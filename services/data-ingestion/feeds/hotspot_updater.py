@@ -68,6 +68,7 @@ HOTSPOTS: list[dict[str, Any]] = [
     {"id": "venezuela-guyana", "name": "Venezuela-Guyana (Essequibo)", "lat": 6.0, "lon": -59.0, "region": "South America", "threat_level": "elevated", "description": "Venezuelan territorial claim on Essequibo region; military posturing.", "sources": ["Crisis Group", "ICJ"]},
     {"id": "colombia-armed-groups", "name": "Colombia (Armed Groups)", "lat": 4.6, "lon": -74.1, "region": "South America", "threat_level": "elevated", "description": "ELN, FARC dissidents, narco groups; peace process challenges.", "sources": ["ACLED", "Crisis Group"]},
     {"id": "mexico-cartel", "name": "Mexico (Cartel Violence)", "lat": 23.6, "lon": -102.5, "region": "North America", "threat_level": "high", "description": "Cartel warfare; record homicide rates; fentanyl trafficking.", "sources": ["ACLED", "InSight Crime"]},
+    {"id": "western-sahara", "name": "Western Sahara", "lat": 24.5, "lon": -13.0, "region": "North Africa", "threat_level": "moderate", "description": "Frozen territorial dispute between Morocco and the Polisario Front with periodic flare-ups.", "sources": ["UN MINURSO", "Crisis Group"]},
 
     # Chokepoints & Strategic Waterways
     {"id": "bab-el-mandeb", "name": "Bab el-Mandeb Strait", "lat": 12.6, "lon": 43.3, "region": "Red Sea", "threat_level": "critical", "description": "Critical shipping chokepoint under Houthi missile/drone threat.", "sources": ["UKMTO", "IMB"]},

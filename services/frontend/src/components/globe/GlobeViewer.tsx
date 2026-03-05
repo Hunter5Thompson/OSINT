@@ -36,7 +36,9 @@ export function GlobeViewer({ onViewerReady, cesiumToken, activeShader }: GlobeV
 
     // Dark atmosphere
     viewer.scene.globe.enableLighting = true;
-    viewer.scene.skyAtmosphere.brightnessShift = -0.3;
+    if (viewer.scene.skyAtmosphere) {
+      viewer.scene.skyAtmosphere.brightnessShift = -0.3;
+    }
     viewer.scene.fog.enabled = true;
     viewer.scene.fog.density = 0.0002;
     viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0a0a0a");
