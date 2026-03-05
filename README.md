@@ -152,6 +152,10 @@ npm run type-check               # tsc --noEmit
 npm run build                    # Production build
 ```
 
+## Agent Handover
+
+- Bugfix history and rationale: `docs/bugfix-log.md`
+
 ## Data Sources
 
 | Source | Data | Rate Limit |
