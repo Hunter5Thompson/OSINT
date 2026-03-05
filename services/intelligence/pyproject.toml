@@ -1,0 +1,30 @@
+[project]
+name = "worldview-intelligence"
+version = "0.1.0"
+description = "WorldView Intelligence — LangGraph Multi-Agent RAG Pipeline"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-ollama>=0.3.0",
+    "qdrant-client>=1.13.0",
+    "httpx>=0.28.0",
+    "structlog>=25.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

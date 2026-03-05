@@ -1,0 +1,92 @@
+{
+  "project": "WorldView",
+  "version": "0.1.0",
+  "updated": "2026-03-05",
+  "compatible_with": { "PRD": "1.0", "architecture": "1.0" },
+  "features": [
+    {
+      "id": "FEAT-001", "name": "CesiumJS Globe + Google 3D Tiles", "requirement": "REQ-001",
+      "priority": "must-have", "status": "planned", "complexity": "L",
+      "criteria": ["Globe rendert 3D Tiles >30 FPS auf RTX 5090", "Fallback auf OSM Buildings wenn kein API Key"],
+      "passes": false, "security_relevant": false, "dependencies": [], "notes": "Fundament für alle Layer",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-002", "name": "Flight Data Layer (OpenSky + adsb.fi)", "requirement": "REQ-002",
+      "priority": "must-have", "status": "planned", "complexity": "XL",
+      "criteria": [">5000 Flugzeuge gleichzeitig bei 60 FPS", "Dead-Reckoning zwischen API-Updates", "BillboardCollection mit Heading-Rotation"],
+      "passes": false, "security_relevant": false, "dependencies": ["FEAT-001", "FEAT-006"], "notes": "Imperatives Rendering, kein Entity API",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-003", "name": "Satellite Tracking (SGP4)", "requirement": "REQ-003",
+      "priority": "must-have", "status": "planned", "complexity": "L",
+      "criteria": ["~9000 aktive Satelliten mit Orbit-Pfaden", "SGP4 Propagation via satellite.js", "Kategorisierung (Military, GPS, Weather, etc.)"],
+      "passes": false, "security_relevant": false, "dependencies": ["FEAT-001"], "notes": "CelesTrak TLE + satellite.js im Frontend",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-004", "name": "Earthquake Layer (USGS)", "requirement": "REQ-004",
+      "priority": "must-have", "status": "planned", "complexity": "S",
+      "criteria": ["M4.5+ letzte 7 Tage", "Magnitude-proportionale Marker", "Pulsing Animation"],
+      "passes": false, "security_relevant": false, "dependencies": ["FEAT-001", "FEAT-006"], "notes": "Einfachster Layer, guter Startpunkt",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-005", "name": "GLSL Post-Processing (CRT/NV/FLIR)", "requirement": "REQ-005",
+      "priority": "must-have", "status": "planned", "complexity": "L",
+      "criteria": ["3 Filter via PostProcessStage", "Framerate-Drop <5%", "CRT Scanlines + Sweep, NV Phosphor + Grain, FLIR Thermal Palette"],
+      "passes": false, "security_relevant": false, "dependencies": ["FEAT-001"], "notes": "GLSL Fragment Shaders, Depth-Buffer-Zugriff",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-006", "name": "FastAPI Backend Proxy + Cache", "requirement": "REQ-006",
+      "priority": "must-have", "status": "planned", "complexity": "L",
+      "criteria": ["Alle externen Calls proxied", "Redis Cache mit TTL", "<200ms p95 unter 10 concurrent", "Graceful degradation bei API-Ausfall"],
+      "passes": false, "security_relevant": true, "dependencies": [], "notes": "Fundament für alle Daten-Layer",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-007", "name": "RAG System (Qdrant + Embeddings)", "requirement": "REQ-007",
+      "priority": "must-have", "status": "planned", "complexity": "XL",
+      "criteria": ["Qdrant Collection mit 768-dim Embeddings", "nomic-embed-text via Ollama", "Hybrid Search (Dense + Sparse)", "Query < 10s auf RTX 5090"],
+      "passes": false, "security_relevant": false, "dependencies": ["FEAT-006"], "notes": "Kernstück der Intelligence Pipeline",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-008", "name": "LangGraph Multi-Agent Pipeline", "requirement": "REQ-008",
+      "priority": "must-have", "status": "planned", "complexity": "XL",
+      "criteria": ["OSINT + Analyst + Synthesis Agenten", "Conditional Routing (Search vs Direct)", "SSE Streaming Output", "StateGraph mit Checkpointer"],
+      "passes": false, "security_relevant": false, "dependencies": ["FEAT-007"], "notes": "LangGraph 1.0+ mit Tool-Use",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-009", "name": "Tactical C2 UI", "requirement": "REQ-009",
+      "priority": "must-have", "status": "planned", "complexity": "L",
+      "criteria": ["Layer Toggles", "Shader Selector", "Hotspot Liste", "Intel Panel mit SSE", "4-Zeitzonen Display"],
+      "passes": false, "security_relevant": false, "dependencies": ["FEAT-001"], "notes": "Military C2 Ästhetik",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-010", "name": "Docker Compose Deployment", "requirement": "REQ-010",
+      "priority": "must-have", "status": "planned", "complexity": "M",
+      "criteria": ["docker compose up in <120s", "GPU Passthrough für Ollama/vLLM", "Persistent Volumes für Qdrant + Redis", ".env.example vorhanden"],
+      "passes": false, "security_relevant": true, "dependencies": ["FEAT-006", "FEAT-007"], "notes": "nvidia-container-toolkit für GPU",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-011", "name": "Military ADS-B Filter", "requirement": "REQ-011",
+      "priority": "should-have", "status": "planned", "complexity": "M",
+      "criteria": ["Militärflugzeuge farblich separiert", "ICAO-Type Lookup DB", "Filter-Toggle im UI"],
+      "passes": false, "security_relevant": false, "dependencies": ["FEAT-002"], "notes": "adsb.fi military endpoint",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    },
+    {
+      "id": "FEAT-012", "name": "AIS Ship Tracking", "requirement": "REQ-012",
+      "priority": "should-have", "status": "planned", "complexity": "L",
+      "criteria": ["WebSocket Burst Pattern (20s on, 60s cache)", "Dead-Reckoning für Schiffspositionen", "Ship-Type Farbkodierung"],
+      "passes": false, "security_relevant": true, "dependencies": ["FEAT-006"], "notes": "AISStream.io API Key required",
+      "review_status": "pending", "risk_findings": [], "started_at": null, "completed_at": null, "iteration": null
+    }
+  ]
+}

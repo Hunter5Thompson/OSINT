@@ -1,0 +1,102 @@
+// ── Data Models (matching backend Pydantic models) ──
+
+export interface Aircraft {
+  icao24: string;
+  callsign: string | null;
+  latitude: number;
+  longitude: number;
+  altitude_m: number;
+  velocity_ms: number;
+  heading: number;
+  vertical_rate: number;
+  on_ground: boolean;
+  last_contact: string;
+  is_military: boolean;
+  aircraft_type: string | null;
+}
+
+export interface Satellite {
+  norad_id: number;
+  name: string;
+  tle_line1: string;
+  tle_line2: string;
+  category: string;
+  inclination_deg: number;
+  period_min: number;
+}
+
+export interface Earthquake {
+  id: string;
+  latitude: number;
+  longitude: number;
+  depth_km: number;
+  magnitude: number;
+  place: string;
+  time: string;
+  tsunami: boolean;
+  url: string | null;
+}
+
+export interface Vessel {
+  mmsi: number;
+  name: string | null;
+  latitude: number;
+  longitude: number;
+  speed_knots: number;
+  course: number;
+  ship_type: number;
+  destination: string | null;
+}
+
+export interface Hotspot {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  region: string;
+  threat_level: "CRITICAL" | "HIGH" | "ELEVATED" | "MODERATE";
+  description: string;
+  last_updated: string;
+  sources: string[];
+}
+
+export interface IntelAnalysis {
+  query: string;
+  agent_chain: string[];
+  sources_used: string[];
+  analysis: string;
+  confidence: number;
+  threat_assessment: string | null;
+  timestamp: string;
+}
+
+export interface IntelQuery {
+  query: string;
+  region?: string;
+  hotspot_id?: string;
+}
+
+// ── UI State Types ──
+
+export interface LayerVisibility {
+  flights: boolean;
+  satellites: boolean;
+  earthquakes: boolean;
+  vessels: boolean;
+  cctv: boolean;
+}
+
+export type ShaderType = "none" | "crt" | "nightvision" | "flir";
+
+export interface ClientConfig {
+  cesium_ion_token: string;
+  default_layers: LayerVisibility;
+  api_version: string;
+}
+
+export interface DataFreshness {
+  flights: Date | null;
+  satellites: Date | null;
+  earthquakes: Date | null;
+  vessels: Date | null;
+}

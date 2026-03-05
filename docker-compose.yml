@@ -1,0 +1,143 @@
+version: "3.9"
+
+services:
+  # ═══ FRONTEND ═══
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./services/frontend/src:/app/src
+    depends_on:
+      - backend
+
+  # ═══ BACKEND (FastAPI) ═══
+  backend:
+    build:
+      context: ./services/backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=http://ollama:11434
+      - VLLM_URL=http://vllm:8001
+    volumes:
+      - ./services/backend/app:/app/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ═══ INTELLIGENCE (LangGraph RAG Pipeline) ═══
+  intelligence:
+    build:
+      context: ./services/intelligence
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=http://ollama:11434
+      - VLLM_URL=http://vllm:8001
+    depends_on:
+      - qdrant
+      - redis
+    restart: unless-stopped
+
+  # ═══ DATA INGESTION (Scheduled Feeds) ═══
+  data-ingestion:
+    build:
+      context: ./services/data-ingestion
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=http://ollama:11434
+    depends_on:
+      - qdrant
+      - redis
+    restart: unless-stopped
+
+  # ═══ REDIS (Cache) ═══
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ═══ QDRANT (Vector Database) ═══
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    ports:
+      - "6333:6333"    # REST API
+      - "6334:6334"    # gRPC
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ═══ OLLAMA (LLM Inference - Dev) ═══
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # ═══ vLLM (LLM Inference - Prod, optional) ═══
+  # Uncomment when ready for production inference
+  # vllm:
+  #   image: vllm/vllm-openai:latest
+  #   ports:
+  #     - "8001:8001"
+  #   command: >
+  #     --model Qwen/Qwen3-32B
+  #     --tensor-parallel-size 1
+  #     --gpu-memory-utilization 0.9
+  #     --max-model-len 32768
+  #     --port 8001
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   volumes:
+  #     - model-cache:/root/.cache/huggingface
+
+volumes:
+  redis-data:
+  qdrant-data:
+  ollama-data:
+  # model-cache:  # Uncomment with vLLM
