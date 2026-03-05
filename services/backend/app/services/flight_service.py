@@ -83,6 +83,11 @@ async def _fetch_adsb_fi(proxy: ProxyService) -> list[Aircraft]:
             lon = ac.get("lon")
             if lat is None or lon is None:
                 continue
+            raw_db_flags = ac.get("dbFlags", 0)
+            try:
+                db_flags = int(raw_db_flags or 0)
+            except (TypeError, ValueError):
+                db_flags = 0
             aircraft.append(
                 Aircraft(
                     icao24=ac.get("hex", ""),
@@ -94,7 +99,7 @@ async def _fetch_adsb_fi(proxy: ProxyService) -> list[Aircraft]:
                     heading=float(ac.get("track", 0) or 0),
                     vertical_rate=float(ac.get("baro_rate", 0) or 0) * 0.00508,
                     on_ground=ac.get("alt_baro") == "ground",
-                    is_military=ac.get("dbFlags", 0) == 1,
+                    is_military=bool(db_flags & 1),
                     aircraft_type=ac.get("t"),
                 )
             )

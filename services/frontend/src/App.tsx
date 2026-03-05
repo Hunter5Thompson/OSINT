@@ -16,7 +16,8 @@ import { useFlights } from "./hooks/useFlights";
 import { useSatellites } from "./hooks/useSatellites";
 import { useEarthquakes } from "./hooks/useEarthquakes";
 import { useIntel } from "./hooks/useIntel";
-import { getConfig, getHotspots, getVessels } from "./services/api";
+import { getConfig, getHotspots } from "./services/api";
+import { WebSocketManager } from "./services/websocket";
 import type { LayerVisibility, ShaderType, Hotspot, Vessel, ClientConfig } from "./types";
 
 export function App() {
@@ -41,6 +42,7 @@ export function App() {
   const { satellites, lastUpdate: satellitesUpdate } = useSatellites(layers.satellites);
   const { earthquakes, lastUpdate: earthquakesUpdate } = useEarthquakes(layers.earthquakes);
   const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [vesselsUpdate, setVesselsUpdate] = useState<Date | null>(null);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
 
   // Intel
@@ -65,13 +67,20 @@ export function App() {
     void getHotspots().then(setHotspots).catch(() => {});
   }, []);
 
-  // Poll vessels
+  // Vessel stream via backend WebSocket.
   useEffect(() => {
-    if (!layers.vessels) return;
-    const fetch = () => void getVessels().then(setVessels).catch(() => {});
-    fetch();
-    const timer = setInterval(fetch, 60_000);
-    return () => clearInterval(timer);
+    if (!layers.vessels) {
+      setVessels([]);
+      setVesselsUpdate(null);
+      return;
+    }
+
+    const ws = new WebSocketManager<Vessel>("/ws/vessels", (data) => {
+      setVessels(data);
+      setVesselsUpdate(new Date());
+    });
+    ws.connect();
+    return () => ws.disconnect();
   }, [layers.vessels]);
 
   const handleToggleLayer = useCallback((layer: keyof LayerVisibility) => {
@@ -154,7 +163,7 @@ export function App() {
           flights: flightsUpdate,
           satellites: satellitesUpdate,
           earthquakes: earthquakesUpdate,
-          vessels: null,
+          vessels: vesselsUpdate,
         }}
         flightCount={flights.length}
         satelliteCount={satellites.length}

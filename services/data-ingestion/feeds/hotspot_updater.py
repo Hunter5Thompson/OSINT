@@ -11,7 +11,7 @@ import httpx
 import redis.asyncio as aioredis
 import structlog
 from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchValue
+from qdrant_client.models import Filter, FieldCondition, MatchText
 
 from config import settings
 
@@ -110,11 +110,12 @@ class HotspotUpdater:
         because we want a count of recently ingested items matching the name.
         """
         try:
+            query_text = hotspot_name.replace("/", " ").replace("-", " ")
             results, _ = self.qdrant.scroll(
                 collection_name=settings.qdrant_collection,
                 scroll_filter=Filter(
                     should=[
-                        FieldCondition(key="title", match=MatchValue(value=hotspot_name)),
+                        FieldCondition(key="title", match=MatchText(text=query_text)),
                     ]
                 ),
                 limit=100,
@@ -122,6 +123,17 @@ class HotspotUpdater:
             return len(results)
         except Exception:
             return 0
+
+    @staticmethod
+    def _normalize_backend_threat(level: str) -> str:
+        mapping = {
+            "critical": "CRITICAL",
+            "high": "HIGH",
+            "elevated": "ELEVATED",
+            "moderate": "MODERATE",
+            "low": "MODERATE",
+        }
+        return mapping.get(level.lower(), "MODERATE")
 
     def _adjust_threat_level(self, base_level: str, mention_count: int) -> str:
         """Adjust threat level based on recent media coverage volume."""
@@ -145,6 +157,7 @@ class HotspotUpdater:
         log.info("hotspot_update_started", hotspot_count=len(HOTSPOTS))
         start = time.monotonic()
         r = await self._get_redis()
+        backend_hotspots: list[dict[str, Any]] = []
 
         for hotspot in HOTSPOTS:
             try:
@@ -153,14 +166,27 @@ class HotspotUpdater:
                 adjusted_level = self._adjust_threat_level(
                     hotspot["threat_level"], mention_count
                 )
+                now_iso = datetime.now(timezone.utc).isoformat()
 
                 record = {
                     **hotspot,
                     "threat_level": adjusted_level,
                     "base_threat_level": hotspot["threat_level"],
                     "recent_mentions": mention_count,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": now_iso,
                 }
+                backend_record = {
+                    "id": hotspot["id"],
+                    "name": hotspot["name"],
+                    "latitude": hotspot["lat"],
+                    "longitude": hotspot["lon"],
+                    "region": hotspot["region"],
+                    "threat_level": self._normalize_backend_threat(adjusted_level),
+                    "description": hotspot["description"],
+                    "sources": hotspot["sources"],
+                    "last_updated": now_iso,
+                }
+                backend_hotspots.append(backend_record)
 
                 # Store individual hotspot
                 await r.set(
@@ -174,6 +200,7 @@ class HotspotUpdater:
         # Store full list of hotspot IDs for enumeration
         hotspot_ids = [h["id"] for h in HOTSPOTS]
         await r.set("hotspot:index", json.dumps(hotspot_ids), ex=settings.hotspot_cache_ttl)
+        await r.set("hotspots:all", json.dumps(backend_hotspots), ex=settings.hotspot_cache_ttl)
 
         elapsed = round(time.monotonic() - start, 2)
         log.info("hotspot_update_finished", hotspot_count=len(HOTSPOTS), elapsed_seconds=elapsed)

@@ -1,5 +1,7 @@
 """Geopolitical hotspot endpoints."""
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request
 
 from app.models.hotspot import Hotspot
@@ -31,11 +33,53 @@ DEFAULT_HOTSPOTS: list[dict[str, object]] = [
 ]
 
 
+def _normalize_threat_level(value: Any) -> str:
+    raw = str(value or "").strip().upper()
+    mapping = {
+        "CRITICAL": "CRITICAL",
+        "HIGH": "HIGH",
+        "ELEVATED": "ELEVATED",
+        "MODERATE": "MODERATE",
+        "LOW": "MODERATE",
+    }
+    return mapping.get(raw, "MODERATE")
+
+
+def _normalize_hotspot(raw: dict[str, Any]) -> Hotspot:
+    normalized = {
+        "id": str(raw.get("id", "")),
+        "name": str(raw.get("name", "")),
+        "latitude": float(raw.get("latitude", raw.get("lat", 0.0))),
+        "longitude": float(raw.get("longitude", raw.get("lon", 0.0))),
+        "region": str(raw.get("region", "")),
+        "threat_level": _normalize_threat_level(raw.get("threat_level")),
+        "description": str(raw.get("description", "")),
+        "last_updated": raw.get("last_updated", raw.get("updated_at")),
+        "sources": raw.get("sources", []),
+    }
+    return Hotspot(**normalized)
+
+
 @router.get("", response_model=list[Hotspot])
 async def get_hotspots(request: Request) -> list[Hotspot]:
     cached = await request.app.state.cache.get("hotspots:all")
     if cached is not None:
-        return [Hotspot(**h) for h in cached]
+        return [_normalize_hotspot(h) for h in cached]
+
+    # Backward-compatible fallback for per-hotspot cache keys.
+    hotspot_ids = await request.app.state.cache.get("hotspot:index")
+    if isinstance(hotspot_ids, list) and hotspot_ids:
+        items: list[Hotspot] = []
+        for hotspot_id in hotspot_ids:
+            raw = await request.app.state.cache.get(f"hotspot:{hotspot_id}")
+            if isinstance(raw, dict):
+                try:
+                    items.append(_normalize_hotspot(raw))
+                except Exception:
+                    continue
+        if items:
+            return items
+
     return [Hotspot(**h) for h in DEFAULT_HOTSPOTS]
 
 
