@@ -1,8 +1,11 @@
 """Intelligence analysis models."""
 
-from datetime import datetime
+from datetime import datetime, timezone
+from functools import partial
 
 from pydantic import BaseModel, Field
+
+_utc_now = partial(datetime.now, timezone.utc)
 
 
 class IntelQuery(BaseModel):
@@ -19,7 +22,7 @@ class IntelDocument(BaseModel):
     region: str | None = None
     hotspot_ids: list[str] = Field(default_factory=list)
     published_at: datetime
-    ingested_at: datetime = Field(default_factory=datetime.utcnow)
+    ingested_at: datetime = Field(default_factory=_utc_now)
 
 
 class IntelAnalysis(BaseModel):
@@ -29,11 +32,11 @@ class IntelAnalysis(BaseModel):
     analysis: str
     confidence: float = 0.0
     threat_assessment: str | None = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=_utc_now)
 
 
 class APIError(BaseModel):
     error: str
     detail: str | None = None
     code: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=_utc_now)
