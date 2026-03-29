@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await cache.connect()
     app.state.cache = cache
 
-    logger.info("backend_started", inference_provider=settings.inference_provider)
+    logger.info("backend_started", vllm_url=settings.vllm_url, vllm_model=settings.vllm_model)
     yield
 
     # Shutdown
