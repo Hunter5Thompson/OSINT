@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # Neo4j
     neo4j_url: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
-    neo4j_password: str = "odin1234"
+    neo4j_password: str  # required: set NEO4J_PASSWORD in .env
 
     # Internal Services
     redis_url: str = "redis://localhost:6379/0"
@@ -49,4 +49,8 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
-settings = Settings()
+try:
+    settings = Settings()
+except Exception:
+    # .env not found or NEO4J_PASSWORD not set—allow imports in test context
+    settings = None
