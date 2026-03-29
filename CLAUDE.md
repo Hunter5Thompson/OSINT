@@ -129,9 +129,10 @@ Vor Session-Ende IMMER:
 - AISStream: WebSocket `wss://stream.aisstream.io/v0/stream` (API-Key required)
 
 ### LLM-Konfiguration
-- Dev: Ollama `http://localhost:11434` mit `qwen3:32b`
-- Prod: vLLM `http://localhost:8001/v1` mit `Qwen/Qwen3-32B`
-- Embeddings: Ollama `nomic-embed-text` (768 dim)
+- vLLM: `http://localhost:8000/v1` mit `models/qwen3.5-27b-awq` (Port 8000)
+- TEI Embed: `http://localhost:8001` — Qwen3-Embedding-0.6B (1024 dim)
+- TEI Rerank: `http://localhost:8002` — BAAI/bge-reranker-v2-m3
+- Backend erreichbar auf Port 8080 (docker compose) oder 8000 (lokale Entwicklung)
 
 ### CesiumJS Patterns
 - Immer `BillboardCollection` statt `Entity` für Bulk-Rendering
