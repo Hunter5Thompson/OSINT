@@ -18,19 +18,24 @@ class Settings(BaseSettings):
     # CCTV / Webcams
     windy_api_key: str = ""
 
-    # LLM Inference
-    inference_provider: str = "ollama"
-    ollama_model: str = "qwen3:32b"
-    vllm_model: str = "Qwen/Qwen3-32B"
-    embedding_model: str = "nomic-embed-text"
+    # LLM Inference (vLLM)
+    vllm_url: str = "http://localhost:8000"
+    vllm_model: str = "models/qwen3.5-27b-awq"
+
+    # Embeddings + Reranking (TEI)
+    tei_embed_url: str = "http://localhost:8001"
+    tei_rerank_url: str = "http://localhost:8002"
+
+    # Neo4j
+    neo4j_url: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "odin1234"
 
     # Internal Services
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"
-    ollama_url: str = "http://localhost:11434"
-    vllm_url: str = "http://localhost:8001"
 
-    # API URLs
+    # External APIs
     opensky_api_url: str = "https://opensky-network.org/api/states/all"
     adsb_fi_api_url: str = "https://api.adsb.fi/v2/all"
     usgs_api_url: str = (
