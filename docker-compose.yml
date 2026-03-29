@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   # ═══ VLLM (LLM Inference — startet zuerst, allein auf GPU) ═══
@@ -113,8 +111,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - VLLM_URL=http://vllm:8000
-      - TEI_EMBED_URL=http://tei-embed:8001
-      - TEI_RERANK_URL=http://tei-rerank:8002
+      - TEI_EMBED_URL=http://tei-embed:80
+      - TEI_RERANK_URL=http://tei-rerank:80
       - NEO4J_URL=bolt://neo4j:7687
     volumes:
       - ./services/backend/app:/app/app
@@ -135,8 +133,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - VLLM_URL=http://vllm:8000
-      - TEI_EMBED_URL=http://tei-embed:8001
-      - TEI_RERANK_URL=http://tei-rerank:8002
+      - TEI_EMBED_URL=http://tei-embed:80
+      - TEI_RERANK_URL=http://tei-rerank:80
       - NEO4J_URL=bolt://neo4j:7687
     depends_on:
       tei-embed:
@@ -156,7 +154,7 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
-      - TEI_EMBED_URL=http://tei-embed:8001
+      - TEI_EMBED_URL=http://tei-embed:80
     depends_on:
       redis:
         condition: service_healthy
