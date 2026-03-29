@@ -1,33 +1,121 @@
 version: "3.9"
 
 services:
-  # ═══ FRONTEND ═══
-  frontend:
-    build:
-      context: ./services/frontend
-      dockerfile: Dockerfile
-    ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_URL=http://localhost:8000
-    volumes:
-      - ./services/frontend/src:/app/src
-    depends_on:
-      - backend
 
-  # ═══ BACKEND (FastAPI) ═══
+  # ═══ VLLM (LLM Inference — startet zuerst, allein auf GPU) ═══
+  vllm:
+    image: vllm/vllm-openai:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - VLLM_FLASH_ATTN_VERSION=2
+    volumes:
+      - ${MODELS_PATH:-/home/deadpool-ultra/ODIN/models}:/models
+    command: >
+      --model /models/qwen3.5-27b-awq
+      --max-model-len 32768
+      --gpu-memory-utilization 0.85
+      --enforce-eager
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --port 8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+
+  # ═══ TEI EMBED (startet erst wenn vLLM healthy) ═══
+  tei-embed:
+    image: ghcr.io/huggingface/text-embeddings-inference:120-1.9
+    ports:
+      - "8001:80"
+    volumes:
+      - tei-embed-cache:/data
+    command: --model-id Qwen/Qwen3-Embedding-0.6B --dtype float16
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+      vllm:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ═══ TEI RERANK (startet erst wenn vLLM healthy) ═══
+  tei-rerank:
+    image: ghcr.io/huggingface/text-embeddings-inference:120-1.9
+    ports:
+      - "8002:80"
+    volumes:
+      - tei-rerank-cache:/data
+    command: --model-id BAAI/bge-reranker-v2-m3 --dtype float16
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+      vllm:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ═══ NEO4J ═══
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-odin1234}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_memory_heap_max__size: 1G
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q http://localhost:7474 -O /dev/null && echo ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ═══ BACKEND (FastAPI) — Host-Port 8080, Container intern 8000 ═══
+  # Port-Konflikt: vLLM belegt Host-Port 8000.
+  # Lösung: 8080:8000 — kein Dockerfile-Change nötig.
   backend:
     build:
       context: ./services/backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8080:8000"
     env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
-      - OLLAMA_URL=http://ollama:11434
-      - VLLM_URL=http://vllm:8001
+      - VLLM_URL=http://vllm:8000
+      - TEI_EMBED_URL=http://tei-embed:8001
+      - TEI_RERANK_URL=http://tei-rerank:8002
+      - NEO4J_URL=bolt://neo4j:7687
     volumes:
       - ./services/backend/app:/app/app
     depends_on:
@@ -46,11 +134,17 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
-      - OLLAMA_URL=http://ollama:11434
-      - VLLM_URL=http://vllm:8001
+      - VLLM_URL=http://vllm:8000
+      - TEI_EMBED_URL=http://tei-embed:8001
+      - TEI_RERANK_URL=http://tei-rerank:8002
+      - NEO4J_URL=bolt://neo4j:7687
     depends_on:
-      - qdrant
-      - redis
+      tei-embed:
+        condition: service_started
+      tei-rerank:
+        condition: service_started
+      neo4j:
+        condition: service_healthy
     restart: unless-stopped
 
   # ═══ DATA INGESTION (Scheduled Feeds) ═══
@@ -62,13 +156,29 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
-      - OLLAMA_URL=http://ollama:11434
+      - TEI_EMBED_URL=http://tei-embed:8001
     depends_on:
-      - qdrant
-      - redis
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
     restart: unless-stopped
 
-  # ═══ REDIS (Cache) ═══
+  # ═══ FRONTEND ═══
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8080
+    volumes:
+      - ./services/frontend/src:/app/src
+    depends_on:
+      - backend
+
+  # ═══ REDIS ═══
   redis:
     image: redis:7-alpine
     ports:
@@ -82,12 +192,12 @@ services:
       timeout: 3s
       retries: 5
 
-  # ═══ QDRANT (Vector Database) ═══
+  # ═══ QDRANT ═══
   qdrant:
     image: qdrant/qdrant:v1.13.2
     ports:
-      - "6333:6333"    # REST API
-      - "6334:6334"    # gRPC
+      - "6333:6333"
+      - "6334:6334"
     volumes:
       - qdrant-data:/qdrant/storage
     environment:
@@ -98,46 +208,9 @@ services:
       timeout: 3s
       retries: 5
 
-  # ═══ OLLAMA (LLM Inference - Dev) ═══
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    restart: unless-stopped
-
-  # ═══ vLLM (LLM Inference - Prod, optional) ═══
-  # Uncomment when ready for production inference
-  # vllm:
-  #   image: vllm/vllm-openai:latest
-  #   ports:
-  #     - "8001:8001"
-  #   command: >
-  #     --model Qwen/Qwen3-32B
-  #     --tensor-parallel-size 1
-  #     --gpu-memory-utilization 0.9
-  #     --max-model-len 32768
-  #     --port 8001
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   volumes:
-  #     - model-cache:/root/.cache/huggingface
-
 volumes:
   redis-data:
   qdrant-data:
-  ollama-data:
-  # model-cache:  # Uncomment with vLLM
+  neo4j-data:
+  tei-embed-cache:
+  tei-rerank-cache:
