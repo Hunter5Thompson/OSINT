@@ -96,14 +96,16 @@ class RSSCollector:
     # Embedding helper
     # ------------------------------------------------------------------
     async def _embed(self, text: str) -> list[float]:
-        """Generate embedding vector via Ollama API."""
+        """Generate embedding vector via TEI (Text Embeddings Inference)."""
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
             resp = await client.post(
-                f"{settings.ollama_url}/api/embeddings",
-                json={"model": settings.embedding_model, "prompt": text},
+                f"{settings.tei_embed_url}/embed",
+                json={"inputs": text},
             )
             resp.raise_for_status()
-            return resp.json()["embedding"]
+            result = resp.json()
+            # TEI returns [[...floats...]] for single input
+            return result[0] if isinstance(result[0], list) else result
 
     # ------------------------------------------------------------------
     # Single feed processing

@@ -4,20 +4,20 @@
 services/intelligence/rag/
 
 ## Akzeptanzkriterien
-- [ ] Qdrant Collection "worldview_intel" mit 768-dim Vektoren erstellt
-- [ ] Embedder-Klasse: Text → nomic-embed-text → Vektor (via Ollama API)
-- [ ] Chunker: Semantic Chunking mit max 512 Token Chunks
-- [ ] Indexer: Document → Chunks → Embed → Qdrant Upsert
-- [ ] Retriever: Query → Embed → Qdrant Search → Top-K Documents
-- [ ] Payload-Filtering nach region, source, published_at
-- [ ] Batch-Embedding für >100 Dokumente
-- [ ] Query-Latenz <2s für Retrieval (ohne LLM)
+- [x] Qdrant Collection "worldview_intel" mit 768-dim Vektoren erstellt
+- [x] Embedder-Klasse: Text → nomic-embed-text → Vektor (via Ollama API)
+- [x] Chunker: Semantic Chunking mit max 512 Token Chunks
+- [x] Indexer: Document → Chunks → Embed → Qdrant Upsert
+- [x] Retriever: Query → Embed → Qdrant Search → Top-K Documents
+- [x] Payload-Filtering nach region, source, published_at
+- [x] Batch-Embedding für >100 Dokumente
+- [x] Query-Latenz <2s für Retrieval (ohne LLM)
 
 ## Tests (VOR Implementierung schreiben)
-- [ ] tests/unit/test_chunker.py (Chunk-Sizes, Overlap)
-- [ ] tests/unit/test_embedder.py (Mock Ollama Response)
-- [ ] tests/integration/test_qdrant_ops.py (Create, Upsert, Search, Filter)
-- [ ] tests/integration/test_rag_pipeline.py (End-to-End: Ingest → Query)
+- [x] tests/unit/test_chunker.py (Chunk-Sizes, Overlap)
+- [x] tests/unit/test_embedder.py (Mock Ollama Response)
+- [x] tests/integration/test_qdrant_ops.py (Create, Upsert, Search, Filter)
+- [x] tests/integration/test_rag_pipeline.py (End-to-End: Ingest → Query)
 
 ## Fixtures
 - tests/fixtures/sample_documents.json (5 Geopolitik-Artikel)

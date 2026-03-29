@@ -9,14 +9,13 @@ class Settings(BaseSettings):
     # Internal service URLs
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"
-    ollama_url: str = "http://localhost:11434"
+    tei_embed_url: str = "http://localhost:8001"
 
     # Embedding configuration
-    embedding_model: str = "nomic-embed-text"
-    embedding_dimensions: int = 768
+    embedding_dimensions: int = 1024
 
     # Qdrant collection
-    qdrant_collection: str = "worldview_intel"
+    qdrant_collection: str = "odin_intel"
 
     # HTTP settings
     http_timeout: float = 30.0

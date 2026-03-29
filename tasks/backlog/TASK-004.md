@@ -4,10 +4,10 @@
 services/backend/app/routers/earthquakes.py
 
 ## Akzeptanzkriterien
-- [ ] GET /api/v1/earthquakes → list[Earthquake]
-- [ ] USGS GeoJSON Feed M4.5+ (7 Tage)
-- [ ] Redis Cache 5min TTL
-- [ ] Pydantic Model mit magnitude, depth, coordinates, tsunami flag
+- [x] GET /api/v1/earthquakes → list[Earthquake]
+- [x] USGS GeoJSON Feed M4.5+ (7 Tage)
+- [x] Redis Cache 5min TTL
+- [x] Pydantic Model mit magnitude, depth, coordinates, tsunami flag
 
 ## Dependencies
 - Blocked by: TASK-002

@@ -4,22 +4,22 @@
 services/intelligence/agents/ + services/intelligence/graph/
 
 ## Akzeptanzkriterien
-- [ ] AgentState TypedDict mit messages, sources, analysis, threat_level
-- [ ] OSINT Agent: Web-Recherche Tool + RSS Feed Tool + Qdrant Search Tool
-- [ ] Analyst Agent: Threat Assessment, Escalation Risk Scoring
-- [ ] Synthesis Agent: Report-Generierung aus Agent-Outputs
-- [ ] StateGraph: START → OSINT → Analyst → Synthesis → END
-- [ ] Conditional Edge: Skip OSINT wenn Qdrant ausreichend Kontext hat
-- [ ] SSE Streaming: Jeder Agent-Step wird als Event gestreamt
-- [ ] Ollama/vLLM als LLM Backend (konfigurierbar via Settings)
-- [ ] Query-to-Response <10s für Standard-Queries auf RTX 5090
+- [x] AgentState TypedDict mit messages, sources, analysis, threat_level
+- [x] OSINT Agent: Web-Recherche Tool + RSS Feed Tool + Qdrant Search Tool
+- [x] Analyst Agent: Threat Assessment, Escalation Risk Scoring
+- [x] Synthesis Agent: Report-Generierung aus Agent-Outputs
+- [x] StateGraph: START → OSINT → Analyst → Synthesis → END
+- [x] Conditional Edge: Skip OSINT wenn Qdrant ausreichend Kontext hat
+- [x] SSE Streaming: Jeder Agent-Step wird als Event gestreamt
+- [x] Ollama/vLLM als LLM Backend (konfigurierbar via Settings)
+- [x] Query-to-Response <10s für Standard-Queries auf RTX 5090
 
 ## Tests (VOR Implementierung schreiben)
-- [ ] tests/unit/test_state.py (AgentState Serialization)
-- [ ] tests/unit/test_osint_agent.py (Tool-Use mit Mock-Responses)
-- [ ] tests/unit/test_analyst_agent.py (Threat Assessment Logic)
-- [ ] tests/unit/test_synthesis_agent.py (Report Format)
-- [ ] tests/integration/test_workflow.py (Full Graph Execution mit Mock-LLM)
+- [x] tests/unit/test_state.py (AgentState Serialization)
+- [x] tests/unit/test_osint_agent.py (Tool-Use mit Mock-Responses)
+- [x] tests/unit/test_analyst_agent.py (Threat Assessment Logic)
+- [x] tests/unit/test_synthesis_agent.py (Report Format)
+- [x] tests/integration/test_workflow.py (Full Graph Execution mit Mock-LLM)
 
 ## Fixtures
 - tests/fixtures/mock_llm_responses.json

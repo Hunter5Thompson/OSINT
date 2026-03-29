@@ -4,17 +4,17 @@
 services/frontend/src/components/shaders/
 
 ## Akzeptanzkriterien
-- [ ] CRT Shader: Scanlines (horizontal, 2px pitch), vignette, slight barrel distortion, animated sweep line, green phosphor tint, contrast boost
-- [ ] Night Vision Shader: Green phosphor colorization, noise/grain overlay (procedural), brightness amplification, tube vignette (circular darkening)
-- [ ] FLIR Shader: Thermal palette mapping (blue→green→yellow→red→white), based on luminance, slight blur for thermal diffusion effect
-- [ ] Alle 3 als CesiumJS PostProcessStage implementiert
-- [ ] Shader-Uniforms: u_time (für Animationen), u_intensity (einstellbar)
-- [ ] UI Toggle: 4 Modi (Standard, CRT, NV, FLIR) über OperationsPanel
-- [ ] Performance: Framerate-Drop <5% gegenüber Standard-Rendering
+- [x] CRT Shader: Scanlines (horizontal, 2px pitch), vignette, slight barrel distortion, animated sweep line, green phosphor tint, contrast boost
+- [x] Night Vision Shader: Green phosphor colorization, noise/grain overlay (procedural), brightness amplification, tube vignette (circular darkening)
+- [x] FLIR Shader: Thermal palette mapping (blue→green→yellow→red→white), based on luminance, slight blur for thermal diffusion effect
+- [x] Alle 3 als CesiumJS PostProcessStage implementiert
+- [x] Shader-Uniforms: u_time (für Animationen), u_intensity (einstellbar)
+- [x] UI Toggle: 4 Modi (Standard, CRT, NV, FLIR) über OperationsPanel
+- [x] Performance: Framerate-Drop <5% gegenüber Standard-Rendering
 
 ## Tests (VOR Implementierung schreiben)
-- [ ] tests/e2e/test_shader_toggle.spec.ts (Playwright: Mode-Switch ohne Crash)
-- [ ] Manueller Visueller Test: Screenshots pro Modus für Regression
+- [x] tests/e2e/test_shader_toggle.spec.ts (Playwright: Mode-Switch ohne Crash)
+- [x] Manueller Visueller Test: Screenshots pro Modus für Regression
 
 ## Dependencies
 - Blocked by: TASK-009 (Globe muss rendern)

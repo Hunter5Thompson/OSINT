@@ -4,15 +4,15 @@
 Root + infra/docker/
 
 ## Akzeptanzkriterien
-- [ ] Monorepo mit uv workspaces konfiguriert (backend, intelligence, data-ingestion)
-- [ ] docker-compose.yml startet Redis + Qdrant + Ollama erfolgreich
-- [ ] Ollama Container mit nvidia GPU-Passthrough verifiziert
-- [ ] .env.example vorhanden, .env in .gitignore
-- [ ] Makefile mit `make up`, `make down`, `make test`, `make logs`
-- [ ] Pre-commit config: ruff, mypy
+- [x] Monorepo mit uv workspaces konfiguriert (backend, intelligence, data-ingestion)
+- [x] docker-compose.yml startet Redis + Qdrant + Ollama erfolgreich
+- [x] Ollama Container mit nvidia GPU-Passthrough verifiziert
+- [x] .env.example vorhanden, .env in .gitignore
+- [x] Makefile mit `make up`, `make down`, `make test`, `make logs`
+- [x] Pre-commit config: ruff, mypy
 
 ## Tests (VOR Implementierung schreiben)
-- [ ] scripts/test_docker_health.sh (curl healthchecks für Redis, Qdrant, Ollama)
+- [x] scripts/test_docker_health.sh (curl healthchecks für Redis, Qdrant, Ollama)
 
 ## Dependencies
 - Blocked by: -

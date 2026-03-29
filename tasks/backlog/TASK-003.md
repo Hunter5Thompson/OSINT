@@ -4,17 +4,17 @@
 services/backend/app/routers/flights.py + services/backend/app/services/flight_service.py
 
 ## Akzeptanzkriterien
-- [ ] GET /api/v1/flights → list[Aircraft] (Pydantic model)
-- [ ] OpenSky API als Primary Source, adsb.fi als Fallback
-- [ ] Redis Cache mit 10s TTL
-- [ ] Graceful degradation: leere Liste wenn beide APIs down
-- [ ] Rate-Limiting-Awareness: 10s Cooldown für OpenSky
-- [ ] GET /api/v1/flights/military → gefiltert nach ICAO Military Prefix DB
+- [x] GET /api/v1/flights → list[Aircraft] (Pydantic model)
+- [x] OpenSky API als Primary Source, adsb.fi als Fallback
+- [x] Redis Cache mit 10s TTL
+- [x] Graceful degradation: leere Liste wenn beide APIs down
+- [x] Rate-Limiting-Awareness: 10s Cooldown für OpenSky
+- [x] GET /api/v1/flights/military → gefiltert nach ICAO Military Prefix DB
 
 ## Tests (VOR Implementierung schreiben)
-- [ ] tests/unit/test_flight_service.py (Parsing, Fallback-Logic, Cache)
-- [ ] tests/unit/test_flight_models.py (Pydantic Validation)
-- [ ] tests/integration/test_flights_api.py (Mock-Responses)
+- [x] tests/unit/test_flight_service.py (Parsing, Fallback-Logic, Cache)
+- [x] tests/unit/test_flight_models.py (Pydantic Validation)
+- [x] tests/integration/test_flights_api.py (Mock-Responses)
 
 ## Fixtures
 - tests/fixtures/opensky_response.json

@@ -4,18 +4,18 @@
 services/backend/
 
 ## Akzeptanzkriterien
-- [ ] FastAPI App mit Health-Endpoint `/api/v1/health`
-- [ ] Pydantic Settings aus .env geladen
-- [ ] Redis-Connection mit async redis client
-- [ ] Generic ProxyService Klasse: fetch → cache → return
-- [ ] CORS Middleware für localhost:5173
-- [ ] structlog konfiguriert (JSON-Format)
-- [ ] OpenAPI Docs unter /docs erreichbar
+- [x] FastAPI App mit Health-Endpoint `/api/v1/health`
+- [x] Pydantic Settings aus .env geladen
+- [x] Redis-Connection mit async redis client
+- [x] Generic ProxyService Klasse: fetch → cache → return
+- [x] CORS Middleware für localhost:5173
+- [x] structlog konfiguriert (JSON-Format)
+- [x] OpenAPI Docs unter /docs erreichbar
 
 ## Tests (VOR Implementierung schreiben)
-- [ ] tests/unit/test_config.py (Settings laden)
-- [ ] tests/unit/test_proxy_service.py (Cache Hit/Miss/Expiry)
-- [ ] tests/integration/test_health.py (FastAPI TestClient)
+- [x] tests/unit/test_config.py (Settings laden)
+- [x] tests/unit/test_proxy_service.py (Cache Hit/Miss/Expiry)
+- [x] tests/integration/test_health.py (FastAPI TestClient)
 
 ## Dependencies
 - Blocked by: TASK-001
