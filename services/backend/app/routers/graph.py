@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query
 from neo4j import AsyncGraphDatabase
 
 from app.config import settings
+from app.models.events import GeoEvent, GeoEventsResponse
 from app.models.graph import GraphEdge, GraphNode, GraphResponse
 
 log = structlog.get_logger(__name__)
@@ -170,6 +171,56 @@ async def get_events(
         for r in rows
     ]
     return GraphResponse(nodes=nodes, total_count=len(nodes))
+
+
+@router.get("/events/geo", response_model=GeoEventsResponse)
+async def get_geo_events(
+    entity: str | None = None,
+    codebook_type: str | None = None,
+    limit: int = Query(default=100, le=200),
+) -> GeoEventsResponse:
+    """Get events with resolved lat/lon from Location nodes."""
+    limit = _cap_limit(limit)
+
+    if entity:
+        entity_match = "MATCH (e:Entity {name: $entity})<-[:INVOLVES]-(ev:Event) "
+        params: dict = {"entity": entity, "limit": limit}
+    else:
+        entity_match = "MATCH (ev:Event) "
+        params = {"limit": limit}
+
+    type_filter = ""
+    if codebook_type:
+        type_filter = "WHERE ev.codebook_type STARTS WITH $codebook_type "
+        params["codebook_type"] = codebook_type
+
+    cypher = (
+        f"{entity_match}"
+        f"OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location) "
+        f"{type_filter}"
+        f"RETURN ev.id AS id, ev.title AS title, ev.codebook_type AS codebook_type, "
+        f"ev.severity AS severity, ev.timestamp AS timestamp, "
+        f"l.name AS location_name, l.country AS country, "
+        f"l.lat AS lat, l.lon AS lon "
+        f"ORDER BY ev.timestamp DESC LIMIT $limit"
+    )
+
+    rows = await _read_query(cypher, params)
+    events = [
+        GeoEvent(
+            id=r.get("id", ""),
+            title=r.get("title", ""),
+            codebook_type=r.get("codebook_type", ""),
+            severity=r.get("severity", ""),
+            timestamp=str(r["timestamp"]) if r.get("timestamp") else None,
+            location_name=r.get("location_name"),
+            country=r.get("country"),
+            lat=r.get("lat"),
+            lon=r.get("lon"),
+        )
+        for r in rows
+    ]
+    return GeoEventsResponse(events=events, total_count=len(events))
 
 
 @router.get("/search", response_model=GraphResponse)

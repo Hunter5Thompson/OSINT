@@ -110,6 +110,7 @@ async def client_config() -> ClientConfig:
             "earthquakes": True,
             "vessels": False,
             "cctv": False,
+            "events": False,
         },
         api_version="v1",
     )

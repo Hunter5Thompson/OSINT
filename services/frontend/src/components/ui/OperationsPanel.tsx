@@ -13,6 +13,7 @@ const LAYER_CONFIG: { key: keyof LayerVisibility; label: string; icon: string }[
   { key: "earthquakes", label: "EARTHQUAKES", icon: "~" },
   { key: "vessels", label: "VESSELS", icon: "%" },
   { key: "cctv", label: "CCTV", icon: "@" },
+  { key: "events", label: "EVENTS", icon: "!" },
 ];
 
 const SHADER_OPTIONS: { value: ShaderType; label: string }[] = [

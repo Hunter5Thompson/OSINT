@@ -7,74 +7,68 @@ import { SatelliteLayer } from "./components/layers/SatelliteLayer";
 import { EarthquakeLayer } from "./components/layers/EarthquakeLayer";
 import { ShipLayer } from "./components/layers/ShipLayer";
 import { CCTVLayer } from "./components/layers/CCTVLayer";
+import { EventLayer } from "./components/layers/EventLayer";
 import { OperationsPanel } from "./components/ui/OperationsPanel";
-import { IntelPanel } from "./components/ui/IntelPanel";
+import { RightPanel } from "./components/ui/RightPanel";
 import { ThreatRegister } from "./components/ui/ThreatRegister";
 import { ClockBar } from "./components/ui/ClockBar";
 import { StatusBar } from "./components/ui/StatusBar";
 import { useFlights } from "./hooks/useFlights";
 import { useSatellites } from "./hooks/useSatellites";
 import { useEarthquakes } from "./hooks/useEarthquakes";
+import { useEvents } from "./hooks/useEvents";
 import { useIntel } from "./hooks/useIntel";
 import { getConfig, getHotspots } from "./services/api";
 import { WebSocketManager } from "./services/websocket";
 import type { LayerVisibility, ShaderType, Hotspot, Vessel, ClientConfig } from "./types";
 
 export function App() {
-  // Viewer
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [config, setConfig] = useState<ClientConfig | null>(null);
 
-  // Layer visibility
   const [layers, setLayers] = useState<LayerVisibility>({
     flights: true,
     satellites: true,
     earthquakes: true,
     vessels: false,
     cctv: false,
+    events: false,
   });
 
-  // Shader
   const [activeShader, setActiveShader] = useState<ShaderType>("none");
 
-  // Data
   const { flights, lastUpdate: flightsUpdate } = useFlights(layers.flights);
   const { satellites, lastUpdate: satellitesUpdate } = useSatellites(layers.satellites);
   const { earthquakes, lastUpdate: earthquakesUpdate } = useEarthquakes(layers.earthquakes);
+  const { events, lastUpdate: eventsUpdate } = useEvents(layers.events);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [vesselsUpdate, setVesselsUpdate] = useState<Date | null>(null);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
 
-  // Intel
   const intel = useIntel();
 
-  // Load config
   useEffect(() => {
     void getConfig()
       .then(setConfig)
       .catch(() => {
-        // Use empty token as fallback
         setConfig({
           cesium_ion_token: "",
-          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false },
+          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false },
           api_version: "v1",
         });
       });
   }, []);
 
-  // Load hotspots
   useEffect(() => {
     void getHotspots().then(setHotspots).catch(() => {});
   }, []);
 
-  // Vessel stream via backend WebSocket.
   useEffect(() => {
     if (!layers.vessels) {
       setVessels([]);
       setVesselsUpdate(null);
       return;
     }
-
     const ws = new WebSocketManager<Vessel>("/ws/vessels", (data) => {
       setVessels(data);
       setVesselsUpdate(new Date());
@@ -102,8 +96,8 @@ export function App() {
   );
 
   const handleIntelQuery = useCallback(
-    (query: string) => {
-      intel.runQuery({ query });
+    (query: string, useLegacy: boolean) => {
+      intel.runQuery({ query, use_legacy: useLegacy });
     },
     [intel],
   );
@@ -120,24 +114,21 @@ export function App() {
 
   return (
     <div className="w-full h-full relative">
-      {/* 3D Globe */}
       <GlobeViewer
         onViewerReady={handleViewerReady}
         cesiumToken={config.cesium_ion_token}
         activeShader={activeShader}
       />
 
-      {/* Data Layers */}
       <FlightLayer viewer={viewer} flights={flights} visible={layers.flights} />
       <SatelliteLayer viewer={viewer} satellites={satellites} visible={layers.satellites} />
       <EarthquakeLayer viewer={viewer} earthquakes={earthquakes} visible={layers.earthquakes} />
       <ShipLayer viewer={viewer} vessels={vessels} visible={layers.vessels} />
       <CCTVLayer viewer={viewer} visible={layers.cctv} />
+      <EventLayer viewer={viewer} events={events} visible={layers.events} />
 
-      {/* Click Handler */}
       <EntityClickHandler viewer={viewer} />
 
-      {/* UI Overlay */}
       <ClockBar />
 
       <OperationsPanel
@@ -147,7 +138,7 @@ export function App() {
         onShaderChange={setActiveShader}
       />
 
-      <IntelPanel
+      <RightPanel
         loading={intel.loading}
         currentAgent={intel.currentAgent}
         result={intel.result}
@@ -164,11 +155,13 @@ export function App() {
           satellites: satellitesUpdate,
           earthquakes: earthquakesUpdate,
           vessels: vesselsUpdate,
+          events: eventsUpdate,
         }}
         flightCount={flights.length}
         satelliteCount={satellites.length}
         earthquakeCount={earthquakes.length}
         vesselCount={vessels.length}
+        eventCount={events.length}
       />
     </div>
   );

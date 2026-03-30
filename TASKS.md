@@ -830,7 +830,7 @@ react-force-graph-2d: "^1.25"   # Frontend
 # TASK-106: Demo-Szenario + Polish
 # ══════════════════════════════════════════
 # Aufwand: 2-3 Tage | Blocked by: TASK-105 | Blocks: nichts
-# Status: OFFEN
+# Status: DONE ✅ (committed 2026-03-30, scope C+ demo UI integration)
 
 ## Kontext
 Alle Kernkomponenten stehen. Jetzt: End-to-End Demo mit echten Daten,
@@ -1142,7 +1142,7 @@ TASK-104: Hybrid Search + Docling            3-4 Tage                       [DON
     ↓
 TASK-105: Agent Tools + Graph Explorer       4-5 Tage                       [DONE ✅]
     ↓
-TASK-106: Demo + Polish                      2-3 Tage   ┐                   [OFFEN]
+TASK-106: Demo + Polish                      2-3 Tage   ┐                   [DONE ✅]
 TASK-107: Hybrid Vision (YOLOv8)             5-7 Tage   ┘ parallel          [OFFEN]
                                              ─────────
                                              ~24-31 Tage

@@ -68,12 +68,32 @@ export interface IntelAnalysis {
   confidence: number;
   threat_assessment: string | null;
   timestamp: string;
+  tool_trace?: Array<{ tool_name: string; duration_ms?: number; success?: boolean }>;
+  mode?: "react" | "legacy" | "legacy_fallback" | "error";
 }
 
 export interface IntelQuery {
   query: string;
   region?: string;
   hotspot_id?: string;
+  use_legacy?: boolean;
+}
+
+export interface IntelEvent {
+  id: string;
+  title: string;
+  codebook_type: string;
+  severity: string;
+  timestamp: string | null;
+  location_name: string | null;
+  country: string | null;
+  lat: number | null;
+  lon: number | null;
+}
+
+export interface GeoEventsResponse {
+  events: IntelEvent[];
+  total_count: number;
 }
 
 // ── UI State Types ──
@@ -84,6 +104,7 @@ export interface LayerVisibility {
   earthquakes: boolean;
   vessels: boolean;
   cctv: boolean;
+  events: boolean;
 }
 
 export type ShaderType = "none" | "crt" | "nightvision" | "flir";
@@ -99,4 +120,5 @@ export interface DataFreshness {
   satellites: Date | null;
   earthquakes: Date | null;
   vessels: Date | null;
+  events: Date | null;
 }

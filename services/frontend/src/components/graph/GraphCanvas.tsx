@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import ForceGraph2D from "react-force-graph-2d";
 import type { ForceGraphMethods } from "react-force-graph-2d";
@@ -22,6 +22,25 @@ export default function GraphCanvas({
 }: GraphCanvasProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fgRef = useRef<ForceGraphMethods<any, any> | undefined>(undefined);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(300);
+  const [height, setHeight] = useState(400);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setWidth(entry.contentRect.width);
+        setHeight(entry.contentRect.height);
+      }
+    });
+    observer.observe(el);
+    // Set initial size
+    setWidth(el.clientWidth);
+    setHeight(el.clientHeight);
+    return () => observer.disconnect();
+  }, []);
 
   const graphData = {
     nodes: nodes.map((n) => ({ ...n })),
@@ -60,7 +79,8 @@ export default function GraphCanvas({
   );
 
   return (
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    <div ref={containerRef} style={{ width: "100%", height: "100%", minHeight: 300 }}>
+    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
     <ForceGraph2D<any, any>
       ref={fgRef}
       graphData={graphData}
@@ -73,8 +93,8 @@ export default function GraphCanvas({
       onNodeClick={(node) => onNodeClick(node as unknown as GraphNode)}
       onNodeRightClick={(node) => onNodeDoubleClick(node as unknown as GraphNode)}
       onNodeHover={(node) => onNodeHover(node ? (node as unknown as GraphNode) : null)}
-      width={800}
-      height={600}
+      width={width}
+      height={height}
       backgroundColor="#0f172a"
       linkColor={() => "#475569"}
       nodeCanvasObjectMode={() => "after"}
@@ -89,5 +109,6 @@ export default function GraphCanvas({
         ctx.fillText(label, n.x, n.y + 8);
       }}
     />
+    </div>
   );
 }

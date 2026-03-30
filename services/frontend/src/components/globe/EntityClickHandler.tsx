@@ -23,6 +23,27 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
 
     handler.setInputAction((movement: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
       const picked = viewer.scene.pick(movement.position);
+
+      // Guard 1: Event billboard (custom _eventData property)
+      const eventData = (picked?.primitive as Record<string, unknown>)?._eventData as
+        | { id: string; title: string; codebook_type: string; lat: number; lon: number; severity: string; location_name?: string }
+        | undefined;
+
+      if (eventData) {
+        setSelected({
+          id: eventData.id,
+          name: eventData.title,
+          type: eventData.codebook_type,
+          position: { lat: eventData.lat, lon: eventData.lon },
+          properties: {
+            severity: eventData.severity,
+            location: eventData.location_name ?? "",
+          },
+        });
+        return;
+      }
+
+      // Guard 2: Existing Cesium Entity logic
       if (Cesium.defined(picked) && picked.id) {
         const entity = picked.id;
         const props = entity.properties;
@@ -60,6 +81,17 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
         {selected.position.lat.toFixed(4)}, {selected.position.lon.toFixed(4)}
       </div>
       <div className="text-green-500/60 mt-1">{selected.type}</div>
+      {Object.keys(selected.properties).length > 0 && (
+        <div className="mt-1 border-t border-green-500/20 pt-1">
+          {Object.entries(selected.properties).map(([k, v]) =>
+            v ? (
+              <div key={k} className="text-green-500/50">
+                <span className="text-green-500/30">{k}:</span> {v}
+              </div>
+            ) : null,
+          )}
+        </div>
+      )}
     </div>
   );
 }
