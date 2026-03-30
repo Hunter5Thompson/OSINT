@@ -2,23 +2,36 @@
 Entity Extractor — LLM-based NER via Qwen3.5-27B (vLLM).
 
 Extracts Person, Organization, Country, Location, Facility,
-Commodity, Event entities from OSINT text and writes them to Neo4j.
+Commodity, Event entities from OSINT text and writes them to Neo4j
+via GraphClient.
 """
 
 from __future__ import annotations
 
 import json
+from typing import Literal
 import httpx
 import structlog
 from pydantic import BaseModel, Field
+
+from graph.client import GraphClient
+from graph.write_templates import UPSERT_DOCUMENT, UPSERT_ENTITY_WITH_MENTION
 
 log = structlog.get_logger(__name__)
 
 # ── Pydantic schema for structured LLM output ────────────────────────────────
 
+VALID_ENTITY_TYPES = frozenset({
+    "Person", "Organization", "Country", "Location",
+    "Facility", "Commodity", "Event",
+})
+
 class ExtractedEntity(BaseModel):
     name: str = Field(description="Canonical name of the entity")
-    type: str = Field(description="One of: Person, Organization, Country, Location, Facility, Commodity, Event")
+    type: Literal[
+        "Person", "Organization", "Country", "Location",
+        "Facility", "Commodity", "Event",
+    ] = Field(description="Entity type (whitelisted)")
     mention: str = Field(description="Exact quote from the text that mentions this entity")
     context: str = Field(description="One sentence explaining the entity's role in this document")
 
@@ -68,13 +81,11 @@ class EntityExtractor:
         self,
         vllm_url: str = "http://localhost:8000",
         vllm_model: str = "models/qwen3.5-27b-awq",
-        neo4j_url: str = "http://localhost:7474",
-        neo4j_auth: tuple[str, str] = ("neo4j", "odin1234"),
+        graph_client: GraphClient | None = None,
     ) -> None:
         self.vllm_url = vllm_url
         self.vllm_model = vllm_model
-        self.neo4j_url = neo4j_url
-        self.neo4j_auth = neo4j_auth
+        self._graph = graph_client
 
     # ── LLM extraction ────────────────────────────────────────────────────────
 
@@ -117,7 +128,7 @@ class EntityExtractor:
             log.warning("extraction_failed", url=source_url, error=str(e))
             return ExtractionResult(entities=[])
 
-    # ── Neo4j write ───────────────────────────────────────────────────────────
+    # ── Neo4j write via GraphClient ───────────────────────────────────────────
 
     async def write_to_neo4j(
         self,
@@ -126,59 +137,31 @@ class EntityExtractor:
         doc_url: str,
         doc_source: str = "rss",
     ) -> int:
-        """Write extracted entities to Neo4j. Returns number of entities written."""
-        if not result.entities:
+        """Write extracted entities to Neo4j via GraphClient. Returns entity count."""
+        if not result.entities or self._graph is None:
             return 0
 
-        statements = []
+        # Upsert Document node (deterministic template)
+        await self._graph.run_query(
+            UPSERT_DOCUMENT,
+            {"url": doc_url, "title": doc_title, "source": doc_source},
+        )
 
-        # Upsert Document node
-        statements.append({
-            "statement": (
-                "MERGE (d:Document {url: $url}) "
-                "SET d.title = $title, d.source = $source, d.updated_at = datetime() "
-                "RETURN d"
-            ),
-            "parameters": {"url": doc_url, "title": doc_title, "source": doc_source},
-        })
-
-        # Upsert each Entity + MENTIONS relationship
+        # Upsert each Entity + MENTIONS relationship (deterministic template)
         for entity in result.entities:
-            # Entity node with its specific label (e.g. :Entity:Person)
-            statements.append({
-                "statement": (
-                    f"MERGE (e:Entity:{entity.type} {{name: $name}}) "
-                    "SET e.last_seen = datetime() "
-                    "WITH e "
-                    "MATCH (d:Document {url: $url}) "
-                    "MERGE (d)-[r:MENTIONS]->(e) "
-                    "SET r.mention = $mention, r.context = $context"
-                ),
-                "parameters": {
+            await self._graph.run_query(
+                UPSERT_ENTITY_WITH_MENTION,
+                {
                     "name": entity.name,
+                    "type": entity.type,
                     "url": doc_url,
                     "mention": entity.mention,
                     "context": entity.context,
                 },
-            })
+            )
 
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.post(
-                    f"{self.neo4j_url}/db/neo4j/tx/commit",
-                    json={"statements": statements},
-                    auth=self.neo4j_auth,
-                )
-                resp.raise_for_status()
-                errors = resp.json().get("errors", [])
-                if errors:
-                    log.warning("neo4j_write_errors", errors=errors)
-                    return 0
-                log.info("neo4j_write_complete", url=doc_url, entities=len(result.entities))
-                return len(result.entities)
-        except Exception as e:
-            log.warning("neo4j_write_failed", url=doc_url, error=str(e))
-            return 0
+        log.info("neo4j_write_complete", url=doc_url, entities=len(result.entities))
+        return len(result.entities)
 
     # ── Combined pipeline ─────────────────────────────────────────────────────
 
