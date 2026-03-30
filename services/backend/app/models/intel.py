@@ -12,6 +12,8 @@ class IntelQuery(BaseModel):
     query: str = Field(..., max_length=2000)
     region: str | None = None
     hotspot_id: str | None = None
+    image_url: str | None = None
+    use_legacy: bool = False
 
 
 class IntelDocument(BaseModel):
@@ -32,6 +34,8 @@ class IntelAnalysis(BaseModel):
     analysis: str
     confidence: float = 0.0
     threat_assessment: str | None = None
+    tool_trace: list[dict] = Field(default_factory=list)
+    mode: str = "react"
     timestamp: datetime = Field(default_factory=_utc_now)
 
 

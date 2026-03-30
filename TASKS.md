@@ -730,7 +730,7 @@ sentence-transformers>=3.0   # für Reranker (CrossEncoder)
 # TASK-105: Agent Tools + Graph Explorer + Vision
 # ══════════════════════════════════════════
 # Aufwand: 4-5 Tage | Blocked by: TASK-101, TASK-104 | Blocks: TASK-106, TASK-107
-# Status: OFFEN
+# Status: DONE ✅ (committed 2026-03-30, 155 intelligence + 17 backend tests)
 
 ## Kontext
 WorldView hat LangGraph mit 3 Agents und 4 Tools.
@@ -1140,7 +1140,7 @@ TASK-103: Ingestion Pipeline → Graph         3-4 Tage                       [D
     ↓
 TASK-104: Hybrid Search + Docling            3-4 Tage                       [DONE ✅ Phase 1]
     ↓
-TASK-105: Agent Tools + Graph Explorer       4-5 Tage                       [OFFEN]
+TASK-105: Agent Tools + Graph Explorer       4-5 Tage                       [DONE ✅]
     ↓
 TASK-106: Demo + Polish                      2-3 Tage   ┐                   [OFFEN]
 TASK-107: Hybrid Vision (YOLOv8)             5-7 Tage   ┘ parallel          [OFFEN]
