@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # vLLM (intelligence extraction)
     vllm_url: str = "http://localhost:8000"
-    vllm_model: str = "models/qwen3.5-27b-awq"
+    vllm_model: str = "/models/qwen3.5-27b-awq"
 
     # Neo4j (graph writes via HTTP transactional API)
     neo4j_url: str = "http://localhost:7474"

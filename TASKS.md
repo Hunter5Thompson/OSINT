@@ -1144,9 +1144,9 @@ TASK-105: Agent Tools + Graph Explorer       4-5 Tage                       [DON
     ↓
 TASK-106: Demo + Polish                      2-3 Tage   ┐                   [DONE ✅]
 TASK-107: Hybrid Vision (YOLOv8)             5-7 Tage   ┘ parallel          [OFFEN]
-                                             ─────────
-                                             ~24-31 Tage
-                                             = 5-7 Wochen bei Abenden/WE
+    ↓
+TASK-108: Submarine Cable Layer              1-2 Tage                       [OFFEN]
+TASK-109: Flights Performance (Caching)      1-2 Tage                       [OFFEN]
 ```
 
 ## Gesamte neue Dependencies (über MVP hinaus)
@@ -1165,3 +1165,49 @@ Pillow>=10.0                # Image Processing
 react-force-graph-2d ^1.25  # Graph Viz
 ```
 8 Python + 1 Frontend Dependencies.
+
+---
+
+# ══════════════════════════════════════════
+# TASK-108: Submarine Cable Layer
+# ══════════════════════════════════════════
+# Aufwand: 1-2 Tage | Blocked by: nichts | Blocks: nichts
+# Status: OFFEN
+
+## Kontext
+Unterwasser-Glasfaserkabel sind kritische OSINT-Infrastruktur.
+TeleGeography stellt einen öffentlichen GeoJSON-Datensatz zur Verfügung.
+
+## Deliverables
+1. `services/frontend/src/components/layers/CableLayer.tsx` — CesiumJS Polyline-Rendering
+2. `services/frontend/src/hooks/useCables.ts` — Datenlader (statisch oder API)
+3. Toggle im OperationsPanel ("CABLES")
+4. Kabel-Klick zeigt Name, Eigentümer, Kapazität, Landing Points
+
+## Datenquelle
+- TeleGeography Submarine Cable Map: https://github.com/telegeography/www.submarinecablemap.com
+- Format: GeoJSON (cables.json + landing-points.json)
+- Lizenz: Public domain für die Geodaten
+
+---
+
+# ══════════════════════════════════════════
+# TASK-109: Flights Performance — Redis Caching + Smooth Rendering
+# ══════════════════════════════════════════
+# Aufwand: 1-2 Tage | Blocked by: nichts | Blocks: nichts
+# Status: OFFEN
+
+## Kontext
+Flights-Layer hat ~486ms TTFB weil das Backend bei jedem Request
+OpenSky/adsb.fi live proxied. Bei 10s Polling fühlt sich das träge an.
+
+## Deliverables
+1. Backend: Redis-Cache mit 10s TTL für Flight-Daten
+2. Backend: Server-Side Bounding-Box Filter (nur sichtbare Region)
+3. Frontend: Interpolation zwischen Polling-Updates (dead reckoning via heading+speed)
+4. Optional: WebSocket statt Polling für Push-basierte Updates
+
+## Optionen für Datenquellen
+- OpenSky Network (aktuell, 10s Rate-Limit, optional Auth)
+- adsb.fi (schneller, kein Auth, aggressives Caching)
+- ADS-B Exchange (kommerziell, sehr schnell, API-Key nötig)

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # LLM Inference (vLLM)
     vllm_url: str = "http://localhost:8000"
-    vllm_model: str = "models/qwen3.5-27b-awq"
+    vllm_model: str = "/models/qwen3.5-27b-awq"
 
     # Embeddings + Reranking (TEI)
     tei_embed_url: str = "http://localhost:8001"
