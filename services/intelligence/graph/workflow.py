@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from config import settings
 from agents.react_agent import (
     REACT_SYSTEM_PROMPT,
     create_react_agent,
@@ -253,7 +254,7 @@ async def run_intelligence_query(
         else:
             result = await asyncio.wait_for(
                 react_graph.ainvoke(initial_state),
-                timeout=60,
+                timeout=settings.react_total_timeout_s,
             )
     except (asyncio.TimeoutError, Exception) as e:
         if not use_legacy:
