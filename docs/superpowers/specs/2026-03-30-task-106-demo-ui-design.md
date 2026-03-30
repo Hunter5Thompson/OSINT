@@ -171,17 +171,19 @@ Konkret:
 
 **Icons nach codebook_type Kategorie:**
 
-| Kategorie-Prefix | Icon-Shape | Farbe |
-|---|---|---|
-| `military.*` | ◆ Diamond | `#ef4444` (red) |
-| `space.*` | ★ Star | `#06b6d4` (cyan) |
-| `cyber.*` | ⬡ Hexagon | `#a855f7` (purple) |
-| `political.*` | ■ Square | `#f97316` (orange) |
-| `economic.*` | ▲ Triangle | `#eab308` (yellow) |
-| `environmental.*` | ● Circle | `#22c55e` (green) |
-| `other.*` / default | ○ Ring | `#6b7280` (gray) |
+Einheitliche Diamond-Shape (◆), Unterscheidung nur über Farbe. Verschiedene Shapes pro Kategorie wären nice-to-have für v2 aber für die Demo reicht Farb-Coding.
 
-Icons werden als Canvas-gezeichnete Shapes gerendert (wie FlightLayer), nicht als externe Bilder.
+| Kategorie-Prefix | Farbe |
+|---|---|
+| `military.*` | `#ef4444` (red) |
+| `space.*` | `#06b6d4` (cyan) |
+| `cyber.*` | `#a855f7` (purple) |
+| `political.*` | `#f97316` (orange) |
+| `economic.*` | `#eab308` (yellow) |
+| `environmental.*` | `#22c55e` (green) |
+| `other.*` / default | `#6b7280` (gray) |
+
+Icons werden als Canvas-gezeichnete Diamond-Shapes gerendert (wie FlightLayer), nicht als externe Bilder.
 
 **Props:**
 ```typescript
