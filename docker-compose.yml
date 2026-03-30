@@ -12,7 +12,7 @@ services:
     command: >
       --model /models/qwen3.5-27b-awq
       --max-model-len 32768
-      --gpu-memory-utilization 0.85
+      --gpu-memory-utilization 0.78
       --enforce-eager
       --enable-auto-tool-choice
       --tool-call-parser qwen3_coder
@@ -35,7 +35,7 @@ services:
 
   # ═══ TEI EMBED (startet erst wenn vLLM healthy) ═══
   tei-embed:
-    image: ghcr.io/huggingface/text-embeddings-inference:120-1.9
+    image: ghcr.io/huggingface/text-embeddings-inference:120-1.9.3
     ports:
       - "8001:80"
     volumes:
@@ -54,35 +54,39 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              device_ids: ["0"]
               capabilities: [gpu]
     depends_on:
       vllm:
         condition: service_healthy
     restart: unless-stopped
 
-  # ═══ TEI RERANK (startet erst wenn vLLM healthy) ═══
+  # ═══ RERANKER (custom FastAPI + transformers, GPU) ═══
   tei-rerank:
-    image: ghcr.io/huggingface/text-embeddings-inference:120-1.9
+    build:
+      context: ./infra/docker/reranker
+      dockerfile: Dockerfile
     ports:
       - "8002:80"
     volumes:
       - tei-rerank-cache:/data
-    command: --model-id BAAI/bge-reranker-v2-m3 --dtype float16
+    environment:
+      - MODEL_ID=BAAI/bge-reranker-v2-m3
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_HUB_CACHE=/data
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 15s
       timeout: 5s
       retries: 20
       start_period: 300s
-    environment:
-      - HF_TOKEN=${HF_TOKEN:-}
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              device_ids: ["0"]
               capabilities: [gpu]
     depends_on:
       vllm:
@@ -128,6 +132,7 @@ services:
       - TEI_EMBED_URL=http://tei-embed:80
       - TEI_RERANK_URL=http://tei-rerank:80
       - NEO4J_URL=bolt://neo4j:7687
+      - INTELLIGENCE_URL=http://intelligence:80
     volumes:
       - ./services/backend/app:/app/app
     depends_on:
@@ -137,6 +142,8 @@ services:
         condition: service_healthy
       neo4j:
         condition: service_healthy
+      intelligence:
+        condition: service_healthy
     restart: unless-stopped
 
   # ═══ INTELLIGENCE (LangGraph RAG Pipeline) ═══
@@ -144,6 +151,8 @@ services:
     build:
       context: ./services/intelligence
       dockerfile: Dockerfile
+    ports:
+      - "8003:80"
     env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379/0
@@ -152,6 +161,12 @@ services:
       - TEI_EMBED_URL=http://tei-embed:80
       - TEI_RERANK_URL=http://tei-rerank:80
       - NEO4J_URL=bolt://neo4j:7687
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     depends_on:
       tei-embed:
         condition: service_healthy
@@ -187,8 +202,6 @@ services:
       dockerfile: Dockerfile
     ports:
       - "5173:5173"
-    environment:
-      - VITE_API_URL=http://localhost:8080
     volumes:
       - ./services/frontend/src:/app/src
     depends_on:

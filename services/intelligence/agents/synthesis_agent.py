@@ -1,7 +1,7 @@
 """Synthesis Agent — produces final intelligence reports."""
 
 from langchain_core.messages import SystemMessage
-from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 
 from config import settings
 
@@ -17,12 +17,13 @@ Structure your report with:
 Be precise and avoid speculation beyond what the evidence supports."""
 
 
-def create_synthesis_llm() -> ChatOllama:
+def create_synthesis_llm() -> ChatOpenAI:
     """Create LLM instance for the Synthesis agent."""
-    return ChatOllama(
-        base_url=settings.ollama_url,
-        model=settings.ollama_model,
+    return ChatOpenAI(
+        base_url=settings.llm_base_url,
+        model=settings.llm_model,
         temperature=0.1,
+        api_key="not-needed",
     )
 
 

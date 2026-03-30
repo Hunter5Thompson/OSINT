@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Internal Services
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"
+    qdrant_collection: str = "odin_intel"
+    embedding_dimensions: int = 1024
+    intelligence_url: str = "http://localhost:8003"
 
     # External APIs
     opensky_api_url: str = "https://opensky-network.org/api/states/all"
@@ -49,8 +52,4 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
-try:
-    settings = Settings()
-except Exception:
-    # .env not found or NEO4J_PASSWORD not set—allow imports in test context
-    settings = None
+settings = Settings()

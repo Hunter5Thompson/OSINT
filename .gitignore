@@ -28,3 +28,4 @@ services/frontend/package-lock.json
 Thumbs.db
 .idea/
 .vscode/
+.superpowers/

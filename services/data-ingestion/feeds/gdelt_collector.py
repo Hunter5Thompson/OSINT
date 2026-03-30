@@ -84,11 +84,14 @@ class GDELTCollector:
     async def _embed(self, text: str) -> list[float]:
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
             resp = await client.post(
-                f"{settings.ollama_url}/api/embeddings",
-                json={"model": settings.embedding_model, "prompt": text},
+                f"{settings.tei_embed_url}/embed",
+                json={"inputs": text},
             )
             resp.raise_for_status()
-            return resp.json()["embedding"]
+            data = resp.json()
+            if isinstance(data, list) and data:
+                return data[0] if isinstance(data[0], list) else data
+            return data
 
     async def _fetch_query(self, query_meta: dict[str, str]) -> list[dict[str, Any]]:
         """Execute a single GDELT query and return article list."""

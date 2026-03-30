@@ -1,10 +1,11 @@
-<!-- manifest: project=WorldView | doc_version=1.0 | compatible_with=PRD:1.0 | updated=2026-03-05 -->
+<!-- manifest: project=WorldView | doc_version=2.0 | compatible_with=PRD:1.0 | updated=2026-03-30 -->
+<!-- CANONICAL TECH VALUES: see TASKS.md "TECH STACK — CANONICAL VALUES" block -->
 
 # WorldView — Architektur
 
 ## Summary (max. 500 Token)
 
-WorldView folgt einer klassischen 3-Tier-Architektur: React/CesiumJS Frontend, FastAPI Backend (Proxy + Intelligence), Qdrant VectorDB + Ollama/vLLM Inference. Alle Services laufen als Docker Container, orchestriert via Docker Compose. Das Backend proxied alle externen APIs (OpenSky, USGS, CelesTrak, AISStream), cached aggressiv (Redis), und betreibt einen LangGraph Multi-Agent RAG-Pipeline mit lokaler Inference. CesiumJS rendert Google Photorealistic 3D Tiles mit GLSL Custom Shaders für Post-Processing. WebSocket für Live-Daten-Push, SSE für Streaming-Intelligence-Output.
+WorldView folgt einer klassischen 3-Tier-Architektur: React/CesiumJS Frontend, FastAPI Backend (Proxy + Intelligence), Qdrant VectorDB + Neo4j Knowledge Graph + vLLM Inference. Alle Services laufen als Docker Container, orchestriert via Docker Compose. Das Backend proxied alle externen APIs (OpenSky, USGS, CelesTrak, AISStream), cached aggressiv (Redis), und betreibt einen LangGraph Multi-Agent RAG-Pipeline mit lokaler Inference. Neo4j speichert Entities, Events und deren Beziehungen über eine Two-Loop Graph Architecture (deterministische Templates für Writes, LLM-generiertes Cypher für Reads). CesiumJS rendert Google Photorealistic 3D Tiles mit GLSL Custom Shaders für Post-Processing. WebSocket für Live-Daten-Push, SSE für Streaming-Intelligence-Output.
 
 ---
 
@@ -19,20 +20,20 @@ WorldView folgt einer klassischen 3-Tier-Architektur: React/CesiumJS Frontend, F
 │  │  React/Vite   │──▶│   FastAPI    │──▶│   LangGraph       │   │
 │  │  CesiumJS     │   │   Proxy      │   │   Multi-Agent     │   │
 │  │  TypeScript   │   │   Cache      │   │   RAG Pipeline    │   │
-│  │  Port: 5173   │   │   Port: 8000 │   │   (internal)      │   │
+│  │  Port: 5173   │   │   Port: 8080 │   │   (internal)      │   │
 │  └──────────────┘   └──────┬───────┘   └────────┬──────────┘   │
 │                            │                     │              │
-│                    ┌───────┴───────┐     ┌───────┴───────┐      │
-│                    │    Redis      │     │    Qdrant     │      │
-│                    │    Cache      │     │   VectorDB    │      │
-│                    │   Port: 6379  │     │   Port: 6333  │      │
-│                    └───────────────┘     └───────────────┘      │
-│                                                                 │
-│                    ┌───────────────┐     ┌───────────────┐      │
-│                    │   Ollama      │     │    vLLM       │      │
-│                    │   (dev)       │     │   (prod)      │      │
-│                    │   Port: 11434 │     │   Port: 8001  │      │
-│                    └───────────────┘     └───────────────┘      │
+│           ┌────────┴────────┐  ┌──────┴──────┐  ┌──────────────┐│
+│           │    Redis        │  │   Qdrant    │  │    Neo4j     ││
+│           │    Cache        │  │  VectorDB   │  │  Knowledge   ││
+│           │   Port: 6379    │  │  Port: 6333 │  │    Graph     ││
+│           └─────────────────┘  └─────────────┘  │  Port: 7687  ││
+│                                                 └──────────────┘│
+│           ┌─────────────────┐  ┌─────────────┐  ┌──────────────┐│
+│           │  vLLM           │  │  TEI Embed  │  │  TEI Rerank  ││
+│           │  Qwen3.5-27B   │  │  1024-dim   │  │  bge-v2-m3   ││
+│           │  Port: 8000     │  │  Port: 8001 │  │  Port: 8002  ││
+│           └─────────────────┘  └─────────────┘  └──────────────┘│
 └─────────────────────────────────────────────────────────────────┘
                             │
                    ┌────────┴────────────────────────┐
@@ -61,11 +62,12 @@ WorldView folgt einer klassischen 3-Tier-Architektur: React/CesiumJS Frontend, F
 | **Styling** | Tailwind CSS v4 | 4.x | Utility-First, schnelles taktisches UI-Prototyping |
 | **Backend** | FastAPI + Pydantic v2 | 0.128+ | Async-First, WebSocket-Support, auto-generierte OpenAPI Docs |
 | **Cache** | Redis | 7.x | In-Memory Cache für API-Responses, TTL-basiert |
-| **Vector DB** | Qdrant | 1.13+ | Lokale On-Premise VectorDB, REST + gRPC, Filtering |
-| **Embeddings** | nomic-embed-text (Ollama) | - | 768-dim, lokal, kostenlos, gute Multilingual-Performance |
-| **LLM Inference (dev)** | Ollama | 0.9+ | Einfaches Modell-Management, GPU-Offloading |
-| **LLM Inference (prod)** | vLLM | 0.8+ | Continuous Batching, höherer Throughput, OpenAI-kompatible API |
-| **LLM Model** | Qwen3-32B (Q8) | - | Beste Balance aus Qualität und VRAM (RTX 5090 32GB) |
+| **Vector DB** | Qdrant | 1.13+ | Lokale On-Premise VectorDB, REST + gRPC, Filtering, native BM25 |
+| **Graph DB** | Neo4j | 5-community | Knowledge Graph für Entities/Events/Relationships, Two-Loop Architecture |
+| **Embeddings** | Qwen3-Embedding-0.6B (TEI) | - | 1024-dim, TEI-kompatibles Interface auf Port 8001 |
+| **Reranking** | BAAI/bge-reranker-v2-m3 (TEI) | - | Cross-Encoder Reranker auf Port 8002 |
+| **LLM Inference** | vLLM | 0.8+ | Continuous Batching, OpenAI-kompatible API, Port 8000 |
+| **LLM Model** | Qwen3.5-27B-AWQ | - | Multimodal (Text+Vision), AWQ-quantisiert, ~17.6 GB VRAM |
 | **Agent Framework** | LangGraph | 1.0+ | Stateful Multi-Agent Workflows, Tool-Use, Streaming |
 | **Logging** | structlog | 25.x | Structured JSON Logging |
 | **Container** | Docker + Docker Compose | v2 | Multi-Container Orchestrierung, GPU-Passthrough |
@@ -151,7 +153,7 @@ class IntelDocument(BaseModel):
     hotspot_ids: list[str]
     published_at: datetime
     ingested_at: datetime
-    embedding: list[float] | None  # 768-dim nomic-embed-text
+    embedding: list[float] | None  # 1024-dim Qwen3-Embedding-0.6B
 
 # ── Intelligence Query Result ──
 class IntelAnalysis(BaseModel):
@@ -193,6 +195,16 @@ POST /api/v1/rag/ingest                → IngestResult (Feed-URL oder Dokument)
 GET  /api/v1/rag/sources               → list[Source]
 GET  /api/v1/rag/stats                 → RAGStats (doc count, collection info)
 
+# ── Knowledge Graph (Neo4j) ──
+GET  /api/v1/graph/entity/{name}/neighborhood → Graph (nodes + edges within N hops)
+POST /api/v1/graph/query               → GraphQueryResult (NL → Cypher → Results)
+GET  /api/v1/graph/events/recent       → list[Event] (filtered by hours/type)
+
+# ── Vision ──
+POST /api/v1/vision/analyze            → ImageAnalysis (Qwen3.5 Vision)
+POST /api/v1/vision/detect/military    → list[Detection] (YOLOv8 → Qwen3.5 Reasoning)
+GET  /api/v1/vision/assets             → list[MilitaryAsset] (from Neo4j)
+
 # ── WebSocket ──
 WS   /ws/flights                       → Live aircraft position stream
 WS   /ws/vessels                       → AIS burst pattern (20s on, 60s cache)
@@ -231,7 +243,13 @@ Kein User-Auth (Single-User-System). Backend erfordert keine Authentifizierung.
 ├── OPENSKY_PASS=...
 ├── AISSTREAM_API_KEY=...          # AISStream.io WebSocket
 ├── WINDY_API_KEY=...              # Webcam thumbnails
-└── VLLM_API_KEY=...               # Falls vLLM mit Auth
+├── VLLM_API_KEY=...               # Falls vLLM mit Auth
+├── NEO4J_URI=bolt://localhost:7687
+├── NEO4J_USER=neo4j
+├── NEO4J_PASSWORD=...
+├── EMBEDDING_URL=http://localhost:8001/embed
+├── EMBEDDING_DIMENSIONS=1024
+└── LLM_BASE_URL=http://localhost:8000/v1
 ```
 
 **Regel:** Kein API-Key wird jemals ans Frontend geliefert. Alle externen Calls gehen über `/api/v1/*`.
@@ -341,7 +359,9 @@ worldview/
 │   │   │   │   ├── vessels.py
 │   │   │   │   ├── hotspots.py
 │   │   │   │   ├── intel.py
-│   │   │   │   └── rag.py
+│   │   │   │   ├── rag.py
+│   │   │   │   ├── graph.py        # Neo4j NL-Query + Entity Neighborhood
+│   │   │   │   └── vision.py       # Image Analysis + Military Detection
 │   │   │   ├── services/           # Business Logic
 │   │   │   │   ├── flight_service.py
 │   │   │   │   ├── satellite_service.py
@@ -365,17 +385,39 @@ worldview/
 │   │   │       ├── web_search.py
 │   │   │       ├── rss_fetch.py
 │   │   │       ├── qdrant_search.py
-│   │   │       └── gdelt_query.py
+│   │   │       ├── gdelt_query.py
+│   │   │       ├── graph_query.py   # Neo4j Read-Path als Agent-Tool
+│   │   │       └── vision.py        # Qwen3.5 Vision + YOLOv8 Hybrid
 │   │   ├── graph/
 │   │   │   ├── state.py            # AgentState TypedDict
 │   │   │   ├── workflow.py         # StateGraph Definition
 │   │   │   └── nodes.py            # Node-Funktionen
 │   │   ├── rag/
-│   │   │   ├── embedder.py         # nomic-embed-text via Ollama
+│   │   │   ├── embedder.py         # Qwen3-Embedding-0.6B via TEI (1024-dim)
 │   │   │   ├── indexer.py          # Qdrant Ingestion Pipeline
-│   │   │   ├── retriever.py        # Hybrid Search (Dense + Sparse)
+│   │   │   ├── retriever.py        # Hybrid Search (Dense + BM25 Sparse + RRF)
+│   │   │   ├── reranker.py         # BAAI/bge-reranker-v2-m3 oder Qwen3-Reranker
 │   │   │   └── chunker.py          # Semantic Chunking
 │   │   └── tests/
+│   │
+│   │   ├── extraction/
+│   │   │   └── entity_extractor.py # LLM-basierte NER via vLLM
+│   │   │
+│   ├── graph/                      # Neo4j Knowledge Graph (TASK-101)
+│   │   ├── client.py               # Async Neo4j Wrapper (READ_ACCESS enforcement)
+│   │   ├── models.py               # Entity, Event, Source, ExtractionResult
+│   │   ├── write_templates.py      # Deterministische Cypher Templates (Write-Path)
+│   │   └── read_queries.py         # LLM-Cypher + Validation (Read-Path)
+│   │
+│   ├── codebook/                   # Event Classification (TASK-102)
+│   │   ├── event_codebook.yaml     # 50+ Event-Typen
+│   │   ├── classifier.py
+│   │   └── extractor.py            # Combined Classifier + Entity Extractor
+│   │
+│   ├── vision/                     # Hybrid Vision Pipeline (TASK-107)
+│   │   ├── detector.py             # YOLOv8 Military Object Detection
+│   │   ├── hybrid_pipeline.py      # Detect → Crop → Reason → Graph
+│   │   └── training/               # Fine-Tuning Scripts
 │   │
 │   ├── data-ingestion/             # Scheduled Data Feeds
 │   │   ├── Dockerfile
@@ -438,13 +480,12 @@ worldview/
 ├── data/                           # Persistent volumes
 │   ├── qdrant/
 │   ├── redis/
-│   └── models/                     # Ollama model cache
+│   ├── neo4j/
+│   └── models/                     # vLLM model cache
 │
-├── tasks/                          # Kanban Task-Board
-│   ├── backlog/
-│   ├── in-progress/
-│   ├── review/
-│   └── done/
+├── TASKS.md                        # Single Source of Truth für Tasks + Tech-Stack
+├── tasks/
+│   └── archived/                   # Historische Task-Dateien (001-015, TASKS_final)
 │
 ├── docs/
 │   ├── external-docs.md            # Dokumentations-Links

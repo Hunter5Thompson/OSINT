@@ -1,7 +1,7 @@
 """Analyst Agent — analyzes OSINT data and produces threat assessments."""
 
 from langchain_core.messages import SystemMessage
-from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 
 from config import settings
 
@@ -13,12 +13,13 @@ Be objective and evidence-based in your analysis.
 Always cite the sources that support your assessment."""
 
 
-def create_analyst_llm() -> ChatOllama:
+def create_analyst_llm() -> ChatOpenAI:
     """Create LLM instance for the Analyst agent."""
-    return ChatOllama(
-        base_url=settings.ollama_url,
-        model=settings.ollama_model,
+    return ChatOpenAI(
+        base_url=settings.llm_base_url,
+        model=settings.llm_model,
         temperature=0.2,
+        api_key="not-needed",
     )
 
 

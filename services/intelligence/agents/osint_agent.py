@@ -2,7 +2,7 @@
 
 import structlog
 from langchain_core.messages import SystemMessage
-from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 
 from config import settings
 
@@ -15,12 +15,13 @@ Structure your findings clearly with source attribution.
 Be concise but thorough."""
 
 
-def create_osint_llm() -> ChatOllama:
+def create_osint_llm() -> ChatOpenAI:
     """Create LLM instance for the OSINT agent."""
-    return ChatOllama(
-        base_url=settings.ollama_url,
-        model=settings.ollama_model,
+    return ChatOpenAI(
+        base_url=settings.llm_base_url,
+        model=settings.llm_model,
         temperature=0.3,
+        api_key="not-needed",
     )
 
 

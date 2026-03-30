@@ -72,18 +72,17 @@ async def qdrant_search(query: str, region: str = "") -> str:
 
 
 async def _get_embedding(text: str) -> list[float] | None:
-    """Generate embedding via Ollama API."""
+    """Generate embedding via TEI embed API."""
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
-                f"{settings.ollama_url}/api/embed",
-                json={"model": settings.embedding_model, "input": text},
+                f"{settings.tei_embed_url}/embed",
+                json={"inputs": text},
             )
             resp.raise_for_status()
             data = resp.json()
-            embeddings = data.get("embeddings", [])
-            if embeddings:
-                return embeddings[0]
+            if isinstance(data, list) and data:
+                return data[0] if isinstance(data[0], list) else data
     except Exception as e:
         logger.warning("embedding_failed", error=str(e))
     return None

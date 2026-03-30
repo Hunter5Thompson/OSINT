@@ -1,6 +1,6 @@
 # WorldView — Tactical Intelligence Platform
 
-Palantir-like tactical intelligence platform running locally. CesiumJS 3D Globe with Google Photorealistic 3D Tiles, FastAPI backend proxying real-time data feeds, LangGraph multi-agent RAG pipeline with local LLM inference (Ollama/vLLM), and Qdrant vector database.
+Palantir-like tactical intelligence platform running locally. CesiumJS 3D Globe with Google Photorealistic 3D Tiles, FastAPI backend proxying real-time data feeds, LangGraph multi-agent RAG pipeline with local LLM inference (vLLM + TEI), and Qdrant vector database.
 
 ## Architecture
 
@@ -9,7 +9,7 @@ Palantir-like tactical intelligence platform running locally. CesiumJS 3D Globe 
 │   Frontend   │   │   Backend    │   │   Intelligence    │
 │  React/Vite  │──▶│   FastAPI    │──▶│   LangGraph       │
 │  CesiumJS    │   │   Proxy      │   │   Multi-Agent     │
-│  Port: 5173  │   │   Port: 8000 │   │   RAG Pipeline    │
+│  Port: 5173  │   │ Port: 8000*  │   │   RAG Pipeline    │
 └──────────────┘   └──────┬───────┘   └────────┬──────────┘
                           │                     │
                    ┌──────┴───────┐     ┌───────┴───────┐
@@ -17,12 +17,14 @@ Palantir-like tactical intelligence platform running locally. CesiumJS 3D Globe 
                    │    Cache     │     │   VectorDB    │
                    │   Port: 6379 │     │   Port: 6333  │
                    └──────────────┘     └───────────────┘
-                   ┌──────────────┐
-                   │   Ollama     │
-                   │   LLM       │
-                   │   Port:11434│
-                   └──────────────┘
+                   ┌──────────────┐     ┌──────────────┐
+                   │    vLLM      │     │ TEI Embed +  │
+                   │  OpenAI API  │     │   Reranker   │
+                   │   Port:8000  │     │  8001 / 8002 │
+                   └──────────────┘     └──────────────┘
 ```
+
+\* In Docker Compose liegt der Backend-Host-Port bei `8080` (`8080:8000`), weil `8000` auf dem Host für vLLM genutzt wird.
 
 ## Features
 
@@ -42,7 +44,7 @@ Palantir-like tactical intelligence platform running locally. CesiumJS 3D Globe 
 - **Python** 3.12+
 - **Docker** + Docker Compose
 - **uv** (Python package manager) — `pip install uv`
-- **GPU** (optional) — NVIDIA GPU for Ollama/vLLM inference
+- **GPU** (optional) — NVIDIA GPU for vLLM/TEI inference
 
 ## Quick Start
 
@@ -59,7 +61,7 @@ cp .env.example .env
 ### 2. Infrastructure
 
 ```bash
-docker compose up -d redis qdrant ollama
+docker compose up -d redis qdrant neo4j vllm tei-embed tei-rerank
 ```
 
 ### 3. Backend
@@ -85,6 +87,16 @@ Open **http://localhost:5173** in Chrome/Chromium.
 ```bash
 docker compose up -d
 ```
+
+Service Ports (Docker Compose, Host):
+- Frontend: `5173`
+- Backend: `8080`
+- vLLM: `8000`
+- TEI Embed: `8001`
+- TEI Rerank: `8002`
+- Redis: `6379`
+- Qdrant: `6333`
+- Neo4j: `7474` (HTTP), `7687` (Bolt)
 
 ## Project Structure
 
@@ -175,9 +187,9 @@ npm run build                    # Production build
 | 3D Engine | CesiumJS 1.132+, Google Photorealistic 3D Tiles |
 | Satellite Math | satellite.js (SGP4/SDP4) |
 | Backend | FastAPI, Pydantic v2, httpx, Redis |
-| Intelligence | LangGraph, LangChain, Ollama/vLLM, Qwen3-32B |
+| Intelligence | LangGraph, LangChain, vLLM, Qwen3.5-27B-AWQ |
 | Vector DB | Qdrant |
-| Embeddings | nomic-embed-text (768 dim) |
+| Embeddings | Qwen3-Embedding-0.6B (1024 dim, TEI) |
 | Container | Docker Compose |
 
 ## License

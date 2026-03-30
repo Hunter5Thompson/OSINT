@@ -5,8 +5,9 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 COPY pyproject.toml .
-RUN uv sync --no-dev --no-install-project
+RUN uv sync --no-dev
 
 COPY . .
 
-CMD ["uv", "run", "python", "-m", "agents.graph.workflow"]
+EXPOSE 80
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
