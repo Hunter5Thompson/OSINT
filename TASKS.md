@@ -1147,6 +1147,7 @@ TASK-107: Hybrid Vision (YOLOv8)             5-7 Tage   ┘ parallel          [O
     ↓
 TASK-108: Submarine Cable Layer              1-2 Tage                       [OFFEN]
 TASK-109: Flights Performance (Caching)      1-2 Tage                       [OFFEN]
+TASK-110: Dual-Model (8B ReAct + 27B Synth)  3-4 Tage                       [OFFEN]
 ```
 
 ## Gesamte neue Dependencies (über MVP hinaus)
@@ -1211,3 +1212,47 @@ OpenSky/adsb.fi live proxied. Bei 10s Polling fühlt sich das träge an.
 - OpenSky Network (aktuell, 10s Rate-Limit, optional Auth)
 - adsb.fi (schneller, kein Auth, aggressives Caching)
 - ADS-B Exchange (kommerziell, sehr schnell, API-Key nötig)
+
+---
+
+# ══════════════════════════════════════════
+# TASK-110: Dual-Model Architecture — 8B ReAct + 27B Synthesis
+# ══════════════════════════════════════════
+# Aufwand: 3-4 Tage | Blocked by: nichts | Blocks: nichts
+# Status: OFFEN
+# Priorität: KRITISCH — ReAct Agent ist aktuell unbenutzbar (>120s Timeout)
+
+## Kontext
+Qwen3.5-27B-AWQ braucht >120s für einen einzigen Tool-Call mit bind_tools.
+Bei 97% VRAM-Auslastung (25GB Model + 3.4GB TEI + 1.7GB TEI) bleibt kein
+Headroom für KV-Cache bei langen Tool-Prompts. Der ReAct Agent fällt
+konstant auf den Legacy-Fallback zurück.
+
+## Lösung: Dual-Model-Architektur
+- **ReAct Agent:** Qwen3-8B-AWQ (~4.5GB) — schnell, Tool-Calling out-of-the-box
+- **Synthesis + Extraction:** Qwen3.5-27B-AWQ (~25GB) — Qualität für Reports
+- Beide via vLLM (multi-model oder zweite Instanz auf separatem Port)
+
+## VRAM-Budget (neu)
+```
+Qwen3.5-27B AWQ (Synthesis):    ~17.6 GB (gpu-mem-util 0.55)
+Qwen3-8B AWQ (ReAct):           ~4.5 GB
+TEI Embed:                       ~1.7 GB
+TEI Rerank:                      ~2.6 GB
+─────────────────────────────────────────
+Total:                          ~26.4 GB / 32 GB ✅ (~5.6 GB Headroom)
+```
+
+## Deliverables
+1. vLLM Multi-Model Config oder zweite Instanz (Port 8005)
+2. `config.py` — separates `react_model` / `react_url` Setting
+3. `react_agent.py` — nutzt 8B Modell statt 27B
+4. `workflow.py` — Synthesis bleibt auf 27B
+5. docker-compose.yml — zweiter vLLM-Service oder multi-model
+6. Tests + Latenz-Benchmarks (Ziel: <15s pro Tool-Call)
+
+## Phase 2: Fine-Tuning (optional)
+- Dataset: Tool-Call Traces aus dem System sammeln
+- Fine-Tune Qwen3-8B auf OSINT-spezifische Tool-Auswahl
+- Ziel: bessere Tool-Selektion + kürzere Generierung
+- Framework: TRL (SFT) oder eigenes Training-Script
