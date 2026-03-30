@@ -13,6 +13,7 @@ dependencies = [
     "feedparser>=6.0",
     "lxml>=5.1",
     "redis>=5.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

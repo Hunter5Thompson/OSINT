@@ -13,6 +13,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
+from pipeline import process_item
 
 log = structlog.get_logger(__name__)
 
@@ -65,8 +66,9 @@ def _point_id_from_hash(content_hash: str) -> int:
 class GDELTCollector:
     """Fetch geopolitically relevant events from GDELT GKG and ingest into Qdrant."""
 
-    def __init__(self) -> None:
+    def __init__(self, redis_client=None) -> None:
         self.qdrant = QdrantClient(url=settings.qdrant_url)
+        self._redis = redis_client
         self._ensure_collection()
 
     def _ensure_collection(self) -> None:
@@ -145,6 +147,16 @@ class GDELTCollector:
 
             embed_text = f"{title}"[:2000]
 
+            # Intelligence extraction
+            enrichment = await process_item(
+                title=title,
+                text=embed_text,
+                url=url,
+                source="gdelt",
+                settings=settings,
+                redis_client=self._redis,
+            )
+
             try:
                 vector = await self._embed(embed_text)
             except httpx.HTTPError as exc:
@@ -166,6 +178,8 @@ class GDELTCollector:
                         "seen_date": seendate,
                         "content_hash": chash,
                         "ingested_at": datetime.now(timezone.utc).isoformat(),
+                        "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
+                        "entities": enrichment["entities"] if enrichment else [],
                     },
                 )
             )

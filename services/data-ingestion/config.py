@@ -25,6 +25,18 @@ class Settings(BaseSettings):
     tle_cache_ttl: int = 86400  # 24 hours
     hotspot_cache_ttl: int = 21600  # 6 hours
 
+    # vLLM (intelligence extraction)
+    vllm_url: str = "http://localhost:8000"
+    vllm_model: str = "models/qwen3.5-27b-awq"
+
+    # Neo4j (graph writes via HTTP transactional API)
+    neo4j_url: str = "http://localhost:7474"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = ""
+
+    # Redis Streams
+    redis_stream_events: str = "events:new"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

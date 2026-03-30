@@ -14,6 +14,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
+from pipeline import process_item
 
 log = structlog.get_logger(__name__)
 
@@ -72,8 +73,9 @@ def _point_id_from_hash(content_hash: str) -> int:
 class RSSCollector:
     """Fetch RSS feeds, generate embeddings, and upsert into Qdrant."""
 
-    def __init__(self) -> None:
+    def __init__(self, redis_client=None) -> None:
         self.qdrant = QdrantClient(url=settings.qdrant_url)
+        self._redis = redis_client
         self._ensure_collection()
 
     # ------------------------------------------------------------------
@@ -165,6 +167,16 @@ class RSSCollector:
             else:
                 published_dt = published or datetime.now(timezone.utc).isoformat()
 
+            # Intelligence extraction (graceful — failure doesn't block ingest)
+            enrichment = await process_item(
+                title=title,
+                text=embed_text,
+                url=link,
+                source="rss",
+                settings=settings,
+                redis_client=self._redis,
+            )
+
             try:
                 vector = await self._embed(embed_text)
             except httpx.HTTPError as exc:
@@ -184,6 +196,8 @@ class RSSCollector:
                         "published": published_dt,
                         "content_hash": chash,
                         "ingested_at": datetime.now(timezone.utc).isoformat(),
+                        "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
+                        "entities": enrichment["entities"] if enrichment else [],
                     },
                 )
             )

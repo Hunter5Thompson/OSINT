@@ -11,10 +11,23 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+import redis.asyncio as aioredis
+
+from config import settings
 from feeds.rss_collector import RSSCollector
 from feeds.gdelt_collector import GDELTCollector
 from feeds.tle_updater import TLEUpdater
 from feeds.hotspot_updater import HotspotUpdater
+
+# Shared async Redis client for stream publishing
+_redis_client: aioredis.Redis | None = None
+
+
+def _get_redis_client() -> aioredis.Redis:
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = aioredis.from_url(settings.redis_url)
+    return _redis_client
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -43,7 +56,7 @@ log = structlog.get_logger("scheduler")
 async def run_rss_collector() -> None:
     """Collect RSS feeds."""
     try:
-        collector = RSSCollector()
+        collector = RSSCollector(redis_client=_get_redis_client())
         await collector.collect()
     except Exception:
         log.exception("rss_job_failed")
@@ -52,7 +65,7 @@ async def run_rss_collector() -> None:
 async def run_gdelt_collector() -> None:
     """Collect GDELT events."""
     try:
-        collector = GDELTCollector()
+        collector = GDELTCollector(redis_client=_get_redis_client())
         await collector.collect()
     except Exception:
         log.exception("gdelt_job_failed")
@@ -173,6 +186,8 @@ async def main() -> None:
 
     log.info("scheduler_shutting_down")
     scheduler.shutdown(wait=True)
+    if _redis_client is not None:
+        await _redis_client.aclose()
     log.info("scheduler_stopped")
 
 
