@@ -526,7 +526,7 @@ pyyaml>=6.0
 # TASK-103: Ingestion Pipeline — Extract → Graph Write
 # ══════════════════════════════════════════
 # Aufwand: 3-4 Tage | Blocked by: TASK-101, TASK-102 | Blocks: TASK-104
-# Status: OFFEN
+# Status: DONE ✅ (committed 2026-03-30, 43 tests)
 
 ## Kontext
 WorldView hat 27 RSS Feeds + GDELT + TLE via APScheduler.
@@ -1136,7 +1136,7 @@ TASK-100: vLLM + Embedding Upgrade           0.5 Tage   → Blocks: alles     [D
 TASK-101: Neo4j + Two-Loop Graph             3-4 Tage   ┐                   [DONE ✅]
 TASK-102: Event Codebook + Extractor         2-3 Tage   ┘ parallel          [DONE ✅]
     ↓
-TASK-103: Ingestion Pipeline → Graph         3-4 Tage                       [OFFEN]
+TASK-103: Ingestion Pipeline → Graph         3-4 Tage                       [DONE ✅]
     ↓
 TASK-104: Hybrid Search + Docling            3-4 Tage                       [OFFEN]
     ↓
