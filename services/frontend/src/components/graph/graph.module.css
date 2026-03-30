@@ -1,0 +1,7 @@
+/* EntityExplorer styles — most styling via Tailwind, this is for overrides */
+.graphContainer canvas {
+  cursor: grab;
+}
+.graphContainer canvas:active {
+  cursor: grabbing;
+}
