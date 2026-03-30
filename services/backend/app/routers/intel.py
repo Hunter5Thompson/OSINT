@@ -42,7 +42,12 @@ async def query_intel(query: IntelQuery, request: Request) -> EventSourceRespons
             async with httpx.AsyncClient(timeout=300.0) as client:
                 resp = await client.post(
                     f"{settings.intelligence_url}/query",
-                    json={"query": query.query, "region": query.region},
+                    json={
+                        "query": query.query,
+                        "region": query.region,
+                        "image_url": query.image_url,
+                        "use_legacy": query.use_legacy,
+                    },
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -54,6 +59,8 @@ async def query_intel(query: IntelQuery, request: Request) -> EventSourceRespons
                 analysis=data.get("analysis", ""),
                 confidence=data.get("confidence", 0.0),
                 threat_assessment=data.get("threat_assessment", "MODERATE"),
+                tool_trace=data.get("tool_trace", []),
+                mode=data.get("mode", "react"),
                 timestamp=datetime.fromisoformat(data["timestamp"])
                 if "timestamp" in data
                 else datetime.now(timezone.utc),

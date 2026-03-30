@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.config import settings
-from app.routers import earthquakes, flights, hotspots, intel, rag, satellites, vessels
+from app.routers import earthquakes, flights, graph, hotspots, intel, rag, satellites, vessels
 from app.services.cache_service import CacheService
 from app.services.proxy_service import ProxyService
 from app.ws import flight_ws, vessel_ws
@@ -71,6 +71,7 @@ app.include_router(vessels.router, prefix="/api/v1")
 app.include_router(hotspots.router, prefix="/api/v1")
 app.include_router(intel.router, prefix="/api/v1")
 app.include_router(rag.router, prefix="/api/v1")
+app.include_router(graph.router, prefix="/api/v1")
 
 # WebSocket Routers
 app.include_router(flight_ws.router)
