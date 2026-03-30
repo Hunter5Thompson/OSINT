@@ -61,3 +61,60 @@ class TestGraphEndpoints:
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["nodes"]) == 1
+
+
+class TestGeoEventsEndpoint:
+    @pytest.fixture
+    def client(self):
+        return TestClient(app)
+
+    def test_returns_events_with_location(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = [
+                {
+                    "id": "ev-1", "title": "Satellite Launch",
+                    "codebook_type": "space.satellite_launch",
+                    "severity": "medium", "timestamp": "2026-03-30T10:00:00",
+                    "location_name": "Jiuquan", "country": "China",
+                    "lat": 40.96, "lon": 100.28,
+                },
+            ]
+            resp = client.get("/api/v1/graph/events/geo")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data["events"]) == 1
+            assert data["events"][0]["lat"] == 40.96
+            assert data["events"][0]["title"] == "Satellite Launch"
+
+    def test_returns_events_without_location(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = [
+                {
+                    "id": "ev-2", "title": "Cyber Attack",
+                    "codebook_type": "cyber.ransomware_attack",
+                    "severity": "high", "timestamp": "2026-03-30T12:00:00",
+                    "location_name": None, "country": None,
+                    "lat": None, "lon": None,
+                },
+            ]
+            resp = client.get("/api/v1/graph/events/geo")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data["events"]) == 1
+            assert data["events"][0]["lat"] is None
+
+    def test_entity_filter(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = [
+                {
+                    "id": "ev-3", "title": "Missile Test",
+                    "codebook_type": "military.weapons_test",
+                    "severity": "critical", "timestamp": "2026-03-30T08:00:00",
+                    "location_name": "Pyongyang", "country": "North Korea",
+                    "lat": 39.03, "lon": 125.75,
+                },
+            ]
+            resp = client.get("/api/v1/graph/events/geo?entity=DPRK")
+            assert resp.status_code == 200
+            call_args = mock.call_args
+            assert "$entity" in call_args.args[0] or "entity" in str(call_args)
