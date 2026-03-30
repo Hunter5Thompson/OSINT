@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     react_max_tool_calls: int = 8
     react_max_iterations: int = 5
     react_tool_timeout_s: int = 15
-    react_total_timeout_s: int = 60
+    react_total_timeout_s: int = 120
     # Vision
     vision_max_file_size_mb: int = 10
     vision_max_dimension: int = 4096

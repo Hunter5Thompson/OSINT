@@ -48,6 +48,7 @@ def create_react_agent() -> ChatOpenAI:
         model=settings.llm_model,
         temperature=0.3,
         max_tokens=2000,
+        model_kwargs={"chat_template_kwargs": {"enable_thinking": False}},
     )
     return llm.bind_tools(ALL_TOOLS)
 
