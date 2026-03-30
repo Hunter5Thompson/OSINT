@@ -449,7 +449,7 @@ neo4j>=5.23
 # ══════════════════════════════════════════
 # Aufwand: 2-3 Tage | Blocked by: TASK-100 | Blocks: TASK-103
 # Parallel zu: TASK-101
-# Status: PARTIAL
+# Status: DONE ✅ (committed 2026-03-30, 81 tests)
 
 ## Kontext
 OSINT_MCP hat 5 Keyword-Listen für Topic-Classification. Wir bauen:
@@ -1134,7 +1134,7 @@ Enhancement Pipeline:
 TASK-100: vLLM + Embedding Upgrade           0.5 Tage   → Blocks: alles     [DONE ✅]
     ↓
 TASK-101: Neo4j + Two-Loop Graph             3-4 Tage   ┐                   [DONE ✅]
-TASK-102: Event Codebook + Extractor         2-3 Tage   ┘ parallel          [PARTIAL]
+TASK-102: Event Codebook + Extractor         2-3 Tage   ┘ parallel          [DONE ✅]
     ↓
 TASK-103: Ingestion Pipeline → Graph         3-4 Tage                       [OFFEN]
     ↓
