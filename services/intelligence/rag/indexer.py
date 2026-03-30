@@ -11,8 +11,6 @@ from rag.embedder import embed_text
 
 logger = structlog.get_logger()
 
-VECTOR_SIZE = 768
-
 
 async def ensure_collection() -> None:
     """Create the Qdrant collection if it doesn't exist."""
@@ -26,7 +24,7 @@ async def ensure_collection() -> None:
         await client.put(
             f"{settings.qdrant_url}/collections/{settings.qdrant_collection}",
             json={
-                "vectors": {"size": VECTOR_SIZE, "distance": "Cosine"},
+                "vectors": {"size": settings.embedding_dimensions, "distance": "Cosine"},
             },
         )
         logger.info("qdrant_collection_created", name=settings.qdrant_collection)

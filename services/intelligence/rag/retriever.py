@@ -4,7 +4,26 @@ import httpx
 import structlog
 
 from config import settings
+from graph.client import GraphClient
 from rag.embedder import embed_text
+from rag.reranker import rerank as _rerank_fn
+from rag.graph_context import get_graph_context as _graph_context_fn
+
+# Lazy singleton GraphClient for graph context injection
+_graph_client: GraphClient | None = None
+
+
+def _get_graph_client() -> GraphClient | None:
+    """Get or create a shared GraphClient from config settings."""
+    global _graph_client
+    if _graph_client is None and settings.neo4j_uri:
+        try:
+            _graph_client = GraphClient(
+                settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password,
+            )
+        except Exception:
+            pass
+    return _graph_client
 
 logger = structlog.get_logger()
 
@@ -72,3 +91,70 @@ async def search(
     except Exception as e:
         logger.warning("retriever_search_failed", error=str(e))
         return []
+
+
+async def enhanced_search(
+    query: str,
+    limit: int = 5,
+    region: str | None = None,
+    source: str | None = None,
+    score_threshold: float = 0.3,
+    *,
+    enable_hybrid: bool | None = None,
+    enable_rerank: bool | None = None,
+    enable_graph_context: bool | None = None,
+    graph_client=None,
+) -> list[dict]:
+    """Enhanced retrieval: dense search → optional rerank → optional graph context.
+
+    Feature flags default to config.py settings if not explicitly passed.
+    Hybrid search (dense + sparse) is Phase 2 — raises NotImplementedError if enabled.
+    """
+    # Use config defaults if not explicitly set
+    if enable_hybrid is None:
+        enable_hybrid = settings.enable_hybrid
+    if enable_rerank is None:
+        enable_rerank = settings.enable_rerank
+    if enable_graph_context is None:
+        enable_graph_context = settings.enable_graph_context
+
+    # Phase 2: Hybrid search requires sparse vectors in Qdrant
+    if enable_hybrid:
+        logger.warning(
+            "hybrid_search_not_available",
+            reason="Requires odin_v2 collection with sparse vectors (Phase 2). Falling back to dense-only.",
+        )
+        enable_hybrid = False  # graceful fallback to dense
+
+    # Stage 1: Dense search (baseline)
+    overfetch = limit * 2 if enable_rerank else limit
+    results = await search(
+        query, limit=overfetch, region=region,
+        source=source, score_threshold=score_threshold,
+    )
+
+    if not results:
+        return []
+
+    # Stage 2: Rerank (optional)
+    if enable_rerank:
+        results = await _rerank_fn(query, results, top_k=limit)
+
+    # Stage 3: Graph Context Injection (optional)
+    if enable_graph_context:
+        entity_names = set()
+        for r in results:
+            for e in r.get("entities", []):
+                if isinstance(e, dict) and "name" in e:
+                    entity_names.add(e["name"])
+        if entity_names:
+            # Use provided client or fall back to lazy singleton from config
+            gc = graph_client or _get_graph_client()
+            graph_ctx = await _graph_context_fn(
+                list(entity_names), graph_client=gc,
+            )
+            if graph_ctx:
+                for r in results:
+                    r["graph_context"] = graph_ctx
+
+    return results

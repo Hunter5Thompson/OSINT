@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
+    # RAG feature flags
+    enable_hybrid: bool = False       # Phase 2: needs sparse vectors in Qdrant
+    enable_rerank: bool = True
+    enable_graph_context: bool = True
 
     @property
     def llm_base_url(self) -> str:

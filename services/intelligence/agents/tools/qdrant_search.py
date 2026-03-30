@@ -1,10 +1,9 @@
 """Qdrant vector search tool for RAG retrieval."""
 
-import httpx
 import structlog
 from langchain_core.tools import tool
 
-from config import settings
+from rag.retriever import enhanced_search
 
 logger = structlog.get_logger()
 
@@ -21,68 +20,37 @@ async def qdrant_search(query: str, region: str = "") -> str:
         Relevant documents from the knowledge base.
     """
     try:
-        # Generate embedding for the query
-        embedding = await _get_embedding(query)
-        if not embedding:
-            return "Failed to generate query embedding."
+        results = await enhanced_search(
+            query,
+            limit=5,
+            region=region or None,
+        )
 
-        # Search Qdrant
-        search_body: dict = {
-            "vector": embedding,
-            "limit": 5,
-            "with_payload": True,
-        }
-
-        if region:
-            search_body["filter"] = {
-                "must": [{"key": "region", "match": {"value": region}}]
-            }
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{settings.qdrant_url}/collections/{settings.qdrant_collection}/points/search",
-                json=search_body,
-            )
-
-            if resp.status_code == 404:
-                return "Knowledge base collection not found. Run data ingestion first."
-
-            resp.raise_for_status()
-            data = resp.json()
-
-        results = data.get("result", [])
         if not results:
             return f"No relevant documents found for: {query}"
 
         formatted: list[str] = []
         for r in results:
-            payload = r.get("payload", {})
             score = r.get("score", 0)
-            formatted.append(
-                f"[Score: {score:.3f}] {payload.get('title', 'Untitled')}\n"
-                f"Source: {payload.get('source', 'unknown')} | "
-                f"Region: {payload.get('region', 'N/A')}\n"
-                f"{payload.get('content', '')[:300]}\n"
+            title = r.get("title", "Untitled")
+            source = r.get("source", "unknown")
+            region_val = r.get("region", "N/A")
+            content = r.get("content", "")[:300]
+
+            entry = (
+                f"[Score: {score:.3f}] {title}\n"
+                f"Source: {source} | Region: {region_val}\n"
+                f"{content}\n"
             )
+
+            # Append graph context if available
+            graph_ctx = r.get("graph_context", "")
+            if graph_ctx:
+                entry += f"\n{graph_ctx}\n"
+
+            formatted.append(entry)
 
         return f"[Knowledge Base Results for: {query}]\n" + "\n---\n".join(formatted)
     except Exception as e:
         logger.warning("qdrant_search_failed", error=str(e))
         return f"Knowledge base search failed: {e}"
-
-
-async def _get_embedding(text: str) -> list[float] | None:
-    """Generate embedding via TEI embed API."""
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{settings.tei_embed_url}/embed",
-                json={"inputs": text},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            if isinstance(data, list) and data:
-                return data[0] if isinstance(data[0], list) else data
-    except Exception as e:
-        logger.warning("embedding_failed", error=str(e))
-    return None
