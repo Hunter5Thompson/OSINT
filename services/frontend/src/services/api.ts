@@ -7,8 +7,10 @@ import type {
   Aircraft,
   ClientConfig,
   Earthquake,
+  GeoEventsResponse,
   Hotspot,
   IntelAnalysis,
+  IntelEvent,
   IntelQuery,
   Satellite,
   Vessel,
@@ -54,6 +56,11 @@ export async function getHotspots(): Promise<Hotspot[]> {
 
 export async function getHotspot(id: string): Promise<Hotspot> {
   return fetchJSON<Hotspot>(`/hotspots/${id}`);
+}
+
+export async function getGeoEvents(limit = 100): Promise<IntelEvent[]> {
+  const data = await fetchJSON<GeoEventsResponse>(`/graph/events/geo?limit=${limit}`);
+  return data.events;
 }
 
 /**

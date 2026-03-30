@@ -32,6 +32,7 @@ export function App() {
     earthquakes: true,
     vessels: false,
     cctv: false,
+    events: false,
   });
 
   // Shader
@@ -56,7 +57,7 @@ export function App() {
         // Use empty token as fallback
         setConfig({
           cesium_ion_token: "",
-          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false },
+          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false },
           api_version: "v1",
         });
       });
@@ -164,6 +165,7 @@ export function App() {
           satellites: satellitesUpdate,
           earthquakes: earthquakesUpdate,
           vessels: vesselsUpdate,
+          events: null,
         }}
         flightCount={flights.length}
         satelliteCount={satellites.length}
