@@ -629,7 +629,7 @@ Keine neuen — alles aus TASK-100, TASK-101, TASK-102.
 # ══════════════════════════════════════════
 # Aufwand: 3-4 Tage | Blocked by: TASK-103 | Blocks: TASK-105
 # VEREINFACHUNG: Qdrant native BM25 statt rank_bm25 Library!
-# Status: OFFEN
+# Status: DONE ✅ Phase 1 (committed 2026-03-30, 99 tests). Phase 2 (hybrid sparse) offen.
 
 ## Kontext
 WorldView hat einen RAG-Stack in `services/intelligence/rag/`.
@@ -1138,7 +1138,7 @@ TASK-102: Event Codebook + Extractor         2-3 Tage   ┘ parallel          [D
     ↓
 TASK-103: Ingestion Pipeline → Graph         3-4 Tage                       [DONE ✅]
     ↓
-TASK-104: Hybrid Search + Docling            3-4 Tage                       [OFFEN]
+TASK-104: Hybrid Search + Docling            3-4 Tage                       [DONE ✅ Phase 1]
     ↓
 TASK-105: Agent Tools + Graph Explorer       4-5 Tage                       [OFFEN]
     ↓
