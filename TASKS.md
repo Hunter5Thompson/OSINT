@@ -116,7 +116,7 @@ Phasen: 1 (Catalog+Thumbnail), 2 (Download+Cache+API), 3 (S-1 SAR, Phase Next).
 # TASK-100: vLLM Migration + Embedding Upgrade
 # ══════════════════════════════════════════
 # Aufwand: 0.5 Tage | Blocked by: nichts | Blocks: alles
-# Status: ~60%
+# Status: DONE ✅
 
 ## Kontext
 WorldView nutzt aktuell Ollama mit Qwen3-32B (Port 11434).
@@ -198,7 +198,7 @@ sentence-transformers>=3.0 # für Embedding-Server
 # TASK-101: Neo4j + Two-Loop Graph Architecture
 # ══════════════════════════════════════════
 # Aufwand: 3-4 Tage | Blocked by: TASK-100 | Blocks: TASK-103, TASK-104
-# Status: PARTIAL
+# Status: DONE ✅ (committed 2026-03-30, 69 tests)
 
 ## Kontext
 WorldView hat keinen Knowledge Graph. Wir fügen Neo4j hinzu mit zwei
@@ -1131,9 +1131,9 @@ TASK-015:      █░░░░░░░░░░░░░░░░░░░ TEST
 
 Enhancement Pipeline:
 
-TASK-100: vLLM + Embedding Upgrade           0.5 Tage   → Blocks: alles     [~60%]
+TASK-100: vLLM + Embedding Upgrade           0.5 Tage   → Blocks: alles     [DONE ✅]
     ↓
-TASK-101: Neo4j + Two-Loop Graph             3-4 Tage   ┐                   [PARTIAL]
+TASK-101: Neo4j + Two-Loop Graph             3-4 Tage   ┐                   [DONE ✅]
 TASK-102: Event Codebook + Extractor         2-3 Tage   ┘ parallel          [PARTIAL]
     ↓
 TASK-103: Ingestion Pipeline → Graph         3-4 Tage                       [OFFEN]
