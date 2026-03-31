@@ -40,13 +40,23 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
     for (const vessel of vessels) {
       const position = Cesium.Cartesian3.fromDegrees(vessel.longitude, vessel.latitude, 0);
 
-      bc.add({
+      const billboard = bc.add({
         position,
         image: createShipCanvas(vessel.course),
         scale: 0.6,
         color: Cesium.Color.fromCssColorString("#4fc3f7"),
         eyeOffset: new Cesium.Cartesian3(0, 0, -50),
       });
+      (billboard as unknown as Record<string, unknown>)._vesselData = {
+        mmsi: vessel.mmsi,
+        name: vessel.name,
+        speed_knots: vessel.speed_knots,
+        course: vessel.course,
+        ship_type: vessel.ship_type,
+        destination: vessel.destination,
+        lat: vessel.latitude,
+        lon: vessel.longitude,
+      };
     }
   }, [vessels, visible]);
 

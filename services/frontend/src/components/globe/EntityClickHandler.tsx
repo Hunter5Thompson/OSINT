@@ -1,6 +1,19 @@
 import { useEffect, useState } from "react";
 import * as Cesium from "cesium";
 
+const SHIP_TYPES: Record<number, string> = {
+  20: "Wing in ground", 30: "Fishing", 31: "Towing", 32: "Towing (large)",
+  33: "Dredging", 34: "Diving ops", 35: "Military ops", 36: "Sailing",
+  37: "Pleasure craft", 40: "High speed craft", 50: "Pilot vessel",
+  51: "SAR", 52: "Tug", 53: "Port tender", 54: "Anti-pollution",
+  55: "Law enforcement", 58: "Medical transport", 59: "Noncombatant",
+  60: "Passenger", 70: "Cargo", 80: "Tanker", 90: "Other",
+};
+
+function shipTypeLabel(code: number): string {
+  return SHIP_TYPES[code] ?? SHIP_TYPES[Math.floor(code / 10) * 10] ?? `Type ${code}`;
+}
+
 interface EntityClickHandlerProps {
   viewer: Cesium.Viewer | null;
 }
@@ -80,7 +93,40 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
         return;
       }
 
-      // Guard 3: Flight billboard (custom _flightData property)
+      // Guard 3: Vessel billboard (custom _vesselData property)
+      const vesselData = (picked?.primitive as Record<string, unknown>)?._vesselData as
+        | {
+            mmsi: number;
+            name: string | null;
+            speed_knots: number;
+            course: number;
+            ship_type: number;
+            destination: string | null;
+            lat: number;
+            lon: number;
+          }
+        | undefined;
+
+      if (vesselData) {
+        const props: Record<string, string> = {};
+        props.mmsi = String(vesselData.mmsi);
+        if (vesselData.name) props.name = vesselData.name;
+        props.speed = `${vesselData.speed_knots.toFixed(1)} kts`;
+        props.course = `${Math.round(vesselData.course)}°`;
+        if (vesselData.ship_type) props.type = shipTypeLabel(vesselData.ship_type);
+        if (vesselData.destination) props.destination = vesselData.destination;
+
+        setSelected({
+          id: String(vesselData.mmsi),
+          name: vesselData.name ?? `MMSI ${vesselData.mmsi}`,
+          type: "vessel",
+          position: { lat: vesselData.lat, lon: vesselData.lon },
+          properties: props,
+        });
+        return;
+      }
+
+      // Guard 4: Flight billboard
       const flightData = (picked?.primitive as Record<string, unknown>)?._flightData as
         | {
             icao24: string;
@@ -150,7 +196,7 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
         return;
       }
 
-      // Guard 5: Existing Cesium Entity logic
+      // Guard 6: Existing Cesium Entity logic
       if (Cesium.defined(picked) && picked.id) {
         const entity = picked.id;
         const props = entity.properties;
