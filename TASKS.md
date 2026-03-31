@@ -1,6 +1,6 @@
 # ODIN/WorldView — Task Registry (Single Source of Truth)
 #
-# Letzte Aktualisierung: 2026-03-30
+# Letzte Aktualisierung: 2026-03-31
 # Dieses Dokument ersetzt:
 #   - tasks/backlog/TASK-001..015 (archiviert)
 #   - TASKS_final.md (ersetzt)
@@ -9,7 +9,7 @@
 # Prinzipien:
 # - Ein Dokument, ein Nummernraum, ein Tech-Stack
 # - MVP-Tasks (001-015) als kompakte Referenz
-# - Enhancement-Tasks (100-107) mit vollen Specs
+# - Enhancement-Tasks (100-110) mit vollen Specs
 # - Jeder Task ist ein self-contained Briefing für Sonnet/Haiku
 
 ---
@@ -22,11 +22,12 @@
 
 ```
 LLM:
-  Server:     vLLM (kein Ollama)
-  Model:      Qwen/Qwen3.5-27B-AWQ
+  Server:     vLLM (kein Ollama, Compose Profiles: ingestion/interactive)
+  Model:      Ingestion: Qwen/Qwen3.5-27B-AWQ | Interactive: Qwen3.5-9B-AWQ
   Port:       8000
-  Served-As:  qwen3.5-27b
-  VRAM:       ~17.6 GB (gpu-memory-utilization 0.55)
+  Served-As:  qwen3.5
+  VRAM:       Ingestion ~17.6 GB | Interactive ~6 GB
+  Orchestration: odin.sh (up/swap/doctor/pull)
 
 Embedding:
   Server:     TEI-kompatibles Interface (sentence-transformers oder TEI)
@@ -57,7 +58,7 @@ Backend:
 
 Frontend:
   Vite+React: Port 5173
-  CesiumJS:   Google 3D Tiles + Fallback
+  CesiumJS:   Google 3D Tiles + NASA Black Marble (Night Side)
 ```
 
 ---
@@ -79,7 +80,7 @@ Frontend:
 | 006 | RAG System (Qdrant+Embedding) | DONE | Chunker, Embedder, Retriever, Batch |
 | 007 | LangGraph Multi-Agent Pipeline | DONE | OSINT+Analyst+Synthesis, SSE Streaming |
 | 008 | Intel API Endpoint (SSE) | DONE | POST /intel/query, History |
-| 009 | CesiumJS Globe + Layers | DONE | Flight, Satellite, Earthquake, Dead-Reckoning |
+| 009 | CesiumJS Globe + Layers | DONE | Flight, Satellite, Earthquake, Dead-Reckoning + Black Marble Night Imagery |
 | 010 | GLSL Post-Processing | DONE | CRT, Night Vision, FLIR Shaders |
 | 011 | Tactical C2 UI | DONE | OperationsPanel, IntelPanel, ClockBar |
 | 012 | Data Ingestion (RSS+GDELT) | DONE | 50+ Feeds, APScheduler, Hotspot Updater |
@@ -1146,8 +1147,8 @@ TASK-106: Demo + Polish                      2-3 Tage   ┐                   [D
 TASK-107: Hybrid Vision (YOLOv8)             5-7 Tage   ┘ parallel          [OFFEN]
     ↓
 TASK-108: Submarine Cable Layer              1-2 Tage                       [OFFEN]
-TASK-109: Flights Performance (Caching)      1-2 Tage                       [OFFEN]
-TASK-110: Dual-Model (8B ReAct + 27B Synth)  3-4 Tage                       [OFFEN]
+TASK-109: Flights Performance (Caching)      1-2 Tage                       [PARTIAL ✅]
+TASK-110: Dual-Model (9B Interactive + 27B Ingestion) 3-4 Tage              [PARTIAL ✅]
 ```
 
 ## Gesamte neue Dependencies (über MVP hinaus)
@@ -1196,17 +1197,25 @@ TeleGeography stellt einen öffentlichen GeoJSON-Datensatz zur Verfügung.
 # TASK-109: Flights Performance — Redis Caching + Smooth Rendering
 # ══════════════════════════════════════════
 # Aufwand: 1-2 Tage | Blocked by: nichts | Blocks: nichts
-# Status: OFFEN
+# Status: PARTIAL ✅ (Update 2026-03-31, Commit: f73a19b)
 
 ## Kontext
-Flights-Layer hat ~486ms TTFB weil das Backend bei jedem Request
-OpenSky/adsb.fi live proxied. Bei 10s Polling fühlt sich das träge an.
+Flights-Layer hatte spürbare Stotterer bei größeren Datenmengen.
+Aktueller Stand: Cache + Dead-Reckoning sind umgesetzt, BBox-Filter noch offen.
 
 ## Deliverables
-1. Backend: Redis-Cache mit 10s TTL für Flight-Daten
-2. Backend: Server-Side Bounding-Box Filter (nur sichtbare Region)
-3. Frontend: Interpolation zwischen Polling-Updates (dead reckoning via heading+speed)
-4. Optional: WebSocket statt Polling für Push-basierte Updates
+1. Backend: Redis-Cache für Flight-Daten — **DONE ✅**
+   Umsetzung: TTL jetzt konfigurierbar via `flight_cache_ttl_s` (Default 30s)
+2. Backend: Server-Side Bounding-Box Filter (nur sichtbare Region) — **OFFEN ❌**
+3. Frontend: Interpolation zwischen Polling-Updates (dead reckoning via heading+speed) — **DONE ✅**
+4. Optional: WebSocket statt Polling für Push-basierte Updates — **TEILWEISE ✅**
+   WS-Endpoint existiert bereits (`/ws/flights`), Frontend nutzt aktuell Polling (15s)
+
+## Implementiert (2026-03-31)
+- `services/backend/app/config.py`: `flight_cache_ttl_s = 30`
+- `services/backend/app/services/flight_service.py`: Cache-TTL aus Settings statt Hardcode
+- `services/frontend/src/components/layers/FlightLayer.tsx`: dead-reckoning + icon cache
+- `services/frontend/src/hooks/useFlights.ts`: Polling auf 15s angepasst
 
 ## Optionen für Datenquellen
 - OpenSky Network (aktuell, 10s Rate-Limit, optional Auth)
@@ -1216,43 +1225,49 @@ OpenSky/adsb.fi live proxied. Bei 10s Polling fühlt sich das träge an.
 ---
 
 # ══════════════════════════════════════════
-# TASK-110: Dual-Model Architecture — 8B ReAct + 27B Synthesis
+# TASK-110: Dual-Model Architecture — 9B Interactive + 27B Ingestion
 # ══════════════════════════════════════════
 # Aufwand: 3-4 Tage | Blocked by: nichts | Blocks: nichts
-# Status: OFFEN
-# Priorität: KRITISCH — ReAct Agent ist aktuell unbenutzbar (>120s Timeout)
+# Status: PARTIAL ✅ (Update 2026-03-31, Commit: f73a19b)
+# Priorität: KRITISCH — ReAct-Latenz reduziert, weiterer Ausbau offen
 
 ## Kontext
-Qwen3.5-27B-AWQ braucht >120s für einen einzigen Tool-Call mit bind_tools.
-Bei 97% VRAM-Auslastung (25GB Model + 3.4GB TEI + 1.7GB TEI) bleibt kein
-Headroom für KV-Cache bei langen Tool-Prompts. Der ReAct Agent fällt
-konstant auf den Legacy-Fallback zurück.
+Das ursprüngliche Ziel war ein separates ReAct-Modell plus starkes Ingestion/Synthesis-Modell.
+Umgesetzt wurde Phase 1 als **profilbasiertes Model-Swap-Design**:
+- Ingestion-Modus: 27B + Embedding + Data-Ingestion
+- Interactive-Modus: 9B + Reranker + API + Frontend
 
-## Lösung: Dual-Model-Architektur
-- **ReAct Agent:** Qwen3-8B-AWQ (~4.5GB) — schnell, Tool-Calling out-of-the-box
-- **Synthesis + Extraction:** Qwen3.5-27B-AWQ (~25GB) — Qualität für Reports
-- Beide via vLLM (multi-model oder zweite Instanz auf separatem Port)
+## Umgesetzte Lösung (Phase 1)
+- `docker-compose.yml`: zwei vLLM Services mit Profiles (`vllm-27b`, `vllm-9b`)
+- Gemeinsamer Service-Alias `vllm` für stabile interne URLs
+- `odin.sh`: `up`, `swap`, `doctor`, `pull 9b-awq`
+- `swap` stoppt aktiv beide vLLM-Container vor Umschalten (GPU/Port-Sicherheit)
+- `served-model-name` vereinheitlicht auf `qwen3.5`
 
-## VRAM-Budget (neu)
+## VRAM-Budget (Ist-Stand)
 ```
-Qwen3.5-27B AWQ (Synthesis):    ~17.6 GB (gpu-mem-util 0.55)
-Qwen3-8B AWQ (ReAct):           ~4.5 GB
-TEI Embed:                       ~1.7 GB
-TEI Rerank:                      ~2.6 GB
-─────────────────────────────────────────
-Total:                          ~26.4 GB / 32 GB ✅ (~5.6 GB Headroom)
+Interactive: Qwen3.5-9B AWQ      ~6.0 GB
+             TEI Embed           ~1.7 GB
+             TEI Rerank          ~2.6 GB
+             ───────────────────────────
+             Summe              ~10.3 GB
+
+Ingestion:   Qwen3.5-27B AWQ    ~17.6 GB
+             TEI Embed           ~1.7 GB
+             ───────────────────────────
+             Summe              ~19.3 GB
 ```
 
 ## Deliverables
-1. vLLM Multi-Model Config oder zweite Instanz (Port 8005)
-2. `config.py` — separates `react_model` / `react_url` Setting
-3. `react_agent.py` — nutzt 8B Modell statt 27B
-4. `workflow.py` — Synthesis bleibt auf 27B
-5. docker-compose.yml — zweiter vLLM-Service oder multi-model
-6. Tests + Latenz-Benchmarks (Ziel: <15s pro Tool-Call)
+1. vLLM Multi-Model Config oder zweite Instanz — **DONE ✅** (zweite Instanz via Profile)
+2. `config.py` — separates `react_model` / `react_url` Setting — **OFFEN ❌**
+3. `react_agent.py` — dediziertes kleines Modell unabhängig vom Modus — **OFFEN ❌**
+4. `workflow.py` — dedizierte Modelltrennung je Node — **OFFEN ❌**
+5. docker-compose.yml — zweiter vLLM-Service oder multi-model — **DONE ✅**
+6. Tests + Latenz-Benchmarks (Ziel: <15s pro Tool-Call) — **PARTIAL ✅**
 
 ## Phase 2: Fine-Tuning (optional)
 - Dataset: Tool-Call Traces aus dem System sammeln
-- Fine-Tune Qwen3-8B auf OSINT-spezifische Tool-Auswahl
+- Fine-Tune Qwen3.5-9B auf OSINT-spezifische Tool-Auswahl
 - Ziel: bessere Tool-Selektion + kürzere Generierung
 - Framework: TRL (SFT) oder eigenes Training-Script
