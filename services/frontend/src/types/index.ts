@@ -96,6 +96,34 @@ export interface GeoEventsResponse {
   total_count: number;
 }
 
+export interface SubmarineCable {
+  id: string;
+  name: string;
+  color: string;
+  is_planned: boolean;
+  owners: string | null;
+  capacity_tbps: number | null;
+  length_km: number | null;
+  rfs: string | null;
+  url: string | null;
+  landing_point_ids: string[];
+  coordinates: number[][][];
+}
+
+export interface LandingPoint {
+  id: string;
+  name: string;
+  country: string | null;
+  latitude: number;
+  longitude: number;
+}
+
+export interface CableDataset {
+  cables: SubmarineCable[];
+  landing_points: LandingPoint[];
+  source: string;
+}
+
 // ── UI State Types ──
 
 export interface LayerVisibility {
@@ -105,6 +133,7 @@ export interface LayerVisibility {
   vessels: boolean;
   cctv: boolean;
   events: boolean;
+  cables: boolean;
 }
 
 export type ShaderType = "none" | "crt" | "nightvision" | "flir";
@@ -121,4 +150,5 @@ export interface DataFreshness {
   earthquakes: Date | null;
   vessels: Date | null;
   events: Date | null;
+  cables: Date | null;
 }

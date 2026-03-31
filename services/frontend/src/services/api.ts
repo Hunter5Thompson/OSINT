@@ -5,6 +5,7 @@
 
 import type {
   Aircraft,
+  CableDataset,
   ClientConfig,
   Earthquake,
   GeoEventsResponse,
@@ -48,6 +49,10 @@ export async function getEarthquakes(): Promise<Earthquake[]> {
 
 export async function getVessels(): Promise<Vessel[]> {
   return fetchJSON<Vessel[]>("/vessels");
+}
+
+export async function getCables(): Promise<CableDataset> {
+  return fetchJSON<CableDataset>("/cables");
 }
 
 export async function getHotspots(): Promise<Hotspot[]> {
