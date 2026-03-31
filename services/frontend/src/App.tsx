@@ -19,10 +19,10 @@ import { useSatellites } from "./hooks/useSatellites";
 import { useEarthquakes } from "./hooks/useEarthquakes";
 import { useEvents } from "./hooks/useEvents";
 import { useCables } from "./hooks/useCables";
+import { useVessels } from "./hooks/useVessels";
 import { useIntel } from "./hooks/useIntel";
 import { getConfig, getHotspots } from "./services/api";
-import { WebSocketManager } from "./services/websocket";
-import type { LayerVisibility, ShaderType, Hotspot, Vessel, ClientConfig } from "./types";
+import type { LayerVisibility, ShaderType, Hotspot, ClientConfig } from "./types";
 
 export function App() {
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
@@ -45,8 +45,7 @@ export function App() {
   const { earthquakes, lastUpdate: earthquakesUpdate } = useEarthquakes(layers.earthquakes);
   const { events, lastUpdate: eventsUpdate } = useEvents(layers.events);
   const { cables, landingPoints, lastUpdate: cablesUpdate } = useCables(layers.cables);
-  const [vessels, setVessels] = useState<Vessel[]>([]);
-  const [vesselsUpdate, setVesselsUpdate] = useState<Date | null>(null);
+  const { vessels, lastUpdate: vesselsUpdate } = useVessels(layers.vessels);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
 
   const intel = useIntel();
@@ -66,20 +65,6 @@ export function App() {
   useEffect(() => {
     void getHotspots().then(setHotspots).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!layers.vessels) {
-      setVessels([]);
-      setVesselsUpdate(null);
-      return;
-    }
-    const ws = new WebSocketManager<Vessel>("/ws/vessels", (data) => {
-      setVessels(data);
-      setVesselsUpdate(new Date());
-    });
-    ws.connect();
-    return () => ws.disconnect();
-  }, [layers.vessels]);
 
   const handleToggleLayer = useCallback((layer: keyof LayerVisibility) => {
     setLayers((prev) => ({ ...prev, [layer]: !prev[layer] }));
