@@ -1,5 +1,6 @@
 """Submarine cable data service — hybrid fetch with fallback."""
 
+import asyncio
 import json
 import re
 from pathlib import Path
@@ -35,19 +36,23 @@ async def get_cable_dataset(
 
 
 async def _fetch_live(proxy: ProxyService) -> CableDataset | None:
-    """Fetch both GeoJSON files from TeleGeography."""
+    """Fetch both GeoJSON files from TeleGeography (concurrent, 15s timeout)."""
     try:
-        # ProxyService has 30s default timeout (>15s spec requirement)
-        cable_geojson = await proxy.get_json(settings.cable_geo_url)
-        lp_geojson = await proxy.get_json(settings.landing_point_geo_url)
+        cable_geojson, lp_geojson = await asyncio.wait_for(
+            asyncio.gather(
+                proxy.get_json(settings.cable_geo_url),
+                proxy.get_json(settings.landing_point_geo_url),
+            ),
+            timeout=15.0,
+        )
 
         cables = _parse_cables(cable_geojson)
         landing_points = _parse_landing_points(lp_geojson)
 
         logger.info("cables_fetched_live", cable_count=len(cables), lp_count=len(landing_points))
         return CableDataset(cables=cables, landing_points=landing_points, source="live")
-    except Exception:
-        logger.warning("cables_live_fetch_failed")
+    except Exception as exc:
+        logger.warning("cables_live_fetch_failed", error=str(exc))
         return None
 
 

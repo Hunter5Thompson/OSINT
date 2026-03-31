@@ -88,6 +88,9 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
 
     if (!visible) return;
 
+    // Pre-build landing point name lookup (O(n) instead of O(n*m))
+    const lpNameMap = new Map(landingPoints.map((lp) => [lp.id, lp.name]));
+
     // Draw cables
     for (const cable of cables) {
       const alpha = cable.is_planned ? 0.3 : 0.8;
@@ -126,7 +129,7 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
         });
         // Resolve landing point names for click panel
         const lpNames = cable.landing_point_ids
-          .map((lpId) => landingPoints.find((lp) => lp.id === lpId)?.name)
+          .map((lpId) => lpNameMap.get(lpId))
           .filter((n): n is string => n != null);
 
         (billboard as unknown as Record<string, unknown>)._cableData = {
