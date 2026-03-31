@@ -1,0 +1,4 @@
+{
+  "cables_geojson": { "type": "FeatureCollection", "features": [] },
+  "landing_points_geojson": { "type": "FeatureCollection", "features": [] }
+}
