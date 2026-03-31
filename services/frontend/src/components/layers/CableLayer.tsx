@@ -97,8 +97,8 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
       for (const segment of cable.coordinates) {
         if (segment.length < 2) continue;
 
-        const positions = segment.map(([lon, lat]) =>
-          Cesium.Cartesian3.fromDegrees(lon, lat, 0),
+        const positions = segment.map((coord) =>
+          Cesium.Cartesian3.fromDegrees(coord[0] ?? 0, coord[1] ?? 0, 0),
         );
 
         pc.add({
@@ -112,7 +112,10 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
       const firstSeg = cable.coordinates[0];
       if (firstSeg && firstSeg.length >= 2) {
         const midIdx = Math.floor(firstSeg.length / 2);
-        const [midLon, midLat] = firstSeg[midIdx];
+        const midCoord = firstSeg[midIdx];
+        if (!midCoord) continue;
+        const midLon = midCoord[0] ?? 0;
+        const midLat = midCoord[1] ?? 0;
         const midPos = Cesium.Cartesian3.fromDegrees(midLon, midLat, 0);
 
         const billboard = bc.add({
