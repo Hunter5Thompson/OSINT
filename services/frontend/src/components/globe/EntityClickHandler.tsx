@@ -43,7 +43,44 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
         return;
       }
 
-      // Guard 2: Existing Cesium Entity logic
+      // Guard 2: Cable billboard (custom _cableData property)
+      const cableData = (picked?.primitive as Record<string, unknown>)?._cableData as
+        | {
+            id: string;
+            name: string;
+            owners: string | null;
+            capacity_tbps: number | null;
+            length_km: number | null;
+            rfs: string | null;
+            is_planned: boolean;
+            url: string | null;
+            landing_points: string[];
+            lat: number;
+            lon: number;
+          }
+        | undefined;
+
+      if (cableData) {
+        const props: Record<string, string> = {};
+        if (cableData.owners) props.owners = cableData.owners;
+        if (cableData.capacity_tbps != null) props.capacity = `${cableData.capacity_tbps} Tbps`;
+        if (cableData.length_km != null) props.length = `${Math.round(cableData.length_km).toLocaleString()} km`;
+        if (cableData.rfs) props.rfs = cableData.rfs;
+        props.status = cableData.is_planned ? "PLANNED" : "ACTIVE";
+        if (cableData.landing_points.length > 0) props.landings = cableData.landing_points.join(", ");
+        if (cableData.url) props.info = cableData.url;
+
+        setSelected({
+          id: cableData.id,
+          name: cableData.name,
+          type: "submarine_cable",
+          position: { lat: cableData.lat, lon: cableData.lon },
+          properties: props,
+        });
+        return;
+      }
+
+      // Guard 3: Existing Cesium Entity logic
       if (Cesium.defined(picked) && picked.id) {
         const entity = picked.id;
         const props = entity.properties;

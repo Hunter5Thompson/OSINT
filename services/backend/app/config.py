@@ -49,6 +49,9 @@ class Settings(BaseSettings):
         "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
     )
     aisstream_ws_url: str = "wss://stream.aisstream.io/v0/stream"
+    cable_geo_url: str = "https://www.submarinecablemap.com/api/v3/cable/cable-geo.json"
+    landing_point_geo_url: str = "https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json"
+    cable_cache_ttl_s: int = 86400  # 24 hours
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
