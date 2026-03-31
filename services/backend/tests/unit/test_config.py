@@ -47,3 +47,12 @@ class TestSettings:
             neo4j_password="test-secret",
         )
         assert s.flight_cache_ttl_s == 30
+
+    def test_cable_config_defaults(self) -> None:
+        s = Settings(
+            _env_file=None,
+            neo4j_password="test-secret",
+        )
+        assert "submarinecablemap.com" in s.cable_geo_url
+        assert "submarinecablemap.com" in s.landing_point_geo_url
+        assert s.cable_cache_ttl_s == 86400

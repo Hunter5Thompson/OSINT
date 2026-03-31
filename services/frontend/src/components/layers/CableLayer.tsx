@@ -67,6 +67,8 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
     const removeListener = viewer.camera.moveEnd.addEventListener(updateLabelVisibility);
+    // Sync initial state so labels are correct before first camera move
+    updateLabelVisibility();
     return () => removeListener();
   }, [viewer, updateLabelVisibility]);
 
@@ -100,9 +102,14 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
       for (const segment of cable.coordinates) {
         if (segment.length < 2) continue;
 
-        const positions = segment.map((coord) =>
-          Cesium.Cartesian3.fromDegrees(coord[0] ?? 0, coord[1] ?? 0, 0),
-        );
+        const positions: Cesium.Cartesian3[] = [];
+        for (const coord of segment) {
+          const lon = coord[0];
+          const lat = coord[1];
+          if (lon == null || lat == null || !Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+          positions.push(Cesium.Cartesian3.fromDegrees(lon, lat, 0));
+        }
+        if (positions.length < 2) continue;
 
         pc.add({
           positions,
@@ -116,9 +123,9 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
       if (firstSeg && firstSeg.length >= 2) {
         const midIdx = Math.floor(firstSeg.length / 2);
         const midCoord = firstSeg[midIdx];
-        if (!midCoord) continue;
-        const midLon = midCoord[0] ?? 0;
-        const midLat = midCoord[1] ?? 0;
+        if (!midCoord || midCoord[0] == null || midCoord[1] == null) continue;
+        const midLon = midCoord[0];
+        const midLat = midCoord[1];
         const midPos = Cesium.Cartesian3.fromDegrees(midLon, midLat, 0);
 
         const billboard = bc.add({
