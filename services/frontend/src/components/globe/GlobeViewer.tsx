@@ -44,8 +44,20 @@ export function GlobeViewer({ onViewerReady, cesiumToken, activeShader }: GlobeV
     viewer.scene.fog.density = 0.0002;
     viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0a0a0a");
 
-    // Google Photorealistic 3D Tiles
+    // Google Photorealistic 3D Tiles with night-side darkening
     void Cesium.createGooglePhotorealistic3DTileset().then((tileset) => {
+      tileset.customShader = new Cesium.CustomShader({
+        fragmentShaderText: /* glsl */ `
+          void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+            // Darken fragments on the night side of the Earth
+            vec3 normalEC = fsInput.attributes.normalEC;
+            float NdotL = dot(normalEC, czm_sunDirectionEC);
+            // Smooth day-to-night transition at the terminator
+            float nightFactor = smoothstep(-0.05, 0.15, -NdotL);
+            material.diffuse *= mix(1.0, 0.03, nightFactor);
+          }
+        `,
+      });
       viewer.scene.primitives.add(tileset);
     });
 

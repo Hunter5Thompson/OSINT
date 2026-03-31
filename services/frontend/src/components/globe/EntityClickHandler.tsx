@@ -80,7 +80,77 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
         return;
       }
 
-      // Guard 3: Existing Cesium Entity logic
+      // Guard 3: Flight billboard (custom _flightData property)
+      const flightData = (picked?.primitive as Record<string, unknown>)?._flightData as
+        | {
+            icao24: string;
+            callsign: string | null;
+            altitude_m: number;
+            velocity_ms: number;
+            heading: number;
+            vertical_rate: number;
+            on_ground: boolean;
+            is_military: boolean;
+            aircraft_type: string | null;
+            lat: number;
+            lon: number;
+          }
+        | undefined;
+
+      if (flightData) {
+        const props: Record<string, string> = {};
+        props.icao24 = flightData.icao24;
+        if (flightData.callsign) props.callsign = flightData.callsign;
+        if (flightData.aircraft_type) props.type = flightData.aircraft_type;
+        props.altitude = `${Math.round(flightData.altitude_m).toLocaleString()} m (FL${Math.round(flightData.altitude_m / 30.48)})`;
+        props.speed = `${Math.round(flightData.velocity_ms * 1.944)} kts (${Math.round(flightData.velocity_ms * 3.6)} km/h)`;
+        props.heading = `${Math.round(flightData.heading)}°`;
+        if (flightData.vertical_rate !== 0) props.vrate = `${flightData.vertical_rate > 0 ? "+" : ""}${Math.round(flightData.vertical_rate)} m/s`;
+        props.status = flightData.on_ground ? "ON GROUND" : flightData.is_military ? "MILITARY" : "AIRBORNE";
+
+        setSelected({
+          id: flightData.icao24,
+          name: flightData.callsign ?? flightData.icao24,
+          type: "aircraft",
+          position: { lat: flightData.lat, lon: flightData.lon },
+          properties: props,
+        });
+        return;
+      }
+
+      // Guard 4: Satellite point (custom _satelliteData property)
+      const satData = (picked?.primitive as Record<string, unknown>)?._satelliteData as
+        | {
+            norad_id: number;
+            name: string;
+            category: string;
+            inclination_deg: number;
+            period_min: number;
+            altitude_km: number;
+            lat: number;
+            lon: number;
+          }
+        | undefined;
+
+      if (satData) {
+        const props: Record<string, string> = {};
+        props.norad = String(satData.norad_id);
+        props.category = satData.category.toUpperCase();
+        props.altitude = `${Math.round(satData.altitude_km).toLocaleString()} km`;
+        props.inclination = `${satData.inclination_deg.toFixed(1)}°`;
+        props.period = `${satData.period_min.toFixed(1)} min`;
+
+        setSelected({
+          id: String(satData.norad_id),
+          name: satData.name,
+          type: "satellite",
+          position: { lat: satData.lat, lon: satData.lon },
+          properties: props,
+        });
+        return;
+      }
+
+      // Guard 5: Existing Cesium Entity logic
       if (Cesium.defined(picked) && picked.id) {
         const entity = picked.id;
         const props = entity.properties;

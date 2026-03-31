@@ -79,11 +79,21 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
 
       const color = CATEGORY_COLORS[sat.category] ?? CATEGORY_COLORS["active"]!;
 
-      pc.add({
+      const point = pc.add({
         position: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
         pixelSize: sat.category === "station" ? 8 : 3,
         color,
       });
+      (point as unknown as Record<string, unknown>)._satelliteData = {
+        norad_id: sat.norad_id,
+        name: sat.name,
+        category: sat.category,
+        inclination_deg: sat.inclination_deg,
+        period_min: sat.period_min,
+        altitude_km: geo.height,
+        lat,
+        lon,
+      };
     }
   }, [satellites, visible, viewer]);
 

@@ -81,6 +81,20 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
 
       const sampleTimeMs = parseUtcMs(flight.last_contact, now);
 
+      const flightClickData = {
+        icao24: flight.icao24,
+        callsign: flight.callsign,
+        altitude_m: flight.altitude_m,
+        velocity_ms: flight.velocity_ms,
+        heading: flight.heading,
+        vertical_rate: flight.vertical_rate,
+        on_ground: flight.on_ground,
+        is_military: flight.is_military,
+        aircraft_type: flight.aircraft_type,
+        lat: flight.latitude,
+        lon: flight.longitude,
+      };
+
       const existing = flightMapRef.current.get(id);
       if (existing) {
         existing.latitude = flight.latitude;
@@ -98,19 +112,23 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
           iconCacheRef.current,
         );
         existing.billboard.position = projectPosition(existing, now);
+        (existing.billboard as unknown as Record<string, unknown>)._flightData = flightClickData;
       } else {
+        const billboard = bc.add({
+          position: Cesium.Cartesian3.fromDegrees(
+            flight.longitude,
+            flight.latitude,
+            flight.altitude_m,
+          ),
+          image: getAircraftIconCanvas(flight.heading, color, iconCacheRef.current),
+          scale: 0.5,
+          color,
+          eyeOffset: new Cesium.Cartesian3(0, 0, -100),
+        });
+        (billboard as unknown as Record<string, unknown>)._flightData = flightClickData;
+
         const visualState: FlightVisual = {
-          billboard: bc.add({
-            position: Cesium.Cartesian3.fromDegrees(
-              flight.longitude,
-              flight.latitude,
-              flight.altitude_m,
-            ),
-            image: getAircraftIconCanvas(flight.heading, color, iconCacheRef.current),
-            scale: 0.5,
-            color,
-            eyeOffset: new Cesium.Cartesian3(0, 0, -100),
-          }),
+          billboard,
           latitude: flight.latitude,
           longitude: flight.longitude,
           altitudeM: flight.altitude_m,
