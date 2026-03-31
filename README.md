@@ -61,7 +61,16 @@ cp .env.example .env
 ### 2. Infrastructure
 
 ```bash
-docker compose up -d redis qdrant neo4j vllm tei-embed tei-rerank
+./odin.sh doctor
+./odin.sh pull 9b-awq          # nur einmal nötig, falls noch nicht lokal vorhanden
+./odin.sh up interactive
+```
+
+Mode switch (GPU model swap):
+
+```bash
+./odin.sh swap ingestion    # Qwen3.5-27B + embed + data-ingestion
+./odin.sh swap interactive  # Qwen3.5-9B + reranker + API + UI
 ```
 
 ### 3. Backend
@@ -85,13 +94,13 @@ Open **http://localhost:5173** in Chrome/Chromium.
 ### Full Stack (Docker)
 
 ```bash
-docker compose up -d
+./odin.sh up interactive
 ```
 
 Service Ports (Docker Compose, Host):
 - Frontend: `5173`
 - Backend: `8080`
-- vLLM: `8000`
+- vLLM: `8000` (profile-driven: `vllm-27b` or `vllm-9b`)
 - TEI Embed: `8001`
 - TEI Rerank: `8002`
 - Redis: `6379`
@@ -137,7 +146,7 @@ services/
 |--------|----------|-------------|
 | GET | `/api/v1/health` | Health check |
 | GET | `/api/v1/config` | Client config (Cesium token) |
-| GET | `/api/v1/flights` | Aircraft positions (cached 10s) |
+| GET | `/api/v1/flights` | Aircraft positions (cache configurable, default 30s) |
 | GET | `/api/v1/flights/military` | Military aircraft filter |
 | GET | `/api/v1/satellites` | Satellite TLE data (cached 1h) |
 | GET | `/api/v1/earthquakes` | M4.5+ earthquakes (cached 5min) |

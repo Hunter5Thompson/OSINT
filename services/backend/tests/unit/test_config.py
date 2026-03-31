@@ -10,7 +10,7 @@ class TestSettings:
             neo4j_password="test-secret",
         )
         assert s.vllm_url == "http://localhost:8000"
-        assert s.vllm_model == "models/qwen3.5-27b-awq"
+        assert s.vllm_model == "qwen3.5"
 
     def test_tei_defaults(self) -> None:
         s = Settings(
@@ -40,3 +40,10 @@ class TestSettings:
         assert not hasattr(s, "ollama_model")
         assert not hasattr(s, "inference_provider")
         assert not hasattr(s, "embedding_model")
+
+    def test_flight_cache_ttl_default(self) -> None:
+        s = Settings(
+            _env_file=None,
+            neo4j_password="test-secret",
+        )
+        assert s.flight_cache_ttl_s == 30

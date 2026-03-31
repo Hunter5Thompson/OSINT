@@ -13,6 +13,7 @@ interface GlobeViewerProps {
 export function GlobeViewer({ onViewerReady, cesiumToken, activeShader }: GlobeViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
+  const nightLayerRef = useRef<Cesium.ImageryLayer | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return;
@@ -48,6 +49,24 @@ export function GlobeViewer({ onViewerReady, cesiumToken, activeShader }: GlobeV
       viewer.scene.primitives.add(tileset);
     });
 
+    // NASA Black Marble (VIIRS) for night side city lights
+    // Cesium ion asset id: 3812
+    void Cesium.IonImageryProvider.fromAssetId(3812)
+      .then((provider) => {
+        if (viewer.isDestroyed()) return;
+        const nightLayer = new Cesium.ImageryLayer(provider, {
+          dayAlpha: 0.0,
+          nightAlpha: 0.9,
+          brightness: 1.2,
+          gamma: 1.05,
+        });
+        viewer.imageryLayers.add(nightLayer);
+        nightLayerRef.current = nightLayer;
+      })
+      .catch(() => {
+        // Graceful fallback if token/asset access fails.
+      });
+
     // Initial camera position (Europe overview)
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(15.0, 45.0, 15_000_000),
@@ -57,6 +76,10 @@ export function GlobeViewer({ onViewerReady, cesiumToken, activeShader }: GlobeV
     onViewerReady(viewer);
 
     return () => {
+      if (nightLayerRef.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
+        viewerRef.current.imageryLayers.remove(nightLayerRef.current, false);
+        nightLayerRef.current = null;
+      }
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {
         viewerRef.current.destroy();
         viewerRef.current = null;

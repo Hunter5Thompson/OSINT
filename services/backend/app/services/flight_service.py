@@ -12,7 +12,6 @@ from app.services.proxy_service import ProxyService
 logger = structlog.get_logger()
 
 CACHE_KEY = "flights:all"
-CACHE_TTL = 10
 
 
 async def get_flights(
@@ -29,7 +28,11 @@ async def get_flights(
         aircraft = await _fetch_adsb_fi(proxy)
 
     if aircraft:
-        await cache.set(CACHE_KEY, [a.model_dump(mode="json") for a in aircraft], CACHE_TTL)
+        await cache.set(
+            CACHE_KEY,
+            [a.model_dump(mode="json") for a in aircraft],
+            settings.flight_cache_ttl_s,
+        )
 
     return aircraft
 

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     # Flight Data
     opensky_user: str = ""
     opensky_pass: str = ""
+    flight_cache_ttl_s: int = 30
 
     # Ship Data
     aisstream_api_key: str = ""
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
 
     # LLM Inference (vLLM)
     vllm_url: str = "http://localhost:8000"
-    vllm_model: str = "/models/qwen3.5-27b-awq"
+    vllm_model: str = "qwen3.5"
 
     # Embeddings + Reranking (TEI)
     tei_embed_url: str = "http://localhost:8001"

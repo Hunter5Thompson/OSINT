@@ -1,8 +1,10 @@
 services:
 
-  # ═══ VLLM (LLM Inference — startet zuerst, allein auf GPU) ═══
-  vllm:
+  # ═══ VLLM 27B (Background Analysis / Ingestion) ═══
+  # Start with profile: ingestion
+  vllm-27b:
     image: vllm/vllm-openai:latest
+    profiles: ["ingestion"]
     ports:
       - "8000:8000"
     environment:
@@ -11,13 +13,15 @@ services:
       - ${MODELS_PATH:-/home/deadpool-ultra/ODIN/models}:/models
     command: >
       --model /models/qwen3.5-27b-awq
+      --served-model-name qwen3.5
       --max-model-len 32768
-      --gpu-memory-utilization 0.78
+      --gpu-memory-utilization 0.55
       --enforce-eager
-      --enable-auto-tool-choice
-      --tool-call-parser qwen3_coder
-      --reasoning-parser qwen3
       --port 8000
+    networks:
+      default:
+        aliases:
+          - vllm
     deploy:
       resources:
         reservations:
@@ -33,7 +37,47 @@ services:
       start_period: 120s
     restart: unless-stopped
 
-  # ═══ TEI EMBED (startet erst wenn vLLM healthy) ═══
+  # ═══ VLLM 9B (Interactive ReAct) ═══
+  # Start with profile: interactive
+  vllm-9b:
+    image: vllm/vllm-openai:latest
+    profiles: ["interactive"]
+    ports:
+      - "8000:8000"
+    environment:
+      - VLLM_FLASH_ATTN_VERSION=2
+    volumes:
+      - ${MODELS_PATH:-/home/deadpool-ultra/ODIN/models}:/models
+    command: >
+      --model /models/qwen3.5-9b-awq
+      --served-model-name qwen3.5
+      --max-model-len 32768
+      --gpu-memory-utilization 0.35
+      --enforce-eager
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --port 8000
+    networks:
+      default:
+        aliases:
+          - vllm
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  # ═══ TEI EMBED (both modes) ═══
   tei-embed:
     image: ghcr.io/huggingface/text-embeddings-inference:120-1.9.3
     ports:
@@ -56,13 +100,11 @@ services:
             - driver: nvidia
               device_ids: ["0"]
               capabilities: [gpu]
-    depends_on:
-      vllm:
-        condition: service_healthy
     restart: unless-stopped
 
-  # ═══ RERANKER (custom FastAPI + transformers, GPU) ═══
+  # ═══ RERANKER (interactive mode only) ═══
   tei-rerank:
+    profiles: ["interactive"]
     build:
       context: ./infra/docker/reranker
       dockerfile: Dockerfile
@@ -89,8 +131,6 @@ services:
               device_ids: ["0"]
               capabilities: [gpu]
     depends_on:
-      vllm:
-        condition: service_healthy
       tei-embed:
         condition: service_started
     restart: unless-stopped
@@ -115,10 +155,9 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # ═══ BACKEND (FastAPI) — Host-Port 8080, Container intern 8000 ═══
-  # Port-Konflikt: vLLM belegt Host-Port 8000.
-  # Lösung: 8080:8000 — kein Dockerfile-Change nötig.
+  # ═══ BACKEND (interactive mode) ═══
   backend:
+    profiles: ["interactive"]
     build:
       context: ./services/backend
       dockerfile: Dockerfile
@@ -129,6 +168,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - VLLM_URL=http://vllm:8000
+      - VLLM_MODEL=qwen3.5
       - TEI_EMBED_URL=http://tei-embed:80
       - TEI_RERANK_URL=http://tei-rerank:80
       - NEO4J_URL=bolt://neo4j:7687
@@ -146,8 +186,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ═══ INTELLIGENCE (LangGraph RAG Pipeline) ═══
+  # ═══ INTELLIGENCE (interactive mode) ═══
   intelligence:
+    profiles: ["interactive"]
     build:
       context: ./services/intelligence
       dockerfile: Dockerfile
@@ -158,9 +199,12 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - VLLM_URL=http://vllm:8000
+      - VLLM_MODEL=qwen3.5
       - TEI_EMBED_URL=http://tei-embed:80
       - TEI_RERANK_URL=http://tei-rerank:80
-      - NEO4J_URL=bolt://neo4j:7687
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 15s
@@ -176,8 +220,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ═══ DATA INGESTION (Scheduled Feeds) ═══
+  # ═══ DATA INGESTION (ingestion mode) ═══
   data-ingestion:
+    profiles: ["ingestion"]
     build:
       context: ./services/data-ingestion
       dockerfile: Dockerfile
@@ -186,17 +231,27 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - TEI_EMBED_URL=http://tei-embed:80
+      - VLLM_URL=http://vllm:8000
+      - VLLM_MODEL=qwen3.5
+      - NEO4J_URL=http://neo4j:7474
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
     depends_on:
       redis:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      neo4j:
+        condition: service_healthy
       tei-embed:
-        condition: service_started
+        condition: service_healthy
+      vllm-27b:
+        condition: service_healthy
     restart: unless-stopped
 
-  # ═══ FRONTEND ═══
+  # ═══ FRONTEND (interactive mode) ═══
   frontend:
+    profiles: ["interactive"]
     build:
       context: ./services/frontend
       dockerfile: Dockerfile

@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     inference_provider: str = "vllm"
     vllm_url: str = "http://localhost:8000"
-    vllm_model: str = "/models/qwen3.5-27b-awq"
+    vllm_model: str = "qwen3.5"
     tei_embed_url: str = "http://localhost:8001"
     tei_rerank_url: str = "http://localhost:8002"
     embedding_dimensions: int = 1024
