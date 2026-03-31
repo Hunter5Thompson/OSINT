@@ -14,6 +14,7 @@ const LAYER_CONFIG: { key: keyof LayerVisibility; label: string; icon: string }[
   { key: "vessels", label: "VESSELS", icon: "%" },
   { key: "cctv", label: "CCTV", icon: "@" },
   { key: "events", label: "EVENTS", icon: "!" },
+  { key: "cables", label: "CABLES", icon: "#" },
 ];
 
 const SHADER_OPTIONS: { value: ShaderType; label: string }[] = [

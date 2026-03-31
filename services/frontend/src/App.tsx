@@ -8,6 +8,7 @@ import { EarthquakeLayer } from "./components/layers/EarthquakeLayer";
 import { ShipLayer } from "./components/layers/ShipLayer";
 import { CCTVLayer } from "./components/layers/CCTVLayer";
 import { EventLayer } from "./components/layers/EventLayer";
+import { CableLayer } from "./components/layers/CableLayer";
 import { OperationsPanel } from "./components/ui/OperationsPanel";
 import { RightPanel } from "./components/ui/RightPanel";
 import { ThreatRegister } from "./components/ui/ThreatRegister";
@@ -17,6 +18,7 @@ import { useFlights } from "./hooks/useFlights";
 import { useSatellites } from "./hooks/useSatellites";
 import { useEarthquakes } from "./hooks/useEarthquakes";
 import { useEvents } from "./hooks/useEvents";
+import { useCables } from "./hooks/useCables";
 import { useIntel } from "./hooks/useIntel";
 import { getConfig, getHotspots } from "./services/api";
 import { WebSocketManager } from "./services/websocket";
@@ -33,6 +35,7 @@ export function App() {
     vessels: false,
     cctv: false,
     events: false,
+    cables: false,
   });
 
   const [activeShader, setActiveShader] = useState<ShaderType>("none");
@@ -41,6 +44,7 @@ export function App() {
   const { satellites, lastUpdate: satellitesUpdate } = useSatellites(layers.satellites);
   const { earthquakes, lastUpdate: earthquakesUpdate } = useEarthquakes(layers.earthquakes);
   const { events, lastUpdate: eventsUpdate } = useEvents(layers.events);
+  const { cables, landingPoints, lastUpdate: cablesUpdate } = useCables(layers.cables);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [vesselsUpdate, setVesselsUpdate] = useState<Date | null>(null);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
@@ -53,7 +57,7 @@ export function App() {
       .catch(() => {
         setConfig({
           cesium_ion_token: "",
-          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false },
+          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false, cables: false },
           api_version: "v1",
         });
       });
@@ -126,6 +130,7 @@ export function App() {
       <ShipLayer viewer={viewer} vessels={vessels} visible={layers.vessels} />
       <CCTVLayer viewer={viewer} visible={layers.cctv} />
       <EventLayer viewer={viewer} events={events} visible={layers.events} />
+      <CableLayer viewer={viewer} cables={cables} landingPoints={landingPoints} visible={layers.cables} />
 
       <EntityClickHandler viewer={viewer} />
 
@@ -156,12 +161,14 @@ export function App() {
           earthquakes: earthquakesUpdate,
           vessels: vesselsUpdate,
           events: eventsUpdate,
+          cables: cablesUpdate,
         }}
         flightCount={flights.length}
         satelliteCount={satellites.length}
         earthquakeCount={earthquakes.length}
         vesselCount={vessels.length}
         eventCount={events.length}
+        cableCount={cables.length}
       />
     </div>
   );

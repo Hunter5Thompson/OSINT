@@ -8,6 +8,7 @@ interface StatusBarProps {
   earthquakeCount: number;
   vesselCount: number;
   eventCount: number;
+  cableCount: number;
 }
 
 function formatAge(date: Date | null): string {
@@ -25,6 +26,7 @@ export function StatusBar({
   earthquakeCount,
   vesselCount,
   eventCount,
+  cableCount,
 }: StatusBarProps) {
   const [fps, setFps] = useState(0);
   const frameRef = useRef(0);
@@ -71,6 +73,10 @@ export function StatusBar({
         <span>
           EVENTS <span className="text-green-300">{eventCount}</span>
           <span className="text-green-500/30 ml-1">[{formatAge(freshness.events)}]</span>
+        </span>
+        <span>
+          CABLES <span className="text-green-300">{cableCount}</span>
+          <span className="text-green-500/30 ml-1">[{formatAge(freshness.cables)}]</span>
         </span>
       </div>
 
