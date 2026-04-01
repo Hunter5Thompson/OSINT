@@ -1,6 +1,6 @@
 # ODIN/WorldView — Task Registry (Single Source of Truth)
 #
-# Letzte Aktualisierung: 2026-03-31
+# Letzte Aktualisierung: 2026-04-01
 # Dieses Dokument ersetzt:
 #   - tasks/backlog/TASK-001..015 (archiviert)
 #   - TASKS_final.md (ersetzt)
@@ -9,7 +9,7 @@
 # Prinzipien:
 # - Ein Dokument, ein Nummernraum, ein Tech-Stack
 # - MVP-Tasks (001-015) als kompakte Referenz
-# - Enhancement-Tasks (100-110) mit vollen Specs
+# - Enhancement-Tasks (100-111) mit vollen Specs
 # - Jeder Task ist ein self-contained Briefing für Sonnet/Haiku
 
 ---
@@ -1271,3 +1271,109 @@ Ingestion:   Qwen3.5-27B AWQ    ~17.6 GB
 - Fine-Tune Qwen3.5-9B auf OSINT-spezifische Tool-Auswahl
 - Ziel: bessere Tool-Selektion + kürzere Generierung
 - Framework: TRL (SFT) oder eigenes Training-Script
+
+---
+
+# ══════════════════════════════════════════
+# TASK-111: Voxtral TTS — Audio-Briefings aus Intelligence Pipeline
+# ══════════════════════════════════════════
+# Aufwand: 2-3 Tage | Blocked by: nichts | Blocks: nichts
+# Status: OFFEN ❌
+# Priorität: MEDIUM — Mehrwert für Briefing-Consumption, kein Blocker
+
+## Kontext
+ODIN generiert textuelle Intelligence-Briefings (z.B. tägliche Lageberichte, Event-Summaries).
+Ziel: Diese Briefings als gesprochenes Audio bereitstellen — mit Voxtral TTS von Mistral AI.
+Das Modell unterstützt Deutsch nativ, läuft auf vLLM (passt in den bestehenden Stack),
+und erlaubt Voice Cloning mit <5s Referenz-Audio für eine konsistente "ODIN Analyst"-Stimme.
+
+## Modell-Spezifikation
+
+```
+Modell:        mistralai/Voxtral-4B-TTS-2603
+Architektur:   3.4B Transformer Decoder + 390M Flow-Matching + 300M Neural Codec
+Basis:         Ministral-3-3B-Base-2512 (finetuned)
+Sprachen:      DE, EN, FR, ES, PT, IT, NL, AR, HI (9 Sprachen)
+Lizenz:        CC-BY-NC-4.0 (⚠️ non-commercial)
+Runtime:       vLLM-Omni >= 0.18.0 (vllm serve --omni)
+Docker Image:  vllm/vllm-omni:v0.18.0
+VRAM (BF16):   ~16 GB
+Audio Output:  24 kHz, Codecs: wav/pcm/flac/mp3/aac/opus
+API Endpoint:  POST /v1/audio/speech
+Latenz:        70ms TTFA, RTF ≈ 0.103 (single request)
+Voices:        20 Presets (in voice_embedding/), Custom via <5s Reference
+```
+
+## VRAM-Analyse (RTX 5090, ~31 GB)
+
+```
+Option A — Gleichzeitig mit Interactive (BF16):
+  Interactive (10.3 GB) + Voxtral (16 GB) = 26.3 GB — KNAPP, riskant
+
+Option B — Swap-basiert (empfohlen Phase 1):
+  odin.sh swap tts → Stoppt Interactive, startet Voxtral = 16 GB — SICHER
+  Konsistent mit bestehendem swap-Pattern
+
+Option C — GGUF Quantisiert (Phase 2, experimentell):
+  Community: TrevorJS/voxtral-tts-q4-gguf (~2.5 GB)
+  Interactive + Voxtral-Q4 = ~12.8 GB — LOCKER
+  ⚠️ Braucht llama.cpp oder andere GGUF-Runtime, NICHT vLLM
+  ⚠️ Audio-Qualität muss evaluiert werden
+```
+
+## Deliverables
+
+### Phase 1 — Swap-basiertes TTS (Hauptziel)
+1. docker-compose.yml: Neuer Service `vllm-tts` mit Profil `tts`
+   - Image: `vllm/vllm-omni:v0.18.0`
+   - `runtime: nvidia` + `NVIDIA_VISIBLE_DEVICES=all`
+   - Port: 8000 (shared via Network-Alias `vllm`) ODER 8003 (dediziert)
+   - `gpu-memory-utilization: 0.50` (~16 GB)
+   - Volume: `~/.cache/huggingface:/root/.cache/huggingface`
+   - Deps im Image: espeak-ng, ffmpeg, sox (vorinstalliert)
+2. odin.sh: `swap tts` und `up tts` Kommandos
+   - Swap stoppt vllm-9b/vllm-27b vor TTS-Start (kein VRAM-Konflikt)
+3. Backend: Neuer Endpoint `POST /api/v1/briefings/{id}/audio`
+   - Nimmt Briefing-Text aus bestehender Pipeline
+   - Ruft Voxtral via `POST http://vllm:8000/v1/audio/speech` auf
+   - Parameter: `voice` (Preset oder Custom), `response_format` (default: mp3)
+   - Returned Audio als Streaming-Response
+4. Backend: `config.py` — neue Settings:
+   - `tts_model: str = "mistralai/Voxtral-4B-TTS-2603"`
+   - `tts_voice: str = "casual_male"` (Default-Preset)
+   - `tts_format: str = "mp3"`
+   - `tts_base_url: str = "http://vllm:8000/v1"`
+5. Frontend: Audio-Player im RightPanel (Briefing-Tab)
+   - Play/Pause/Download Button neben jedem Briefing
+   - HTML5 `<audio>` Element, lazy-loaded on click
+6. Tests:
+   - Backend: Mock-basierte Tests für Audio-Endpoint
+   - Integration: vLLM-Omni Health-Check in `odin.sh doctor`
+
+### Phase 2 — Erweiterungen (optional)
+7. Custom Voice: "ODIN Analyst" Stimme via 5-10s Referenz-Audio
+   - Voice Embedding in `voice_embedding/` speichern
+   - Konfigurierbar via .env (`TTS_CUSTOM_VOICE_PATH`)
+8. Batch-TTS: Cronjob generiert Audio für neue Briefings automatisch
+   - Audio-Files in Object Storage / lokales Volume
+   - Frontend zeigt verfügbare Audio-Briefings
+9. GGUF-Evaluation: Voxtral-Q4 Qualitätsvergleich
+   - MOS-Score Vergleich BF16 vs Q4 (subjektiv, 10 Samples)
+   - Falls akzeptabel: llama.cpp Container als leichtgewichtige Alternative
+
+## Architektur-Entscheidungen
+
+- **Swap statt parallel:** VRAM-Sicherheit geht vor Convenience. TTS ist kein Echtzeit-Feature,
+  sondern Batch/On-Demand. User swappt zu TTS, generiert Audio, swappt zurück.
+- **Port 8000 shared:** Gleicher Network-Alias `vllm` wie 9B/27B — Backend-Code braucht keine
+  URL-Änderung, nur der Endpunkt wechselt (/v1/audio/speech statt /v1/chat/completions).
+  ALTERNATIV: Port 8003 dediziert, falls gleichzeitiger Betrieb in Phase 2 gewünscht.
+- **MP3 als Default:** Gute Kompression, universelle Browser-Kompatibilität.
+- **CC-BY-NC-4.0:** Akzeptabel für persönliches OSINT-Tool. Bei Monetarisierung: Mistral API nutzen.
+
+## Referenzen
+- HF Model Card: https://huggingface.co/mistralai/Voxtral-4B-TTS-2603
+- Mistral Blog: https://mistral.ai/news/voxtral-tts
+- Paper: https://arxiv.org/abs/2603.25551
+- vLLM-Omni Docker: https://github.com/vllm-project/vllm-omni
+- GGUF Quant: https://huggingface.co/TrevorJS/voxtral-tts-q4-gguf
