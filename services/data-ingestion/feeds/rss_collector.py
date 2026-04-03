@@ -53,6 +53,10 @@ RSS_FEEDS: list[dict[str, str]] = [
     # ── Arms Control / Nonproliferation ──
     {"name": "SIPRI", "url": "https://www.sipri.org/rss/combined.xml"},
     {"name": "Arms Control Association", "url": "https://www.armscontrol.org/rss.xml"},
+    # ── German Defense / Bundeswehr ──
+    # Teaser-only (paywall), but keywords are extraction-rich.
+    # Full knowledge via YouTube → NotebookLM → NLM pipeline.
+    {"name": "SUV Sicherheit & Verteidigung", "url": "https://steady.page/de/suv/rss"},
     # ── Conflict / Crisis ──
     {"name": "Crisis Group", "url": "https://www.crisisgroup.org/rss.xml"},
     {"name": "ReliefWeb", "url": "https://reliefweb.int/updates/rss.xml"},
