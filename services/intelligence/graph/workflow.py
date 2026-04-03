@@ -33,7 +33,7 @@ async def react_agent_node(state: AgentState) -> dict:
     try:
         llm = create_react_agent()
 
-        # Build initial messages if first iteration
+        # Build messages for LLM invocation
         if state.get("iteration", 0) == 0:
             query = state["query"]
             image_note = ""
@@ -47,6 +47,11 @@ async def react_agent_node(state: AgentState) -> dict:
             messages = list(state.get("messages", [])) + initial_messages
         else:
             messages = list(state.get("messages", []))
+            # Qwen3.5 chat template requires a user message after tool results.
+            # Without this, the template raises "No user query found in messages".
+            messages.append(
+                HumanMessage(content="Continue your analysis based on the tool results above.")
+            )
 
         response = await llm.ainvoke(messages)
 
