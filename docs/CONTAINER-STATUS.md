@@ -29,6 +29,23 @@ BLOB
 - **Model name in responses:** `model.gguf` (not `qwen3.5`)
 - **Flags:** `--jinja` required for tool-calling, blob path required (HF symlinks don't work in Docker)
 
+### vLLM + Qwen3.5-9B-AWQ (docker-compose vllm-9b) — WORKS (ReAct/Interactive)
+
+**Status: WORKS. Cold start ~95s. Tool-calling verified.**
+
+```bash
+docker compose --profile interactive up -d vllm-9b
+```
+
+- **VRAM:** ~19 GB at 0.50 utilization
+- **API:** OpenAI-compatible at `http://localhost:8000/v1/chat/completions`
+- **Model name:** `qwen3.5`
+- **Tool-calling:** `--enable-auto-tool-choice --tool-call-parser qwen3_coder`
+- **Key flags:** `--limit-mm-per-prompt '{"image":0}'` disables vision profiling (prevents OOM)
+- **max-model-len:** 8192 (sufficient for ReAct agent loops)
+- **Known issue:** Qwen3.5 chat template requires a user message after ToolMessages. Fixed in `graph/workflow.py` by appending `HumanMessage("Continue...")` after tool results.
+- **Fine-tuning option:** If 9B quality insufficient, fine-tune with Unsloth Studio for ODIN-specific tasks.
+
 ### vLLM + Qwen3.5-27B-AWQ (docker-compose vllm-27b) — BROKEN
 
 **Status: BROKEN. Encoder cache profiling loop, never becomes healthy.**
