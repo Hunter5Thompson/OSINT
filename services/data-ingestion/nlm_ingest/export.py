@@ -1,4 +1,4 @@
-# notebooklm/export.py
+# nlm_ingest/export.py
 from __future__ import annotations
 
 import json
@@ -13,7 +13,7 @@ async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dic
     """
     Export notebooks from NotebookLM.
 
-    Requires prior manual login (cookie-auth via notebooklm-py).
+    Requires prior login via `python -m notebooklm login`.
     If notebook_id is given, only that notebook is exported.
     Returns list of {notebook_id, title, source_name, audio_path} dicts.
     """
@@ -25,42 +25,53 @@ async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dic
             "Run: uv pip install 'notebooklm-py[browser]' && playwright install"
         ) from None
 
-    client = NotebookLMClient()
-    notebooks = await client.notebooks.list()
-    if notebook_id:
-        notebooks = [nb for nb in notebooks if nb.id == notebook_id]
-    log.info("notebooklm_list", count=len(notebooks))
+    client = await NotebookLMClient.from_storage()
+    async with client:
+        notebooks = await client.notebooks.list()
+        if notebook_id:
+            notebooks = [nb for nb in notebooks if nb.id == notebook_id]
+        log.info("notebooklm_list", count=len(notebooks))
 
-    exported: list[dict] = []
-    for nb in notebooks:
-        nb_dir = data_dir / "notebooks" / nb.id
-        nb_dir.mkdir(parents=True, exist_ok=True)
+        exported: list[dict] = []
+        for nb in notebooks:
+            nb_dir = data_dir / "notebooks" / nb.id
+            nb_dir.mkdir(parents=True, exist_ok=True)
 
-        # Metadata
-        meta = {
-            "id": nb.id,
-            "title": getattr(nb, "title", "untitled"),
-            "source_name": _infer_source(getattr(nb, "title", "")),
-        }
-        (nb_dir / "metadata.json").write_text(json.dumps(meta, indent=2))
+            # Metadata
+            meta = {
+                "id": nb.id,
+                "title": getattr(nb, "title", "untitled"),
+                "source_name": _infer_source(getattr(nb, "title", "")),
+            }
+            (nb_dir / "metadata.json").write_text(json.dumps(meta, indent=2))
 
-        # Audio (podcast)
-        audio_path = nb_dir / "podcast.mp3"
-        if not audio_path.exists():
-            try:
-                audio_data = await client.notebooks.get_audio(nb.id)
-                audio_path.write_bytes(audio_data)
-                log.info("export_audio", notebook_id=nb.id, size_mb=len(audio_data) / 1e6)
-            except Exception:
-                log.warning("export_audio_failed", notebook_id=nb.id, exc_info=True)
-                continue
+            # Audio (podcast) — download via artifacts API
+            audio_path = nb_dir / "podcast.mp4"
+            if not audio_path.exists():
+                try:
+                    await client.artifacts.download_audio(
+                        nb.id, str(audio_path)
+                    )
+                    size_mb = audio_path.stat().st_size / 1e6
+                    log.info(
+                        "export_audio",
+                        notebook_id=nb.id,
+                        size_mb=round(size_mb, 1),
+                    )
+                except Exception:
+                    log.warning(
+                        "export_audio_failed",
+                        notebook_id=nb.id,
+                        exc_info=True,
+                    )
+                    continue
 
-        exported.append({
-            "notebook_id": nb.id,
-            "title": meta["title"],
-            "source_name": meta["source_name"],
-            "audio_path": str(audio_path),
-        })
+            exported.append({
+                "notebook_id": nb.id,
+                "title": meta["title"],
+                "source_name": meta["source_name"],
+                "audio_path": str(audio_path),
+            })
 
     return exported
 

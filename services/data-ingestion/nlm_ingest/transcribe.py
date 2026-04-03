@@ -37,8 +37,8 @@ def split_audio(audio_path: Path, max_minutes: int = CHUNK_MINUTES) -> list[Path
         start_ms = i * max_ms
         end_ms = min((i + 1) * max_ms, len(audio))
         chunk = audio[start_ms:end_ms]
-        chunk_path = chunk_dir / f"chunk_{i:03d}.wav"
-        chunk.export(str(chunk_path), format="wav")
+        chunk_path = chunk_dir / f"chunk_{i:03d}.mp3"
+        chunk.export(str(chunk_path), format="mp3", bitrate="128k")
         chunks.append(chunk_path)
 
     log.info("audio_split", path=str(audio_path), chunks=len(chunks))
@@ -69,9 +69,9 @@ async def transcribe_chunk(
 
     response = await client.post(
         f"{voxtral_url}/audio/transcriptions",
-        files={"file": (audio_path.name, audio_bytes, "audio/wav")},
-        data={"model": voxtral_model, "response_format": "verbose_json"},
-        timeout=300.0,
+        files={"file": (audio_path.name, audio_bytes, "audio/mpeg")},
+        data={"model": voxtral_model},
+        timeout=600.0,
     )
     response.raise_for_status()
     data = response.json()

@@ -87,12 +87,13 @@ services:
     volumes:
       - ${VOXTRAL_MODEL_PATH:-/home/deadpool-ultra/Voxtral/model}:/models/voxtral:ro
     command: >
-      --model /models/voxtral
+      vllm serve /models/voxtral
       --served-model-name voxtral
       --tokenizer_mode mistral
       --config_format mistral
       --load_format mistral
-      --gpu-memory-utilization 0.25
+      --gpu-memory-utilization 0.55
+      --max-model-len 16384
       --enforce-eager
       --port 8000
     networks:

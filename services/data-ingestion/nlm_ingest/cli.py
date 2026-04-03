@@ -143,7 +143,10 @@ def transcribe(notebook_id: str | None):
         async with httpx.AsyncClient() as client:
             for row in targets:
                 nid = row["notebook_id"]
-                audio_path = data_dir / "notebooks" / nid / "podcast.mp3"
+                # Try mp4 first (NotebookLM default), then mp3
+                audio_path = data_dir / "notebooks" / nid / "podcast.mp4"
+                if not audio_path.exists():
+                    audio_path = data_dir / "notebooks" / nid / "podcast.mp3"
                 if not audio_path.exists():
                     click.echo(f"SKIP {nid}: no audio file")
                     continue
