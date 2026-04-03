@@ -128,7 +128,7 @@ channels:
 ### Message-Processing
 
 - Jede Message → `process_item()` (bestehende Pipeline: vLLM Extract → Neo4j → Qdrant → Redis Stream)
-- Deduplication: `SHA256(channel_handle + message_id)` — analog zu RSS content hash
+- Deduplication: `SHA256(channel_handle + message_id)` für Einzel-Messages, `SHA256(channel_handle + grouped_id)` für Albums — analog zu RSS content hash
 - State-Tracking: `last_message_id` pro Channel in Redis (`telegram:last_msg:{handle}`)
 - Grouped Messages (Telegram "Albums"): werden zu einem Item zusammengefasst (Text konkateniert, alle Media-Pfade gesammelt). Canonical Key = `grouped_id` (Telethon's `message.grouped_id`). Dedup-Hash für Albums: `SHA256(channel_handle + grouped_id)`. Einzelne Messages innerhalb eines Albums werden nicht separat dedupliziert.
 - Forwarded Messages: Original-Source wird als `forwarded_from` im Payload erfasst
@@ -161,7 +161,7 @@ payload = {
 
 ### Media-Download
 
-- Speicherpfad: `~/ODIN/odin-data/telegram/media/{channel}/{message_id}/`
+- Speicherpfad: `/data/telegram/media/{channel}/{message_id}/` (Container), gemountet auf `${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram/media/` (Host)
 - Nur wenn `media: true` in Channel-Config
 - Max Dateigröße: 20MB (konfigurierbar via `telegram_media_max_size`)
 - Unterstützte Typen: Fotos, Videos, Dokumente (PDFs, etc.)
