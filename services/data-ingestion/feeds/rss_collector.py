@@ -22,40 +22,40 @@ log = structlog.get_logger(__name__)
 # Curated OSINT / Intelligence RSS Feeds
 # ---------------------------------------------------------------------------
 RSS_FEEDS: list[dict[str, str]] = [
-    # Major News — World
-    {"name": "Reuters World", "url": "https://feeds.reuters.com/Reuters/worldNews"},
+    # ── Major News — World ──
+    # Reuters/AP have no public RSS; Google News proxies provide equivalent coverage.
+    {"name": "Reuters (Google)", "url": "https://news.google.com/rss/search?q=site:reuters.com+world&hl=en-US&gl=US&ceid=US:en"},
     {"name": "BBC World", "url": "https://feeds.bbci.co.uk/news/world/rss.xml"},
     {"name": "Al Jazeera", "url": "https://www.aljazeera.com/xml/rss/all.xml"},
-    {"name": "AP News", "url": "https://rsshub.app/apnews/topics/world-news"},
+    {"name": "AP News (Google)", "url": "https://news.google.com/rss/search?q=site:apnews.com+world+news&hl=en-US&gl=US&ceid=US:en"},
     {"name": "France24", "url": "https://www.france24.com/en/rss"},
-    # Defense / Military
+    # ── Defense / Military ──
     {"name": "The War Zone", "url": "https://www.thedrive.com/the-war-zone/feed"},
-    {"name": "Defense One", "url": "https://www.defenseone.com/rss/"},
+    {"name": "Defense One", "url": "https://www.defenseone.com/rss/all/"},
     {"name": "Breaking Defense", "url": "https://breakingdefense.com/feed/"},
     {"name": "Defense News", "url": "https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml"},
-    {"name": "Janes", "url": "https://www.janes.com/feeds/news"},
+    {"name": "War on the Rocks", "url": "https://warontherocks.com/feed/"},
     {"name": "Aviation Week", "url": "https://aviationweek.com/rss.xml"},
-    # OSINT / Investigative
+    {"name": "DoD News", "url": "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=1&Site=945"},
+    # ── OSINT / Investigative ──
     {"name": "Bellingcat", "url": "https://www.bellingcat.com/feed/"},
     {"name": "The Intercept", "url": "https://theintercept.com/feed/?rss"},
-    # Think Tanks
-    {"name": "RUSI", "url": "https://rusi.org/rss.xml"},
-    {"name": "IISS", "url": "https://www.iiss.org/rss"},
-    {"name": "RAND Corporation", "url": "https://www.rand.org/content/rand/pubs/feed.xml"},
+    {"name": "EUvsDisinfo", "url": "https://euvsdisinfo.eu/feed/"},
+    # ── Think Tanks ──
+    {"name": "RAND Corporation", "url": "https://www.rand.org/pubs/research_reports.xml"},
     {"name": "CSIS", "url": "https://www.csis.org/rss.xml"},
-    {"name": "Brookings", "url": "https://www.brookings.edu/feed/"},
-    {"name": "Carnegie Endowment", "url": "https://carnegieendowment.org/rss/solr/?lang=en"},
-    # Government / IO
-    {"name": "US State Dept", "url": "https://www.state.gov/rss-feed/press-releases/feed/"},
-    {"name": "NATO News", "url": "https://www.nato.int/cps/en/natohq/news.xml"},
+    {"name": "Brookings", "url": "https://www.brookings.edu/feed/?post_type=article"},
+    {"name": "Atlantic Council", "url": "https://www.atlanticcouncil.org/feed/"},
+    # ── Government / IO ──
     {"name": "UN News", "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml"},
-    # Arms Control / Nonproliferation
-    {"name": "SIPRI", "url": "https://www.sipri.org/rss.xml"},
+    {"name": "US State Dept (Google)", "url": "https://news.google.com/rss/search?q=site:state.gov+%22press+releases%22&hl=en-US&gl=US&ceid=US:en"},
+    {"name": "NATO (Google)", "url": "https://news.google.com/rss/search?q=site:nato.int&hl=en-US&gl=US&ceid=US:en"},
+    # ── Arms Control / Nonproliferation ──
+    {"name": "SIPRI", "url": "https://www.sipri.org/rss/combined.xml"},
     {"name": "Arms Control Association", "url": "https://www.armscontrol.org/rss.xml"},
-    # Conflict / Crisis
+    # ── Conflict / Crisis ──
     {"name": "Crisis Group", "url": "https://www.crisisgroup.org/rss.xml"},
-    {"name": "Liveuamap", "url": "https://liveuamap.com/rss"},
-    {"name": "ACLED", "url": "https://acleddata.com/feed/"},
+    {"name": "ReliefWeb", "url": "https://reliefweb.int/updates/rss.xml"},
 ]
 
 
@@ -122,6 +122,7 @@ class RSSCollector:
             async with httpx.AsyncClient(
                 timeout=settings.http_timeout,
                 follow_redirects=True,
+                headers={"User-Agent": "ODIN/WorldView RSS Collector (+https://github.com/Hunter5Thompson/OSINT)"},
             ) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
