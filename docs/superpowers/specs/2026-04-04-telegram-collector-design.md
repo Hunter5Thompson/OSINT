@@ -6,7 +6,7 @@
 
 ## Overview
 
-Konfigurierbarer Telegram-Channel-Collector für die ODIN Data-Ingestion Pipeline. Nutzt Telethon (MTProto) für vollen Channel-Zugriff, adaptives Polling, Media-Download und einen separaten Vision-Enrichment Service mit eigenem vLLM-Profil (Qwen2.5-VL-7B).
+Konfigurierbarer Telegram-Channel-Collector für die ODIN Data-Ingestion Pipeline. Nutzt Telethon (MTProto) für vollen Channel-Zugriff, adaptives Polling, Media-Download und einen separaten Vision-Enrichment Service mit eigenem vLLM-Profil (Qwen3-VL-8B).
 
 ## Goals
 
@@ -107,7 +107,9 @@ channels:
 
 ### Telethon Session
 
-- Session-File: `~/ODIN/odin-data/telegram/session.session` (Docker Volume)
+- Session-Datei: `/data/telegram/odin.session` (im Container), gemountet auf `${ODIN_DATA_DIR}/telegram/odin.session` (Host)
+- Telethon wird mit explizitem Session-Pfad initialisiert: `TelegramClient('/data/telegram/odin', ...)`
+  - Telethon hängt automatisch `.session` an → erzeugt `/data/telegram/odin.session`
 - `api_id`, `api_hash` als Environment-Variablen (`TELEGRAM_API_ID`, `TELEGRAM_API_HASH`)
 - Einmalige Authentifizierung beim ersten Start (interaktiv, Phone + Code)
 - Session wird im Volume persistiert, überlebt Container-Restarts
@@ -128,7 +130,7 @@ channels:
 - Jede Message → `process_item()` (bestehende Pipeline: vLLM Extract → Neo4j → Qdrant → Redis Stream)
 - Deduplication: `SHA256(channel_handle + message_id)` — analog zu RSS content hash
 - State-Tracking: `last_message_id` pro Channel in Redis (`telegram:last_msg:{handle}`)
-- Grouped Messages (Telegram "Albums"): werden zu einem Item zusammengefasst (Text konkateniert, alle Media-Pfade gesammelt)
+- Grouped Messages (Telegram "Albums"): werden zu einem Item zusammengefasst (Text konkateniert, alle Media-Pfade gesammelt). Canonical Key = `grouped_id` (Telethon's `message.grouped_id`). Dedup-Hash für Albums: `SHA256(channel_handle + grouped_id)`. Einzelne Messages innerhalb eines Albums werden nicht separat dedupliziert.
 - Forwarded Messages: Original-Source wird als `forwarded_from` im Payload erfasst
 
 ### Payload (Qdrant + Neo4j)
@@ -163,7 +165,7 @@ payload = {
 - Nur wenn `media: true` in Channel-Config
 - Max Dateigröße: 20MB (konfigurierbar via `telegram_media_max_size`)
 - Unterstützte Typen: Fotos, Videos, Dokumente (PDFs, etc.)
-- Nach Download: Publish auf Redis Stream `vision:pending` (wenn Bild/Video)
+- **Vision-Queue:** Nur Bilder (photo) werden auf `vision:pending` gepublisht. Videos werden gespeichert aber **nicht** an Vision-Queue gesendet (`vision_status: skipped`). Video-Frame-Extraction ist ein separates zukünftiges Feature.
 
 ---
 
@@ -199,7 +201,7 @@ Redis Stream: vision:pending
        ↓
 Vision-Enrichment Service (Consumer Group)
        ↓
-vLLM Qwen2.5-VL → strukturierte Bildbeschreibung (JSON)
+vLLM Qwen3-VL-8B → strukturierte Bildbeschreibung (JSON, nur Bilder — kein Video)
        ↓
 Neo4j: MATCH (d:Document {url: $url}) SET d.vision_description = $desc
 Qdrant: Update payload mit vision_description
@@ -225,7 +227,12 @@ Output as JSON.
 - Redis Stream `vision:pending` mit Consumer Group `vision-workers`
 - At-least-once delivery — idempotent writes (MATCH + SET, kein neuer Node)
 - Pending messages überleben Service-Restart
-- Backpressure: max 100 pending items, danach loggt Warning
+- **Backpressure:** Bei >100 pending Items in der Queue:
+  1. Nur noch `priority: high` Channels senden Media an Queue
+  2. `priority: medium/low` Channels: Media wird gespeichert, aber `vision_status: deferred` (kein Queue-Eintrag)
+  3. Wenn Queue wieder <50: normale Verarbeitung für alle Priorities
+- **Poison Messages:** Max 3 Retries pro Item. Nach 3 Fehlern → Item wird per `XACK` bestätigt und in `vision:dead_letter` Stream verschoben (manuelles Review). `XAUTOCLAIM` mit 10min Idle-Timeout für Consumer-Failover.
+- **Monitoring:** Queue-Tiefe wird als Metric in Healthcheck exponiert
 
 ### Wiederverwendbarkeit
 
@@ -269,7 +276,7 @@ odin doctor                 # Prüft auch Telegram-Session + Vision-Queue
 |----------|-----------|
 | Channel gesperrt/offline | Warning loggen, Channel überspringen, nächsten Zyklus retry |
 | Telethon Session expired | Error loggen, Healthcheck schlägt fehl, Alert |
-| Telegram Rate Limit (FloodWait) | Telethon handled nativ — wartet automatisch |
+| Telegram Rate Limit (FloodWait) | Telethon handled nativ (wartet automatisch). **Aber:** Channels werden per-Channel mit `asyncio.wait_for(timeout=60)` gewrappt — ein FloodWait >60s auf einem Channel überspringt diesen und fährt mit dem nächsten fort. Retry im nächsten Zyklus. |
 | vLLM down | Graceful Degradation — Text+Embedding in Qdrant, kein Extract |
 | Vision Service down | Media gespeichert, bleibt in `vision:pending` Queue |
 | Redis down | Collector stoppt, Healthcheck failed |
@@ -297,13 +304,13 @@ TELEGRAM_API_HASH=abcdef1234567890abcdef1234567890
 ```python
 telegram_api_id: int              # env: TELEGRAM_API_ID
 telegram_api_hash: str            # env: TELEGRAM_API_HASH
-telegram_session_path: str        # default: /data/telegram/session
+telegram_session_name: str        # default: /data/telegram/odin  (Telethon hängt .session an)
 telegram_media_path: str          # default: /data/telegram/media
 telegram_media_max_size: int      # default: 20_971_520 (20MB)
 telegram_channels_config: str     # default: feeds/telegram_channels.yaml
 telegram_base_interval: int       # default: 300 (5min)
 telegram_max_interval: int        # default: 1800 (30min)
-vision_vllm_url: str              # default: http://localhost:8011
+vision_vllm_url: str              # default: http://localhost:8011 (Host) / http://vllm-vision:8000 (Docker intern)
 vision_vllm_model: str            # default: qwen-vl (Qwen3-VL-8B-Instruct)
 vision_queue_max_pending: int     # default: 100
 ```
@@ -312,21 +319,10 @@ vision_queue_max_pending: int     # default: 100
 
 ```yaml
 # Neue Volumes
-volumes:
-  telegram-session:
-    driver: local
-    driver_opts:
-      device: ${ODIN_DATA_DIR:-~/ODIN/odin-data}/telegram/session
-  telegram-media:
-    driver: local
-    driver_opts:
-      device: ${ODIN_DATA_DIR:-~/ODIN/odin-data}/telegram/media
-
-# data-ingestion: zusätzliche Mounts + Env
+# data-ingestion: zusätzliche Mounts + Env (Bind-Mounts, kein named Volume)
 data-ingestion:
   volumes:
-    - telegram-session:/data/telegram/session
-    - telegram-media:/data/telegram/media
+    - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram:/data/telegram
   environment:
     - TELEGRAM_API_ID=${TELEGRAM_API_ID}
     - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
@@ -336,9 +332,9 @@ vision-enrichment:
   build: ./services/vision-enrichment
   profiles: ["vision"]
   volumes:
-    - telegram-media:/data/telegram/media:ro
+    - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram/media:/data/telegram/media:ro
   environment:
-    - VISION_VLLM_URL=http://vllm-vision:8011/v1
+    - VISION_VLLM_URL=http://vllm-vision:8000/v1
     - REDIS_URL=redis://redis:6379/0
   depends_on:
     redis: { condition: service_healthy }
@@ -351,7 +347,7 @@ vllm-vision:
   ports:
     - "8011:8000"
   volumes:
-    - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
+    - ${HF_HOME:-${HOME}/.cache/huggingface}:/root/.cache/huggingface
   deploy:
     resources:
       reservations:
@@ -387,28 +383,30 @@ telegram_channels.yaml
         ↓
 TelegramCollector.collect()         [5min APScheduler Job]
         ↓
-    ┌── Für jeden Channel (adaptiv) ──┐
-    │                                  │
-    │  Telethon: get_messages()        │
-    │  since: last_message_id          │
-    │        ↓                         │
-    │  Dedup: SHA256(handle+msg_id)    │
-    │        ↓                         │
-    │  Media Download (wenn enabled)   │
-    │        ↓                         │
-    │  process_item()                  │
-    │    ├─ vLLM Extract (Qwen 27B)   │
-    │    ├─ Neo4j Write               │
-    │    ├─ Qdrant Upsert             │
-    │    └─ Redis Publish             │
-    │        ↓                         │
-    │  Redis: vision:pending           │
-    │  (wenn has_media)                │
-    └──────────────────────────────────┘
+    ┌── Für jeden Channel (adaptiv, per-channel timeout 60s) ──┐
+    │                                                          │
+    │  Telethon: get_messages()                                │
+    │  since: last_message_id                                  │
+    │        ↓                                                 │
+    │  Album-Gruppierung (grouped_id)                          │
+    │        ↓                                                 │
+    │  Dedup: SHA256(handle + msg_id|grouped_id)               │
+    │        ↓                                                 │
+    │  Media Download (wenn enabled + Bild)                    │
+    │        ↓                                                 │
+    │  process_item()                                          │
+    │    ├─ vLLM Extract (Qwen 27B)                           │
+    │    ├─ Neo4j Write                                        │
+    │    ├─ Qdrant Upsert                                      │
+    │    └─ Redis Publish                                      │
+    │        ↓                                                 │
+    │  Redis: vision:pending                                   │
+    │  (nur Bilder, Backpressure-Check)                        │
+    └──────────────────────────────────────────────────────────┘
         ↓ (async, entkoppelt)
 Vision-Enrichment Service
         ↓
-    vLLM Qwen2.5-VL-7B
+    vLLM Qwen3-VL-8B (nur Bilder)
         ↓
     Neo4j Update + Qdrant Update
         ↓
