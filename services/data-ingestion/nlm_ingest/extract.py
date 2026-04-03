@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx
 import structlog
 
-from notebooklm.schemas import (
+from nlm_ingest.schemas import (
     Claim,
     Entity,
     Extraction,

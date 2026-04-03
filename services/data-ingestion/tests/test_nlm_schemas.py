@@ -1,6 +1,6 @@
 import pytest
 
-from notebooklm.schemas import (
+from nlm_ingest.schemas import (
     Claim,
     Entity,
     Extraction,

@@ -5,8 +5,8 @@ import base64
 import httpx
 import structlog
 
-from notebooklm.schemas import Extraction, claim_hash
-from notebooklm.write_templates import (
+from nlm_ingest.schemas import Extraction, claim_hash
+from nlm_ingest.write_templates import (
     LINK_CLAIM_DOCUMENT,
     LINK_CLAIM_ENTITY,
     LINK_DOCUMENT_SOURCE,

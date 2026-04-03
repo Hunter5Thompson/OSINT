@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from notebooklm.ingest_neo4j import ingest_extraction
-from notebooklm.schemas import Claim, Entity, Extraction, Relation
+from nlm_ingest.ingest_neo4j import ingest_extraction
+from nlm_ingest.schemas import Claim, Entity, Extraction, Relation
 
 
 def _make_extraction() -> Extraction:

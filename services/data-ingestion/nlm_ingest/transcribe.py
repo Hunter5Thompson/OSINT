@@ -9,7 +9,7 @@ import httpx
 import structlog
 from pydub import AudioSegment
 
-from notebooklm.schemas import Transcript, TranscriptSegment
+from nlm_ingest.schemas import Transcript, TranscriptSegment
 
 log = structlog.get_logger()
 

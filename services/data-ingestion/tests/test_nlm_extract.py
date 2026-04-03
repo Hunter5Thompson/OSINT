@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from notebooklm.extract import (
+from nlm_ingest.extract import (
     extract_context,
     extract_with_qwen,
     load_prompt,
     review_with_claude,
 )
-from notebooklm.schemas import Extraction, Transcript, TranscriptSegment
+from nlm_ingest.schemas import Extraction, Transcript, TranscriptSegment
 
 
 def _make_transcript(text: str = "NATO expanded eastward. China opposes this.") -> Transcript:

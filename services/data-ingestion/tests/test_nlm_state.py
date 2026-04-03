@@ -1,7 +1,7 @@
 # tests/test_nlm_state.py
 import pytest
 
-from notebooklm.state import (
+from nlm_ingest.state import (
     get_all_status,
     get_phase_status,
     init_db,
@@ -130,7 +130,7 @@ class TestAtomicRetry:
     def test_retry_only_updates_failed(self, db):
         register_notebook(db, "nb1", "T", "S")
         set_phase_status(db, "nb1", "export", "completed")
-        from notebooklm.state import attempt_retry
+        from nlm_ingest.state import attempt_retry
         affected = attempt_retry(db, "nb1", "export")
         assert affected == 0
         assert get_phase_status(db, "nb1", "export") == "completed"
@@ -138,7 +138,7 @@ class TestAtomicRetry:
     def test_retry_updates_failed_phase(self, db):
         register_notebook(db, "nb1", "T", "S")
         set_phase_status(db, "nb1", "export", "failed")
-        from notebooklm.state import attempt_retry
+        from nlm_ingest.state import attempt_retry
         affected = attempt_retry(db, "nb1", "export")
         assert affected == 1
         assert get_phase_status(db, "nb1", "export") == "running"

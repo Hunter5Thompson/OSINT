@@ -18,14 +18,14 @@ async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dic
     Returns list of {notebook_id, title, source_name, audio_path} dicts.
     """
     try:
-        import notebooklm_py
+        from notebooklm import NotebookLMClient
     except ImportError:
         raise ImportError(
             "notebooklm-py not installed. "
             "Run: uv pip install 'notebooklm-py[browser]' && playwright install"
         ) from None
 
-    client = notebooklm_py.NotebookLM()
+    client = NotebookLMClient()
     notebooks = await client.notebooks.list()
     if notebook_id:
         notebooks = [nb for nb in notebooks if nb.id == notebook_id]

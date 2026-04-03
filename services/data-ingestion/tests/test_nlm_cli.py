@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from notebooklm.cli import cli
+from nlm_ingest.cli import cli
 
 
 @pytest.fixture
@@ -13,7 +13,7 @@ def runner():
 
 class TestStatus:
     def test_status_empty(self, runner, tmp_path):
-        with patch("notebooklm.cli._get_db") as mock_db:
+        with patch("nlm_ingest.cli._get_db") as mock_db:
             mock_conn = MagicMock()
             mock_conn.execute.return_value.fetchall.return_value = []
             mock_db.return_value = mock_conn
@@ -34,6 +34,6 @@ class TestRetry:
 
 class TestHealthcheck:
     def test_healthcheck_fails_gracefully(self, runner):
-        with patch("notebooklm.cli._check_voxtral", new_callable=AsyncMock, return_value=False):
+        with patch("nlm_ingest.cli._check_voxtral", new_callable=AsyncMock, return_value=False):
             result = runner.invoke(cli, ["healthcheck"])
             assert "FAIL" in result.output or result.exit_code != 0

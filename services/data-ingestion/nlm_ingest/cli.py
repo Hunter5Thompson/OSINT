@@ -9,8 +9,8 @@ import httpx
 import structlog
 
 from config import Settings
-from notebooklm.schemas import Transcript
-from notebooklm.state import (
+from nlm_ingest.schemas import Transcript
+from nlm_ingest.state import (
     PHASE_ORDER,
     attempt_retry,
     get_all_status,
@@ -110,7 +110,7 @@ def export(notebook_id: str | None):
     data_dir = Path(settings.nlm_data_dir)
 
     async def _run():
-        from notebooklm.export import export_all
+        from nlm_ingest.export import export_all
         results = await export_all(data_dir, notebook_id=notebook_id)
         db = _get_db()
         for r in results:
@@ -130,7 +130,7 @@ def transcribe(notebook_id: str | None):
     data_dir = Path(settings.nlm_data_dir)
 
     async def _run():
-        from notebooklm.transcribe import transcribe as do_transcribe
+        from nlm_ingest.transcribe import transcribe as do_transcribe
         db = _get_db()
         matrix = get_all_status(db)
         targets = [
@@ -180,7 +180,7 @@ def extract(notebook_id: str | None):
     data_dir = Path(settings.nlm_data_dir)
 
     async def _run():
-        from notebooklm.extract import extract_with_qwen, review_with_claude
+        from nlm_ingest.extract import extract_with_qwen, review_with_claude
         db = _get_db()
         matrix = get_all_status(db)
         targets = [
@@ -253,8 +253,8 @@ def ingest(notebook_id: str | None):
     data_dir = Path(settings.nlm_data_dir)
 
     async def _run():
-        from notebooklm.ingest_neo4j import ingest_extraction
-        from notebooklm.schemas import Extraction
+        from nlm_ingest.ingest_neo4j import ingest_extraction
+        from nlm_ingest.schemas import Extraction
         db = _get_db()
         matrix = get_all_status(db)
         targets = [

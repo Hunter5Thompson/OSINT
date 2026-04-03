@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 import httpx
 import pytest
 
-from notebooklm.transcribe import split_audio, transcribe, transcribe_chunk
+from nlm_ingest.transcribe import split_audio, transcribe, transcribe_chunk
 
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:8010/v1/audio/transcriptions")
 
@@ -65,10 +65,10 @@ class TestTranscribe:
             MagicMock(start=0.0, end=10.0, text="Short audio", speaker=None)
         ]
 
-        with patch("notebooklm.transcribe.split_audio", return_value=[Path("/tmp/c0.wav")]), \
-             patch("notebooklm.transcribe.transcribe_chunk", new_callable=AsyncMock, return_value=mock_chunk_result), \
-             patch("notebooklm.transcribe.get_original_duration", return_value=10.0), \
-             patch("notebooklm.transcribe.majority_language", return_value="en"):
+        with patch("nlm_ingest.transcribe.split_audio", return_value=[Path("/tmp/c0.wav")]), \
+             patch("nlm_ingest.transcribe.transcribe_chunk", new_callable=AsyncMock, return_value=mock_chunk_result), \
+             patch("nlm_ingest.transcribe.get_original_duration", return_value=10.0), \
+             patch("nlm_ingest.transcribe.majority_language", return_value="en"):
             result = await transcribe(
                 notebook_id="nb42",
                 audio_path=Path("/fake/podcast.mp3"),
@@ -87,10 +87,10 @@ class TestTranscribe:
         chunk0 = MagicMock(segments=[seg0])
         chunk1 = MagicMock(segments=[seg1])
 
-        with patch("notebooklm.transcribe.split_audio", return_value=[Path("/tmp/c0.wav"), Path("/tmp/c1.wav")]), \
-             patch("notebooklm.transcribe.transcribe_chunk", new_callable=AsyncMock, side_effect=[chunk0, chunk1]), \
-             patch("notebooklm.transcribe.get_original_duration", return_value=1200.0), \
-             patch("notebooklm.transcribe.majority_language", return_value="en"):
+        with patch("nlm_ingest.transcribe.split_audio", return_value=[Path("/tmp/c0.wav"), Path("/tmp/c1.wav")]), \
+             patch("nlm_ingest.transcribe.transcribe_chunk", new_callable=AsyncMock, side_effect=[chunk0, chunk1]), \
+             patch("nlm_ingest.transcribe.get_original_duration", return_value=1200.0), \
+             patch("nlm_ingest.transcribe.majority_language", return_value="en"):
             result = await transcribe(
                 notebook_id="nb1",
                 audio_path=Path("/fake/long.mp3"),
