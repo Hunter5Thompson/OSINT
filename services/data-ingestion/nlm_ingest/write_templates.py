@@ -11,10 +11,10 @@ NLM-specific templates (Claim, Source tier) are new.
 
 UPSERT_ENTITY = """
 MERGE (e:Entity {name: $name, type: $type})
+ON CREATE SET e.first_seen = datetime()
 SET e.aliases = $aliases,
     e.confidence = $confidence,
     e.last_seen = datetime()
-ON CREATE SET e.first_seen = datetime()
 """
 
 UPSERT_DOCUMENT = """
