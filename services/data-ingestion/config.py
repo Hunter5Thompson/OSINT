@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # Redis Streams
     redis_stream_events: str = "events:new"
 
+    # NotebookLM / Voxtral
+    voxtral_url: str = "http://localhost:8010/v1"
+    voxtral_model: str = "voxtral"
+    nlm_data_dir: str = "/home/deadpool-ultra/ODIN/odin-data/notebooklm"
+    claude_model: str = "claude-sonnet-4-20250514"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

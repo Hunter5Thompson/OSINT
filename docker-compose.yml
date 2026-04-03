@@ -77,6 +77,43 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  # ═══ VLLM VOXTRAL (NotebookLM / Audio Transcription) ═══
+  # Start with profile: notebooklm
+  vllm-voxtral:
+    image: vllm/vllm-omni:v0.18.0
+    profiles: ["notebooklm"]
+    ports:
+      - "8010:8000"
+    volumes:
+      - ${VOXTRAL_MODEL_PATH:-/home/deadpool-ultra/Voxtral/model}:/models/voxtral:ro
+    command: >
+      --model /models/voxtral
+      --served-model-name voxtral
+      --tokenizer_mode mistral
+      --config_format mistral
+      --load_format mistral
+      --gpu-memory-utilization 0.25
+      --enforce-eager
+      --port 8000
+    networks:
+      default:
+        aliases:
+          - vllm-voxtral
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+
   # ═══ TEI EMBED (both modes) ═══
   tei-embed:
     image: ghcr.io/huggingface/text-embeddings-inference:120-1.9.3
