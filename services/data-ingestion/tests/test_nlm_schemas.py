@@ -1,7 +1,13 @@
 import pytest
+
 from notebooklm.schemas import (
-    TranscriptSegment, Transcript, Entity, Relation, Claim,
-    Extraction, claim_hash,
+    Claim,
+    Entity,
+    Extraction,
+    Relation,
+    Transcript,
+    TranscriptSegment,
+    claim_hash,
 )
 
 

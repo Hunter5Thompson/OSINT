@@ -1,12 +1,10 @@
-import json
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
-import pytest
 import httpx
+import pytest
 
-from notebooklm.transcribe import transcribe_chunk, transcribe, split_audio
-
+from notebooklm.transcribe import split_audio, transcribe, transcribe_chunk
 
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:8010/v1/audio/transcriptions")
 

@@ -1,15 +1,16 @@
 import json
-from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 import httpx
+import pytest
 
 from notebooklm.extract import (
-    extract_with_qwen, review_with_claude, extract_context,
-    load_prompt, CLAUDE_BUDGET_PER_RUN,
+    extract_context,
+    extract_with_qwen,
+    load_prompt,
+    review_with_claude,
 )
-from notebooklm.schemas import Transcript, TranscriptSegment, Extraction
+from notebooklm.schemas import Extraction, Transcript, TranscriptSegment
 
 
 def _make_transcript(text: str = "NATO expanded eastward. China opposes this.") -> Transcript:

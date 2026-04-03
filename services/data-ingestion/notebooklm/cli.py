@@ -9,11 +9,16 @@ import httpx
 import structlog
 
 from config import Settings
-from notebooklm.state import (
-    init_db, register_notebook, set_phase_status, get_phase_status,
-    get_all_status, validate_retry, attempt_retry, PHASE_ORDER,
-)
 from notebooklm.schemas import Transcript
+from notebooklm.state import (
+    PHASE_ORDER,
+    attempt_retry,
+    get_all_status,
+    init_db,
+    register_notebook,
+    set_phase_status,
+    validate_retry,
+)
 
 log = structlog.get_logger()
 
@@ -33,8 +38,9 @@ async def _check_voxtral(url: str) -> bool:
     """Healthcheck: try real audio transcription, fallback to /models."""
     try:
         async with httpx.AsyncClient() as client:
-            from pydub import AudioSegment
             import io
+
+            from pydub import AudioSegment
             silence = AudioSegment.silent(duration=1000)
             buf = io.BytesIO()
             silence.export(buf, format="wav")
@@ -155,7 +161,8 @@ def transcribe(notebook_id: str | None):
                     out_path.parent.mkdir(parents=True, exist_ok=True)
                     out_path.write_text(result.model_dump_json(indent=2))
                     set_phase_status(db, nid, "transcribe", "completed")
-                    click.echo(f"OK {nid}: {result.duration_seconds:.0f}s, {len(result.segments)} segments")
+                    segs = len(result.segments)
+                    click.echo(f"OK {nid}: {result.duration_seconds:.0f}s, {segs} segments")
                 except Exception as e:
                     set_phase_status(db, nid, "transcribe", "failed", error=str(e))
                     click.echo(f"FAIL {nid}: {e}")
@@ -309,7 +316,7 @@ def retry(notebook_id: str, phase: str):
     try:
         validate_retry(db, notebook_id, phase)
     except ValueError as e:
-        raise click.UsageError(str(e))
+        raise click.UsageError(str(e)) from e
 
     affected = attempt_retry(db, notebook_id, phase)
     db.close()
@@ -320,5 +327,8 @@ def retry(notebook_id: str, phase: str):
 
     click.echo(f"Retrying '{phase}' for {notebook_id}...")
     ctx = click.get_current_context()
-    phase_commands = {"export": export, "transcribe": transcribe, "extract": extract, "ingest": ingest}
+    phase_commands = {
+        "export": export, "transcribe": transcribe,
+        "extract": extract, "ingest": ingest,
+    }
     ctx.invoke(phase_commands[phase], notebook_id=notebook_id)

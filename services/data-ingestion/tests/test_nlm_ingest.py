@@ -1,10 +1,10 @@
-from unittest.mock import AsyncMock, call, patch, MagicMock
+from unittest.mock import AsyncMock
 
-import pytest
 import httpx
+import pytest
 
 from notebooklm.ingest_neo4j import ingest_extraction
-from notebooklm.schemas import Extraction, Entity, Relation, Claim
+from notebooklm.schemas import Claim, Entity, Extraction, Relation
 
 
 def _make_extraction() -> Extraction:

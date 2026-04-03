@@ -21,8 +21,9 @@ async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dic
         import notebooklm_py
     except ImportError:
         raise ImportError(
-            "notebooklm-py not installed. Run: uv pip install 'notebooklm-py[browser]' && playwright install"
-        )
+            "notebooklm-py not installed. "
+            "Run: uv pip install 'notebooklm-py[browser]' && playwright install"
+        ) from None
 
     client = notebooklm_py.NotebookLM()
     notebooks = await client.notebooks.list()

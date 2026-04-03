@@ -1,9 +1,13 @@
 # tests/test_nlm_state.py
-import sqlite3
 import pytest
+
 from notebooklm.state import (
-    init_db, register_notebook, set_phase_status, get_phase_status,
-    get_all_status, validate_retry, PHASE_ORDER,
+    get_all_status,
+    get_phase_status,
+    init_db,
+    register_notebook,
+    set_phase_status,
+    validate_retry,
 )
 
 

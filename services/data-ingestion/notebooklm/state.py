@@ -41,7 +41,8 @@ def register_notebook(db, notebook_id, title, source_name):
     )
     for phase in PHASE_ORDER:
         db.execute(
-            "INSERT OR IGNORE INTO phase_status (notebook_id, phase, status) VALUES (?, ?, 'pending')",
+            "INSERT OR IGNORE INTO phase_status (notebook_id, phase, status) "
+            "VALUES (?, ?, 'pending')",
             (notebook_id, phase),
         )
     db.commit()
@@ -51,21 +52,24 @@ def set_phase_status(db, notebook_id, phase, status, *, error=None):
     if status == "running":
         db.execute(
             """UPDATE phase_status
-               SET status = ?, started_at = datetime('now'), error = NULL, updated_at = datetime('now')
+               SET status = ?, started_at = datetime('now'),
+                   error = NULL, updated_at = datetime('now')
                WHERE notebook_id = ? AND phase = ?""",
             (status, notebook_id, phase),
         )
     elif status == "completed":
         db.execute(
             """UPDATE phase_status
-               SET status = ?, finished_at = datetime('now'), error = NULL, updated_at = datetime('now')
+               SET status = ?, finished_at = datetime('now'),
+                   error = NULL, updated_at = datetime('now')
                WHERE notebook_id = ? AND phase = ?""",
             (status, notebook_id, phase),
         )
     elif status == "failed":
         db.execute(
             """UPDATE phase_status
-               SET status = ?, finished_at = datetime('now'), error = ?, updated_at = datetime('now')
+               SET status = ?, finished_at = datetime('now'),
+                   error = ?, updated_at = datetime('now')
                WHERE notebook_id = ? AND phase = ?""",
             (status, error, notebook_id, phase),
         )

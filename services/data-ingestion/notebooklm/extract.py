@@ -7,7 +7,11 @@ import httpx
 import structlog
 
 from notebooklm.schemas import (
-    Transcript, Extraction, Entity, Relation, Claim,
+    Claim,
+    Entity,
+    Extraction,
+    Relation,
+    Transcript,
 )
 
 log = structlog.get_logger()
@@ -117,7 +121,8 @@ async def review_with_claude(
                             f"Claim: \"{claim.statement}\"\n"
                             f"Type: {claim.type} | Polarity: {claim.polarity}\n\n"
                             f"Transcript context:\n{context_window}\n\n"
-                            f'Return JSON: {{"verdict": "confirmed|rejected|modified", "confidence": 0.0-1.0}}'
+                            f'Return JSON: {{"verdict": "confirmed|rejected|modified",'
+                            f' "confidence": 0.0-1.0}}'
                         ),
                     }
                 ],

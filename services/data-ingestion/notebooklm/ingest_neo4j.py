@@ -7,8 +7,13 @@ import structlog
 
 from notebooklm.schemas import Extraction, claim_hash
 from notebooklm.write_templates import (
-    UPSERT_SOURCE_WITH_TIER, UPSERT_DOCUMENT, LINK_DOCUMENT_SOURCE,
-    UPSERT_ENTITY, UPSERT_CLAIM, LINK_CLAIM_DOCUMENT, LINK_CLAIM_ENTITY,
+    LINK_CLAIM_DOCUMENT,
+    LINK_CLAIM_ENTITY,
+    LINK_DOCUMENT_SOURCE,
+    UPSERT_CLAIM,
+    UPSERT_DOCUMENT,
+    UPSERT_ENTITY,
+    UPSERT_SOURCE_WITH_TIER,
     get_source_tier,
 )
 
