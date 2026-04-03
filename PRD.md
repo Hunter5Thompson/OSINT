@@ -1,27 +1,17 @@
-<!-- manifest: project=WorldView | doc_version=1.0 | compatible_with=arch:1.0,feat:1.0 | updated=2026-03-05 -->
+# PRD — Odin OSINT Analytics (WorldView Tactical Intelligence Platform)
 
-# WorldView — Product Requirements Document
-
-## Summary (max. 500 Token)
-
-WorldView ist eine lokal ausführbare Tactical Intelligence Platform, die Echtzeit-Geodaten (Flüge, Satelliten, Erdbeben, Schiffe, Verkehr, CCTV) auf einem 3D CesiumJS-Globe mit Google Photorealistic 3D Tiles fusioniert. Ein FastAPI-Backend proxied externe Datenfeeds und betreibt ein LangGraph-basiertes Multi-Agent RAG-System (Ollama/vLLM auf RTX 5090) für KI-gestützte Intelligence-Analysen. GLSL Post-Processing (CRT, Night Vision, FLIR) und ein taktisches C2-Interface runden das System ab. Zielgruppe: Einzelentwickler/Analyst mit On-Premise GPU-Stack.
-
----
-
-## 1. Projektvision
+## Projektvision
 
 WorldView löst das Problem, dass taktische Lagebilder entweder proprietär und teuer (Palantir Gotham) oder fragmentiert über Dutzende Einzelquellen verstreut sind. Die Lösung fusioniert öffentlich zugängliche Echtzeit-Datenfeeds auf einem photorealistischen 3D-Globus mit KI-gestützter Intelligence-Analyse — vollständig lokal ausführbar auf Consumer-GPU-Hardware.
 
-**Mehrwert:** Palantir-ähnliche Datenfusion ohne Cloud-Abhängigkeit, ohne Lizenzkosten, mit voller Kontrolle über die Daten-Pipeline und KI-Inferenz.
-
 ---
 
-## 2. Nutzer & Personas
+## Nutzer
 
 ### Primär: Albert (Einzelentwickler/Analyst)
-- AI Engineer mit RTX 5090, Ubuntu 24.04
-- Kennt CesiumJS, FastAPI, LangGraph, Docker, vLLM/Ollama
-- Will: Geopolitische Lagebilder erstellen, Thesis-relevante Wargaming-Daten integrieren, OSINT-Analyse
+- AI Engineer mit RTX 5090, Ubuntu, Linux
+- Kennt CesiumJS, FastAPI, LangGraph, Docker, vLLM
+- Will: Geopolitische Lagebilder erstellen, OSINT-Analyse, Intelligence Briefings
 
 ### Sekundär: Power-User/Forscher
 - Installiert über Docker Compose, bringt eigene API-Keys mit
@@ -29,119 +19,209 @@ WorldView löst das Problem, dass taktische Lagebilder entweder proprietär und 
 
 ---
 
-## 3. Funktionale Anforderungen
+## Baseline — Funktionale Requirements (erfüllt)
 
-### Must-Have (MVP)
+### Globe & Visualisierung
+| # | Requirement | Status |
+|---|-------------|--------|
+| REQ-001 | 3D Globe mit CesiumJS + Google Photorealistic 3D Tiles (>30 FPS) | DONE |
+| REQ-002 | Flugdaten-Layer (OpenSky + adsb.fi, >5K gleichzeitig, Dead-Reckoning) | DONE |
+| REQ-003 | Satelliten-Tracking (CelesTrak TLE + SGP4, ~9K aktive Satelliten) | DONE |
+| REQ-004 | Erdbeben-Layer (USGS M4.5+ der letzten 7 Tage) | DONE |
+| REQ-005 | GLSL Post-Processing (CRT, Night Vision, FLIR) | DONE |
+| REQ-009 | Tactical C2 UI (Layer-Toggles, Shader-Selector, Intel-Panel, ClockBar) | DONE |
 
-- **[REQ-001]**: 3D Globe mit CesiumJS + Google Photorealistic 3D Tiles
-  - **Akzeptanzkriterium**: Globe rendert mit 3D Tiles bei >30 FPS auf RTX 5090 unter Standardzoom
-  - **Security-relevant**: nein
+### Backend & Infrastruktur
+| # | Requirement | Status |
+|---|-------------|--------|
+| REQ-006 | FastAPI Backend Proxy mit Caching (<200ms, 60s TTL) | DONE |
+| REQ-007 | RAG-System (Qdrant + LLM, <10s Query-Response) | DONE |
+| REQ-008 | Multi-Agent Intelligence Pipeline (LangGraph OSINT→Analyst→Synthesis, SSE) | DONE |
+| REQ-010 | Docker Compose Deployment | DONE |
 
-- **[REQ-002]**: Flugdaten-Layer (OpenSky Network + adsb.fi)
-  - **Akzeptanzkriterium**: >5.000 Flugzeuge gleichzeitig darstellbar mit Dead-Reckoning bei 60 FPS
-  - **Security-relevant**: nein
+### Erweiterte Layer (v1.1 → erfüllt)
+| # | Requirement | Status |
+|---|-------------|--------|
+| REQ-011 | Militärische ADS-B Flugverfolgung (ICAO-Type-Lookup) | DONE |
+| REQ-012 | AIS Schiffsdaten (Digitraffic REST, 18K+ Vessels) | DONE |
+| REQ-015 | Geopolitische Hotspots (50+ mit Threat-Level, Mention-basiert) | DONE |
+| NEW | Submarine Cable Layer (709 Cables, 1908 Landing Points) | DONE |
+| NEW | NASA Black Marble Night Imagery | DONE |
 
-- **[REQ-003]**: Satelliten-Tracking (CelesTrak TLE + SGP4 via satellite.js)
-  - **Akzeptanzkriterium**: Alle aktiven Satelliten (~9.000) mit korrekten Orbit-Pfaden propagiert
-  - **Security-relevant**: nein
-
-- **[REQ-004]**: Erdbeben-Layer (USGS GeoJSON Feed)
-  - **Akzeptanzkriterium**: M4.5+ der letzten 7 Tage mit Magnitude-proportionalen Markern
-  - **Security-relevant**: nein
-
-- **[REQ-005]**: GLSL Post-Processing (CRT, Night Vision, FLIR)
-  - **Akzeptanzkriterium**: 3 Filter umschaltbar über UI, kein Framerate-Drop >5% gegenüber Standard
-  - **Security-relevant**: nein
-
-- **[REQ-006]**: FastAPI Backend Proxy mit Caching
-  - **Akzeptanzkriterium**: Alle externen API-Calls über Backend proxied, 60s Cache-TTL, <200ms API-Latenz unter 10 concurrent Requests
-  - **Security-relevant**: ja (API-Key Management)
-
-- **[REQ-007]**: RAG-System für Intelligence-Analyse
-  - **Akzeptanzkriterium**: Agentic RAG mit Qdrant + Ollama/vLLM, Query-to-Response <10s für Standard-Queries auf RTX 5090
-  - **Security-relevant**: nein
-
-- **[REQ-008]**: Multi-Agent Intelligence Pipeline (LangGraph)
-  - **Akzeptanzkriterium**: OSINT-Agent, Analyst-Agent und Synthesis-Agent orchestriert via LangGraph StateGraph, Streaming-Output via SSE
-  - **Security-relevant**: nein
-
-- **[REQ-009]**: Tactical C2 UI mit Operations Panel
-  - **Akzeptanzkriterium**: Layer-Toggles, Shader-Selector, Hotspot-Liste, Intel-Panel, Zeitzonen-Display
-  - **Security-relevant**: nein
-
-- **[REQ-010]**: Docker Compose Deployment
-  - **Akzeptanzkriterium**: `docker compose up` startet alle Services (Backend, Frontend, Qdrant, Ollama) innerhalb von 120s
-  - **Security-relevant**: ja (Secret Management via .env)
-
-### Should-Have (v1.1)
-
-- **[REQ-011]**: Militärische ADS-B Flugverfolgung (adsb.fi Military Filter)
-  - **Akzeptanzkriterium**: Militärflugzeuge farblich separiert mit ICAO-Type-Lookup
-  - **Security-relevant**: nein
-
-- **[REQ-012]**: AIS Schiffsdaten (AISStream.io WebSocket)
-  - **Akzeptanzkriterium**: Live-Schiffspositionen mit Burst-Pattern (20s Connect, 60s Cache)
-  - **Security-relevant**: ja (API-Key)
-
-- **[REQ-013]**: CCTV-Overlay (öffentliche Webcams)
-  - **Akzeptanzkriterium**: Kamera-Marker auf Globe mit Thumbnail-Preview bei Hover
-  - **Security-relevant**: nein
-
-- **[REQ-014]**: Straßenverkehr-Simulation (animierte Fahrzeuge auf Straßengeometrie)
-  - **Akzeptanzkriterium**: Fahrzeuge bewegen sich entlang realer Straßennetze in Fokus-Städten
-  - **Security-relevant**: nein
-
-- **[REQ-015]**: Geopolitische Hotspot-Datenbank mit RAG-Kontext
-  - **Akzeptanzkriterium**: 50+ Hotspots mit jeweils >10 indexierten Quell-Dokumenten in Qdrant
-  - **Security-relevant**: nein
-
-### Nice-to-Have (Backlog)
-
-- **[REQ-020]**: WebSocket Push für Live-Updates (statt Polling)
-- **[REQ-021]**: Multi-Monitor-Support (Globe auf Monitor 1, Intel auf Monitor 2)
-- **[REQ-022]**: Wargaming-Integration (LangGraph Multi-Agent aus Thesis)
-- **[REQ-023]**: Audio-Alerts bei Threat-Level-Änderungen
-- **[REQ-024]**: Export Intelligence Reports als PDF/DOCX
+### Nicht implementiert (bewusst depriorisiert)
+| # | Requirement | Grund |
+|---|-------------|-------|
+| REQ-013 | CCTV-Overlay | Datenschutz, geringer OSINT-Wert |
+| REQ-014 | Straßenverkehr-Simulation | Kein Intelligence-Mehrwert |
+| REQ-020 | WebSocket Push | Polling mit Cache reicht |
+| REQ-022 | Wargaming-Integration | Separate Thesis |
 
 ---
 
-## 4. Nicht-funktionale Anforderungen
+## Evolution — Enhancement-Delta auf WorldView
 
-- **Performance**: Globe-Rendering >30 FPS mit allen Layern aktiv auf RTX 5090 / 64GB RAM
-- **Latenz**: Backend API <200ms p95, RAG Query <10s p95 (Qwen3-32B auf vLLM)
-- **Sicherheit**: API-Keys nur in .env, nie im Frontend exponiert; alle externen Calls über Backend-Proxy
-- **Skalierbarkeit**: Single-Node-Betrieb optimiert; Docker-basiert für spätere Multi-Node-Erweiterung
-- **Verfügbarkeit**: Kein SLA (lokaler Betrieb), aber graceful degradation wenn externe APIs ausfallen
+### Ausgangslage
+
+WorldView ist eine funktionsfähige Platform mit:
+- CesiumJS 3D Globe + Google Photorealistic 3D Tiles
+- FastAPI Backend mit Proxy + Cache
+- LangGraph 3-Agent RAG Pipeline (OSINT → Analyst → Synthesis)
+- Live-Daten: Flights (27K+), Satellites (SGP4), Ships (AIS), Earthquakes (USGS)
+- Qdrant Vector DB + Redis Cache
+- 27 RSS Feeds + GDELT + TLE Collectors
+- GLSL Post-Processing (CRT, Night Vision, FLIR)
+- 50+ Geopolitical Hotspots Threat Register
+
+### Enhancement-Ziele (MVP)
+
+| # | Enhancement | Status |
+|---|-------------|--------|
+| E1 | Neo4j Knowledge Graph (Two-Loop: Templates Write, LLM Read) | DONE |
+| E2 | Event Codebook + LLM Classifier + Entity Extractor (1 Call) | DONE |
+| E3 | Ingestion Pipeline: Extract → Classify → Graph Write | DONE |
+| E4 | Qdrant native Hybrid Search + Reranker | PARTIAL (Hybrid offen) |
+| E5 | Agent Tools: Graph Query, Classify, Vision | DONE |
+| E6 | LLM/Embedding Upgrade: vLLM + Qwen3.5 + Qwen3-Embedding | DONE |
+| E7 | NotebookLM → Knowledge Graph Pipeline | DONE |
+| E8 | ReAct Agent mit Tool-Calling (vLLM 9B) | DONE |
+
+### Techstack-Delta
+
+#### Neu hinzukommend
+| Komponente | Technologie | Zweck |
+|------------|-------------|-------|
+| Graph DB | Neo4j Community 5.x | Knowledge Graph, Two-Loop Architecture |
+| Hybrid Search | Qdrant native BM25 + Dense + RRF | Serverseitige Fusion |
+| Reranker | BAAI/bge-reranker-v2-m3 via TEI | Cross-Encoder Reranking |
+| Entity Extraction | LLM Structured Output (JSON) | OSINT-Entities die spaCy nicht kann |
+| NLM Pipeline | Voxtral + Qwen + Claude hybrid | NotebookLM Podcast → Knowledge Graph |
+| Audio Transcription | Voxtral via vLLM | Think-Tank Podcast Transcription |
+
+#### Upgrades bestehender Komponenten
+| Besteht | Upgrade | Begründung |
+|---------|---------|------------|
+| Ollama | vLLM + llama.cpp | Continuous Batching, AWQ, Tool-Calling |
+| Qwen3-32B | Qwen3.5-27B/9B | Tool-Calling, 201 Sprachen, multimodal |
+| nomic-embed-text | Qwen3-Embedding-0.6B | 100+ Sprachen, 1024 dim, MTEB Top-Tier |
+| 27 RSS Feeds | 27 Feeds (12 gefixt) + SUV | Breitere + funktionsfähige Quellenbasis |
 
 ---
 
-## 5. Scope-Ausschlüsse
+## Neo4j Datenmodell (Yggdrasil)
 
-- **Kein Multi-User-Auth**: Single-User-System, kein Login/Sessions
-- **Keine Cloud-Deployment**: Kein AWS/GCP/Azure — rein lokal
-- **Kein Mobile**: Desktop-First (1920x1080+)
-- **Keine proprietären Daten**: Nur öffentlich zugängliche Feeds
-- **Kein Echtzeit-Streaming-Video**: CCTV nur als Thumbnails, kein Video-Player
-- **Kein Fine-Tuning**: Modelle werden as-is über Ollama/vLLM genutzt
+```cypher
+// Node Types
+(:Entity {id, name, type, aliases, confidence, first_seen, last_seen})
+  // type ∈ [person, organization, location, weapon_system, satellite, vessel, aircraft, military_unit]
+(:Event {id, title, summary, timestamp, codebook_type, severity, confidence})
+(:Source {url, name, quality_tier, last_fetched})
+(:Document {notebook_id, title, source, type, updated_at})
+(:Claim {statement_hash, statement, type, polarity, confidence, temporal_scope, extraction_model, prompt_version})
+(:Location {name, country, lat, lon})
+
+// Relationships
+(:Event)-[:INVOLVES]->(:Entity)
+(:Event)-[:REPORTED_BY]->(:Source)
+(:Event)-[:OCCURRED_AT]->(:Location)
+(:Entity)-[:ASSOCIATED_WITH {type, confidence}]->(:Entity)
+(:Document)-[:FROM_SOURCE]->(:Source)
+(:Claim)-[:EXTRACTED_FROM]->(:Document)
+(:Claim)-[:INVOLVES]->(:Entity)
+
+// Constraints
+CREATE CONSTRAINT entity_id IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE;
+CREATE CONSTRAINT event_id IF NOT EXISTS FOR (ev:Event) REQUIRE ev.id IS UNIQUE;
+CREATE CONSTRAINT source_url IF NOT EXISTS FOR (s:Source) REQUIRE s.url IS UNIQUE;
+CREATE INDEX entity_name IF NOT EXISTS FOR (e:Entity) ON (e.name);
+CREATE INDEX event_timestamp IF NOT EXISTS FOR (ev:Event) ON (ev.timestamp);
+CREATE INDEX event_type IF NOT EXISTS FOR (ev:Event) ON (ev.codebook_type);
+```
+
+## Graph-Architektur (Two-Loop)
+
+### WRITE PATH (Ingestion → Graph)
+```
+Feed-Item
+  → LLM: extract(text) → JSON {entities, events, locations}
+  → Pydantic: ExtractionResult.model_validate(json)
+  → Deterministic Cypher Templates (write_templates.py)
+  → Neo4j MERGE/CREATE
+```
+**Kein LLM-generiertes Cypher.** Templates sind statisch, Parameter kommen aus Pydantic.
+
+### READ PATH (Query → Graph)
+```
+Natural Language Question
+  → ReAct Agent: Tool Call (qdrant_search, graph_query, gdelt)
+  → Tool Results → Synthesis Agent
+  → Structured Intelligence Report
+```
 
 ---
 
-## 6. Abhängigkeiten & Risiken
+## Event Codebook (Auszug)
 
-| Abhängigkeit | Risiko | Mitigation |
-|---|---|---|
-| Google 3D Tiles API Key | Rate-Limiting bei $200 Free-Tier Überschreitung | Budget-Alert, Fallback auf OpenStreetMap Buildings |
-| OpenSky Network API | Häufige Downtime, 10s Rate-Limit | adsb.fi als Fallback, aggressive Caching |
-| CelesTrak TLE Data | Gelegentlich outdated TLEs | Täglicher Cron-Refresh |
-| Ollama/vLLM Inference | Modell-Qualität variiert, VRAM-Limits | Modell-Benchmark vor Integration, Fallback auf kleinere Modelle |
-| CesiumJS Rendering | WebGL-Kompatibilität | Chrome/Chromium als Referenz-Browser |
+```yaml
+military: [armed_clash, troop_movement, air_strike, drone_attack,
+           naval_engagement, missile_launch, military_exercise, arms_transfer]
+space:    [satellite_launch, orbit_maneuver, space_debris_event,
+           reconnaissance_satellite, ASAT_test]
+cyber:    [data_breach, state_sponsored_hack, infrastructure_disruption,
+           disinformation_campaign, ransomware_attack]
+political:[election, coup_attempt, sanctions_imposed, sanctions_lifted,
+           treaty_signed, diplomatic_incident, protest, government_change]
+infrastructure: [bridge_destroyed, power_grid_failure, port_blockade,
+                 airport_closure, pipeline_disruption, communication_outage]
+humanitarian:   [refugee_movement, famine_crisis, epidemic_outbreak,
+                 natural_disaster, civilian_casualties]
+economic: [trade_embargo, currency_crisis, supply_chain_disruption,
+           energy_price_shock, nationalization]
+```
 
 ---
 
-## 7. Erfolgskriterien
+## Nicht-funktionale Anforderungen
 
-1. `docker compose up` → System ist in <120s betriebsbereit
-2. Globe mit 3D Tiles + 3 aktive Daten-Layer bei >30 FPS
-3. RAG-basierte Intelligence-Query mit relevanten Ergebnissen in <10s
-4. Alle 3 visuellen Filter (CRT/NV/FLIR) ohne Rendering-Artefakte
-5. Graceful Degradation: System funktioniert wenn einzelne externe APIs ausfallen
+- **Performance**: Globe >30 FPS mit allen Layern auf RTX 5090 / 64GB RAM
+- **Latenz**: Backend API <200ms p95, RAG Query <10s p95
+- **Sicherheit**: API-Keys nur in .env, nie im Frontend; alle externen Calls über Proxy
+- **Verfügbarkeit**: Graceful degradation wenn externe APIs ausfallen
+- **GPU**: Single RTX 5090 (32 GB), nur ein LLM gleichzeitig
+
+---
+
+## Scope-Ausschlüsse
+
+- Kein Multi-User-Auth (Single-User-System)
+- Keine Cloud-Deployment (rein lokal)
+- Kein Mobile (Desktop-First)
+- Keine proprietären Daten (nur öffentliche Feeds)
+
+---
+
+## Risiken
+
+| Risiko | Mitigation |
+|--------|------------|
+| Neo4j bricht bestehende Qdrant-Flows | Parallel: Neo4j = Graph, Qdrant = Vektoren |
+| vLLM Encoder-Profiling OOM auf 5090 | llama.cpp GGUF als stabiler Fallback |
+| LLM-generiertes Cypher halluziniert | READ-ONLY + Validation + Self-Heal |
+| Entity Extraction unvollständig | Confidence Score + Claude Review für Low-Conf |
+| NotebookLM Cookie-Auth fragil | Manueller Re-Login, klare CLI-Fehlermeldungen |
+| RSS-Feeds veralten | Audit + Google News Proxies als Fallback |
+| Qwen3.5 Template-Bug mit ToolMessages | HumanMessage-Adapter nach Tool-Results |
+
+---
+
+## Phase Next
+
+| Feature | Technologie | Priorität |
+|---------|-------------|-----------|
+| Briefing Room (zweite View) | React, eigenes UI-Design | HOCH |
+| Events auf Globe plotten | Geo-kodierte Events als Marker | MITTEL |
+| Entity Resolution (Fuzzy Dedup) | LLM Disambiguation | MITTEL |
+| Docling Document Upload | Docling 2.80+ | MITTEL |
+| Deep Crawler | Crawl4AI | NIEDRIG |
+| Telegram Adapter | Telethon | NIEDRIG |
+| Anomaly Detection | Prophet auf Event-Frequenzen | NIEDRIG |
+| Fine-Tuning 9B für ODIN | Unsloth Studio | BEI BEDARF |
