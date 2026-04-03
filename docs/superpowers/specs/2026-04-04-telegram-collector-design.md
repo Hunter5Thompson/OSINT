@@ -175,12 +175,19 @@ payload = {
 
 | Parameter | Wert |
 |-----------|------|
-| Modell | Qwen2.5-VL-7B-Instruct (AWQ) |
+| Modell | Qwen3-VL-8B-Instruct (FP16/BF16, kein AWQ nötig) |
 | Container | `vllm-vision` |
 | Port | 8011 |
 | served-model-name | `qwen-vl` |
-| VRAM | ~5.5 GB Modell + 1.7 GB TEI Embed = ~7.2 GB |
+| VRAM | ~8 GB Modell + 1.7 GB TEI Embed = ~9.7 GB |
+| Speed | ~187 tok/s auf RTX 5090 |
 | Concurrency | Nicht concurrent mit Ingestion-27B, concurrent mit Interactive-9B möglich |
+
+**Modellwahl-Begründung:** Qwen3-VL-8B (qwen3_vl Architektur, 8.8B params) ist neuer und schneller als Qwen2.5-VL-7B. Bei ~8 GB VRAM passt es ohne Quantisierung auf die 5090 mit genügend Headroom.
+
+**Alternativen bei höherem Qualitätsbedarf:**
+- InternVL3-14B (~10 GB Q4) — stärker bei OCR/Document Understanding
+- InternVL3-38B (~22 GB Q4) — State-of-the-Art, aber braucht fast die ganze GPU
 
 ### Architektur
 
@@ -297,7 +304,7 @@ telegram_channels_config: str     # default: feeds/telegram_channels.yaml
 telegram_base_interval: int       # default: 300 (5min)
 telegram_max_interval: int        # default: 1800 (30min)
 vision_vllm_url: str              # default: http://localhost:8011
-vision_vllm_model: str            # default: qwen-vl
+vision_vllm_model: str            # default: qwen-vl (Qwen3-VL-8B-Instruct)
 vision_queue_max_pending: int     # default: 100
 ```
 
@@ -353,11 +360,10 @@ vllm-vision:
             count: 1
             capabilities: [gpu]
   command: >
-    --model Qwen/Qwen2.5-VL-7B-Instruct-AWQ
+    --model Qwen/Qwen3-VL-8B-Instruct
     --served-model-name qwen-vl
-    --quantization awq
     --max-model-len 4096
-    --gpu-memory-utilization 0.35
+    --gpu-memory-utilization 0.40
 ```
 
 ### Dependencies (pyproject.toml)
