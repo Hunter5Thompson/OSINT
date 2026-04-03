@@ -334,6 +334,33 @@ case "$COMMAND" in
     fi
     pull_model "$MODE"
     ;;
+  nlm)
+    subcmd="${2:-help}"
+    case "$subcmd" in
+      up)
+        echo "Starting Voxtral for NotebookLM..."
+        docker compose --profile notebooklm up -d vllm-voxtral
+        ;;
+      down)
+        echo "Stopping Voxtral..."
+        docker compose stop vllm-voxtral && docker compose rm -f vllm-voxtral
+        ;;
+      smoke)
+        echo "Running Voxtral healthcheck..."
+        cd services/data-ingestion && uv run odin-ingest-nlm healthcheck
+        ;;
+      run)
+        echo "Running NotebookLM ingestion pipeline..."
+        cd services/data-ingestion && uv run odin-ingest-nlm run
+        ;;
+      status)
+        cd services/data-ingestion && uv run odin-ingest-nlm status
+        ;;
+      *)
+        echo "Usage: odin nlm {up|down|smoke|run|status}"
+        ;;
+    esac
+    ;;
   help|--help|-h|"")
     usage
     ;;
