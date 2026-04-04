@@ -173,7 +173,7 @@ In `services/backend/app/main.py`, add `"pipelines": False` to the `default_laye
         },
 ```
 
-- [ ] **Step 6: Verify type-check passes**
+- [ ] **Step 6: Run type-check (expected interim error until Task 8)**
 
 ```bash
 cd services/frontend && npx tsc --noEmit
