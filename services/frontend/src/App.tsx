@@ -36,6 +36,7 @@ export function App() {
     cctv: false,
     events: false,
     cables: false,
+    pipelines: false,
   });
 
   const [activeShader, setActiveShader] = useState<ShaderType>("none");
@@ -56,11 +57,17 @@ export function App() {
       .catch(() => {
         setConfig({
           cesium_ion_token: "",
-          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false, cables: false },
+          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false, cables: false, pipelines: false },
           api_version: "v1",
         });
       });
   }, []);
+
+  useEffect(() => {
+    if (config?.default_layers) {
+      setLayers((prev) => ({ ...prev, ...config.default_layers }));
+    }
+  }, [config]);
 
   useEffect(() => {
     void getHotspots().then(setHotspots).catch(() => {});
