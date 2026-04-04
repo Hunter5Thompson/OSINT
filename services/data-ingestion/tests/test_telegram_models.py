@@ -144,3 +144,30 @@ class TestTelegramPayload:
                 media_types=[],
                 vision_status="unknown",
             )
+
+
+from pathlib import Path
+import yaml
+
+
+class TestChannelYAML:
+    def test_yaml_loads_and_validates(self):
+        yaml_path = Path(__file__).parent.parent / "feeds" / "telegram_channels.yaml"
+        with open(yaml_path) as f:
+            raw = yaml.safe_load(f)
+        cf = ChannelsFile(**raw)
+        assert len(cf.channels) >= 7
+        handles = [ch.handle for ch in cf.channels]
+        assert "OSINTdefender" in handles
+        assert "rybar" in handles
+
+    def test_all_channels_have_required_fields(self):
+        yaml_path = Path(__file__).parent.parent / "feeds" / "telegram_channels.yaml"
+        with open(yaml_path) as f:
+            raw = yaml.safe_load(f)
+        cf = ChannelsFile(**raw)
+        for ch in cf.channels:
+            assert ch.handle
+            assert ch.name
+            assert ch.category
+            assert ch.language == "en"  # all spec channels are English

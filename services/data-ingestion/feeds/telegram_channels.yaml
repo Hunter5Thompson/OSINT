@@ -1,0 +1,56 @@
+channels:
+  - handle: OSINTdefender
+    name: "OSINT Defender"
+    category: osint
+    source_bias: neutral
+    language: en
+    priority: high
+    media: true
+
+  - handle: AuroraIntel
+    name: "Aurora Intel"
+    category: osint
+    source_bias: neutral
+    language: en
+    priority: high
+    media: true
+
+  - handle: DeepStateEN
+    name: "DeepState Map (EN)"
+    category: conflict_ukraine
+    source_bias: pro_ukrainian
+    language: en
+    priority: high
+    media: true
+
+  - handle: wartranslated
+    name: "War Translated"
+    category: conflict_ukraine
+    source_bias: neutral
+    language: en
+    priority: medium
+    media: false
+
+  - handle: liveuamap
+    name: "Liveuamap"
+    category: conflict_global
+    source_bias: neutral
+    language: en
+    priority: medium
+    media: true
+
+  - handle: CalibreObscura
+    name: "Calibre Obscura"
+    category: arms_tracking
+    source_bias: neutral
+    language: en
+    priority: medium
+    media: true
+
+  - handle: rybar
+    name: "Rybar"
+    category: conflict_ukraine
+    source_bias: pro_russian
+    language: en
+    priority: medium
+    media: true
