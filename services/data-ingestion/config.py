@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     vision_dead_letter_queue: str = "vision:dead_letter"
     vision_consumer_group: str = "vision-workers"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

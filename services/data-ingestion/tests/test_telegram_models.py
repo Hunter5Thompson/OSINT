@@ -156,7 +156,7 @@ class TestChannelYAML:
         with open(yaml_path) as f:
             raw = yaml.safe_load(f)
         cf = ChannelsFile(**raw)
-        assert len(cf.channels) >= 7
+        assert len(cf.channels) >= 6
         handles = [ch.handle for ch in cf.channels]
         assert "OSINTdefender" in handles
         assert "rybar" in handles

@@ -39,14 +39,6 @@ channels:
     priority: medium
     media: true
 
-  - handle: CalibreObscura
-    name: "Calibre Obscura"
-    category: arms_tracking
-    source_bias: neutral
-    language: en
-    priority: medium
-    media: true
-
   - handle: rybar
     name: "Rybar"
     category: conflict_ukraine
