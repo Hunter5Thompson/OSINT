@@ -1,0 +1,781 @@
+"""Tests for Telegram collector core logic."""
+
+from __future__ import annotations
+
+import hashlib
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from feeds.telegram_collector import (
+    TelegramCollector,
+    _dedup_hash,
+    _dedup_hash_album,
+)
+
+
+class TestDedupHash:
+    def test_single_message_hash(self):
+        h = _dedup_hash("OSINTdefender", 12345)
+        expected = hashlib.sha256(b"OSINTdefender|12345").hexdigest()
+        assert h == expected
+
+    def test_album_hash(self):
+        h = _dedup_hash_album("OSINTdefender", 99999)
+        expected = hashlib.sha256(b"OSINTdefender|album|99999").hexdigest()
+        assert h == expected
+
+    def test_different_channels_different_hash(self):
+        h1 = _dedup_hash("chan_a", 1)
+        h2 = _dedup_hash("chan_b", 1)
+        assert h1 != h2
+
+    def test_hash_is_deterministic(self):
+        h1 = _dedup_hash("test", 42)
+        h2 = _dedup_hash("test", 42)
+        assert h1 == h2
+
+
+class TestCollectorInit:
+    @patch("feeds.telegram_collector._load_channels")
+    def test_loads_channels_on_init(self, mock_load):
+        mock_load.return_value = []
+        mock_redis = AsyncMock()
+        collector = TelegramCollector(redis_client=mock_redis)
+        mock_load.assert_called_once()
+        assert collector._redis is mock_redis
+
+
+# ── Helpers ──────────────────────────────────────────────────────────
+
+
+def _make_mock_message(msg_id=1, text="Breaking: Test event", grouped_id=None, has_photo=False):
+    """Create a mock Telethon message."""
+    msg = MagicMock()
+    msg.id = msg_id
+    msg.message = text
+    msg.grouped_id = grouped_id
+    msg.date = datetime(2026, 4, 4, 10, 0, 0, tzinfo=UTC)
+    msg.forward = None
+    msg.photo = MagicMock() if has_photo else None
+    msg.video = None
+    msg.document = None
+    msg.file = None
+    return msg
+
+
+def _make_settings(**overrides):
+    """Create Settings with test-friendly defaults."""
+    from config import Settings
+
+    defaults = {
+        "neo4j_password": "test",
+        "telegram_api_id": 12345,
+        "telegram_api_hash": "testhash",
+        "telegram_channels_config": "feeds/telegram_channels.yaml",
+    }
+    defaults.update(overrides)
+    return Settings(**defaults)
+
+
+# ── Redis dedup tests ────────────────────────────────────────────────
+
+
+class TestDedupRedis:
+    async def test_is_duplicate_returns_false_when_not_seen(self):
+        mock_redis = AsyncMock()
+        mock_redis.exists.return_value = 0
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        result = await collector._is_duplicate("abc123")
+        assert result is False
+        mock_redis.exists.assert_called_once_with("telegram:seen:abc123")
+
+    async def test_is_duplicate_returns_true_when_seen(self):
+        mock_redis = AsyncMock()
+        mock_redis.exists.return_value = 1
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        result = await collector._is_duplicate("abc123")
+        assert result is True
+
+    async def test_mark_seen_sets_with_ttl(self):
+        mock_redis = AsyncMock()
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        await collector._mark_seen("abc123")
+        mock_redis.set.assert_called_once_with(
+            "telegram:seen:abc123", "1", ex=604800
+        )
+
+    async def test_no_redis_means_no_duplicate(self):
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+        result = await collector._is_duplicate("abc123")
+        assert result is False
+
+
+# ── Last message ID state ────────────────────────────────────────────
+
+
+class TestLastMessageId:
+    async def test_get_returns_none_when_no_state(self):
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        result = await collector._get_last_message_id("test_channel")
+        assert result is None
+
+    async def test_get_returns_int(self):
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = b"42"
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        result = await collector._get_last_message_id("test_channel")
+        assert result == 42
+
+    async def test_set_stores_msg_id(self):
+        mock_redis = AsyncMock()
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        await collector._set_last_message_id("test_channel", 99)
+        mock_redis.set.assert_called_once_with(
+            "telegram:last_msg:test_channel", "99"
+        )
+
+    async def test_get_returns_none_without_redis(self):
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+        result = await collector._get_last_message_id("test_channel")
+        assert result is None
+
+
+# ── Vision queue tests ───────────────────────────────────────────────
+
+
+class TestVisionQueue:
+    async def test_backpressure_falls_back_to_xlen_on_nogroup(self):
+        """If consumer group doesn't exist yet, XPENDING fails — fall back to XLEN."""
+        import redis as redis_lib
+
+        mock_redis = AsyncMock()
+        mock_redis.xpending.side_effect = redis_lib.ResponseError(
+            "NOGROUP No such consumer group 'vision-workers'"
+        )
+        mock_redis.xlen.return_value = 150  # over threshold
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        from feeds.telegram_models import ChannelConfig
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="medium", media=True,
+        )
+        status = await collector._maybe_enqueue_vision(ch, 1, "/data/photo.jpg")
+        assert status == "deferred"
+        mock_redis.xlen.assert_called_once()
+
+    async def test_enqueue_vision_publishes_to_stream(self):
+        mock_redis = AsyncMock()
+        mock_redis.xpending.return_value = {"pending": 10}  # under threshold
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        from feeds.telegram_models import ChannelConfig
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+        status = await collector._maybe_enqueue_vision(ch, 123, "/data/photo.jpg")
+        assert status == "pending"
+        mock_redis.xadd.assert_called_once()
+
+    async def test_backpressure_defers_medium_priority(self):
+        mock_redis = AsyncMock()
+        mock_redis.xpending.return_value = {"pending": 150}  # over threshold
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        from feeds.telegram_models import ChannelConfig
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="medium", media=True,
+        )
+        status = await collector._maybe_enqueue_vision(ch, 123, "/data/photo.jpg")
+        assert status == "deferred"
+        mock_redis.xadd.assert_not_called()
+
+    async def test_backpressure_allows_high_priority(self):
+        mock_redis = AsyncMock()
+        mock_redis.xpending.return_value = {"pending": 150}  # over threshold
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        from feeds.telegram_models import ChannelConfig
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+        status = await collector._maybe_enqueue_vision(ch, 123, "/data/photo.jpg")
+        assert status == "pending"
+        mock_redis.xadd.assert_called_once()
+
+    async def test_no_redis_returns_skipped(self):
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+
+        from feeds.telegram_models import ChannelConfig
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+        status = await collector._maybe_enqueue_vision(ch, 1, "/data/photo.jpg")
+        assert status == "skipped"
+
+
+# ── Adaptive polling tests ───────────────────────────────────────────
+
+
+class TestAdaptivePolling:
+    async def test_high_priority_always_polls(self):
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+        assert await collector._should_poll(ch) is True
+
+    async def test_no_redis_always_polls(self):
+        from feeds.telegram_models import ChannelConfig
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="medium", media=True,
+        )
+        assert await collector._should_poll(ch) is True
+
+    async def test_never_polled_channel_polls(self):
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None  # no last_activity
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="medium", media=True,
+        )
+        assert await collector._should_poll(ch) is True
+
+    async def test_interval_doubles_on_no_activity(self):
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = "300"  # current interval
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="medium", media=True,
+        )
+        await collector._update_polling_interval(ch, had_new_messages=False)
+        # Should set interval to 600 (300 * 2)
+        set_calls = mock_redis.set.call_args_list
+        interval_call = [c for c in set_calls if "interval" in str(c)]
+        assert any("600" in str(c) for c in interval_call)
+
+    async def test_interval_resets_on_activity(self):
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = "1200"  # current interval (backed off)
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="medium", media=True,
+        )
+        await collector._update_polling_interval(ch, had_new_messages=True)
+        # Should reset interval to base (300)
+        set_calls = mock_redis.set.call_args_list
+        interval_call = [c for c in set_calls if "interval" in str(c)]
+        assert any("300" in str(c) for c in interval_call)
+
+    async def test_interval_capped_at_max(self):
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = "1800"  # already at max
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="medium", media=True,
+        )
+        await collector._update_polling_interval(ch, had_new_messages=False)
+        set_calls = mock_redis.set.call_args_list
+        interval_call = [c for c in set_calls if "interval" in str(c)]
+        # min(1800*2, 1800) = 1800
+        assert any("1800" in str(c) for c in interval_call)
+
+    async def test_high_priority_skips_interval_update(self):
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+        await collector._update_polling_interval(ch, had_new_messages=False)
+        # No Redis calls for high priority
+        mock_redis.set.assert_not_called()
+        mock_redis.get.assert_not_called()
+
+
+# ── Contiguous watermark tests ───────────────────────────────────────
+
+
+class TestContiguousWatermark:
+    async def test_watermark_advances_on_success(self):
+        """Watermark advances through contiguous successful items."""
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.exists.return_value = 0  # not seen
+        mock_redis.get.return_value = None  # no prior watermark
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+
+        msg1 = _make_mock_message(msg_id=10, text="Event 1")
+        msg2 = _make_mock_message(msg_id=11, text="Event 2")
+
+        mock_client = AsyncMock()
+        mock_client.get_entity.return_value = MagicMock()
+        mock_client.get_messages.return_value = [msg2, msg1]  # descending
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[ch]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        collector._client = mock_client
+
+        # Mock the processing methods to succeed
+        collector._process_single = AsyncMock(return_value=1)
+        collector._embed_and_upsert = AsyncMock(return_value=True)
+
+        count = await collector._fetch_and_process(ch)
+
+        assert count == 2
+        # Watermark should be set to 11 (highest successful)
+        watermark_calls = [
+            c for c in mock_redis.set.call_args_list
+            if "last_msg" in str(c)
+        ]
+        assert len(watermark_calls) == 1
+        assert watermark_calls[0] == (("telegram:last_msg:test", "11"),)
+
+    async def test_exception_in_process_freezes_watermark_not_aborts(self):
+        """Finding 1: Exception in _process_single must not abort the entire batch.
+        Watermark should freeze at last success, not lose all progress."""
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.exists.return_value = 0
+        mock_redis.get.return_value = None
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+
+        msg1 = _make_mock_message(msg_id=10, text="Event 1")
+        msg2 = _make_mock_message(msg_id=11, text="Event 2")  # will raise
+        msg3 = _make_mock_message(msg_id=12, text="Event 3")
+
+        mock_client = AsyncMock()
+        mock_client.get_entity.return_value = MagicMock()
+        mock_client.get_messages.return_value = [msg3, msg2, msg1]
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[ch]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        collector._client = mock_client
+
+        call_count = 0
+
+        async def mock_process_single(channel, msg, chash):
+            nonlocal call_count
+            call_count += 1
+            if msg.id == 11:
+                raise RuntimeError("Qdrant connection refused")
+            return 1
+
+        collector._process_single = mock_process_single
+
+        # Must NOT raise — exception should be caught per-item
+        count = await collector._fetch_and_process(ch)
+
+        # msg1 ok (1), msg2 exception (0), msg3 ok (1)
+        assert count == 2
+        # All 3 items must be attempted
+        assert call_count == 3
+        # Watermark freezes at 10 (last contiguous before exception)
+        watermark_calls = [
+            c for c in mock_redis.set.call_args_list
+            if "last_msg" in str(c)
+        ]
+        assert len(watermark_calls) == 1
+        assert watermark_calls[0] == (("telegram:last_msg:test", "10"),)
+
+    async def test_watermark_freezes_on_failure(self):
+        """When processing fails, watermark freezes at last success."""
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.exists.return_value = 0  # not seen
+        mock_redis.get.return_value = None  # no prior watermark
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+
+        msg1 = _make_mock_message(msg_id=10, text="Event 1")
+        msg2 = _make_mock_message(msg_id=11, text="Event 2")  # will fail
+        msg3 = _make_mock_message(msg_id=12, text="Event 3")
+
+        mock_client = AsyncMock()
+        mock_client.get_entity.return_value = MagicMock()
+        mock_client.get_messages.return_value = [msg3, msg2, msg1]
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[ch]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        collector._client = mock_client
+
+        # msg1 succeeds, msg2 fails, msg3 succeeds
+        call_count = 0
+
+        async def mock_process_single(channel, msg, chash):
+            nonlocal call_count
+            call_count += 1
+            if msg.id == 11:
+                return 0  # fail
+            return 1  # success
+
+        collector._process_single = mock_process_single
+
+        count = await collector._fetch_and_process(ch)
+
+        # count = 2 (msg1 + msg3 succeed)
+        assert count == 2
+        # Watermark should freeze at 10 (last contiguous success before failure)
+        watermark_calls = [
+            c for c in mock_redis.set.call_args_list
+            if "last_msg" in str(c)
+        ]
+        assert len(watermark_calls) == 1
+        assert watermark_calls[0] == (("telegram:last_msg:test", "10"),)
+
+
+    async def test_service_messages_advance_watermark(self):
+        """Finding 3: When the highest-ID message is a service message (no
+        text/photo/video/doc), the watermark must still advance past it.
+        Otherwise, next poll re-fetches the same service messages."""
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.exists.return_value = 0
+        mock_redis.get.return_value = None
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+
+        msg1 = _make_mock_message(msg_id=10, text="Event 1")
+        # Service message at the END — highest ID, no content
+        msg_service = MagicMock()
+        msg_service.id = 11
+        msg_service.message = None
+        msg_service.grouped_id = None
+        msg_service.date = datetime(2026, 4, 4, 10, 0, 0, tzinfo=UTC)
+        msg_service.forward = None
+        msg_service.photo = None
+        msg_service.video = None
+        msg_service.document = None
+        msg_service.file = None
+
+        mock_client = AsyncMock()
+        mock_client.get_entity.return_value = MagicMock()
+        mock_client.get_messages.return_value = [msg_service, msg1]
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[ch]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        collector._client = mock_client
+        collector._process_single = AsyncMock(return_value=1)
+
+        await collector._fetch_and_process(ch)
+
+        # Watermark must reach 11 (past the service message), not stop at 10
+        watermark_calls = [
+            c for c in mock_redis.set.call_args_list
+            if "last_msg" in str(c)
+        ]
+        assert len(watermark_calls) == 1
+        assert watermark_calls[0] == (("telegram:last_msg:test", "11"),)
+
+
+# ── Media download tests ────────────────────────────────────────────
+
+
+class TestMediaDownload:
+    async def test_skips_oversized_media(self, tmp_path):
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+        collector._settings = _make_settings(telegram_media_path=str(tmp_path))
+
+        msg = MagicMock()
+        msg.id = 1
+        msg.file = MagicMock()
+        msg.file.size = 50_000_000  # 50 MB, over 20 MB limit
+
+        result = await collector._download_media("test_channel", msg)
+        assert result is None
+
+    async def test_downloads_media_under_limit(self, tmp_path):
+        mock_client = AsyncMock()
+        mock_client.download_media.return_value = str(tmp_path / "photo.jpg")
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+        collector._client = mock_client
+        collector._settings = _make_settings(telegram_media_path=str(tmp_path))
+
+        msg = MagicMock()
+        msg.id = 1
+        msg.file = MagicMock()
+        msg.file.size = 1_000_000  # 1 MB, under limit
+
+        result = await collector._download_media("test_channel", msg)
+        assert result == str(tmp_path / "photo.jpg")
+        mock_client.download_media.assert_called_once()
+
+    async def test_handles_download_failure_gracefully(self, tmp_path):
+        mock_client = AsyncMock()
+        mock_client.download_media.side_effect = Exception("Network error")
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+        collector._client = mock_client
+        collector._settings = _make_settings(telegram_media_path=str(tmp_path))
+
+        msg = MagicMock()
+        msg.id = 1
+        msg.file = MagicMock()
+        msg.file.size = 1_000_000
+
+        result = await collector._download_media("test_channel", msg)
+        assert result is None
+
+
+# ── Collect entry point tests ────────────────────────────────────────
+
+
+class TestCollectEntryPoint:
+    async def test_collect_skips_adaptive_channels(self):
+        from feeds.telegram_models import ChannelConfig
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="medium", media=True,
+        )
+        mock_redis = AsyncMock()
+        with patch("feeds.telegram_collector._load_channels", return_value=[ch]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        collector._client = AsyncMock()
+        collector._should_poll = AsyncMock(return_value=False)
+        collector._collect_channel = AsyncMock()
+
+        await collector.collect()
+
+        collector._collect_channel.assert_not_called()
+
+    async def test_collect_handles_channel_error(self):
+        from feeds.telegram_models import ChannelConfig
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+        mock_redis = AsyncMock()
+        with patch("feeds.telegram_collector._load_channels", return_value=[ch]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        collector._client = AsyncMock()
+        collector._collect_channel = AsyncMock(side_effect=Exception("API error"))
+        collector._update_polling_interval = AsyncMock()
+
+        # Should not raise — errors are caught per-channel
+        await collector.collect()
+
+    async def test_collect_auto_connects(self):
+        from feeds.telegram_models import ChannelConfig
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+        mock_redis = AsyncMock()
+        with patch("feeds.telegram_collector._load_channels", return_value=[ch]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        collector._client = None
+        collector._collect_channel = AsyncMock(return_value=0)
+        collector._update_polling_interval = AsyncMock()
+
+        with patch.object(collector, "connect", new_callable=AsyncMock) as mock_connect:
+            await collector.collect()
+            mock_connect.assert_called_once()
+
+
+# ── Config path resolution tests ─────────────────────────────────────
+
+
+class TestConfigPathResolution:
+    def test_relative_path_with_subdirectory_resolved_from_service_root(self, tmp_path):
+        """Finding 4: A relative config override like 'configs/telegram/custom.yaml'
+        must resolve from the service root, not collapse via path.name."""
+        from feeds.telegram_collector import _load_channels
+
+        # Build a fake service root mimicking the real layout
+        service_root = tmp_path / "service"
+        feeds_dir = service_root / "feeds"
+        feeds_dir.mkdir(parents=True)
+        config_sub = service_root / "configs" / "telegram"
+        config_sub.mkdir(parents=True)
+
+        yaml_file = config_sub / "custom.yaml"
+        yaml_file.write_text(
+            "channels:\n"
+            "  - handle: test\n"
+            "    name: Test\n"
+            "    category: osint\n"
+            "    source_bias: neutral\n"
+            "    language: en\n"
+            "    priority: high\n"
+            "    media: true\n"
+        )
+
+        # Patch __file__ in the module to point at our fake feeds dir
+        fake_file = str(feeds_dir / "telegram_collector.py")
+        with patch("feeds.telegram_collector.__file__", fake_file):
+            # Reload the reference that _load_channels uses for Path(__file__)
+            # by patching the module-level Path used inside the function
+            channels = _load_channels("configs/telegram/custom.yaml")
+
+        assert len(channels) == 1
+        assert channels[0].handle == "test"
+
+
+class TestAlbumVisionSingleEnqueue:
+    async def test_album_enqueues_only_first_photo(self):
+        """Finding 2: Album with multiple photos must enqueue only the first
+        for vision, preventing last-write-wins overwrite in consumer."""
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.xpending.return_value = {"pending": 0}
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+
+        # Mock 3 album messages with photos
+        msgs = []
+        for i in range(3):
+            m = MagicMock()
+            m.id = 100 + i
+            m.message = "Album text" if i == 0 else None
+            m.grouped_id = 9999
+            m.date = datetime(2026, 4, 4, 10, 0, 0, tzinfo=UTC)
+            m.forward = None
+            m.photo = MagicMock()
+            m.video = None
+            m.document = None
+            m.file = MagicMock()
+            m.file.size = 500_000
+            msgs.append(m)
+
+        # Mock download to return unique paths
+        download_paths = iter([
+            "/data/photo0.jpg", "/data/photo1.jpg", "/data/photo2.jpg",
+        ])
+        collector._client = AsyncMock()
+        collector._client.download_media.side_effect = (
+            lambda msg, file: next(download_paths)
+        )
+        collector._settings = _make_settings(
+            telegram_media_path="/tmp/test_media",
+        )
+
+        # process_item is imported inside _process_album from pipeline module
+        with (
+            patch("pipeline.process_item", new_callable=AsyncMock, return_value=None),
+            patch.object(
+                collector, "_embed_and_upsert",
+                new_callable=AsyncMock, return_value=True,
+            ),
+        ):
+            await collector._process_album(ch, msgs, "test_hash")
+
+        # Should have called xadd exactly ONCE (first photo only)
+        xadd_calls = [
+            c for c in mock_redis.xadd.call_args_list
+            if "vision:pending" in str(c)
+        ]
+        assert len(xadd_calls) == 1
+        # The enqueued path should be the first photo
+        enqueued_data = xadd_calls[0][0][1]
+        assert enqueued_data["media_path"] == "/data/photo0.jpg"
+
+
+# ── Scheduler integration tests ──────────────────────────────────────
+
+
+class TestSchedulerIntegration:
+    def test_telegram_job_registered(self):
+        """Verify the telegram collector job is in the scheduler."""
+        from scheduler import create_scheduler
+
+        scheduler = create_scheduler()
+        job_ids = [j.id for j in scheduler.get_jobs()]
+        assert "telegram_collector" in job_ids
+
+    def test_telegram_job_interval_5_min(self):
+        from scheduler import create_scheduler
+
+        scheduler = create_scheduler()
+        job = scheduler.get_job("telegram_collector")
+        assert job is not None
+        assert job.trigger.interval.total_seconds() == 300
