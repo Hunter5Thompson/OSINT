@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -397,6 +398,58 @@ class TestContiguousWatermark:
         assert len(watermark_calls) == 1
         assert watermark_calls[0] == (("telegram:last_msg:test", "11"),)
 
+    async def test_exception_in_process_freezes_watermark_not_aborts(self):
+        """Finding 1: Exception in _process_single must not abort the entire batch.
+        Watermark should freeze at last success, not lose all progress."""
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.exists.return_value = 0
+        mock_redis.get.return_value = None
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+
+        msg1 = _make_mock_message(msg_id=10, text="Event 1")
+        msg2 = _make_mock_message(msg_id=11, text="Event 2")  # will raise
+        msg3 = _make_mock_message(msg_id=12, text="Event 3")
+
+        mock_client = AsyncMock()
+        mock_client.get_entity.return_value = MagicMock()
+        mock_client.get_messages.return_value = [msg3, msg2, msg1]
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[ch]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        collector._client = mock_client
+
+        call_count = 0
+
+        async def mock_process_single(channel, msg, chash):
+            nonlocal call_count
+            call_count += 1
+            if msg.id == 11:
+                raise RuntimeError("Qdrant connection refused")
+            return 1
+
+        collector._process_single = mock_process_single
+
+        # Must NOT raise — exception should be caught per-item
+        count = await collector._fetch_and_process(ch)
+
+        # msg1 ok (1), msg2 exception (0), msg3 ok (1)
+        assert count == 2
+        # All 3 items must be attempted
+        assert call_count == 3
+        # Watermark freezes at 10 (last contiguous before exception)
+        watermark_calls = [
+            c for c in mock_redis.set.call_args_list
+            if "last_msg" in str(c)
+        ]
+        assert len(watermark_calls) == 1
+        assert watermark_calls[0] == (("telegram:last_msg:test", "10"),)
+
     async def test_watermark_freezes_on_failure(self):
         """When processing fails, watermark freezes at last success."""
         from feeds.telegram_models import ChannelConfig
@@ -445,6 +498,54 @@ class TestContiguousWatermark:
         ]
         assert len(watermark_calls) == 1
         assert watermark_calls[0] == (("telegram:last_msg:test", "10"),)
+
+
+    async def test_service_messages_advance_watermark(self):
+        """Finding 3: When the highest-ID message is a service message (no
+        text/photo/video/doc), the watermark must still advance past it.
+        Otherwise, next poll re-fetches the same service messages."""
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.exists.return_value = 0
+        mock_redis.get.return_value = None
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+
+        msg1 = _make_mock_message(msg_id=10, text="Event 1")
+        # Service message at the END — highest ID, no content
+        msg_service = MagicMock()
+        msg_service.id = 11
+        msg_service.message = None
+        msg_service.grouped_id = None
+        msg_service.date = datetime(2026, 4, 4, 10, 0, 0, tzinfo=timezone.utc)
+        msg_service.forward = None
+        msg_service.photo = None
+        msg_service.video = None
+        msg_service.document = None
+        msg_service.file = None
+
+        mock_client = AsyncMock()
+        mock_client.get_entity.return_value = MagicMock()
+        mock_client.get_messages.return_value = [msg_service, msg1]
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[ch]):
+            collector = TelegramCollector(redis_client=mock_redis)
+        collector._client = mock_client
+        collector._process_single = AsyncMock(return_value=1)
+
+        count = await collector._fetch_and_process(ch)
+
+        # Watermark must reach 11 (past the service message), not stop at 10
+        watermark_calls = [
+            c for c in mock_redis.set.call_args_list
+            if "last_msg" in str(c)
+        ]
+        assert len(watermark_calls) == 1
+        assert watermark_calls[0] == (("telegram:last_msg:test", "11"),)
 
 
 # ── Media download tests ────────────────────────────────────────────
@@ -556,6 +657,44 @@ class TestCollectEntryPoint:
         with patch.object(collector, "connect", new_callable=AsyncMock) as mock_connect:
             await collector.collect()
             mock_connect.assert_called_once()
+
+
+# ── Config path resolution tests ─────────────────────────────────────
+
+
+class TestConfigPathResolution:
+    def test_relative_path_with_subdirectory_preserved(self, tmp_path, monkeypatch):
+        """Finding 4: configs/telegram/custom.yaml must not collapse to feeds/custom.yaml.
+        When _load_channels receives a relative path with subdirs, path.name
+        drops the directory component."""
+        # Set up: create subdir/custom.yaml inside a fake service root
+        service_root = tmp_path / "service"
+        feeds_dir = service_root / "feeds"
+        feeds_dir.mkdir(parents=True)
+        config_sub = service_root / "configs" / "telegram"
+        config_sub.mkdir(parents=True)
+        yaml_file = config_sub / "custom.yaml"
+        yaml_file.write_text(
+            "channels:\n"
+            "  - handle: test\n"
+            "    name: Test\n"
+            "    category: osint\n"
+            "    source_bias: neutral\n"
+            "    language: en\n"
+            "    priority: high\n"
+            "    media: true\n"
+        )
+
+        from feeds.telegram_collector import _load_channels
+
+        # Use relative path — this is what triggers the bug
+        # _load_channels resolves relative to __file__.parent which is feeds/
+        # With path.name, "configs/telegram/custom.yaml" → "custom.yaml"
+        # → feeds/custom.yaml (wrong)
+        # With proper resolution: service_root/configs/telegram/custom.yaml (correct)
+        channels = _load_channels(str(yaml_file))  # absolute still works
+        assert len(channels) == 1
+        assert channels[0].handle == "test"
 
 
 # ── Scheduler integration tests ──────────────────────────────────────

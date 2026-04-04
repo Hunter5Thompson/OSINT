@@ -6,19 +6,18 @@ import asyncio
 import signal
 import sys
 
+import redis.asyncio as aioredis
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-import redis.asyncio as aioredis
-
 from config import settings
-from feeds.rss_collector import RSSCollector
 from feeds.gdelt_collector import GDELTCollector
-from feeds.tle_updater import TLEUpdater
 from feeds.hotspot_updater import HotspotUpdater
+from feeds.rss_collector import RSSCollector
 from feeds.telegram_collector import TelegramCollector
+from feeds.tle_updater import TLEUpdater
 
 # Shared async Redis client for stream publishing
 _redis_client: aioredis.Redis | None = None
@@ -40,7 +39,9 @@ structlog.configure(
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
-        structlog.dev.ConsoleRenderer() if sys.stderr.isatty() else structlog.processors.JSONRenderer(),
+        structlog.dev.ConsoleRenderer()
+        if sys.stderr.isatty()
+        else structlog.processors.JSONRenderer(),
     ],
     wrapper_class=structlog.make_filtering_bound_logger(0),
     context_class=dict,

@@ -31,7 +31,9 @@ def _load_channels(config_path: str | None = None) -> list[ChannelConfig]:
     """Load and validate channel config from YAML."""
     path = Path(config_path or settings.telegram_channels_config)
     if not path.is_absolute():
-        path = Path(__file__).parent / path.name
+        # Resolve relative to service root (parent of feeds/), not feeds/ dir
+        service_root = Path(__file__).resolve().parent.parent
+        path = service_root / path
     with open(path) as f:
         raw = yaml.safe_load(f)
     cf = ChannelsFile(**raw)
@@ -242,12 +244,14 @@ class TelegramCollector:
             canonical_id = min(m.id for m in album_msgs)
             chash = _dedup_hash_album(channel.handle, grouped_id)
             items.append((canonical_id, chash, ("album", album_msgs)))
-        # "single" items
+        # "single" items — service messages (no content) tracked as "skip"
+        # so their IDs still advance the watermark
         for msg in singles:
             if not msg.message and not msg.photo and not msg.video and not msg.document:
-                continue  # Skip service messages (joins, pins, etc.)
-            chash = _dedup_hash(channel.handle, msg.id)
-            items.append((msg.id, chash, ("single", msg)))
+                items.append((msg.id, "", ("skip", None)))
+            else:
+                chash = _dedup_hash(channel.handle, msg.id)
+                items.append((msg.id, chash, ("single", msg)))
 
         items.sort(key=lambda x: x[0])
 
@@ -262,10 +266,25 @@ class TelegramCollector:
                 continue
 
             kind, data = payload
-            if kind == "album":
-                result = await self._process_album(channel, data, chash)
-            else:
-                result = await self._process_single(channel, data, chash)
+            if kind == "skip":
+                # Service message — nothing to process, advance watermark
+                if not watermark_frozen:
+                    watermark = max(watermark or 0, item_id)
+                continue
+
+            try:
+                if kind == "album":
+                    result = await self._process_album(channel, data, chash)
+                else:
+                    result = await self._process_single(channel, data, chash)
+            except Exception as e:
+                log.error(
+                    "telegram_item_failed",
+                    handle=channel.handle,
+                    item_id=item_id,
+                    error=str(e),
+                )
+                result = 0
 
             count += result
             if result > 0 and not watermark_frozen:
@@ -400,13 +419,15 @@ class TelegramCollector:
 
         has_media = len(media_paths) > 0
 
-        # Enqueue only photos for vision
+        # Enqueue first photo only for vision (analog to _process_single)
+        # Multiple enqueues with same URL cause last-write-wins in consumer
         vision_status = "skipped"
         for path, mtype in zip(media_paths, media_types, strict=False):
             if mtype == "photo":
                 vision_status = await self._maybe_enqueue_vision(
                     channel, canonical_msg.id, path
                 )
+                break
 
         enrichment = await process_item(
             title=title,

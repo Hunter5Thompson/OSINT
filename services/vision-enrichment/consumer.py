@@ -85,6 +85,7 @@ class VisionConsumer:
 
     async def _process_message(self, msg_id: bytes, msg_data: dict) -> None:
         """Process a single vision queue entry."""
+        msg_id_str = msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
         url = msg_data.get(b"url", b"").decode()
         media_path = msg_data.get(b"media_path", b"").decode()
         channel = msg_data.get(b"channel", b"").decode()
@@ -162,13 +163,15 @@ class VisionConsumer:
                 self._settings.vision_consumer_group,
                 msg_id,
             )
+            # Clean up any retry state from prior failed attempts
+            await self._redis.delete(f"vision:retries:{msg_id_str}")
             log.info("vision_processed", url=url, channel=channel)
 
         except Exception as e:
             log.error("vision_processing_failed", url=url, error=str(e))
 
             # Track retries
-            retry_key = f"vision:retries:{msg_id}"
+            retry_key = f"vision:retries:{msg_id_str}"
             retry_count = await self._redis.hincrby(retry_key, "count", 1)
 
             if retry_count > self._settings.vision_max_retries:

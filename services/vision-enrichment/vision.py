@@ -49,7 +49,10 @@ async def analyze_image(
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "You are an OSINT image analyst. Output valid JSON only."},
+            {
+                "role": "system",
+                "content": "You are an OSINT image analyst. Output valid JSON only.",
+            },
             {
                 "role": "user",
                 "content": [
