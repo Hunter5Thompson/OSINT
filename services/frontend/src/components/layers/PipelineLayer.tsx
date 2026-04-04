@@ -91,9 +91,11 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
         const coords = getCoordinatesFlat(feature);
         if (coords.length < 2) continue;
 
-        const positions = Cesium.Cartesian3.fromDegreesArray(
-          coords.flatMap(([lon, lat]) => [lon, lat]),
-        );
+        const flat: number[] = [];
+        for (const c of coords) {
+          flat.push(c[0] as number, c[1] as number);
+        }
+        const positions = Cesium.Cartesian3.fromDegreesArray(flat);
 
         const color = Cesium.Color.fromCssColorString(
           PIPELINE_COLORS[props.type] ?? PIPELINE_COLORS.mixed,
@@ -111,9 +113,11 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
         });
 
         const midIdx = Math.floor(coords.length / 2);
-        const midCoord = coords[midIdx];
+        const midCoord = coords[midIdx]!;
+        const midLon = midCoord[0] as number;
+        const midLat = midCoord[1] as number;
         const bb = bc.add({
-          position: Cesium.Cartesian3.fromDegrees(midCoord[0], midCoord[1]),
+          position: Cesium.Cartesian3.fromDegrees(midLon, midLat),
           image: createPipelineDot(PIPELINE_COLORS[props.type] ?? PIPELINE_COLORS.mixed),
           scale: 1.0,
           translucencyByDistance: new Cesium.NearFarScalar(1e5, 1.0, 1e7, 0.3),
@@ -127,12 +131,12 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
           capacity_bcm: props.capacity_bcm,
           length_km: props.length_km,
           countries: props.countries,
-          lat: midCoord[1],
-          lon: midCoord[0],
+          lat: midLat,
+          lon: midLon,
         };
 
         lc.add({
-          position: Cesium.Cartesian3.fromDegrees(midCoord[0], midCoord[1]),
+          position: Cesium.Cartesian3.fromDegrees(midLon, midLat),
           text: props.name,
           font: "11px monospace",
           fillColor: color.withAlpha(0.8),
