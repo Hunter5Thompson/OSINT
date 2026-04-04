@@ -51,15 +51,13 @@ In `services/frontend/src/components/globe/GlobeViewer.tsx`, add after the `view
 
 ```typescript
     // Cesium World Terrain — relief + bathymetry
-    void Cesium.createWorldTerrainAsync({
-      requestWaterMask: true,
-      requestVertexNormals: true,
-    }).then((terrain) => {
-      if (!viewer.isDestroyed()) {
-        viewer.scene.setTerrain(new Cesium.Terrain(terrain));
-        viewer.scene.verticalExaggeration = 1.5;
-      }
-    });
+    viewer.scene.setTerrain(
+      Cesium.Terrain.fromWorldTerrain({
+        requestWaterMask: true,
+        requestVertexNormals: true,
+      }),
+    );
+    viewer.scene.verticalExaggeration = 1.5;
 ```
 
 - [ ] **Step 2: Verify terrain loads**
@@ -134,7 +132,7 @@ In `services/frontend/src/App.tsx`, add `pipelines: false` to the initial `layer
   });
 ```
 
-- [ ] **Step 4: Update App.tsx config fallback**
+- [ ] **Step 4: Update App.tsx config fallback + apply backend defaults**
 
 In `services/frontend/src/App.tsx`, add `pipelines: false` to the fallback config (line 59):
 
@@ -146,11 +144,19 @@ In `services/frontend/src/App.tsx`, add `pipelines: false` to the fallback confi
         });
 ```
 
-- [ ] **Step 5: Update StatusBar to accept pipelines count**
+Also, add a `useEffect` after the config load (after line 63) to apply backend-provided layer defaults:
 
-In `services/frontend/src/App.tsx`, add `pipelineCount={0}` to the StatusBar props (after line 156), and add `pipelines: null` to the freshness object.
+```typescript
+  useEffect(() => {
+    if (config?.default_layers) {
+      setLayers((prev) => ({ ...prev, ...config.default_layers }));
+    }
+  }, [config]);
+```
 
-- [ ] **Step 6: Update backend config defaults**
+This ensures the backend `default_layers` dict is the source of truth for initial layer visibility. New layers added to the backend config will automatically propagate to the frontend without hardcoded changes.
+
+- [ ] **Step 5: Update backend config defaults**
 
 In `services/backend/app/main.py`, add `"pipelines": False` to the `default_layers` dict in the `client_config` endpoint (after line 115):
 
@@ -167,15 +173,15 @@ In `services/backend/app/main.py`, add `"pipelines": False` to the `default_laye
         },
 ```
 
-- [ ] **Step 7: Verify type-check passes**
+- [ ] **Step 6: Verify type-check passes**
 
 ```bash
 cd services/frontend && npx tsc --noEmit
 ```
 
-Expected: No errors (or only pre-existing ones unrelated to our changes).
+Expected: No errors (or only pre-existing ones unrelated to our changes). Note: StatusBar will show a type error for missing `pipelines` in freshness — this is expected and fixed in Task 8 when we wire everything together.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add services/frontend/src/types/index.ts services/frontend/src/App.tsx services/backend/app/main.py
@@ -279,16 +285,15 @@ In the same file, replace the button content inside the `.map()` (the `<span cla
           <button
             key={key}
             onClick={() => onToggleLayer(key)}
-            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded mb-1 transition-colors
-              ${layers[key]
-                ? `bg-[${color}]/10 text-[${color}] border border-[${color}]/30`
-                : "text-green-500/40 hover:text-green-500/60 border border-transparent"
-              }`}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded mb-1 transition-colors border"
             style={layers[key] ? {
               backgroundColor: `${color}1a`,
               borderColor: `${color}4d`,
               color: color,
-            } : undefined}
+            } : {
+              color: "rgba(0, 255, 65, 0.4)",
+              borderColor: "transparent",
+            }}
           >
             <span className="w-4 flex items-center justify-center" style={{ opacity: layers[key] ? 1 : 0.3 }}>
               <LayerIcon layerKey={key} color={color} />
@@ -685,6 +690,8 @@ interface PipelineBillboard extends Cesium.Billboard {
     capacity_bcm: number | null;
     length_km: number | null;
     countries: string[];
+    lat: number;
+    lon: number;
   };
 }
 
@@ -712,7 +719,7 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
   const polylineCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
   const billboardCollectionRef = useRef<Cesium.BillboardCollection | null>(null);
   const labelCollectionRef = useRef<Cesium.LabelCollection | null>(null);
-  const currentTiersRef = useRef<Set<string>>(new Set(["major"]));
+  const currentTiersRef = useRef<Set<string>>(new Set<string>());
   const labelsVisibleRef = useRef(false);
 
   const LABEL_ALTITUDE_THRESHOLD = 5_000_000;
@@ -800,6 +807,8 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
           capacity_bcm: props.capacity_bcm,
           length_km: props.length_km,
           countries: props.countries,
+          lat: midCoord[1],
+          lon: midCoord[0],
         };
 
         // Label
@@ -854,8 +863,8 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
     };
 
     viewer.camera.moveEnd.addEventListener(updateLOD);
-    // Initial render
-    renderPipelines(currentTiersRef.current);
+    // Initial render at current camera altitude (not hardcoded to "major")
+    updateLOD();
 
     return () => {
       if (!viewer.isDestroyed()) {
@@ -962,28 +971,58 @@ Update the StatusBar freshness and counts to include pipelines:
 
 - [ ] **Step 4: Add pipeline click handling to EntityClickHandler**
 
-In `services/frontend/src/components/globe/EntityClickHandler.tsx`, add pipeline detection in the click handler (after the cable detection block). Find where `_cableData` is checked and add a similar block:
+In `services/frontend/src/components/globe/EntityClickHandler.tsx`, add a new guard block after the `cableData` block (after line 94, before the `vesselData` guard). Follow the existing `setSelected` + `_...Data` pattern:
 
 ```typescript
-      // Pipeline click
-      if ((picked as any)?._pipelineData) {
-        const d = (picked as any)._pipelineData;
-        setPopup({
-          lat: Cesium.Math.toDegrees(cartographic.latitude),
-          lon: Cesium.Math.toDegrees(cartographic.longitude),
-          type: "Pipeline",
-          details: {
-            Name: d.name,
-            Type: d.type.toUpperCase(),
-            Status: d.status.replace("_", " "),
-            Operator: d.operator ?? "Unknown",
-            ...(d.capacity_bcm ? { "Capacity (bcm/yr)": d.capacity_bcm } : {}),
-            ...(d.length_km ? { "Length (km)": d.length_km } : {}),
-            Countries: d.countries.join(", "),
-          },
+      // Guard: Pipeline billboard (custom _pipelineData property)
+      const pipelineData = (picked?.primitive as Record<string, unknown>)?._pipelineData as
+        | {
+            name: string;
+            type: string;
+            status: string;
+            operator: string | null;
+            capacity_bcm: number | null;
+            length_km: number | null;
+            countries: string[];
+            lat: number;
+            lon: number;
+          }
+        | undefined;
+
+      if (pipelineData) {
+        const props: Record<string, string> = {};
+        props.type = pipelineData.type.toUpperCase();
+        props.status = pipelineData.status.replace("_", " ").toUpperCase();
+        if (pipelineData.operator) props.operator = pipelineData.operator;
+        if (pipelineData.capacity_bcm != null) props.capacity = `${pipelineData.capacity_bcm} bcm/yr`;
+        if (pipelineData.length_km != null) props.length = `${Math.round(pipelineData.length_km).toLocaleString()} km`;
+        if (pipelineData.countries.length > 0) props.countries = pipelineData.countries.join(", ");
+
+        setSelected({
+          id: pipelineData.name,
+          name: pipelineData.name,
+          type: "pipeline",
+          position: { lat: pipelineData.lat, lon: pipelineData.lon },
+          properties: props,
         });
         return;
       }
+```
+
+Also update the `_pipelineData` assignment in `PipelineLayer.tsx` (Task 7) to include `lat` and `lon` from the midpoint coordinate:
+
+```typescript
+        bb._pipelineData = {
+          name: props.name,
+          type: props.type,
+          status: props.status,
+          operator: props.operator,
+          capacity_bcm: props.capacity_bcm,
+          length_km: props.length_km,
+          countries: props.countries,
+          lat: midCoord[1],
+          lon: midCoord[0],
+        };
 ```
 
 - [ ] **Step 5: Update StatusBar component to accept pipelineCount**
