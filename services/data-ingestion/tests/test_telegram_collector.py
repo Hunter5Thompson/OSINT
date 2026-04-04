@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 from feeds.telegram_collector import (
     TelegramCollector,
@@ -57,7 +54,7 @@ def _make_mock_message(msg_id=1, text="Breaking: Test event", grouped_id=None, h
     msg.id = msg_id
     msg.message = text
     msg.grouped_id = grouped_id
-    msg.date = datetime(2026, 4, 4, 10, 0, 0, tzinfo=timezone.utc)
+    msg.date = datetime(2026, 4, 4, 10, 0, 0, tzinfo=UTC)
     msg.forward = None
     msg.photo = MagicMock() if has_photo else None
     msg.video = None
@@ -521,7 +518,7 @@ class TestContiguousWatermark:
         msg_service.id = 11
         msg_service.message = None
         msg_service.grouped_id = None
-        msg_service.date = datetime(2026, 4, 4, 10, 0, 0, tzinfo=timezone.utc)
+        msg_service.date = datetime(2026, 4, 4, 10, 0, 0, tzinfo=UTC)
         msg_service.forward = None
         msg_service.photo = None
         msg_service.video = None
@@ -537,7 +534,7 @@ class TestContiguousWatermark:
         collector._client = mock_client
         collector._process_single = AsyncMock(return_value=1)
 
-        count = await collector._fetch_and_process(ch)
+        await collector._fetch_and_process(ch)
 
         # Watermark must reach 11 (past the service message), not stop at 10
         watermark_calls = [
@@ -663,16 +660,18 @@ class TestCollectEntryPoint:
 
 
 class TestConfigPathResolution:
-    def test_relative_path_with_subdirectory_preserved(self, tmp_path, monkeypatch):
-        """Finding 4: configs/telegram/custom.yaml must not collapse to feeds/custom.yaml.
-        When _load_channels receives a relative path with subdirs, path.name
-        drops the directory component."""
-        # Set up: create subdir/custom.yaml inside a fake service root
+    def test_relative_path_with_subdirectory_resolved_from_service_root(self, tmp_path):
+        """Finding 4: A relative config override like 'configs/telegram/custom.yaml'
+        must resolve from the service root, not collapse via path.name."""
+        from feeds.telegram_collector import _load_channels
+
+        # Build a fake service root mimicking the real layout
         service_root = tmp_path / "service"
         feeds_dir = service_root / "feeds"
         feeds_dir.mkdir(parents=True)
         config_sub = service_root / "configs" / "telegram"
         config_sub.mkdir(parents=True)
+
         yaml_file = config_sub / "custom.yaml"
         yaml_file.write_text(
             "channels:\n"
@@ -685,16 +684,80 @@ class TestConfigPathResolution:
             "    media: true\n"
         )
 
-        from feeds.telegram_collector import _load_channels
+        # Patch __file__ in the module to point at our fake feeds dir
+        fake_file = str(feeds_dir / "telegram_collector.py")
+        with patch("feeds.telegram_collector.__file__", fake_file):
+            # Reload the reference that _load_channels uses for Path(__file__)
+            # by patching the module-level Path used inside the function
+            channels = _load_channels("configs/telegram/custom.yaml")
 
-        # Use relative path — this is what triggers the bug
-        # _load_channels resolves relative to __file__.parent which is feeds/
-        # With path.name, "configs/telegram/custom.yaml" → "custom.yaml"
-        # → feeds/custom.yaml (wrong)
-        # With proper resolution: service_root/configs/telegram/custom.yaml (correct)
-        channels = _load_channels(str(yaml_file))  # absolute still works
         assert len(channels) == 1
         assert channels[0].handle == "test"
+
+
+class TestAlbumVisionSingleEnqueue:
+    async def test_album_enqueues_only_first_photo(self):
+        """Finding 2: Album with multiple photos must enqueue only the first
+        for vision, preventing last-write-wins overwrite in consumer."""
+        from feeds.telegram_models import ChannelConfig
+
+        mock_redis = AsyncMock()
+        mock_redis.xpending.return_value = {"pending": 0}
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=mock_redis)
+
+        ch = ChannelConfig(
+            handle="test", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="high", media=True,
+        )
+
+        # Mock 3 album messages with photos
+        msgs = []
+        for i in range(3):
+            m = MagicMock()
+            m.id = 100 + i
+            m.message = "Album text" if i == 0 else None
+            m.grouped_id = 9999
+            m.date = datetime(2026, 4, 4, 10, 0, 0, tzinfo=UTC)
+            m.forward = None
+            m.photo = MagicMock()
+            m.video = None
+            m.document = None
+            m.file = MagicMock()
+            m.file.size = 500_000
+            msgs.append(m)
+
+        # Mock download to return unique paths
+        download_paths = iter([
+            "/data/photo0.jpg", "/data/photo1.jpg", "/data/photo2.jpg",
+        ])
+        collector._client = AsyncMock()
+        collector._client.download_media.side_effect = (
+            lambda msg, file: next(download_paths)
+        )
+        collector._settings = _make_settings(
+            telegram_media_path="/tmp/test_media",
+        )
+
+        # process_item is imported inside _process_album from pipeline module
+        with (
+            patch("pipeline.process_item", new_callable=AsyncMock, return_value=None),
+            patch.object(
+                collector, "_embed_and_upsert",
+                new_callable=AsyncMock, return_value=True,
+            ),
+        ):
+            await collector._process_album(ch, msgs, "test_hash")
+
+        # Should have called xadd exactly ONCE (first photo only)
+        xadd_calls = [
+            c for c in mock_redis.xadd.call_args_list
+            if "vision:pending" in str(c)
+        ]
+        assert len(xadd_calls) == 1
+        # The enqueued path should be the first photo
+        enqueued_data = xadd_calls[0][0][1]
+        assert enqueued_data["media_path"] == "/data/photo0.jpg"
 
 
 # ── Scheduler integration tests ──────────────────────────────────────

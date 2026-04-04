@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from consumer import VisionConsumer
 
 
@@ -67,12 +65,12 @@ class TestProcessMessage:
 
         with (
             patch("consumer.analyze_image", return_value=mock_vision_result),
-            patch("consumer.httpx.AsyncClient") as MockClient,
-            patch("consumer.QdrantClient") as MockQdrant,
+            patch("consumer.httpx.AsyncClient") as mock_client_cls,
+            patch("consumer.QdrantClient") as mock_qdrant_cls,
         ):
             mock_http = AsyncMock()
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_http)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             import httpx
 
@@ -83,7 +81,7 @@ class TestProcessMessage:
             )
 
             mock_qdrant_instance = MagicMock()
-            MockQdrant.return_value = mock_qdrant_instance
+            mock_qdrant_cls.return_value = mock_qdrant_instance
             mock_qdrant_instance.scroll.return_value = ([mock_point], None)
 
             await consumer._process_message(b"stream-id-1", msg_data)
@@ -97,6 +95,8 @@ class TestProcessMessage:
             assert "vision_description" in payload
             # Should ACK the message
             mock_redis.xack.assert_called_once()
+            # Finding 5: retry key must be cleaned on success
+            mock_redis.delete.assert_called_once_with("vision:retries:stream-id-1")
 
     async def test_neo4j_error_prevents_ack(self):
         """If Neo4j returns Cypher errors, message should NOT be ACKed."""
@@ -115,11 +115,11 @@ class TestProcessMessage:
 
         with (
             patch("consumer.analyze_image", return_value={"scene_description": "test"}),
-            patch("consumer.httpx.AsyncClient") as MockClient,
+            patch("consumer.httpx.AsyncClient") as mock_client_cls,
         ):
             mock_http = AsyncMock()
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_http)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             import httpx
 

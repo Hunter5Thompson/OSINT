@@ -6,10 +6,8 @@ import tempfile
 from unittest.mock import AsyncMock
 
 import httpx
-import pytest
 
 from vision import analyze_image
-
 
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:8011/v1/chat/completions")
 
