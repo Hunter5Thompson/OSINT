@@ -18,6 +18,7 @@ from feeds.rss_collector import RSSCollector
 from feeds.gdelt_collector import GDELTCollector
 from feeds.tle_updater import TLEUpdater
 from feeds.hotspot_updater import HotspotUpdater
+from feeds.telegram_collector import TelegramCollector
 
 # Shared async Redis client for stream publishing
 _redis_client: aioredis.Redis | None = None
@@ -93,6 +94,17 @@ async def run_hotspot_updater() -> None:
         await updater.close()
 
 
+async def run_telegram_collector() -> None:
+    """Collect Telegram channel messages."""
+    collector = TelegramCollector(redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("telegram_job_failed")
+    finally:
+        await collector.disconnect()
+
+
 # ---------------------------------------------------------------------------
 # Scheduler setup
 # ---------------------------------------------------------------------------
@@ -142,6 +154,15 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Telegram channels — every 5 minutes (adaptive internally)
+    scheduler.add_job(
+        run_telegram_collector,
+        trigger=IntervalTrigger(minutes=5),
+        id="telegram_collector",
+        name="Telegram Channel Collector",
+        replace_existing=True,
+    )
+
     return scheduler
 
 
@@ -177,6 +198,7 @@ async def main() -> None:
         run_gdelt_collector(),
         run_tle_updater(),
         run_hotspot_updater(),
+        run_telegram_collector(),
     ]
     await asyncio.gather(*initial_tasks, return_exceptions=True)
     log.info("initial_collection_complete")

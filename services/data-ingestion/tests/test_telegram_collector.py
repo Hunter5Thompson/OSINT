@@ -556,3 +556,24 @@ class TestCollectEntryPoint:
         with patch.object(collector, "connect", new_callable=AsyncMock) as mock_connect:
             await collector.collect()
             mock_connect.assert_called_once()
+
+
+# ── Scheduler integration tests ──────────────────────────────────────
+
+
+class TestSchedulerIntegration:
+    def test_telegram_job_registered(self):
+        """Verify the telegram collector job is in the scheduler."""
+        from scheduler import create_scheduler
+
+        scheduler = create_scheduler()
+        job_ids = [j.id for j in scheduler.get_jobs()]
+        assert "telegram_collector" in job_ids
+
+    def test_telegram_job_interval_5_min(self):
+        from scheduler import create_scheduler
+
+        scheduler = create_scheduler()
+        job = scheduler.get_job("telegram_collector")
+        assert job is not None
+        assert job.trigger.interval.total_seconds() == 300
