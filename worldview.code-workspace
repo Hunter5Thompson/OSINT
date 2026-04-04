@@ -17,6 +17,10 @@
       "path": "services/data-ingestion"
     },
     {
+      "name": "Vision Enrichment",
+      "path": "services/vision-enrichment"
+    },
+    {
       "name": "Frontend",
       "path": "services/frontend"
     }
