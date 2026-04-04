@@ -3,9 +3,13 @@
 from config import Settings
 
 
-def test_telegram_defaults():
+def test_telegram_defaults(monkeypatch):
     """Verify Telegram config defaults are sane."""
-    s = Settings(neo4j_password="test")
+    monkeypatch.delenv("TELEGRAM_API_ID", raising=False)
+    monkeypatch.delenv("TELEGRAM_API_HASH", raising=False)
+    monkeypatch.delenv("TELEGRAM_SESSION_PATH", raising=False)
+    monkeypatch.delenv("TELEGRAM_MEDIA_PATH", raising=False)
+    s = Settings(neo4j_password="test", _env_file=None)
     assert s.telegram_api_id == 0
     assert s.telegram_api_hash == ""
     assert s.telegram_session_path == "/data/telegram/odin"
@@ -16,9 +20,11 @@ def test_telegram_defaults():
     assert s.telegram_max_interval == 1800
 
 
-def test_vision_defaults():
+def test_vision_defaults(monkeypatch):
     """Verify Vision config defaults are sane."""
-    s = Settings(neo4j_password="test")
+    monkeypatch.delenv("VISION_VLLM_URL", raising=False)
+    monkeypatch.delenv("VISION_VLLM_MODEL", raising=False)
+    s = Settings(neo4j_password="test", _env_file=None)
     assert s.vision_vllm_url == "http://localhost:8011"
     assert s.vision_vllm_model == "qwen-vl"
     assert s.vision_queue_name == "vision:pending"
