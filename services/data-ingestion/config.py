@@ -43,6 +43,24 @@ class Settings(BaseSettings):
     nlm_data_dir: str = "/home/deadpool-ultra/ODIN/odin-data/notebooklm"
     claude_model: str = "claude-sonnet-4-20250514"
 
+    # Telegram Collector
+    telegram_api_id: int = 0
+    telegram_api_hash: str = ""
+    telegram_session_path: str = "/data/telegram/odin"
+    telegram_media_path: str = "/data/telegram/media"
+    telegram_media_max_size: int = 20_971_520  # 20 MB
+    telegram_channels_config: str = "feeds/telegram_channels.yaml"
+    telegram_base_interval: int = 300   # 5 minutes
+    telegram_max_interval: int = 1800   # 30 minutes
+
+    # Vision Enrichment
+    vision_vllm_url: str = "http://localhost:8011"
+    vision_vllm_model: str = "qwen-vl"
+    vision_queue_name: str = "vision:pending"
+    vision_queue_max_pending: int = 100
+    vision_dead_letter_queue: str = "vision:dead_letter"
+    vision_consumer_group: str = "vision-workers"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
