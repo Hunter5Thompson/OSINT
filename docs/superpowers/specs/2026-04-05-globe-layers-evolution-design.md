@@ -49,10 +49,17 @@ Replace ASCII characters (`^*~%@!#`) with inline SVG icons. Each layer gets a un
 - ON: Full color, `bg-{color}/10` background, `border-{color}/30` border
 - OFF: 30% opacity, no background, transparent border
 
+**Config contract (Finding 2 Fix):**
+- `src/types/index.ts` — add `pipelines: boolean` to `LayerVisibility`
+- `src/App.tsx` — add `pipelines: false` default in initial state (layer disabled until Phase 2 data exists)
+- `services/backend/app/routers/config.py` — add `pipelines: false` to `ClientConfig` response defaults
+- Backend config endpoint returns layer defaults — frontend reads them on init. New layers default to `false` until their data source is available, so Phase 1 deploys without breaking even if Phase 2 isn't done yet.
+
 **Files to modify:**
 - `src/components/ui/OperationsPanel.tsx` — replace `icon: string` with SVG components
 - `src/types/index.ts` — add `pipelines: boolean` to `LayerVisibility`
 - `src/App.tsx` — add pipelines layer state + toggle
+- `services/backend/app/routers/config.py` — add pipelines default to ClientConfig
 
 ---
 
@@ -147,9 +154,12 @@ All animations operate under a strict performance budget:
   2. Stop pulse animations (static rings only)
   3. Hide orbit arcs
   4. Fall back to static dots only
-- **LOD gate:** Animations only render when camera altitude < 10M meters. Global view = static dots only.
+- **LOD gate (Finding 5 Fix — per-layer thresholds):**
+  - Flight trails, ship vectors, event pulses, earthquake pulses: < 10M meters
+  - Satellite orbit arcs: < 20M meters (orbits are large-scale, visible from further out)
+  - Above threshold = static dots/markers only
 - **Hard limit:** Max 10,000 animated primitives simultaneously.
-- **GPU-side animation:** Use GLSL shaders (`PostProcessStage`) for pulses where possible, not JavaScript timers.
+- **Animation technique:** Canvas-based `requestAnimationFrame` loops for pulses and trail updates (not `PostProcessStage` — that's a full-screen filter, wrong tool for per-marker animation). GLSL custom shaders only considered for future heatmap overlays.
 
 ### Aircraft Type Icons
 
@@ -206,10 +216,14 @@ Replace single diamond icon with type-specific silhouettes:
 - Visible only when satellite layer active AND camera < 20M meters
 - On hover: full orbit ellipse rendered
 
-**Operator/Country:**
-- Extract from satellite name + NORAD catalog
-- New field `operator_country` in backend satellite response
-- Color override by country: USA=blue, Russia=red, China=yellow, EU=white, others=gray
+**Operator/Country (Finding 3 Fix — full contract):**
+- Extract from satellite name prefix using a static mapping table in the backend
+- Mapping: `USA`/`NROL` → US, `COSMOS` → RU, `YAOGAN`/`CZ` → CN, `GALILEO` → EU, etc.
+- New fields added to the `Satellite` Pydantic response model in `services/backend/app/routers/satellites.py`:
+  - `operator_country: str | None` (ISO 3166-1 alpha-2, e.g. `"US"`, `"RU"`, `"CN"`)
+  - `satellite_type: str` (`"recon"` | `"comms"` | `"gps"` | `"weather"` | `"station"` | `"unknown"`)
+- Frontend `Satellite` type in `src/types/index.ts` extended with matching fields
+- Color override by country: US=`#3b82f6`, RU=`#ef4444`, CN=`#eab308`, EU=`#d4cdc0`, others=`#6b7280`
 - Applied as secondary tint on orbit arc, not on the satellite dot itself
 
 **Footprint on Hover:**
@@ -253,31 +267,50 @@ Replace single diamond icon with type-specific silhouettes:
 - `src/App.tsx` — FPS monitor, performance guard state
 
 **Backend changes:**
-- `services/backend/app/routers/satellites.py` — add `operator_country` field to response
+- `services/backend/app/routers/satellites.py` — add `operator_country` + `satellite_type` fields to Satellite Pydantic model + response
+- `services/backend/app/routers/satellites.py` — add static name-prefix → country mapping dict
+- `src/types/index.ts` — extend `Satellite` type with `operator_country` + `satellite_type`
 
 ---
 
 ## Phase 4: Telegram → Globe Integration
 
-### Backend Endpoint
+### Unified Events Endpoint (Finding 1 Fix)
 
-New endpoint: `GET /api/v1/events/telegram`
+**No separate `/api/v1/events/telegram` endpoint.** Instead, extend the existing `/api/v1/graph/events/geo` endpoint with a `source` query parameter:
 
-- Queries Qdrant collection `odin_intel` with filter `source=telegram`
-- Returns only events with `lat`/`lon` coordinates (non-null)
-- Response format matches existing `/api/v1/graph/events/geo` schema for EventLayer compatibility
-- Fields: title, url, codebook_type, severity, lat, lon, published, telegram_channel, source_bias, vision_status
+```
+GET /api/v1/graph/events/geo?source=all        (default — Neo4j + Qdrant/Telegram)
+GET /api/v1/graph/events/geo?source=telegram   (Qdrant only, source=telegram)
+GET /api/v1/graph/events/geo?source=rss        (Neo4j only, existing behavior)
+```
 
-### Geocoding Fallback (Data Ingestion)
+- Backend merges Neo4j events + Qdrant Telegram events into a single response
+- Dedup by `url` field — if same URL exists in both stores, Neo4j version wins (richer extraction)
+- Each event carries a `source` field in the response: `"telegram"` | `"rss"` | `"gdelt"`
+- Frontend `useEvents` hook passes `source` param from OperationsPanel filter
+- **Single data flow:** useEvents → API → EventLayer. No separate hook, no client-side merge.
+
+### Geocoding Fallback (Data Ingestion) (Finding 4 Fix)
 
 Added to the telegram collector pipeline after vLLM extraction:
 
 - When `entities` contains items with type `location` but no coordinates in the extracted data
 - Lookup against static Gazetteer file (~50,000 places, GeoNames export)
 - File: `services/data-ingestion/feeds/geonames_gazetteer.json`
-- Matching: exact name match first, then fuzzy match (Levenshtein distance ≤ 2)
-- Result stored as `lat`/`lon` in the Qdrant payload during upsert
-- Fallback chain: LLM-extracted coordinates → Gazetteer lookup → no geo (feed only)
+
+**Matching strategy (strict to prevent false positives):**
+- Exact name match only — no fuzzy matching
+- Gazetteer entries keyed by `(name, country_code)` tuples to disambiguate (e.g. "Springfield, US" vs "Springfield, UK")
+- Country context extracted from surrounding entities in the same message (if LLM extracted a country entity, use it to scope the lookup)
+- Minimum population filter: only places with population > 10,000 (removes hamlets/villages with duplicate names)
+- Confidence field: `geo_confidence: "exact"` | `"contextual"` | `"none"` stored in Qdrant payload
+  - `"exact"`: LLM extracted coordinates directly
+  - `"contextual"`: Gazetteer matched with country context
+  - `"none"`: no geo data available
+
+- Result stored as `lat`/`lon` + `geo_confidence` in the Qdrant payload during upsert
+- Fallback chain: LLM-extracted coordinates (`exact`) → Gazetteer + country context (`contextual`) → no geo (`none`, feed only)
 
 ### EventLayer Extension
 
@@ -291,7 +324,7 @@ Added to the telegram collector pipeline after vLLM extraction:
 - Below the Events toggle button: collapsible sub-filter
 - Options: `ALL` | `TELEGRAM` | `RSS/GDELT`
 - Default: `ALL`
-- Filter applied client-side on the events array before rendering
+- Filter triggers re-fetch via `useEvents(source)` — server-side filtering, not client-side
 
 ### Source Bias Indicator
 
@@ -301,17 +334,17 @@ Added to the telegram collector pipeline after vLLM extraction:
 - Bias info already present in Qdrant payload from telegram collector
 
 **Files to create:**
-- `services/backend/app/routers/telegram_events.py` — new endpoint
 - `services/data-ingestion/feeds/geonames_gazetteer.json` — geocoding data
-- `src/hooks/useTelegramEvents.ts` — frontend hook
+- `services/data-ingestion/feeds/geocoder.py` — gazetteer lookup module
 
 **Files to modify:**
+- `services/backend/app/routers/graph.py` — extend events/geo endpoint with source param + Qdrant merge + dedup
 - `services/data-ingestion/feeds/telegram_collector.py` — geocoding fallback in `_process_single` / `_process_album`
 - `src/components/layers/EventLayer.tsx` — source badge, source field
 - `src/components/ui/OperationsPanel.tsx` — source sub-filter
 - `src/components/globe/EntityClickHandler.tsx` — bias badge in popup
-- `src/types/index.ts` — extend IntelEvent type with source fields
-- `services/backend/app/main.py` — register new router
+- `src/hooks/useEvents.ts` — add source parameter
+- `src/types/index.ts` — extend IntelEvent type with source, source_bias, geo_confidence fields
 
 ---
 
@@ -344,6 +377,49 @@ Added to the telegram collector pipeline after vLLM extraction:
 | Pipeline LOD | 3 tiers by altitude | Camera moveEnd listener |
 | Satellite orbit arcs | < 20M meters altitude | Above = dots only |
 | Icon cache size | ~500 entries | LRU eviction |
+
+---
+
+## Acceptance Criteria / Test Matrix (Finding 6 Fix)
+
+### Phase 1: Terrain + Icons
+- [ ] Terrain visible: mountains have relief, ocean floors visible at zoom (visual check)
+- [ ] All 8 sidebar icons render as SVG with correct colors
+- [ ] Toggle ON/OFF changes opacity correctly
+- [ ] `pipelines: false` default in config endpoint response
+- [ ] Existing layer tests still pass (no regressions)
+
+### Phase 2: Pipeline Layer
+- [ ] GeoJSON loads without errors
+- [ ] LOD: only major pipelines visible at global zoom, all tiers at local zoom
+- [ ] Color coding: oil=yellow, gas=orange, LNG=purple
+- [ ] Dashed lines for planned/under_construction
+- [ ] Click popup shows name, operator, capacity, countries
+- [ ] FPS ≥ 30 with all pipelines visible at local zoom
+
+### Phase 3: Animations + Type Icons
+- [ ] Aircraft icons differ by type (fighter vs civilian visually distinct)
+- [ ] Ship icons differ by type (warship vs cargo visually distinct)
+- [ ] Flight trails render behind moving aircraft, fade to transparent
+- [ ] Ship course vectors point in heading direction
+- [ ] Satellite orbit arcs visible at < 20M meters, hidden above
+- [ ] Satellite footprint appears on hover, disappears on leave
+- [ ] Satellite click popup shows operator_country, type, footprint radius
+- [ ] Earthquake pulses: ≥7 permanent, ≥5 timed, <5 single ripple
+- [ ] FPS monitor: degradation triggers when FPS < 30 for > 2s
+- [ ] At global zoom (>10M): only static dots, no trails/pulses
+- [ ] Backend: `operator_country` and `satellite_type` fields in satellite API response
+
+### Phase 4: Telegram Integration
+- [ ] `/api/v1/graph/events/geo?source=telegram` returns only Telegram events
+- [ ] `/api/v1/graph/events/geo?source=all` returns merged + deduped events
+- [ ] Dedup: same URL in Neo4j + Qdrant → Neo4j version wins
+- [ ] Telegram events show paperplane badge on globe
+- [ ] Source filter in OperationsPanel triggers re-fetch (not client-side filter)
+- [ ] Bias badge shows in click popup for non-neutral channels
+- [ ] Geocoding: exact match places resolved correctly
+- [ ] Geocoding: ambiguous names without country context → not geocoded (no false positives)
+- [ ] `geo_confidence` field present in Qdrant payload
 
 ---
 
