@@ -93,6 +93,40 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
         return;
       }
 
+      // Guard: Pipeline billboard (custom _pipelineData property)
+      const pipelineData = (picked?.primitive as Record<string, unknown>)?._pipelineData as
+        | {
+            name: string;
+            type: string;
+            status: string;
+            operator: string | null;
+            capacity_bcm: number | null;
+            length_km: number | null;
+            countries: string[];
+            lat: number;
+            lon: number;
+          }
+        | undefined;
+
+      if (pipelineData) {
+        const props: Record<string, string> = {};
+        props.type = pipelineData.type.toUpperCase();
+        props.status = pipelineData.status.replace("_", " ").toUpperCase();
+        if (pipelineData.operator) props.operator = pipelineData.operator;
+        if (pipelineData.capacity_bcm != null) props.capacity = `${pipelineData.capacity_bcm} bcm/yr`;
+        if (pipelineData.length_km != null) props.length = `${Math.round(pipelineData.length_km).toLocaleString()} km`;
+        if (pipelineData.countries.length > 0) props.countries = pipelineData.countries.join(", ");
+
+        setSelected({
+          id: pipelineData.name,
+          name: pipelineData.name,
+          type: "pipeline",
+          position: { lat: pipelineData.lat, lon: pipelineData.lon },
+          properties: props,
+        });
+        return;
+      }
+
       // Guard 3: Vessel billboard (custom _vesselData property)
       const vesselData = (picked?.primitive as Record<string, unknown>)?._vesselData as
         | {
