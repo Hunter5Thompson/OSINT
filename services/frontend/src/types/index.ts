@@ -154,3 +154,6 @@ export interface DataFreshness {
   cables: Date | null;
   pipelines: Date | null;
 }
+
+export type { PipelineProperties, PipelineFeature, PipelineGeoJSON } from "./pipeline";
+export { PIPELINE_COLORS, PIPELINE_LOD_THRESHOLDS } from "./pipeline";
