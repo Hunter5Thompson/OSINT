@@ -52,14 +52,14 @@ Replace ASCII characters (`^*~%@!#`) with inline SVG icons. Each layer gets a un
 **Config contract (Finding 2 Fix):**
 - `src/types/index.ts` — add `pipelines: boolean` to `LayerVisibility`
 - `src/App.tsx` — add `pipelines: false` default in initial state (layer disabled until Phase 2 data exists)
-- `services/backend/app/routers/config.py` — add `pipelines: false` to `ClientConfig` response defaults
+- `services/backend/app/main.py` — add `pipelines: false` to `ClientConfig` response defaults
 - Backend config endpoint returns layer defaults — frontend reads them on init. New layers default to `false` until their data source is available, so Phase 1 deploys without breaking even if Phase 2 isn't done yet.
 
 **Files to modify:**
 - `src/components/ui/OperationsPanel.tsx` — replace `icon: string` with SVG components
 - `src/types/index.ts` — add `pipelines: boolean` to `LayerVisibility`
 - `src/App.tsx` — add pipelines layer state + toggle
-- `services/backend/app/routers/config.py` — add pipelines default to ClientConfig
+- `services/backend/app/main.py` — add pipelines default to ClientConfig
 
 ---
 
