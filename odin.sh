@@ -8,6 +8,7 @@ COMPOSE=(docker compose)
 CORE_SERVICES=(redis qdrant neo4j tei-embed)
 INGESTION_SERVICES=(vllm-27b data-ingestion)
 INTERACTIVE_SERVICES=(vllm-9b tei-rerank intelligence backend frontend)
+VISION_SERVICES=(vllm-vision vision-enrichment)
 
 MODE="${2:-}"
 COMMAND="${1:-help}"
@@ -25,6 +26,7 @@ Usage:
   ./odin.sh doctor             # Check compose + model directories
   ./odin.sh pull 9b-awq        # Download smaller interactive model
   ./odin.sh smoke              # Smoke-test running services (health + basic calls)
+  ./odin.sh vision up|down     # Start/stop Vision Enrichment (Qwen3-VL-8B)
 USAGE
 }
 
@@ -358,6 +360,23 @@ case "$COMMAND" in
         ;;
       *)
         echo "Usage: odin nlm {up|down|smoke|run|status}"
+        ;;
+    esac
+    ;;
+  vision)
+    subcmd="${2:-help}"
+    case "$subcmd" in
+      up)
+        echo "Starting Vision Enrichment services..."
+        "${COMPOSE[@]}" --profile vision up -d "${VISION_SERVICES[@]}"
+        ;;
+      down)
+        echo "Stopping Vision Enrichment services..."
+        "${COMPOSE[@]}" stop "${VISION_SERVICES[@]}"
+        ;;
+      *)
+        echo "Usage: odin vision up|down"
+        exit 1
         ;;
     esac
     ;;

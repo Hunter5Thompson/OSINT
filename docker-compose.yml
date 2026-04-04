@@ -275,6 +275,10 @@ services:
       - NEO4J_URL=http://neo4j:7474
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID:-0}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH:-}
+    volumes:
+      - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram:/data/telegram
     depends_on:
       redis:
         condition: service_healthy
@@ -285,6 +289,59 @@ services:
       tei-embed:
         condition: service_healthy
       vllm-27b:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ═══ VLLM VISION (Qwen3-VL-8B for image analysis) ═══
+  vllm-vision:
+    image: vllm/vllm-openai:latest
+    profiles: ["vision"]
+    ports:
+      - "8011:8000"
+    volumes:
+      - ${HF_HOME:-${HOME}/.cache/huggingface}:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    command: >
+      --model Qwen/Qwen3-VL-8B-Instruct
+      --served-model-name qwen-vl
+      --max-model-len 4096
+      --gpu-memory-utilization 0.40
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    restart: unless-stopped
+
+  # ═══ VISION ENRICHMENT (async image analysis consumer) ═══
+  vision-enrichment:
+    build:
+      context: ./services/vision-enrichment
+      dockerfile: Dockerfile
+    profiles: ["vision"]
+    volumes:
+      - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram/media:/data/telegram/media:ro
+    environment:
+      - VISION_VLLM_URL=http://vllm-vision:8000/v1
+      - VISION_VLLM_MODEL=${VISION_VLLM_MODEL:-qwen-vl}
+      - REDIS_URL=redis://redis:6379/0
+      - NEO4J_URL=http://neo4j:7474
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
+      - QDRANT_URL=http://qdrant:6333
+    depends_on:
+      redis:
+        condition: service_healthy
+      vllm-vision:
         condition: service_healthy
     restart: unless-stopped
 
