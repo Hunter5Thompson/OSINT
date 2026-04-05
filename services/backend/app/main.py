@@ -113,6 +113,7 @@ async def client_config() -> ClientConfig:
             "cctv": False,
             "events": False,
             "cables": False,
+            "pipelines": False,
         },
         api_version="v1",
     )

@@ -9,6 +9,7 @@ interface StatusBarProps {
   vesselCount: number;
   eventCount: number;
   cableCount: number;
+  pipelineCount: number;
 }
 
 function formatAge(date: Date | null): string {
@@ -27,6 +28,7 @@ export function StatusBar({
   vesselCount,
   eventCount,
   cableCount,
+  pipelineCount,
 }: StatusBarProps) {
   const [fps, setFps] = useState(0);
   const frameRef = useRef(0);
@@ -77,6 +79,10 @@ export function StatusBar({
         <span>
           CABLES <span className="text-green-300">{cableCount}</span>
           <span className="text-green-500/30 ml-1">[{formatAge(freshness.cables)}]</span>
+        </span>
+        <span>
+          PIPES <span className="text-yellow-400">{pipelineCount}</span>
+          <span className="text-green-500/30 ml-1">[{formatAge(freshness.pipelines)}]</span>
         </span>
       </div>
 

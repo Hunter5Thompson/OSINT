@@ -9,6 +9,7 @@ import { ShipLayer } from "./components/layers/ShipLayer";
 import { CCTVLayer } from "./components/layers/CCTVLayer";
 import { EventLayer } from "./components/layers/EventLayer";
 import { CableLayer } from "./components/layers/CableLayer";
+import { PipelineLayer } from "./components/layers/PipelineLayer";
 import { OperationsPanel } from "./components/ui/OperationsPanel";
 import { RightPanel } from "./components/ui/RightPanel";
 import { ThreatRegister } from "./components/ui/ThreatRegister";
@@ -20,6 +21,7 @@ import { useEarthquakes } from "./hooks/useEarthquakes";
 import { useEvents } from "./hooks/useEvents";
 import { useCables } from "./hooks/useCables";
 import { useVessels } from "./hooks/useVessels";
+import { usePipelines } from "./hooks/usePipelines";
 import { useIntel } from "./hooks/useIntel";
 import { getConfig, getHotspots } from "./services/api";
 import type { LayerVisibility, ShaderType, Hotspot, ClientConfig } from "./types";
@@ -36,6 +38,7 @@ export function App() {
     cctv: false,
     events: false,
     cables: false,
+    pipelines: false,
   });
 
   const [activeShader, setActiveShader] = useState<ShaderType>("none");
@@ -46,6 +49,7 @@ export function App() {
   const { events, lastUpdate: eventsUpdate } = useEvents(layers.events);
   const { cables, landingPoints, lastUpdate: cablesUpdate } = useCables(layers.cables);
   const { vessels, lastUpdate: vesselsUpdate } = useVessels(layers.vessels);
+  const { pipelines: pipelineData, lastUpdate: pipelinesUpdate } = usePipelines(layers.pipelines);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
 
   const intel = useIntel();
@@ -56,11 +60,17 @@ export function App() {
       .catch(() => {
         setConfig({
           cesium_ion_token: "",
-          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false, cables: false },
+          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false, cables: false, pipelines: false },
           api_version: "v1",
         });
       });
   }, []);
+
+  useEffect(() => {
+    if (config?.default_layers) {
+      setLayers((prev) => ({ ...prev, ...config.default_layers }));
+    }
+  }, [config]);
 
   useEffect(() => {
     void getHotspots().then(setHotspots).catch(() => {});
@@ -116,6 +126,7 @@ export function App() {
       <CCTVLayer viewer={viewer} visible={layers.cctv} />
       <EventLayer viewer={viewer} events={events} visible={layers.events} />
       <CableLayer viewer={viewer} cables={cables} landingPoints={landingPoints} visible={layers.cables} />
+      <PipelineLayer viewer={viewer} pipelines={pipelineData} visible={layers.pipelines} />
 
       <EntityClickHandler viewer={viewer} />
 
@@ -147,6 +158,7 @@ export function App() {
           vessels: vesselsUpdate,
           events: eventsUpdate,
           cables: cablesUpdate,
+          pipelines: pipelinesUpdate,
         }}
         flightCount={flights.length}
         satelliteCount={satellites.length}
@@ -154,6 +166,7 @@ export function App() {
         vesselCount={vessels.length}
         eventCount={events.length}
         cableCount={cables.length}
+        pipelineCount={pipelineData?.features.length ?? 0}
       />
     </div>
   );

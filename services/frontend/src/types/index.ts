@@ -134,6 +134,7 @@ export interface LayerVisibility {
   cctv: boolean;
   events: boolean;
   cables: boolean;
+  pipelines: boolean;
 }
 
 export type ShaderType = "none" | "crt" | "nightvision" | "flir";
@@ -151,4 +152,8 @@ export interface DataFreshness {
   vessels: Date | null;
   events: Date | null;
   cables: Date | null;
+  pipelines: Date | null;
 }
+
+export type { PipelineProperties, PipelineFeature, PipelineGeoJSON } from "./pipeline";
+export { PIPELINE_COLORS, PIPELINE_LOD_THRESHOLDS } from "./pipeline";

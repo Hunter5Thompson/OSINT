@@ -1,0 +1,262 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Nord Stream 1",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Nord Stream AG",
+        "capacity_bcm": 55.0,
+        "length_km": 1224,
+        "countries": ["Russia", "Germany"]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [28.8, 59.4],
+          [25.0, 59.2],
+          [20.0, 58.5],
+          [17.5, 56.5],
+          [13.6, 54.6],
+          [12.1, 54.1]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "TurkStream",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "South Stream Transport B.V.",
+        "capacity_bcm": 31.5,
+        "length_km": 930,
+        "countries": ["Russia", "Turkey"]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [38.5, 44.6],
+          [37.0, 43.0],
+          [34.0, 42.5],
+          [31.0, 42.0],
+          [29.5, 41.5],
+          [28.7, 41.2]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "BTC Pipeline",
+        "tier": "major",
+        "type": "oil",
+        "status": "active",
+        "operator": "BP",
+        "capacity_bcm": null,
+        "length_km": 1768,
+        "countries": ["Azerbaijan", "Georgia", "Turkey"]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [49.9, 40.4],
+          [47.5, 41.0],
+          [45.0, 41.7],
+          [43.5, 41.8],
+          [41.0, 41.2],
+          [39.5, 40.5],
+          [37.0, 39.0],
+          [36.0, 36.8]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "TANAP",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "BOTAŞ",
+        "capacity_bcm": 16.0,
+        "length_km": 1850,
+        "countries": ["Azerbaijan", "Turkey", "Greece"]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [49.9, 40.4],
+          [47.5, 41.0],
+          [43.5, 41.8],
+          [41.0, 40.5],
+          [39.0, 39.5],
+          [36.0, 38.5],
+          [33.0, 39.5],
+          [30.0, 40.0],
+          [27.0, 40.5],
+          [26.0, 40.8]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Druzhba Pipeline",
+        "tier": "major",
+        "type": "oil",
+        "status": "active",
+        "operator": "Transneft",
+        "capacity_bcm": null,
+        "length_km": 4000,
+        "countries": ["Russia", "Belarus", "Ukraine", "Poland", "Germany", "Hungary", "Slovakia", "Czech Republic"]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [52.0, 56.0],
+          [48.0, 55.5],
+          [43.0, 54.0],
+          [38.0, 53.5],
+          [33.0, 53.0],
+          [28.0, 52.8],
+          [24.0, 52.5],
+          [21.0, 52.5],
+          [18.0, 52.0],
+          [14.5, 51.5]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "East-West Pipeline",
+        "tier": "major",
+        "type": "oil",
+        "status": "active",
+        "operator": "Saudi Aramco",
+        "capacity_bcm": null,
+        "length_km": 1200,
+        "countries": ["Saudi Arabia"]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [50.1, 26.4],
+          [48.5, 26.0],
+          [46.0, 25.0],
+          [44.0, 24.5],
+          [42.0, 24.0],
+          [39.5, 23.5],
+          [38.0, 22.5]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Keystone Pipeline",
+        "tier": "major",
+        "type": "oil",
+        "status": "active",
+        "operator": "TC Energy",
+        "capacity_bcm": null,
+        "length_km": 4324,
+        "countries": ["Canada", "United States"]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-110.0, 52.0],
+          [-108.0, 50.0],
+          [-105.0, 49.0],
+          [-100.0, 46.0],
+          [-97.0, 42.0],
+          [-97.0, 38.0],
+          [-96.0, 35.0],
+          [-95.0, 32.0],
+          [-94.5, 29.5]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Power of Siberia",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Gazprom",
+        "capacity_bcm": 38.0,
+        "length_km": 3000,
+        "countries": ["Russia", "China"]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [130.0, 53.0],
+          [128.0, 51.0],
+          [127.5, 49.5],
+          [127.0, 48.0],
+          [126.5, 46.5],
+          [126.0, 45.0]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "TAP",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Trans Adriatic Pipeline AG",
+        "capacity_bcm": 10.0,
+        "length_km": 878,
+        "countries": ["Greece", "Albania", "Italy"]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [26.0, 40.8],
+          [24.0, 40.5],
+          [21.0, 40.2],
+          [19.8, 40.5],
+          [18.5, 40.8],
+          [17.0, 41.0]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Yamal-Europe Pipeline",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Gazprom",
+        "capacity_bcm": 33.0,
+        "length_km": 4196,
+        "countries": ["Russia", "Belarus", "Poland", "Germany"]
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [73.0, 68.0],
+          [65.0, 62.0],
+          [55.0, 58.0],
+          [45.0, 55.0],
+          [35.0, 53.5],
+          [28.0, 52.5],
+          [22.0, 52.0],
+          [18.0, 52.5],
+          [14.5, 52.5]
+        ]
+      }
+    }
+  ]
+}
