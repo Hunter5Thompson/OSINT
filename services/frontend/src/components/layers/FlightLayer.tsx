@@ -37,6 +37,8 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
   const interpolationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const trailCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
   const trailBuffersRef = useRef<Map<string, Cesium.Cartesian3[]>>(new Map());
+  const viewerRef = useRef<Cesium.Viewer | null>(viewer);
+  viewerRef.current = viewer;
 
   const { degradation } = usePerformance();
   const degradationRef = useRef<DegradationLevel>(degradation);
@@ -202,47 +204,47 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         }
       }
 
-      // Rebuild trail polylines (batched, not per-frame per-trail)
+      // Rebuild trail polylines — only for flights in current view
       if (tc && deg >= 3) {
         tc.removeAll();
         trailBuffersRef.current.clear();
       } else if (tc && deg < 3) {
         tc.removeAll();
 
-        // Priority: military trails always, then civilian up to MAX_TRAIL_POLYLINES
-        const MAX_TRAIL_POLYLINES = 300;
+        // Get current camera view rectangle for frustum culling
+        const v = viewerRef.current;
+        const viewRect = v && !v.isDestroyed()
+          ? v.camera.computeViewRectangle(v.scene.globe.ellipsoid)
+          : null;
+
+        const MAX_TRAIL_POLYLINES = 500;
         let trailCount = 0;
 
-        // Pass 1: military trails (always)
-        for (const [id, buffer] of trailBuffersRef.current.entries()) {
-          if (buffer.length < 2) continue;
-          const visual = flightMapRef.current.get(id);
-          const flightData = (visual?.billboard as unknown as Record<string, unknown>)?._flightData as { is_military?: boolean } | undefined;
-          if (!flightData?.is_military) continue;
-
-          tc.add({
-            positions: buffer.slice(),
-            width: 2.0,
-            material: Cesium.Material.fromType("Color", {
-              color: Cesium.Color.RED.withAlpha(0.5),
-            }),
-          });
-          trailCount++;
-        }
-
-        // Pass 2: civilian trails (up to limit, skip already-rendered military)
         for (const [id, buffer] of trailBuffersRef.current.entries()) {
           if (trailCount >= MAX_TRAIL_POLYLINES) break;
           if (buffer.length < 2) continue;
+
+          // Frustum cull: only render trails for flights in current view
           const visual = flightMapRef.current.get(id);
+          if (visual && viewRect) {
+            const latRad = Cesium.Math.toRadians(visual.latitude);
+            const lonRad = Cesium.Math.toRadians(visual.longitude);
+            if (
+              latRad < viewRect.south || latRad > viewRect.north ||
+              lonRad < viewRect.west || lonRad > viewRect.east
+            ) continue;
+          }
+
           const fd = (visual?.billboard as unknown as Record<string, unknown>)?._flightData as { is_military?: boolean } | undefined;
-          if (fd?.is_military) continue; // already rendered in pass 1
+          const isMil = fd?.is_military ?? false;
 
           tc.add({
             positions: buffer.slice(),
-            width: 1.0,
+            width: isMil ? 2.0 : 1.0,
             material: Cesium.Material.fromType("Color", {
-              color: Cesium.Color.CYAN.withAlpha(0.4),
+              color: isMil
+                ? Cesium.Color.RED.withAlpha(0.5)
+                : Cesium.Color.CYAN.withAlpha(0.4),
             }),
           });
           trailCount++;
