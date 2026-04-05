@@ -282,7 +282,7 @@ export function getAircraftTypeIcon(
   type: AircraftIconType,
   headingDeg: number,
 ): string {
-  const bucket = Math.round((headingDeg || 0) / 5) * 5;
+  const bucket = ((Math.round((headingDeg || 0) / 5) * 5) % 360 + 360) % 360;
   const key = `${type}_${bucket}`;
 
   const cached = iconCache.get(key);
@@ -515,11 +515,6 @@ Replace the interpolation `useEffect` (lines 154-175) with an expanded version t
       const deg = degradationRef.current;
       const tc = trailCollectionRef.current;
 
-      // Check camera altitude for LOD gate
-      const viewer = collectionRef.current
-        ? (collectionRef.current as unknown as { _scene?: Cesium.Scene })._scene
-        : null;
-
       for (const [id, visual] of flightMapRef.current.entries()) {
         const newPos = projectPosition(visual, now);
         visual.billboard.position = newPos;
@@ -630,7 +625,7 @@ Create `services/frontend/src/components/layers/icons/shipIcons.ts`:
 
 export type ShipIconType = "warship" | "carrier" | "submarine" | "tanker" | "cargo" | "civilian";
 
-const ICON_COLORS: Record<ShipIconType, string> = {
+export const ICON_COLORS: Record<ShipIconType, string> = {
   warship: "#ef4444",
   carrier: "#ef4444",
   submarine: "#ef4444",
@@ -824,7 +819,7 @@ Replace the entire contents of `services/frontend/src/components/layers/ShipLaye
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { Vessel } from "../../types";
-import { classifyShip, getShipTypeIcon } from "./icons/shipIcons";
+import { classifyShip, getShipTypeIcon, ICON_COLORS } from "./icons/shipIcons";
 import { usePerformance } from "../globe/PerformanceGuard";
 
 interface ShipLayerProps {
@@ -868,7 +863,8 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
     };
   }, [viewer]);
 
-  useEffect(() => {
+  // Render billboards (always) + course vectors (LOD-gated)
+  const renderVessels = useCallback((showVectors: boolean) => {
     const bc = collectionRef.current;
     const vc = vectorCollectionRef.current;
     if (!bc || !vc) return;
@@ -876,10 +872,6 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
     bc.removeAll();
     vc.removeAll();
     if (!visible) return;
-
-    // Check camera altitude for course vector LOD
-    const cameraAlt = viewer?.camera.positionCartographic.height ?? Infinity;
-    const showVectors = degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD;
 
     for (const vessel of vessels) {
       const position = Cesium.Cartesian3.fromDegrees(vessel.longitude, vessel.latitude, 0);
@@ -926,18 +918,44 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
           0,
         );
 
-        const color = shipType === "warship" || shipType === "carrier"
-          ? Cesium.Color.RED.withAlpha(0.4)
-          : Cesium.Color.fromCssColorString("#4fc3f7").withAlpha(0.4);
+        const vectorColor = Cesium.Color.fromCssColorString(
+          ICON_COLORS[shipType] ?? ICON_COLORS.civilian
+        ).withAlpha(0.4);
 
         vc.add({
           positions: [position, endPosition],
           width: 1.0,
-          material: Cesium.Material.fromType("Color", { color }),
+          material: Cesium.Material.fromType("Color", { color: vectorColor }),
         });
       }
     }
-  }, [vessels, visible, viewer, degradation]);
+  }, [vessels, visible]);
+
+  // Re-render on data change
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const cameraAlt = viewer.camera.positionCartographic.height;
+    renderVessels(degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD);
+  }, [vessels, visible, viewer, degradation, renderVessels]);
+
+  // Re-render vectors on camera move (LOD reactivity)
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+
+    const onMoveEnd = () => {
+      if (!viewer || viewer.isDestroyed()) return;
+      const cameraAlt = viewer.camera.positionCartographic.height;
+      const vc = vectorCollectionRef.current;
+      if (vc) {
+        vc.show = degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD;
+      }
+    };
+
+    viewer.camera.moveEnd.addEventListener(onMoveEnd);
+    return () => {
+      if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
+    };
+  }, [viewer, degradation]);
 
   return null;
 }
@@ -1020,10 +1038,12 @@ def _detect_type(name: str, category: str) -> str:
     """Detect satellite type from name + existing category."""
     upper = name.upper()
     if category == "military":
-        # Sub-classify military
+        # Sub-classify military — recon or comms (no generic "military" value)
         if any(k in upper for k in ("NROL", "USA ", "NOSS", "YAOGAN", "COSMOS 25")):
             return "recon"
-        return "military"
+        if any(k in upper for k in ("MILSTAR", "AEHF", "MUOS", "WGS", "DSCS")):
+            return "comms"
+        return "recon"  # conservative: unclassified mil → recon
     if category == "gps":
         return "gps"
     if category == "weather":
@@ -1292,6 +1312,22 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     }
   }, [satellites, visible, viewer, degradation, propagateOrbitArc]);
 
+  // Orbit LOD reactivity on camera move
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+
+    const onMoveEnd = () => {
+      if (!viewer || viewer.isDestroyed() || !orbitCollectionRef.current) return;
+      const cameraAlt = viewer.camera.positionCartographic.height;
+      orbitCollectionRef.current.show = degradation < 3 && cameraAlt < ORBIT_LOD_ALTITUDE;
+    };
+
+    viewer.camera.moveEnd.addEventListener(onMoveEnd);
+    return () => {
+      if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
+    };
+  }, [viewer, degradation]);
+
   // Footprint on hover
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -1420,6 +1456,7 @@ function magnitudeToSize(mag: number): number {
 
 interface QuakePulse {
   billboard: Cesium.Billboard;
+  ringBillboard: Cesium.Billboard;
   magnitude: number;
   eventTimeMs: number;
   baseSize: number;
@@ -1482,11 +1519,20 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
       const color = magnitudeToColor(quake.magnitude);
       const size = magnitudeToSize(quake.magnitude);
 
+      // Inner dot (static)
       const billboard = bc.add({
         position,
-        image: createQuakeCanvas(size, color),
+        image: createQuakeDot(size * 0.4, color),
         scale: 1.0,
         eyeOffset: new Cesium.Cartesian3(0, 0, -50),
+      });
+
+      // Outer ring (animated — expanding + fading)
+      const ringBillboard = bc.add({
+        position,
+        image: createQuakeRing(size, color),
+        scale: 1.0,
+        eyeOffset: new Cesium.Cartesian3(0, 0, -49),
       });
 
       lc.add({
@@ -1503,6 +1549,7 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
 
       pulsesRef.current.push({
         billboard,
+        ringBillboard,
         magnitude: quake.magnitude,
         eventTimeMs: new Date(quake.time).getTime(),
         baseSize: size,
@@ -1526,18 +1573,34 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
         for (const pulse of pulsesRef.current) {
           const ageMs = now - pulse.eventTimeMs;
           const ageSec = ageMs / 1000;
-          let scale = 1.0;
+          let ringScale = 1.0;
+          let ringAlpha = 0.8;
 
           if (pulse.magnitude >= 7.0) {
-            // Permanent pulse
-            scale = 1.0 + 0.3 * Math.sin(now * 0.003);
+            // Permanent pulse: ring expands + fades cyclically
+            const phase = (now * 0.003) % (Math.PI * 2);
+            ringScale = 1.0 + 0.5 * Math.sin(phase);
+            ringAlpha = 0.8 - 0.4 * Math.sin(phase);
           } else if (pulse.magnitude >= 5.0 && ageSec < 30) {
             // 30-second pulse
-            scale = 1.0 + 0.2 * Math.sin(now * 0.005);
+            const phase = (now * 0.005) % (Math.PI * 2);
+            ringScale = 1.0 + 0.3 * Math.sin(phase);
+            ringAlpha = 0.8 - 0.3 * Math.sin(phase);
+          } else if (pulse.magnitude < 5.0) {
+            // Single ripple: expand + fade out in first 3 seconds, then static
+            if (ageSec < 3.0) {
+              const t = ageSec / 3.0;
+              ringScale = 1.0 + t * 0.5;
+              ringAlpha = 0.8 * (1.0 - t);
+            } else {
+              ringScale = 1.0;
+              ringAlpha = 0.0; // ring hidden after ripple
+            }
           }
-          // M < 5.0 or aged out: scale stays 1.0 (static)
 
-          pulse.billboard.scale = scale;
+          // Inner dot stays static, outer ring animates
+          pulse.ringBillboard.scale = ringScale;
+          pulse.ringBillboard.color = pulse.color.withAlpha(ringAlpha);
         }
       }
 
@@ -1554,7 +1617,24 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
   return null;
 }
 
-function createQuakeCanvas(size: number, color: Cesium.Color): HTMLCanvasElement {
+function createQuakeDot(radius: number, color: Cesium.Color): HTMLCanvasElement {
+  const canvasSize = Math.ceil(radius * 4);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasSize;
+  canvas.height = canvasSize;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+
+  const center = canvasSize / 2;
+  ctx.beginPath();
+  ctx.arc(center, center, radius, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(${color.red * 255}, ${color.green * 255}, ${color.blue * 255}, 0.9)`;
+  ctx.fill();
+
+  return canvas;
+}
+
+function createQuakeRing(size: number, color: Cesium.Color): HTMLCanvasElement {
   const canvasSize = Math.ceil(size * 4);
   const canvas = document.createElement("canvas");
   canvas.width = canvasSize;
@@ -1563,20 +1643,19 @@ function createQuakeCanvas(size: number, color: Cesium.Color): HTMLCanvasElement
   if (!ctx) return canvas;
 
   const center = canvasSize / 2;
-  const r = size;
 
-  // Outer ring
+  // Two concentric rings
   ctx.beginPath();
-  ctx.arc(center, center, r, 0, Math.PI * 2);
+  ctx.arc(center, center, size, 0, Math.PI * 2);
   ctx.strokeStyle = `rgba(${color.red * 255}, ${color.green * 255}, ${color.blue * 255}, 0.8)`;
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Inner filled circle
   ctx.beginPath();
-  ctx.arc(center, center, r * 0.4, 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(${color.red * 255}, ${color.green * 255}, ${color.blue * 255}, 0.9)`;
-  ctx.fill();
+  ctx.arc(center, center, size * 0.65, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(${color.red * 255}, ${color.green * 255}, ${color.blue * 255}, 0.4)`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 
   return canvas;
 }
