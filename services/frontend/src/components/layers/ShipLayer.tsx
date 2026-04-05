@@ -13,16 +13,24 @@ interface ShipLayerProps {
 const COURSE_VECTOR_MINUTES = 5;
 const KNOTS_TO_MS = 0.514444;
 const EARTH_RADIUS_M = 6_378_137;
-const LOD_ALTITUDE_THRESHOLD = 3_000_000; // vectors only when zoomed in close
-const MAX_COURSE_VECTORS = 200; // hard cap on vector polylines
+const VECTOR_ALT_THRESHOLD = 3_000_000;
+const MAX_RENDERED_VESSELS = 3000;
+const MAX_COURSE_VECTORS = 200;
 
 /**
  * Renders AIS vessel positions with type-specific icons and course vectors.
+ * Only vessels in the current camera viewport are rendered (frustum culling).
  */
 export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
   const collectionRef = useRef<Cesium.BillboardCollection | null>(null);
   const vectorCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
   const { degradation } = usePerformance();
+  const vesselsRef = useRef(vessels);
+  vesselsRef.current = vessels;
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const degradationRef = useRef(degradation);
+  degradationRef.current = degradation;
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -46,19 +54,40 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
     };
   }, [viewer]);
 
-  // Render billboards (always) + course vectors (LOD-gated)
-  const renderVessels = useCallback((showVectors: boolean) => {
+  const renderVisible = useCallback(() => {
     const bc = collectionRef.current;
     const vc = vectorCollectionRef.current;
-    if (!bc || !vc) return;
+    if (!bc || !vc || !viewer || viewer.isDestroyed()) return;
 
     bc.removeAll();
     vc.removeAll();
-    if (!visible) return;
+    if (!visibleRef.current) return;
 
+    const cameraAlt = viewer.camera.positionCartographic.height;
+    const showVectors = degradationRef.current < 3 && cameraAlt < VECTOR_ALT_THRESHOLD;
+
+    // Get viewport bounds for frustum culling
+    const viewRect = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid);
+    const south = viewRect ? Cesium.Math.toDegrees(viewRect.south) : -90;
+    const north = viewRect ? Cesium.Math.toDegrees(viewRect.north) : 90;
+    const west = viewRect ? Cesium.Math.toDegrees(viewRect.west) : -180;
+    const east = viewRect ? Cesium.Math.toDegrees(viewRect.east) : 180;
+
+    let vesselCount = 0;
     let vectorCount = 0;
 
-    for (const vessel of vessels) {
+    for (const vessel of vesselsRef.current) {
+      // Viewport culling
+      if (vessel.latitude < south || vessel.latitude > north) continue;
+      // Handle date-line wrapping
+      if (west < east) {
+        if (vessel.longitude < west || vessel.longitude > east) continue;
+      } else {
+        if (vessel.longitude < west && vessel.longitude > east) continue;
+      }
+
+      if (vesselCount >= MAX_RENDERED_VESSELS) break;
+
       const position = Cesium.Cartesian3.fromDegrees(vessel.longitude, vessel.latitude, 0);
       const shipType = classifyShip(vessel.ship_type, vessel.name);
 
@@ -78,8 +107,8 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
         lat: vessel.latitude,
         lon: vessel.longitude,
       };
+      vesselCount++;
 
-      // Course vector: line in heading direction, length proportional to speed
       if (showVectors && vectorCount < MAX_COURSE_VECTORS && vessel.speed_knots > 0.5) {
         const speedMs = vessel.speed_knots * KNOTS_TO_MS;
         const distanceM = speedMs * COURSE_VECTOR_MINUTES * 60;
@@ -115,40 +144,24 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
         vectorCount++;
       }
     }
-  }, [vessels, visible]);
+  }, [viewer]);
 
   // Re-render on data change
   useEffect(() => {
-    if (!viewer || viewer.isDestroyed()) return;
-    const cameraAlt = viewer.camera.positionCartographic.height;
-    const showVectors = degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD;
-    lastShowVectorsRef.current = showVectors;
-    renderVessels(showVectors);
-  }, [vessels, visible, viewer, degradation, renderVessels]);
+    renderVisible();
+  }, [vessels, visible, degradation, renderVisible]);
 
-  // Re-render vectors on camera move (LOD reactivity)
-  const lastShowVectorsRef = useRef(false);
-
+  // Re-render on camera move (viewport changes)
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
 
-    const onMoveEnd = () => {
-      if (!viewer || viewer.isDestroyed()) return;
-      const cameraAlt = viewer.camera.positionCartographic.height;
-      const shouldShow = degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD;
-
-      // Only re-render if LOD state changed (avoids redundant work)
-      if (shouldShow !== lastShowVectorsRef.current) {
-        lastShowVectorsRef.current = shouldShow;
-        renderVessels(shouldShow);
-      }
-    };
+    const onMoveEnd = () => renderVisible();
 
     viewer.camera.moveEnd.addEventListener(onMoveEnd);
     return () => {
       if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
     };
-  }, [viewer, degradation, renderVessels]);
+  }, [viewer, renderVisible]);
 
   return null;
 }
