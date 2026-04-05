@@ -23,6 +23,8 @@ export interface Satellite {
   category: string;
   inclination_deg: number;
   period_min: number;
+  operator_country: string | null;
+  satellite_type: string;
 }
 
 export interface Earthquake {

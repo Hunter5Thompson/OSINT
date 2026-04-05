@@ -207,6 +207,9 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
             inclination_deg: number;
             period_min: number;
             altitude_km: number;
+            operator_country: string | null;
+            satellite_type: string;
+            footprint_radius_km: number;
             lat: number;
             lon: number;
           }
@@ -216,9 +219,12 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
         const props: Record<string, string> = {};
         props.norad = String(satData.norad_id);
         props.category = satData.category.toUpperCase();
+        if (satData.operator_country) props.country = satData.operator_country;
+        if (satData.satellite_type !== "unknown") props.type = satData.satellite_type.toUpperCase();
         props.altitude = `${Math.round(satData.altitude_km).toLocaleString()} km`;
         props.inclination = `${satData.inclination_deg.toFixed(1)}°`;
         props.period = `${satData.period_min.toFixed(1)} min`;
+        props.footprint = `${satData.footprint_radius_km.toLocaleString()} km`;
 
         setSelected({
           id: String(satData.norad_id),
