@@ -208,25 +208,41 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         trailBuffersRef.current.clear();
       } else if (tc && deg < 3) {
         tc.removeAll();
+
+        // Priority: military trails always, then civilian up to MAX_TRAIL_POLYLINES
+        const MAX_TRAIL_POLYLINES = 300;
+        let trailCount = 0;
+
+        // Pass 1: military trails (always)
         for (const [id, buffer] of trailBuffersRef.current.entries()) {
           if (buffer.length < 2) continue;
+          const visual = flightMapRef.current.get(id);
+          const flightData = (visual?.billboard as unknown as Record<string, unknown>)?._flightData as { is_military?: boolean } | undefined;
+          if (!flightData?.is_military) continue;
 
-          // Only draw trails for military aircraft when > 500 visible
-          if (flightMapRef.current.size > 500) {
-            const visual = flightMapRef.current.get(id);
-            if (visual) {
-              const flightData = (visual.billboard as unknown as Record<string, unknown>)?._flightData as { is_military?: boolean } | undefined;
-              if (!flightData?.is_military) continue;
-            }
-          }
+          tc.add({
+            positions: buffer.slice(),
+            width: 2.0,
+            material: Cesium.Material.fromType("Color", {
+              color: Cesium.Color.RED.withAlpha(0.5),
+            }),
+          });
+          trailCount++;
+        }
+
+        // Pass 2: civilian trails (up to limit)
+        for (const [, buffer] of trailBuffersRef.current.entries()) {
+          if (trailCount >= MAX_TRAIL_POLYLINES) break;
+          if (buffer.length < 2) continue;
 
           tc.add({
             positions: buffer.slice(),
             width: 1.5,
             material: Cesium.Material.fromType("Color", {
-              color: Cesium.Color.CYAN.withAlpha(0.3),
+              color: Cesium.Color.CYAN.withAlpha(0.25),
             }),
           });
+          trailCount++;
         }
       }
     }, INTERPOLATION_INTERVAL_MS);
