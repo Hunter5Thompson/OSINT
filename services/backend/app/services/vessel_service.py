@@ -14,8 +14,8 @@ from app.services.proxy_service import ProxyService
 logger = structlog.get_logger()
 
 CACHE_KEY = "vessels:all"
-CACHE_TTL = 120  # seconds — collector refreshes every 60s
-MAX_AGE_MS = 300_000  # 5 minutes — discard stale positions
+CACHE_TTL = 180  # seconds — collector refreshes every 60s, buffer for misses
+VESSEL_MAX_AGE_S = 600  # 10 minutes — discard positions older than this
 
 # Finnish Digitraffic — free, no auth, real-time AIS (Baltic only)
 LOCATIONS_URL = "https://meri.digitraffic.fi/api/ais/v1/locations"
@@ -71,19 +71,35 @@ async def stop_collector() -> None:
 
 
 async def _collector_loop(cache: CacheService) -> None:
-    """Continuously collect AIS data and cache it."""
+    """Continuously collect AIS data, accumulating across cycles."""
+    # Accumulated vessel store: MMSI → (Vessel, timestamp)
+    accumulated: dict[int, tuple[Vessel, float]] = {}
+
     while True:
         try:
-            vessels = await _collect_aisstream()
-            if vessels:
-                await cache.set(
-                    CACHE_KEY,
-                    [v.model_dump(mode="json") for v in vessels],
-                    CACHE_TTL,
-                )
-                logger.info("aisstream_cache_updated", count=len(vessels))
-            else:
-                logger.warning("aisstream_collect_empty")
+            new_vessels = await _collect_aisstream()
+            now = time.time()
+
+            # Merge new data into accumulated store
+            if new_vessels:
+                for v in new_vessels:
+                    accumulated[v.mmsi] = (v, now)
+
+            # Evict stale entries (older than VESSEL_MAX_AGE_S)
+            cutoff = now - VESSEL_MAX_AGE_S
+            stale_keys = [k for k, (_, ts) in accumulated.items() if ts < cutoff]
+            for k in stale_keys:
+                del accumulated[k]
+
+            # Write accumulated data to cache
+            all_vessels = [v.model_dump(mode="json") for v, _ in accumulated.values()]
+            await cache.set(CACHE_KEY, all_vessels, CACHE_TTL)
+            logger.info(
+                "aisstream_cache_updated",
+                total=len(all_vessels),
+                new=len(new_vessels) if new_vessels else 0,
+                evicted=len(stale_keys),
+            )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -191,7 +207,7 @@ async def _fetch_digitraffic(proxy: ProxyService) -> list[Vessel]:
                     continue
 
                 ts = props.get("timestampExternal")
-                if ts and (now_ms - ts) > MAX_AGE_MS:
+                if ts and (now_ms - ts) > VESSEL_MAX_AGE_S * 1000:
                     continue
 
                 mmsi_int = int(mmsi)
