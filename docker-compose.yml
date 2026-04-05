@@ -245,11 +245,11 @@ services:
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:80/health\")'"]
       interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 60s
+      start_period: 120s
     depends_on:
       tei-embed:
         condition: service_healthy
