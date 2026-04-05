@@ -14,6 +14,7 @@ from app.config import settings
 from app.routers import cables, earthquakes, flights, graph, hotspots, intel, rag, satellites, vessels
 from app.services.cache_service import CacheService
 from app.services.proxy_service import ProxyService
+from app.services import vessel_service
 from app.ws import flight_ws, vessel_ws
 
 structlog.configure(
@@ -39,10 +40,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await cache.connect()
     app.state.cache = cache
 
+    # Start AISStream background collector
+    await vessel_service.start_collector(cache)
+
     logger.info("backend_started", vllm_url=settings.vllm_url, vllm_model=settings.vllm_model)
     yield
 
     # Shutdown
+    await vessel_service.stop_collector()
     await proxy.stop()
     await cache.close()
     logger.info("backend_stopped")

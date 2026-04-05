@@ -1,4 +1,4 @@
-"""Vessel data service — AISStream burst-fetch + Digitraffic REST fallback."""
+"""Vessel data service — AISStream background collector + Digitraffic fallback."""
 
 import asyncio
 import json
@@ -14,45 +14,86 @@ from app.services.proxy_service import ProxyService
 logger = structlog.get_logger()
 
 CACHE_KEY = "vessels:all"
-CACHE_TTL = 60  # seconds
+CACHE_TTL = 120  # seconds — collector refreshes every 60s
 MAX_AGE_MS = 300_000  # 5 minutes — discard stale positions
 
 # Finnish Digitraffic — free, no auth, real-time AIS (Baltic only)
 LOCATIONS_URL = "https://meri.digitraffic.fi/api/ais/v1/locations"
 METADATA_URL = "https://meri.digitraffic.fi/api/ais/v1/vessels"
 
-# AISStream burst duration
-BURST_SECONDS = 15
+# AISStream collection window per cycle
+COLLECT_SECONDS = 45
+COLLECT_INTERVAL = 60  # seconds between collection cycles
+
+# Background task handle
+_collector_task: asyncio.Task[None] | None = None
 
 
 async def get_vessels(
     proxy: ProxyService,
     cache: CacheService,
 ) -> list[Vessel]:
-    """Return vessels from cache, or fetch via AISStream burst / Digitraffic fallback."""
+    """Return vessels from cache. Background collector keeps cache fresh."""
     cached = await cache.get(CACHE_KEY)
     if cached is not None:
         return [Vessel(**v) for v in cached]
 
-    # Primary: AISStream global WebSocket burst
-    vessels = await _burst_fetch_aisstream()
-
-    # Fallback: Digitraffic (Baltic only)
-    if not vessels:
-        vessels = await _fetch_digitraffic(proxy)
-
+    # Cache miss (collector hasn't run yet) — quick Digitraffic fallback
+    vessels = await _fetch_digitraffic(proxy)
     if vessels:
         await cache.set(CACHE_KEY, [v.model_dump(mode="json") for v in vessels], CACHE_TTL)
-
     return vessels
 
 
-async def _burst_fetch_aisstream() -> list[Vessel]:
-    """Connect to AISStream for a burst, collecting global vessel positions."""
+async def start_collector(cache: CacheService) -> None:
+    """Start the background AISStream collector task."""
+    global _collector_task
+    if _collector_task and not _collector_task.done():
+        return
     if not settings.aisstream_api_key:
-        logger.warning("aisstream_no_api_key")
-        return []
+        logger.warning("aisstream_collector_disabled", reason="no API key")
+        return
+    _collector_task = asyncio.create_task(_collector_loop(cache))
+    logger.info("aisstream_collector_started")
 
+
+async def stop_collector() -> None:
+    """Stop the background collector."""
+    global _collector_task
+    if _collector_task and not _collector_task.done():
+        _collector_task.cancel()
+        try:
+            await _collector_task
+        except asyncio.CancelledError:
+            pass
+    _collector_task = None
+    logger.info("aisstream_collector_stopped")
+
+
+async def _collector_loop(cache: CacheService) -> None:
+    """Continuously collect AIS data and cache it."""
+    while True:
+        try:
+            vessels = await _collect_aisstream()
+            if vessels:
+                await cache.set(
+                    CACHE_KEY,
+                    [v.model_dump(mode="json") for v in vessels],
+                    CACHE_TTL,
+                )
+                logger.info("aisstream_cache_updated", count=len(vessels))
+            else:
+                logger.warning("aisstream_collect_empty")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("aisstream_collector_error", error=str(exc))
+
+        await asyncio.sleep(COLLECT_INTERVAL)
+
+
+async def _collect_aisstream() -> list[Vessel]:
+    """Connect to AISStream and collect vessel positions."""
     try:
         import websockets
 
@@ -71,7 +112,7 @@ async def _burst_fetch_aisstream() -> list[Vessel]:
             await ws.send(subscribe_msg)
 
             try:
-                async with asyncio.timeout(BURST_SECONDS):
+                async with asyncio.timeout(COLLECT_SECONDS):
                     async for msg in ws:
                         data = json.loads(msg)
                         meta = data.get("MetaData", {})
@@ -88,7 +129,6 @@ async def _burst_fetch_aisstream() -> list[Vessel]:
                         if lat == 0 and lon == 0:
                             continue
 
-                        # Dedup by MMSI — keep latest position
                         seen[mmsi] = Vessel(
                             mmsi=mmsi,
                             name=meta.get("ShipName", "").strip() or None,
@@ -103,13 +143,13 @@ async def _burst_fetch_aisstream() -> list[Vessel]:
                 pass
 
         vessels = list(seen.values())
-        logger.info("aisstream_burst_complete", count=len(vessels), burst_seconds=BURST_SECONDS)
+        logger.info("aisstream_collect_complete", count=len(vessels), seconds=COLLECT_SECONDS)
         return vessels
     except ImportError:
         logger.warning("websockets_not_installed")
         return []
     except Exception as exc:
-        logger.warning("aisstream_burst_failed", error=str(exc))
+        logger.warning("aisstream_collect_failed", error=str(exc))
         return []
 
 
@@ -129,7 +169,6 @@ async def _fetch_digitraffic(proxy: ProxyService) -> list[Vessel]:
         locations = loc_resp.json()
         metadata_list = meta_resp.json()
 
-        # Build MMSI → metadata lookup
         meta_map: dict[int, dict] = {}
         for m in metadata_list:
             mmsi = m.get("mmsi")
@@ -151,7 +190,6 @@ async def _fetch_digitraffic(proxy: ProxyService) -> list[Vessel]:
                 if not mmsi:
                     continue
 
-                # Filter stale positions (> 5 min old)
                 ts = props.get("timestampExternal")
                 if ts and (now_ms - ts) > MAX_AGE_MS:
                     continue
