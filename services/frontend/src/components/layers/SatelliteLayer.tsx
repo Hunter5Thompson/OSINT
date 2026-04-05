@@ -116,20 +116,14 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     const showOrbits = degradation < 3 && cameraAlt < ORBIT_LOD_ALTITUDE;
     lastShowOrbitsRef.current = showOrbits;
 
-    // LOD: at global zoom only show high-interest sats (~215)
-    // At medium zoom show everything except Starlink (~1600)
-    // At close zoom show all (~11700)
-    const showAll = cameraAlt < 5_000_000;
-    const showNonMega = cameraAlt < 10_000_000;
+    // At global zoom, skip mega-constellations (Starlink=10K, OneWeb=651)
+    // They render as an indistinguishable green mass anyway
+    const showMegaConstellations = cameraAlt < 8_000_000;
 
     for (const sat of satellites) {
-      if (!showAll) {
+      if (!showMegaConstellations && sat.category === "active") {
         const upper = sat.name.toUpperCase();
-        if (upper.startsWith("STARLINK") || upper.startsWith("ONEWEB")) {
-          if (!showNonMega) continue; // skip at global zoom
-          continue; // skip at medium zoom too — they're 10K+ points
-        }
-        if (!showNonMega && sat.category === "active") continue;
+        if (upper.startsWith("STARLINK") || upper.startsWith("ONEWEB")) continue;
       }
       let satrec: satellite.SatRec;
       try {
