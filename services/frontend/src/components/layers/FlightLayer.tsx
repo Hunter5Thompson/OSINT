@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { Aircraft } from "../../types";
+import { classifyAircraft, getAircraftTypeIcon } from "./icons/aircraftIcons";
+import { usePerformance, type DegradationLevel } from "../globe/PerformanceGuard";
 
 interface FlightLayerProps {
   viewer: Cesium.Viewer | null;
@@ -22,6 +24,8 @@ interface FlightVisual {
 const INTERPOLATION_INTERVAL_MS = 500;
 const MAX_EXTRAPOLATION_SECONDS = 30;
 const EARTH_RADIUS_M = 6_378_137;
+const TRAIL_MAX_POSITIONS = 30;
+const TRAIL_REDUCED_POSITIONS = 10;
 
 /**
  * Renders aircraft using imperative BillboardCollection for performance.
@@ -30,8 +34,13 @@ const EARTH_RADIUS_M = 6_378_137;
 export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
   const collectionRef = useRef<Cesium.BillboardCollection | null>(null);
   const flightMapRef = useRef<Map<string, FlightVisual>>(new Map());
-  const iconCacheRef = useRef<Map<string, string>>(new Map());
   const interpolationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const trailCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
+  const trailBuffersRef = useRef<Map<string, Cesium.Cartesian3[]>>(new Map());
+
+  const { degradation } = usePerformance();
+  const degradationRef = useRef<DegradationLevel>(degradation);
+  degradationRef.current = degradation;
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -39,6 +48,9 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
     if (!collectionRef.current) {
       collectionRef.current = new Cesium.BillboardCollection({ scene: viewer.scene });
       viewer.scene.primitives.add(collectionRef.current);
+
+      trailCollectionRef.current = new Cesium.PolylineCollection();
+      viewer.scene.primitives.add(trailCollectionRef.current);
     }
 
     return () => {
@@ -47,13 +59,18 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         interpolationTimerRef.current = null;
       }
 
+      if (trailCollectionRef.current) {
+        viewer.scene.primitives.remove(trailCollectionRef.current);
+        trailCollectionRef.current = null;
+      }
+      trailBuffersRef.current.clear();
+
       if (collectionRef.current && !viewer.isDestroyed()) {
         viewer.scene.primitives.remove(collectionRef.current);
         collectionRef.current = null;
       }
 
       flightMapRef.current.clear();
-      iconCacheRef.current.clear();
     };
   }, [viewer]);
 
@@ -62,6 +79,7 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
     if (!bc) return;
 
     bc.show = visible;
+    if (trailCollectionRef.current) trailCollectionRef.current.show = visible;
     if (!visible) return;
 
     const now = Date.now();
@@ -106,11 +124,8 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         existing.sampleTimeMs = sampleTimeMs;
 
         existing.billboard.color = color;
-        existing.billboard.image = getAircraftIconCanvas(
-          flight.heading,
-          color,
-          iconCacheRef.current,
-        );
+        const iconType = classifyAircraft(flight.callsign, flight.is_military, flight.aircraft_type, flight.altitude_m, flight.velocity_ms);
+        existing.billboard.image = getAircraftTypeIcon(iconType, flight.heading);
         existing.billboard.position = projectPosition(existing, now);
         (existing.billboard as unknown as Record<string, unknown>)._flightData = flightClickData;
       } else {
@@ -120,7 +135,10 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
             flight.latitude,
             flight.altitude_m,
           ),
-          image: getAircraftIconCanvas(flight.heading, color, iconCacheRef.current),
+          image: getAircraftTypeIcon(
+            classifyAircraft(flight.callsign, flight.is_military, flight.aircraft_type, flight.altitude_m, flight.velocity_ms),
+            flight.heading,
+          ),
           scale: 0.5,
           color,
           eyeOffset: new Cesium.Cartesian3(0, 0, -100),
@@ -149,6 +167,13 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         flightMapRef.current.delete(id);
       }
     }
+
+    // Clean stale trail buffers
+    for (const id of trailBuffersRef.current.keys()) {
+      if (!activeIds.has(id)) {
+        trailBuffersRef.current.delete(id);
+      }
+    }
   }, [flights, visible]);
 
   useEffect(() => {
@@ -161,8 +186,53 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
 
     interpolationTimerRef.current = setInterval(() => {
       const now = Date.now();
-      for (const visual of flightMapRef.current.values()) {
-        visual.billboard.position = projectPosition(visual, now);
+      const deg = degradationRef.current;
+      const tc = trailCollectionRef.current;
+
+      for (const [id, visual] of flightMapRef.current.entries()) {
+        const newPos = projectPosition(visual, now);
+        visual.billboard.position = newPos;
+
+        // Trail: skip if degradation >= 3 (no trails)
+        if (deg < 3 && tc) {
+          let buffer = trailBuffersRef.current.get(id);
+          if (!buffer) {
+            buffer = [];
+            trailBuffersRef.current.set(id, buffer);
+          }
+
+          buffer.push(newPos);
+
+          const maxLen = deg >= 1 ? TRAIL_REDUCED_POSITIONS : TRAIL_MAX_POSITIONS;
+          while (buffer.length > maxLen) {
+            buffer.shift();
+          }
+        }
+      }
+
+      // Rebuild trail polylines (batched, not per-frame per-trail)
+      if (tc && deg < 3) {
+        tc.removeAll();
+        for (const [id, buffer] of trailBuffersRef.current.entries()) {
+          if (buffer.length < 2) continue;
+
+          // Only draw trails for military aircraft when > 500 visible
+          if (flightMapRef.current.size > 500) {
+            const visual = flightMapRef.current.get(id);
+            if (visual) {
+              const flightData = (visual.billboard as unknown as Record<string, unknown>)?._flightData as { is_military?: boolean } | undefined;
+              if (!flightData?.is_military) continue;
+            }
+          }
+
+          tc.add({
+            positions: buffer.slice(),
+            width: 1.5,
+            material: Cesium.Material.fromType("Color", {
+              color: Cesium.Color.CYAN.withAlpha(0.3),
+            }),
+          });
+        }
       }
     }, INTERPOLATION_INTERVAL_MS);
 
@@ -218,49 +288,4 @@ function projectPosition(visual: FlightVisual, nowMs: number): Cesium.Cartesian3
     Cesium.Math.toDegrees(projectedLat),
     altitudeM,
   );
-}
-
-function getAircraftIconCanvas(
-  heading: number,
-  color: Cesium.Color,
-  cache: Map<string, string>,
-): string {
-  const headingBucket = Math.round((heading || 0) / 5) * 5;
-  const colorKey = `${Math.round(color.red * 255)}-${Math.round(color.green * 255)}-${Math.round(color.blue * 255)}`;
-  const key = `${headingBucket}-${colorKey}`;
-
-  const cachedDataUrl = cache.get(key);
-  if (cachedDataUrl) return cachedDataUrl;
-
-  const size = 24;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    const emptyDataUrl = canvas.toDataURL();
-    cache.set(key, emptyDataUrl);
-    return emptyDataUrl;
-  }
-
-  ctx.translate(size / 2, size / 2);
-  ctx.rotate((headingBucket * Math.PI) / 180);
-
-  ctx.beginPath();
-  ctx.moveTo(0, -size / 2 + 2);
-  ctx.lineTo(-size / 4, size / 2 - 4);
-  ctx.lineTo(0, size / 3);
-  ctx.lineTo(size / 4, size / 2 - 4);
-  ctx.closePath();
-
-  ctx.fillStyle = `rgba(${color.red * 255}, ${color.green * 255}, ${color.blue * 255}, 0.9)`;
-  ctx.fill();
-  ctx.strokeStyle = `rgba(${color.red * 255}, ${color.green * 255}, ${color.blue * 255}, 1)`;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  const dataUrl = canvas.toDataURL();
-  cache.set(key, dataUrl);
-  return dataUrl;
 }
