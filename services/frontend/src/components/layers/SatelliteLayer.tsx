@@ -27,7 +27,7 @@ const COUNTRY_TINT: Record<string, Cesium.Color> = {
 };
 
 const ORBIT_ARC_POINTS = 50;
-const ORBIT_LOD_ALTITUDE = 20_000_000;
+const ORBIT_LOD_ALTITUDE = 12_000_000; // show orbits only when reasonably zoomed in
 const RECON_PREFIXES = ["USA ", "NROL", "COSMOS 25", "YAOGAN"];
 const MIN_ELEVATION_DEG = 5;
 /** Only render orbit arcs for high-interest categories (not all 15K active sats) */

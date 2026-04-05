@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     # Flight Data
     opensky_user: str = ""
     opensky_pass: str = ""
-    flight_cache_ttl_s: int = 30
+    flight_cache_ttl_s: int = 300  # 5 min — survives temporary API outages
 
     # Ship Data
     aisstream_api_key: str = ""

@@ -24,8 +24,9 @@ interface FlightVisual {
 const INTERPOLATION_INTERVAL_MS = 500;
 const MAX_EXTRAPOLATION_SECONDS = 30;
 const EARTH_RADIUS_M = 6_378_137;
-const TRAIL_MAX_POSITIONS = 120; // 60 seconds at 500ms intervals
-const TRAIL_REDUCED_POSITIONS = 40;
+const TRAIL_MAX_POSITIONS = 60; // 60 seconds at 1s intervals
+const TRAIL_REDUCED_POSITIONS = 20;
+const TRAIL_REBUILD_INTERVAL = 4; // rebuild polylines every Nth interpolation tick
 
 /**
  * Renders aircraft using imperative BillboardCollection for performance.
@@ -37,6 +38,7 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
   const interpolationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const trailCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
   const trailBuffersRef = useRef<Map<string, Cesium.Cartesian3[]>>(new Map());
+  const trailTickRef = useRef(0);
   const viewerRef = useRef<Cesium.Viewer | null>(viewer);
   viewerRef.current = viewer;
 
@@ -182,13 +184,16 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
       const now = Date.now();
       const deg = degradationRef.current;
       const tc = trailCollectionRef.current;
+      const tick = ++trailTickRef.current;
+      const isTrailTick = tick % 2 === 0; // buffer positions every 2nd tick (1s)
+      const isRebuildTick = tick % TRAIL_REBUILD_INTERVAL === 0; // rebuild polylines every 4th tick (2s)
 
       for (const [id, visual] of flightMapRef.current.entries()) {
         const newPos = projectPosition(visual, now);
         visual.billboard.position = newPos;
 
-        // Trail: skip if degradation >= 3 (no trails)
-        if (deg < 3 && tc) {
+        // Trail: buffer positions every 2nd tick, skip if degradation >= 3
+        if (isTrailTick && deg < 3 && tc) {
           let buffer = trailBuffersRef.current.get(id);
           if (!buffer) {
             buffer = [];
@@ -204,7 +209,8 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         }
       }
 
-      // Rebuild trail polylines — only for flights in current view
+      // Rebuild trail polylines — only on rebuild ticks, only for flights in current view
+      if (!isRebuildTick) return;
       if (tc && deg >= 3) {
         tc.removeAll();
         trailBuffersRef.current.clear();
