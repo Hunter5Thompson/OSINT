@@ -12,6 +12,52 @@ from app.services.proxy_service import ProxyService
 
 logger = structlog.get_logger()
 
+# Name prefix → ISO 3166-1 alpha-2 country code
+_COUNTRY_PREFIXES: dict[str, str] = {
+    "USA ": "US", "NROL": "US", "NOSS": "US", "GPS ": "US", "NAVSTAR": "US",
+    "DSP ": "US", "SBIRS": "US", "WGS ": "US", "GOES": "US", "NOAA": "US",
+    "MILSTAR": "US", "AEHF": "US", "MUOS": "US", "TDRS": "US",
+    "COSMOS": "RU", "GLONASS": "RU", "MOLNIYA": "RU",
+    "YAOGAN": "CN", "CZ-": "CN", "BEIDOU": "CN", "FENGYUN": "CN", "TIANGONG": "CN",
+    "GALILEO": "EU", "METEOSAT": "EU",
+    "HIMAWARI": "JP", "QZS": "JP",
+    "ASTRA": "LU",
+    "INTELSAT": "INT", "IRIDIUM": "US", "STARLINK": "US", "ONEWEB": "GB",
+}
+
+
+def _detect_country(name: str) -> str | None:
+    """Detect operator country from satellite name prefix."""
+    upper = name.upper()
+    for prefix, country in _COUNTRY_PREFIXES.items():
+        if upper.startswith(prefix) or f" {prefix}" in upper:
+            return country
+    if "ISS" in upper:
+        return "INT"
+    return None
+
+
+def _detect_type(name: str, category: str) -> str:
+    """Detect satellite type from name + existing category."""
+    upper = name.upper()
+    if category == "military":
+        # Sub-classify military — recon or comms (no generic "military" value)
+        if any(k in upper for k in ("NROL", "USA ", "NOSS", "YAOGAN", "COSMOS 25")):
+            return "recon"
+        if any(k in upper for k in ("MILSTAR", "AEHF", "MUOS", "WGS", "DSCS")):
+            return "comms"
+        return "recon"  # conservative: unclassified mil → recon
+    if category == "gps":
+        return "gps"
+    if category == "weather":
+        return "weather"
+    if category == "station":
+        return "station"
+    if any(k in upper for k in ("INTELSAT", "ASTRA", "SES", "VIASAT", "STARLINK", "ONEWEB", "IRIDIUM", "TDRS")):
+        return "comms"
+    return "unknown"
+
+
 CACHE_KEY = "satellites:tle"
 CACHE_TTL = 3600  # 1 hour
 
@@ -62,6 +108,8 @@ async def _fetch_celestrak(proxy: ProxyService) -> list[Satellite]:
             period = (1440.0 / mean_motion) if mean_motion > 0 else 0.0
 
             category = _categorize(name, inclination)
+            operator_country = _detect_country(name)
+            sat_type = _detect_type(name, category)
 
             satellites.append(
                 Satellite(
@@ -72,6 +120,8 @@ async def _fetch_celestrak(proxy: ProxyService) -> list[Satellite]:
                     category=category,
                     inclination_deg=round(inclination, 2),
                     period_min=round(period, 2),
+                    operator_country=operator_country,
+                    satellite_type=sat_type,
                 )
             )
             i += 3

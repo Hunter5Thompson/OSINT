@@ -11,3 +11,5 @@ class Satellite(BaseModel):
     category: str = "active"
     inclination_deg: float = 0.0
     period_min: float = 0.0
+    operator_country: str | None = None
+    satellite_type: str = "unknown"
