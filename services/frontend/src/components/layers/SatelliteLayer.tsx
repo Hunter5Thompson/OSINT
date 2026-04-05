@@ -48,7 +48,8 @@ function computeFootprintRadiusKm(altitudeKm: number): number {
 export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerProps) {
   const pointsRef = useRef<Cesium.PointPrimitiveCollection | null>(null);
   const orbitCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
-  const footprintRef = useRef<Cesium.Entity | null>(null);
+  const footprintEntityRef = useRef<Cesium.Entity | null>(null);
+  const coneCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
   const { degradation } = usePerformance();
   const lastShowOrbitsRef = useRef(false);
 
@@ -63,16 +64,22 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
       orbitCollectionRef.current = new Cesium.PolylineCollection();
       viewer.scene.primitives.add(orbitCollectionRef.current);
     }
+    if (!coneCollectionRef.current) {
+      coneCollectionRef.current = new Cesium.PolylineCollection();
+      viewer.scene.primitives.add(coneCollectionRef.current);
+    }
 
     return () => {
       if (!viewer.isDestroyed()) {
         if (pointsRef.current) viewer.scene.primitives.remove(pointsRef.current);
         if (orbitCollectionRef.current) viewer.scene.primitives.remove(orbitCollectionRef.current);
-        if (footprintRef.current) viewer.entities.remove(footprintRef.current);
+        if (coneCollectionRef.current) viewer.scene.primitives.remove(coneCollectionRef.current);
+        if (footprintEntityRef.current) viewer.entities.remove(footprintEntityRef.current);
       }
       pointsRef.current = null;
       orbitCollectionRef.current = null;
-      footprintRef.current = null;
+      coneCollectionRef.current = null;
+      footprintEntityRef.current = null;
     };
   }, [viewer]);
 
@@ -208,43 +215,93 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     };
   }, [viewer, visible, degradation, satellites, propagateOrbitArc]);
 
+  // 3D observation cone on hover
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    const CONE_SEGMENTS = 24;
+
+    const clearCone = () => {
+      if (coneCollectionRef.current) coneCollectionRef.current.removeAll();
+      if (footprintEntityRef.current) {
+        viewer.entities.remove(footprintEntityRef.current);
+        footprintEntityRef.current = null;
+      }
+    };
 
     handler.setInputAction((movement: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
       const picked = viewer.scene.pick(movement.endPosition);
       const satData = (picked?.primitive as Record<string, unknown>)?._satelliteData as
-        | { footprint_radius_km?: number; lat: number; lon: number }
+        | { footprint_radius_km?: number; altitude_km?: number; lat: number; lon: number; category?: string }
         | undefined;
 
-      if (footprintRef.current) {
-        viewer.entities.remove(footprintRef.current);
-        footprintRef.current = null;
-      }
+      clearCone();
 
-      if (satData && satData.footprint_radius_km && satData.footprint_radius_km > 0) {
-        const category = (picked?.primitive as Record<string, unknown>)?._satelliteData as { category?: string } | undefined;
-        const color = CATEGORY_COLORS[category?.category ?? "active"] ?? CATEGORY_COLORS["active"]!;
+      if (!satData || !satData.footprint_radius_km || satData.footprint_radius_km <= 0) return;
 
-        footprintRef.current = viewer.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(satData.lon, satData.lat, 0),
-          // @ts-expect-error — Cesium Entity supports allowPicking but types don't expose it
-          allowPicking: false,
-          ellipse: {
-            semiMajorAxis: satData.footprint_radius_km * 1000,
-            semiMinorAxis: satData.footprint_radius_km * 1000,
-            material: color.withAlpha(0.12),
-            outline: true,
-            outlineColor: color.withAlpha(0.3),
-            outlineWidth: 1,
-          },
+      const color = CATEGORY_COLORS[satData.category ?? "active"] ?? CATEGORY_COLORS["active"]!;
+      const radiusM = satData.footprint_radius_km * 1000;
+      const altM = (satData.altitude_km ?? 400) * 1000;
+      const satPosition = Cesium.Cartesian3.fromDegrees(satData.lon, satData.lat, altM);
+      const cc = coneCollectionRef.current;
+
+      if (cc) {
+        // Compute footprint edge points
+        const edgePoints: Cesium.Cartesian3[] = [];
+        for (let i = 0; i < CONE_SEGMENTS; i++) {
+          const angle = (i / CONE_SEGMENTS) * Math.PI * 2;
+          const dLat = (radiusM * Math.cos(angle)) / 6_371_000;
+          const dLon = (radiusM * Math.sin(angle)) / (6_371_000 * Math.cos(Cesium.Math.toRadians(satData.lat)));
+          edgePoints.push(
+            Cesium.Cartesian3.fromDegrees(
+              satData.lon + Cesium.Math.toDegrees(dLon),
+              satData.lat + Cesium.Math.toDegrees(dLat),
+              0,
+            ),
+          );
+        }
+
+        // Cone wireframe lines: satellite → edge points
+        for (let i = 0; i < CONE_SEGMENTS; i += 2) {
+          cc.add({
+            positions: [satPosition, edgePoints[i]],
+            width: 1.0,
+            material: Cesium.Material.fromType("Color", {
+              color: color.withAlpha(0.25),
+            }),
+          });
+        }
+
+        // Footprint edge ring on ground
+        const ringPositions = [...edgePoints, edgePoints[0]];
+        cc.add({
+          positions: ringPositions,
+          width: 1.5,
+          material: Cesium.Material.fromType("Color", {
+            color: color.withAlpha(0.5),
+          }),
         });
       }
+
+      // Semi-transparent ground ellipse fill
+      footprintEntityRef.current = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(satData.lon, satData.lat, 0),
+        // @ts-expect-error — allowPicking not in type defs
+        allowPicking: false,
+        ellipse: {
+          semiMajorAxis: radiusM,
+          semiMinorAxis: radiusM,
+          material: color.withAlpha(0.08),
+          outline: false,
+        },
+      });
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
-    return () => handler.destroy();
+    return () => {
+      clearCone();
+      handler.destroy();
+    };
   }, [viewer]);
 
   return null;
