@@ -38,15 +38,17 @@ async def get_flights(
     proxy: ProxyService,
     cache: CacheService,
 ) -> list[Aircraft]:
-    """Fetch flight data, trying cache first, then adsb.fi (richer data), then OpenSky."""
+    """Fetch flight data: cache → adsb.fi → OpenSky → FR24 public feed."""
     cached = await cache.get(CACHE_KEY)
     if cached is not None:
         return [Aircraft(**a) for a in cached]
 
-    # adsb.fi is primary — provides aircraft_type + military dbFlags
+    # adsb.fi primary (has aircraft_type + military dbFlags)
     aircraft = await _fetch_adsb_fi(proxy)
     if not aircraft:
         aircraft = await _fetch_opensky(proxy)
+    if not aircraft:
+        aircraft = await _fetch_fr24(proxy)
 
     if aircraft:
         await cache.set(
@@ -133,4 +135,63 @@ async def _fetch_adsb_fi(proxy: ProxyService) -> list[Aircraft]:
         return aircraft
     except Exception:
         logger.warning("adsb_fi_fetch_failed")
+        return []
+
+
+# FR24 public feed URL (no auth needed)
+_FR24_URL = (
+    "https://data-cloud.flightradar24.com/zones/fcgi/feed.js"
+    "?faa=1&satellite=1&mlat=1&adsb=1&gnd=0&air=1&vehicles=0"
+    "&estimated=0&maxage=14400&gliders=0&stats=0"
+)
+
+
+async def _fetch_fr24(proxy: ProxyService) -> list[Aircraft]:
+    """Fallback: fetch from FR24 public feed (no auth, ~1500 flights)."""
+    try:
+        # FR24 needs a browser-like User-Agent
+        resp = await proxy.client.get(
+            _FR24_URL,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=15.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        aircraft: list[Aircraft] = []
+        for key, val in data.items():
+            if not isinstance(val, list) or len(val) < 15:
+                continue
+
+            # FR24 array fields: [icao24, lat, lon, heading, altitude_ft, speed_kts,
+            #   squawk, radar, type, registration, timestamp, origin, dest, flight, ?, ?, callsign, ?, ?]
+            icao24 = val[0]
+            lat = val[1]
+            lon = val[2]
+            if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+                continue
+
+            callsign = (val[16] if len(val) > 16 else val[13]) or None
+            if isinstance(callsign, str):
+                callsign = callsign.strip() or None
+
+            aircraft.append(
+                Aircraft(
+                    icao24=str(icao24),
+                    callsign=callsign,
+                    latitude=float(lat),
+                    longitude=float(lon),
+                    altitude_m=float(val[4] or 0) * 0.3048,
+                    velocity_ms=float(val[5] or 0) * 0.5144,
+                    heading=float(val[3] or 0),
+                    vertical_rate=0,
+                    on_ground=False,
+                    is_military=_is_military_callsign(callsign),
+                    aircraft_type=val[8] if len(val) > 8 and val[8] else None,
+                )
+            )
+        logger.info("fr24_fetched", count=len(aircraft))
+        return aircraft
+    except Exception:
+        logger.warning("fr24_fetch_failed")
         return []

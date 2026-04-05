@@ -46,7 +46,7 @@ class TestSettings:
             _env_file=None,
             neo4j_password="test-secret",
         )
-        assert s.flight_cache_ttl_s == 30
+        assert s.flight_cache_ttl_s == 300
 
     def test_cable_config_defaults(self) -> None:
         s = Settings(
