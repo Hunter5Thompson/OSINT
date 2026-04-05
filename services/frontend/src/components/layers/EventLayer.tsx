@@ -143,6 +143,11 @@ export function EventLayer({ viewer, events, visible }: EventLayerProps) {
             pulse.billboard.scale = 1.0 + 0.15 * Math.sin(now * 0.00314);
           }
         }
+      } else {
+        // Reset scales when animations are degraded
+        for (const pulse of pulsesRef.current) {
+          pulse.billboard.scale = 1.0;
+        }
       }
 
       animFrameRef.current = requestAnimationFrame(animate);

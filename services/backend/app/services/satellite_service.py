@@ -136,7 +136,7 @@ async def _fetch_celestrak(proxy: ProxyService) -> list[Satellite]:
 def _categorize(name: str, inclination: float) -> str:
     """Categorize satellite based on name and orbit parameters."""
     name_upper = name.upper()
-    if any(k in name_upper for k in ("USA ", "NOSS", "MILSTAR", "DSP", "SBIRS", "WGS")):
+    if any(k in name_upper for k in ("USA ", "NROL", "NOSS", "MILSTAR", "DSP", "SBIRS", "WGS", "YAOGAN", "COSMOS 2")):
         return "military"
     if any(k in name_upper for k in ("NOAA", "METEO", "GOES", "HIMAWARI", "FENGYUN")):
         return "weather"

@@ -104,6 +104,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     const now = new Date();
     const cameraAlt = viewer.camera.positionCartographic.height;
     const showOrbits = degradation < 3 && cameraAlt < ORBIT_LOD_ALTITUDE;
+    lastShowOrbitsRef.current = showOrbits;
 
     for (const sat of satellites) {
       let satrec: satellite.SatRec;
@@ -168,7 +169,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     if (!viewer || viewer.isDestroyed()) return;
 
     const onMoveEnd = () => {
-      if (!viewer || viewer.isDestroyed()) return;
+      if (!viewer || viewer.isDestroyed() || !visible) return;
       const cameraAlt = viewer.camera.positionCartographic.height;
       const shouldShow = degradation < 3 && cameraAlt < ORBIT_LOD_ALTITUDE;
 
@@ -204,7 +205,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     return () => {
       if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
     };
-  }, [viewer, degradation, satellites, propagateOrbitArc]);
+  }, [viewer, visible, degradation, satellites, propagateOrbitArc]);
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;

@@ -211,7 +211,10 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
       }
 
       // Rebuild trail polylines (batched, not per-frame per-trail)
-      if (tc && deg < 3) {
+      if (tc && deg >= 3) {
+        tc.removeAll();
+        trailBuffersRef.current.clear();
+      } else if (tc && deg < 3) {
         tc.removeAll();
         for (const [id, buffer] of trailBuffersRef.current.entries()) {
           if (buffer.length < 2) continue;

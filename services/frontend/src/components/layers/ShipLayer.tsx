@@ -117,7 +117,9 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
     const cameraAlt = viewer.camera.positionCartographic.height;
-    renderVessels(degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD);
+    const showVectors = degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD;
+    lastShowVectorsRef.current = showVectors;
+    renderVessels(showVectors);
   }, [vessels, visible, viewer, degradation, renderVessels]);
 
   // Re-render vectors on camera move (LOD reactivity)
