@@ -13,6 +13,26 @@ logger = structlog.get_logger()
 
 CACHE_KEY = "flights:all"
 
+# Callsign prefixes that indicate military aircraft
+_MILITARY_CALLSIGN_PREFIXES = (
+    "RCH", "EVAC", "DUKE", "VALOR", "REACH", "FORGE", "COBRA", "HAWK",
+    "VIPER", "RAPTOR", "REAPER", "SIGINT", "FORTE", "NCHO", "TOPCAT",
+    "RRR",  # Royal Air Force
+    "IAM",  # Italian Air Force
+    "GAF",  # German Air Force
+    "FAF",  # French Air Force
+    "CNV",  # US Navy
+    "RFR",  # French Air Force
+)
+
+
+def _is_military_callsign(callsign: str | None) -> bool:
+    """Heuristic military detection from callsign prefix."""
+    if not callsign:
+        return False
+    cs = callsign.strip().upper()
+    return any(cs.startswith(p) for p in _MILITARY_CALLSIGN_PREFIXES)
+
 
 async def get_flights(
     proxy: ProxyService,
@@ -53,10 +73,11 @@ async def _fetch_opensky(proxy: ProxyService) -> list[Aircraft]:
         for s in states:
             if s[6] is None or s[5] is None:
                 continue
+            callsign = (s[1] or "").strip() or None
             aircraft.append(
                 Aircraft(
                     icao24=s[0],
-                    callsign=(s[1] or "").strip() or None,
+                    callsign=callsign,
                     longitude=float(s[5]),
                     latitude=float(s[6]),
                     altitude_m=float(s[7] or 0),
@@ -65,6 +86,7 @@ async def _fetch_opensky(proxy: ProxyService) -> list[Aircraft]:
                     vertical_rate=float(s[11] or 0),
                     on_ground=bool(s[8]),
                     last_contact=datetime.fromtimestamp(s[4] or 0, tz=timezone.utc),
+                    is_military=_is_military_callsign(callsign),
                 )
             )
         logger.info("opensky_fetched", count=len(aircraft))
