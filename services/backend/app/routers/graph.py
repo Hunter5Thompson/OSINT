@@ -208,15 +208,15 @@ async def get_geo_events(
     rows = await _read_query(cypher, params)
     events = [
         GeoEvent(
-            id=r.get("id", ""),
-            title=r.get("title", ""),
-            codebook_type=r.get("codebook_type", ""),
-            severity=r.get("severity", ""),
+            id=str(r.get("id") or ""),
+            title=str(r.get("title") or ""),
+            codebook_type=str(r.get("codebook_type") or ""),
+            severity=str(r.get("severity") or ""),
             timestamp=str(r["timestamp"]) if r.get("timestamp") else None,
-            location_name=r.get("location_name"),
-            country=r.get("country"),
-            lat=r.get("lat"),
-            lon=r.get("lon"),
+            location_name=str(r["location_name"]) if r.get("location_name") else None,
+            country=str(r["country"]) if r.get("country") else None,
+            lat=float(r["lat"]) if r.get("lat") is not None else None,
+            lon=float(r["lon"]) if r.get("lon") is not None else None,
         )
         for r in rows
     ]

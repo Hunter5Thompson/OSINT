@@ -38,14 +38,15 @@ async def get_flights(
     proxy: ProxyService,
     cache: CacheService,
 ) -> list[Aircraft]:
-    """Fetch flight data, trying cache first, then OpenSky, then adsb.fi."""
+    """Fetch flight data, trying cache first, then adsb.fi (richer data), then OpenSky."""
     cached = await cache.get(CACHE_KEY)
     if cached is not None:
         return [Aircraft(**a) for a in cached]
 
-    aircraft = await _fetch_opensky(proxy)
+    # adsb.fi is primary — provides aircraft_type + military dbFlags
+    aircraft = await _fetch_adsb_fi(proxy)
     if not aircraft:
-        aircraft = await _fetch_adsb_fi(proxy)
+        aircraft = await _fetch_opensky(proxy)
 
     if aircraft:
         await cache.set(
