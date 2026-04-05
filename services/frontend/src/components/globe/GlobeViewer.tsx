@@ -45,13 +45,17 @@ export function GlobeViewer({ onViewerReady, cesiumToken, activeShader }: GlobeV
     viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0a0a0a");
 
     // Cesium World Terrain — relief + bathymetry
-    viewer.scene.setTerrain(
-      Cesium.Terrain.fromWorldTerrain({
-        requestWaterMask: true,
-        requestVertexNormals: true,
-      }),
-    );
-    viewer.scene.verticalExaggeration = 1.5;
+    try {
+      viewer.scene.setTerrain(
+        Cesium.Terrain.fromWorldTerrain({
+          requestWaterMask: true,
+          requestVertexNormals: true,
+        }),
+      );
+      viewer.scene.verticalExaggeration = 1.5;
+    } catch {
+      // Terrain unavailable — continue without relief
+    }
 
     // Google Photorealistic 3D Tiles with night-side darkening
     void Cesium.createGooglePhotorealistic3DTileset().then((tileset) => {
