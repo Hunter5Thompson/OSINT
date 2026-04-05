@@ -24,8 +24,8 @@ interface FlightVisual {
 const INTERPOLATION_INTERVAL_MS = 500;
 const MAX_EXTRAPOLATION_SECONDS = 30;
 const EARTH_RADIUS_M = 6_378_137;
-const TRAIL_MAX_POSITIONS = 30;
-const TRAIL_REDUCED_POSITIONS = 10;
+const TRAIL_MAX_POSITIONS = 120; // 60 seconds at 500ms intervals
+const TRAIL_REDUCED_POSITIONS = 40;
 
 /**
  * Renders aircraft using imperative BillboardCollection for performance.
@@ -230,16 +230,19 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
           trailCount++;
         }
 
-        // Pass 2: civilian trails (up to limit)
-        for (const [, buffer] of trailBuffersRef.current.entries()) {
+        // Pass 2: civilian trails (up to limit, skip already-rendered military)
+        for (const [id, buffer] of trailBuffersRef.current.entries()) {
           if (trailCount >= MAX_TRAIL_POLYLINES) break;
           if (buffer.length < 2) continue;
+          const visual = flightMapRef.current.get(id);
+          const fd = (visual?.billboard as unknown as Record<string, unknown>)?._flightData as { is_military?: boolean } | undefined;
+          if (fd?.is_military) continue; // already rendered in pass 1
 
           tc.add({
             positions: buffer.slice(),
-            width: 1.5,
+            width: 1.0,
             material: Cesium.Material.fromType("Color", {
-              color: Cesium.Color.CYAN.withAlpha(0.25),
+              color: Cesium.Color.CYAN.withAlpha(0.4),
             }),
           });
           trailCount++;
