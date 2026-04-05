@@ -116,7 +116,15 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     const showOrbits = degradation < 3 && cameraAlt < ORBIT_LOD_ALTITUDE;
     lastShowOrbitsRef.current = showOrbits;
 
+    // At global zoom, skip mega-constellations (Starlink=10K, OneWeb=651)
+    // They render as an indistinguishable green mass anyway
+    const showMegaConstellations = cameraAlt < 8_000_000;
+
     for (const sat of satellites) {
+      if (!showMegaConstellations && sat.category === "active") {
+        const upper = sat.name.toUpperCase();
+        if (upper.startsWith("STARLINK") || upper.startsWith("ONEWEB")) continue;
+      }
       let satrec: satellite.SatRec;
       try {
         satrec = satellite.twoline2satrec(sat.tle_line1, sat.tle_line2);

@@ -13,7 +13,8 @@ interface ShipLayerProps {
 const COURSE_VECTOR_MINUTES = 5;
 const KNOTS_TO_MS = 0.514444;
 const EARTH_RADIUS_M = 6_378_137;
-const LOD_ALTITUDE_THRESHOLD = 5_000_000;
+const LOD_ALTITUDE_THRESHOLD = 3_000_000; // vectors only when zoomed in close
+const MAX_COURSE_VECTORS = 200; // hard cap on vector polylines
 
 /**
  * Renders AIS vessel positions with type-specific icons and course vectors.
@@ -55,6 +56,8 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
     vc.removeAll();
     if (!visible) return;
 
+    let vectorCount = 0;
+
     for (const vessel of vessels) {
       const position = Cesium.Cartesian3.fromDegrees(vessel.longitude, vessel.latitude, 0);
       const shipType = classifyShip(vessel.ship_type, vessel.name);
@@ -77,7 +80,7 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
       };
 
       // Course vector: line in heading direction, length proportional to speed
-      if (showVectors && vessel.speed_knots > 0.5) {
+      if (showVectors && vectorCount < MAX_COURSE_VECTORS && vessel.speed_knots > 0.5) {
         const speedMs = vessel.speed_knots * KNOTS_TO_MS;
         const distanceM = speedMs * COURSE_VECTOR_MINUTES * 60;
         const headingRad = Cesium.Math.toRadians(vessel.course);
@@ -109,6 +112,7 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
           width: 1.0,
           material: Cesium.Material.fromType("Color", { color: vectorColor }),
         });
+        vectorCount++;
       }
     }
   }, [vessels, visible]);
