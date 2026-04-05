@@ -30,6 +30,8 @@ const ORBIT_ARC_POINTS = 50;
 const ORBIT_LOD_ALTITUDE = 20_000_000;
 const RECON_PREFIXES = ["USA ", "NROL", "COSMOS 25", "YAOGAN"];
 const MIN_ELEVATION_DEG = 5;
+/** Only render orbit arcs for high-interest categories (not all 15K active sats) */
+const ORBIT_ELIGIBLE_CATEGORIES = new Set(["military", "station", "gps", "weather"]);
 
 function isReconSatellite(name: string): boolean {
   const upper = name.toUpperCase();
@@ -48,6 +50,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
   const orbitCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
   const footprintRef = useRef<Cesium.Entity | null>(null);
   const { degradation } = usePerformance();
+  const lastShowOrbitsRef = useRef(false);
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -146,7 +149,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
         lon,
       };
 
-      if (showOrbits && sat.category !== "geo") {
+      if (showOrbits && ORBIT_ELIGIBLE_CATEGORIES.has(sat.category)) {
         const orbitPositions = propagateOrbitArc(satrec, now);
         if (orbitPositions.length >= 2) {
           const orbitColor = sat.operator_country
@@ -162,8 +165,6 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
       }
     }
   }, [satellites, visible, viewer, degradation, propagateOrbitArc]);
-
-  const lastShowOrbitsRef = useRef(false);
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -181,7 +182,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
         if (shouldShow && oc.length === 0) {
           const now = new Date();
           for (const sat of satellites) {
-            if (sat.category === "geo") continue;
+            if (!ORBIT_ELIGIBLE_CATEGORIES.has(sat.category)) continue;
             let satrec: satellite.SatRec;
             try { satrec = satellite.twoline2satrec(sat.tle_line1, sat.tle_line2); } catch { continue; }
             const orbitPositions = propagateOrbitArc(satrec, now);
@@ -229,6 +230,8 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
 
         footprintRef.current = viewer.entities.add({
           position: Cesium.Cartesian3.fromDegrees(satData.lon, satData.lat, 0),
+          // @ts-expect-error — Cesium Entity supports allowPicking but types don't expose it
+          allowPicking: false,
           ellipse: {
             semiMajorAxis: satData.footprint_radius_km * 1000,
             semiMinorAxis: satData.footprint_radius_km * 1000,

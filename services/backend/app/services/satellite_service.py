@@ -12,10 +12,10 @@ from app.services.proxy_service import ProxyService
 
 logger = structlog.get_logger()
 
-# Name prefix → ISO 3166-1 alpha-2 country code
+# Name prefix → ISO 3166-1 alpha-2 country code (no trailing spaces!)
 _COUNTRY_PREFIXES: dict[str, str] = {
-    "USA ": "US", "NROL": "US", "NOSS": "US", "GPS ": "US", "NAVSTAR": "US",
-    "DSP ": "US", "SBIRS": "US", "WGS ": "US", "GOES": "US", "NOAA": "US",
+    "USA": "US", "NROL": "US", "NOSS": "US", "GPS": "US", "NAVSTAR": "US",
+    "DSP": "US", "SBIRS": "US", "WGS": "US", "GOES": "US", "NOAA": "US",
     "MILSTAR": "US", "AEHF": "US", "MUOS": "US", "TDRS": "US",
     "COSMOS": "RU", "GLONASS": "RU", "MOLNIYA": "RU",
     "YAOGAN": "CN", "CZ-": "CN", "BEIDOU": "CN", "FENGYUN": "CN", "TIANGONG": "CN",
@@ -30,8 +30,12 @@ def _detect_country(name: str) -> str | None:
     """Detect operator country from satellite name prefix."""
     upper = name.upper()
     for prefix, country in _COUNTRY_PREFIXES.items():
-        if upper.startswith(prefix) or f" {prefix}" in upper:
-            return country
+        # Match "USA 169", "USA-169", "NROL-39", "COSMOS 2667" etc.
+        if upper.startswith(prefix):
+            # Ensure prefix is a word boundary (not middle of another word)
+            rest = upper[len(prefix):]
+            if not rest or not rest[0].isalpha():
+                return country
     if "ISS" in upper:
         return "INT"
     return None

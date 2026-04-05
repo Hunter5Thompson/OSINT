@@ -91,12 +91,6 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
 
       activeIds.add(id);
 
-      const color = flight.is_military
-        ? Cesium.Color.RED
-        : flight.on_ground
-          ? Cesium.Color.GRAY
-          : Cesium.Color.CYAN;
-
       const sampleTimeMs = parseUtcMs(flight.last_contact, now);
 
       const flightClickData = {
@@ -123,7 +117,6 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         existing.verticalRate = flight.vertical_rate;
         existing.sampleTimeMs = sampleTimeMs;
 
-        existing.billboard.color = color;
         const iconType = classifyAircraft(flight.callsign, flight.is_military, flight.aircraft_type, flight.altitude_m, flight.velocity_ms);
         existing.billboard.image = getAircraftTypeIcon(iconType, flight.heading);
         existing.billboard.position = projectPosition(existing, now);
@@ -140,7 +133,6 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
             flight.heading,
           ),
           scale: 0.5,
-          color,
           eyeOffset: new Cesium.Cartesian3(0, 0, -100),
         });
         (billboard as unknown as Record<string, unknown>)._flightData = flightClickData;
