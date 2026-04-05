@@ -442,7 +442,6 @@ After the existing constants (line 23-25), add:
 ```typescript
 const TRAIL_MAX_POSITIONS = 30;
 const TRAIL_REDUCED_POSITIONS = 10;
-const LOD_ALTITUDE_THRESHOLD = 10_000_000; // meters — above this, no trails
 ```
 
 Inside the `FlightLayer` component, after `interpolationTimerRef` (line 34), add:
@@ -658,7 +657,7 @@ export function getShipTypeIcon(
   type: ShipIconType,
   courseDeg: number,
 ): HTMLCanvasElement {
-  const bucket = Math.round((courseDeg || 0) / 5) * 5;
+  const bucket = ((Math.round((courseDeg || 0) / 5) * 5) % 360 + 360) % 360;
   const key = `${type}_${bucket}`;
 
   const cached = iconCache.get(key);
@@ -816,7 +815,7 @@ git commit -m "feat(frontend): add ship type icon factory with 5 silhouettes + c
 Replace the entire contents of `services/frontend/src/components/layers/ShipLayer.tsx`:
 
 ```typescript
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import type { Vessel } from "../../types";
 import { classifyShip, getShipTypeIcon, ICON_COLORS } from "./icons/shipIcons";
@@ -939,15 +938,20 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
   }, [vessels, visible, viewer, degradation, renderVessels]);
 
   // Re-render vectors on camera move (LOD reactivity)
+  const lastShowVectorsRef = useRef(false);
+
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
 
     const onMoveEnd = () => {
       if (!viewer || viewer.isDestroyed()) return;
       const cameraAlt = viewer.camera.positionCartographic.height;
-      const vc = vectorCollectionRef.current;
-      if (vc) {
-        vc.show = degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD;
+      const shouldShow = degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD;
+
+      // Only re-render if LOD state changed (avoids redundant work)
+      if (shouldShow !== lastShowVectorsRef.current) {
+        lastShowVectorsRef.current = shouldShow;
+        renderVessels(shouldShow);
       }
     };
 
@@ -955,7 +959,7 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
     return () => {
       if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
     };
-  }, [viewer, degradation]);
+  }, [viewer, degradation, renderVessels]);
 
   return null;
 }
@@ -1312,21 +1316,51 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     }
   }, [satellites, visible, viewer, degradation, propagateOrbitArc]);
 
-  // Orbit LOD reactivity on camera move
+  // Orbit LOD reactivity on camera move — re-render orbits when crossing threshold
+  const lastShowOrbitsRef = useRef(false);
+
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
 
     const onMoveEnd = () => {
-      if (!viewer || viewer.isDestroyed() || !orbitCollectionRef.current) return;
+      if (!viewer || viewer.isDestroyed()) return;
       const cameraAlt = viewer.camera.positionCartographic.height;
-      orbitCollectionRef.current.show = degradation < 3 && cameraAlt < ORBIT_LOD_ALTITUDE;
+      const shouldShow = degradation < 3 && cameraAlt < ORBIT_LOD_ALTITUDE;
+
+      if (shouldShow !== lastShowOrbitsRef.current) {
+        lastShowOrbitsRef.current = shouldShow;
+        const oc = orbitCollectionRef.current;
+        if (!oc) return;
+
+        if (shouldShow && oc.length === 0) {
+          // Orbits weren't built on last render — build them now
+          const now = new Date();
+          for (const sat of satellites) {
+            if (sat.category === "geo") continue;
+            let satrec: satellite.SatRec;
+            try { satrec = satellite.twoline2satrec(sat.tle_line1, sat.tle_line2); } catch { continue; }
+            const orbitPositions = propagateOrbitArc(satrec, now);
+            if (orbitPositions.length < 2) continue;
+            const color = CATEGORY_COLORS[sat.category] ?? CATEGORY_COLORS["active"]!;
+            const orbitColor = sat.operator_country
+              ? (COUNTRY_TINT[sat.operator_country] ?? color.withAlpha(0.3))
+              : color.withAlpha(0.3);
+            oc.add({
+              positions: orbitPositions,
+              width: 1.0,
+              material: Cesium.Material.fromType("Color", { color: orbitColor }),
+            });
+          }
+        }
+        oc.show = shouldShow;
+      }
     };
 
     viewer.camera.moveEnd.addEventListener(onMoveEnd);
     return () => {
       if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
     };
-  }, [viewer, degradation]);
+  }, [viewer, degradation, satellites, propagateOrbitArc]);
 
   // Footprint on hover
   useEffect(() => {
