@@ -1,6 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import type { Vessel } from "../../types";
+import { classifyShip, getShipTypeIcon, ICON_COLORS } from "./icons/shipIcons";
+import { usePerformance } from "../globe/PerformanceGuard";
 
 interface ShipLayerProps {
   viewer: Cesium.Viewer | null;
@@ -8,11 +10,18 @@ interface ShipLayerProps {
   visible: boolean;
 }
 
+const COURSE_VECTOR_MINUTES = 5;
+const KNOTS_TO_MS = 0.514444;
+const EARTH_RADIUS_M = 6_378_137;
+const LOD_ALTITUDE_THRESHOLD = 5_000_000;
+
 /**
- * Renders AIS vessel positions using BillboardCollection.
+ * Renders AIS vessel positions with type-specific icons and course vectors.
  */
 export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
   const collectionRef = useRef<Cesium.BillboardCollection | null>(null);
+  const vectorCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
+  const { degradation } = usePerformance();
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -21,30 +30,39 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
       collectionRef.current = new Cesium.BillboardCollection({ scene: viewer.scene });
       viewer.scene.primitives.add(collectionRef.current);
     }
+    if (!vectorCollectionRef.current) {
+      vectorCollectionRef.current = new Cesium.PolylineCollection();
+      viewer.scene.primitives.add(vectorCollectionRef.current);
+    }
 
     return () => {
-      if (collectionRef.current && !viewer.isDestroyed()) {
-        viewer.scene.primitives.remove(collectionRef.current);
-        collectionRef.current = null;
+      if (!viewer.isDestroyed()) {
+        if (collectionRef.current) viewer.scene.primitives.remove(collectionRef.current);
+        if (vectorCollectionRef.current) viewer.scene.primitives.remove(vectorCollectionRef.current);
       }
+      collectionRef.current = null;
+      vectorCollectionRef.current = null;
     };
   }, [viewer]);
 
-  useEffect(() => {
+  // Render billboards (always) + course vectors (LOD-gated)
+  const renderVessels = useCallback((showVectors: boolean) => {
     const bc = collectionRef.current;
-    if (!bc) return;
+    const vc = vectorCollectionRef.current;
+    if (!bc || !vc) return;
 
     bc.removeAll();
+    vc.removeAll();
     if (!visible) return;
 
     for (const vessel of vessels) {
       const position = Cesium.Cartesian3.fromDegrees(vessel.longitude, vessel.latitude, 0);
+      const shipType = classifyShip(vessel.ship_type, vessel.name);
 
       const billboard = bc.add({
         position,
-        image: createShipCanvas(vessel.course),
+        image: getShipTypeIcon(shipType, vessel.course),
         scale: 0.6,
-        color: Cesium.Color.fromCssColorString("#4fc3f7"),
         eyeOffset: new Cesium.Cartesian3(0, 0, -50),
       });
       (billboard as unknown as Record<string, unknown>)._vesselData = {
@@ -57,36 +75,74 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
         lat: vessel.latitude,
         lon: vessel.longitude,
       };
+
+      // Course vector: line in heading direction, length proportional to speed
+      if (showVectors && vessel.speed_knots > 0.5) {
+        const speedMs = vessel.speed_knots * KNOTS_TO_MS;
+        const distanceM = speedMs * COURSE_VECTOR_MINUTES * 60;
+        const headingRad = Cesium.Math.toRadians(vessel.course);
+        const latRad = Cesium.Math.toRadians(vessel.latitude);
+        const lonRad = Cesium.Math.toRadians(vessel.longitude);
+
+        const angDist = distanceM / EARTH_RADIUS_M;
+        const endLat = Math.asin(
+          Math.sin(latRad) * Math.cos(angDist) +
+          Math.cos(latRad) * Math.sin(angDist) * Math.cos(headingRad),
+        );
+        const endLon = lonRad + Math.atan2(
+          Math.sin(headingRad) * Math.sin(angDist) * Math.cos(latRad),
+          Math.cos(angDist) - Math.sin(latRad) * Math.sin(endLat),
+        );
+
+        const endPosition = Cesium.Cartesian3.fromDegrees(
+          Cesium.Math.toDegrees(endLon),
+          Cesium.Math.toDegrees(endLat),
+          0,
+        );
+
+        const vectorColor = Cesium.Color.fromCssColorString(
+          ICON_COLORS[shipType] ?? ICON_COLORS.civilian
+        ).withAlpha(0.4);
+
+        vc.add({
+          positions: [position, endPosition],
+          width: 1.0,
+          material: Cesium.Material.fromType("Color", { color: vectorColor }),
+        });
+      }
     }
   }, [vessels, visible]);
 
+  // Re-render on data change
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const cameraAlt = viewer.camera.positionCartographic.height;
+    renderVessels(degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD);
+  }, [vessels, visible, viewer, degradation, renderVessels]);
+
+  // Re-render vectors on camera move (LOD reactivity)
+  const lastShowVectorsRef = useRef(false);
+
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+
+    const onMoveEnd = () => {
+      if (!viewer || viewer.isDestroyed()) return;
+      const cameraAlt = viewer.camera.positionCartographic.height;
+      const shouldShow = degradation < 3 && cameraAlt < LOD_ALTITUDE_THRESHOLD;
+
+      // Only re-render if LOD state changed (avoids redundant work)
+      if (shouldShow !== lastShowVectorsRef.current) {
+        lastShowVectorsRef.current = shouldShow;
+        renderVessels(shouldShow);
+      }
+    };
+
+    viewer.camera.moveEnd.addEventListener(onMoveEnd);
+    return () => {
+      if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
+    };
+  }, [viewer, degradation, renderVessels]);
+
   return null;
-}
-
-function createShipCanvas(course: number): HTMLCanvasElement {
-  const size = 20;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return canvas;
-
-  ctx.translate(size / 2, size / 2);
-  ctx.rotate((course * Math.PI) / 180);
-
-  // Ship shape (diamond/arrow)
-  ctx.beginPath();
-  ctx.moveTo(0, -size / 2 + 2);
-  ctx.lineTo(-size / 4, size / 4);
-  ctx.lineTo(0, size / 6);
-  ctx.lineTo(size / 4, size / 4);
-  ctx.closePath();
-
-  ctx.fillStyle = "rgba(79, 195, 247, 0.8)";
-  ctx.fill();
-  ctx.strokeStyle = "rgba(79, 195, 247, 1)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  return canvas;
 }
