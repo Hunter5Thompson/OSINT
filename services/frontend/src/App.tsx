@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { PerformanceGuard } from "./components/globe/PerformanceGuard";
 import * as Cesium from "cesium";
 import { GlobeViewer } from "./components/globe/GlobeViewer";
 import { EntityClickHandler } from "./components/globe/EntityClickHandler";
@@ -112,6 +113,7 @@ export function App() {
   }
 
   return (
+    <PerformanceGuard>
     <div className="w-full h-full relative">
       <GlobeViewer
         onViewerReady={handleViewerReady}
@@ -169,5 +171,6 @@ export function App() {
         pipelineCount={pipelineData?.features.length ?? 0}
       />
     </div>
+    </PerformanceGuard>
   );
 }

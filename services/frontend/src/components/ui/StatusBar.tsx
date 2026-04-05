@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
 import type { DataFreshness } from "../../types";
+import { usePerformance } from "../globe/PerformanceGuard";
 
 interface StatusBarProps {
   freshness: DataFreshness;
@@ -30,25 +30,7 @@ export function StatusBar({
   cableCount,
   pipelineCount,
 }: StatusBarProps) {
-  const [fps, setFps] = useState(0);
-  const frameRef = useRef(0);
-  const lastTimeRef = useRef(performance.now());
-
-  useEffect(() => {
-    let animId: number;
-    const measure = () => {
-      frameRef.current++;
-      const now = performance.now();
-      if (now - lastTimeRef.current >= 1000) {
-        setFps(frameRef.current);
-        frameRef.current = 0;
-        lastTimeRef.current = now;
-      }
-      animId = requestAnimationFrame(measure);
-    };
-    animId = requestAnimationFrame(measure);
-    return () => cancelAnimationFrame(animId);
-  }, []);
+  const { fps } = usePerformance();
 
   const fpsColor = fps >= 50 ? "text-green-400" : fps >= 30 ? "text-yellow-400" : "text-red-400";
 
