@@ -2150,6 +2150,46 @@ def test_parse_sdn_xml_individual():
     assert person["identifiers"] == []
 
 
+SAMPLE_CONS_XML = """\
+<?xml version="1.0" encoding="utf-8"?>
+<sdnList xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_ADVANCED.XML">
+  <sdnEntry>
+    <uid>12345</uid>
+    <sdnType>Entity</sdnType>
+    <lastName>MEGA SHIPPING LLC</lastName>
+    <programList><program>IRAN</program></programList>
+  </sdnEntry>
+  <sdnEntry>
+    <uid>99999</uid>
+    <sdnType>Individual</sdnType>
+    <lastName>PETROV</lastName>
+    <firstName>Ivan</firstName>
+    <programList><program>RUSSIA-EO14024</program></programList>
+  </sdnEntry>
+</sdnList>
+"""
+
+
+def test_cross_feed_dedup():
+    """SDN and Consolidated may share entries — deduplicate by ofac_id."""
+    sdn_entries = parse_sdn_xml(SAMPLE_SDN_XML)       # has uid 12345 + 67890
+    cons_entries = parse_sdn_xml(SAMPLE_CONS_XML)      # has uid 12345 + 99999
+
+    all_entries = sdn_entries + cons_entries
+    assert len(all_entries) == 4  # 2 + 2 before dedup
+
+    seen_ids: set[str] = set()
+    unique: list[dict] = []
+    for entry in all_entries:
+        if entry["ofac_id"] not in seen_ids:
+            seen_ids.add(entry["ofac_id"])
+            unique.append(entry)
+
+    assert len(unique) == 3  # 12345 deduplicated, 67890 + 99999 unique
+    unique_ids = {e["ofac_id"] for e in unique}
+    assert unique_ids == {"12345", "67890", "99999"}
+
+
 def test_build_embed_text(collector):
     entry = {
         "full_name": "MEGA SHIPPING LLC",
