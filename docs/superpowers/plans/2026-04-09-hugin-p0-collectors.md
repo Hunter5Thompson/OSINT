@@ -787,12 +787,11 @@ PAGE_SIZE = 1000
 VIOLENCE_TYPES = {1: "state-based", 2: "non-state", 3: "one-sided"}
 
 
+UCDP_TIMEOUT = 90.0  # UCDP is notoriously slow
+
+
 class UCDPCollector(BaseCollector):
     """Fetch conflict events from UCDP GED API."""
-
-    def __init__(self, settings: Settings, redis_client: Any | None = None) -> None:
-        super().__init__(settings, redis_client)
-        self.http = __import__("httpx").AsyncClient(timeout=90.0)  # UCDP is slow
 
     async def _discover_version(self) -> str | None:
         current_year = datetime.now(timezone.utc).year
@@ -808,6 +807,7 @@ class UCDPCollector(BaseCollector):
                     f"{UCDP_BASE_URL}/{version}",
                     params={"pagesize": "1", "page": "0"},
                     headers=self._auth_headers(),
+                    timeout=UCDP_TIMEOUT,
                 )
                 if resp.status_code == 200 and resp.json().get("Result"):
                     log.info("ucdp_version_found", version=version)
@@ -858,6 +858,7 @@ class UCDPCollector(BaseCollector):
         today = datetime.now(timezone.utc).date()
         date_from = today - timedelta(days=365)
         total_new = 0
+        last_resp: dict | None = None
 
         for page in range(MAX_PAGES):
             try:
@@ -870,13 +871,15 @@ class UCDPCollector(BaseCollector):
                         "EndDate": today.isoformat(),
                     },
                     headers=self._auth_headers(),
+                    timeout=UCDP_TIMEOUT,
                 )
                 resp.raise_for_status()
             except Exception as exc:
                 log.error("ucdp_fetch_failed", page=page, error=str(exc))
                 break
 
-            results = resp.json().get("Result", [])
+            last_resp = resp.json()
+            results = last_resp.get("Result", [])
             if not results:
                 break
 
@@ -920,7 +923,7 @@ class UCDPCollector(BaseCollector):
             if len(results) < PAGE_SIZE:
                 break
 
-        total_count = resp.json().get("TotalCount", 0) if resp else 0
+        total_count = last_resp.get("TotalCount", 0) if last_resp else 0
         if total_count > MAX_PAGES * PAGE_SIZE:
             log.warning("ucdp_data_truncated", total=total_count, fetched=MAX_PAGES * PAGE_SIZE)
 
@@ -1591,6 +1594,11 @@ class USGSCollector(BaseCollector):
                 redis_client=self.redis,
             )
 
+            # Nuclear enrichment runs as a separate Neo4j call after process_item().
+            # Not atomic — if this fails, the Document+Event exist without the
+            # NEAR_TEST_SITE relationship. Acceptable: MERGE is idempotent,
+            # next run will retry. Combining into one tx would require changing
+            # process_item()'s internals.
             if payload["concern_level"]:
                 await self._write_nuclear_enrichment(
                     payload["url"],
@@ -1969,10 +1977,14 @@ class MilitaryAircraftCollector(BaseCollector):
         )
 
     async def _fetch_opensky(self) -> list[dict]:
-        log.info("opensky_fallback_starting")
-        # Simplified: would need OAuth token fetch + region queries
-        # For now, return empty — OpenSky is a fallback
-        log.warning("opensky_fallback_not_yet_implemented")
+        # KNOWN DEFERRED: OpenSky OAuth2 fallback not yet implemented.
+        # adsb.fi /v2/mil is the primary source and has been stable.
+        # If adsb.fi has extended downtime, implement:
+        #   1. OAuth2 Client Credentials token fetch
+        #   2. Region queries (PACIFIC, WESTERN bounding boxes)
+        #   3. ICAO hex-range filtering (adsb.fi pre-filters, OpenSky doesn't)
+        #   4. Rate-limit handling (4000 credits/day)
+        log.warning("opensky_fallback_not_implemented_skipping")
         return []
 ```
 
@@ -2177,9 +2189,12 @@ from feeds.base import BaseCollector
 
 log = structlog.get_logger(__name__)
 
-SDN_URL = "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/sdn_advanced.xml"
+OFAC_FEEDS = {
+    "sdn": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/sdn_advanced.xml",
+    "consolidated": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/cons_advanced.xml",
+}
 
-# Namespace used in OFAC XML
+# Namespace used in OFAC XML (same for both feeds)
 NS = {"ns": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_ADVANCED.XML"}
 
 
@@ -2326,20 +2341,33 @@ class OFACCollector(BaseCollector):
 
         await self._ensure_collection()
 
-        try:
-            resp = await self.http.get(SDN_URL, timeout=120.0)
-            resp.raise_for_status()
-        except Exception as exc:
-            log.error("ofac_fetch_failed", error=str(exc))
-            return
-
-        entries = parse_sdn_xml(resp.text)
-        log.info("ofac_xml_parsed", total_entries=len(entries))
-
         from qdrant_client.models import PointStruct
 
+        all_entries: list[dict] = []
+        for feed_name, feed_url in OFAC_FEEDS.items():
+            try:
+                resp = await self.http.get(feed_url, timeout=120.0)
+                resp.raise_for_status()
+            except Exception as exc:
+                log.error("ofac_fetch_failed", feed=feed_name, error=str(exc))
+                continue
+
+            entries = parse_sdn_xml(resp.text)
+            log.info("ofac_xml_parsed", feed=feed_name, entries=len(entries))
+            all_entries.extend(entries)
+
+        # Deduplicate across feeds by ofac_id (SDN and Consolidated may overlap)
+        seen_ids: set[str] = set()
+        unique_entries: list[dict] = []
+        for entry in all_entries:
+            if entry["ofac_id"] not in seen_ids:
+                seen_ids.add(entry["ofac_id"])
+                unique_entries.append(entry)
+
+        log.info("ofac_total_unique", total=len(unique_entries))
+
         points: list[PointStruct] = []
-        for entry in entries:
+        for entry in unique_entries:
             chash = self._content_hash("ofac", entry["ofac_id"])
             pid = self._point_id(chash)
 
@@ -2376,7 +2404,7 @@ class OFACCollector(BaseCollector):
         elapsed = round(time.monotonic() - start, 2)
         log.info(
             "ofac_collection_finished",
-            total_entries=len(entries),
+            total_entries=len(unique_entries),
             new_qdrant=len(points),
             elapsed_seconds=elapsed,
         )
