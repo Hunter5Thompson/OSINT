@@ -1,6 +1,6 @@
 # ACLED + FIRMS Cross-Korrelation — Design Spec
 
-> Batch-Job der FIRMS-Thermal-Anomalien mit ACLED-Konfliktereignissen korreliert. FRP-Spike + ACLED-Battle im selben 50km-Radius und ±1-Tag-Fenster = high-confidence verifiziertes Event. Ergebnis wird als `CORROBORATED_BY`-Relationship in Neo4j gespeichert.
+> Batch-Job der FIRMS-Thermal-Anomalien (`possible_explosion=true`) mit ACLED-Konfliktereignissen aller Event-Types korreliert. Treffer im selben 50km-Radius und ±1-Tag-Fenster bekommen einen gewichteten Confidence-Score. ACLED-Event-Type fließt als Score-Bonus ein ("Explosions/Remote violence" +0.2), ist aber kein harter Filter — auch "Battles" können durch Thermal-Anomalien bestätigt werden.
 
 **Datum:** 2026-04-09
 **Status:** Draft
@@ -25,15 +25,15 @@ FIRMS Collector (alle 2h)
   ↓ fertig
 Correlation Job startet (5 min versetzt)
   ↓
-Qdrant Scroll: FIRMS-Events
-  Filter: source=firms, possible_explosion=true, ingested_at > last_run
+Qdrant Paginated Scroll: FIRMS-Events
+  Filter: source=firms, possible_explosion=true, ingested_epoch > last_run
+  Loop: scroll(limit=100, offset=next_page_offset) bis keine Ergebnisse
   ↓
 Für jeden FIRMS-Hit (lat, lon, acq_date):
   ↓
-  Qdrant Scroll: ACLED-Candidates
-    Filter: source=acled,
-            latitude ∈ [firms_lat - 0.5°, firms_lat + 0.5°],
-            longitude ∈ [firms_lon - 0.5°, firms_lon + 0.5°]
+  Qdrant Paginated Scroll: ACLED-Candidates
+    Filter: source=acled, lat/lon bbox (±0.5° lat, ±0.5°/cos(lat) lon)
+    Loop: scroll(limit=200, offset=next_page_offset) bis keine Ergebnisse
     ↓
   Application-Level Filter:
     haversine(firms, acled) ≤ 50km
@@ -46,9 +46,37 @@ Für jeden FIRMS-Hit (lat, lon, acq_date):
   Neo4j: MERGE CORROBORATED_BY Relationship
 ```
 
+### Scroll-Pagination
+
+Beide Qdrant-Scrolls verwenden `next_page_offset` für vollständige Iteration:
+
+```python
+offset = None
+while True:
+    results, next_offset = qdrant.scroll(
+        collection_name=collection,
+        scroll_filter=filter,
+        limit=200,
+        offset=offset,
+    )
+    if not results:
+        break
+    for point in results:
+        yield point
+    offset = next_offset
+    if offset is None:
+        break
+```
+
 ### Last-Run Tracking
 
-Redis Key `correlation:last_run` speichert den ISO-Timestamp des letzten Laufs. Beim Start werden nur FIRMS-Events seit diesem Zeitpunkt verarbeitet. Beim ersten Run: alle FIRMS-Events der letzten 7 Tage.
+Redis Key `correlation:last_run` speichert den ISO-Timestamp des letzten **erfolgreichen** Laufs.
+
+**Schreib-Semantik:** `correlation:last_run` wird **nur am Ende eines vollständig durchgelaufenen Jobs** aktualisiert. Bei Abbruch oder Exception bleibt der alte Wert stehen → nächster Run verarbeitet dieselben FIRMS-Events erneut (idempotent durch MERGE).
+
+**Erster Run:** Kein `correlation:last_run` Key vorhanden → Fallback auf 7-Tage-Lookback.
+
+**Teilfehler:** Einzelne Neo4j-Write-Fehler für spezifische Korrelationen werden geloggt aber übersprungen. Der Job gilt als erfolgreich wenn der Scroll komplett durchlief — fehlgeschlagene Einzelkorrelationen werden beim nächsten Run nicht erneut versucht (akzeptabel: MERGE ist idempotent, bei Neo4j-Recovery kommen die beim übernächsten FIRMS-Batch-Cycle sowieso neu rein).
 
 ---
 
@@ -56,8 +84,14 @@ Redis Key `correlation:last_run` speichert den ISO-Timestamp des letzten Laufs. 
 
 ### FIRMS-Kandidaten (neue Explosions-Verdachtsfälle)
 
+`ingested_at` ist ein ISO-String im Qdrant-Payload. Qdrant `Range` arbeitet numerisch. Deshalb filtern wir über einen numerischen Epoch-Timestamp, den wir parallel zum ISO-String im Payload speichern müssen.
+
+**Payload-Erweiterung in BaseCollector:** `_build_point()` setzt zusätzlich `ingested_epoch: float` (Unix-Timestamp) neben dem bestehenden `ingested_at` ISO-String.
+
 ```python
 from qdrant_client.models import Filter, FieldCondition, MatchValue, Range
+
+last_run_epoch = last_run_dt.timestamp()
 
 firms_filter = Filter(must=[
     FieldCondition(key="source", match=MatchValue(value="firms")),
@@ -66,10 +100,13 @@ firms_filter = Filter(must=[
         match=MatchValue(value=True),
     ),
     FieldCondition(
-        key="ingested_at",
-        range=Range(gte=last_run_iso),
+        key="ingested_epoch",
+        range=Range(gte=last_run_epoch),
     ),
 ])
+```
+
+**Alternativ (wenn BaseCollector-Änderung zu invasiv):** Der Correlation-Job kann auch ohne `ingested_epoch` arbeiten, indem er **alle** FIRMS `possible_explosion=true` Events scrollt und application-seitig nach `ingested_at > last_run` filtert. Weniger effizient, aber kein Schema-Change nötig. Implementierung entscheidet.
 ```
 
 ### ACLED-Candidates (räumliche Vorfilterung)
@@ -176,26 +213,41 @@ def correlation_score(
 
 ### Relationship
 
+Da `process_item()` pro Document mehrere Events erzeugen kann, würde ein naives `MATCH (d)-[:DESCRIBES]->(e)` auf beiden Seiten N×M Kanten erzeugen. Lösung: **Document-zu-Document Relationship** statt Event-zu-Event.
+
 ```cypher
-MATCH (d1:Document {url: $acled_url})-[:DESCRIBES]->(e1:Event)
-MATCH (d2:Document {url: $firms_url})-[:DESCRIBES]->(e2:Event)
-MERGE (e1)-[r:CORROBORATED_BY]->(e2)
+MATCH (d1:Document {url: $acled_url})
+MATCH (d2:Document {url: $firms_url})
+MERGE (d1)-[r:CORROBORATED_BY]->(d2)
 SET r.distance_km = $dist,
     r.days_diff = $days,
     r.confidence = $score,
-    r.correlation_time = $timestamp
+    r.correlation_time = $timestamp,
+    r.acled_event_type = $acled_event_type,
+    r.firms_frp = $frp,
+    r.firms_brightness = $brightness
 ```
 
-**Richtung:** ACLED-Event → `CORROBORATED_BY` → FIRMS-Event. Der Konflikt wird durch den Satelliten bestätigt, nicht umgekehrt.
+**Warum Document statt Event:** Jedes ACLED-Event hat genau eine Document-URL, jeder FIRMS-Hit ebenso. Document-Matching ist 1:1, kein N×M-Problem. Die Events sind über `DESCRIBES` erreichbar:
 
-**MERGE statt CREATE:** Idempotent — bei erneutem Run wird die bestehende Relationship aktualisiert (Score könnte sich ändern wenn neue ACLED-Daten reinkommen).
+```cypher
+-- "Welche Konflikte haben Satellitenbestätigung?"
+MATCH (d1:Document)-[r:CORROBORATED_BY]->(d2:Document)
+MATCH (d1)-[:DESCRIBES]->(e:Event)
+WHERE r.confidence >= 0.5
+RETURN e.title, r.distance_km, r.confidence
+ORDER BY r.confidence DESC
+```
+
+**MERGE statt CREATE:** Idempotent — bei erneutem Run wird die bestehende Relationship aktualisiert.
 
 ### Beispiel-Query für den ReAct-Agent
 
 ```cypher
-MATCH (e:Event)-[r:CORROBORATED_BY]->(f:Event)
+MATCH (d1:Document)-[r:CORROBORATED_BY]->(d2:Document)
+MATCH (d1)-[:DESCRIBES]->(e:Event)
 WHERE r.confidence >= 0.5
-RETURN e.title, f.title, r.distance_km, r.confidence
+RETURN e.title, d2.title, r.distance_km, r.confidence
 ORDER BY r.confidence DESC
 LIMIT 20
 ```
@@ -250,11 +302,20 @@ correlation_interval_hours: int = 2
 
 ## 9. Scheduler-Registrierung
 
+Der Job startet 5 Minuten nach dem FIRMS-Job über `start_date`-Offset:
+
 ```python
+from datetime import datetime, timezone, timedelta
+
+# FIRMS runs on the hour (IntervalTrigger(hours=2))
+# Correlation starts 5 min after to let FIRMS finish
+correlation_start = datetime.now(timezone.utc) + timedelta(minutes=5)
+
 scheduler.add_job(
     run_correlation_job,
     trigger=IntervalTrigger(
         hours=settings.correlation_interval_hours,
+        start_date=correlation_start,
     ),
     id="firms_acled_correlation",
     name="FIRMS-ACLED Correlation",
