@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from feeds.ofac_collector import OFACCollector, parse_sdn_xml
-
 
 SAMPLE_SDN_XML = """\
 <?xml version="1.0" encoding="utf-8"?>

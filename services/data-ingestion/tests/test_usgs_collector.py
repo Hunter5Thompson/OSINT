@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import math
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from feeds.usgs_collector import (
-    USGSCollector,
     NUCLEAR_TEST_SITES,
-    concern_score,
+    USGSCollector,
     concern_level,
+    concern_score,
     haversine_km,
 )
 

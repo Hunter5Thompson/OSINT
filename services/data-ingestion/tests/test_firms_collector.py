@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import csv
-import io
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from feeds.firms_collector import (
-    FIRMSCollector,
     FIRMS_BBOXES,
     FIRMS_SATELLITES,
+    FIRMSCollector,
     is_possible_explosion,
 )
 

@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from feeds.military_aircraft_collector import (
     MilitaryAircraftCollector,
-    MILITARY_ICAO_RANGES,
-    REGION_BBOXES,
-    identify_branch,
     classify_region,
+    identify_branch,
 )
 
 

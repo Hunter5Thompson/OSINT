@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from feeds.ucdp_collector import UCDPCollector, VIOLENCE_TYPES
+from feeds.ucdp_collector import VIOLENCE_TYPES, UCDPCollector
 
 
 @pytest.fixture
