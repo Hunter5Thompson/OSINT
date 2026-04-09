@@ -13,11 +13,17 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from config import settings
+from feeds.acled_collector import ACLEDCollector
+from feeds.firms_collector import FIRMSCollector
 from feeds.gdelt_collector import GDELTCollector
 from feeds.hotspot_updater import HotspotUpdater
+from feeds.military_aircraft_collector import MilitaryAircraftCollector
+from feeds.ofac_collector import OFACCollector
 from feeds.rss_collector import RSSCollector
 from feeds.telegram_collector import TelegramCollector
 from feeds.tle_updater import TLEUpdater
+from feeds.ucdp_collector import UCDPCollector
+from feeds.usgs_collector import USGSCollector
 
 # Shared async Redis client for stream publishing
 _redis_client: aioredis.Redis | None = None
@@ -106,6 +112,72 @@ async def run_telegram_collector() -> None:
         await collector.disconnect()
 
 
+async def run_acled_collector() -> None:
+    """Collect ACLED conflict events."""
+    collector = ACLEDCollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("acled_job_failed")
+    finally:
+        await collector.close()
+
+
+async def run_ucdp_collector() -> None:
+    """Collect UCDP GED conflict events."""
+    collector = UCDPCollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("ucdp_job_failed")
+    finally:
+        await collector.close()
+
+
+async def run_firms_collector() -> None:
+    """Collect NASA FIRMS thermal anomalies."""
+    collector = FIRMSCollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("firms_job_failed")
+    finally:
+        await collector.close()
+
+
+async def run_usgs_collector() -> None:
+    """Collect USGS earthquakes with nuclear enrichment."""
+    collector = USGSCollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("usgs_job_failed")
+    finally:
+        await collector.close()
+
+
+async def run_military_collector() -> None:
+    """Collect military aircraft positions."""
+    collector = MilitaryAircraftCollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("military_job_failed")
+    finally:
+        await collector.close()
+
+
+async def run_ofac_collector() -> None:
+    """Collect OFAC sanctions list."""
+    collector = OFACCollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("ofac_job_failed")
+    finally:
+        await collector.close()
+
+
 # ---------------------------------------------------------------------------
 # Scheduler setup
 # ---------------------------------------------------------------------------
@@ -164,6 +236,56 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # --- Hugin P0 Collectors ---
+
+    scheduler.add_job(
+        run_acled_collector,
+        trigger=IntervalTrigger(hours=settings.acled_interval_hours),
+        id="acled_collector",
+        name="ACLED Conflict Collector",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        run_ucdp_collector,
+        trigger=IntervalTrigger(hours=settings.ucdp_interval_hours),
+        id="ucdp_collector",
+        name="UCDP GED Collector",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        run_firms_collector,
+        trigger=IntervalTrigger(hours=settings.firms_interval_hours),
+        id="firms_collector",
+        name="FIRMS Thermal Anomaly Collector",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        run_usgs_collector,
+        trigger=IntervalTrigger(hours=settings.usgs_interval_hours),
+        id="usgs_collector",
+        name="USGS Nuclear Earthquake Collector",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        run_military_collector,
+        trigger=IntervalTrigger(minutes=settings.military_interval_minutes),
+        id="military_aircraft_collector",
+        name="Military Aircraft Collector",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        run_ofac_collector,
+        trigger=CronTrigger(hour=3, minute=30, timezone="UTC"),
+        id="ofac_collector",
+        name="OFAC Sanctions Collector",
+        replace_existing=True,
+    )
+
     return scheduler
 
 
@@ -200,6 +322,12 @@ async def main() -> None:
         run_tle_updater(),
         run_hotspot_updater(),
         run_telegram_collector(),
+        run_acled_collector(),
+        run_ucdp_collector(),
+        run_firms_collector(),
+        run_usgs_collector(),
+        run_military_collector(),
+        # OFAC runs daily via cron, not on initial startup
     ]
     await asyncio.gather(*initial_tasks, return_exceptions=True)
     log.info("initial_collection_complete")
