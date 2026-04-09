@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -12,6 +11,7 @@ from qdrant_client.models import PointStruct
 
 from config import Settings
 from feeds.base import BaseCollector
+from feeds.geo import haversine_km
 from pipeline import process_item
 
 log = structlog.get_logger(__name__)
@@ -36,18 +36,6 @@ NUCLEAR_TEST_SITES: dict[str, tuple[float, float]] = {
 # ---------------------------------------------------------------------------
 # Pure utility functions (importable by tests without instantiating collector)
 # ---------------------------------------------------------------------------
-
-
-def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Return great-circle distance in kilometres between two WGS-84 points."""
-    if lat1 == lat2 and lon1 == lon2:
-        return 0.0
-    r = 6371.0  # Earth mean radius km
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlam = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    return r * 2 * math.asin(math.sqrt(a))
 
 
 def concern_score(magnitude: float, distance_km: float, depth_km: float) -> float:
