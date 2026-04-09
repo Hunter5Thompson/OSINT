@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     opensky_client_secret: str = ""
     military_interval_minutes: int = 15
 
+    # FIRMS-ACLED Correlation
+    correlation_radius_km: float = 50.0
+    correlation_time_window_days: int = 1
+    correlation_min_score: float = 0.3
+    correlation_interval_hours: int = 2
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

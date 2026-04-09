@@ -90,7 +90,9 @@ class BaseCollector(ABC):
         vector = await self._embed(text)
         point_id = self._point_id(content_hash)
         payload["content_hash"] = content_hash
-        payload["ingested_at"] = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
+        payload["ingested_at"] = now.isoformat()
+        payload["ingested_epoch"] = now.timestamp()
         return PointStruct(id=point_id, vector=vector, payload=payload)
 
     @abstractmethod

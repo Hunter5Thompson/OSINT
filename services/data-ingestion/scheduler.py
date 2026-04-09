@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import signal
 import sys
+from datetime import UTC, datetime, timedelta
 
 import redis.asyncio as aioredis
 import structlog
@@ -24,6 +25,7 @@ from feeds.telegram_collector import TelegramCollector
 from feeds.tle_updater import TLEUpdater
 from feeds.ucdp_collector import UCDPCollector
 from feeds.usgs_collector import USGSCollector
+from feeds.correlation_job import CorrelationJob
 
 # Shared async Redis client for stream publishing
 _redis_client: aioredis.Redis | None = None
@@ -178,6 +180,17 @@ async def run_ofac_collector() -> None:
         await collector.close()
 
 
+async def run_correlation_job() -> None:
+    """Correlate FIRMS thermal anomalies with ACLED conflict events."""
+    job = CorrelationJob(
+        settings=settings, redis_client=_get_redis_client()
+    )
+    try:
+        await job.run()
+    except Exception:
+        log.exception("correlation_job_failed")
+
+
 # ---------------------------------------------------------------------------
 # Scheduler setup
 # ---------------------------------------------------------------------------
@@ -283,6 +296,19 @@ def create_scheduler() -> AsyncIOScheduler:
         trigger=CronTrigger(hour=3, minute=30, timezone="UTC"),
         id="ofac_collector",
         name="OFAC Sanctions Collector",
+        replace_existing=True,
+    )
+
+    # FIRMS-ACLED Correlation — 5 min offset from FIRMS
+    correlation_start = datetime.now(UTC) + timedelta(minutes=5)
+    scheduler.add_job(
+        run_correlation_job,
+        trigger=IntervalTrigger(
+            hours=settings.correlation_interval_hours,
+            start_date=correlation_start,
+        ),
+        id="firms_acled_correlation",
+        name="FIRMS-ACLED Correlation",
         replace_existing=True,
     )
 
