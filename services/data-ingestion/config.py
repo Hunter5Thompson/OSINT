@@ -63,11 +63,6 @@ class Settings(BaseSettings):
 
     # --- Hugin P0 Collectors ---
 
-    # ACLED (Armed Conflict Location & Event Data)
-    acled_email: str = ""
-    acled_password: str = ""
-    acled_interval_hours: int = 6
-
     # UCDP (Uppsala Conflict Data Program)
     ucdp_access_token: str = ""
     ucdp_interval_hours: int = 12

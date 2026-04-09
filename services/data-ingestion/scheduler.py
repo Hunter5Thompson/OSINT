@@ -14,7 +14,6 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from config import settings
-from feeds.acled_collector import ACLEDCollector
 from feeds.firms_collector import FIRMSCollector
 from feeds.gdelt_collector import GDELTCollector
 from feeds.hotspot_updater import HotspotUpdater
@@ -113,16 +112,6 @@ async def run_telegram_collector() -> None:
     finally:
         await collector.disconnect()
 
-
-async def run_acled_collector() -> None:
-    """Collect ACLED conflict events."""
-    collector = ACLEDCollector(settings=settings, redis_client=_get_redis_client())
-    try:
-        await collector.collect()
-    except Exception:
-        log.exception("acled_job_failed")
-    finally:
-        await collector.close()
 
 
 async def run_ucdp_collector() -> None:
@@ -251,13 +240,6 @@ def create_scheduler() -> AsyncIOScheduler:
 
     # --- Hugin P0 Collectors ---
 
-    scheduler.add_job(
-        run_acled_collector,
-        trigger=IntervalTrigger(hours=settings.acled_interval_hours),
-        id="acled_collector",
-        name="ACLED Conflict Collector",
-        replace_existing=True,
-    )
 
     scheduler.add_job(
         run_ucdp_collector,
@@ -348,7 +330,6 @@ async def main() -> None:
         run_tle_updater(),
         run_hotspot_updater(),
         run_telegram_collector(),
-        run_acled_collector(),
         run_ucdp_collector(),
         run_firms_collector(),
         run_usgs_collector(),
