@@ -137,7 +137,7 @@ git commit -m "refactor(data-ingestion): extract haversine_km into shared geo mo
 
 **Files:**
 - Modify: `services/data-ingestion/feeds/base.py:87-94`
-- Modify: `services/data-ingestion/config.py:85-87`
+- Modify: `services/data-ingestion/config.py` (add before `model_config` at line 87)
 
 - [ ] **Step 1: Add ingested_epoch to _build_point()**
 
@@ -719,7 +719,7 @@ class CorrelationJob:
 
         # Step 1: Get new FIRMS explosion candidates
         firms_filter = build_firms_filter(last_run_epoch)
-        firms_hits = self._scroll_all(firms_filter)
+        firms_hits = await self._scroll_all(firms_filter)
         log.info("correlation_firms_hits", count=len(firms_hits))
 
         if not firms_hits:
@@ -746,7 +746,7 @@ class CorrelationJob:
             acled_filter = build_acled_bbox_filter(
                 firms_lat, firms_lon
             )
-            acled_candidates = self._scroll_all(acled_filter)
+            acled_candidates = await self._scroll_all(acled_filter)
 
             for acled in acled_candidates:
                 acled_lat = acled.get("latitude")
