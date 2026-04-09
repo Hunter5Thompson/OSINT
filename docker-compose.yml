@@ -15,7 +15,7 @@ services:
       --model /models/qwen3.5-27b-awq
       --served-model-name qwen3.5
       --max-model-len 32768
-      --gpu-memory-utilization 0.55
+      --gpu-memory-utilization 0.85
       --enforce-eager
       --port 8000
     networks:

@@ -1,6 +1,6 @@
 """Military aircraft collector — adsb.fi primary, OpenSky fallback (deferred stub).
 
-Primary source: GET https://api.adsb.fi/v2/mil — no auth, no rate limit.
+Primary source: GET https://opendata.adsb.fi/api/v2/mil — no auth, no rate limit.
 Fallback: OpenSky Network (OAuth2 client-credentials) — stub only, deferred.
 
 Dedup key: {icao24}|{timestamp_rounded_to_15min}
@@ -20,7 +20,7 @@ from feeds.base import BaseCollector
 
 log = structlog.get_logger(__name__)
 
-ADSB_FI_MIL_URL = "https://api.adsb.fi/v2/mil"
+ADSB_FI_MIL_URL = "https://opendata.adsb.fi/api/v2/mil"
 
 # ---------------------------------------------------------------------------
 # ICAO hex ranges per military branch

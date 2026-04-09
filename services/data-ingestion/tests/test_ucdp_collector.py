@@ -24,6 +24,7 @@ def mock_settings():
     s.neo4j_user = "neo4j"
     s.neo4j_password = "test"
     s.redis_stream_events = "events:new"
+    s.ucdp_access_token = "test-token-123"
     return s
 
 

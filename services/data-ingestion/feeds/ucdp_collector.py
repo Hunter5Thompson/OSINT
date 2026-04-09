@@ -55,12 +55,17 @@ class UCDPCollector(BaseCollector):
 
     async def _discover_version(self) -> str | None:
         """Try version candidates sequentially; return the first that responds."""
+        headers = self._auth_headers()
+        if not headers:
+            log.error("ucdp_access_token_missing")
+            return None
         for version in self._version_candidates():
             url = f"{UCDP_BASE_URL}/{version}"
             try:
                 resp = await self.http.get(
                     url,
                     params={"pagesize": 1, "page": 1},
+                    headers=headers,
                     timeout=UCDP_TIMEOUT,
                 )
                 if resp.status_code == 200:

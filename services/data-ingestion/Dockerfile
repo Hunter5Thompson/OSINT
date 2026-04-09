@@ -13,6 +13,7 @@ RUN uv sync --no-dev
 
 # Copy application code
 COPY config.py .
+COPY pipeline.py .
 COPY scheduler.py .
 COPY feeds/ feeds/
 
