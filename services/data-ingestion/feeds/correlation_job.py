@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-import time
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from typing import Any
 
 import httpx
@@ -235,8 +234,6 @@ class CorrelationJob:
                 f_lon: float = p["longitude"]
                 f_date: str = p.get("acq_date", "")
                 f_url: str = p.get("url", "")
-                f_frp: float = p.get("frp", 0.0)
-                f_brightness: float = p.get("brightness", 0.0)
                 f_confidence: str = p.get("confidence", "nominal")
                 f_explosion: bool = bool(p.get("possible_explosion", False))
 
@@ -257,13 +254,12 @@ class CorrelationJob:
                         continue
 
                     # Time window check
-                    if f_date and a_date:
-                        if not passes_time_filter(
-                            f_date,
-                            a_date,
-                            window_days=self.settings.correlation_time_window_days,
-                        ):
-                            continue
+                    if f_date and a_date and not passes_time_filter(
+                        f_date,
+                        a_date,
+                        window_days=self.settings.correlation_time_window_days,
+                    ):
+                        continue
 
                     # Compute score
                     days_diff = 0

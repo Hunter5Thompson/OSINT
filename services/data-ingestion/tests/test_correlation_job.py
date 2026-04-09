@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import math
-from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from feeds.correlation_job import (
+    CorrelationJob,
     build_acled_bbox_filter,
     build_firms_filter,
-    passes_time_filter,
-    CorrelationJob,
     correlation_score,
+    passes_time_filter,
 )
 
 
@@ -148,7 +146,7 @@ async def test_first_run_uses_7_day_lookback(job):
     job.redis = mock_redis
 
     epoch = await job._get_last_run_epoch()
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
     seven_days_ago = datetime.now(UTC).timestamp() - 7 * 86400
     assert abs(epoch - seven_days_ago) < 60
 
