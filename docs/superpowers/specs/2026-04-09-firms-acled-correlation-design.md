@@ -27,7 +27,7 @@ Correlation Job startet (5 min versetzt)
   ↓
 Qdrant Paginated Scroll: FIRMS-Events
   Filter: source=firms, possible_explosion=true, ingested_epoch > last_run
-  Loop: scroll(limit=100, offset=next_page_offset) bis keine Ergebnisse
+  Loop: scroll(limit=200, offset=next_page_offset) bis keine Ergebnisse
   ↓
 Für jeden FIRMS-Hit (lat, lon, acq_date):
   ↓
@@ -76,7 +76,7 @@ Redis Key `correlation:last_run` speichert den ISO-Timestamp des letzten **erfol
 
 **Erster Run:** Kein `correlation:last_run` Key vorhanden → Fallback auf 7-Tage-Lookback.
 
-**Teilfehler:** Einzelne Neo4j-Write-Fehler für spezifische Korrelationen werden geloggt aber übersprungen. Der Job gilt als erfolgreich wenn der Scroll komplett durchlief — fehlgeschlagene Einzelkorrelationen werden beim nächsten Run nicht erneut versucht (akzeptabel: MERGE ist idempotent, bei Neo4j-Recovery kommen die beim übernächsten FIRMS-Batch-Cycle sowieso neu rein).
+**Teilfehler:** Einzelne Neo4j-Write-Fehler für spezifische Korrelationen werden in eine `failed_pairs: list[tuple[str, str]]` (acled_url, firms_url) gesammelt. Am Job-Ende wird `correlation:last_run` nur aktualisiert wenn `failed_pairs` leer ist. Bei Fehlern bleibt der alte Timestamp stehen → nächster Run verarbeitet dieselben FIRMS-Events erneut und versucht die fehlgeschlagenen Korrelationen nochmal. Das verhindert dauerhaften Datenverlust durch FIRMS-Dedup (FIRMS-Hotspots tauchen nach Qdrant-Dedup nicht erneut auf, deshalb muss der Correlation-Job selbst retry-fähig sein).
 
 ---
 
@@ -107,7 +107,6 @@ firms_filter = Filter(must=[
 ```
 
 **Alternativ (wenn BaseCollector-Änderung zu invasiv):** Der Correlation-Job kann auch ohne `ingested_epoch` arbeiten, indem er **alle** FIRMS `possible_explosion=true` Events scrollt und application-seitig nach `ingested_at > last_run` filtert. Weniger effizient, aber kein Schema-Change nötig. Implementierung entscheidet.
-```
 
 ### ACLED-Candidates (räumliche Vorfilterung)
 
