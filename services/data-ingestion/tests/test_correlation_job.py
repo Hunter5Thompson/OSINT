@@ -1,4 +1,4 @@
-"""Tests for FIRMS-ACLED cross-correlation job."""
+"""Tests for FIRMS cross-correlation job."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pytest
 
 from feeds.correlation_job import (
     CorrelationJob,
-    build_acled_bbox_filter,
+    build_conflict_bbox_filter,
     build_firms_filter,
     correlation_score,
     passes_time_filter,
@@ -21,7 +21,7 @@ def test_score_close_same_day_explosion():
         distance_km=5.0,
         days_diff=0,
         possible_explosion=True,
-        acled_event_type="Explosions/Remote violence",
+        conflict_codebook_type="military.airstrike",
         firms_confidence="high",
     )
     assert score >= 0.8
@@ -33,7 +33,7 @@ def test_score_far_next_day():
         distance_km=45.0,
         days_diff=1,
         possible_explosion=False,
-        acled_event_type="Battles",
+        conflict_codebook_type="other.unclassified",
         firms_confidence="nominal",
     )
     assert score < 0.5
@@ -45,7 +45,7 @@ def test_score_boundary_50km():
         distance_km=50.0,
         days_diff=0,
         possible_explosion=False,
-        acled_event_type="Battles",
+        conflict_codebook_type="other.unclassified",
         firms_confidence="nominal",
     )
     assert score == 0.0
@@ -57,7 +57,7 @@ def test_score_capped_at_1():
         distance_km=0.0,
         days_diff=0,
         possible_explosion=True,
-        acled_event_type="Explosions/Remote violence",
+        conflict_codebook_type="military.airstrike",
         firms_confidence="high",
     )
     assert score == 1.0
@@ -69,7 +69,7 @@ def test_score_zero_km_same_day_no_bonus():
         distance_km=0.0,
         days_diff=0,
         possible_explosion=False,
-        acled_event_type="Battles",
+        conflict_codebook_type="other.unclassified",
         firms_confidence="nominal",
     )
     assert score == 1.0
@@ -77,7 +77,7 @@ def test_score_zero_km_same_day_no_bonus():
 
 def test_bbox_filter_equator():
     """At equator, lon_delta ≈ 0.5."""
-    f = build_acled_bbox_filter(0.0, 30.0)
+    f = build_conflict_bbox_filter(0.0, 30.0)
     must = f.must
     lat_cond = next(c for c in must if c.key == "latitude")
     lon_cond = next(c for c in must if c.key == "longitude")
@@ -89,7 +89,7 @@ def test_bbox_filter_equator():
 
 def test_bbox_filter_high_latitude():
     """At 60°N, lon_delta should be wider (~1.0°)."""
-    f = build_acled_bbox_filter(60.0, 30.0)
+    f = build_conflict_bbox_filter(60.0, 30.0)
     must = f.must
     lon_cond = next(c for c in must if c.key == "longitude")
     lon_width = lon_cond.range.lte - lon_cond.range.gte
@@ -171,14 +171,14 @@ async def test_failed_pairs_blocks_last_run_update(job):
         "confidence": "high",
         "possible_explosion": True,
     }
-    acled_point = MagicMock()
-    acled_point.payload = {
-        "source": "acled",
+    conflict_point = MagicMock()
+    conflict_point.payload = {
+        "source": "gdelt",
         "latitude": 48.01,
         "longitude": 35.01,
-        "event_date": "2026-04-01",
-        "url": "https://acled.example/1",
-        "event_type": "Battles",
+        "seen_date": "2026-04-01T12:00:00",
+        "url": "https://gdelt.example/1",
+        "codebook_type": "military.airstrike",
     }
 
     call_count = 0
@@ -188,7 +188,7 @@ async def test_failed_pairs_blocks_last_run_update(job):
         if call_count == 1:
             return ([firms_point], None)
         if call_count == 2:
-            return ([acled_point], None)
+            return ([conflict_point], None)
         return ([], None)
 
     job.qdrant.scroll = mock_scroll
