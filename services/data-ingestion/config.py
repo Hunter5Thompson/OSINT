@@ -61,6 +61,29 @@ class Settings(BaseSettings):
     vision_dead_letter_queue: str = "vision:dead_letter"
     vision_consumer_group: str = "vision-workers"
 
+    # --- Hugin P0 Collectors ---
+
+    # ACLED (Armed Conflict Location & Event Data)
+    acled_email: str = ""
+    acled_password: str = ""
+    acled_interval_hours: int = 6
+
+    # UCDP (Uppsala Conflict Data Program)
+    ucdp_access_token: str = ""
+    ucdp_interval_hours: int = 12
+
+    # NASA FIRMS (Fire Information)
+    nasa_earthdata_key: str = ""
+    firms_interval_hours: int = 2
+
+    # USGS Earthquake
+    usgs_interval_hours: int = 6
+
+    # Military Aircraft (OpenSky fallback)
+    opensky_client_id: str = ""
+    opensky_client_secret: str = ""
+    military_interval_minutes: int = 15
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
