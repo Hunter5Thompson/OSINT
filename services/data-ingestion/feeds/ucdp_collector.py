@@ -36,13 +36,22 @@ class UCDPCollector(BaseCollector):
         self._api_version: str | None = None
 
     def _version_candidates(self) -> list[str]:
-        """Return API version candidates to try, most recent first."""
+        """Return API version candidates to try, most recent first.
+
+        GED yearly releases (e.g. 25.1) lag the calendar year.
+        GED Candidate monthly releases (e.g. 26.0.2) have more current data.
+        We try candidate (monthly) first, then yearly, newest to oldest.
+        """
         year = datetime.now(UTC).year
+        yy = year - 2000  # e.g. 26 for 2026
+        month = datetime.now(UTC).month
         candidates = [
-            f"{year - 2000}.1",
-            f"{year - 2001}.1",
-            "25.1",
-            "24.1",
+            # GED Candidate: current year, latest month
+            f"{yy}.0.{month}",
+            f"{yy}.0.{month - 1}" if month > 1 else f"{yy - 1}.0.12",
+            # GED yearly: previous year (most likely available)
+            f"{yy - 1}.1",
+            f"{yy - 2}.1",
         ]
         # Deduplicate while preserving order
         seen: set[str] = set()
