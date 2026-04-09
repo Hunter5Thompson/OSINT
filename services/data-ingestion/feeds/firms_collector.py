@@ -176,7 +176,8 @@ class FIRMSCollector(BaseCollector):
                     )
                     embed_text = (
                         f"{title}. FRP: {row['frp']} MW, Brightness: {row['brightness']} K, "
-                        f"Confidence: {row['confidence']}, Date: {row['acq_date']} {row['acq_time']}."
+                        f"Confidence: {row['confidence']}, "
+                        f"Date: {row['acq_date']} {row['acq_time']}."
                     )
 
                     await process_item(

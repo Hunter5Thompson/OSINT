@@ -9,10 +9,7 @@ Neo4j write: MERGE MilitaryAircraft → MERGE Location → MERGE SPOTTED_AT
 
 from __future__ import annotations
 
-import asyncio
-import math
 import time
-from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -150,7 +147,8 @@ class MilitaryAircraftCollector(BaseCollector):
                 speed_ms = None
 
             branch = identify_branch(icao24)
-            region = classify_region(lat, lon) if (lat is not None and lon is not None) else "unknown"
+            has_pos = lat is not None and lon is not None
+            region = classify_region(lat, lon) if has_pos else "unknown"
 
             # Dedup key: icao24 + 15-minute bucket
             ts_bucket = _round_to_15min(int(now_ts))

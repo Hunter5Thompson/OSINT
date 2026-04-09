@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
@@ -44,7 +44,7 @@ class ACLEDCollector(BaseCollector):
         log.info("acled_authenticated")
 
     def _build_query_url(self, page: int = 1) -> str:
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         date_from = today - timedelta(days=30)
         params = {
             "event_type": ACLED_EVENT_TYPES,
@@ -61,7 +61,10 @@ class ACLEDCollector(BaseCollector):
         lon_str = raw.get("longitude", "")
         return {
             "source": "acled",
-            "title": f"{raw.get('event_type', '')} in {raw.get('admin1', '')}, {raw.get('country', '')}",
+            "title": (
+                f"{raw.get('event_type', '')} in "
+                f"{raw.get('admin1', '')}, {raw.get('country', '')}"
+            ),
             "url": f"https://acleddata.com/data/{raw.get('event_id_cnty', '')}",
             "acled_event_id": raw.get("event_id_cnty", ""),
             "event_type": raw.get("event_type", ""),

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -156,7 +155,7 @@ class OFACCollector(BaseCollector):
         """Write SanctionedEntity + relationships to Neo4j using deterministic Cypher templates."""
         neo4j_tx_url = f"{self.settings.neo4j_url}/db/neo4j/tx/commit"
         auth = (self.settings.neo4j_user, self.settings.neo4j_password)
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         statements = []
 

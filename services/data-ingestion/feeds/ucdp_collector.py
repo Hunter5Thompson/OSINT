@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -37,7 +37,7 @@ class UCDPCollector(BaseCollector):
 
     def _version_candidates(self) -> list[str]:
         """Return API version candidates to try, most recent first."""
-        year = datetime.now(timezone.utc).year
+        year = datetime.now(UTC).year
         candidates = [
             f"{year - 2000}.1",
             f"{year - 2001}.1",
@@ -78,7 +78,7 @@ class UCDPCollector(BaseCollector):
         return f"{UCDP_BASE_URL}/{version}"
 
     def _build_params(self, page: int = 1) -> dict:
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         date_from = today - timedelta(days=365)
         params: dict[str, Any] = {
             "StartDate": date_from.isoformat(),

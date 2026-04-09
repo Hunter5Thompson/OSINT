@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -90,7 +90,7 @@ class BaseCollector(ABC):
         vector = await self._embed(text)
         point_id = self._point_id(content_hash)
         payload["content_hash"] = content_hash
-        payload["ingested_at"] = datetime.now(timezone.utc).isoformat()
+        payload["ingested_at"] = datetime.now(UTC).isoformat()
         return PointStruct(id=point_id, vector=vector, payload=payload)
 
     @abstractmethod

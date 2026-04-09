@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import math
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -55,9 +54,9 @@ def concern_score(magnitude: float, distance_km: float, depth_km: float) -> floa
     """Heuristic concern score 0–100 for a seismic event near a nuclear test site.
 
     Formula:
-        mag_factor    = (mag / 9.0) * 0.45              — magnitude drives base score
-        prox_factor   = max(0, (40 - dist) / 40) * 0.35 — proximity within 40 km is high-weight
-        depth_factor  = max(0, 1 - depth / 10) * 0.15   — shallow events (< 10 km) are more concerning
+        mag_factor   = (mag / 9.0) * 0.45
+        prox_factor  = max(0, (40 - dist) / 40) * 0.35
+        depth_factor = max(0, 1 - depth / 10) * 0.15
 
     Score = (mag_factor + prox_factor + depth_factor) * 100
     """
@@ -144,7 +143,7 @@ class USGSCollector(BaseCollector):
                 clevel = concern_level(cscore)
 
             ts_ms = props.get("time") or 0
-            event_time = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat()
+            event_time = datetime.fromtimestamp(ts_ms / 1000, tz=UTC).isoformat()
 
             results.append(
                 {
@@ -156,10 +155,7 @@ class USGSCollector(BaseCollector):
                     "latitude": lat,
                     "longitude": lon,
                     "depth_km": depth_km,
-                    "url": props.get(
-                        "url",
-                        f"https://earthquake.usgs.gov/earthquakes/eventpage/{feature.get('id', '')}",
-                    ),
+                    "url": props.get("url", ""),
                     "nearest_test_site": site_name,
                     "distance_to_site_km": site_dist,
                     "concern_score": cscore,
@@ -215,7 +211,11 @@ ON CREATE SET r.distance_km   = $distance_km,
             resp.raise_for_status()
             errors = resp.json().get("errors", [])
             if errors:
-                log.warning("usgs_neo4j_near_test_site_errors", errors=errors, usgs_id=event["usgs_id"])
+                log.warning(
+                    "usgs_neo4j_near_test_site_errors",
+                    errors=errors,
+                    usgs_id=event["usgs_id"],
+                )
             else:
                 log.debug(
                     "usgs_neo4j_near_test_site_written",
@@ -291,7 +291,7 @@ ON CREATE SET r.distance_km   = $distance_km,
                 redis_client=self.redis,
             )
 
-            # Write nuclear proximity relationship (eventual consistency — see _write_near_test_site docstring)
+            # Nuclear proximity (eventual consistency, see docstring)
             if event["nearest_test_site"]:
                 await self._write_near_test_site(event)
 
