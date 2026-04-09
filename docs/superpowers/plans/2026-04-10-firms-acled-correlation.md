@@ -427,18 +427,80 @@ async def test_first_run_uses_7_day_lookback(job):
     from datetime import datetime, UTC
     seven_days_ago = datetime.now(UTC).timestamp() - 7 * 86400
     assert abs(epoch - seven_days_ago) < 60  # within 1 minute
+
+
+@pytest.mark.asyncio
+async def test_failed_pairs_blocks_last_run_update(job):
+    """When Neo4j writes fail, last_run must NOT be updated."""
+    mock_redis = AsyncMock()
+    mock_redis.get = AsyncMock(return_value="1712000000.0")
+    mock_redis.set = AsyncMock()
+    job.redis = mock_redis
+
+    # Mock: one FIRMS hit, one ACLED candidate within range
+    firms_point = MagicMock()
+    firms_point.payload = {
+        "source": "firms",
+        "latitude": 48.0,
+        "longitude": 35.0,
+        "acq_date": "2026-04-01",
+        "url": "https://firms.example/1",
+        "frp": 95.0,
+        "brightness": 400.0,
+        "confidence": "high",
+        "possible_explosion": True,
+    }
+    acled_point = MagicMock()
+    acled_point.payload = {
+        "source": "acled",
+        "latitude": 48.01,
+        "longitude": 35.01,
+        "event_date": "2026-04-01",
+        "url": "https://acled.example/1",
+        "event_type": "Battles",
+    }
+
+    # Scroll returns one FIRMS hit, then one ACLED candidate
+    call_count = 0
+
+    def mock_scroll(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return ([firms_point], None)
+        if call_count == 2:
+            return ([acled_point], None)
+        return ([], None)
+
+    job.qdrant.scroll = mock_scroll
+
+    # Neo4j write fails
+    with patch("feeds.correlation_job.httpx.AsyncClient") as mock_http:
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(
+            side_effect=Exception("Neo4j down")
+        )
+        mock_http.return_value = mock_client
+
+        await job.run()
+
+    # last_run must NOT have been updated
+    mock_redis.set.assert_not_called()
 ```
 
 - [ ] **Step 2: Run tests to verify new tests fail**
 
 Run: `cd /home/deadpool-ultra/ODIN/OSINT/services/data-ingestion && uv run pytest tests/test_correlation_job.py -v`
-Expected: 5 old tests PASS, new tests FAIL (missing functions)
+Expected: 5 old tests PASS, 9 new tests FAIL (missing functions)
 
 - [ ] **Step 3: Implement full CorrelationJob**
 
 Update `services/data-ingestion/feeds/correlation_job.py` — add the full batch job after the existing `correlation_score` function:
 
 ```python
+import asyncio
 import math
 import time
 from datetime import UTC, date, datetime, timedelta
@@ -551,12 +613,17 @@ class CorrelationJob:
                 str(datetime.now(UTC).timestamp()),
             )
 
-    def _scroll_all(self, scroll_filter: Filter) -> list[dict]:
-        """Paginated scroll through all matching Qdrant points."""
+    async def _scroll_all(self, scroll_filter: Filter) -> list[dict]:
+        """Paginated scroll through all matching Qdrant points.
+
+        Uses asyncio.to_thread to avoid blocking the event loop
+        (qdrant-client is synchronous).
+        """
         all_points: list[dict] = []
         offset = None
         while True:
-            results, next_offset = self.qdrant.scroll(
+            results, next_offset = await asyncio.to_thread(
+                self.qdrant.scroll,
                 collection_name=self.settings.qdrant_collection,
                 scroll_filter=scroll_filter,
                 limit=SCROLL_LIMIT,
@@ -762,7 +829,7 @@ class CorrelationJob:
 - [ ] **Step 4: Run all correlation tests**
 
 Run: `cd /home/deadpool-ultra/ODIN/OSINT/services/data-ingestion && uv run pytest tests/test_correlation_job.py -v`
-Expected: All 12 tests PASS
+Expected: All 14 tests PASS
 
 - [ ] **Step 5: Run full test suite**
 
@@ -811,9 +878,16 @@ async def run_correlation_job() -> None:
 
 Add after the OFAC job registration (line 287), before `return scheduler`:
 
+First, add the missing import at the top of `scheduler.py` (after `import sys`, around line 7):
+
+```python
+from datetime import UTC, datetime, timedelta
+```
+
+Then add after the OFAC job registration (line 287), before `return scheduler`:
+
 ```python
     # FIRMS-ACLED Correlation — 5 min offset from FIRMS
-    from datetime import timedelta
     correlation_start = datetime.now(UTC) + timedelta(minutes=5)
     scheduler.add_job(
         run_correlation_job,
@@ -827,7 +901,7 @@ Add after the OFAC job registration (line 287), before `return scheduler`:
     )
 ```
 
-Note: `datetime` and `UTC` are already imported at the top of scheduler.py. Do NOT add to `initial_tasks` — correlation needs existing data.
+Do NOT add to `initial_tasks` — correlation needs existing data.
 
 - [ ] **Step 4: Verify job count**
 
