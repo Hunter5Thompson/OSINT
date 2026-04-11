@@ -138,7 +138,7 @@ export function MilAircraftLayer({ viewer, tracks, visible, onSelect }: MilAircr
       });
       idMapRef.current.set(bb as unknown as object, t);
     }
-  }, [tracks, visible]);
+  }, [tracks, visible, viewer]);
 
   return null;
 }

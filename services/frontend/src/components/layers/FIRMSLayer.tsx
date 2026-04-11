@@ -133,7 +133,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
         pulsesRef.current.push({ ring, color });
       }
     }
-  }, [hotspots, visible]);
+  }, [hotspots, visible, viewer]);
 
   useEffect(() => {
     if (!visible || pulsesRef.current.length === 0) {
