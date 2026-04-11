@@ -125,7 +125,7 @@ export function MilAircraftLayer({ viewer, tracks, visible, onSelect }: MilAircr
         idMapRef.current.set(poly as unknown as object, t);
       }
 
-      const last = t.points[t.points.length - 1];
+      const last = t.points[t.points.length - 1]!;
       const position = Cesium.Cartesian3.fromDegrees(last.lon, last.lat, last.altitude_m ?? 0);
       const rotationRad = Cesium.Math.toRadians(-(last.heading ?? 0) + 90);
       const bb = bc.add({
