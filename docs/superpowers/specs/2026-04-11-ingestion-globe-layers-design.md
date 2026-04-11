@@ -103,7 +103,8 @@ Reuse the existing `_read_query(cypher, params)` helper already implemented in `
 GET /api/v1/firms/hotspots?since_hours=24
 ```
 
-- Router is mounted with `prefix="/api/v1"` in `main.py` like all existing routers
+The full URL path is `/api/v1/firms/hotspots`. This is assembled exactly once: the router declares `APIRouter(prefix="/firms", tags=["firms"])` and `main.py` mounts it with `include_router(firms.router, prefix="/api/v1")`. **Do not also prefix `/api/v1` on the router itself** — that would produce `/api/v1/api/v1/firms/hotspots`.
+
 - `since_hours` is an int query parameter, default 24, minimum 1, maximum 168 (7 days); values outside the range produce HTTP 422 via `Query(ge=1, le=168)`
 - Uses `get_qdrant_client()` to fetch the async Qdrant client
 - Returns `list[FIRMSHotspot]`
@@ -198,7 +199,8 @@ No collector change is needed.
 GET /api/v1/aircraft/tracks?since_hours=24
 ```
 
-- Router mounted with `prefix="/api/v1"` in `main.py`
+Router declares `APIRouter(prefix="/aircraft", tags=["aircraft"])`, mounted in `main.py` with `include_router(aircraft.router, prefix="/api/v1")`. Same single-prefix rule as the FIRMS router.
+
 - `since_hours` is `Query(default=24, ge=1, le=72)` — values outside the range return HTTP 422
 - Uses the extracted `_read_query(cypher, params)` helper from `app/services/neo4j_client.py`
 - Returns `list[AircraftTrack]`
@@ -297,6 +299,7 @@ interface FIRMSHotspot {
   satellite: string;
   bbox_name: string;
   possible_explosion: boolean;
+  firms_map_url: string;        // server-computed, see backend Response Model
 }
 
 interface FIRMSLayerProps {
@@ -329,7 +332,19 @@ interface FIRMSLayerProps {
 
 ### Data fetch — `hooks/useFIRMSHotspots.ts` (new)
 
+Use the existing API client at `services/frontend/src/services/api.ts`, which exports a module-level `BASE = "/api/v1"` and its helper calls concatenate paths to it. The hook adds a new `getFIRMSHotspots(sinceHours)` function to `api.ts` that calls `fetch(`${BASE}/firms/hotspots?since_hours=${sinceHours}`)`, then imports that function here. No hardcoded `/api/v1` in the hook itself — it stays in one place.
+
 ```tsx
+// in services/api.ts
+export async function getFIRMSHotspots(sinceHours = 24): Promise<FIRMSHotspot[]> {
+  const res = await fetch(`${BASE}/firms/hotspots?since_hours=${sinceHours}`);
+  if (!res.ok) throw new Error(`FIRMS fetch failed: ${res.status}`);
+  return res.json();
+}
+
+// in hooks/useFIRMSHotspots.ts
+import { getFIRMSHotspots } from "../services/api";
+
 export function useFIRMSHotspots(sinceHours = 24): FIRMSHotspot[] {
   const [data, setData] = useState<FIRMSHotspot[]>([]);
   useEffect(() => {
@@ -337,9 +352,7 @@ export function useFIRMSHotspots(sinceHours = 24): FIRMSHotspot[] {
     const tick = async () => {
       if (document.hidden) return;
       try {
-        const res = await fetch(`${API_BASE}/api/v1/firms/hotspots?since_hours=${sinceHours}`);
-        if (!res.ok) return;
-        const json = await res.json();
+        const json = await getFIRMSHotspots(sinceHours);
         if (!cancelled) setData(json);
       } catch (err) {
         console.warn("FIRMS fetch failed", err);
@@ -426,9 +439,7 @@ interface MilAircraftLayerProps {
 
 ### Data fetch — `hooks/useAircraftTracks.ts` (new)
 
-Same shape as `useFIRMSHotspots`, 30 s interval, `GET ${API_BASE}/api/v1/aircraft/tracks?since_hours=24`.
-
-Both hooks should import and reuse the existing `api.ts` client (`services/frontend/src/api.ts`) if it exposes a base or helper; otherwise call `fetch` directly against the URL derived from the same environment variable `api.ts` uses, to keep a single source of truth for the API base.
+Same shape as `useFIRMSHotspots`, 30 s interval. Adds a `getAircraftTracks(sinceHours)` function to `services/frontend/src/services/api.ts` that calls `fetch(`${BASE}/aircraft/tracks?since_hours=${sinceHours}`)`. The hook imports it and polls every 30 s. No hardcoded `/api/v1` in the hook.
 
 ### Tests — `MilAircraftLayer.test.tsx` + `useAircraftTracks.test.ts`
 
@@ -445,17 +456,24 @@ The existing `OperationsPanel` (left-docked, header "OPERATIONS") holds layer to
 
 ### Changes
 
-- Add a "INGESTION" section header inside `OperationsPanel`, visually separated from the existing `DATA LAYERS` block by a thin border and small header label (`text-[10px] tracking-widest text-green-500/60`).
-- Add two new entries to `LAYER_CONFIG`:
+- Split the existing single `LAYER_CONFIG` constant into **two arrays**:
 
 ```tsx
-{ key: "firmsHotspots", label: "FIRMS HOTSPOTS", color: "#ff7a33" },
-{ key: "milAircraft",   label: "MIL AIRCRAFT",   color: "#66e6ff" },
+const CORE_LAYERS: LayerConfigEntry[] = [
+  { key: "flights", label: "FLIGHTS", color: "#c4813a" },
+  { key: "satellites", label: "SATELLITES", color: "#06b6d4" },
+  // ... existing entries unchanged ...
+];
+
+const INGESTION_LAYERS: LayerConfigEntry[] = [
+  { key: "firmsHotspots", label: "FIRMS HOTSPOTS", color: "#ff7a33" },
+  { key: "milAircraft",   label: "MIL AIRCRAFT",   color: "#66e6ff" },
+];
 ```
 
-- Extend `LayerIcon` `switch` with two new cases drawing a small flame glyph for `firmsHotspots` and a jet silhouette for `milAircraft`.
-- Render the INGESTION entries in a separate `.map()` pass below the existing `LAYER_CONFIG` loop, so they appear grouped.
-- Counter badges: append `({count})` to the label when the count is > 0. Counts come from new props `firmsCount`/`milAircraftCount` passed down by `App.tsx`. These are derived from hook data — no extra requests.
+- Render `CORE_LAYERS` under the existing `DATA LAYERS` header via `.map()`, then render an **INGESTION** header (`text-[10px] tracking-widest text-green-500/60`) with a thin top border, followed by a second `.map()` over `INGESTION_LAYERS`. Each array is iterated exactly once — no duplicates.
+- Extend `LayerIcon` `switch` with two new cases: a small flame glyph for `firmsHotspots` and a jet silhouette for `milAircraft`.
+- Counter badges: append `({count})` to the label when the count is > 0. Counts come from new props `firmsCount` and `milAircraftCount` on `OperationsPanelProps`, passed down by `App.tsx` as `hotspots.length` and `tracks.length` from the hooks. No extra requests.
 
 ### LayerVisibility type extension
 
@@ -542,8 +560,8 @@ MilAircraftLayer  useAircraftTracks   /api/v1/aircraft/tracks   Redis 30s
 
 ### Backend (pytest)
 
-- `services/backend/tests/test_firms_router.py` — 5 cases (see FIRMS Router section).
-- `services/backend/tests/test_aircraft_router.py` — 5 cases (see Aircraft Router section).
+- `services/backend/tests/test_firms_router.py` — 9 cases, see FIRMS Router "Tests" section.
+- `services/backend/tests/test_aircraft_router.py` — 6 cases, see Aircraft Router "Tests" section.
 - Ruff + mypy clean on new files.
 
 ### Frontend (vitest + @testing-library/react)
@@ -594,12 +612,13 @@ MilAircraftLayer  useAircraftTracks   /api/v1/aircraft/tracks   Redis 30s
 - `services/backend/app/routers/graph.py` — refactor to import `_read_query` from `app/services/neo4j_client.py` (pure move, no behavior change)
 - `services/frontend/src/App.tsx` — new state, hooks, layer mounts, SelectionPanel wiring
 - `services/frontend/src/components/ui/OperationsPanel.tsx` — Ingestion sub-section, extended `LAYER_CONFIG`, new `LayerIcon` cases, new props for counts
-- `services/frontend/src/types/index.ts` — add `FIRMSHotspot`, `AircraftPoint`, `AircraftTrack`; extend `LayerVisibility` with `firmsHotspots` and `milAircraft`
+- `services/frontend/src/services/api.ts` — add `getFIRMSHotspots(sinceHours)` and `getAircraftTracks(sinceHours)` functions reusing the existing `BASE = "/api/v1"` constant
+- `services/frontend/src/types/index.ts` — add `FIRMSHotspot` (including `firms_map_url`), `AircraftPoint`, `AircraftTrack`; extend `LayerVisibility` with `firmsHotspots` and `milAircraft`
 
 ## Open Verification Steps (before implementation)
 
 - Confirm `ingested_epoch` is present on FIRMS payloads in production Qdrant (was added 2026-04-10; sanity check with a scroll query against the running stack).
-- Confirm `services/frontend/src/api.ts` exports an API-base value or helper the new hooks can reuse (expected, since existing code uses `/api/v1`). If not, add one.
+- Confirm `services/frontend/src/services/api.ts` still exports the `BASE = "/api/v1"` constant (verified 2026-04-11).
 - Confirm that `qdrant_url` is already present in `services/backend/app/config.py` — if not, add it.
 
 These checks happen during Task 1 of the implementation plan.
@@ -616,3 +635,12 @@ This spec was reviewed and revised after a high-signal code review. Changes:
 6. **Selection details panel docks bottom-left** as `SelectionPanel.tsx` because `RightPanel.tsx` already occupies the right side.
 7. **Qdrant scroll is paginated** via `next_offset` loop with a safety ceiling of 5000 results.
 8. **Tests cover boundary cases** — HTTP 422 for `since_hours=0` and above-max, pagination across multiple pages, `max_total` ceiling.
+
+## Second review pass (2026-04-11)
+
+1. `firms_map_url` added to the frontend `FIRMSHotspot` TypeScript interface so the type chain matches the backend response.
+2. Hook-level `/api/v1` hardcoding removed: both hooks now call helper functions in `services/frontend/src/services/api.ts`, which owns the single `BASE = "/api/v1"` constant. This eliminates the `/api/v1/api/v1/...` double-prefix risk.
+3. Router-prefix rule made explicit: `APIRouter(prefix="/firms", ...)` + `include_router(..., prefix="/api/v1")`, no double prefixing.
+4. API-client path corrected everywhere to `services/frontend/src/services/api.ts`.
+5. OperationsPanel internal contradiction resolved by splitting `LAYER_CONFIG` into two arrays (`CORE_LAYERS`, `INGESTION_LAYERS`), each rendered via exactly one `.map()` pass.
+6. Testing-Strategy case counts synced with the per-router test case lists (9 FIRMS, 6 Aircraft).
