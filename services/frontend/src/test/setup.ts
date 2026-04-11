@@ -12,6 +12,65 @@
  */
 import { vi } from "vitest";
 
+// jsdom doesn't implement HTMLCanvasElement.getContext('2d'). Install a minimal
+// no-op stub so layer code (and tests that assert the context is non-null) can
+// exercise canvas drawing paths without bundling the heavy `canvas` package.
+const canvasProto = globalThis.HTMLCanvasElement?.prototype;
+if (canvasProto && !("__odinCanvasStubbed" in canvasProto)) {
+  const noop = () => {};
+  const stub2d = {
+    canvas: null as HTMLCanvasElement | null,
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 1,
+    globalAlpha: 1,
+    translate: noop,
+    scale: noop,
+    rotate: noop,
+    save: noop,
+    restore: noop,
+    beginPath: noop,
+    closePath: noop,
+    moveTo: noop,
+    lineTo: noop,
+    arc: noop,
+    rect: noop,
+    fill: noop,
+    stroke: noop,
+    clip: noop,
+    fillRect: noop,
+    clearRect: noop,
+    strokeRect: noop,
+    drawImage: noop,
+    createLinearGradient: () => ({ addColorStop: noop }),
+    createRadialGradient: () => ({ addColorStop: noop }),
+    getImageData: () => ({ data: new Uint8ClampedArray(4) }),
+    putImageData: noop,
+    measureText: () => ({ width: 0 }),
+    fillText: noop,
+    strokeText: noop,
+  };
+  (canvasProto as unknown as { getContext: (kind: string) => unknown }).getContext = function getContext(
+    kind: string,
+  ) {
+    if (kind === "2d") {
+      return { ...stub2d, canvas: this as unknown as HTMLCanvasElement };
+    }
+    return null;
+  };
+  (canvasProto as unknown as { __odinCanvasStubbed: boolean }).__odinCanvasStubbed = true;
+}
+
+// Cesium's Material introspection references the DOM `ImageBitmap` type even
+// when no image uniforms are used. jsdom doesn't define it, so provide a stub
+// constructor to satisfy the `instanceof` / typeof checks.
+if (typeof (globalThis as { ImageBitmap?: unknown }).ImageBitmap === "undefined") {
+  (globalThis as { ImageBitmap: unknown }).ImageBitmap = class {};
+}
+if (typeof (globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas === "undefined") {
+  (globalThis as { OffscreenCanvas: unknown }).OffscreenCanvas = class {};
+}
+
 const jestShim = {
   advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms),
   runAllTicks: () => vi.runAllTicks(),
