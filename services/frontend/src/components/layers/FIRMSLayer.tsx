@@ -129,6 +129,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
           scale: 1.0,
           eyeOffset: new Cesium.Cartesian3(0, 0, -44),
         });
+        idMapRef.current.set(ring as unknown as object, h);
         pulsesRef.current.push({ ring, color });
       }
     }

@@ -5,9 +5,6 @@ import { FIRMSLayer, createFIRMSDot, frpToSize, frpToColor } from "../FIRMSLayer
 import type { FIRMSHotspot } from "../../../types";
 
 function fakeViewer(): Cesium.Viewer {
-  const fakeScene = { frameState: { mode: Cesium.SceneMode.SCENE3D } } as unknown as Cesium.Scene;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const bc = new Cesium.BillboardCollection({ scene: fakeScene });
   const primitives = {
     add: vi.fn((p: unknown) => p),
     remove: vi.fn(),
