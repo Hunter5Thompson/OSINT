@@ -332,7 +332,7 @@ interface FIRMSLayerProps {
 
 ### Data fetch — `hooks/useFIRMSHotspots.ts` (new)
 
-Use the existing API client at `services/frontend/src/services/api.ts`, which exports a module-level `BASE = "/api/v1"` and its helper calls concatenate paths to it. The hook adds a new `getFIRMSHotspots(sinceHours)` function to `api.ts` that calls `fetch(`${BASE}/firms/hotspots?since_hours=${sinceHours}`)`, then imports that function here. No hardcoded `/api/v1` in the hook itself — it stays in one place.
+Use the existing API client at `services/frontend/src/services/api.ts`, which defines a module-level `BASE = "/api/v1"` constant that its helper calls concatenate paths to. `BASE` stays module-private — no export needed. A new `getFIRMSHotspots(sinceHours)` function is added to `api.ts` that calls `fetch(`${BASE}/firms/hotspots?since_hours=${sinceHours}`)`. The hook imports that function. No hardcoded `/api/v1` in the hook itself — the single source of truth is `api.ts`.
 
 ```tsx
 // in services/api.ts
@@ -452,7 +452,7 @@ Same shape as `useFIRMSHotspots`, 30 s interval. Adds a `getAircraftTracks(since
 
 **Modified file:** `services/frontend/src/components/ui/OperationsPanel.tsx`
 
-The existing `OperationsPanel` (left-docked, header "OPERATIONS") holds layer toggles driven by a `LAYER_CONFIG` array of `{key, label, color}` with matching `LayerIcon` cases. The new layers extend this structure rather than introducing a new component.
+The existing `OperationsPanel` (left-docked, header "OPERATIONS") holds layer toggles driven by a single `LAYER_CONFIG` constant of `{key, label, color}` entries with matching `LayerIcon` cases. The new layers extend this structure rather than introducing a new component. `LAYER_CONFIG` is split into two named arrays (see below).
 
 ### Changes
 
@@ -611,14 +611,14 @@ MilAircraftLayer  useAircraftTracks   /api/v1/aircraft/tracks   Redis 30s
 - `services/backend/app/main.py` — register `firms` and `aircraft` routers with `/api/v1` prefix; extend `client_config.default_layers` with `firmsHotspots` and `milAircraft`
 - `services/backend/app/routers/graph.py` — refactor to import `_read_query` from `app/services/neo4j_client.py` (pure move, no behavior change)
 - `services/frontend/src/App.tsx` — new state, hooks, layer mounts, SelectionPanel wiring
-- `services/frontend/src/components/ui/OperationsPanel.tsx` — Ingestion sub-section, extended `LAYER_CONFIG`, new `LayerIcon` cases, new props for counts
-- `services/frontend/src/services/api.ts` — add `getFIRMSHotspots(sinceHours)` and `getAircraftTracks(sinceHours)` functions reusing the existing `BASE = "/api/v1"` constant
+- `services/frontend/src/components/ui/OperationsPanel.tsx` — split `LAYER_CONFIG` into `CORE_LAYERS` + `INGESTION_LAYERS`, render each under its own section header, add `LayerIcon` cases for `firmsHotspots` and `milAircraft`, add `firmsCount` and `milAircraftCount` props
+- `services/frontend/src/services/api.ts` — add `getFIRMSHotspots(sinceHours)` and `getAircraftTracks(sinceHours)` functions that concatenate onto the existing module-private `BASE = "/api/v1"` constant (no new export)
 - `services/frontend/src/types/index.ts` — add `FIRMSHotspot` (including `firms_map_url`), `AircraftPoint`, `AircraftTrack`; extend `LayerVisibility` with `firmsHotspots` and `milAircraft`
 
 ## Open Verification Steps (before implementation)
 
 - Confirm `ingested_epoch` is present on FIRMS payloads in production Qdrant (was added 2026-04-10; sanity check with a scroll query against the running stack).
-- Confirm `services/frontend/src/services/api.ts` still exports the `BASE = "/api/v1"` constant (verified 2026-04-11).
+- Confirm `services/frontend/src/services/api.ts` still defines the module-private `BASE = "/api/v1"` constant (verified 2026-04-11).
 - Confirm that `qdrant_url` is already present in `services/backend/app/config.py` — if not, add it.
 
 These checks happen during Task 1 of the implementation plan.
@@ -631,7 +631,7 @@ This spec was reviewed and revised after a high-signal code review. Changes:
 2. **Backend infrastructure section added**: `qdrant-client` dependency, lazy Qdrant client getter in `app/services/qdrant_client.py`, Neo4j `_read_query` extracted from `graph.py` into `app/services/neo4j_client.py`.
 3. **FIRMS `firms_map_url` is computed server-side** from payload fields — the collector does not persist a URL into the Qdrant payload.
 4. **Aircraft polylines use uniform per-track color** via `Material.fromType("Color", ...)` — matches existing `FlightLayer` pattern. Per-vertex alpha fade dropped from v1 because `PolylineCollection.add()` does not accept `PolylineColorAppearance`.
-5. **`OperationsPanel.tsx` is the real file**; `LayerPanel.tsx` does not exist. Two new entries added to its `LAYER_CONFIG` plus a new grouped "INGESTION" section below the existing layer block. `LayerVisibility` type extended. `client_config.default_layers` dict extended to stay in sync.
+5. **`OperationsPanel.tsx` is the real file**; `LayerPanel.tsx` does not exist. Its single `LAYER_CONFIG` constant is split into `CORE_LAYERS` + `INGESTION_LAYERS`, rendered under separate section headers. `LayerVisibility` type extended. `client_config.default_layers` dict extended to stay in sync.
 6. **Selection details panel docks bottom-left** as `SelectionPanel.tsx` because `RightPanel.tsx` already occupies the right side.
 7. **Qdrant scroll is paginated** via `next_offset` loop with a safety ceiling of 5000 results.
 8. **Tests cover boundary cases** — HTTP 422 for `since_hours=0` and above-max, pagination across multiple pages, `max_total` ceiling.
