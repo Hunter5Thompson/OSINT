@@ -5,9 +5,11 @@
 
 import type {
   Aircraft,
+  AircraftTrack,
   CableDataset,
   ClientConfig,
   Earthquake,
+  FIRMSHotspot,
   GeoEventsResponse,
   Hotspot,
   IntelAnalysis,
@@ -140,4 +142,12 @@ export function queryIntel(
 
 export async function getIntelHistory(): Promise<IntelAnalysis[]> {
   return fetchJSON<IntelAnalysis[]>("/intel/history");
+}
+
+export async function getFIRMSHotspots(sinceHours = 24): Promise<FIRMSHotspot[]> {
+  return fetchJSON<FIRMSHotspot[]>(`/firms/hotspots?since_hours=${sinceHours}`);
+}
+
+export async function getAircraftTracks(sinceHours = 24): Promise<AircraftTrack[]> {
+  return fetchJSON<AircraftTrack[]>(`/aircraft/tracks?since_hours=${sinceHours}`);
 }
