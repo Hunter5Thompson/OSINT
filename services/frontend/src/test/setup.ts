@@ -10,7 +10,16 @@
  * React state updates don't flush inside the polled callback on React 19 +
  * jsdom. See https://github.com/testing-library/react-testing-library/issues/1197
  */
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+
+// With `globals: false` in vite.config.ts, @testing-library/react's automatic
+// cleanup (which hooks into the global `afterEach`) does not run. Register it
+// explicitly so DOM nodes from previous tests don't leak into the next test.
+afterEach(() => {
+  cleanup();
+});
 
 // jsdom doesn't implement HTMLCanvasElement.getContext('2d'). Install a minimal
 // no-op stub so layer code (and tests that assert the context is non-null) can
