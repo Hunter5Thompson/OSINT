@@ -62,6 +62,39 @@ export interface Hotspot {
   sources: string[];
 }
 
+export interface FIRMSHotspot {
+  id: string;
+  latitude: number;
+  longitude: number;
+  frp: number;
+  brightness: number;
+  confidence: string;
+  acq_date: string;
+  acq_time: string;
+  satellite: string;
+  bbox_name: string;
+  possible_explosion: boolean;
+  firms_map_url: string;
+}
+
+export interface AircraftPoint {
+  lat: number;
+  lon: number;
+  altitude_m: number | null;
+  speed_ms: number | null;
+  heading: number | null;
+  timestamp: number;
+}
+
+export interface AircraftTrack {
+  icao24: string;
+  callsign: string | null;
+  type_code: string | null;
+  military_branch: string | null;
+  registration: string | null;
+  points: AircraftPoint[];
+}
+
 export interface IntelAnalysis {
   query: string;
   agent_chain: string[];
@@ -137,6 +170,8 @@ export interface LayerVisibility {
   events: boolean;
   cables: boolean;
   pipelines: boolean;
+  firmsHotspots: boolean;
+  milAircraft: boolean;
 }
 
 export type ShaderType = "none" | "crt" | "nightvision" | "flir";
