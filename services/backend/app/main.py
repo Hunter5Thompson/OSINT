@@ -133,6 +133,8 @@ async def client_config() -> ClientConfig:
             "events": False,
             "cables": False,
             "pipelines": False,
+            "firmsHotspots": True,
+            "milAircraft": True,
         },
         api_version="v1",
     )

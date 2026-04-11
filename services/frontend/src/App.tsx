@@ -11,11 +11,14 @@ import { CCTVLayer } from "./components/layers/CCTVLayer";
 import { EventLayer } from "./components/layers/EventLayer";
 import { CableLayer } from "./components/layers/CableLayer";
 import { PipelineLayer } from "./components/layers/PipelineLayer";
+import { FIRMSLayer } from "./components/layers/FIRMSLayer";
+import { MilAircraftLayer } from "./components/layers/MilAircraftLayer";
 import { OperationsPanel } from "./components/ui/OperationsPanel";
 import { RightPanel } from "./components/ui/RightPanel";
 import { ThreatRegister } from "./components/ui/ThreatRegister";
 import { ClockBar } from "./components/ui/ClockBar";
 import { StatusBar } from "./components/ui/StatusBar";
+import { SelectionPanel, type Selected } from "./components/ui/SelectionPanel";
 import { useFlights } from "./hooks/useFlights";
 import { useSatellites } from "./hooks/useSatellites";
 import { useEarthquakes } from "./hooks/useEarthquakes";
@@ -23,6 +26,8 @@ import { useEvents } from "./hooks/useEvents";
 import { useCables } from "./hooks/useCables";
 import { useVessels } from "./hooks/useVessels";
 import { usePipelines } from "./hooks/usePipelines";
+import { useFIRMSHotspots } from "./hooks/useFIRMSHotspots";
+import { useAircraftTracks } from "./hooks/useAircraftTracks";
 import { useIntel } from "./hooks/useIntel";
 import { getConfig, getHotspots } from "./services/api";
 import type { LayerVisibility, ShaderType, Hotspot, ClientConfig } from "./types";
@@ -40,6 +45,8 @@ export function App() {
     events: false,
     cables: false,
     pipelines: false,
+    firmsHotspots: true,
+    milAircraft: true,
   });
 
   const [activeShader, setActiveShader] = useState<ShaderType>("none");
@@ -51,6 +58,9 @@ export function App() {
   const { cables, landingPoints, lastUpdate: cablesUpdate } = useCables(layers.cables);
   const { vessels, lastUpdate: vesselsUpdate } = useVessels(layers.vessels);
   const { pipelines: pipelineData, lastUpdate: pipelinesUpdate } = usePipelines(layers.pipelines);
+  const { hotspots: firmsHotspots } = useFIRMSHotspots(layers.firmsHotspots);
+  const { tracks: milTracks } = useAircraftTracks(layers.milAircraft);
+  const [selected, setSelected] = useState<Selected | null>(null);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
 
   const intel = useIntel();
@@ -61,7 +71,7 @@ export function App() {
       .catch(() => {
         setConfig({
           cesium_ion_token: "",
-          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false, cables: false, pipelines: false },
+          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false, cables: false, pipelines: false, firmsHotspots: true, milAircraft: true },
           api_version: "v1",
         });
       });
@@ -129,6 +139,18 @@ export function App() {
       <EventLayer viewer={viewer} events={events} visible={layers.events} />
       <CableLayer viewer={viewer} cables={cables} landingPoints={landingPoints} visible={layers.cables} />
       <PipelineLayer viewer={viewer} pipelines={pipelineData} visible={layers.pipelines} />
+      <FIRMSLayer
+        viewer={viewer}
+        hotspots={firmsHotspots}
+        visible={layers.firmsHotspots}
+        onSelect={(h) => setSelected({ type: "firms", data: h })}
+      />
+      <MilAircraftLayer
+        viewer={viewer}
+        tracks={milTracks}
+        visible={layers.milAircraft}
+        onSelect={(t) => setSelected({ type: "aircraft", data: t })}
+      />
 
       <EntityClickHandler viewer={viewer} />
 
@@ -139,6 +161,8 @@ export function App() {
         onToggleLayer={handleToggleLayer}
         activeShader={activeShader}
         onShaderChange={setActiveShader}
+        firmsCount={firmsHotspots.length}
+        milAircraftCount={milTracks.length}
       />
 
       <RightPanel
@@ -151,6 +175,12 @@ export function App() {
       />
 
       <ThreatRegister hotspots={hotspots} onSelect={handleHotspotSelect} />
+
+      <SelectionPanel
+        selected={selected}
+        onClose={() => setSelected(null)}
+        viewer={viewer}
+      />
 
       <StatusBar
         freshness={{
