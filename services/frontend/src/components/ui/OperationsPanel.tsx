@@ -5,9 +5,11 @@ interface OperationsPanelProps {
   onToggleLayer: (layer: keyof LayerVisibility) => void;
   activeShader: ShaderType;
   onShaderChange: (shader: ShaderType) => void;
+  firmsCount?: number;
+  milAircraftCount?: number;
 }
 
-const LAYER_CONFIG: { key: keyof LayerVisibility; label: string; color: string }[] = [
+const CORE_LAYERS: { key: keyof LayerVisibility; label: string; color: string }[] = [
   { key: "flights", label: "FLIGHTS", color: "#c4813a" },
   { key: "satellites", label: "SATELLITES", color: "#06b6d4" },
   { key: "earthquakes", label: "EARTHQUAKES", color: "#ef4444" },
@@ -16,6 +18,11 @@ const LAYER_CONFIG: { key: keyof LayerVisibility; label: string; color: string }
   { key: "events", label: "EVENTS", color: "#f97316" },
   { key: "cables", label: "CABLES", color: "#22c55e" },
   { key: "pipelines", label: "PIPELINES", color: "#eab308" },
+];
+
+const INGESTION_LAYERS: { key: keyof LayerVisibility; label: string; color: string }[] = [
+  { key: "firmsHotspots", label: "FIRMS HOTSPOTS", color: "#ff7a33" },
+  { key: "milAircraft",   label: "MIL AIRCRAFT",   color: "#66e6ff" },
 ];
 
 function LayerIcon({ layerKey, color }: { layerKey: string; color: string }) {
@@ -37,6 +44,26 @@ function LayerIcon({ layerKey, color }: { layerKey: string; color: string }) {
       return (<svg {...s}><path d="M4 24 C10 24 10 8 16 8 C22 8 22 24 28 24" stroke={color} strokeWidth={2} opacity={0.7} fill="none" /></svg>);
     case "pipelines":
       return (<svg {...s}><path d="M4 16 Q10 10 16 16 Q22 22 28 16" stroke={color} strokeWidth={2.5} opacity={0.7} fill="none" /><circle cx={4} cy={16} r={3} fill={color} opacity={0.6} /><circle cx={28} cy={16} r={3} fill={color} opacity={0.6} /></svg>);
+    case "firmsHotspots":
+      return (
+        <svg {...s}>
+          <path
+            d="M16 6 C13 12 10 13 10 18 A6 6 0 0 0 22 18 C22 13 19 12 16 6 Z"
+            fill={color}
+            opacity={0.8}
+          />
+        </svg>
+      );
+    case "milAircraft":
+      return (
+        <svg {...s}>
+          <path
+            d="M16 4 L18 16 L28 18 L18 20 L17 28 L15 28 L14 20 L4 18 L14 16 Z"
+            fill={color}
+            opacity={0.85}
+          />
+        </svg>
+      );
     default:
       return <span style={{ color }}>●</span>;
   }
@@ -54,7 +81,38 @@ export function OperationsPanel({
   onToggleLayer,
   activeShader,
   onShaderChange,
+  firmsCount = 0,
+  milAircraftCount = 0,
 }: OperationsPanelProps) {
+  const countFor = (key: keyof LayerVisibility): number | null => {
+    if (key === "firmsHotspots") return firmsCount;
+    if (key === "milAircraft") return milAircraftCount;
+    return null;
+  };
+
+  const renderLayerRow = ({ key, label, color }: { key: keyof LayerVisibility; label: string; color: string }) => {
+    const count = countFor(key);
+    const badge = count && count > 0 ? ` (${count})` : "";
+    return (
+      <button
+        key={key}
+        onClick={() => onToggleLayer(key)}
+        className="w-full flex items-center gap-2 px-2 py-1.5 rounded mb-1 transition-colors border"
+        style={layers[key] ? {
+          backgroundColor: `${color}1a`,
+          borderColor: `${color}4d`,
+          color: color,
+        } : {
+          color: "rgba(0, 255, 65, 0.4)",
+          borderColor: "transparent",
+        }}
+      >
+        <LayerIcon layerKey={key} color={color} />
+        <span>{label}{badge}</span>
+      </button>
+    );
+  };
+
   return (
     <div className="absolute left-3 top-16 w-56 bg-black/85 border border-green-500/20 rounded font-mono text-xs z-40 backdrop-blur-sm">
       {/* Header */}
@@ -65,27 +123,12 @@ export function OperationsPanel({
       {/* Layer Toggles */}
       <div className="p-3">
         <div className="text-green-500/60 mb-2 text-[10px] tracking-widest">DATA LAYERS</div>
-        {LAYER_CONFIG.map(({ key, label, color }) => (
-          <button
-            key={key}
-            onClick={() => onToggleLayer(key)}
-            className="w-full flex items-center gap-2 px-2 py-1.5 rounded mb-1 transition-colors border"
-            style={layers[key] ? {
-              backgroundColor: `${color}1a`,
-              borderColor: `${color}4d`,
-              color: color,
-            } : {
-              color: "rgba(0, 255, 65, 0.4)",
-              borderColor: "transparent",
-            }}
-          >
-            <span className="w-4 flex items-center justify-center" style={{ opacity: layers[key] ? 1 : 0.3 }}>
-              <LayerIcon layerKey={key} color={color} />
-            </span>
-            <span>{label}</span>
-            <span className="ml-auto text-[10px]">{layers[key] ? "ON" : "OFF"}</span>
-          </button>
-        ))}
+        {CORE_LAYERS.map(renderLayerRow)}
+
+        <div className="mt-3 pt-3 border-t border-green-500/20 text-green-500/60 mb-2 text-[10px] tracking-widest">
+          INGESTION
+        </div>
+        {INGESTION_LAYERS.map(renderLayerRow)}
       </div>
 
       {/* Shader Selector */}
