@@ -440,7 +440,7 @@ async def get_firms_hotspots(
         raise HTTPException(status_code=503, detail="qdrant unreachable") from exc
 
     hotspots = [h for h in (_point_to_hotspot(p) for p in results) if h is not None]
-    await cache.set(cache_key, [h.model_dump() for h in hotspots], ttl=_CACHE_TTL_S)
+    await cache.set(cache_key, [h.model_dump() for h in hotspots], ttl_seconds=_CACHE_TTL_S)
     return hotspots
 ```
 
@@ -740,7 +740,7 @@ async def get_aircraft_tracks(
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
 
     tracks = [AircraftTrack(**row) for row in rows]
-    await cache.set(cache_key, [t.model_dump() for t in tracks], ttl=_CACHE_TTL_S)
+    await cache.set(cache_key, [t.model_dump() for t in tracks], ttl_seconds=_CACHE_TTL_S)
     return tracks
 ```
 

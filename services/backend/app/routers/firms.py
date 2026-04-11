@@ -108,5 +108,5 @@ async def get_firms_hotspots(
         raise HTTPException(status_code=503, detail="qdrant unreachable") from exc
 
     hotspots = [h for h in (_point_to_hotspot(p) for p in results) if h is not None]
-    await cache.set(cache_key, [h.model_dump() for h in hotspots], ttl=_CACHE_TTL_S)
+    await cache.set(cache_key, [h.model_dump() for h in hotspots], ttl_seconds=_CACHE_TTL_S)
     return hotspots
