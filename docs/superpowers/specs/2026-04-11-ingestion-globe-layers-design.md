@@ -29,7 +29,7 @@ Qdrant (odin_intel)          Neo4j
        v                              v
 +----------------------------------------------+
 |  Backend (FastAPI, :8080)                    |
-|  /firms/hotspots       /aircraft/tracks      |
+|  /api/v1/firms/hotspots  /api/v1/aircraft/tracks |
 |    (Qdrant scroll)       (Cypher read-only)  |
 |    Redis cache 60s       Redis cache 30s     |
 +----------------------------------------------+
@@ -42,8 +42,8 @@ Qdrant (odin_intel)          Neo4j
 |                          + PolylineColl      |
 |          \               /                   |
 |           v             v                    |
-|      LayerPanel "Ingestion" sub-section      |
-|      Click -> InfoPanel (typed details)      |
+|    OperationsPanel "Ingestion" sub-section   |
+|    Click -> SelectionPanel (bottom-left)     |
 +----------------------------------------------+
 ```
 
@@ -53,6 +53,46 @@ Qdrant (odin_intel)          Neo4j
 - Polling pauses when `document.hidden`.
 - No WebSockets; the data pipeline is batch-ingestion driven, so real-time push has no value here.
 
+## Backend — Infrastructure prerequisites
+
+The current backend has `app.state.proxy` and `app.state.cache` only. Qdrant and Neo4j are not initialized at startup. This spec adds the minimum wiring needed.
+
+### Dependencies
+
+Add to `services/backend/pyproject.toml`:
+
+```toml
+dependencies = [
+  ...,
+  "qdrant-client>=1.13",
+]
+```
+
+### Qdrant client
+
+Follow the existing `graph.py` pattern (lazy module-global) rather than lifespan init — no changes to `main.py` lifespan required.
+
+**New file:** `services/backend/app/services/qdrant_client.py`
+
+```python
+from qdrant_client import AsyncQdrantClient
+from app.config import settings
+
+_client: AsyncQdrantClient | None = None
+
+async def get_qdrant_client() -> AsyncQdrantClient:
+    global _client
+    if _client is None:
+        _client = AsyncQdrantClient(url=settings.qdrant_url)
+    return _client
+```
+
+`settings.qdrant_url` must be added to `app/config.py` if missing (default `http://qdrant:6333` for Docker, `http://localhost:6333` for local).
+
+### Neo4j reader helper
+
+Reuse the existing `_read_query(cypher, params)` helper already implemented in `services/backend/app/routers/graph.py:32-37`. Extract it into `services/backend/app/services/neo4j_client.py` so both `graph.py` and the new `aircraft.py` can import it without cross-router dependencies. `graph.py` is refactored to import from the new module — a pure move, no behavior change.
+
 ## Backend — FIRMS Router
 
 **New file:** `services/backend/app/routers/firms.py`
@@ -60,14 +100,15 @@ Qdrant (odin_intel)          Neo4j
 ### Endpoint
 
 ```
-GET /firms/hotspots?since_hours=24
+GET /api/v1/firms/hotspots?since_hours=24
 ```
 
-- `since_hours` is an int query parameter, default 24, max 168 (7 days)
-- Reads from the Qdrant client on `app.state`
+- Router is mounted with `prefix="/api/v1"` in `main.py` like all existing routers
+- `since_hours` is an int query parameter, default 24, minimum 1, maximum 168 (7 days); values outside the range produce HTTP 422 via `Query(ge=1, le=168)`
+- Uses `get_qdrant_client()` to fetch the async Qdrant client
 - Returns `list[FIRMSHotspot]`
 
-### Qdrant query
+### Qdrant query (with pagination)
 
 ```python
 from qdrant_client.models import Filter, FieldCondition, MatchValue, Range
@@ -77,16 +118,27 @@ flt = Filter(must=[
     FieldCondition(key="source", match=MatchValue(value="firms")),
     FieldCondition(key="ingested_epoch", range=Range(gte=cutoff)),
 ])
-points, _ = await qdrant.scroll(
-    collection_name="odin_intel",
-    scroll_filter=flt,
-    limit=2000,
-    with_payload=True,
-    with_vectors=False,
-)
+
+results: list[dict] = []
+next_offset = None
+page_size = 512
+max_total = 5000   # safety ceiling
+while True:
+    points, next_offset = await qdrant.scroll(
+        collection_name="odin_intel",
+        scroll_filter=flt,
+        limit=page_size,
+        offset=next_offset,
+        with_payload=True,
+        with_vectors=False,
+    )
+    results.extend(points)
+    if next_offset is None or len(results) >= max_total:
+        break
 ```
 
-`ingested_epoch` is guaranteed on FIRMS payloads (added in the 2026-04-10 correlation sprint).
+- `ingested_epoch` is guaranteed on FIRMS payloads (added in the 2026-04-10 correlation sprint)
+- Loop protects against silent truncation; `max_total` is a hard ceiling to prevent runaway responses if the filter degenerates
 
 ### Response model
 
@@ -103,7 +155,19 @@ class FIRMSHotspot(BaseModel):
     satellite: str           # "VIIRS_SNPP_NRT" | ...
     bbox_name: str           # "ukraine" | ...
     possible_explosion: bool
+    firms_map_url: str       # computed server-side, see below
 ```
+
+**`firms_map_url` is computed server-side** from payload fields — the collector currently does not persist the URL into the Qdrant payload (only the `row` dict reaches `_build_point`, and `row` has no `url` key). The URL format is deterministic:
+
+```python
+firms_map_url = (
+    f"https://firms.modaps.eosdis.nasa.gov/map/#d:{acq_date};"
+    f"@{longitude:.4f},{latitude:.4f},10z"
+)
+```
+
+No collector change is needed.
 
 ### Caching & errors
 
@@ -118,7 +182,11 @@ class FIRMSHotspot(BaseModel):
   2. Empty result → `[]`.
   3. `since_hours` param passed into `Range(gte=...)` computation.
   4. `possible_explosion` flag propagated unchanged.
-  5. Redis cache hit short-circuits Qdrant call.
+  5. `firms_map_url` is computed correctly from lat/lon/acq_date.
+  6. Redis cache hit short-circuits Qdrant call.
+  7. **Pagination** — mocked scroll returns `(page1, next_offset=token)`, then `(page2, None)`; router concatenates both pages.
+  8. **Boundary 422** — `since_hours=0` and `since_hours=169` return HTTP 422 (FastAPI validation).
+  9. **max_total ceiling** — scroll keeps returning pages; loop stops at `max_total` without infinite iteration.
 
 ## Backend — Aircraft Router
 
@@ -127,11 +195,12 @@ class FIRMSHotspot(BaseModel):
 ### Endpoint
 
 ```
-GET /aircraft/tracks?since_hours=24
+GET /api/v1/aircraft/tracks?since_hours=24
 ```
 
-- `since_hours` default 24, max 72
-- Read-only Neo4j session from `app.state.neo4j_driver`
+- Router mounted with `prefix="/api/v1"` in `main.py`
+- `since_hours` is `Query(default=24, ge=1, le=72)` — values outside the range return HTTP 422
+- Uses the extracted `_read_query(cypher, params)` helper from `app/services/neo4j_client.py`
 - Returns `list[AircraftTrack]`
 
 ### Cypher — verified against `military_aircraft_collector.py`
@@ -200,13 +269,14 @@ class AircraftTrack(BaseModel):
 
 ### Tests — `test_aircraft_router.py`
 
-- Neo4j driver mocked via `AsyncMock` returning canned records.
+- `_read_query` patched to return canned records.
 - Cases:
   1. Happy path — two aircraft, one with 5 points, one with 1 point, verify ordering (points asc, tracks by newest last-point desc).
   2. Empty result → `[]`.
-  3. `since_hours` param translates to correct `$since_epoch`.
-  4. Record with null lat/lon is filtered out at the Cypher layer (unit-test the query string contains `IS NOT NULL`).
+  3. `since_hours` param translates to correct `$since_epoch` (mock `time.time()` for determinism).
+  4. Record with null lat/lon is filtered out at the Cypher layer (assert the query string contains `IS NOT NULL`).
   5. Redis cache hit short-circuits Neo4j call.
+  6. **Boundary 422** — `since_hours=0` and `since_hours=73` return HTTP 422.
 
 ## Frontend — FIRMS Layer
 
@@ -267,7 +337,7 @@ export function useFIRMSHotspots(sinceHours = 24): FIRMSHotspot[] {
     const tick = async () => {
       if (document.hidden) return;
       try {
-        const res = await fetch(`${API_BASE}/firms/hotspots?since_hours=${sinceHours}`);
+        const res = await fetch(`${API_BASE}/api/v1/firms/hotspots?since_hours=${sinceHours}`);
         if (!res.ok) return;
         const json = await res.json();
         if (!cancelled) setData(json);
@@ -328,7 +398,8 @@ interface MilAircraftLayerProps {
 
 - Positions: `Cesium.Cartesian3.fromDegreesArrayHeights([lon, lat, alt_m, ...])`. Missing `altitude_m` defaults to 0.
 - Polylines render at **true altitude**, so tanker orbits and AWACS racetracks are recognizable as 3D shapes.
-- Material: `PolylineColorAppearance` with per-vertex colors, base RGB from branch palette, alpha interpolated over timestamp — newest segment alpha 1.0, oldest point within window alpha 0.2. Linear fade based on `(timestamp - oldest) / (newest - oldest)`.
+- Material: uniform per-polyline color via `Cesium.Material.fromType("Color", { color: branchColorWithAlpha })` — the same pattern used by `FlightLayer.tsx:247-255`. `PolylineCollection.add()` does not accept `PolylineColorAppearance`; per-vertex coloring would require per-segment Primitive geometry, which is out of scope for v1.
+- Alpha: uniform 0.6 per polyline. Age-based fade is deferred to a later iteration.
 - Width 1.5.
 
 **2. `BillboardCollection`** — one icon per track at the **latest** point:
@@ -355,50 +426,68 @@ interface MilAircraftLayerProps {
 
 ### Data fetch — `hooks/useAircraftTracks.ts` (new)
 
-Same shape as `useFIRMSHotspots`, 30 s interval, `GET /aircraft/tracks?since_hours=24`.
+Same shape as `useFIRMSHotspots`, 30 s interval, `GET ${API_BASE}/api/v1/aircraft/tracks?since_hours=24`.
+
+Both hooks should import and reuse the existing `api.ts` client (`services/frontend/src/api.ts`) if it exposes a base or helper; otherwise call `fetch` directly against the URL derived from the same environment variable `api.ts` uses, to keep a single source of truth for the API base.
 
 ### Tests — `MilAircraftLayer.test.tsx` + `useAircraftTracks.test.ts`
 
 - Unit: `trackToPolylinePositions(points)` returns a flat Cartesian3 array of expected length.
-- Unit: alpha-fade helper assigns 1.0 to newest and 0.2 to oldest vertex.
 - Unit: `createJetIcon(color)` returns canvas with non-transparent silhouette.
 - Component: two mock tracks (5-point, 1-point) → polyline collection length === 1, billboard collection length === 2.
 - Hook: fake timers, mocked fetch, 30 s interval.
 
-## Layer Panel — "Ingestion" sub-section
+## Operations Panel — "Ingestion" sub-section
 
-**Modified file:** `services/frontend/src/components/ui/LayerPanel.tsx`
+**Modified file:** `services/frontend/src/components/ui/OperationsPanel.tsx`
 
-- New section header "INGESTION" with a thin separator above, placed after the existing layer toggles.
-- Two new checkboxes: `firmsHotspots`, `milAircraft`. Default **on**.
-- Each label shows a live count badge: e.g. `FIRMS Hotspots (187)` and `Mil Aircraft (23)`. Counts derived from the hook data passed down by App.tsx, no extra requests.
-- App state:
+The existing `OperationsPanel` (left-docked, header "OPERATIONS") holds layer toggles driven by a `LAYER_CONFIG` array of `{key, label, color}` with matching `LayerIcon` cases. The new layers extend this structure rather than introducing a new component.
+
+### Changes
+
+- Add a "INGESTION" section header inside `OperationsPanel`, visually separated from the existing `DATA LAYERS` block by a thin border and small header label (`text-[10px] tracking-widest text-green-500/60`).
+- Add two new entries to `LAYER_CONFIG`:
 
 ```tsx
-const [layers, setLayers] = useState({
-  flights: true,
-  satellites: true,
-  earthquakes: true,
-  // ... existing ...
-  firmsHotspots: true,
-  milAircraft: true,
-});
+{ key: "firmsHotspots", label: "FIRMS HOTSPOTS", color: "#ff7a33" },
+{ key: "milAircraft",   label: "MIL AIRCRAFT",   color: "#66e6ff" },
 ```
+
+- Extend `LayerIcon` `switch` with two new cases drawing a small flame glyph for `firmsHotspots` and a jet silhouette for `milAircraft`.
+- Render the INGESTION entries in a separate `.map()` pass below the existing `LAYER_CONFIG` loop, so they appear grouped.
+- Counter badges: append `({count})` to the label when the count is > 0. Counts come from new props `firmsCount`/`milAircraftCount` passed down by `App.tsx`. These are derived from hook data — no extra requests.
+
+### LayerVisibility type extension
+
+`services/frontend/src/types/index.ts` — `LayerVisibility` interface gains two fields:
+
+```tsx
+interface LayerVisibility {
+  flights: boolean;
+  satellites: boolean;
+  // ... existing ...
+  firmsHotspots: boolean;   // new
+  milAircraft: boolean;     // new
+}
+```
+
+Default values in `App.tsx` initial state: both `true`. `main.py` `client_config()` endpoint's `default_layers` dict is extended with the same two keys to stay in sync with the frontend default.
 
 - The `visible` prop on each new layer is wired to `layers.firmsHotspots` / `layers.milAircraft`.
 
 ## Info Panel — Click details
 
-**Strategy:** Check for existing `InfoPanel.tsx` first. If present, extend its renderer. If not, create it.
+**Placement decision:** The right side of the screen is already occupied by `RightPanel.tsx` (Intel + Graph tabs). Adding another right-docked panel would overlap. The selection-details panel instead docks **bottom-left**, below `OperationsPanel`, as a floating card. This keeps both side rails free and matches Cesium-operator UI conventions where a selected-feature readout sits near the map controls.
 
-### New or extended file
+### New file
 
 ```
-services/frontend/src/components/ui/InfoPanel.tsx
+services/frontend/src/components/ui/SelectionPanel.tsx
 ```
 
-- Right-docked fixed panel, 320 px wide, semi-transparent dark background consistent with `LayerPanel`.
+- Bottom-left floating card, `absolute left-3 bottom-16`, ~300 px wide, max-height `40vh` with internal scroll, semi-transparent dark background matching `OperationsPanel` styling.
 - Close button (×) top right.
+- Returns `null` when `selected === null`.
 - Discriminated union for typed content:
 
 ```tsx
@@ -412,7 +501,7 @@ type Selected =
 - Title: "Thermal Anomaly"
 - Grid rows: FRP (MW) • Brightness (K) • Confidence • Satellite • Acq (date + time) • BBox • Position (lat, lon)
 - Red warning badge when `possible_explosion === true`: "POSSIBLE EXPLOSION"
-- Link "View on FIRMS Map" opens the FIRMS URL embedded in the point (built by the collector)
+- Link "View on FIRMS Map" opens `firms_map_url` (server-computed from acq_date/lat/lon, see Response Model section)
 
 ### Aircraft content
 
@@ -428,21 +517,21 @@ const [selected, setSelected] = useState<Selected | null>(null);
 
 <FIRMSLayer ... onSelect={(h) => setSelected({ type: "firms", data: h })} />
 <MilAircraftLayer ... onSelect={(t) => setSelected({ type: "aircraft", data: t })} />
-<InfoPanel selected={selected} onClose={() => setSelected(null)} viewer={viewer} />
+<SelectionPanel selected={selected} onClose={() => setSelected(null)} viewer={viewer} />
 ```
 
 ## Data Flow Summary
 
 ```
-FIRMSLayer        useFIRMSHotspots    /firms/hotspots        Redis 60s
-    ^                  |                    |                   |
-    |   60s poll       v                    v                   v
-    +- hotspots[] <-- setState <-- JSON <-- Qdrant scroll (source+time)
+FIRMSLayer        useFIRMSHotspots    /api/v1/firms/hotspots    Redis 60s
+    ^                  |                    |                      |
+    |   60s poll       v                    v                      v
+    +- hotspots[] <-- setState <-- JSON <-- Qdrant scroll (source+time, paginated)
 
-MilAircraftLayer  useAircraftTracks   /aircraft/tracks       Redis 30s
-    ^                  |                    |                   |
-    |   30s poll       v                    v                   v
-    +- tracks[] <---- setState <-- JSON <-- Neo4j Cypher (since_epoch)
+MilAircraftLayer  useAircraftTracks   /api/v1/aircraft/tracks   Redis 30s
+    ^                  |                    |                      |
+    |   30s poll       v                    v                      v
+    +- tracks[] <---- setState <-- JSON <-- Neo4j _read_query (since_epoch)
 ```
 
 - Fetch failures: hook keeps previous state, logs a warning, retries on next tick.
@@ -461,7 +550,7 @@ MilAircraftLayer  useAircraftTracks   /aircraft/tracks       Redis 30s
 
 - `FIRMSLayer.test.tsx`, `MilAircraftLayer.test.tsx` — mount with fake viewer.
 - `useFIRMSHotspots.test.ts`, `useAircraftTracks.test.ts` — fake timers, mocked fetch.
-- `InfoPanel.test.tsx` — render both variants of the discriminated union.
+- `SelectionPanel.test.tsx` — render both variants of the discriminated union.
 - Type-check + ESLint clean.
 
 ### Manual smoke
@@ -469,12 +558,13 @@ MilAircraftLayer  useAircraftTracks   /aircraft/tracks       Redis 30s
 1. `./odin.sh up ingestion` — wait for FIRMS + Military Aircraft to write data.
 2. Verify Qdrant has `source=firms` points and Neo4j has `SPOTTED_AT` edges with recent `timestamp`.
 3. `./odin.sh swap interactive` — start backend + frontend.
-4. `curl localhost:8080/firms/hotspots?since_hours=24 | jq length`
-5. `curl localhost:8080/aircraft/tracks?since_hours=24 | jq length`
-6. Open browser, toggle both layers in the Ingestion sub-panel, verify counts match curl.
-7. Click a FIRMS dot → InfoPanel shows thermal anomaly details.
-8. Click an aircraft icon → InfoPanel shows track details, "Center on track" flies the camera.
-9. Find a `possible_explosion` hotspot (if any) and confirm the pulse ring renders.
+4. `curl localhost:8080/api/v1/firms/hotspots?since_hours=24 | jq length`
+5. `curl localhost:8080/api/v1/aircraft/tracks?since_hours=24 | jq length`
+6. `curl localhost:8080/api/v1/firms/hotspots?since_hours=0` → expect HTTP 422 (boundary check).
+7. Open browser, toggle both layers in the Ingestion sub-section of OperationsPanel, verify counts match curl.
+8. Click a FIRMS dot → SelectionPanel shows thermal anomaly details, "View on FIRMS Map" opens the computed URL.
+9. Click an aircraft icon → SelectionPanel shows track details, "Center on track" flies the camera.
+10. Find a `possible_explosion` hotspot (if any) and confirm the pulse ring renders.
 
 ## File Inventory
 
@@ -482,11 +572,13 @@ MilAircraftLayer  useAircraftTracks   /aircraft/tracks       Redis 30s
 
 - `services/backend/app/routers/firms.py`
 - `services/backend/app/routers/aircraft.py`
+- `services/backend/app/services/qdrant_client.py` — lazy async Qdrant client getter
+- `services/backend/app/services/neo4j_client.py` — extracted `_read_query` helper
 - `services/backend/tests/test_firms_router.py`
 - `services/backend/tests/test_aircraft_router.py`
 - `services/frontend/src/components/layers/FIRMSLayer.tsx`
 - `services/frontend/src/components/layers/MilAircraftLayer.tsx`
-- `services/frontend/src/components/ui/InfoPanel.tsx` (unless already exists, then extend)
+- `services/frontend/src/components/ui/SelectionPanel.tsx` — bottom-left selection details
 - `services/frontend/src/hooks/useFIRMSHotspots.ts`
 - `services/frontend/src/hooks/useAircraftTracks.ts`
 - `services/frontend/src/components/layers/__tests__/FIRMSLayer.test.tsx`
@@ -496,16 +588,31 @@ MilAircraftLayer  useAircraftTracks   /aircraft/tracks       Redis 30s
 
 ### Modified
 
-- `services/backend/app/main.py` — register `firms` and `aircraft` routers
-- `services/frontend/src/App.tsx` — new state, hooks, layer mounts, InfoPanel wiring
-- `services/frontend/src/components/ui/LayerPanel.tsx` — Ingestion sub-section + two toggles with counters
-- `services/frontend/src/types/index.ts` (or equivalent) — add `FIRMSHotspot`, `AircraftPoint`, `AircraftTrack`
+- `services/backend/pyproject.toml` — add `qdrant-client>=1.13` dependency
+- `services/backend/app/config.py` — add `qdrant_url` setting if missing
+- `services/backend/app/main.py` — register `firms` and `aircraft` routers with `/api/v1` prefix; extend `client_config.default_layers` with `firmsHotspots` and `milAircraft`
+- `services/backend/app/routers/graph.py` — refactor to import `_read_query` from `app/services/neo4j_client.py` (pure move, no behavior change)
+- `services/frontend/src/App.tsx` — new state, hooks, layer mounts, SelectionPanel wiring
+- `services/frontend/src/components/ui/OperationsPanel.tsx` — Ingestion sub-section, extended `LAYER_CONFIG`, new `LayerIcon` cases, new props for counts
+- `services/frontend/src/types/index.ts` — add `FIRMSHotspot`, `AircraftPoint`, `AircraftTrack`; extend `LayerVisibility` with `firmsHotspots` and `milAircraft`
 
 ## Open Verification Steps (before implementation)
 
-- Confirm whether `services/frontend/src/components/ui/InfoPanel.tsx` already exists; if yes, reuse, if no, create.
-- Confirm the Qdrant client is exposed on `app.state` under an attribute name the new routers can import (mirror whatever `rag.py` uses).
-- Confirm the Neo4j driver is exposed on `app.state` (check `intel.py` / `graph.py`).
-- Confirm `ingested_epoch` is present on FIRMS payloads in production Qdrant (was added 2026-04-10; sanity check with a scroll query).
+- Confirm `ingested_epoch` is present on FIRMS payloads in production Qdrant (was added 2026-04-10; sanity check with a scroll query against the running stack).
+- Confirm `services/frontend/src/api.ts` exports an API-base value or helper the new hooks can reuse (expected, since existing code uses `/api/v1`). If not, add one.
+- Confirm that `qdrant_url` is already present in `services/backend/app/config.py` — if not, add it.
 
-These checks happen during Task 1 of the implementation plan — they may trigger tiny adjustments but will not change the overall design.
+These checks happen during Task 1 of the implementation plan.
+
+## Changes from initial review (2026-04-11)
+
+This spec was reviewed and revised after a high-signal code review. Changes:
+
+1. **All endpoints mounted under `/api/v1`** to match the existing backend router prefix.
+2. **Backend infrastructure section added**: `qdrant-client` dependency, lazy Qdrant client getter in `app/services/qdrant_client.py`, Neo4j `_read_query` extracted from `graph.py` into `app/services/neo4j_client.py`.
+3. **FIRMS `firms_map_url` is computed server-side** from payload fields — the collector does not persist a URL into the Qdrant payload.
+4. **Aircraft polylines use uniform per-track color** via `Material.fromType("Color", ...)` — matches existing `FlightLayer` pattern. Per-vertex alpha fade dropped from v1 because `PolylineCollection.add()` does not accept `PolylineColorAppearance`.
+5. **`OperationsPanel.tsx` is the real file**; `LayerPanel.tsx` does not exist. Two new entries added to its `LAYER_CONFIG` plus a new grouped "INGESTION" section below the existing layer block. `LayerVisibility` type extended. `client_config.default_layers` dict extended to stay in sync.
+6. **Selection details panel docks bottom-left** as `SelectionPanel.tsx` because `RightPanel.tsx` already occupies the right side.
+7. **Qdrant scroll is paginated** via `next_offset` loop with a safety ceiling of 5000 results.
+8. **Tests cover boundary cases** — HTTP 422 for `since_hours=0` and above-max, pagination across multiple pages, `max_total` ceiling.
