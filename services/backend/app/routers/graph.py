@@ -2,39 +2,16 @@
 
 from __future__ import annotations
 
-import neo4j
 import structlog
 from fastapi import APIRouter, Query
-from neo4j import AsyncGraphDatabase
 
-from app.config import settings
 from app.models.events import GeoEvent, GeoEventsResponse
 from app.models.graph import GraphEdge, GraphNode, GraphResponse
+from app.services.neo4j_client import read_query as _read_query
 
 log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/graph", tags=["graph"])
-
-_driver = None
-
-
-async def _get_graph_client():
-    """Lazy-init async Neo4j driver."""
-    global _driver
-    if _driver is None:
-        _driver = AsyncGraphDatabase.driver(
-            settings.neo4j_url,
-            auth=(settings.neo4j_user, settings.neo4j_password),
-        )
-    return _driver
-
-
-async def _read_query(cypher: str, params: dict) -> list[dict]:
-    """Execute a read-only Cypher query."""
-    driver = await _get_graph_client()
-    async with driver.session(default_access_mode=neo4j.READ_ACCESS) as session:
-        result = await session.run(cypher, params)
-        return [dict(record) async for record in result]
 
 
 def _cap_limit(limit: int) -> int:
