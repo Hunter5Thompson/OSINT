@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.routers import (
+    aircraft,
     cables,
     earthquakes,
     firms,
@@ -90,6 +91,7 @@ app.include_router(rag.router, prefix="/api/v1")
 app.include_router(graph.router, prefix="/api/v1")
 app.include_router(cables.router, prefix="/api/v1")
 app.include_router(firms.router, prefix="/api/v1")
+app.include_router(aircraft.router, prefix="/api/v1")
 
 # WebSocket Routers
 app.include_router(flight_ws.router)
