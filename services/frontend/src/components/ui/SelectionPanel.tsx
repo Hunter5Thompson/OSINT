@@ -1,9 +1,11 @@
 import * as Cesium from "cesium";
-import type { AircraftTrack, FIRMSHotspot } from "../../types";
+import type { AircraftTrack, FIRMSHotspot, DatacenterProperties, RefineryProperties } from "../../types";
 
 export type Selected =
   | { type: "firms"; data: FIRMSHotspot }
-  | { type: "aircraft"; data: AircraftTrack };
+  | { type: "aircraft"; data: AircraftTrack }
+  | { type: "datacenter"; data: DatacenterProperties }
+  | { type: "refinery"; data: RefineryProperties };
 
 interface SelectionPanelProps {
   selected: Selected | null;
@@ -17,7 +19,15 @@ export function SelectionPanel({ selected, onClose, viewer }: SelectionPanelProp
   return (
     <div className="absolute left-3 bottom-16 w-80 max-h-[40vh] overflow-y-auto bg-black/85 border border-green-500/20 rounded font-mono text-xs z-40 backdrop-blur-sm">
       <div className="flex items-center justify-between px-3 py-2 border-b border-green-500/20 text-green-400 font-bold tracking-wider">
-        <span>{selected.type === "firms" ? "THERMAL ANOMALY" : "AIRCRAFT TRACK"}</span>
+        <span>
+          {selected.type === "firms"
+            ? "THERMAL ANOMALY"
+            : selected.type === "aircraft"
+              ? "AIRCRAFT TRACK"
+              : selected.type === "datacenter"
+                ? "DATACENTER"
+                : "OIL REFINERY"}
+        </span>
         <button
           aria-label="close"
           onClick={onClose}
@@ -29,8 +39,12 @@ export function SelectionPanel({ selected, onClose, viewer }: SelectionPanelProp
       <div className="p-3 text-green-300/80 leading-relaxed">
         {selected.type === "firms" ? (
           <FIRMSContent h={selected.data} />
-        ) : (
+        ) : selected.type === "aircraft" ? (
           <AircraftContent t={selected.data} viewer={viewer} />
+        ) : selected.type === "datacenter" ? (
+          <DatacenterContent d={selected.data} />
+        ) : (
+          <RefineryContent r={selected.data} />
         )}
       </div>
     </div>
@@ -69,6 +83,36 @@ function FIRMSContent({ h }: { h: FIRMSHotspot }) {
       >
         View on FIRMS Map
       </a>
+    </>
+  );
+}
+
+function DatacenterContent({ d }: { d: DatacenterProperties }) {
+  return (
+    <>
+      <div className="mb-1 text-cyan-300 font-bold">{d.name}</div>
+      <Row label="OPERATOR" value={d.operator} />
+      <Row label="TIER" value={d.tier.toUpperCase()} />
+      <Row label="CAPACITY" value={d.capacity_mw != null ? `${d.capacity_mw} MW` : "—"} />
+      <Row label="COUNTRY" value={d.country} />
+      <Row label="CITY" value={d.city} />
+    </>
+  );
+}
+
+function RefineryContent({ r }: { r: RefineryProperties }) {
+  const fmtCapacity = (bpd: number): string => {
+    if (bpd >= 1_000_000) return `${(bpd / 1_000_000).toFixed(2)}M bbl/day`;
+    return `${(bpd / 1_000).toFixed(0)}K bbl/day`;
+  };
+
+  return (
+    <>
+      <div className="mb-1 text-amber-300 font-bold">{r.name}</div>
+      <Row label="OPERATOR" value={r.operator} />
+      <Row label="CAPACITY" value={fmtCapacity(r.capacity_bpd)} />
+      <Row label="COUNTRY" value={r.country} />
+      <Row label="STATUS" value={r.status.toUpperCase()} />
     </>
   );
 }
