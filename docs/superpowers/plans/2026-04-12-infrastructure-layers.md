@@ -114,17 +114,32 @@ export type {
 } from "./infrastructure";
 ```
 
-- [ ] **Step 3: Run type-check**
+- [ ] **Step 3: Fix LayerVisibility literals in App.tsx**
+
+Adding fields to `LayerVisibility` breaks all places that construct a full literal. Fix them now to keep the tree green.
+
+In `src/App.tsx`, add to the `useState<LayerVisibility>` initial value (after `milAircraft: true,`):
+
+```typescript
+    datacenters: false,
+    refineries: false,
+```
+
+And in the `getConfig().catch()` fallback `default_layers` (after `milAircraft: true,`):
+
+```typescript
+        datacenters: false, refineries: false,
+```
+
+- [ ] **Step 4: Run type-check**
 
 Run: `cd services/frontend && npx tsc --noEmit`
-Expected: Clean (0 errors). The new `datacenters`/`refineries` fields will cause errors in `App.tsx` and `OperationsPanel.tsx` where `LayerVisibility` objects are constructed — these are expected and will be fixed in later tasks.
+Expected: Clean (0 errors).
 
-Note: If type-check shows errors in `App.tsx` default state or backend config fallback, that's expected — those files construct `LayerVisibility` literals that now need the new fields. We fix them in Task 8.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/types/infrastructure.ts src/types/index.ts
+git add src/types/infrastructure.ts src/types/index.ts src/App.tsx
 git commit -m "feat(frontend): add infrastructure types and extend LayerVisibility"
 ```
 
@@ -547,18 +562,6 @@ describe("createDatacenterIcon", () => {
 });
 
 describe("DatacenterLayer", () => {
-  it("renders without throwing", () => {
-    const viewer = fakeViewer();
-    render(
-      <DatacenterLayer
-        viewer={viewer}
-        datacenters={MOCK_DATA}
-        visible={true}
-        onSelect={vi.fn()}
-      />,
-    );
-  });
-
   it("adds billboard and label collections to scene", () => {
     const viewer = fakeViewer();
     render(
@@ -569,6 +572,46 @@ describe("DatacenterLayer", () => {
         onSelect={vi.fn()}
       />,
     );
+    // BillboardCollection + LabelCollection = 2 calls
+    expect(viewer.scene.primitives.add).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates one billboard per feature when visible", () => {
+    const viewer = fakeViewer();
+    // Capture the BillboardCollection instance
+    let bbCollection: { add: ReturnType<typeof vi.fn>; removeAll: ReturnType<typeof vi.fn> } | null = null;
+    (viewer.scene.primitives.add as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
+      const obj = p as Record<string, unknown>;
+      if (obj && typeof obj === "object" && "add" in obj) {
+        if (!bbCollection) bbCollection = obj as typeof bbCollection;
+      }
+      return p;
+    });
+    render(
+      <DatacenterLayer
+        viewer={viewer}
+        datacenters={MOCK_DATA}
+        visible={true}
+        onSelect={vi.fn()}
+      />,
+    );
+    // BillboardCollection.add called once per feature (2 features in MOCK_DATA)
+    // Note: actual Cesium primitives are instantiated inside the component,
+    // so we verify via the primitives.add spy count instead
+    expect(viewer.scene.primitives.add).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not add billboards when visible=false", () => {
+    const viewer = fakeViewer();
+    render(
+      <DatacenterLayer
+        viewer={viewer}
+        datacenters={MOCK_DATA}
+        visible={false}
+        onSelect={vi.fn()}
+      />,
+    );
+    // Collections are created but no features rendered
     expect(viewer.scene.primitives.add).toHaveBeenCalled();
   });
 
@@ -846,18 +889,6 @@ describe("createRefineryIcon", () => {
 });
 
 describe("RefineryLayer", () => {
-  it("renders without throwing", () => {
-    const viewer = fakeViewer();
-    render(
-      <RefineryLayer
-        viewer={viewer}
-        refineries={MOCK_DATA}
-        visible={true}
-        onSelect={vi.fn()}
-      />,
-    );
-  });
-
   it("adds billboard and label collections to scene", () => {
     const viewer = fakeViewer();
     render(
@@ -868,6 +899,21 @@ describe("RefineryLayer", () => {
         onSelect={vi.fn()}
       />,
     );
+    // BillboardCollection + LabelCollection = 2 calls
+    expect(viewer.scene.primitives.add).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not add billboards when visible=false", () => {
+    const viewer = fakeViewer();
+    render(
+      <RefineryLayer
+        viewer={viewer}
+        refineries={MOCK_DATA}
+        visible={false}
+        onSelect={vi.fn()}
+      />,
+    );
+    // Collections are created but no features rendered
     expect(viewer.scene.primitives.add).toHaveBeenCalled();
   });
 
@@ -1144,7 +1190,7 @@ In the `LayerIcon` component's `switch` statement, add two cases before the `def
 - [ ] **Step 3: Run type-check**
 
 Run: `cd services/frontend && npx tsc --noEmit`
-Expected: May show errors in `App.tsx` where `LayerVisibility` literals are missing the new fields — that's expected, fixed in Task 8.
+Expected: Clean (0 errors) — `App.tsx` was already fixed in Task 1 Step 3.
 
 - [ ] **Step 4: Commit**
 
@@ -1255,7 +1301,7 @@ function RefineryContent({ r }: { r: RefineryProperties }) {
 - [ ] **Step 5: Run type-check**
 
 Run: `cd services/frontend && npx tsc --noEmit`
-Expected: May still have errors in `App.tsx` — fixed in next task.
+Expected: Clean (0 errors).
 
 - [ ] **Step 6: Commit**
 
@@ -1266,10 +1312,12 @@ git commit -m "feat(frontend): add datacenter + refinery content to SelectionPan
 
 ---
 
-### Task 9: App.tsx — Wire Everything Together
+### Task 9: App.tsx — Wire Hooks + Render Layers
 
 **Files:**
 - Modify: `src/App.tsx`
+
+Note: `LayerVisibility` defaults were already added to `App.tsx` in Task 1 Step 3. This task wires the hooks and renders the layer components.
 
 - [ ] **Step 1: Add imports**
 
@@ -1287,41 +1335,7 @@ Also import new types in the existing type import line:
 import type { LayerVisibility, ShaderType, Hotspot, ClientConfig, DatacenterProperties, RefineryProperties } from "./types";
 ```
 
-- [ ] **Step 2: Update default LayerVisibility state**
-
-In the `useState<LayerVisibility>` initial value, add the two new fields:
-
-```typescript
-  const [layers, setLayers] = useState<LayerVisibility>({
-    flights: true,
-    satellites: true,
-    earthquakes: true,
-    vessels: false,
-    cctv: false,
-    events: false,
-    cables: false,
-    pipelines: false,
-    firmsHotspots: true,
-    milAircraft: true,
-    datacenters: false,
-    refineries: false,
-  });
-```
-
-- [ ] **Step 3: Update config fallback default_layers**
-
-In the `getConfig().catch()` fallback, add the new fields:
-
-```typescript
-  default_layers: {
-    flights: true, satellites: true, earthquakes: true, vessels: false,
-    cctv: false, events: false, cables: false, pipelines: false,
-    firmsHotspots: true, milAircraft: true,
-    datacenters: false, refineries: false,
-  },
-```
-
-- [ ] **Step 4: Wire hooks**
+- [ ] **Step 2: Wire hooks**
 
 Add after the existing `useAircraftTracks` line:
 
@@ -1330,7 +1344,7 @@ Add after the existing `useAircraftTracks` line:
   const { refineries: refineryData } = useRefineries(layers.refineries);
 ```
 
-- [ ] **Step 5: Render layer components**
+- [ ] **Step 3: Render layer components**
 
 Add after the `<MilAircraftLayer>` JSX, before `<EntityClickHandler>`:
 
@@ -1349,22 +1363,22 @@ Add after the `<MilAircraftLayer>` JSX, before `<EntityClickHandler>`:
       />
 ```
 
-- [ ] **Step 6: Run type-check**
+- [ ] **Step 4: Run type-check**
 
 Run: `cd services/frontend && npx tsc --noEmit`
-Expected: CLEAN — all `LayerVisibility` literals now have the new fields.
+Expected: Clean (0 errors).
 
-- [ ] **Step 7: Run all tests**
+- [ ] **Step 5: Run all tests**
 
 Run: `cd services/frontend && npx vitest run`
 Expected: All tests pass (existing + new).
 
-- [ ] **Step 8: Run lint**
+- [ ] **Step 6: Run lint**
 
 Run: `cd services/frontend && npx eslint src/ --ext .ts,.tsx`
 Expected: 0 new errors (pre-existing warnings in GraphCanvas.tsx are acceptable).
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/App.tsx
@@ -1373,7 +1387,180 @@ git commit -m "feat(frontend): wire datacenter + refinery layers into App"
 
 ---
 
-### Task 10: Full Integration Verification
+### Task 10: Integration Tests — OperationsPanel, SelectionPanel, App Wiring
+
+**Files:**
+- Create: `src/components/ui/__tests__/OperationsPanel.infra.test.tsx`
+- Create: `src/components/ui/__tests__/SelectionPanel.infra.test.tsx`
+
+- [ ] **Step 1: Write OperationsPanel integration test**
+
+Create `src/components/ui/__tests__/OperationsPanel.infra.test.tsx`:
+
+```typescript
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { OperationsPanel } from "../OperationsPanel";
+import type { LayerVisibility } from "../../../types";
+
+const baseLayers: LayerVisibility = {
+  flights: true, satellites: true, earthquakes: true, vessels: false,
+  cctv: false, events: false, cables: false, pipelines: false,
+  firmsHotspots: true, milAircraft: true,
+  datacenters: false, refineries: false,
+};
+
+describe("OperationsPanel — infrastructure layers", () => {
+  it("renders DATACENTERS and REFINERIES toggles", () => {
+    render(
+      <OperationsPanel
+        layers={baseLayers}
+        onToggleLayer={vi.fn()}
+        activeShader="none"
+        onShaderChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("DATACENTERS")).toBeDefined();
+    expect(screen.getByText("REFINERIES")).toBeDefined();
+  });
+
+  it("calls onToggleLayer with 'datacenters' when clicked", () => {
+    const toggle = vi.fn();
+    render(
+      <OperationsPanel
+        layers={baseLayers}
+        onToggleLayer={toggle}
+        activeShader="none"
+        onShaderChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText("DATACENTERS"));
+    expect(toggle).toHaveBeenCalledWith("datacenters");
+  });
+
+  it("calls onToggleLayer with 'refineries' when clicked", () => {
+    const toggle = vi.fn();
+    render(
+      <OperationsPanel
+        layers={baseLayers}
+        onToggleLayer={toggle}
+        activeShader="none"
+        onShaderChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText("REFINERIES"));
+    expect(toggle).toHaveBeenCalledWith("refineries");
+  });
+});
+```
+
+- [ ] **Step 2: Write SelectionPanel integration test**
+
+Create `src/components/ui/__tests__/SelectionPanel.infra.test.tsx`:
+
+```typescript
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { SelectionPanel } from "../SelectionPanel";
+import type { DatacenterProperties, RefineryProperties } from "../../../types";
+
+describe("SelectionPanel — datacenter selection", () => {
+  const dcProps: DatacenterProperties = {
+    name: "AWS Ashburn",
+    operator: "Amazon Web Services",
+    tier: "hyperscaler",
+    capacity_mw: 600,
+    country: "US",
+    city: "Ashburn",
+  };
+
+  it("renders datacenter header and all fields", () => {
+    render(
+      <SelectionPanel
+        selected={{ type: "datacenter", data: dcProps }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+    expect(screen.getByText("DATACENTER")).toBeDefined();
+    expect(screen.getByText("AWS Ashburn")).toBeDefined();
+    expect(screen.getByText("Amazon Web Services")).toBeDefined();
+    expect(screen.getByText("HYPERSCALER")).toBeDefined();
+    expect(screen.getByText("600 MW")).toBeDefined();
+    expect(screen.getByText("US")).toBeDefined();
+    expect(screen.getByText("Ashburn")).toBeDefined();
+  });
+
+  it("renders '—' for null capacity", () => {
+    render(
+      <SelectionPanel
+        selected={{ type: "datacenter", data: { ...dcProps, capacity_mw: null } }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+    expect(screen.getByText("—")).toBeDefined();
+  });
+});
+
+describe("SelectionPanel — refinery selection", () => {
+  const rfProps: RefineryProperties = {
+    name: "Jamnagar Refinery",
+    operator: "Reliance Industries",
+    capacity_bpd: 1240000,
+    country: "IN",
+    status: "active",
+  };
+
+  it("renders refinery header and all fields", () => {
+    render(
+      <SelectionPanel
+        selected={{ type: "refinery", data: rfProps }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+    expect(screen.getByText("OIL REFINERY")).toBeDefined();
+    expect(screen.getByText("Jamnagar Refinery")).toBeDefined();
+    expect(screen.getByText("Reliance Industries")).toBeDefined();
+    expect(screen.getByText("1.24M bbl/day")).toBeDefined();
+    expect(screen.getByText("IN")).toBeDefined();
+    expect(screen.getByText("ACTIVE")).toBeDefined();
+  });
+
+  it("formats sub-million capacity in K", () => {
+    render(
+      <SelectionPanel
+        selected={{ type: "refinery", data: { ...rfProps, capacity_bpd: 550000 } }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+    expect(screen.getByText("550K bbl/day")).toBeDefined();
+  });
+});
+```
+
+- [ ] **Step 3: Run integration tests**
+
+Run: `cd services/frontend && npx vitest run src/components/ui/__tests__/OperationsPanel.infra.test.tsx src/components/ui/__tests__/SelectionPanel.infra.test.tsx`
+Expected: All tests pass.
+
+- [ ] **Step 4: Run full test suite**
+
+Run: `cd services/frontend && npx vitest run`
+Expected: All tests pass (existing + hook + layer + integration).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/components/ui/__tests__/OperationsPanel.infra.test.tsx src/components/ui/__tests__/SelectionPanel.infra.test.tsx
+git commit -m "test(frontend): add integration tests for infra layer toggle + selection"
+```
+
+---
+
+### Task 11: Full Integration Verification
 
 **Files:** None (verification only)
 
