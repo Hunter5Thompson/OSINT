@@ -25,6 +25,11 @@ from feeds.tle_updater import TLEUpdater
 from feeds.ucdp_collector import UCDPCollector
 from feeds.usgs_collector import USGSCollector
 from feeds.correlation_job import CorrelationJob
+from feeds.eonet_collector import EONETCollector
+from feeds.gdacs_collector import GDACSCollector
+from feeds.hapi_collector import HAPICollector
+from feeds.noaa_nhc_collector import NOAANHCCollector
+from feeds.portwatch_collector import PortWatchCollector
 
 # Shared async Redis client for stream publishing
 _redis_client: aioredis.Redis | None = None
@@ -180,6 +185,61 @@ async def run_correlation_job() -> None:
         log.exception("correlation_job_failed")
 
 
+async def run_eonet_collector() -> None:
+    """Collect NASA EONET natural events."""
+    collector = EONETCollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("eonet_job_failed")
+    finally:
+        await collector.close()
+
+
+async def run_gdacs_collector() -> None:
+    """Collect GDACS global disaster alerts."""
+    collector = GDACSCollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("gdacs_job_failed")
+    finally:
+        await collector.close()
+
+
+async def run_hapi_collector() -> None:
+    """Collect HAPI humanitarian data."""
+    collector = HAPICollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("hapi_job_failed")
+    finally:
+        await collector.close()
+
+
+async def run_noaa_nhc_collector() -> None:
+    """Collect NOAA NHC tropical storm advisories."""
+    collector = NOAANHCCollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("noaa_nhc_job_failed")
+    finally:
+        await collector.close()
+
+
+async def run_portwatch_collector() -> None:
+    """Collect IMF PortWatch maritime trade data."""
+    collector = PortWatchCollector(settings=settings, redis_client=_get_redis_client())
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("portwatch_job_failed")
+    finally:
+        await collector.close()
+
+
 # ---------------------------------------------------------------------------
 # Scheduler setup
 # ---------------------------------------------------------------------------
@@ -294,6 +354,48 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # --- Hugin Sprint 2a Collectors ---
+
+    scheduler.add_job(
+        run_eonet_collector,
+        trigger=IntervalTrigger(hours=settings.eonet_interval_hours),
+        id="eonet_collector",
+        name="NASA EONET Natural Events Collector",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        run_gdacs_collector,
+        trigger=IntervalTrigger(hours=settings.gdacs_interval_hours),
+        id="gdacs_collector",
+        name="GDACS Global Disaster Alert Collector",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        run_hapi_collector,
+        trigger=CronTrigger(hour=4, minute=0, timezone="UTC"),
+        id="hapi_collector",
+        name="HAPI Humanitarian Data Collector",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        run_noaa_nhc_collector,
+        trigger=IntervalTrigger(hours=settings.noaa_nhc_interval_hours),
+        id="noaa_nhc_collector",
+        name="NOAA NHC Tropical Storm Collector",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        run_portwatch_collector,
+        trigger=IntervalTrigger(hours=settings.portwatch_interval_hours),
+        id="portwatch_collector",
+        name="IMF PortWatch Maritime Trade Collector",
+        replace_existing=True,
+    )
+
     return scheduler
 
 
@@ -334,6 +436,11 @@ async def main() -> None:
         run_firms_collector(),
         run_usgs_collector(),
         run_military_collector(),
+        run_eonet_collector(),
+        run_gdacs_collector(),
+        # HAPI runs daily via cron, not on initial startup
+        run_noaa_nhc_collector(),
+        run_portwatch_collector(),
         # OFAC runs daily via cron, not on initial startup
     ]
     await asyncio.gather(*initial_tasks, return_exceptions=True)
