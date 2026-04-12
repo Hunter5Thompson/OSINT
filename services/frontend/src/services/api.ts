@@ -9,7 +9,9 @@ import type {
   CableDataset,
   ClientConfig,
   Earthquake,
+  EONETEvent,
   FIRMSHotspot,
+  GDACSEvent,
   GeoEventsResponse,
   Hotspot,
   IntelAnalysis,
@@ -150,4 +152,12 @@ export async function getFIRMSHotspots(sinceHours = 24): Promise<FIRMSHotspot[]>
 
 export async function getAircraftTracks(sinceHours = 24): Promise<AircraftTrack[]> {
   return fetchJSON<AircraftTrack[]>(`/aircraft/tracks?since_hours=${sinceHours}`);
+}
+
+export async function getEONETEvents(sinceHours = 168): Promise<EONETEvent[]> {
+  return fetchJSON<EONETEvent[]>(`/eonet/events?since_hours=${sinceHours}`);
+}
+
+export async function getGDACSEvents(sinceHours = 168): Promise<GDACSEvent[]> {
+  return fetchJSON<GDACSEvent[]>(`/gdacs/events?since_hours=${sinceHours}`);
 }

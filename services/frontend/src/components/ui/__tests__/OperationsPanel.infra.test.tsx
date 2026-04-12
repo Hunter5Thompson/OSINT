@@ -7,7 +7,7 @@ const baseLayers: LayerVisibility = {
   flights: true, satellites: true, earthquakes: true, vessels: false,
   cctv: false, events: false, cables: false, pipelines: false,
   firmsHotspots: true, milAircraft: true,
-  datacenters: false, refineries: false,
+  datacenters: false, refineries: false, eonet: false, gdacs: false,
 };
 
 describe("OperationsPanel — infrastructure layers", () => {

@@ -159,6 +159,29 @@ export interface CableDataset {
   source: string;
 }
 
+export interface EONETEvent {
+  id: string;
+  title: string;
+  category: string;
+  status: string;
+  latitude: number;
+  longitude: number;
+  event_date: string;
+}
+
+export interface GDACSEvent {
+  id: string;
+  event_type: string;
+  event_name: string;
+  alert_level: string;
+  severity: number;
+  country: string;
+  latitude: number;
+  longitude: number;
+  from_date: string;
+  to_date: string;
+}
+
 // ── UI State Types ──
 
 export interface LayerVisibility {
@@ -174,6 +197,8 @@ export interface LayerVisibility {
   milAircraft: boolean;
   datacenters: boolean;
   refineries: boolean;
+  eonet: boolean;
+  gdacs: boolean;
 }
 
 export type ShaderType = "none" | "crt" | "nightvision" | "flir";
