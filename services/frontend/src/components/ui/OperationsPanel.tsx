@@ -18,6 +18,8 @@ const CORE_LAYERS: { key: keyof LayerVisibility; label: string; color: string }[
   { key: "events", label: "EVENTS", color: "#f97316" },
   { key: "cables", label: "CABLES", color: "#22c55e" },
   { key: "pipelines", label: "PIPELINES", color: "#eab308" },
+  { key: "datacenters", label: "DATACENTERS", color: "#00e5ff" },
+  { key: "refineries",  label: "REFINERIES",  color: "#ff8f00" },
 ];
 
 const INGESTION_LAYERS: { key: keyof LayerVisibility; label: string; color: string }[] = [
@@ -62,6 +64,28 @@ function LayerIcon({ layerKey, color }: { layerKey: string; color: string }) {
             fill={color}
             opacity={0.85}
           />
+        </svg>
+      );
+    case "datacenters":
+      return (
+        <svg {...s}>
+          <rect x={8} y={8} width={16} height={16} rx={2} fill={color} opacity={0.3} stroke={color} strokeWidth={1} />
+          <line x1={11} y1={13} x2={21} y2={13} stroke={color} strokeWidth={1.5} opacity={0.7} />
+          <line x1={11} y1={17} x2={21} y2={17} stroke={color} strokeWidth={1.5} opacity={0.7} />
+          <line x1={11} y1={21} x2={21} y2={21} stroke={color} strokeWidth={1.5} opacity={0.7} />
+          <circle cx={20} cy={13} r={1.2} fill={color} opacity={0.9} />
+          <circle cx={20} cy={17} r={1.2} fill="#00ff88" opacity={0.9} />
+          <circle cx={20} cy={21} r={1.2} fill={color} opacity={0.9} />
+        </svg>
+      );
+    case "refineries":
+      return (
+        <svg {...s}>
+          <rect x={10} y={14} width={5} height={14} rx={2.5} fill={color} opacity={0.3} stroke={color} strokeWidth={1} />
+          <rect x={17} y={10} width={5} height={18} rx={2.5} fill={color} opacity={0.3} stroke={color} strokeWidth={1} />
+          <rect x={24} y={16} width={4} height={12} rx={1} fill={color} opacity={0.2} stroke={color} strokeWidth={1} />
+          <circle cx={26} cy={12} r={2} fill={color} opacity={0.15} stroke={color} strokeWidth={0.8} />
+          <line x1={8} y1={28} x2={30} y2={28} stroke={color} strokeWidth={1.5} />
         </svg>
       );
     default:
