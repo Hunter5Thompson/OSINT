@@ -64,7 +64,7 @@ class PortWatchCollector(BaseCollector):
             })
         return records
 
-    async def _fetch_paginated(self, url: str) -> list[dict[str, Any]]:
+    async def _fetch_paginated(self, url: str) -> dict[str, Any]:
         """Fetch all pages from ArcGIS FeatureServer."""
         all_features: list[dict[str, Any]] = []
         offset = 0
@@ -119,8 +119,6 @@ class PortWatchCollector(BaseCollector):
                 f"${record['trade_value_usd']:,.0f} trade, {record['vessel_count']} vessels"
             )
 
-            chash = self._content_hash(record["chokepoint"], record["date"], "daily_flow")
-
             try:
                 from pipeline import process_item
                 await process_item(
@@ -136,6 +134,7 @@ class PortWatchCollector(BaseCollector):
 
             payload = {
                 "source": "portwatch",
+                "description": description,
                 **record,
                 "latitude": coords[0],
                 "longitude": coords[1],
@@ -166,8 +165,6 @@ class PortWatchCollector(BaseCollector):
             coords = CHOKEPOINT_COORDS.get(record["chokepoint"], (0.0, 0.0))
             description = f"PortWatch Disruption: {record['chokepoint']} — {record['description']}"
 
-            chash = self._content_hash("disruption", record["disruption_id"])
-
             try:
                 from pipeline import process_item
                 await process_item(
@@ -183,6 +180,7 @@ class PortWatchCollector(BaseCollector):
 
             payload = {
                 "source": "portwatch",
+                "description": description,
                 **record,
                 "latitude": coords[0],
                 "longitude": coords[1],

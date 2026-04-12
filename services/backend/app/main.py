@@ -139,6 +139,8 @@ async def client_config() -> ClientConfig:
             "pipelines": False,
             "firmsHotspots": True,
             "milAircraft": True,
+            "eonet": False,
+            "gdacs": False,
         },
         api_version="v1",
     )

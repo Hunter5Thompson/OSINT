@@ -98,9 +98,9 @@ class HAPICollector(BaseCollector):
 
                 payload = {
                     "source": "hapi",
+                    "description": description,
                     **record,
                 }
-                chash = self._content_hash(record["location_code"], record["reference_period"], record["event_type"])
                 try:
                     point = await self._build_point(description, payload, chash)
                     points.append(point)

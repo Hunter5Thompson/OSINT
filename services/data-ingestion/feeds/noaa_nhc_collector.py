@@ -84,8 +84,6 @@ class NOAANHCCollector(BaseCollector):
                 f"moving {storm['movement']}"
             )
 
-            chash = self._content_hash(storm["storm_id"], storm["advisory_number"])
-
             try:
                 from pipeline import process_item
                 await process_item(
@@ -101,6 +99,7 @@ class NOAANHCCollector(BaseCollector):
 
             payload = {
                 "source": "noaa_nhc",
+                "description": description,
                 **storm,
             }
             try:
