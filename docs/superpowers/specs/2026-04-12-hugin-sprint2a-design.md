@@ -10,10 +10,14 @@ Five new data collectors for conflict monitoring, natural disasters, maritime ch
 
 ## Architectural Decisions
 
-### BaseCollector Pattern (unchanged)
+### BaseCollector Pattern (with mutable-event exception)
 
 All collectors inherit from `feeds/base.py:BaseCollector` and implement `collect()`:
 Fetch → Parse → Dedup (SHA-256 content hash) → Pipeline (vLLM extract → Neo4j) → Embed (TEI) → Qdrant upsert.
+
+**Exception for mutable events (EONET, GDACS):** These sources track evolving events whose status/severity changes over time. They bypass `_dedup_check()` and upsert unconditionally to Qdrant. To prevent Neo4j duplicates, they skip the Pipeline's `CREATE` step on re-ingestion — only call Pipeline on first-seen events (determined by checking Qdrant point existence before upsert). Subsequent upserts update Qdrant payload only, no new Neo4j nodes.
+
+The remaining three collectors (HAPI, NOAA NHC, PortWatch) use standard insert-only dedup.
 
 ### Globe-Layer: Only EONET + GDACS
 
@@ -53,7 +57,10 @@ EONET categorizes events: `wildfires`, `volcanoes`, `severeStorms`, `seaLakeIce`
 
 ### Dedup + Upsert Strategy
 
-**Mutable events:** EONET events change status/severity over their lifecycle. Use `sha256(event_id)` as stable Qdrant point ID. On each collect cycle, **upsert** (not insert-only) — existing points get their payload overwritten with current data. This bypasses `_dedup_check()` from BaseCollector; instead, call `_batch_upsert()` directly which performs an unconditional upsert.
+**Mutable events:** EONET events change status/severity over their lifecycle. Use `sha256(event_id)` as stable Qdrant point ID. On each collect cycle:
+1. Check if point ID already exists in Qdrant (lightweight scroll with ID filter)
+2. **First-seen:** Run through Pipeline (vLLM → Neo4j) + upsert to Qdrant
+3. **Already exists:** Upsert to Qdrant only (update payload), skip Pipeline to avoid Neo4j duplicates
 
 ### Qdrant Payload
 
@@ -74,7 +81,7 @@ EONET categorizes events: `wildfires`, `volcanoes`, `severeStorms`, `seaLakeIce`
 
 ### Globe-Layer
 
-- **Backend Router:** `GET /api/v1/eonet/events?since_hours=168` — query Qdrant by source+ingested_epoch
+- **Backend Router:** `GET /api/v1/eonet/events?since_hours=168` — query Qdrant by source+ingested_epoch, Redis cache with `ttl_seconds=120` (same pattern as FIRMS router)
 - **Frontend Hook:** `useEONETEvents(enabled)` — polls every 120s when enabled
 - **Icons by category:**
   - Volcanoes: red triangle (#ef4444)
@@ -102,7 +109,10 @@ IntervalTrigger, every 2 hours. Run on startup.
 
 ### Dedup + Upsert Strategy
 
-**Mutable events:** GDACS alert levels and severity change as disasters evolve. Use `sha256(eventtype + eventid)` as stable Qdrant point ID. Same upsert pattern as EONET — bypass `_dedup_check()`, upsert unconditionally on each cycle.
+**Mutable events:** GDACS alert levels and severity change as disasters evolve. Use `sha256(eventtype + eventid)` as stable Qdrant point ID. Same upsert pattern as EONET:
+1. Check if point ID already exists in Qdrant
+2. **First-seen:** Pipeline + upsert
+3. **Already exists:** Qdrant upsert only, no Pipeline (prevents Neo4j duplicates)
 
 ### Qdrant Payload
 
@@ -126,7 +136,7 @@ IntervalTrigger, every 2 hours. Run on startup.
 
 ### Globe-Layer
 
-- **Backend Router:** `GET /api/v1/gdacs/events?since_hours=168`
+- **Backend Router:** `GET /api/v1/gdacs/events?since_hours=168` — Redis cache with `ttl_seconds=120`
 - **Frontend Hook:** `useGDACSEvents(enabled)` — polls every 120s
 - **Icons by alert level:**
   - Red: large red circle (#ef4444), pulsing ring (like FIRMS explosion)
