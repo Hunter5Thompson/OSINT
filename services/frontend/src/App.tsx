@@ -47,6 +47,8 @@ export function App() {
     pipelines: false,
     firmsHotspots: true,
     milAircraft: true,
+    datacenters: false,
+    refineries: false,
   });
 
   const [activeShader, setActiveShader] = useState<ShaderType>("none");
@@ -71,7 +73,7 @@ export function App() {
       .catch(() => {
         setConfig({
           cesium_ion_token: "",
-          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false, cables: false, pipelines: false, firmsHotspots: true, milAircraft: true },
+          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false, cables: false, pipelines: false, firmsHotspots: true, milAircraft: true, datacenters: false, refineries: false },
           api_version: "v1",
         });
       });

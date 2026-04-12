@@ -172,6 +172,8 @@ export interface LayerVisibility {
   pipelines: boolean;
   firmsHotspots: boolean;
   milAircraft: boolean;
+  datacenters: boolean;
+  refineries: boolean;
 }
 
 export type ShaderType = "none" | "crt" | "nightvision" | "flir";
@@ -194,3 +196,14 @@ export interface DataFreshness {
 
 export type { PipelineProperties, PipelineFeature, PipelineGeoJSON } from "./pipeline";
 export { PIPELINE_COLORS, PIPELINE_LOD_THRESHOLDS } from "./pipeline";
+
+export type {
+  DatacenterTier,
+  RefineryStatus,
+  DatacenterProperties,
+  RefineryProperties,
+  InfraFeature,
+  InfraGeoJSON,
+  DatacenterGeoJSON,
+  RefineryGeoJSON,
+} from "./infrastructure";
