@@ -13,6 +13,8 @@ import { CableLayer } from "./components/layers/CableLayer";
 import { PipelineLayer } from "./components/layers/PipelineLayer";
 import { FIRMSLayer } from "./components/layers/FIRMSLayer";
 import { MilAircraftLayer } from "./components/layers/MilAircraftLayer";
+import { DatacenterLayer } from "./components/layers/DatacenterLayer";
+import { RefineryLayer } from "./components/layers/RefineryLayer";
 import { OperationsPanel } from "./components/ui/OperationsPanel";
 import { RightPanel } from "./components/ui/RightPanel";
 import { ThreatRegister } from "./components/ui/ThreatRegister";
@@ -28,9 +30,11 @@ import { useVessels } from "./hooks/useVessels";
 import { usePipelines } from "./hooks/usePipelines";
 import { useFIRMSHotspots } from "./hooks/useFIRMSHotspots";
 import { useAircraftTracks } from "./hooks/useAircraftTracks";
+import { useDatacenters } from "./hooks/useDatacenters";
+import { useRefineries } from "./hooks/useRefineries";
 import { useIntel } from "./hooks/useIntel";
 import { getConfig, getHotspots } from "./services/api";
-import type { LayerVisibility, ShaderType, Hotspot, ClientConfig } from "./types";
+import type { LayerVisibility, ShaderType, Hotspot, ClientConfig, DatacenterProperties, RefineryProperties } from "./types";
 
 export function App() {
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
@@ -62,6 +66,8 @@ export function App() {
   const { pipelines: pipelineData, lastUpdate: pipelinesUpdate } = usePipelines(layers.pipelines);
   const { hotspots: firmsHotspots } = useFIRMSHotspots(layers.firmsHotspots);
   const { tracks: milTracks } = useAircraftTracks(layers.milAircraft);
+  const { datacenters: datacenterData } = useDatacenters(layers.datacenters);
+  const { refineries: refineryData } = useRefineries(layers.refineries);
   const [selected, setSelected] = useState<Selected | null>(null);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
 
@@ -152,6 +158,19 @@ export function App() {
         tracks={milTracks}
         visible={layers.milAircraft}
         onSelect={(t) => setSelected({ type: "aircraft", data: t })}
+      />
+
+      <DatacenterLayer
+        viewer={viewer}
+        datacenters={datacenterData}
+        visible={layers.datacenters}
+        onSelect={(d: DatacenterProperties) => setSelected({ type: "datacenter", data: d })}
+      />
+      <RefineryLayer
+        viewer={viewer}
+        refineries={refineryData}
+        visible={layers.refineries}
+        onSelect={(r: RefineryProperties) => setSelected({ type: "refinery", data: r })}
       />
 
       <EntityClickHandler viewer={viewer} />
