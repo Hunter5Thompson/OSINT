@@ -18,7 +18,7 @@ Hooks only fetch when `enabled=true` (same as `usePipelines`). Since both layers
 
 ### No Backend Involvement
 
-Pure frontend — static GeoJSON served from `public/data/`. No `/api/v1/config` extension needed. The `default_layers` backend config only governs ingestion-sourced layers (FIRMS, MilAircraft) that have backend endpoints.
+Pure frontend — static GeoJSON served from `public/data/`. Backend `/api/v1/config` already delivers `default_layers` for existing layers (flights, satellites, FIRMS, etc.); no backend change needed here since these new layers are static frontend-only data with a hardcoded default of `false`.
 
 ### All paths relative to `services/frontend/`
 
