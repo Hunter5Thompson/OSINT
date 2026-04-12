@@ -105,6 +105,50 @@ class TestEONETParser:
         assert events[0]["event_date"] == "2026-04-10T00:00:00Z"
 
 
+    def test_parse_events_skips_polygon_geometries(self, collector):
+        """EONET returns Polygon geometries for some events — only Point should be used."""
+        response = {
+            "events": [
+                {
+                    "id": "E_POLY",
+                    "title": "Ice Event",
+                    "categories": [{"id": "seaLakeIce"}],
+                    "geometry": [
+                        {
+                            "date": "2026-04-10T00:00:00Z",
+                            "type": "Polygon",
+                            "coordinates": [[[10, 20], [11, 20], [11, 21], [10, 21], [10, 20]]],
+                        }
+                    ],
+                    "closed": None,
+                }
+            ]
+        }
+        events = collector._parse_events(response)
+        assert events == []
+
+    def test_parse_events_uses_point_over_polygon(self, collector):
+        """When both Point and Polygon exist, only Point geometries are considered."""
+        response = {
+            "events": [
+                {
+                    "id": "E_MIXED",
+                    "title": "Storm Mixed",
+                    "categories": [{"id": "severeStorms"}],
+                    "geometry": [
+                        {"date": "2026-04-10T00:00:00Z", "type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
+                        {"date": "2026-04-09T00:00:00Z", "type": "Point", "coordinates": [5.0, 10.0]},
+                    ],
+                    "closed": None,
+                }
+            ]
+        }
+        events = collector._parse_events(response)
+        assert len(events) == 1
+        assert events[0]["latitude"] == 10.0
+        assert events[0]["longitude"] == 5.0
+
+
 class TestEONETContentHash:
     def test_stable_hash_for_same_id(self, collector):
         h1 = collector._content_hash("eonet", "EONET_1234")

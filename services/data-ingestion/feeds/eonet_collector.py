@@ -32,8 +32,13 @@ class EONETCollector(BaseCollector):
             if not geometries:
                 continue
 
-            # Use latest geometry (most recent position)
-            latest = max(geometries, key=lambda g: g.get("date", ""))
+            # Filter to Point geometries only (EONET also returns Polygons)
+            point_geometries = [g for g in geometries if g.get("type") == "Point"]
+            if not point_geometries:
+                continue
+
+            # Use latest Point geometry (most recent position)
+            latest = max(point_geometries, key=lambda g: g.get("date", ""))
             coords = latest.get("coordinates", [])
             if len(coords) < 2:
                 continue

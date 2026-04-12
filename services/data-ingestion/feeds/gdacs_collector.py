@@ -35,7 +35,10 @@ class GDACSCollector(BaseCollector):
             event_type = str(props.get("eventtype", ""))
             event_id = str(props.get("eventid", ""))
             severity_obj = props.get("severity", {})
-            severity = float(severity_obj.get("value", 0)) if isinstance(severity_obj, dict) else 0.0
+            try:
+                severity = float(severity_obj.get("value", 0)) if isinstance(severity_obj, dict) else 0.0
+            except (TypeError, ValueError):
+                severity = 0.0
 
             events.append({
                 "gdacs_id": f"{event_type}_{event_id}",

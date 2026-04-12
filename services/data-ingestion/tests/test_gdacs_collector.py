@@ -89,6 +89,57 @@ class TestGDACSParser:
         assert events == []
 
 
+    def test_parse_features_null_severity(self, collector):
+        """GDACS sometimes returns null severity — should not crash the entire cycle."""
+        data = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [10.0, 20.0]},
+                    "properties": {
+                        "eventtype": "FL",
+                        "eventid": "3003",
+                        "eventname": "Flood Test",
+                        "alertlevel": "Green",
+                        "severity": {"value": None},
+                        "country": "Test",
+                        "fromdate": "2026-04-10",
+                        "todate": "2026-04-10",
+                    },
+                },
+            ],
+        }
+        events = collector._parse_features(data)
+        assert len(events) == 1
+        assert events[0]["severity"] == 0.0
+
+    def test_parse_features_non_dict_severity(self, collector):
+        """GDACS severity might be a bare number or string — handle gracefully."""
+        data = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [10.0, 20.0]},
+                    "properties": {
+                        "eventtype": "EQ",
+                        "eventid": "4004",
+                        "eventname": "Quake",
+                        "alertlevel": "Orange",
+                        "severity": "invalid",
+                        "country": "Test",
+                        "fromdate": "2026-04-10",
+                        "todate": "2026-04-10",
+                    },
+                },
+            ],
+        }
+        events = collector._parse_features(data)
+        assert len(events) == 1
+        assert events[0]["severity"] == 0.0
+
+
 class TestGDACSContentHash:
     def test_stable_hash(self, collector):
         h1 = collector._content_hash("gdacs", "EQ", "1001")
