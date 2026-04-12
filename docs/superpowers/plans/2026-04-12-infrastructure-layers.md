@@ -577,16 +577,21 @@ describe("DatacenterLayer", () => {
   });
 
   it("creates one billboard per feature when visible", () => {
+    // Spy on BillboardCollection to count add calls
+    const bbAddSpy = vi.fn().mockReturnValue({});
+    const lcAddSpy = vi.fn().mockReturnValue({});
+    vi.spyOn(Cesium, "BillboardCollection").mockImplementation(() => ({
+      add: bbAddSpy,
+      removeAll: vi.fn(),
+      show: true,
+    }) as unknown as Cesium.BillboardCollection);
+    vi.spyOn(Cesium, "LabelCollection").mockImplementation(() => ({
+      add: lcAddSpy,
+      removeAll: vi.fn(),
+      show: true,
+    }) as unknown as Cesium.LabelCollection);
+
     const viewer = fakeViewer();
-    // Capture the BillboardCollection instance
-    let bbCollection: { add: ReturnType<typeof vi.fn>; removeAll: ReturnType<typeof vi.fn> } | null = null;
-    (viewer.scene.primitives.add as ReturnType<typeof vi.fn>).mockImplementation((p: unknown) => {
-      const obj = p as Record<string, unknown>;
-      if (obj && typeof obj === "object" && "add" in obj) {
-        if (!bbCollection) bbCollection = obj as typeof bbCollection;
-      }
-      return p;
-    });
     render(
       <DatacenterLayer
         viewer={viewer}
@@ -595,13 +600,24 @@ describe("DatacenterLayer", () => {
         onSelect={vi.fn()}
       />,
     );
-    // BillboardCollection.add called once per feature (2 features in MOCK_DATA)
-    // Note: actual Cesium primitives are instantiated inside the component,
-    // so we verify via the primitives.add spy count instead
-    expect(viewer.scene.primitives.add).toHaveBeenCalledTimes(2);
+    // One billboard + one label per feature (2 features in MOCK_DATA)
+    expect(bbAddSpy).toHaveBeenCalledTimes(2);
+    expect(lcAddSpy).toHaveBeenCalledTimes(2);
   });
 
-  it("does not add billboards when visible=false", () => {
+  it("skips rendering when visible=false", () => {
+    const bbAddSpy = vi.fn().mockReturnValue({});
+    vi.spyOn(Cesium, "BillboardCollection").mockImplementation(() => ({
+      add: bbAddSpy,
+      removeAll: vi.fn(),
+      show: true,
+    }) as unknown as Cesium.BillboardCollection);
+    vi.spyOn(Cesium, "LabelCollection").mockImplementation(() => ({
+      add: vi.fn().mockReturnValue({}),
+      removeAll: vi.fn(),
+      show: true,
+    }) as unknown as Cesium.LabelCollection);
+
     const viewer = fakeViewer();
     render(
       <DatacenterLayer
@@ -611,8 +627,8 @@ describe("DatacenterLayer", () => {
         onSelect={vi.fn()}
       />,
     );
-    // Collections are created but no features rendered
-    expect(viewer.scene.primitives.add).toHaveBeenCalled();
+    // Collections exist but no billboards added
+    expect(bbAddSpy).not.toHaveBeenCalled();
   });
 
   it("renders null to DOM", () => {
@@ -806,7 +822,7 @@ export function DatacenterLayer({ viewer, datacenters, visible, onSelect }: Data
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd services/frontend && npx vitest run src/components/layers/__tests__/DatacenterLayer.test.tsx`
-Expected: 3 tests PASS.
+Expected: 5 tests PASS (1 icon + 4 layer).
 
 - [ ] **Step 5: Commit**
 
@@ -903,7 +919,47 @@ describe("RefineryLayer", () => {
     expect(viewer.scene.primitives.add).toHaveBeenCalledTimes(2);
   });
 
-  it("does not add billboards when visible=false", () => {
+  it("creates one billboard per feature when visible", () => {
+    const bbAddSpy = vi.fn().mockReturnValue({});
+    const lcAddSpy = vi.fn().mockReturnValue({});
+    vi.spyOn(Cesium, "BillboardCollection").mockImplementation(() => ({
+      add: bbAddSpy,
+      removeAll: vi.fn(),
+      show: true,
+    }) as unknown as Cesium.BillboardCollection);
+    vi.spyOn(Cesium, "LabelCollection").mockImplementation(() => ({
+      add: lcAddSpy,
+      removeAll: vi.fn(),
+      show: true,
+    }) as unknown as Cesium.LabelCollection);
+
+    const viewer = fakeViewer();
+    render(
+      <RefineryLayer
+        viewer={viewer}
+        refineries={MOCK_DATA}
+        visible={true}
+        onSelect={vi.fn()}
+      />,
+    );
+    // One billboard + one label per feature (2 features in MOCK_DATA)
+    expect(bbAddSpy).toHaveBeenCalledTimes(2);
+    expect(lcAddSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips rendering when visible=false", () => {
+    const bbAddSpy = vi.fn().mockReturnValue({});
+    vi.spyOn(Cesium, "BillboardCollection").mockImplementation(() => ({
+      add: bbAddSpy,
+      removeAll: vi.fn(),
+      show: true,
+    }) as unknown as Cesium.BillboardCollection);
+    vi.spyOn(Cesium, "LabelCollection").mockImplementation(() => ({
+      add: vi.fn().mockReturnValue({}),
+      removeAll: vi.fn(),
+      show: true,
+    }) as unknown as Cesium.LabelCollection);
+
     const viewer = fakeViewer();
     render(
       <RefineryLayer
@@ -913,8 +969,8 @@ describe("RefineryLayer", () => {
         onSelect={vi.fn()}
       />,
     );
-    // Collections are created but no features rendered
-    expect(viewer.scene.primitives.add).toHaveBeenCalled();
+    // Collections exist but no billboards added
+    expect(bbAddSpy).not.toHaveBeenCalled();
   });
 
   it("renders null to DOM", () => {
@@ -1133,7 +1189,7 @@ export function RefineryLayer({ viewer, refineries, visible, onSelect }: Refiner
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd services/frontend && npx vitest run src/components/layers/__tests__/RefineryLayer.test.tsx`
-Expected: 3 tests PASS.
+Expected: 5 tests PASS (1 icon + 4 layer).
 
 - [ ] **Step 5: Commit**
 
@@ -1387,7 +1443,7 @@ git commit -m "feat(frontend): wire datacenter + refinery layers into App"
 
 ---
 
-### Task 10: Integration Tests — OperationsPanel, SelectionPanel, App Wiring
+### Task 10: Integration Tests — OperationsPanel + SelectionPanel
 
 **Files:**
 - Create: `src/components/ui/__tests__/OperationsPanel.infra.test.tsx`
