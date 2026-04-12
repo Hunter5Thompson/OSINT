@@ -51,9 +51,9 @@ All with `coalesce=True`, `max_instances=1`, `misfire_grace_time=300`.
 
 EONET categorizes events: `wildfires`, `volcanoes`, `severeStorms`, `seaLakeIce`, `earthquakes`, `floods`, `landslides`, `dustHaze`, `drought`, `snow`, `tempExtremes`, `waterColor`, `manmade`.
 
-### Content Hash
+### Dedup + Upsert Strategy
 
-`sha256(event_id)` — EONET events have stable IDs.
+**Mutable events:** EONET events change status/severity over their lifecycle. Use `sha256(event_id)` as stable Qdrant point ID. On each collect cycle, **upsert** (not insert-only) — existing points get their payload overwritten with current data. This bypasses `_dedup_check()` from BaseCollector; instead, call `_batch_upsert()` directly which performs an unconditional upsert.
 
 ### Qdrant Payload
 
@@ -100,9 +100,9 @@ IntervalTrigger, every 2 hours. Run on startup.
 - **Response:** GeoJSON FeatureCollection with disaster events
 - **Fields per feature:** `properties.eventtype` (EQ/TC/FL/VO/DR/WF), `properties.alertlevel` (Red/Orange/Green), `properties.eventname`, `properties.severity.value`, `properties.country`, `properties.fromdate`, `properties.todate`, `geometry.coordinates`
 
-### Content Hash
+### Dedup + Upsert Strategy
 
-`sha256(eventtype + eventid)` — GDACS events have type+id pairs.
+**Mutable events:** GDACS alert levels and severity change as disasters evolve. Use `sha256(eventtype + eventid)` as stable Qdrant point ID. Same upsert pattern as EONET — bypass `_dedup_check()`, upsert unconditionally on each cycle.
 
 ### Qdrant Payload
 
@@ -149,7 +149,7 @@ IntervalTrigger, every 2 hours. Run on startup.
 - **Auth:** `app_identifier` header = Base64 encoded email (attribution only, no key)
 - **Params:** `output_format=json&limit=1000&location_code={ISO3}`
 - **Response:** Monthly aggregates per country: `events`, `fatalities`, `event_type` (political_violence, civilian_targeting, demonstration)
-- **Countries (20 focus):** AF, SY, UA, SD, SS, SO, CD, MM, YE, ET, IQ, PS, LY, ML, BF, NE, NG, CM, MZ, HT
+- **Countries (20 focus, ISO3):** AFG, SYR, UKR, SDN, SSD, SOM, COD, MMR, YEM, ETH, IRQ, PSE, LBY, MLI, BFA, NER, NGA, CMR, MOZ, HTI
 
 ### Content Hash
 
@@ -231,7 +231,8 @@ IntervalTrigger, every 3 hours. Run on startup.
   - `Daily_Chokepoints_Data/FeatureServer/0/query` — daily flows
   - `portwatch_disruptions_database/FeatureServer/0/query` — disruption events
 - **Auth:** None
-- **Query:** `where=1=1&outFields=*&f=json&resultRecordCount=1000`
+- **Query:** `where=1=1&outFields=*&f=json&resultRecordCount=1000&resultOffset={offset}`
+- **Pagination:** ArcGIS FeatureServer truncates at `resultRecordCount`. Loop with incrementing `resultOffset` until `features[]` is empty or `exceededTransferLimit` is false.
 - **Chokepoints:** Hormuz, Bab-el-Mandeb, Suez, Malakka, Panama, Good Hope, Gibraltar, Turkish Straits
 
 ### Content Hash
@@ -292,6 +293,7 @@ IntervalTrigger, every 6 hours. Run on startup.
 
 ### Modified files (services/data-ingestion):
 - `scheduler.py` — add 5 new collector jobs
+- `config.py` — add settings fields: `hapi_app_identifier`, `eonet_interval_hours`, `gdacs_interval_hours`, `noaa_nhc_interval_hours`, `portwatch_interval_hours`
 
 ### New files (services/backend):
 - `app/routers/eonet.py`
@@ -308,6 +310,7 @@ IntervalTrigger, every 6 hours. Run on startup.
 
 ### Modified files (services/frontend):
 - `src/types/index.ts` — EONETEvent + GDACSEvent types, LayerVisibility extension
+- `src/services/api.ts` — add `getEONETEvents()` + `getGDACSEvents()` API functions
 - `src/components/ui/OperationsPanel.tsx` — add to INGESTION_LAYERS
 - `src/components/ui/SelectionPanel.tsx` — add EONET + GDACS content
 - `src/App.tsx` — wire hooks, render layers
