@@ -15,8 +15,10 @@ from app.routers import (
     aircraft,
     cables,
     earthquakes,
+    eonet,
     firms,
     flights,
+    gdacs,
     graph,
     hotspots,
     intel,
@@ -92,6 +94,8 @@ app.include_router(graph.router, prefix="/api/v1")
 app.include_router(cables.router, prefix="/api/v1")
 app.include_router(firms.router, prefix="/api/v1")
 app.include_router(aircraft.router, prefix="/api/v1")
+app.include_router(eonet.router, prefix="/api/v1")
+app.include_router(gdacs.router, prefix="/api/v1")
 
 # WebSocket Routers
 app.include_router(flight_ws.router)
