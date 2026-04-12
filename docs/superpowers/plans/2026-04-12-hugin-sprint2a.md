@@ -70,7 +70,7 @@ Add after the `correlation_interval_hours` field (line 86) in `config.py`:
 
     # HAPI (Humanitarian Data Exchange)
     hapi_app_identifier: str = ""  # Base64 encoded email
-    hapi_interval_hours: int = 24
+    # HAPI uses CronTrigger (daily 04:00 UTC), no interval setting needed
 
     # NOAA NHC (Tropical Weather)
     noaa_nhc_interval_hours: int = 3
@@ -338,6 +338,7 @@ import time
 from typing import Any
 
 import structlog
+from qdrant_client.models import PointStruct
 
 from config import settings
 from feeds.base import BaseCollector
@@ -427,8 +428,8 @@ class EONETCollector(BaseCollector):
                         text=description,
                         url=f"https://eonet.gsfc.nasa.gov/api/v3/events/{event['eonet_id']}",
                         source="eonet",
-                        settings=settings,
-                        redis_client=self.redis_client,
+                        settings=self.settings,
+                        redis_client=self.redis,
                     )
                 except Exception:
                     log.warning("eonet_pipeline_failed", event_id=event["eonet_id"])
@@ -437,8 +438,12 @@ class EONETCollector(BaseCollector):
                 update_count += 1
 
             # Always upsert to Qdrant (new or update)
-            vector = await self._embed(description)
-            if vector is None:
+            # Mutable events use manual PointStruct (can't use _build_point
+            # which derives point_id from content_hash, but we need event-based IDs)
+            try:
+                vector = await self._embed(description)
+            except Exception:
+                log.warning("eonet_embed_failed", event_id=event["eonet_id"])
                 continue
 
             payload = {
@@ -447,12 +452,7 @@ class EONETCollector(BaseCollector):
                 "ingested_epoch": time.time(),
                 "description": description,
             }
-            point = self._build_point(
-                point_id=point_id,
-                vector=vector,
-                payload=payload,
-            )
-            points.append(point)
+            points.append(PointStruct(id=point_id, vector=vector, payload=payload))
 
         if points:
             await self._batch_upsert(points)
@@ -618,6 +618,7 @@ import time
 from typing import Any
 
 import structlog
+from qdrant_client.models import PointStruct
 
 from config import settings
 from feeds.base import BaseCollector
@@ -702,8 +703,8 @@ class GDACSCollector(BaseCollector):
                         text=description,
                         url=f"https://www.gdacs.org/report.aspx?eventtype={event['event_type']}&eventid={event['gdacs_id'].split('_')[-1]}",
                         source="gdacs",
-                        settings=settings,
-                        redis_client=self.redis_client,
+                        settings=self.settings,
+                        redis_client=self.redis,
                     )
                 except Exception:
                     log.warning("gdacs_pipeline_failed", event_id=event["gdacs_id"])
@@ -711,8 +712,10 @@ class GDACSCollector(BaseCollector):
             else:
                 update_count += 1
 
-            vector = await self._embed(description)
-            if vector is None:
+            try:
+                vector = await self._embed(description)
+            except Exception:
+                log.warning("gdacs_embed_failed", event_id=event["gdacs_id"])
                 continue
 
             payload = {
@@ -721,7 +724,7 @@ class GDACSCollector(BaseCollector):
                 "ingested_epoch": time.time(),
                 "description": description,
             }
-            point = self._build_point(point_id=point_id, vector=vector, payload=payload)
+            point = PointStruct(id=point_id, vector=vector, payload=payload)
             points.append(point)
 
         if points:
@@ -836,13 +839,13 @@ class TestHAPIFocusCountries:
 
 class TestHAPIContentHash:
     def test_stable_hash(self, collector):
-        h1 = collector._hapi_content_hash("UKR", "2026-03", "political_violence")
-        h2 = collector._hapi_content_hash("UKR", "2026-03", "political_violence")
+        h1 = collector._content_hash("UKR", "2026-03", "political_violence")
+        h2 = collector._content_hash("UKR", "2026-03", "political_violence")
         assert h1 == h2
 
     def test_different_country_different_hash(self, collector):
-        h1 = collector._hapi_content_hash("UKR", "2026-03", "political_violence")
-        h2 = collector._hapi_content_hash("SYR", "2026-03", "political_violence")
+        h1 = collector._content_hash("UKR", "2026-03", "political_violence")
+        h2 = collector._content_hash("SYR", "2026-03", "political_violence")
         assert h1 != h2
 ```
 
@@ -889,10 +892,6 @@ FOCUS_COUNTRIES = [
 class HAPICollector(BaseCollector):
     """Collect humanitarian conflict data from HAPI."""
 
-    def _hapi_content_hash(self, location_code: str, period: str, event_type: str) -> int:
-        digest = hashlib.sha256(f"{location_code}{period}{event_type}".encode()).hexdigest()
-        return int(digest[:16], 16)
-
     def _parse_records(self, data: dict[str, Any], country: str) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
         for item in data.get("data", []):
@@ -935,11 +934,8 @@ class HAPICollector(BaseCollector):
             points = []
 
             for record in records:
-                point_id = self._hapi_content_hash(
-                    record["location_code"],
-                    record["reference_period"],
-                    record["event_type"],
-                )
+                chash = self._content_hash(record["location_code"], record["reference_period"], record["event_type"])
+                point_id = self._point_id(chash)
 
                 # Standard dedup — skip if exists
                 is_dup = await self._dedup_check(point_id)
@@ -958,24 +954,22 @@ class HAPICollector(BaseCollector):
                         text=description,
                         url=_HAPI_URL,
                         source="hapi",
-                        settings=settings,
-                        redis_client=self.redis_client,
+                        settings=self.settings,
+                        redis_client=self.redis,
                     )
                 except Exception:
                     log.warning("hapi_pipeline_failed", country=country)
 
-                vector = await self._embed(description)
-                if vector is None:
-                    continue
-
                 payload = {
                     "source": "hapi",
                     **record,
-                    "ingested_epoch": time.time(),
-                    "description": description,
                 }
-                point = self._build_point(point_id=point_id, vector=vector, payload=payload)
-                points.append(point)
+                chash = self._content_hash(record["location_code"], record["reference_period"], record["event_type"])
+                try:
+                    point = await self._build_point(description, payload, chash)
+                    points.append(point)
+                except Exception:
+                    log.warning("hapi_embed_failed", country=country)
 
             if points:
                 await self._batch_upsert(points)
@@ -1088,13 +1082,13 @@ class TestNOAAParser:
 
 class TestNOAAContentHash:
     def test_stable_hash(self, collector):
-        h1 = collector._nhc_content_hash("al042026", "14")
-        h2 = collector._nhc_content_hash("al042026", "14")
+        h1 = collector._content_hash("al042026", "14")
+        h2 = collector._content_hash("al042026", "14")
         assert h1 == h2
 
     def test_different_advisory_different_hash(self, collector):
-        h1 = collector._nhc_content_hash("al042026", "14")
-        h2 = collector._nhc_content_hash("al042026", "15")
+        h1 = collector._content_hash("al042026", "14")
+        h2 = collector._content_hash("al042026", "15")
         assert h1 != h2
 ```
 
@@ -1142,10 +1136,6 @@ _CLASSIFICATION_MAP = {
 class NOAANHCCollector(BaseCollector):
     """Collect tropical weather advisories from NOAA NHC."""
 
-    def _nhc_content_hash(self, storm_id: str, advisory_number: str) -> int:
-        digest = hashlib.sha256(f"{storm_id}{advisory_number}".encode()).hexdigest()
-        return int(digest[:16], 16)
-
     def _parse_storms(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         storms: list[dict[str, Any]] = []
         for storm in data.get("activeStorms", []):
@@ -1188,7 +1178,8 @@ class NOAANHCCollector(BaseCollector):
 
         points = []
         for storm in storms:
-            point_id = self._nhc_content_hash(storm["storm_id"], storm["advisory_number"])
+            chash = self._content_hash(storm["storm_id"], storm["advisory_number"])
+            point_id = self._point_id(chash)
 
             is_dup = await self._dedup_check(point_id)
             if is_dup:
@@ -1200,6 +1191,8 @@ class NOAANHCCollector(BaseCollector):
                 f"moving {storm['movement']}"
             )
 
+            chash = self._content_hash(storm["storm_id"], storm["advisory_number"])
+
             try:
                 from pipeline import process_item
                 await process_item(
@@ -1207,24 +1200,21 @@ class NOAANHCCollector(BaseCollector):
                     text=description,
                     url=f"https://www.nhc.noaa.gov/text/refresh/{storm['storm_id']}+shtml",
                     source="noaa_nhc",
-                    settings=settings,
-                    redis_client=self.redis_client,
+                    settings=self.settings,
+                    redis_client=self.redis,
                 )
             except Exception:
                 log.warning("noaa_nhc_pipeline_failed", storm_id=storm["storm_id"])
 
-            vector = await self._embed(description)
-            if vector is None:
-                continue
-
             payload = {
                 "source": "noaa_nhc",
                 **storm,
-                "ingested_epoch": time.time(),
-                "description": description,
             }
-            point = self._build_point(point_id=point_id, vector=vector, payload=payload)
-            points.append(point)
+            try:
+                point = await self._build_point(description, payload, chash)
+                points.append(point)
+            except Exception:
+                log.warning("noaa_nhc_embed_failed", storm_id=storm["storm_id"])
 
         if points:
             await self._batch_upsert(points)
@@ -1412,14 +1402,6 @@ CHOKEPOINT_COORDS: dict[str, tuple[float, float]] = {
 class PortWatchCollector(BaseCollector):
     """Collect chokepoint trade flows and disruptions from IMF PortWatch."""
 
-    def _chokepoint_content_hash(self, chokepoint: str, date: str) -> int:
-        digest = hashlib.sha256(f"{chokepoint}{date}daily_flow".encode()).hexdigest()
-        return int(digest[:16], 16)
-
-    def _disruption_content_hash(self, disruption_id: str) -> int:
-        digest = hashlib.sha256(f"disruption_{disruption_id}".encode()).hexdigest()
-        return int(digest[:16], 16)
-
     def _parse_chokepoint_data(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
         for feature in data.get("features", []):
@@ -1491,7 +1473,8 @@ class PortWatchCollector(BaseCollector):
 
         flow_points = []
         for record in flow_records:
-            point_id = self._chokepoint_content_hash(record["chokepoint"], record["date"])
+            chash = self._content_hash(record["chokepoint"], record["date"], "daily_flow")
+            point_id = self._point_id(chash)
             is_dup = await self._dedup_check(point_id)
             if is_dup:
                 continue
@@ -1502,6 +1485,8 @@ class PortWatchCollector(BaseCollector):
                 f"${record['trade_value_usd']:,.0f} trade, {record['vessel_count']} vessels"
             )
 
+            chash = self._content_hash(record["chokepoint"], record["date"], "daily_flow")
+
             try:
                 from pipeline import process_item
                 await process_item(
@@ -1509,26 +1494,23 @@ class PortWatchCollector(BaseCollector):
                     text=description,
                     url=_CHOKEPOINTS_URL,
                     source="portwatch",
-                    settings=settings,
-                    redis_client=self.redis_client,
+                    settings=self.settings,
+                    redis_client=self.redis,
                 )
             except Exception:
                 log.warning("portwatch_pipeline_failed", chokepoint=record["chokepoint"])
-
-            vector = await self._embed(description)
-            if vector is None:
-                continue
 
             payload = {
                 "source": "portwatch",
                 **record,
                 "latitude": coords[0],
                 "longitude": coords[1],
-                "ingested_epoch": time.time(),
-                "description": description,
             }
-            point = self._build_point(point_id=point_id, vector=vector, payload=payload)
-            flow_points.append(point)
+            try:
+                point = await self._build_point(description, payload, chash)
+                flow_points.append(point)
+            except Exception:
+                log.warning("portwatch_embed_failed", chokepoint=record["chokepoint"])
 
         if flow_points:
             await self._batch_upsert(flow_points)
@@ -1541,13 +1523,16 @@ class PortWatchCollector(BaseCollector):
 
         disruption_points = []
         for record in disruption_records:
-            point_id = self._disruption_content_hash(record["disruption_id"])
+            chash = self._content_hash("disruption", record["disruption_id"])
+            point_id = self._point_id(chash)
             is_dup = await self._dedup_check(point_id)
             if is_dup:
                 continue
 
             coords = CHOKEPOINT_COORDS.get(record["chokepoint"], (0.0, 0.0))
             description = f"PortWatch Disruption: {record['chokepoint']} — {record['description']}"
+
+            chash = self._content_hash("disruption", record["disruption_id"])
 
             try:
                 from pipeline import process_item
@@ -1556,25 +1541,23 @@ class PortWatchCollector(BaseCollector):
                     text=description,
                     url=_DISRUPTIONS_URL,
                     source="portwatch",
-                    settings=settings,
-                    redis_client=self.redis_client,
+                    settings=self.settings,
+                    redis_client=self.redis,
                 )
             except Exception:
                 log.warning("portwatch_disruption_pipeline_failed")
-
-            vector = await self._embed(description)
-            if vector is None:
-                continue
 
             payload = {
                 "source": "portwatch",
                 **record,
                 "latitude": coords[0],
                 "longitude": coords[1],
-                "ingested_epoch": time.time(),
             }
-            point = self._build_point(point_id=point_id, vector=vector, payload=payload)
-            disruption_points.append(point)
+            try:
+                point = await self._build_point(description, payload, chash)
+                disruption_points.append(point)
+            except Exception:
+                log.warning("portwatch_disruption_embed_failed")
 
         if disruption_points:
             await self._batch_upsert(disruption_points)
@@ -1870,16 +1853,97 @@ And in the router registration section:
 app.include_router(eonet.router, prefix="/api/v1")
 ```
 
-- [ ] **Step 3: Run backend tests**
+- [ ] **Step 3: Write EONET router tests**
 
-Run: `cd services/backend && uv run pytest -v`
-Expected: All tests pass.
+Create `services/backend/tests/test_eonet_router.py`:
 
-- [ ] **Step 4: Commit**
+```python
+"""Tests for EONET events router."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.main import app
+
+
+@pytest.fixture
+def mock_cache():
+    cache = AsyncMock()
+    cache.get = AsyncMock(return_value=None)
+    cache.set = AsyncMock()
+    return cache
+
+
+@pytest.fixture
+def mock_qdrant_points():
+    return [
+        MagicMock(
+            id=1,
+            payload={
+                "source": "eonet",
+                "title": "Wildfire - California",
+                "category": "wildfires",
+                "status": "open",
+                "latitude": 34.0,
+                "longitude": -118.5,
+                "event_date": "2026-04-10",
+            },
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_eonet_events_returns_data(mock_cache, mock_qdrant_points):
+    app.state.cache = mock_cache
+    mock_client = AsyncMock()
+    mock_client.scroll = AsyncMock(return_value=(mock_qdrant_points, None))
+
+    with patch("app.routers.eonet.get_qdrant_client", return_value=mock_client):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/v1/eonet/events?since_hours=168")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["title"] == "Wildfire - California"
+    assert data[0]["category"] == "wildfires"
+
+
+@pytest.mark.asyncio
+async def test_eonet_events_cache_hit(mock_cache):
+    mock_cache.get = AsyncMock(return_value=[
+        {"id": "1", "title": "Fire", "category": "wildfires", "status": "open", "latitude": 34.0, "longitude": -118.5, "event_date": "2026-04-10"},
+    ])
+    app.state.cache = mock_cache
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/v1/eonet/events?since_hours=168")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_eonet_events_qdrant_down(mock_cache):
+    app.state.cache = mock_cache
+    with patch("app.routers.eonet.get_qdrant_client", side_effect=Exception("connection refused")):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/v1/eonet/events?since_hours=168")
+    assert resp.status_code == 503
+```
+
+- [ ] **Step 4: Run backend tests**
+
+Run: `cd services/backend && uv run pytest tests/test_eonet_router.py -v`
+Expected: 3 tests PASS.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add services/backend/app/routers/eonet.py services/backend/app/main.py
-git commit -m "feat(backend): add EONET events router with Redis cache"
+git add services/backend/app/routers/eonet.py services/backend/app/main.py services/backend/tests/test_eonet_router.py
+git commit -m "feat(backend): add EONET events router with Redis cache + tests"
 ```
 
 ---
@@ -2009,16 +2073,100 @@ And registration:
 app.include_router(gdacs.router, prefix="/api/v1")
 ```
 
-- [ ] **Step 3: Run backend tests**
+- [ ] **Step 3: Write GDACS router tests**
 
-Run: `cd services/backend && uv run pytest -v`
-Expected: All tests pass.
+Create `services/backend/tests/test_gdacs_router.py`:
 
-- [ ] **Step 4: Commit**
+```python
+"""Tests for GDACS events router."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.main import app
+
+
+@pytest.fixture
+def mock_cache():
+    cache = AsyncMock()
+    cache.get = AsyncMock(return_value=None)
+    cache.set = AsyncMock()
+    return cache
+
+
+@pytest.fixture
+def mock_qdrant_points():
+    return [
+        MagicMock(
+            id=1,
+            payload={
+                "source": "gdacs",
+                "event_type": "EQ",
+                "event_name": "Earthquake Indonesia",
+                "alert_level": "Red",
+                "severity": 6.8,
+                "country": "Indonesia",
+                "latitude": 3.5,
+                "longitude": 95.0,
+                "from_date": "2026-04-10",
+                "to_date": "2026-04-10",
+            },
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_gdacs_events_returns_data(mock_cache, mock_qdrant_points):
+    app.state.cache = mock_cache
+    mock_client = AsyncMock()
+    mock_client.scroll = AsyncMock(return_value=(mock_qdrant_points, None))
+
+    with patch("app.routers.gdacs.get_qdrant_client", return_value=mock_client):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/v1/gdacs/events?since_hours=168")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["event_name"] == "Earthquake Indonesia"
+    assert data[0]["alert_level"] == "Red"
+
+
+@pytest.mark.asyncio
+async def test_gdacs_events_cache_hit(mock_cache):
+    mock_cache.get = AsyncMock(return_value=[
+        {"id": "1", "event_type": "EQ", "event_name": "Earthquake", "alert_level": "Red", "severity": 6.8, "country": "ID", "latitude": 3.5, "longitude": 95.0, "from_date": "2026-04-10", "to_date": "2026-04-10"},
+    ])
+    app.state.cache = mock_cache
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/v1/gdacs/events?since_hours=168")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_gdacs_events_qdrant_down(mock_cache):
+    app.state.cache = mock_cache
+    with patch("app.routers.gdacs.get_qdrant_client", side_effect=Exception("connection refused")):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/v1/gdacs/events?since_hours=168")
+    assert resp.status_code == 503
+```
+
+- [ ] **Step 4: Run backend tests**
+
+Run: `cd services/backend && uv run pytest tests/test_gdacs_router.py -v`
+Expected: 3 tests PASS.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add services/backend/app/routers/gdacs.py services/backend/app/main.py
-git commit -m "feat(backend): add GDACS events router with Redis cache"
+git add services/backend/app/routers/gdacs.py services/backend/app/main.py services/backend/tests/test_gdacs_router.py
+git commit -m "feat(backend): add GDACS events router with Redis cache + tests"
 ```
 
 ---
@@ -2720,16 +2868,113 @@ describe("useGDACSEvents", () => {
 });
 ```
 
-- [ ] **Step 3: Run all frontend tests**
+- [ ] **Step 3: Write OperationsPanel integration test**
+
+Create `services/frontend/src/components/ui/__tests__/OperationsPanel.eonet-gdacs.test.tsx`:
+
+```typescript
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { OperationsPanel } from "../OperationsPanel";
+import type { LayerVisibility } from "../../../types";
+
+const baseLayers: LayerVisibility = {
+  flights: true, satellites: true, earthquakes: true, vessels: false,
+  cctv: false, events: false, cables: false, pipelines: false,
+  firmsHotspots: true, milAircraft: true,
+  datacenters: false, refineries: false,
+  eonet: false, gdacs: false,
+};
+
+describe("OperationsPanel — EONET/GDACS layers", () => {
+  it("renders EONET EVENTS and GDACS ALERTS toggles", () => {
+    render(
+      <OperationsPanel
+        layers={baseLayers}
+        onToggleLayer={vi.fn()}
+        activeShader="none"
+        onShaderChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("EONET EVENTS")).toBeDefined();
+    expect(screen.getByText("GDACS ALERTS")).toBeDefined();
+  });
+
+  it("calls onToggleLayer with correct keys", () => {
+    const toggle = vi.fn();
+    render(
+      <OperationsPanel
+        layers={baseLayers}
+        onToggleLayer={toggle}
+        activeShader="none"
+        onShaderChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText("EONET EVENTS"));
+    expect(toggle).toHaveBeenCalledWith("eonet");
+    fireEvent.click(screen.getByText("GDACS ALERTS"));
+    expect(toggle).toHaveBeenCalledWith("gdacs");
+  });
+});
+```
+
+- [ ] **Step 4: Write SelectionPanel integration test**
+
+Create `services/frontend/src/components/ui/__tests__/SelectionPanel.eonet-gdacs.test.tsx`:
+
+```typescript
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { SelectionPanel } from "../SelectionPanel";
+
+describe("SelectionPanel — EONET selection", () => {
+  it("renders EONET event fields", () => {
+    render(
+      <SelectionPanel
+        selected={{
+          type: "eonet",
+          data: { id: "e1", title: "Wildfire California", category: "wildfires", status: "open", latitude: 34.0, longitude: -118.5, event_date: "2026-04-10" },
+        }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+    expect(screen.getByText("Wildfire California")).toBeDefined();
+    expect(screen.getByText("WILDFIRES")).toBeDefined();
+    expect(screen.getByText("OPEN")).toBeDefined();
+  });
+});
+
+describe("SelectionPanel — GDACS selection", () => {
+  it("renders GDACS event fields", () => {
+    render(
+      <SelectionPanel
+        selected={{
+          type: "gdacs",
+          data: { id: "g1", event_type: "EQ", event_name: "Earthquake Indonesia", alert_level: "Red", severity: 6.8, country: "Indonesia", latitude: 3.5, longitude: 95.0, from_date: "2026-04-10", to_date: "2026-04-10" },
+        }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+    expect(screen.getByText("Earthquake Indonesia")).toBeDefined();
+    expect(screen.getByText("Earthquake")).toBeDefined();
+    expect(screen.getByText("Red")).toBeDefined();
+    expect(screen.getByText("Indonesia")).toBeDefined();
+  });
+});
+```
+
+- [ ] **Step 5: Run all frontend tests**
 
 Run: `cd services/frontend && npx vitest run`
 Expected: All tests pass.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add services/frontend/src/hooks/__tests__/useEONETEvents.test.ts services/frontend/src/hooks/__tests__/useGDACSEvents.test.ts
-git commit -m "test(frontend): add EONET + GDACS hook tests"
+git add services/frontend/src/hooks/__tests__/useEONETEvents.test.ts services/frontend/src/hooks/__tests__/useGDACSEvents.test.ts services/frontend/src/components/ui/__tests__/OperationsPanel.eonet-gdacs.test.tsx services/frontend/src/components/ui/__tests__/SelectionPanel.eonet-gdacs.test.tsx
+git commit -m "test(frontend): add EONET + GDACS hook, panel, and integration tests"
 ```
 
 ---
