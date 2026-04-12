@@ -1,0 +1,960 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [72.0, 22.3] },
+      "properties": { "name": "Jamnagar Refinery", "operator": "Reliance Industries", "capacity_bpd": 1240000, "country": "IN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [72.1, 22.35] },
+      "properties": { "name": "Jamnagar SEZ Refinery", "operator": "Reliance Industries", "capacity_bpd": 580000, "country": "IN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [50.0769, 26.6396] },
+      "properties": { "name": "Ras Tanura Refinery", "operator": "Saudi Aramco", "capacity_bpd": 550000, "country": "SA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [39.1728, 21.4225] },
+      "properties": { "name": "Jeddah Refinery", "operator": "Saudi Aramco", "capacity_bpd": 400000, "country": "SA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [49.9811, 26.3047] },
+      "properties": { "name": "SATORP Jubail Refinery", "operator": "Saudi Aramco / Total", "capacity_bpd": 400000, "country": "SA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [49.5687, 25.3548] },
+      "properties": { "name": "Yanbu Refinery", "operator": "Saudi Aramco", "capacity_bpd": 400000, "country": "SA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [48.0, 29.0] },
+      "properties": { "name": "Mina Al-Ahmadi Refinery", "operator": "Kuwait National Petroleum", "capacity_bpd": 466000, "country": "KW", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [48.1, 29.08] },
+      "properties": { "name": "Mina Abdullah Refinery", "operator": "Kuwait National Petroleum", "capacity_bpd": 270000, "country": "KW", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [48.15, 29.1] },
+      "properties": { "name": "Al Zour Refinery", "operator": "Kuwait National Petroleum", "capacity_bpd": 615000, "country": "KW", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [54.6536, 24.8834] },
+      "properties": { "name": "Ruwais Refinery", "operator": "ADNOC", "capacity_bpd": 837000, "country": "AE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [129.3651, 35.5011] },
+      "properties": { "name": "SK Ulsan Refinery", "operator": "SK Innovation", "capacity_bpd": 840000, "country": "KR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [126.5891, 34.7604] },
+      "properties": { "name": "GS Caltex Yeosu Refinery", "operator": "GS Caltex", "capacity_bpd": 800000, "country": "KR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [126.7318, 37.4563] },
+      "properties": { "name": "S-Oil Onsan Refinery", "operator": "S-Oil", "capacity_bpd": 669000, "country": "KR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [128.5673, 35.8714] },
+      "properties": { "name": "Hyundai Oilbank Daesan", "operator": "Hyundai Oilbank", "capacity_bpd": 520000, "country": "KR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.7000, 1.2600] },
+      "properties": { "name": "ExxonMobil Singapore (Jurong)", "operator": "ExxonMobil", "capacity_bpd": 592000, "country": "SG", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.7500, 1.2700] },
+      "properties": { "name": "Shell Pulau Bukom Refinery", "operator": "Shell", "capacity_bpd": 500000, "country": "SG", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.7200, 1.2650] },
+      "properties": { "name": "Singapore Refining Company", "operator": "SRC (Singapore Petroleum)", "capacity_bpd": 290000, "country": "SG", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [136.9066, 34.9667] },
+      "properties": { "name": "JXTG Negishi Refinery", "operator": "ENEOS", "capacity_bpd": 270000, "country": "JP", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.6503, 35.4437] },
+      "properties": { "name": "ENEOS Kawasaki Refinery", "operator": "ENEOS", "capacity_bpd": 245000, "country": "JP", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [131.8066, 33.9167] },
+      "properties": { "name": "ENEOS Oita Refinery", "operator": "ENEOS", "capacity_bpd": 136000, "country": "JP", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [136.7700, 35.0800] },
+      "properties": { "name": "Cosmo Oil Yokkaichi Refinery", "operator": "Cosmo Energy", "capacity_bpd": 175000, "country": "JP", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [135.4287, 34.7243] },
+      "properties": { "name": "ENEOS Sakai Refinery", "operator": "ENEOS", "capacity_bpd": 156000, "country": "JP", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.5000, 31.3500] },
+      "properties": { "name": "Sinopec Shanghai Refinery", "operator": "Sinopec", "capacity_bpd": 320000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.6, 30.8] },
+      "properties": { "name": "CNOOC Zhoushan Refinery", "operator": "CNOOC", "capacity_bpd": 400000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [113.2, 23.1] },
+      "properties": { "name": "Sinopec Maoming Refinery", "operator": "Sinopec", "capacity_bpd": 350000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [118.7, 31.9] },
+      "properties": { "name": "Sinopec Nanjing Refinery", "operator": "Sinopec", "capacity_bpd": 320000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [117.0, 36.6] },
+      "properties": { "name": "Sinopec Qilu Refinery", "operator": "Sinopec", "capacity_bpd": 250000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [116.8, 39.9] },
+      "properties": { "name": "Sinopec Beijing Yanshan", "operator": "Sinopec", "capacity_bpd": 200000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.6, 38.9] },
+      "properties": { "name": "PetroChina Dalian Refinery", "operator": "PetroChina", "capacity_bpd": 410000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [123.4, 41.8] },
+      "properties": { "name": "PetroChina Fushun Refinery", "operator": "PetroChina", "capacity_bpd": 200000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [86.1, 44.3] },
+      "properties": { "name": "PetroChina Dushanzi Refinery", "operator": "PetroChina", "capacity_bpd": 200000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [113.6, 22.8] },
+      "properties": { "name": "PetroChina Guangzhou Refinery", "operator": "PetroChina", "capacity_bpd": 260000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [120.3, 36.0] },
+      "properties": { "name": "Sinopec Qingdao Refinery", "operator": "Sinopec", "capacity_bpd": 240000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [119.5, 39.9] },
+      "properties": { "name": "CNOOC Huizhou Refinery", "operator": "CNOOC", "capacity_bpd": 220000, "country": "CN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.1, 24.5] },
+      "properties": { "name": "Formosa Mailiao Refinery", "operator": "Formosa Petrochemical", "capacity_bpd": 540000, "country": "TW", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [120.3, 22.6] },
+      "properties": { "name": "CPC Kaohsiung Refinery", "operator": "CPC Corporation", "capacity_bpd": 220000, "country": "TW", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.0, 29.75] },
+      "properties": { "name": "ExxonMobil Baytown Refinery", "operator": "ExxonMobil", "capacity_bpd": 584000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.28, 30.07] },
+      "properties": { "name": "Motiva Port Arthur Refinery", "operator": "Saudi Aramco (Motiva)", "capacity_bpd": 636000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.0, 29.35] },
+      "properties": { "name": "Marathon Galveston Bay Refinery", "operator": "Marathon Petroleum", "capacity_bpd": 585000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-90.3, 29.95] },
+      "properties": { "name": "Marathon Garyville Refinery", "operator": "Marathon Petroleum", "capacity_bpd": 578000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.25, 29.4] },
+      "properties": { "name": "Valero Texas City Refinery", "operator": "Valero Energy", "capacity_bpd": 260000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-97.5, 27.8] },
+      "properties": { "name": "Valero Corpus Christi Refinery", "operator": "Valero Energy", "capacity_bpd": 290000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.3, 30.0] },
+      "properties": { "name": "Valero Port Arthur Refinery", "operator": "Valero Energy", "capacity_bpd": 335000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-90.5, 30.0] },
+      "properties": { "name": "Valero St. Charles Refinery", "operator": "Valero Energy", "capacity_bpd": 275000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.9, 29.9] },
+      "properties": { "name": "ExxonMobil Beaumont Refinery", "operator": "ExxonMobil", "capacity_bpd": 369000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.2, 30.2] },
+      "properties": { "name": "Total Port Arthur Refinery", "operator": "TotalEnergies", "capacity_bpd": 234000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-90.1, 30.0] },
+      "properties": { "name": "Phillips 66 Alliance Refinery", "operator": "Phillips 66", "capacity_bpd": 255000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-90.4, 29.9] },
+      "properties": { "name": "PBF Energy Chalmette Refinery", "operator": "PBF Energy", "capacity_bpd": 190000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.5, 41.6] },
+      "properties": { "name": "BP Whiting Refinery", "operator": "BP", "capacity_bpd": 435000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-118.26, 33.93] },
+      "properties": { "name": "Marathon El Segundo Refinery", "operator": "Marathon Petroleum", "capacity_bpd": 363000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-122.25, 38.05] },
+      "properties": { "name": "Marathon Martinez Refinery", "operator": "Marathon Petroleum", "capacity_bpd": 161000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-75.1, 39.85] },
+      "properties": { "name": "Phillips 66 Bayway Refinery", "operator": "Phillips 66", "capacity_bpd": 258000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-97.3, 32.6] },
+      "properties": { "name": "Delek Big Spring Refinery", "operator": "Delek US", "capacity_bpd": 103000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.3, 29.7] },
+      "properties": { "name": "LyondellBasell Houston Refinery", "operator": "LyondellBasell", "capacity_bpd": 268000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-75.1, 39.9] },
+      "properties": { "name": "PBF Energy Delaware City Refinery", "operator": "PBF Energy", "capacity_bpd": 190000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-122.05, 38.0] },
+      "properties": { "name": "Phillips 66 Rodeo Refinery", "operator": "Phillips 66", "capacity_bpd": 120000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-111.8, 40.75] },
+      "properties": { "name": "Marathon Salt Lake City Refinery", "operator": "Marathon Petroleum", "capacity_bpd": 161000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-110.9, 32.2] },
+      "properties": { "name": "HF Sinclair Tucson Refinery", "operator": "HF Sinclair", "capacity_bpd": 120000, "country": "US", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-114.2, 51.0] },
+      "properties": { "name": "Imperial Oil Strathcona Refinery", "operator": "Imperial Oil", "capacity_bpd": 191000, "country": "CA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-82.4, 42.9] },
+      "properties": { "name": "Imperial Oil Sarnia Refinery", "operator": "Imperial Oil", "capacity_bpd": 121000, "country": "CA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-64.8, 47.0] },
+      "properties": { "name": "Irving Oil Saint John Refinery", "operator": "Irving Oil", "capacity_bpd": 320000, "country": "CA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-73.5, 45.4] },
+      "properties": { "name": "Suncor Montreal Refinery", "operator": "Suncor Energy", "capacity_bpd": 137000, "country": "CA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [4.2, 51.95] },
+      "properties": { "name": "Shell Pernis Refinery", "operator": "Shell", "capacity_bpd": 404000, "country": "NL", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [6.95, 51.05] },
+      "properties": { "name": "Shell Rhineland Refinery (Wesseling)", "operator": "Shell", "capacity_bpd": 340000, "country": "DE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [0.42, 51.47] },
+      "properties": { "name": "Shell Stanlow Refinery", "operator": "Essar Oil UK", "capacity_bpd": 205000, "country": "GB", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-2.95, 51.62] },
+      "properties": { "name": "Valero Pembroke Refinery", "operator": "Valero Energy", "capacity_bpd": 270000, "country": "GB", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-1.3, 50.85] },
+      "properties": { "name": "ExxonMobil Fawley Refinery", "operator": "ExxonMobil", "capacity_bpd": 270000, "country": "GB", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-3.4, 56.0] },
+      "properties": { "name": "Petroineos Grangemouth Refinery", "operator": "Petroineos", "capacity_bpd": 200000, "country": "GB", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.7, 51.1] },
+      "properties": { "name": "Phillips 66 Humber Refinery", "operator": "Phillips 66", "capacity_bpd": 221000, "country": "GB", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [0.95, 43.45] },
+      "properties": { "name": "TotalEnergies Donges Refinery", "operator": "TotalEnergies", "capacity_bpd": 219000, "country": "FR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [5.1, 43.35] },
+      "properties": { "name": "TotalEnergies La Mede Refinery", "operator": "TotalEnergies", "capacity_bpd": 155000, "country": "FR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [1.3, 49.5] },
+      "properties": { "name": "ExxonMobil Gravenchon Refinery", "operator": "ExxonMobil", "capacity_bpd": 240000, "country": "FR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [6.85, 49.35] },
+      "properties": { "name": "TotalEnergies Gonfreville Refinery", "operator": "TotalEnergies", "capacity_bpd": 247000, "country": "FR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.3, 49.0] },
+      "properties": { "name": "MiRO Karlsruhe Refinery", "operator": "MiRO GmbH", "capacity_bpd": 310000, "country": "DE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.25, 51.35] },
+      "properties": { "name": "TotalEnergies Leuna Refinery", "operator": "TotalEnergies", "capacity_bpd": 240000, "country": "DE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [9.88, 53.5] },
+      "properties": { "name": "Shell Hamburg Refinery", "operator": "Shell", "capacity_bpd": 100000, "country": "DE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [10.0, 48.7] },
+      "properties": { "name": "BP Lingen Refinery", "operator": "BP", "capacity_bpd": 115000, "country": "DE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [6.5, 50.4] },
+      "properties": { "name": "BP Gelsenkirchen Refinery", "operator": "BP", "capacity_bpd": 260000, "country": "DE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.0, 54.3] },
+      "properties": { "name": "PCK Schwedt Refinery", "operator": "PCK Raffinerie", "capacity_bpd": 233000, "country": "DE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [9.1, 45.4] },
+      "properties": { "name": "Saras Sarroch Refinery", "operator": "Saras", "capacity_bpd": 300000, "country": "IT", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [15.1, 37.15] },
+      "properties": { "name": "ISAB Priolo Refinery", "operator": "Lukoil (ISAB)", "capacity_bpd": 320000, "country": "IT", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.3, 44.1] },
+      "properties": { "name": "API Falconara Refinery", "operator": "API Group", "capacity_bpd": 100000, "country": "IT", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [0.95, 41.1] },
+      "properties": { "name": "Repsol Tarragona Refinery", "operator": "Repsol", "capacity_bpd": 186000, "country": "ES", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-5.95, 36.45] },
+      "properties": { "name": "Cepsa La Rabida Refinery", "operator": "Cepsa", "capacity_bpd": 220000, "country": "ES", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-6.2, 36.5] },
+      "properties": { "name": "Cepsa San Roque Refinery", "operator": "Cepsa", "capacity_bpd": 240000, "country": "ES", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-1.0, 43.3] },
+      "properties": { "name": "Repsol Bilbao Refinery", "operator": "Repsol", "capacity_bpd": 220000, "country": "ES", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-8.7, 42.4] },
+      "properties": { "name": "Repsol A Coruna Refinery", "operator": "Repsol", "capacity_bpd": 120000, "country": "ES", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-3.7, 40.35] },
+      "properties": { "name": "Repsol Puertollano Refinery", "operator": "Repsol", "capacity_bpd": 150000, "country": "ES", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.35, 39.45] },
+      "properties": { "name": "BP Castellon Refinery", "operator": "BP", "capacity_bpd": 110000, "country": "ES", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [4.4, 51.35] },
+      "properties": { "name": "TotalEnergies Antwerp Refinery", "operator": "TotalEnergies", "capacity_bpd": 360000, "country": "BE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [4.25, 51.25] },
+      "properties": { "name": "ExxonMobil Antwerp Refinery", "operator": "ExxonMobil", "capacity_bpd": 309000, "country": "BE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [18.6, 59.3] },
+      "properties": { "name": "Preem Lysekil Refinery", "operator": "Preem", "capacity_bpd": 220000, "country": "SE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.0, 57.7] },
+      "properties": { "name": "Preem Gothenburg Refinery", "operator": "Preem", "capacity_bpd": 125000, "country": "SE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [10.4, 63.4] },
+      "properties": { "name": "Equinor Mongstad Refinery", "operator": "Equinor", "capacity_bpd": 200000, "country": "NO", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [25.5, 60.0] },
+      "properties": { "name": "Neste Porvoo Refinery", "operator": "Neste", "capacity_bpd": 206000, "country": "FI", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [19.9, 54.35] },
+      "properties": { "name": "PKN Orlen Gdansk Refinery", "operator": "PKN Orlen", "capacity_bpd": 210000, "country": "PL", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [19.8, 51.75] },
+      "properties": { "name": "PKN Orlen Plock Refinery", "operator": "PKN Orlen", "capacity_bpd": 327000, "country": "PL", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [21.4, 47.5] },
+      "properties": { "name": "MOL Szazhalombatta Refinery", "operator": "MOL Group", "capacity_bpd": 165000, "country": "HU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [26.0, 44.4] },
+      "properties": { "name": "Petromidia Navodari Refinery", "operator": "KMG International", "capacity_bpd": 140000, "country": "RO", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [14.5, 50.1] },
+      "properties": { "name": "Unipetrol Litvinov Refinery", "operator": "PKN Orlen (Unipetrol)", "capacity_bpd": 110000, "country": "CZ", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [16.3, 48.2] },
+      "properties": { "name": "OMV Schwechat Refinery", "operator": "OMV", "capacity_bpd": 195000, "country": "AT", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [23.7, 37.9] },
+      "properties": { "name": "Motor Oil Corinth Refinery", "operator": "Motor Oil Hellas", "capacity_bpd": 185000, "country": "GR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [22.9, 40.6] },
+      "properties": { "name": "Hellenic Petroleum Thessaloniki", "operator": "Hellenic Petroleum", "capacity_bpd": 100000, "country": "GR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [29.0, 41.0] },
+      "properties": { "name": "TUPRAS Izmit Refinery", "operator": "TUPRAS", "capacity_bpd": 226000, "country": "TR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [27.1, 38.4] },
+      "properties": { "name": "TUPRAS Izmir Refinery", "operator": "TUPRAS", "capacity_bpd": 226000, "country": "TR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [36.2, 36.6] },
+      "properties": { "name": "TUPRAS Kirikkale Refinery", "operator": "TUPRAS", "capacity_bpd": 113000, "country": "TR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [40.7, 37.1] },
+      "properties": { "name": "TUPRAS Batman Refinery", "operator": "TUPRAS", "capacity_bpd": 110000, "country": "TR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [37.6, 55.75] },
+      "properties": { "name": "Gazprom Neft Moscow Refinery", "operator": "Gazprom Neft", "capacity_bpd": 250000, "country": "RU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [73.4, 54.9] },
+      "properties": { "name": "Gazprom Neft Omsk Refinery", "operator": "Gazprom Neft", "capacity_bpd": 440000, "country": "RU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [40.5, 56.1] },
+      "properties": { "name": "Lukoil Nizhny Novgorod Refinery", "operator": "Lukoil", "capacity_bpd": 350000, "country": "RU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [44.5, 48.7] },
+      "properties": { "name": "Lukoil Volgograd Refinery", "operator": "Lukoil", "capacity_bpd": 260000, "country": "RU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [56.0, 54.7] },
+      "properties": { "name": "Bashneft Ufa Refinery Group", "operator": "Bashneft (Rosneft)", "capacity_bpd": 370000, "country": "RU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [82.9, 55.0] },
+      "properties": { "name": "Rosneft Achinsk Refinery", "operator": "Rosneft", "capacity_bpd": 140000, "country": "RU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [52.4, 56.8] },
+      "properties": { "name": "TAIF Nizhnekamsk Refinery", "operator": "TAIF Group", "capacity_bpd": 280000, "country": "RU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [44.0, 56.3] },
+      "properties": { "name": "Lukoil Perm Refinery", "operator": "Lukoil", "capacity_bpd": 130000, "country": "RU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [85.2, 56.5] },
+      "properties": { "name": "Rosneft Angarsk Refinery", "operator": "Rosneft", "capacity_bpd": 200000, "country": "RU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [30.3, 59.9] },
+      "properties": { "name": "Gazprom Neft St. Petersburg", "operator": "Gazprom Neft", "capacity_bpd": 120000, "country": "RU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [72.88, 19.1] },
+      "properties": { "name": "BPCL Mumbai Refinery", "operator": "Bharat Petroleum", "capacity_bpd": 240000, "country": "IN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [80.3, 13.1] },
+      "properties": { "name": "Chennai Petroleum Manali Refinery", "operator": "Chennai Petroleum (IOCL)", "capacity_bpd": 210000, "country": "IN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [73.9, 18.5] },
+      "properties": { "name": "HPCL Mumbai Refinery", "operator": "Hindustan Petroleum", "capacity_bpd": 150000, "country": "IN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [81.65, 21.25] },
+      "properties": { "name": "IOCL Paradip Refinery", "operator": "Indian Oil Corporation", "capacity_bpd": 300000, "country": "IN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [75.8, 26.9] },
+      "properties": { "name": "IOCL Koyali Refinery (Gujarat)", "operator": "Indian Oil Corporation", "capacity_bpd": 275000, "country": "IN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [77.6, 12.9] },
+      "properties": { "name": "MRPL Mangalore Refinery", "operator": "MRPL (ONGC)", "capacity_bpd": 300000, "country": "IN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [84.9, 22.1] },
+      "properties": { "name": "IOCL Haldia Refinery", "operator": "Indian Oil Corporation", "capacity_bpd": 150000, "country": "IN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [76.8, 30.7] },
+      "properties": { "name": "IOCL Panipat Refinery", "operator": "Indian Oil Corporation", "capacity_bpd": 300000, "country": "IN", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-43.2, -22.9] },
+      "properties": { "name": "Petrobras Duque de Caxias (REDUC)", "operator": "Petrobras", "capacity_bpd": 242000, "country": "BR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-46.4, -23.6] },
+      "properties": { "name": "Petrobras Paulinia (REPLAN)", "operator": "Petrobras", "capacity_bpd": 434000, "country": "BR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-49.3, -25.4] },
+      "properties": { "name": "Petrobras Araucaria (REPAR)", "operator": "Petrobras", "capacity_bpd": 218000, "country": "BR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-38.5, -12.7] },
+      "properties": { "name": "Petrobras Landulpho Alves (RLAM)", "operator": "Petrobras", "capacity_bpd": 323000, "country": "BR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-36.6, -10.9] },
+      "properties": { "name": "Petrobras Henrique Lage (REVAP)", "operator": "Petrobras", "capacity_bpd": 251000, "country": "BR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-99.9, 22.2] },
+      "properties": { "name": "Pemex Salamanca Refinery", "operator": "Pemex", "capacity_bpd": 220000, "country": "MX", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.15, 18.15] },
+      "properties": { "name": "Pemex Minatitlan Refinery", "operator": "Pemex", "capacity_bpd": 285000, "country": "MX", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-97.4, 20.5] },
+      "properties": { "name": "Pemex Tula Refinery", "operator": "Pemex", "capacity_bpd": 315000, "country": "MX", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.9, 18.5] },
+      "properties": { "name": "Pemex Salina Cruz Refinery", "operator": "Pemex", "capacity_bpd": 330000, "country": "MX", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-97.8, 22.25] },
+      "properties": { "name": "Pemex Madero Refinery", "operator": "Pemex", "capacity_bpd": 190000, "country": "MX", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-92.9, 18.0] },
+      "properties": { "name": "Dos Bocas Refinery", "operator": "Pemex", "capacity_bpd": 340000, "country": "MX", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-66.9, 10.2] },
+      "properties": { "name": "PDVSA Amuay Refinery", "operator": "PDVSA", "capacity_bpd": 645000, "country": "VE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-71.6, 10.5] },
+      "properties": { "name": "PDVSA Cardon Refinery", "operator": "PDVSA", "capacity_bpd": 310000, "country": "VE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [51.4, 35.7] },
+      "properties": { "name": "Tehran Refinery", "operator": "NIORDC", "capacity_bpd": 250000, "country": "IR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [52.6, 32.7] },
+      "properties": { "name": "Isfahan Refinery", "operator": "NIORDC", "capacity_bpd": 375000, "country": "IR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [49.2, 30.4] },
+      "properties": { "name": "Abadan Refinery", "operator": "NIORDC", "capacity_bpd": 400000, "country": "IR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [52.3, 27.2] },
+      "properties": { "name": "Bandar Abbas Refinery", "operator": "NIORDC", "capacity_bpd": 320000, "country": "IR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [52.7, 29.6] },
+      "properties": { "name": "Shiraz Refinery", "operator": "NIORDC", "capacity_bpd": 200000, "country": "IR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [52.5, 27.5] },
+      "properties": { "name": "Persian Gulf Star Refinery (Bandar Abbas)", "operator": "NIORDC", "capacity_bpd": 480000, "country": "IR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [47.4, 30.5] },
+      "properties": { "name": "Basra Refinery", "operator": "South Refineries Co", "capacity_bpd": 210000, "country": "IQ", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [44.4, 33.3] },
+      "properties": { "name": "Doura Refinery (Baghdad)", "operator": "Midland Refineries Co", "capacity_bpd": 140000, "country": "IQ", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [44.0, 36.3] },
+      "properties": { "name": "Baiji Refinery", "operator": "North Refineries Co", "capacity_bpd": 310000, "country": "IQ", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [31.2, 30.0] },
+      "properties": { "name": "MIDOR Alexandria Refinery", "operator": "MIDOR", "capacity_bpd": 160000, "country": "EG", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [29.8, 31.2] },
+      "properties": { "name": "El-Nasr Refinery (Suez)", "operator": "EGPC", "capacity_bpd": 146000, "country": "EG", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [2.2, 36.7] },
+      "properties": { "name": "Skikda Refinery", "operator": "Sonatrach", "capacity_bpd": 300000, "country": "DZ", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.6, 35.7] },
+      "properties": { "name": "Arzew Refinery", "operator": "Sonatrach", "capacity_bpd": 120000, "country": "DZ", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [2.8, 36.75] },
+      "properties": { "name": "Algiers Refinery", "operator": "Sonatrach", "capacity_bpd": 110000, "country": "DZ", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [18.5, -4.3] },
+      "properties": { "name": "SOCIR Muanda Refinery", "operator": "SOCIR", "capacity_bpd": 110000, "country": "CD", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [3.4, 6.45] },
+      "properties": { "name": "Dangote Refinery (Lagos)", "operator": "Dangote Industries", "capacity_bpd": 650000, "country": "NG", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [7.0, 4.8] },
+      "properties": { "name": "Port Harcourt Refinery", "operator": "NNPC", "capacity_bpd": 210000, "country": "NG", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [3.5, 6.5] },
+      "properties": { "name": "Warri Refinery", "operator": "NNPC", "capacity_bpd": 125000, "country": "NG", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [13.5, -4.8] },
+      "properties": { "name": "CORAF Pointe-Noire Refinery", "operator": "CORAF", "capacity_bpd": 120000, "country": "CG", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [36.8, -1.3] },
+      "properties": { "name": "Kenya Petroleum Refinery (Mombasa)", "operator": "Kenya Petroleum Refineries", "capacity_bpd": 100000, "country": "KE", "status": "shutdown" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [28.8, -26.2] },
+      "properties": { "name": "Sapref Durban Refinery", "operator": "Shell/BP (Sapref)", "capacity_bpd": 180000, "country": "ZA", "status": "shutdown" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [28.7, -26.3] },
+      "properties": { "name": "Sasol Secunda CTL", "operator": "Sasol", "capacity_bpd": 150000, "country": "ZA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [31.0, -29.9] },
+      "properties": { "name": "Engen Durban Refinery", "operator": "Engen", "capacity_bpd": 135000, "country": "ZA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [151.3, -33.9] },
+      "properties": { "name": "Ampol Lytton Refinery", "operator": "Ampol", "capacity_bpd": 109000, "country": "AU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [144.45, -38.1] },
+      "properties": { "name": "Viva Energy Geelong Refinery", "operator": "Viva Energy", "capacity_bpd": 120000, "country": "AU", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [174.9, -41.3] },
+      "properties": { "name": "Refining NZ Marsden Point", "operator": "Refining NZ", "capacity_bpd": 135000, "country": "NZ", "status": "shutdown" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [106.7, -6.3] },
+      "properties": { "name": "Pertamina Cilacap Refinery", "operator": "Pertamina", "capacity_bpd": 348000, "country": "ID", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [104.8, -2.9] },
+      "properties": { "name": "Pertamina Plaju Refinery", "operator": "Pertamina", "capacity_bpd": 134000, "country": "ID", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [116.8, -1.3] },
+      "properties": { "name": "Pertamina Balikpapan Refinery", "operator": "Pertamina", "capacity_bpd": 260000, "country": "ID", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [101.4, 2.0] },
+      "properties": { "name": "Pertamina Dumai Refinery", "operator": "Pertamina", "capacity_bpd": 170000, "country": "ID", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [100.5, 5.3] },
+      "properties": { "name": "Petronas Pengerang Refinery (RAPID)", "operator": "Petronas", "capacity_bpd": 300000, "country": "MY", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.4, 1.6] },
+      "properties": { "name": "Petronas Melaka Refinery", "operator": "Petronas", "capacity_bpd": 270000, "country": "MY", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [100.4, 6.9] },
+      "properties": { "name": "Petronas Kerteh Refinery", "operator": "Petronas", "capacity_bpd": 150000, "country": "MY", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [100.5, 13.1] },
+      "properties": { "name": "Thai Oil Sriracha Refinery", "operator": "Thai Oil", "capacity_bpd": 275000, "country": "TH", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [100.9, 13.2] },
+      "properties": { "name": "IRPC Map Ta Phut Refinery", "operator": "IRPC", "capacity_bpd": 215000, "country": "TH", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [100.9, 13.15] },
+      "properties": { "name": "Star Petroleum Refinery (Map Ta Phut)", "operator": "Star Petroleum", "capacity_bpd": 175000, "country": "TH", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [120.3, 14.4] },
+      "properties": { "name": "Petron Bataan Refinery", "operator": "Petron Corporation", "capacity_bpd": 180000, "country": "PH", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [51.2, 25.9] },
+      "properties": { "name": "Laffan Refinery (Ras Laffan)", "operator": "QatarEnergy", "capacity_bpd": 292000, "country": "QA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [51.5, 26.0] },
+      "properties": { "name": "Laffan Refinery 2", "operator": "QatarEnergy", "capacity_bpd": 146000, "country": "QA", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [56.1, 23.6] },
+      "properties": { "name": "Sohar Refinery", "operator": "Oman Oil Company", "capacity_bpd": 198000, "country": "OM", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [57.0, 24.0] },
+      "properties": { "name": "Duqm Refinery", "operator": "OQ / Kuwait Petroleum", "capacity_bpd": 230000, "country": "OM", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [50.2, 26.2] },
+      "properties": { "name": "Bapco Sitra Refinery", "operator": "Bapco", "capacity_bpd": 267000, "country": "BH", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [67.1, 24.85] },
+      "properties": { "name": "PARCO Mid-Country Refinery", "operator": "Pak-Arab Refinery", "capacity_bpd": 120000, "country": "PK", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [66.95, 24.8] },
+      "properties": { "name": "PRL Karachi Refinery", "operator": "Pakistan Refinery Limited", "capacity_bpd": 100000, "country": "PK", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [88.3, 22.6] },
+      "properties": { "name": "Eastern Refinery Chittagong", "operator": "Eastern Refinery", "capacity_bpd": 120000, "country": "BD", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-76.8, -12.0] },
+      "properties": { "name": "La Pampilla Refinery (Callao)", "operator": "Repsol", "capacity_bpd": 117000, "country": "PE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-67.6, 10.2] },
+      "properties": { "name": "PDVSA El Palito Refinery", "operator": "PDVSA", "capacity_bpd": 140000, "country": "VE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-76.5, 3.4] },
+      "properties": { "name": "Ecopetrol Barrancabermeja Refinery", "operator": "Ecopetrol", "capacity_bpd": 250000, "country": "CO", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-75.5, 10.4] },
+      "properties": { "name": "Ecopetrol Cartagena Refinery", "operator": "Ecopetrol", "capacity_bpd": 165000, "country": "CO", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-80.1, -2.2] },
+      "properties": { "name": "Esmeraldas Refinery", "operator": "PetroEcuador", "capacity_bpd": 110000, "country": "EC", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-57.5, -38.0] },
+      "properties": { "name": "YPF La Plata Refinery", "operator": "YPF", "capacity_bpd": 189000, "country": "AR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-60.7, -32.9] },
+      "properties": { "name": "YPF Lujan de Cuyo Refinery", "operator": "YPF", "capacity_bpd": 106000, "country": "AR", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [55.5, 25.4] },
+      "properties": { "name": "ENOC Jebel Ali Refinery", "operator": "ENOC", "capacity_bpd": 120000, "country": "AE", "status": "active" }
+    }
+  ]
+}

@@ -1,0 +1,1345 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.4875, 39.0438] },
+      "properties": { "name": "AWS US-East-1 (Ashburn)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 600, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-121.9344, 37.3688] },
+      "properties": { "name": "AWS US-West-1 (Santa Clara)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 150, "country": "US", "city": "Santa Clara" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-122.3321, 47.6062] },
+      "properties": { "name": "AWS US-West-2 (Portland/Boardman)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 400, "country": "US", "city": "Boardman" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-79.8711, 43.4516] },
+      "properties": { "name": "AWS Canada (Montreal)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 120, "country": "CA", "city": "Montreal" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-3.1883, 51.4816] },
+      "properties": { "name": "AWS EU-West-2 (London)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 200, "country": "GB", "city": "London" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-6.2603, 53.3498] },
+      "properties": { "name": "AWS EU-West-1 (Dublin)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 300, "country": "IE", "city": "Dublin" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [2.3522, 48.9266] },
+      "properties": { "name": "AWS EU-West-3 (Paris)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 150, "country": "FR", "city": "Paris" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "AWS EU-Central-1 (Frankfurt)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 250, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [18.0686, 59.3293] },
+      "properties": { "name": "AWS EU-North-1 (Stockholm)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 120, "country": "SE", "city": "Stockholm" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.4964, 41.9028] },
+      "properties": { "name": "AWS EU-South-1 (Milan)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 100, "country": "IT", "city": "Milan" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.7745, 35.6812] },
+      "properties": { "name": "AWS AP-Northeast-1 (Tokyo)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 300, "country": "JP", "city": "Tokyo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [126.978, 37.5665] },
+      "properties": { "name": "AWS AP-Northeast-2 (Seoul)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 200, "country": "KR", "city": "Seoul" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.8198, 1.3521] },
+      "properties": { "name": "AWS AP-Southeast-1 (Singapore)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 200, "country": "SG", "city": "Singapore" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [151.2093, -33.8688] },
+      "properties": { "name": "AWS AP-Southeast-2 (Sydney)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 150, "country": "AU", "city": "Sydney" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [72.8777, 19.0760] },
+      "properties": { "name": "AWS AP-South-1 (Mumbai)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 200, "country": "IN", "city": "Mumbai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-46.6333, -23.5505] },
+      "properties": { "name": "AWS SA-East-1 (Sao Paulo)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 120, "country": "BR", "city": "Sao Paulo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [55.2708, 25.1985] },
+      "properties": { "name": "AWS ME-South-1 (Bahrain)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 100, "country": "BH", "city": "Manama" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [28.2336, -25.7461] },
+      "properties": { "name": "AWS AF-South-1 (Cape Town)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 80, "country": "ZA", "city": "Cape Town" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.4603, 39.0458] },
+      "properties": { "name": "Google us-east4 (Ashburn)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 500, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.9345, 36.1540] },
+      "properties": { "name": "Google us-central1 (Council Bluffs)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 450, "country": "US", "city": "Council Bluffs" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-122.0838, 37.3861] },
+      "properties": { "name": "Google us-west1 (The Dalles)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 350, "country": "US", "city": "The Dalles" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-118.2437, 34.0522] },
+      "properties": { "name": "Google us-west2 (Los Angeles)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 200, "country": "US", "city": "Los Angeles" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.1033, 51.5133] },
+      "properties": { "name": "Google europe-west2 (London)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 200, "country": "GB", "city": "London" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "Google europe-west3 (Frankfurt)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 250, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [4.8945, 52.3702] },
+      "properties": { "name": "Google europe-west4 (Eemshaven)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 300, "country": "NL", "city": "Eemshaven" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [6.1432, 46.2044] },
+      "properties": { "name": "Google europe-west6 (Zurich)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 150, "country": "CH", "city": "Zurich" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [18.0686, 59.3293] },
+      "properties": { "name": "Google europe-north1 (Hamina)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 200, "country": "FI", "city": "Hamina" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.6917, 35.6895] },
+      "properties": { "name": "Google asia-northeast1 (Tokyo)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 250, "country": "JP", "city": "Tokyo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.8198, 1.3521] },
+      "properties": { "name": "Google asia-southeast1 (Singapore)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 200, "country": "SG", "city": "Singapore" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [77.1025, 28.7041] },
+      "properties": { "name": "Google asia-south1 (Mumbai)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 180, "country": "IN", "city": "Mumbai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [151.2093, -33.8688] },
+      "properties": { "name": "Google australia-southeast1 (Sydney)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 150, "country": "AU", "city": "Sydney" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-46.6333, -23.5505] },
+      "properties": { "name": "Google southamerica-east1 (Sao Paulo)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 100, "country": "BR", "city": "Sao Paulo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [34.7818, 32.0853] },
+      "properties": { "name": "Google me-west1 (Tel Aviv)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 80, "country": "IL", "city": "Tel Aviv" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [46.6753, 24.7136] },
+      "properties": { "name": "Google me-central2 (Dammam)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 100, "country": "SA", "city": "Dammam" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.4536, 39.0481] },
+      "properties": { "name": "Azure US East (Ashburn)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 500, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.6298, 41.8781] },
+      "properties": { "name": "Azure US North Central (Chicago)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 300, "country": "US", "city": "Chicago" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.7970, 32.7767] },
+      "properties": { "name": "Azure US South Central (San Antonio)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 400, "country": "US", "city": "San Antonio" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-122.1215, 47.6740] },
+      "properties": { "name": "Azure US West (Quincy)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 350, "country": "US", "city": "Quincy" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-121.9500, 37.3541] },
+      "properties": { "name": "Azure US West 3 (Phoenix)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 200, "country": "US", "city": "Phoenix" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.0235, 51.5144] },
+      "properties": { "name": "Azure UK South (London)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 200, "country": "GB", "city": "London" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-6.2603, 53.3498] },
+      "properties": { "name": "Azure North Europe (Dublin)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 300, "country": "IE", "city": "Dublin" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [4.3517, 52.0705] },
+      "properties": { "name": "Azure West Europe (Amsterdam)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 350, "country": "NL", "city": "Amsterdam" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "Azure Germany West Central (Frankfurt)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 200, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [2.3522, 48.8566] },
+      "properties": { "name": "Azure France Central (Paris)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 150, "country": "FR", "city": "Paris" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.7745, 35.6812] },
+      "properties": { "name": "Azure Japan East (Tokyo)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 250, "country": "JP", "city": "Tokyo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [126.978, 37.5665] },
+      "properties": { "name": "Azure Korea Central (Seoul)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 180, "country": "KR", "city": "Seoul" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.8198, 1.3521] },
+      "properties": { "name": "Azure Southeast Asia (Singapore)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 200, "country": "SG", "city": "Singapore" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [72.8777, 19.0760] },
+      "properties": { "name": "Azure Central India (Pune)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 150, "country": "IN", "city": "Pune" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [55.2708, 25.1985] },
+      "properties": { "name": "Azure UAE North (Dubai)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 100, "country": "AE", "city": "Dubai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [28.0473, -26.2041] },
+      "properties": { "name": "Azure South Africa North (Johannesburg)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 80, "country": "ZA", "city": "Johannesburg" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-46.6333, -23.5505] },
+      "properties": { "name": "Azure Brazil South (Sao Paulo)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 100, "country": "BR", "city": "Sao Paulo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [151.1793, -33.8688] },
+      "properties": { "name": "Azure Australia East (Sydney)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 150, "country": "AU", "city": "Sydney" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.4336, 39.0437] },
+      "properties": { "name": "Meta Ashburn DC", "operator": "Meta", "tier": "hyperscaler", "capacity_mw": 300, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.2650, 44.9778] },
+      "properties": { "name": "Meta Altoona DC", "operator": "Meta", "tier": "hyperscaler", "capacity_mw": 200, "country": "US", "city": "Altoona" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-97.5164, 35.4676] },
+      "properties": { "name": "Meta Prineville DC", "operator": "Meta", "tier": "hyperscaler", "capacity_mw": 250, "country": "US", "city": "Prineville" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-80.0534, 33.1581] },
+      "properties": { "name": "Meta Henrico DC", "operator": "Meta", "tier": "hyperscaler", "capacity_mw": 200, "country": "US", "city": "Henrico" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-121.7405, 45.5946] },
+      "properties": { "name": "Meta The Dalles DC", "operator": "Meta", "tier": "hyperscaler", "capacity_mw": 180, "country": "US", "city": "The Dalles" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [10.2039, 56.1629] },
+      "properties": { "name": "Meta Odense DC", "operator": "Meta", "tier": "hyperscaler", "capacity_mw": 150, "country": "DK", "city": "Odense" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [22.9354, 65.5848] },
+      "properties": { "name": "Meta Lulea DC", "operator": "Meta", "tier": "hyperscaler", "capacity_mw": 120, "country": "SE", "city": "Lulea" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.7414, 1.2966] },
+      "properties": { "name": "Meta Singapore DC", "operator": "Meta", "tier": "hyperscaler", "capacity_mw": 150, "country": "SG", "city": "Singapore" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.3064, 38.9517] },
+      "properties": { "name": "Equinix DC1-DC15 (Ashburn Campus)", "operator": "Equinix", "tier": "IV", "capacity_mw": 200, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-122.3994, 37.7852] },
+      "properties": { "name": "Equinix SV1-SV11 (Silicon Valley)", "operator": "Equinix", "tier": "IV", "capacity_mw": 150, "country": "US", "city": "San Jose" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-74.0060, 40.7128] },
+      "properties": { "name": "Equinix NY1-NY13 (New York)", "operator": "Equinix", "tier": "IV", "capacity_mw": 180, "country": "US", "city": "New York" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.6298, 41.8781] },
+      "properties": { "name": "Equinix CH1-CH4 (Chicago)", "operator": "Equinix", "tier": "IV", "capacity_mw": 120, "country": "US", "city": "Chicago" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.7970, 32.7767] },
+      "properties": { "name": "Equinix DA1-DA11 (Dallas)", "operator": "Equinix", "tier": "IV", "capacity_mw": 130, "country": "US", "city": "Dallas" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.0235, 51.5187] },
+      "properties": { "name": "Equinix LD1-LD9 (London/Slough)", "operator": "Equinix", "tier": "IV", "capacity_mw": 150, "country": "GB", "city": "London" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [4.9041, 52.3676] },
+      "properties": { "name": "Equinix AM1-AM11 (Amsterdam)", "operator": "Equinix", "tier": "IV", "capacity_mw": 140, "country": "NL", "city": "Amsterdam" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "Equinix FR1-FR8 (Frankfurt)", "operator": "Equinix", "tier": "IV", "capacity_mw": 160, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [2.3522, 48.8566] },
+      "properties": { "name": "Equinix PA1-PA8 (Paris)", "operator": "Equinix", "tier": "IV", "capacity_mw": 100, "country": "FR", "city": "Paris" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.7525, 35.6846] },
+      "properties": { "name": "Equinix TY1-TY12 (Tokyo)", "operator": "Equinix", "tier": "IV", "capacity_mw": 140, "country": "JP", "city": "Tokyo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.8531, 1.3200] },
+      "properties": { "name": "Equinix SG1-SG5 (Singapore)", "operator": "Equinix", "tier": "IV", "capacity_mw": 100, "country": "SG", "city": "Singapore" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [114.1694, 22.3193] },
+      "properties": { "name": "Equinix HK1-HK5 (Hong Kong)", "operator": "Equinix", "tier": "IV", "capacity_mw": 80, "country": "HK", "city": "Hong Kong" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [151.2093, -33.8688] },
+      "properties": { "name": "Equinix SY1-SY5 (Sydney)", "operator": "Equinix", "tier": "IV", "capacity_mw": 90, "country": "AU", "city": "Sydney" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-46.6333, -23.5505] },
+      "properties": { "name": "Equinix SP1-SP4 (Sao Paulo)", "operator": "Equinix", "tier": "IV", "capacity_mw": 60, "country": "BR", "city": "Sao Paulo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.3064, 38.9517] },
+      "properties": { "name": "Digital Realty IAD (Ashburn)", "operator": "Digital Realty", "tier": "IV", "capacity_mw": 180, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.7970, 32.7767] },
+      "properties": { "name": "Digital Realty DFW (Dallas)", "operator": "Digital Realty", "tier": "IV", "capacity_mw": 150, "country": "US", "city": "Dallas" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-121.8863, 37.3382] },
+      "properties": { "name": "Digital Realty SJC (San Jose)", "operator": "Digital Realty", "tier": "IV", "capacity_mw": 120, "country": "US", "city": "San Jose" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.6298, 41.8781] },
+      "properties": { "name": "Digital Realty ORD (Chicago)", "operator": "Digital Realty", "tier": "IV", "capacity_mw": 140, "country": "US", "city": "Chicago" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [4.8945, 52.3702] },
+      "properties": { "name": "Digital Realty AMS (Amsterdam)", "operator": "Digital Realty", "tier": "IV", "capacity_mw": 120, "country": "NL", "city": "Amsterdam" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "Digital Realty FRA (Frankfurt)", "operator": "Digital Realty", "tier": "IV", "capacity_mw": 130, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.1257, 51.5074] },
+      "properties": { "name": "Digital Realty LHR (London)", "operator": "Digital Realty", "tier": "IV", "capacity_mw": 110, "country": "GB", "city": "London" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.8198, 1.3521] },
+      "properties": { "name": "Digital Realty SIN (Singapore)", "operator": "Digital Realty", "tier": "IV", "capacity_mw": 100, "country": "SG", "city": "Singapore" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [114.1694, 22.3193] },
+      "properties": { "name": "Digital Realty HKG (Hong Kong)", "operator": "Digital Realty", "tier": "IV", "capacity_mw": 60, "country": "HK", "city": "Hong Kong" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.7525, 35.6846] },
+      "properties": { "name": "Digital Realty NRT (Tokyo)", "operator": "Digital Realty", "tier": "IV", "capacity_mw": 90, "country": "JP", "city": "Tokyo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.3064, 38.9517] },
+      "properties": { "name": "CyrusOne Sterling (Ashburn)", "operator": "CyrusOne", "tier": "III", "capacity_mw": 100, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.7970, 32.7767] },
+      "properties": { "name": "CyrusOne Carrollton (Dallas)", "operator": "CyrusOne", "tier": "III", "capacity_mw": 90, "country": "US", "city": "Dallas" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.3698, 29.7604] },
+      "properties": { "name": "CyrusOne Houston West", "operator": "CyrusOne", "tier": "III", "capacity_mw": 80, "country": "US", "city": "Houston" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-112.0740, 33.4484] },
+      "properties": { "name": "CyrusOne Chandler (Phoenix)", "operator": "CyrusOne", "tier": "III", "capacity_mw": 75, "country": "US", "city": "Phoenix" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "CyrusOne Frankfurt I", "operator": "CyrusOne", "tier": "III", "capacity_mw": 50, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.1257, 51.5074] },
+      "properties": { "name": "CyrusOne London I", "operator": "CyrusOne", "tier": "III", "capacity_mw": 40, "country": "GB", "city": "London" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.6917, 35.6895] },
+      "properties": { "name": "NTT Tokyo DC1 (Mitaka)", "operator": "NTT", "tier": "IV", "capacity_mw": 80, "country": "JP", "city": "Tokyo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [135.5023, 34.6937] },
+      "properties": { "name": "NTT Osaka DC1", "operator": "NTT", "tier": "IV", "capacity_mw": 60, "country": "JP", "city": "Osaka" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.3064, 38.9517] },
+      "properties": { "name": "NTT Ashburn DC1", "operator": "NTT", "tier": "IV", "capacity_mw": 70, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.1257, 51.5074] },
+      "properties": { "name": "NTT London DC1 (Dagenham)", "operator": "NTT", "tier": "IV", "capacity_mw": 50, "country": "GB", "city": "London" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "NTT Frankfurt DC1", "operator": "NTT", "tier": "IV", "capacity_mw": 40, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [72.8777, 19.0760] },
+      "properties": { "name": "NTT Mumbai DC1", "operator": "NTT", "tier": "IV", "capacity_mw": 40, "country": "IN", "city": "Mumbai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [114.1694, 22.3193] },
+      "properties": { "name": "NTT Hong Kong DC1 (Tseung Kwan O)", "operator": "NTT", "tier": "IV", "capacity_mw": 30, "country": "HK", "city": "Hong Kong" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [2.3388, 48.8746] },
+      "properties": { "name": "OVHcloud Paris (Roubaix P19)", "operator": "OVHcloud", "tier": "III", "capacity_mw": 60, "country": "FR", "city": "Roubaix" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [3.1746, 50.6840] },
+      "properties": { "name": "OVHcloud Roubaix (RBX)", "operator": "OVHcloud", "tier": "III", "capacity_mw": 40, "country": "FR", "city": "Roubaix" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-1.5536, 47.2184] },
+      "properties": { "name": "OVHcloud Gravelines (GRA)", "operator": "OVHcloud", "tier": "III", "capacity_mw": 50, "country": "FR", "city": "Gravelines" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [7.3508, 49.1153] },
+      "properties": { "name": "OVHcloud Strasbourg (SBG)", "operator": "OVHcloud", "tier": "III", "capacity_mw": 30, "country": "FR", "city": "Strasbourg" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "OVHcloud Frankfurt (FRA)", "operator": "OVHcloud", "tier": "III", "capacity_mw": 25, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.1257, 51.5074] },
+      "properties": { "name": "OVHcloud London (LON)", "operator": "OVHcloud", "tier": "III", "capacity_mw": 20, "country": "GB", "city": "London" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.8198, 1.3521] },
+      "properties": { "name": "OVHcloud Singapore (SGP)", "operator": "OVHcloud", "tier": "III", "capacity_mw": 15, "country": "SG", "city": "Singapore" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [151.2093, -33.8688] },
+      "properties": { "name": "OVHcloud Sydney (SYD)", "operator": "OVHcloud", "tier": "III", "capacity_mw": 15, "country": "AU", "city": "Sydney" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.3064, 38.9517] },
+      "properties": { "name": "OVHcloud Vint Hill (US-East)", "operator": "OVHcloud", "tier": "III", "capacity_mw": 20, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [11.0767, 49.4521] },
+      "properties": { "name": "Hetzner Nuremberg (NBG1)", "operator": "Hetzner", "tier": "III", "capacity_mw": 30, "country": "DE", "city": "Nuremberg" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [9.7688, 52.3759] },
+      "properties": { "name": "Hetzner Falkenstein (FSN1)", "operator": "Hetzner", "tier": "III", "capacity_mw": 25, "country": "DE", "city": "Falkenstein" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [24.9384, 60.1699] },
+      "properties": { "name": "Hetzner Helsinki (HEL1)", "operator": "Hetzner", "tier": "III", "capacity_mw": 20, "country": "FI", "city": "Helsinki" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.4603, 39.0458] },
+      "properties": { "name": "Hetzner Ashburn (ASH)", "operator": "Hetzner", "tier": "III", "capacity_mw": 15, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.7414, 1.2966] },
+      "properties": { "name": "Hetzner Singapore (SIN)", "operator": "Hetzner", "tier": "III", "capacity_mw": 10, "country": "SG", "city": "Singapore" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [116.3975, 39.9042] },
+      "properties": { "name": "Alibaba Cloud Beijing", "operator": "Alibaba Cloud", "tier": "hyperscaler", "capacity_mw": 300, "country": "CN", "city": "Beijing" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.4737, 31.2304] },
+      "properties": { "name": "Alibaba Cloud Shanghai", "operator": "Alibaba Cloud", "tier": "hyperscaler", "capacity_mw": 250, "country": "CN", "city": "Shanghai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [120.1551, 30.2741] },
+      "properties": { "name": "Alibaba Cloud Hangzhou", "operator": "Alibaba Cloud", "tier": "hyperscaler", "capacity_mw": 400, "country": "CN", "city": "Hangzhou" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [113.2644, 23.1291] },
+      "properties": { "name": "Alibaba Cloud Shenzhen", "operator": "Alibaba Cloud", "tier": "hyperscaler", "capacity_mw": 200, "country": "CN", "city": "Shenzhen" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [103.8198, 1.3521] },
+      "properties": { "name": "Alibaba Cloud Singapore", "operator": "Alibaba Cloud", "tier": "hyperscaler", "capacity_mw": 100, "country": "SG", "city": "Singapore" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [106.8456, -6.2088] },
+      "properties": { "name": "Alibaba Cloud Jakarta", "operator": "Alibaba Cloud", "tier": "hyperscaler", "capacity_mw": 80, "country": "ID", "city": "Jakarta" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [116.3975, 39.9042] },
+      "properties": { "name": "Tencent Cloud Beijing", "operator": "Tencent Cloud", "tier": "hyperscaler", "capacity_mw": 250, "country": "CN", "city": "Beijing" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.4737, 31.2304] },
+      "properties": { "name": "Tencent Cloud Shanghai", "operator": "Tencent Cloud", "tier": "hyperscaler", "capacity_mw": 200, "country": "CN", "city": "Shanghai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [113.2644, 23.1291] },
+      "properties": { "name": "Tencent Cloud Guangzhou", "operator": "Tencent Cloud", "tier": "hyperscaler", "capacity_mw": 180, "country": "CN", "city": "Guangzhou" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [104.0668, 30.5728] },
+      "properties": { "name": "Tencent Cloud Chengdu", "operator": "Tencent Cloud", "tier": "hyperscaler", "capacity_mw": 120, "country": "CN", "city": "Chengdu" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.5417, 47.3769] },
+      "properties": { "name": "Interxion ZUR1-ZUR2 (Zurich)", "operator": "Digital Realty (Interxion)", "tier": "III", "capacity_mw": 30, "country": "CH", "city": "Zurich" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.3731, 51.3397] },
+      "properties": { "name": "Interxion DUS1-DUS2 (Dusseldorf)", "operator": "Digital Realty (Interxion)", "tier": "III", "capacity_mw": 25, "country": "DE", "city": "Dusseldorf" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [16.3738, 48.2082] },
+      "properties": { "name": "Interxion VIE1-VIE2 (Vienna)", "operator": "Digital Realty (Interxion)", "tier": "III", "capacity_mw": 25, "country": "AT", "city": "Vienna" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.5683, 55.6761] },
+      "properties": { "name": "Interxion CPH1-CPH2 (Copenhagen)", "operator": "Digital Realty (Interxion)", "tier": "III", "capacity_mw": 20, "country": "DK", "city": "Copenhagen" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-3.7038, 40.4168] },
+      "properties": { "name": "Interxion MAD1-MAD2 (Madrid)", "operator": "Digital Realty (Interxion)", "tier": "III", "capacity_mw": 30, "country": "ES", "city": "Madrid" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [14.4378, 50.0755] },
+      "properties": { "name": "Interxion PRA1 (Prague)", "operator": "Digital Realty (Interxion)", "tier": "III", "capacity_mw": 15, "country": "CZ", "city": "Prague" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.4875, 39.0438] },
+      "properties": { "name": "CoreSite VA1-VA3 (Reston)", "operator": "CoreSite", "tier": "III", "capacity_mw": 80, "country": "US", "city": "Reston" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-104.9903, 39.7392] },
+      "properties": { "name": "CoreSite DE1-DE2 (Denver)", "operator": "CoreSite", "tier": "III", "capacity_mw": 50, "country": "US", "city": "Denver" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-118.2437, 34.0522] },
+      "properties": { "name": "CoreSite LA1-LA3 (Los Angeles)", "operator": "CoreSite", "tier": "III", "capacity_mw": 60, "country": "US", "city": "Los Angeles" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-121.8863, 37.3382] },
+      "properties": { "name": "CoreSite SV1-SV8 (Santa Clara)", "operator": "CoreSite", "tier": "III", "capacity_mw": 70, "country": "US", "city": "Santa Clara" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [55.3047, 25.2582] },
+      "properties": { "name": "Khazna Data Centers (Abu Dhabi)", "operator": "Khazna", "tier": "IV", "capacity_mw": 200, "country": "AE", "city": "Abu Dhabi" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [55.2708, 25.1985] },
+      "properties": { "name": "Gulf Data Hub (Dubai)", "operator": "Gulf Data Hub", "tier": "III", "capacity_mw": 60, "country": "AE", "city": "Dubai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [46.6753, 24.7136] },
+      "properties": { "name": "STC Cloud Riyadh", "operator": "STC", "tier": "IV", "capacity_mw": 50, "country": "SA", "city": "Riyadh" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [51.5310, 25.2854] },
+      "properties": { "name": "Ooredoo Data Center (Doha)", "operator": "Ooredoo", "tier": "IV", "capacity_mw": 30, "country": "QA", "city": "Doha" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [36.8219, -1.2921] },
+      "properties": { "name": "Africa Data Centres Nairobi", "operator": "Africa Data Centres", "tier": "III", "capacity_mw": 15, "country": "KE", "city": "Nairobi" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [3.3792, 6.5244] },
+      "properties": { "name": "Rack Centre Lagos", "operator": "Rack Centre", "tier": "III", "capacity_mw": 10, "country": "NG", "city": "Lagos" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [28.0473, -26.2041] },
+      "properties": { "name": "Teraco JB1-JB4 (Johannesburg)", "operator": "Teraco", "tier": "IV", "capacity_mw": 40, "country": "ZA", "city": "Johannesburg" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [18.4241, -33.9249] },
+      "properties": { "name": "Teraco CT1-CT2 (Cape Town)", "operator": "Teraco", "tier": "III", "capacity_mw": 20, "country": "ZA", "city": "Cape Town" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [31.0335, -29.8587] },
+      "properties": { "name": "Teraco DB1 (Durban)", "operator": "Teraco", "tier": "III", "capacity_mw": 10, "country": "ZA", "city": "Durban" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [28.9784, 41.0082] },
+      "properties": { "name": "Equinix IS1-IS3 (Istanbul)", "operator": "Equinix", "tier": "III", "capacity_mw": 30, "country": "TR", "city": "Istanbul" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [20.9947, 52.2297] },
+      "properties": { "name": "Equinix WA1-WA2 (Warsaw)", "operator": "Equinix", "tier": "III", "capacity_mw": 25, "country": "PL", "city": "Warsaw" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-73.9857, 40.7484] },
+      "properties": { "name": "Equinix NY5 (Secaucus)", "operator": "Equinix", "tier": "IV", "capacity_mw": 100, "country": "US", "city": "Secaucus" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-80.1918, 25.7617] },
+      "properties": { "name": "Equinix MI1-MI3 (Miami)", "operator": "Equinix", "tier": "IV", "capacity_mw": 50, "country": "US", "city": "Miami" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-84.3880, 33.7490] },
+      "properties": { "name": "Equinix AT1-AT5 (Atlanta)", "operator": "Equinix", "tier": "IV", "capacity_mw": 60, "country": "US", "city": "Atlanta" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-122.4194, 37.7749] },
+      "properties": { "name": "Equinix SF1-SF5 (San Francisco)", "operator": "Equinix", "tier": "IV", "capacity_mw": 50, "country": "US", "city": "San Francisco" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [9.9937, 53.5511] },
+      "properties": { "name": "Equinix HH1-HH2 (Hamburg)", "operator": "Equinix", "tier": "III", "capacity_mw": 30, "country": "DE", "city": "Hamburg" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [11.5820, 48.1351] },
+      "properties": { "name": "Equinix MU1-MU3 (Munich)", "operator": "Equinix", "tier": "III", "capacity_mw": 35, "country": "DE", "city": "Munich" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [174.7633, -36.8485] },
+      "properties": { "name": "Equinix AK1 (Auckland)", "operator": "Equinix", "tier": "III", "capacity_mw": 15, "country": "NZ", "city": "Auckland" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [144.9631, -37.8136] },
+      "properties": { "name": "Equinix ME1-ME2 (Melbourne)", "operator": "Equinix", "tier": "III", "capacity_mw": 40, "country": "AU", "city": "Melbourne" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [153.0251, -27.4698] },
+      "properties": { "name": "Equinix BN1 (Brisbane)", "operator": "Equinix", "tier": "III", "capacity_mw": 20, "country": "AU", "city": "Brisbane" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [115.8605, -31.9505] },
+      "properties": { "name": "Equinix PE1-PE2 (Perth)", "operator": "Equinix", "tier": "III", "capacity_mw": 15, "country": "AU", "city": "Perth" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [100.5018, 13.7563] },
+      "properties": { "name": "TRUE IDC Bangkok", "operator": "TRUE IDC", "tier": "III", "capacity_mw": 20, "country": "TH", "city": "Bangkok" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [106.6297, 10.8231] },
+      "properties": { "name": "Viettel IDC Ho Chi Minh", "operator": "Viettel", "tier": "III", "capacity_mw": 15, "country": "VN", "city": "Ho Chi Minh City" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.5654, 25.0330] },
+      "properties": { "name": "Chief Telecom Taipei DC", "operator": "Chief Telecom", "tier": "III", "capacity_mw": 25, "country": "TW", "city": "Taipei" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.4737, 31.2304] },
+      "properties": { "name": "GDS Shanghai Data Center", "operator": "GDS Holdings", "tier": "IV", "capacity_mw": 150, "country": "CN", "city": "Shanghai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [116.3975, 39.9042] },
+      "properties": { "name": "GDS Beijing Data Center", "operator": "GDS Holdings", "tier": "IV", "capacity_mw": 120, "country": "CN", "city": "Beijing" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [113.2644, 23.1291] },
+      "properties": { "name": "GDS Shenzhen Data Center", "operator": "GDS Holdings", "tier": "IV", "capacity_mw": 80, "country": "CN", "city": "Shenzhen" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [114.0579, 22.5431] },
+      "properties": { "name": "Chindata Huailai Cluster", "operator": "Chindata Group", "tier": "hyperscaler", "capacity_mw": 300, "country": "CN", "city": "Huailai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [106.8456, -6.2088] },
+      "properties": { "name": "DCI Indonesia Jakarta", "operator": "DCI Indonesia", "tier": "IV", "capacity_mw": 40, "country": "ID", "city": "Jakarta" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [101.6869, 3.1390] },
+      "properties": { "name": "AIMS Data Centre Kuala Lumpur", "operator": "AIMS", "tier": "III", "capacity_mw": 20, "country": "MY", "city": "Kuala Lumpur" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.0244, 14.5547] },
+      "properties": { "name": "PLDT Vitro Manila", "operator": "PLDT", "tier": "III", "capacity_mw": 15, "country": "PH", "city": "Manila" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-73.9857, 40.7484] },
+      "properties": { "name": "QTS Piscataway (New Jersey)", "operator": "QTS Realty Trust", "tier": "IV", "capacity_mw": 80, "country": "US", "city": "Piscataway" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-84.3880, 33.7490] },
+      "properties": { "name": "QTS Atlanta (Suwanee)", "operator": "QTS Realty Trust", "tier": "IV", "capacity_mw": 100, "country": "US", "city": "Atlanta" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.3064, 38.9517] },
+      "properties": { "name": "QTS Ashburn", "operator": "QTS Realty Trust", "tier": "IV", "capacity_mw": 90, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.6298, 41.8781] },
+      "properties": { "name": "QTS Chicago", "operator": "QTS Realty Trust", "tier": "IV", "capacity_mw": 60, "country": "US", "city": "Chicago" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.7970, 32.7767] },
+      "properties": { "name": "QTS Irving (Dallas)", "operator": "QTS Realty Trust", "tier": "IV", "capacity_mw": 70, "country": "US", "city": "Dallas" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.4875, 39.0438] },
+      "properties": { "name": "Vantage Ashburn Campus", "operator": "Vantage Data Centers", "tier": "IV", "capacity_mw": 150, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-121.8863, 37.3382] },
+      "properties": { "name": "Vantage Santa Clara Campus", "operator": "Vantage Data Centers", "tier": "IV", "capacity_mw": 100, "country": "US", "city": "Santa Clara" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-73.5674, 45.5017] },
+      "properties": { "name": "Vantage Montreal Campus", "operator": "Vantage Data Centers", "tier": "IV", "capacity_mw": 80, "country": "CA", "city": "Montreal" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "Vantage Frankfurt Campus", "operator": "Vantage Data Centers", "tier": "IV", "capacity_mw": 50, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [16.3738, 48.2082] },
+      "properties": { "name": "Vantage Vienna Campus", "operator": "Vantage Data Centers", "tier": "III", "capacity_mw": 30, "country": "AT", "city": "Vienna" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [20.9947, 52.2297] },
+      "properties": { "name": "Vantage Warsaw Campus", "operator": "Vantage Data Centers", "tier": "III", "capacity_mw": 30, "country": "PL", "city": "Warsaw" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-9.1393, 38.7223] },
+      "properties": { "name": "Equinix LS1 (Lisbon)", "operator": "Equinix", "tier": "III", "capacity_mw": 20, "country": "PT", "city": "Lisbon" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [24.7536, 59.4370] },
+      "properties": { "name": "Equinix TL1 (Tallinn)", "operator": "Equinix", "tier": "III", "capacity_mw": 10, "country": "EE", "city": "Tallinn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [10.7522, 59.9139] },
+      "properties": { "name": "DigiPlex Oslo", "operator": "DigiPlex", "tier": "III", "capacity_mw": 20, "country": "NO", "city": "Oslo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [11.9746, 57.7089] },
+      "properties": { "name": "Equinix GR1-GR2 (Gothenburg)", "operator": "Equinix", "tier": "III", "capacity_mw": 15, "country": "SE", "city": "Gothenburg" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-99.1332, 19.4326] },
+      "properties": { "name": "Equinix MX1 (Mexico City)", "operator": "Equinix", "tier": "III", "capacity_mw": 15, "country": "MX", "city": "Mexico City" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-70.6693, -33.4489] },
+      "properties": { "name": "Equinix SC1 (Santiago)", "operator": "Equinix", "tier": "III", "capacity_mw": 12, "country": "CL", "city": "Santiago" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-57.9535, -34.9011] },
+      "properties": { "name": "Equinix BG1 (Buenos Aires)", "operator": "Equinix", "tier": "III", "capacity_mw": 10, "country": "AR", "city": "Buenos Aires" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-74.0721, 4.7110] },
+      "properties": { "name": "Equinix BT1 (Bogota)", "operator": "Equinix", "tier": "III", "capacity_mw": 10, "country": "CO", "city": "Bogota" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.0369, -12.0464] },
+      "properties": { "name": "Equinix LM1 (Lima)", "operator": "Equinix", "tier": "III", "capacity_mw": 8, "country": "PE", "city": "Lima" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-118.2437, 34.0522] },
+      "properties": { "name": "T5@LA (Los Angeles)", "operator": "T5 Data Centers", "tier": "IV", "capacity_mw": 40, "country": "US", "city": "Los Angeles" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.6298, 41.8781] },
+      "properties": { "name": "T5@Chicago", "operator": "T5 Data Centers", "tier": "IV", "capacity_mw": 40, "country": "US", "city": "Chicago" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-84.3880, 33.7490] },
+      "properties": { "name": "T5@Atlanta", "operator": "T5 Data Centers", "tier": "IV", "capacity_mw": 35, "country": "US", "city": "Atlanta" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-122.3321, 47.6062] },
+      "properties": { "name": "Sabey Intergate Seattle", "operator": "Sabey Data Centers", "tier": "III", "capacity_mw": 50, "country": "US", "city": "Seattle" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-73.9857, 40.7484] },
+      "properties": { "name": "Sabey Intergate Manhattan", "operator": "Sabey Data Centers", "tier": "III", "capacity_mw": 30, "country": "US", "city": "New York" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [37.6173, 55.7558] },
+      "properties": { "name": "IXcellerate Moscow One", "operator": "IXcellerate", "tier": "III", "capacity_mw": 40, "country": "RU", "city": "Moscow" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [37.6173, 55.7558] },
+      "properties": { "name": "DataLine Moscow OST", "operator": "DataLine", "tier": "III", "capacity_mw": 30, "country": "RU", "city": "Moscow" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [30.3351, 59.9343] },
+      "properties": { "name": "Rostelecom St Petersburg DC", "operator": "Rostelecom", "tier": "III", "capacity_mw": 25, "country": "RU", "city": "St Petersburg" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [69.2401, 41.2995] },
+      "properties": { "name": "Uzbektelecom Tashkent DC", "operator": "Uzbektelecom", "tier": "III", "capacity_mw": 10, "country": "UZ", "city": "Tashkent" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [76.9286, 43.2220] },
+      "properties": { "name": "Kazakhtelecom Almaty DC", "operator": "Kazakhtelecom", "tier": "III", "capacity_mw": 10, "country": "KZ", "city": "Almaty" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [44.7833, 41.7151] },
+      "properties": { "name": "Beeline Georgia DC (Tbilisi)", "operator": "Beeline", "tier": "III", "capacity_mw": 5, "country": "GE", "city": "Tbilisi" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-115.1398, 36.1699] },
+      "properties": { "name": "Switch SuperNAP (Las Vegas)", "operator": "Switch", "tier": "IV", "capacity_mw": 200, "country": "US", "city": "Las Vegas" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-84.5120, 42.7325] },
+      "properties": { "name": "Switch The Pyramid (Grand Rapids)", "operator": "Switch", "tier": "IV", "capacity_mw": 150, "country": "US", "city": "Grand Rapids" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-84.3880, 33.7490] },
+      "properties": { "name": "Switch Atlanta Campus", "operator": "Switch", "tier": "IV", "capacity_mw": 100, "country": "US", "city": "Atlanta" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.7970, 32.7767] },
+      "properties": { "name": "Compass Datacenters Dallas", "operator": "Compass Datacenters", "tier": "IV", "capacity_mw": 100, "country": "US", "city": "Dallas" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.3064, 38.9517] },
+      "properties": { "name": "Compass Datacenters Ashburn", "operator": "Compass Datacenters", "tier": "IV", "capacity_mw": 80, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.6298, 41.8781] },
+      "properties": { "name": "Compass Datacenters Chicago", "operator": "Compass Datacenters", "tier": "IV", "capacity_mw": 60, "country": "US", "city": "Chicago" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [77.5946, 12.9716] },
+      "properties": { "name": "CtrlS Hyperscale Hyderabad", "operator": "CtrlS", "tier": "IV", "capacity_mw": 50, "country": "IN", "city": "Hyderabad" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [72.8777, 19.0760] },
+      "properties": { "name": "CtrlS Hyperscale Mumbai", "operator": "CtrlS", "tier": "IV", "capacity_mw": 40, "country": "IN", "city": "Mumbai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [77.1025, 28.7041] },
+      "properties": { "name": "CtrlS Hyperscale Noida (Delhi NCR)", "operator": "CtrlS", "tier": "IV", "capacity_mw": 35, "country": "IN", "city": "Noida" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [80.2707, 13.0827] },
+      "properties": { "name": "STT Chennai DC", "operator": "ST Telemedia", "tier": "III", "capacity_mw": 25, "country": "IN", "city": "Chennai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [72.8777, 19.0760] },
+      "properties": { "name": "Yotta NM1 (Navi Mumbai)", "operator": "Yotta Infrastructure", "tier": "IV", "capacity_mw": 60, "country": "IN", "city": "Mumbai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-117.1611, 32.7157] },
+      "properties": { "name": "Aligned Energy San Diego", "operator": "Aligned Data Centers", "tier": "IV", "capacity_mw": 40, "country": "US", "city": "San Diego" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-112.0740, 33.4484] },
+      "properties": { "name": "Aligned Energy Phoenix", "operator": "Aligned Data Centers", "tier": "IV", "capacity_mw": 60, "country": "US", "city": "Phoenix" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.3064, 38.9517] },
+      "properties": { "name": "Aligned Energy Ashburn", "operator": "Aligned Data Centers", "tier": "IV", "capacity_mw": 80, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.7970, 32.7767] },
+      "properties": { "name": "Aligned Energy Dallas", "operator": "Aligned Data Centers", "tier": "IV", "capacity_mw": 50, "country": "US", "city": "Dallas" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-1.8904, 52.4862] },
+      "properties": { "name": "NTT Birmingham DC", "operator": "NTT", "tier": "III", "capacity_mw": 20, "country": "GB", "city": "Birmingham" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [4.3517, 52.0705] },
+      "properties": { "name": "NTT Amsterdam DC", "operator": "NTT", "tier": "IV", "capacity_mw": 30, "country": "NL", "city": "Amsterdam" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.3064, 38.9517] },
+      "properties": { "name": "CloudHQ Ashburn", "operator": "CloudHQ", "tier": "IV", "capacity_mw": 120, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.1257, 51.5074] },
+      "properties": { "name": "CloudHQ London", "operator": "CloudHQ", "tier": "IV", "capacity_mw": 60, "country": "GB", "city": "London" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "CloudHQ Frankfurt", "operator": "CloudHQ", "tier": "IV", "capacity_mw": 50, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-122.0312, 37.0141] },
+      "properties": { "name": "Apple Maiden Data Center", "operator": "Apple", "tier": "hyperscaler", "capacity_mw": 100, "country": "US", "city": "Maiden" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.2650, 41.6611] },
+      "properties": { "name": "Apple Waukee Data Center", "operator": "Apple", "tier": "hyperscaler", "capacity_mw": 200, "country": "US", "city": "Waukee" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-121.7405, 45.5946] },
+      "properties": { "name": "Apple Prineville Data Center", "operator": "Apple", "tier": "hyperscaler", "capacity_mw": 150, "country": "US", "city": "Prineville" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-6.2603, 53.3498] },
+      "properties": { "name": "Apple Galway Data Center (Ireland)", "operator": "Apple", "tier": "hyperscaler", "capacity_mw": 100, "country": "IE", "city": "Galway" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [10.4515, 63.4305] },
+      "properties": { "name": "Apple Viborg Data Center (Denmark)", "operator": "Apple", "tier": "hyperscaler", "capacity_mw": 80, "country": "DK", "city": "Viborg" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [116.7517, 23.6345] },
+      "properties": { "name": "Apple Guizhou Data Center (China)", "operator": "Apple", "tier": "hyperscaler", "capacity_mw": 100, "country": "CN", "city": "Guiyang" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-79.3832, 43.6532] },
+      "properties": { "name": "AWS CA-Central-1 (Toronto Region)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 100, "country": "CA", "city": "Toronto" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [77.2090, 28.6139] },
+      "properties": { "name": "AWS AP-South-2 (Hyderabad)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 120, "country": "IN", "city": "Hyderabad" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [135.5023, 34.6937] },
+      "properties": { "name": "AWS AP-Northeast-3 (Osaka)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 100, "country": "JP", "city": "Osaka" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [106.8456, -6.2088] },
+      "properties": { "name": "AWS AP-Southeast-3 (Jakarta)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 80, "country": "ID", "city": "Jakarta" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [144.9631, -37.8136] },
+      "properties": { "name": "AWS AP-Southeast-4 (Melbourne)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 80, "country": "AU", "city": "Melbourne" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-3.7038, 40.4168] },
+      "properties": { "name": "AWS EU-South-2 (Spain)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 80, "country": "ES", "city": "Zaragoza" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [6.1432, 46.2044] },
+      "properties": { "name": "AWS EU-Central-2 (Zurich)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 80, "country": "CH", "city": "Zurich" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [47.9774, 29.3759] },
+      "properties": { "name": "AWS ME-Central-1 (UAE)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 80, "country": "AE", "city": "Abu Dhabi" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [34.7818, 32.0853] },
+      "properties": { "name": "AWS IL-Central-1 (Tel Aviv)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 80, "country": "IL", "city": "Tel Aviv" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [100.5018, 13.7563] },
+      "properties": { "name": "AWS AP-Southeast-7 (Bangkok)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 60, "country": "TH", "city": "Bangkok" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [101.6869, 3.1390] },
+      "properties": { "name": "AWS AP-Southeast-5 (Malaysia)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 60, "country": "MY", "city": "Kuala Lumpur" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [174.7633, -36.8485] },
+      "properties": { "name": "AWS AP-Southeast-6 (Auckland)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 50, "country": "NZ", "city": "Auckland" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-99.1332, 19.4326] },
+      "properties": { "name": "AWS Mexico (Queretaro)", "operator": "Amazon Web Services", "tier": "hyperscaler", "capacity_mw": 60, "country": "MX", "city": "Queretaro" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [13.4050, 52.5200] },
+      "properties": { "name": "e-shelter Berlin DC", "operator": "NTT (e-shelter)", "tier": "III", "capacity_mw": 20, "country": "DE", "city": "Berlin" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [16.3738, 48.2082] },
+      "properties": { "name": "e-shelter Vienna DC", "operator": "NTT (e-shelter)", "tier": "III", "capacity_mw": 15, "country": "AT", "city": "Vienna" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-122.0838, 37.3861] },
+      "properties": { "name": "Oracle US West (San Jose)", "operator": "Oracle Cloud", "tier": "hyperscaler", "capacity_mw": 100, "country": "US", "city": "San Jose" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.3064, 38.9517] },
+      "properties": { "name": "Oracle US East (Ashburn)", "operator": "Oracle Cloud", "tier": "hyperscaler", "capacity_mw": 100, "country": "US", "city": "Ashburn" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.1257, 51.5074] },
+      "properties": { "name": "Oracle UK South (London)", "operator": "Oracle Cloud", "tier": "hyperscaler", "capacity_mw": 60, "country": "GB", "city": "London" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.6821, 50.1109] },
+      "properties": { "name": "Oracle Germany Central (Frankfurt)", "operator": "Oracle Cloud", "tier": "hyperscaler", "capacity_mw": 60, "country": "DE", "city": "Frankfurt" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.7525, 35.6846] },
+      "properties": { "name": "Oracle Japan East (Tokyo)", "operator": "Oracle Cloud", "tier": "hyperscaler", "capacity_mw": 60, "country": "JP", "city": "Tokyo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-46.6333, -23.5505] },
+      "properties": { "name": "Oracle Brazil East (Sao Paulo)", "operator": "Oracle Cloud", "tier": "hyperscaler", "capacity_mw": 40, "country": "BR", "city": "Sao Paulo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [72.8777, 19.0760] },
+      "properties": { "name": "Oracle India West (Mumbai)", "operator": "Oracle Cloud", "tier": "hyperscaler", "capacity_mw": 40, "country": "IN", "city": "Mumbai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [46.6753, 24.7136] },
+      "properties": { "name": "Oracle Saudi Arabia (Jeddah)", "operator": "Oracle Cloud", "tier": "hyperscaler", "capacity_mw": 30, "country": "SA", "city": "Jeddah" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-79.3832, 43.6532] },
+      "properties": { "name": "Google northamerica-northeast1 (Toronto)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 150, "country": "CA", "city": "Toronto" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [120.9605, 14.5995] },
+      "properties": { "name": "Google asia-southeast2 (Manila)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 60, "country": "PH", "city": "Manila" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [20.9947, 52.2297] },
+      "properties": { "name": "Google europe-central2 (Warsaw)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 100, "country": "PL", "city": "Warsaw" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-3.7038, 40.4168] },
+      "properties": { "name": "Google europe-southwest1 (Madrid)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 80, "country": "ES", "city": "Madrid" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.4964, 41.9028] },
+      "properties": { "name": "Google europe-west8 (Milan)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 80, "country": "IT", "city": "Milan" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [28.9784, 41.0082] },
+      "properties": { "name": "Google europe-west12 (Turin)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 60, "country": "IT", "city": "Turin" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-99.1332, 19.4326] },
+      "properties": { "name": "Google southamerica-west1 (Santiago)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 60, "country": "CL", "city": "Santiago" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [55.2708, 25.1985] },
+      "properties": { "name": "Google me-central1 (Doha)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 80, "country": "QA", "city": "Doha" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [28.0473, -26.2041] },
+      "properties": { "name": "Google africa-south1 (Johannesburg)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 60, "country": "ZA", "city": "Johannesburg" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [144.9631, -37.8136] },
+      "properties": { "name": "Google australia-southeast2 (Melbourne)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 80, "country": "AU", "city": "Melbourne" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [77.2090, 28.6139] },
+      "properties": { "name": "Google asia-south2 (Delhi)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 100, "country": "IN", "city": "Delhi" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [106.8456, -6.2088] },
+      "properties": { "name": "Google asia-southeast2 (Jakarta)", "operator": "Google Cloud", "tier": "hyperscaler", "capacity_mw": 80, "country": "ID", "city": "Jakarta" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [126.978, 37.5665] },
+      "properties": { "name": "Azure Korea South (Busan)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 100, "country": "KR", "city": "Busan" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [135.5023, 34.6937] },
+      "properties": { "name": "Azure Japan West (Osaka)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 120, "country": "JP", "city": "Osaka" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [116.3975, 39.9042] },
+      "properties": { "name": "Azure China North (Beijing)", "operator": "Microsoft Azure (21Vianet)", "tier": "hyperscaler", "capacity_mw": 150, "country": "CN", "city": "Beijing" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [121.4737, 31.2304] },
+      "properties": { "name": "Azure China East (Shanghai)", "operator": "Microsoft Azure (21Vianet)", "tier": "hyperscaler", "capacity_mw": 120, "country": "CN", "city": "Shanghai" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [10.7522, 59.9139] },
+      "properties": { "name": "Azure Norway East (Oslo)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 80, "country": "NO", "city": "Oslo" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [18.0686, 59.3293] },
+      "properties": { "name": "Azure Sweden Central (Gavle)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 100, "country": "SE", "city": "Gavle" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [20.9947, 52.2297] },
+      "properties": { "name": "Azure Poland Central (Warsaw)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 80, "country": "PL", "city": "Warsaw" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.4964, 41.9028] },
+      "properties": { "name": "Azure Italy North (Milan)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 80, "country": "IT", "city": "Milan" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-3.7038, 40.4168] },
+      "properties": { "name": "Azure Spain Central (Madrid)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 80, "country": "ES", "city": "Madrid" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [34.7818, 32.0853] },
+      "properties": { "name": "Azure Israel Central (Tel Aviv)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 60, "country": "IL", "city": "Tel Aviv" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [51.5310, 25.2854] },
+      "properties": { "name": "Azure Qatar Central (Doha)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 60, "country": "QA", "city": "Doha" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [100.5018, 13.7563] },
+      "properties": { "name": "Azure Southeast Asia 2 (Bangkok)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 60, "country": "TH", "city": "Bangkok" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-99.1332, 19.4326] },
+      "properties": { "name": "Azure Mexico Central", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 60, "country": "MX", "city": "Queretaro" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [174.7633, -36.8485] },
+      "properties": { "name": "Azure New Zealand North (Auckland)", "operator": "Microsoft Azure", "tier": "hyperscaler", "capacity_mw": 40, "country": "NZ", "city": "Auckland" }
+    }
+  ]
+}
