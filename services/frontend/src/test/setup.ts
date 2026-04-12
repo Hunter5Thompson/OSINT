@@ -58,6 +58,7 @@ if (canvasProto && !("__odinCanvasStubbed" in canvasProto)) {
     measureText: () => ({ width: 0 }),
     fillText: noop,
     strokeText: noop,
+    roundRect: noop,
   };
   (canvasProto as unknown as { getContext: (kind: string) => unknown }).getContext = function getContext(
     kind: string,
