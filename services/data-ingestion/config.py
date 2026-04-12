@@ -85,6 +85,24 @@ class Settings(BaseSettings):
     correlation_min_score: float = 0.3
     correlation_interval_hours: int = 2
 
+    # --- Hugin P1 Collectors (Sprint 2a) ---
+
+    # EONET (NASA Earth Observatory Natural Events)
+    eonet_interval_hours: int = 2
+
+    # GDACS (Global Disaster Alerts)
+    gdacs_interval_hours: int = 2
+
+    # HAPI (Humanitarian Data Exchange)
+    hapi_app_identifier: str = ""  # Base64 encoded email
+    # HAPI uses CronTrigger (daily 04:00 UTC), no interval setting needed
+
+    # NOAA NHC (Tropical Weather)
+    noaa_nhc_interval_hours: int = 3
+
+    # PortWatch (IMF Chokepoint Flows)
+    portwatch_interval_hours: int = 6
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
