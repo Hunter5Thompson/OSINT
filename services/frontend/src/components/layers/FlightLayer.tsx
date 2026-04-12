@@ -136,7 +136,7 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
             classifyAircraft(flight.callsign, flight.is_military, flight.aircraft_type, flight.altitude_m, flight.velocity_ms),
             flight.heading,
           ),
-          scale: 1.0,
+          scale: 0.8,
           eyeOffset: new Cesium.Cartesian3(0, 0, -100),
         });
         (billboard as unknown as Record<string, unknown>)._flightData = flightClickData;
