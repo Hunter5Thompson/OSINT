@@ -4,6 +4,26 @@
 **Status:** Draft
 **Pattern:** PipelineLayer (static GeoJSON + BillboardCollection)
 
+## Architectural Decisions
+
+### Click Handling: Layer-Local (not EntityClickHandler)
+
+Each layer manages its own `ScreenSpaceEventHandler` and `idMapRef`, emitting selections via `onSelect` prop to `SelectionPanel`. This follows the FIRMS/MilAircraft pattern (not the older EntityClickHandler used by Cables/Pipelines). Rationale: layer-local handlers are self-contained, testable, and avoid coupling to a central dispatcher.
+
+**Binding rule:** `EntityClickHandler` is for Entity API layers (legacy). All BillboardCollection-based layers use layer-local click handlers.
+
+### Data Loading: Lazy, Enabled-Gated
+
+Hooks only fetch when `enabled=true` (same as `usePipelines`). Since both layers default to `off`, no GeoJSON is downloaded until the user toggles the layer on. This avoids ~2 unnecessary fetches on every page load.
+
+### No Backend Involvement
+
+Pure frontend — static GeoJSON served from `public/data/`. No `/api/v1/config` extension needed. The `default_layers` backend config only governs ingestion-sourced layers (FIRMS, MilAircraft) that have backend endpoints.
+
+### All paths relative to `services/frontend/`
+
+All `src/` and `public/` paths in this spec are relative to `services/frontend/`.
+
 ## Goal
 
 Two new static infrastructure layers on the CesiumJS globe: **Datacenter** (~200 Tier III+ / Hyperscaler) and **Oil Refineries** (~150, >100k bbl/day). Both follow the existing PipelineLayer pattern — static GeoJSON loaded once, rendered as BillboardCollections with click-to-select.
@@ -20,7 +40,7 @@ Two new static infrastructure layers on the CesiumJS globe: **Datacenter** (~200
 |-------|------|-------------|
 | `name` | string | Facility name (e.g. "AWS US-East-1 (Ashburn)") |
 | `operator` | string | Company (AWS, Google, Meta, Equinix, Microsoft, Oracle, etc.) |
-| `tier` | string | "III", "IV", or "hyperscaler" |
+| `tier` | `"III"` \| `"IV"` \| `"hyperscaler"` | Tier classification |
 | `capacity_mw` | number \| null | Power capacity in megawatts (if known) |
 | `country` | string | ISO 3166-1 alpha-2 |
 | `city` | string | Nearest city |
@@ -42,7 +62,7 @@ Two new static infrastructure layers on the CesiumJS globe: **Datacenter** (~200
 | `operator` | string | Company (Saudi Aramco, Reliance, ExxonMobil, etc.) |
 | `capacity_bpd` | number | Capacity in barrels per day |
 | `country` | string | ISO 3166-1 alpha-2 |
-| `status` | string | "active", "planned", or "shutdown" |
+| `status` | `"active"` \| `"planned"` \| `"shutdown"` | Operational status |
 
 **Sources:**
 - Global Energy Monitor — Global Oil Infrastructure Tracker
@@ -66,7 +86,7 @@ export interface LayerVisibility {
 export interface DatacenterProperties {
   name: string;
   operator: string;
-  tier: string;
+  tier: "III" | "IV" | "hyperscaler";
   capacity_mw: number | null;
   country: string;
   city: string;
@@ -77,19 +97,21 @@ export interface RefineryProperties {
   operator: string;
   capacity_bpd: number;
   country: string;
-  status: string;
+  status: "active" | "planned" | "shutdown";
 }
 ```
 
 ### Hooks
 
 **`useDatacenters.ts`** — identical pattern to `usePipelines.ts`:
-- Fetch `/data/datacenters.geojson` once on mount
+- Accept `enabled: boolean` parameter — only fetch when `true`
+- Fetch `/data/datacenters.geojson` once when first enabled
 - Return `{ datacenters: FeatureCollection | null, loading, lastUpdate }`
 - No polling (static data)
 
 **`useRefineries.ts`** — same pattern:
-- Fetch `/data/refineries.geojson` once on mount
+- Accept `enabled: boolean` parameter — only fetch when `true`
+- Fetch `/data/refineries.geojson` once when first enabled
 - Return `{ refineries: FeatureCollection | null, loading, lastUpdate }`
 - No polling
 
@@ -143,6 +165,8 @@ Both layers default to **off**. Rationale: static reference data, not real-time 
 
 ## Files Changed
 
+All paths relative to `services/frontend/`.
+
 ### New files:
 - `public/data/datacenters.geojson`
 - `public/data/refineries.geojson`
@@ -150,6 +174,10 @@ Both layers default to **off**. Rationale: static reference data, not real-time 
 - `src/components/layers/RefineryLayer.tsx`
 - `src/hooks/useDatacenters.ts`
 - `src/hooks/useRefineries.ts`
+- `src/components/layers/__tests__/DatacenterLayer.test.tsx`
+- `src/components/layers/__tests__/RefineryLayer.test.tsx`
+- `src/hooks/__tests__/useDatacenters.test.ts`
+- `src/hooks/__tests__/useRefineries.test.ts`
 
 ### Modified files:
 - `src/types/index.ts` — LayerVisibility + property types
@@ -159,7 +187,22 @@ Both layers default to **off**. Rationale: static reference data, not real-time 
 
 ## Testing
 
-- Unit tests for `useDatacenters` + `useRefineries` hooks (fetch mock)
-- Unit tests for `DatacenterLayer` + `RefineryLayer` (Cesium collection creation, visibility toggle)
-- Type-check clean
-- ESLint clean
+### Hook tests (`useDatacenters.test.ts`, `useRefineries.test.ts`):
+- Fetch mock: returns GeoJSON, verifies state
+- `enabled=false`: no fetch triggered
+- `enabled` toggle: fetch on first enable, no re-fetch on subsequent toggles
+
+### Layer tests (`DatacenterLayer.test.ts`, `RefineryLayer.test.ts`):
+- Collection creation on mount
+- Visibility toggle (`show` property)
+- Billboard count matches feature count
+- Click handler emits correct properties via `onSelect`
+
+### Integration tests:
+- OperationsPanel: new toggles render, click toggles `LayerVisibility` state
+- App.tsx: layers receive correct props, default visibility is `false`
+- SelectionPanel: datacenter/refinery selection renders correct detail fields
+
+### Quality gates:
+- `npm run type-check` clean
+- `npm run lint` clean (0 new errors)
