@@ -1,11 +1,13 @@
 import * as Cesium from "cesium";
-import type { AircraftTrack, FIRMSHotspot, DatacenterProperties, RefineryProperties } from "../../types";
+import type { AircraftTrack, FIRMSHotspot, DatacenterProperties, RefineryProperties, EONETEvent, GDACSEvent } from "../../types";
 
 export type Selected =
   | { type: "firms"; data: FIRMSHotspot }
   | { type: "aircraft"; data: AircraftTrack }
   | { type: "datacenter"; data: DatacenterProperties }
-  | { type: "refinery"; data: RefineryProperties };
+  | { type: "refinery"; data: RefineryProperties }
+  | { type: "eonet"; data: EONETEvent }
+  | { type: "gdacs"; data: GDACSEvent };
 
 interface SelectionPanelProps {
   selected: Selected | null;
@@ -26,7 +28,11 @@ export function SelectionPanel({ selected, onClose, viewer }: SelectionPanelProp
               ? "AIRCRAFT TRACK"
               : selected.type === "datacenter"
                 ? "DATACENTER"
-                : "OIL REFINERY"}
+                : selected.type === "refinery"
+                  ? "OIL REFINERY"
+                  : selected.type === "eonet"
+                    ? "EONET EVENT"
+                    : "GDACS ALERT"}
         </span>
         <button
           aria-label="close"
@@ -43,8 +49,12 @@ export function SelectionPanel({ selected, onClose, viewer }: SelectionPanelProp
           <AircraftContent t={selected.data} viewer={viewer} />
         ) : selected.type === "datacenter" ? (
           <DatacenterContent d={selected.data} />
-        ) : (
+        ) : selected.type === "refinery" ? (
           <RefineryContent r={selected.data} />
+        ) : selected.type === "eonet" ? (
+          <EONETContent e={selected.data} />
+        ) : (
+          <GDACSContent e={selected.data} />
         )}
       </div>
     </div>
@@ -113,6 +123,36 @@ function RefineryContent({ r }: { r: RefineryProperties }) {
       <Row label="CAPACITY" value={fmtCapacity(r.capacity_bpd)} />
       <Row label="COUNTRY" value={r.country} />
       <Row label="STATUS" value={r.status.toUpperCase()} />
+    </>
+  );
+}
+
+function EONETContent({ e }: { e: EONETEvent }) {
+  return (
+    <>
+      <div className="mb-1 text-orange-300 font-bold">{e.title}</div>
+      <Row label="CATEGORY" value={e.category.toUpperCase()} />
+      <Row label="STATUS" value={e.status.toUpperCase()} />
+      <Row label="DATE" value={e.event_date.slice(0, 10)} />
+      <Row label="POSITION" value={`${e.latitude.toFixed(4)}, ${e.longitude.toFixed(4)}`} />
+    </>
+  );
+}
+
+function GDACSContent({ e }: { e: GDACSEvent }) {
+  const typeLabel: Record<string, string> = {
+    EQ: "Earthquake", TC: "Tropical Cyclone", FL: "Flood",
+    VO: "Volcano", DR: "Drought", WF: "Wildfire",
+  };
+  return (
+    <>
+      <div className="mb-1 text-red-300 font-bold">{e.event_name}</div>
+      <Row label="TYPE" value={typeLabel[e.event_type] ?? e.event_type} />
+      <Row label="ALERT" value={e.alert_level} />
+      <Row label="SEVERITY" value={e.severity.toFixed(1)} />
+      <Row label="COUNTRY" value={e.country} />
+      <Row label="PERIOD" value={`${e.from_date.slice(0, 10)} → ${e.to_date.slice(0, 10)}`} />
+      <Row label="POSITION" value={`${e.latitude.toFixed(4)}, ${e.longitude.toFixed(4)}`} />
     </>
   );
 }

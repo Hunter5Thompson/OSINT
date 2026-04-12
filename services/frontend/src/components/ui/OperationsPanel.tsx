@@ -7,6 +7,8 @@ interface OperationsPanelProps {
   onShaderChange: (shader: ShaderType) => void;
   firmsCount?: number;
   milAircraftCount?: number;
+  eonetCount?: number;
+  gdacsCount?: number;
 }
 
 const CORE_LAYERS: { key: keyof LayerVisibility; label: string; color: string }[] = [
@@ -25,6 +27,8 @@ const CORE_LAYERS: { key: keyof LayerVisibility; label: string; color: string }[
 const INGESTION_LAYERS: { key: keyof LayerVisibility; label: string; color: string }[] = [
   { key: "firmsHotspots", label: "FIRMS HOTSPOTS", color: "#ff7a33" },
   { key: "milAircraft",   label: "MIL AIRCRAFT",   color: "#66e6ff" },
+  { key: "eonet",         label: "EONET EVENTS",   color: "#f97316" },
+  { key: "gdacs",         label: "GDACS ALERTS",   color: "#ef4444" },
 ];
 
 function LayerIcon({ layerKey, color }: { layerKey: string; color: string }) {
@@ -88,6 +92,20 @@ function LayerIcon({ layerKey, color }: { layerKey: string; color: string }) {
           <line x1={8} y1={28} x2={30} y2={28} stroke={color} strokeWidth={1.5} />
         </svg>
       );
+    case "eonet":
+      return (
+        <svg {...s}>
+          <polygon points="16,5 27,27 5,27" fill={color} opacity={0.85} />
+        </svg>
+      );
+    case "gdacs":
+      return (
+        <svg {...s}>
+          <circle cx={16} cy={16} r={11} stroke={color} strokeWidth={1.5} opacity={0.3} fill="none" />
+          <circle cx={16} cy={16} r={7} stroke={color} strokeWidth={1.5} opacity={0.6} fill="none" />
+          <circle cx={16} cy={16} r={3} fill={color} opacity={0.9} />
+        </svg>
+      );
     default:
       return <span style={{ color }}>●</span>;
   }
@@ -107,10 +125,14 @@ export function OperationsPanel({
   onShaderChange,
   firmsCount = 0,
   milAircraftCount = 0,
+  eonetCount = 0,
+  gdacsCount = 0,
 }: OperationsPanelProps) {
   const countFor = (key: keyof LayerVisibility): number | null => {
     if (key === "firmsHotspots") return firmsCount;
     if (key === "milAircraft") return milAircraftCount;
+    if (key === "eonet") return eonetCount;
+    if (key === "gdacs") return gdacsCount;
     return null;
   };
 

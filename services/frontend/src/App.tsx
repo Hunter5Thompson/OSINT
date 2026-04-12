@@ -15,6 +15,8 @@ import { FIRMSLayer } from "./components/layers/FIRMSLayer";
 import { MilAircraftLayer } from "./components/layers/MilAircraftLayer";
 import { DatacenterLayer } from "./components/layers/DatacenterLayer";
 import { RefineryLayer } from "./components/layers/RefineryLayer";
+import { EONETLayer } from "./components/layers/EONETLayer";
+import { GDACSLayer } from "./components/layers/GDACSLayer";
 import { OperationsPanel } from "./components/ui/OperationsPanel";
 import { RightPanel } from "./components/ui/RightPanel";
 import { ThreatRegister } from "./components/ui/ThreatRegister";
@@ -32,6 +34,8 @@ import { useFIRMSHotspots } from "./hooks/useFIRMSHotspots";
 import { useAircraftTracks } from "./hooks/useAircraftTracks";
 import { useDatacenters } from "./hooks/useDatacenters";
 import { useRefineries } from "./hooks/useRefineries";
+import { useEONETEvents } from "./hooks/useEONETEvents";
+import { useGDACSEvents } from "./hooks/useGDACSEvents";
 import { useIntel } from "./hooks/useIntel";
 import { getConfig, getHotspots } from "./services/api";
 import type { LayerVisibility, ShaderType, Hotspot, ClientConfig, DatacenterProperties, RefineryProperties } from "./types";
@@ -70,6 +74,8 @@ export function App() {
   const { tracks: milTracks } = useAircraftTracks(layers.milAircraft);
   const { datacenters: datacenterData } = useDatacenters(layers.datacenters);
   const { refineries: refineryData } = useRefineries(layers.refineries);
+  const { events: eonetEvents } = useEONETEvents(layers.eonet);
+  const { events: gdacsEvents } = useGDACSEvents(layers.gdacs);
   const [selected, setSelected] = useState<Selected | null>(null);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
 
@@ -174,6 +180,18 @@ export function App() {
         visible={layers.refineries}
         onSelect={(r: RefineryProperties) => setSelected({ type: "refinery", data: r })}
       />
+      <EONETLayer
+        viewer={viewer}
+        events={eonetEvents}
+        visible={layers.eonet}
+        onSelect={(e) => setSelected({ type: "eonet", data: e })}
+      />
+      <GDACSLayer
+        viewer={viewer}
+        events={gdacsEvents}
+        visible={layers.gdacs}
+        onSelect={(e) => setSelected({ type: "gdacs", data: e })}
+      />
 
       <EntityClickHandler viewer={viewer} />
 
@@ -186,6 +204,8 @@ export function App() {
         onShaderChange={setActiveShader}
         firmsCount={firmsHotspots.length}
         milAircraftCount={milTracks.length}
+        eonetCount={eonetEvents.length}
+        gdacsCount={gdacsEvents.length}
       />
 
       <RightPanel
