@@ -41,6 +41,7 @@
 - `services/data-ingestion/tests/test_pipeline_errors.py` — new test file for error-class mapping
 - `services/data-ingestion/tests/test_scheduler_healthcheck.py` — new test file for `check_ingestion_llm()`
 - `services/data-ingestion/tests/test_nlm_extract_url.py` — URL-normalization test
+- `services/data-ingestion/tests/test_nlm_cli_wiring.py` — CLI-wiring test (Task 9)
 - `services/data-ingestion/tests/integration/test_spark_smoke.py` — integration test (skip-if-unreachable)
 
 **Modify (tests):**
@@ -1176,29 +1177,56 @@ git commit -m "fix(nlm): extract_with_qwen treats vllm_url as base (appends /v1/
 
 - [ ] **Step 1: Write a focused test for the CLI URL/model wiring**
 
+The `extract` Click command (`nlm_ingest/cli.py:178-244`) walks the SQLite status DB, reads transcripts from disk, and calls `extract_with_qwen` per notebook. The test patches the DB+filesystem helpers and `extract_with_qwen` itself, then drives the command via Click's `CliRunner` and asserts the captured kwargs.
+
 Create `services/data-ingestion/tests/test_nlm_cli_wiring.py`:
 
 ```python
 """Verify nlm_ingest.cli passes ingestion_vllm_* to extract_with_qwen."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
+from click.testing import CliRunner
+
+from nlm_ingest import cli as cli_mod
+from nlm_ingest.schemas import Extraction, Transcript
 
 
-@pytest.mark.asyncio
-async def test_cli_extract_uses_ingestion_vllm_settings(tmp_path, monkeypatch):
-    """The 'extract' CLI step must use ingestion_vllm_url (no '+ /v1') and
-    ingestion_vllm_model when calling extract_with_qwen."""
+def _transcript_json() -> str:
+    t = Transcript(
+        notebook_id="nb1",
+        duration_seconds=10.0,
+        language="en",
+        segments=[],
+        full_text="hello world",
+    )
+    return t.model_dump_json()
 
-    # Smoke-level: import the module and inspect the relevant call line.
-    # Easiest: patch extract_with_qwen, drive the CLI extract entry, capture kwargs.
-    from nlm_ingest import cli
+
+def test_cli_extract_uses_ingestion_vllm_settings(tmp_path, monkeypatch):
+    """The 'extract' CLI must call extract_with_qwen with ingestion_vllm_url
+    (without '+/v1' suffix) and ingestion_vllm_model."""
+
+    # Lay out the on-disk fixture the CLI expects.
+    data_dir = tmp_path / "nlm"
+    (data_dir / "transcripts").mkdir(parents=True)
+    (data_dir / "transcripts" / "nb1.json").write_text(_transcript_json())
+    (data_dir / "notebooks" / "nb1").mkdir(parents=True)
+    (data_dir / "notebooks" / "nb1" / "metadata.json").write_text(json.dumps(
+        {"source_name": "x", "title": "t"}
+    ))
+
+    # Force settings.nlm_data_dir + Spark URL/model into a known state.
+    monkeypatch.setenv("NLM_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("INGESTION_VLLM_URL", "http://192.168.178.39:8000")
+    monkeypatch.setenv("INGESTION_VLLM_MODEL", "google/gemma-4-26B-A4B-it")
 
     captured = {}
 
     async def fake_extract(**kwargs):
         captured.update(kwargs)
-        from nlm_ingest.schemas import Extraction
         return Extraction(
             notebook_id=kwargs["transcript"].notebook_id,
             entities=[],
@@ -1208,21 +1236,28 @@ async def test_cli_extract_uses_ingestion_vllm_settings(tmp_path, monkeypatch):
             prompt_version="v0-test",
         )
 
-    # Use whatever entry is the smallest unit that drives the call.
-    # If cli has a function `_run_extract_for_one(...)`, prefer that.
-    # Otherwise drive Click runner over a single-notebook fixture.
-    ...
+    # get_all_status returns rows describing per-notebook phase state.
+    fake_rows = [{"notebook_id": "nb1", "transcribe": "completed", "extract": "pending"}]
 
+    with patch.object(cli_mod, "get_all_status", return_value=fake_rows), \
+         patch.object(cli_mod, "_get_db", return_value=MagicMock()), \
+         patch.object(cli_mod, "set_phase_status"), \
+         patch("nlm_ingest.extract.extract_with_qwen", new=AsyncMock(side_effect=fake_extract)):
+        runner = CliRunner()
+        result = runner.invoke(cli_mod.extract, [])
+
+    assert result.exit_code == 0, result.output
     assert captured["vllm_url"] == "http://192.168.178.39:8000"
     assert "/v1" not in captured["vllm_url"]
     assert captured["vllm_model"] == "google/gemma-4-26B-A4B-it"
 ```
 
-(Engineer: read `nlm_ingest/cli.py` to find the smallest test surface — likely the `extract` subcommand. Use Click's `CliRunner` if needed. The key assertion is the two captured kwargs.)
+(If `cli.extract` is registered under a different attribute name, verify with `python -c "from nlm_ingest import cli; print([c for c in dir(cli) if not c.startswith('_')])"`. If `get_all_status` / `set_phase_status` / `_get_db` live in a sibling module instead of `cli`, adjust the `patch.object` targets accordingly — read `cli.py`'s import block first.)
 
 - [ ] **Step 2: Run test — expect FAIL**
 
-Currently the CLI passes `settings.vllm_url + "/v1"` and `settings.vllm_model`.
+Run: `cd services/data-ingestion && uv run pytest tests/test_nlm_cli_wiring.py -v`
+Expected: FAIL — assertion `captured["vllm_url"] == "http://192.168.178.39:8000"` fails because the current CLI passes `settings.vllm_url + "/v1"` (i.e. `http://localhost:8000/v1`).
 
 - [ ] **Step 3: Update CLI**
 
@@ -1251,6 +1286,9 @@ to:
 ```
 
 - [ ] **Step 4: Run test — expect PASS**
+
+Run: `cd services/data-ingestion && uv run pytest tests/test_nlm_cli_wiring.py -v`
+Expected: PASS
 
 - [ ] **Step 5: Commit**
 
@@ -1352,13 +1390,18 @@ async def test_4xx_logs_config_error(status, caplog):
 
 
 @pytest.mark.asyncio
-async def test_connect_error_logs_unreachable(caplog):
-    """ConnectError → log 'ingestion_llm_unreachable'."""
+@pytest.mark.parametrize("exc", [
+    httpx.ConnectError("refused"),
+    httpx.TimeoutException("slow"),
+    httpx.ReadTimeout("slow read"),
+])
+async def test_transient_exceptions_log_unreachable(exc, caplog):
+    """ConnectError, Timeout, ReadTimeout → log 'ingestion_llm_unreachable'."""
     from scheduler import check_ingestion_llm
 
     with patch("scheduler.httpx.AsyncClient") as mock_cls:
         mc = AsyncMock()
-        mc.get.side_effect = httpx.ConnectError("refused")
+        mc.get.side_effect = exc
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mc)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -1366,6 +1409,32 @@ async def test_connect_error_logs_unreachable(caplog):
             await check_ingestion_llm()
 
     assert any("ingestion_llm_unreachable" in rec.getMessage() for rec in caplog.records)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [500, 502, 503])
+async def test_5xx_logs_unreachable(status, caplog):
+    """5xx on /v1/models → log 'ingestion_llm_unreachable' (NOT config_error)."""
+    from scheduler import check_ingestion_llm
+
+    bad = MagicMock()
+    bad.status_code = status
+    bad.raise_for_status.side_effect = httpx.HTTPStatusError(
+        str(status), request=MagicMock(), response=MagicMock(status_code=status)
+    )
+
+    with patch("scheduler.httpx.AsyncClient") as mock_cls:
+        mc = AsyncMock()
+        mc.get.return_value = bad
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mc)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with caplog.at_level("WARNING"):
+            await check_ingestion_llm()
+
+    assert any("ingestion_llm_unreachable" in rec.getMessage() for rec in caplog.records)
+    # Must NOT log config_error for 5xx.
+    assert not any("ingestion_llm_config_error" in rec.getMessage() for rec in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -1919,6 +1988,12 @@ EOF
 - Per-collector behavioral tests (spec §4) are scaffolded in tasks 4-7 — Telegram and the lazy-import collectors get their own task because they need bespoke mock setup.
 - Compose + odin.sh changes (spec §8 + §9) covered in tasks 11 + 12, including the cross-mode stop cleanup that prevents two parallel schedulers.
 - Memory + Rollout from spec §rollout covered in task 14.
+
+### Rev-3 changes (after Codex re-review)
+
+- **Hoch (Task 9 placeholder):** Full CliRunner-based test written, no `...`; Step 2 + Step 4 have explicit `pytest` run-commands.
+- **Mittel (healthcheck coverage):** Task 10 now has parametrized tests for `httpx.TimeoutException`/`ReadTimeout` (transient) and HTTP 500/502/503 (also transient, NOT config_error).
+- **Niedrig (file map):** `test_nlm_cli_wiring.py` added to the `Create` list at the top.
 
 ### Rev-2 changes (after Codex review)
 
