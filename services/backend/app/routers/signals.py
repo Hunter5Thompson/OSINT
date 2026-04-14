@@ -91,9 +91,17 @@ async def sse_generator(
 @router.get("/stream")
 async def stream_signals(
     request: Request,
-    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    last_event_id_header: str | None = Header(default=None, alias="Last-Event-ID"),
+    last_event_id_query: str | None = Query(default=None, alias="last_event_id"),
 ) -> EventSourceResponse:
-    """Server-Sent Events endpoint for ingestion signals."""
+    """Server-Sent Events endpoint for ingestion signals.
+
+    The standard `Last-Event-ID` header is preferred; when absent (e.g. on
+    explicit client reconnects — native `EventSource` cannot set custom
+    headers), the `?last_event_id=` query parameter is used as a fallback.
+    If both are supplied, the header wins.
+    """
+    last_event_id = last_event_id_header or last_event_id_query
     return EventSourceResponse(sse_generator(request, last_event_id))
 
 
