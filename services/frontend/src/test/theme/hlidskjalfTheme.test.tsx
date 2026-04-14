@@ -10,13 +10,23 @@
  *    `[data-reduced-motion="true"]` attribute (the latter lets tests simulate
  *    the media query in jsdom, which does not emulate reduced-motion).
  */
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
-// Side-effect import — loading the CSS registers custom properties and
-// font-face rules on the document.
-import "../../theme/hlidskjalf.css";
+// Vitest's default Vite pipeline treats `import "*.css"` as a side-effect-free
+// stub in jsdom (no style injection). To actually test that the stylesheet's
+// rules resolve, we read the source file from disk and inject it as a
+// `<style>` element into the document head.
+const THEME_CSS_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../theme/hlidskjalf.css",
+);
+
+let styleEl: HTMLStyleElement | null = null;
 
 const TOKENS = [
   "--void",
@@ -53,8 +63,16 @@ function Wrapper({
 
 describe("Hlíðskjalf theme tokens", () => {
   beforeAll(() => {
-    // Defensive: ensure jsdom parsed the @import in test setup.
-    // CSS is imported above as a side effect.
+    const css = readFileSync(THEME_CSS_PATH, "utf8");
+    styleEl = document.createElement("style");
+    styleEl.setAttribute("data-testid", "hlidskjalf-css");
+    styleEl.textContent = css;
+    document.head.appendChild(styleEl);
+  });
+
+  afterAll(() => {
+    styleEl?.remove();
+    styleEl = null;
   });
 
   it("exposes all palette tokens as CSS custom properties on .hlid", () => {

@@ -1,0 +1,162 @@
+/*
+ * Hlíðskjalf Noir — ODIN Design System (S1 · Task 2)
+ * ---------------------------------------------------------------------------
+ * Spec: docs/superpowers/specs/2026-04-14-odin-4layer-hlidskjalf-design.md §2
+ *
+ * Defines:
+ *  - Palette tokens (8-stage grey scale + 4 accents) as CSS custom properties
+ *  - Self-hosted @font-face declarations (WOFF2 only, font-display: swap)
+ *  - Utility classes (`.hlid`, `.serif`, `.mono`, `.eyebrow`, `.hair`, …)
+ *  - Reduced-motion opt-out (`.hlid-motion`) keyed on both the media query
+ *    AND a `[data-reduced-motion="true"]` attribute so tests can simulate it
+ *    (jsdom does not emulate `prefers-reduced-motion`).
+ *
+ * Minimum-size guards (spec §2.2, enforced by convention — do not violate):
+ *   - Instrument Serif ≥ 11px
+ *   - Hanken Grotesk ≥ 10px (eyebrows/labels), ≥ 12px body
+ *   - Martian Mono ≥ 10px (absolute floor — anything smaller becomes unreadable)
+ *   - Ash (#6b6358) is DECO-ONLY (≈3.8:1 vs --void, below WCAG AA 4.5:1).
+ *     Readable body text must use Stone or lighter.
+ */
+
+/* ── Fonts (self-hosted; Vite serves public/ at the root) ─────────────── */
+
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/instrument-serif/InstrumentSerif-Italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/instrument-serif/InstrumentSerif-Italic-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-Variable.woff2") format("woff2-variations"),
+       url("/fonts/hanken-grotesk/HankenGrotesk-Variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Martian Mono";
+  font-style: normal;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url("/fonts/martian-mono/MartianMono-Variable.woff2") format("woff2-variations"),
+       url("/fonts/martian-mono/MartianMono-Variable.woff2") format("woff2");
+}
+
+/* ── Palette tokens (spec §2.1) ────────────────────────────────────────── */
+
+:root,
+.hlid {
+  /* Backgrounds / surfaces */
+  --void: #0b0a08;
+  --obsidian: #12110e;
+  --basalt: #1a1814;
+
+  /* Structure */
+  --granite: #2a2720;
+
+  /* Text ladder (ash → parchment) */
+  --ash: #6b6358;
+  --stone: #958a7a;
+  --bone: #d4cdc0;
+  --parchment: #e8e2d4;
+
+  /* Accents */
+  --amber: #c4813a;     /* Munin · Agent */
+  --sage: #7a8a68;      /* Hugin · Ingestion */
+  --sentinel: #b85a2a;  /* Sentinel · Incident */
+  --rust: #8a4a3a;      /* Critical */
+}
+
+/* ── Scope ─────────────────────────────────────────────────────────────── */
+
+.hlid {
+  color: var(--bone);
+  background-color: var(--void);
+  font-family: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;            /* body default — Hanken ≥ 12px; 14 is comfortable */
+  font-weight: 400;
+  line-height: 1.5;
+  font-feature-settings: "ss01", "cv01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Typography utilities ──────────────────────────────────────────────── */
+
+.serif {
+  font-family: "Instrument Serif", "Times New Roman", serif;
+  font-style: italic;
+}
+
+.mono {
+  font-family: "Martian Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-feature-settings: "ss01", "cv01";
+}
+
+.eyebrow {
+  font-family: "Hanken Grotesk", system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ash);
+}
+
+/* ── Geometry ──────────────────────────────────────────────────────────── */
+
+.hair {
+  display: block;
+  height: 1px;
+  width: 100%;
+  border: 0;
+  margin: 0;
+  background-color: var(--granite);
+}
+
+/* ── Colour utilities ──────────────────────────────────────────────────── */
+
+.dim    { color: var(--ash); }
+.stone  { color: var(--stone); }
+.amb    { color: var(--amber); }
+.sage   { color: var(--sage); }
+.sent   { color: var(--sentinel); }
+.rust   { color: var(--rust); }
+
+/* ── Reduced-motion opt-out ────────────────────────────────────────────── *
+ * Components that animate (Orrery rAF, Incident pulse, Landing reveal,
+ * Button amber-flash) attach `.hlid-motion` to every element they animate.
+ * When the user prefers reduced motion, the animation is removed.
+ *
+ * Two selectors intentionally:
+ *   1. `@media (prefers-reduced-motion: reduce)` — the real, user-facing rule
+ *   2. `[data-reduced-motion="true"] .hlid-motion` — a testable equivalent so
+ *      Vitest + jsdom can simulate the media query (jsdom cannot emulate it).
+ * Both resolve to the same declaration; keep them in sync.
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  .hlid-motion {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+[data-reduced-motion="true"] .hlid-motion,
+.hlid[data-reduced-motion="true"] .hlid-motion,
+.hlid[data-reduced-motion="true"].hlid-motion {
+  animation: none !important;
+  transition: none !important;
+}
