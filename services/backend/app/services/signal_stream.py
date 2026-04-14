@@ -3,12 +3,15 @@
 Design notes
 ------------
 - The `SignalStream` holds a deque of `SignalEnvelope` instances keyed by
-  their ULID `event_id`, plus a set of seen Redis record-ids for dedupe.
+  their `event_id`, plus a set of seen Redis record-ids for dedupe.
+- `event_id` is derived directly from the Redis Stream record-id
+  `<ms>-<seq>` and normalized to a fixed-width zero-padded form
+  `<013d ms>-<06d seq>` so lexicographic string comparison matches
+  chronological (and intra-ms) ordering. Redis stream IDs are
+  monotonic-by-construction on a single stream; fixed-width padding makes
+  the ordering stable under `<`/`>` on Python strings.
 - Pruning happens lazily on every insert AND on every replay/latest call,
   so stale entries never leak even if ingestion goes quiet.
-- ULIDs are generated from the Redis record's ms component; python-ulid
-  guarantees monotonic ordering even for two ULIDs minted at the same ms,
-  which preserves our "event_id > last" replay semantics.
 - The Redis consumer is a best-effort asyncio task started on FastAPI
   lifespan. If Redis is unreachable it logs a warning and retries; the
   HTTP endpoints keep working on an empty buffer.
@@ -23,7 +26,6 @@ from typing import Literal
 
 import redis.asyncio as redis
 import structlog
-from ulid import ULID
 
 from app.config import settings
 from app.models.signals import SignalEnvelope, SignalPayload
@@ -44,10 +46,19 @@ def _ms_to_iso_utc(ms: int) -> str:
     return f"{base}.{millis}Z"
 
 
-def _parse_record_ms(record_id: str) -> int:
-    """Extract ms component from a Redis Stream record-id `<ms>-<seq>`."""
-    head, _, _ = record_id.partition("-")
-    return int(head)
+def _parse_record_id(record_id: str) -> tuple[int, int]:
+    """Split a Redis Stream record-id `<ms>-<seq>` into (ms, seq)."""
+    head, _, tail = record_id.partition("-")
+    return int(head), int(tail) if tail else 0
+
+
+def _build_event_id(ms: int, seq: int) -> str:
+    """Build a fixed-width, lexicographically-monotonic event id.
+
+    13-digit ms covers timestamps beyond year 9000; 6-digit seq covers
+    up to 999,999 concurrent same-ms entries on a single Redis stream.
+    """
+    return f"{ms:013d}-{seq:06d}"
 
 
 class SignalStream:
@@ -87,13 +98,13 @@ class SignalStream:
         self._prune()
 
         try:
-            ms = _parse_record_ms(record_id)
+            ms, seq = _parse_record_id(record_id)
         except (ValueError, AttributeError):
             logger.warning("signal_stream_invalid_record_id", record_id=record_id)
             return None
 
         ts = _ms_to_iso_utc(ms)
-        event_id = str(ULID.from_timestamp(ms / 1000))
+        event_id = _build_event_id(ms, seq)
         codebook_type = fields.get("codebook_type") or "signal.unknown"
 
         payload_data: dict[str, str] = {
@@ -149,37 +160,12 @@ class SignalStream:
         self._prune()
         if last_event_id is None or last_event_id == "":
             return "ok", []
-
-        # If last_event_id predates the oldest buffered entry, the client
-        # has missed events — signal reset.
-        if self._buffer:
-            oldest = self._buffer[0]
-            if last_event_id < oldest.event_id:
-                # Only call it stale when the claimed id is older than our
-                # oldest buffered entry. Otherwise it's "in-window but we
-                # don't have that specific id" which still gives an ok replay.
-                # Heuristic: if last_event_id's timestamp is older than the
-                # window boundary, it's stale regardless.
-                try:
-                    last_ms = ULID.from_str(last_event_id).timestamp * 1000
-                except ValueError:
-                    return "reset", []
-                oldest_ms = ULID.from_str(oldest.event_id).timestamp * 1000
-                window_ms = self._window_seconds * 1000
-                # Stale if older than (oldest - some slack). Simpler: if
-                # last_event_id < oldest.event_id, we genuinely missed events.
-                # Treat this uniformly as stale/reset.
-                if last_ms < oldest_ms - 1:
-                    return "reset", []
-                # Otherwise, it's essentially at-or-before the oldest —
-                # fall through and stream everything we have.
-                _ = window_ms
-        else:
-            # Empty buffer — nothing to replay, but not stale either.
+        if not self._buffer:
             return "ok", []
-
-        replay = [e for e in self._buffer if e.event_id > last_event_id]
-        return "ok", replay
+        oldest = self._buffer[0]
+        if last_event_id < oldest.event_id:
+            return "reset", []
+        return "ok", [e for e in self._buffer if e.event_id > last_event_id]
 
     # -- Live subscription (SSE fan-out) -----------------------------------
 
@@ -205,7 +191,8 @@ class SignalStream:
         while self._buffer:
             oldest = self._buffer[0]
             try:
-                oldest_ms = int(ULID.from_str(oldest.event_id).timestamp * 1000)
+                ms_part, _, _ = oldest.event_id.partition("-")
+                oldest_ms = int(ms_part)
             except ValueError:
                 self._buffer.popleft()
                 self._seen_record_ids.discard(oldest.payload.redis_id)

@@ -26,12 +26,13 @@ class SignalPayload(BaseModel):
 class SignalEnvelope(BaseModel):
     """Common event envelope for all /api/signals SSE frames.
 
-    `event_id` is a ULID derived from the upstream Redis record timestamp,
-    monotonic even within the same millisecond.
+    `event_id` is a fixed-width normalized Redis Stream record-id of the form
+    `<013d ms>-<06d seq>`. Lexicographic string comparison of two `event_id`s
+    matches their chronological/intra-ms order on a single Redis stream.
     `ts` is ISO-8601 UTC with millisecond precision ending in 'Z'.
     """
 
-    event_id: str = Field(..., description="ULID, monotonically sortable")
+    event_id: str = Field(..., description="`<013d ms>-<06d seq>`, lex-monotonic")
     ts: str = Field(..., description="ISO-8601 UTC with ms precision, ends with 'Z'")
     type: str = Field(..., description="e.g. signal.firms, signal.ucdp, signal.unknown")
     payload: SignalPayload

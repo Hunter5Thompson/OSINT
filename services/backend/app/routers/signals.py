@@ -40,9 +40,13 @@ async def sse_generator(
 ) -> AsyncGenerator[dict[str, str], None]:
     """SSE body generator — exported for direct unit testing."""
     stream = get_signal_stream()
-    mode, replay = stream.get_replay(last_event_id)
+    # Subscribe BEFORE computing replay so that events inserted in the race
+    # window between the two calls are captured in the live queue. We then
+    # de-duplicate any queued items that were also covered by the replay.
     queue = stream.subscribe()
     try:
+        mode, replay = stream.get_replay(last_event_id)
+
         # Preamble: ready or reset
         if mode == "reset":
             yield {
@@ -53,8 +57,14 @@ async def sse_generator(
             yield {"comment": "ready"}
 
         # Replay in-window events (ascending)
+        replay_ids: set[str] = set()
         for envelope in replay:
             yield _frame(envelope)
+            replay_ids.add(envelope.event_id)
+
+        # Highest id already delivered via replay — any live-queue items at
+        # or below this id were already emitted and must be skipped.
+        last_delivered = replay[-1].event_id if replay else last_event_id
 
         # Live tail with heartbeats
         while True:
@@ -64,7 +74,14 @@ async def sse_generator(
                 envelope = await asyncio.wait_for(
                     queue.get(), timeout=_HEARTBEAT_SECONDS
                 )
+                # Drop anything already covered by the replay (exact match
+                # or lex-below the highest replayed id).
+                if envelope.event_id in replay_ids:
+                    continue
+                if last_delivered is not None and envelope.event_id <= last_delivered:
+                    continue
                 yield _frame(envelope)
+                last_delivered = envelope.event_id
             except TimeoutError:
                 yield {"comment": "heartbeat"}
     finally:

@@ -15,7 +15,6 @@ dependencies = [
     "neo4j>=5.0",
     "websockets>=13.0",
     "qdrant-client>=1.13",
-    "python-ulid>=3.0.0",
 ]
 
 [project.optional-dependencies]

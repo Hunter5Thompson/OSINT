@@ -12,7 +12,6 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
-from ulid import ULID
 
 from app.main import app
 from app.models.signals import SignalEnvelope
@@ -94,7 +93,7 @@ def test_ring_buffer_dedupes_same_redis_record_id() -> None:
     assert latest[0].payload.title == "first"
 
 
-def test_redis_record_to_envelope_mapping_and_monotonic_ulid() -> None:
+def test_redis_record_to_envelope_mapping_and_monotonic_event_id() -> None:
     s = SignalStream(window_seconds=900, max_size=2000)
     # Use a recent ms to stay in the replay window
     ms = int(time.time() * 1000)
@@ -118,9 +117,9 @@ def test_redis_record_to_envelope_mapping_and_monotonic_ulid() -> None:
     assert env1.type == "signal.firms"
     assert env1.payload.redis_id == rid1
 
-    # event_id is a valid ULID
-    ULID.from_str(env1.event_id)
-    ULID.from_str(env2.event_id)
+    # event_id shape: 13-digit ms, dash, 6-digit seq
+    assert env1.event_id == f"{ms:013d}-{0:06d}"
+    assert env2.event_id == f"{ms:013d}-{1:06d}"
 
     # Monotonic even within the same ms
     assert env2.event_id > env1.event_id
@@ -158,13 +157,48 @@ def test_replay_with_stale_last_event_id_returns_reset() -> None:
     for i in range(3):
         s.insert_record(_record_id(base_ms, i), _fields(title=f"t{i}"))
 
-    # Craft a ULID from > 15 min ago
+    # Craft an event_id that lexicographically predates the oldest buffered.
     stale_ms = base_ms - 1_000_000  # ~16.6 min ago
-    stale_ulid = str(ULID.from_timestamp(stale_ms / 1000))
+    stale_event_id = f"{stale_ms:013d}-{0:06d}"
 
-    mode, replay = s.get_replay(stale_ulid)
+    mode, replay = s.get_replay(stale_event_id)
     assert mode == "reset"
     assert replay == []
+
+
+def test_event_id_strict_monotonic_across_wall_clock_bursts() -> None:
+    """Regression guard for C1: event_id must be strictly lex-monotonic
+    even when many records share the same user-supplied ms timestamp, and
+    across ms boundaries. The previous ULID-based implementation had a
+    ~50% failure rate on same-ms bursts because python-ulid keys random
+    bytes on wall-clock ms, not on the supplied timestamp.
+    """
+    s = SignalStream(window_seconds=900, max_size=1000)
+    # Use recent ms to stay in window
+    base_ms = int(time.time() * 1000)
+
+    ids: list[str] = []
+
+    # 200 records all at the same logical ms, seq 0..199
+    for seq in range(200):
+        env = s.insert_record(_record_id(base_ms, seq), _fields(title=f"b{seq}"))
+        assert env is not None
+        ids.append(env.event_id)
+
+    # Cross ms boundaries: (base_ms, 250), (base_ms+1, 0), (base_ms+1, 1), (base_ms+1000, 0)
+    for rid in [
+        _record_id(base_ms, 250),
+        _record_id(base_ms + 1, 0),
+        _record_id(base_ms + 1, 1),
+        _record_id(base_ms + 1000, 0),
+    ]:
+        env = s.insert_record(rid, _fields())
+        assert env is not None
+        ids.append(env.event_id)
+
+    # Strict lex-monotonic across the whole sequence
+    for prev, curr in zip(ids, ids[1:]):
+        assert curr > prev, f"non-monotonic: {prev!r} >= {curr!r}"
 
 
 def test_replay_with_no_last_event_id_returns_empty_ok() -> None:
@@ -308,8 +342,8 @@ async def test_stream_with_stale_last_event_id_emits_reset(
     for i in range(2):
         stream.insert_record(_record_id(base_ms, i), _fields(title=f"t{i}"))
 
-    stale_ulid = str(ULID.from_timestamp((base_ms - 1_000_000) / 1000))
-    frames = await _drain_generator(stale_ulid, max_frames=1)
+    stale_event_id = f"{(base_ms - 1_000_000):013d}-{0:06d}"
+    frames = await _drain_generator(stale_event_id, max_frames=1)
 
     reset_frames = [f for f in frames if f.get("event") == "reset"]
     assert len(reset_frames) >= 1
