@@ -18,6 +18,9 @@
  *  - Reconnect is explicit (we close on error and schedule a new EventSource)
  *    with exponential backoff 1s → 2s → 4s → 8s → 16s → 30s (cap).
  *  - Unmount always closes the active EventSource and cancels any timer.
+ *  - React 19 Strict-Mode safe: we use a per-effect `cancelled` flag closed
+ *    over by the async hydration + inner `connect()`. No module-scoped or
+ *    ref-based "mounted" flag that could leak across Strict-Mode re-mounts.
  */
 import { useEffect, useRef, useState } from "react";
 import { SIGNAL_STREAM_URL, getLatestSignals } from "../services/api";
@@ -62,7 +65,6 @@ export function useSignalFeed(): UseSignalFeedResult {
   const dedupeOrderRef = useRef<string[]>([]);
   const attemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountedRef = useRef(true);
   const lastEventIdRef = useRef<string | null>(null);
 
   // Keep the ref in sync with the state so reconnect handlers see the latest.
@@ -71,7 +73,12 @@ export function useSignalFeed(): UseSignalFeedResult {
   }, [lastEventId]);
 
   useEffect(() => {
-    mountedRef.current = true;
+    // Per-effect local flag — survives Strict-Mode double-invocation because
+    // each invocation captures its own `cancelled`. The cleanup of the first
+    // mount flips its copy to `true`; the remount starts fresh.
+    let cancelled = false;
+    attemptRef.current = 0;
+    setStatus("idle");
 
     function rememberSeen(id: string) {
       if (dedupeRef.current.has(id)) return false;
@@ -125,7 +132,7 @@ export function useSignalFeed(): UseSignalFeedResult {
       dedupeOrderRef.current = [];
       try {
         const fresh = await getLatestSignals(FEED_CAP);
-        if (!mountedRef.current) return;
+        if (cancelled) return;
         seedFromLatest(fresh);
       } catch {
         // Keep items as-is on refetch failure.
@@ -133,6 +140,7 @@ export function useSignalFeed(): UseSignalFeedResult {
     }
 
     function connect() {
+      if (cancelled) return;
       const Ctor = getEventSourceCtor();
       if (!Ctor) {
         setStatus("down");
@@ -142,12 +150,13 @@ export function useSignalFeed(): UseSignalFeedResult {
       esRef.current = es;
 
       es.onopen = () => {
-        if (!mountedRef.current) return;
+        if (cancelled) return;
         attemptRef.current = 0;
         setStatus("live");
       };
 
       es.onmessage = (ev: MessageEvent) => {
+        if (cancelled) return;
         handleEnvelope(ev.data, ev.lastEventId ?? "");
       };
 
@@ -167,16 +176,18 @@ export function useSignalFeed(): UseSignalFeedResult {
       ];
       for (const type of SIGNAL_EVENT_TYPES) {
         es.addEventListener(type, ((ev: MessageEvent) => {
+          if (cancelled) return;
           handleEnvelope(ev.data, ev.lastEventId ?? "");
         }) as EventListener);
       }
 
       es.addEventListener("reset", (() => {
+        if (cancelled) return;
         void handleReset();
       }) as EventListener);
 
       es.onerror = () => {
-        if (!mountedRef.current) return;
+        if (cancelled) return;
         // Close the broken connection and schedule a reconnect.
         try {
           es.close();
@@ -185,39 +196,46 @@ export function useSignalFeed(): UseSignalFeedResult {
         }
         if (esRef.current === es) esRef.current = null;
         setStatus("reconnecting");
+        // Guard: if `onerror` fires twice before the pending timer runs,
+        // we must not stack multiple timers.
+        if (reconnectTimerRef.current !== null) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
         const delay =
           BACKOFF_MS[Math.min(attemptRef.current, BACKOFF_MS.length - 1)];
         attemptRef.current += 1;
         reconnectTimerRef.current = setTimeout(() => {
           reconnectTimerRef.current = null;
-          if (!mountedRef.current) return;
+          if (cancelled) return;
           connect();
         }, delay);
       };
     }
 
-    // Hydrate then connect. We kick off both in parallel; the EventSource will
-    // dedupe against the hydrated IDs once it delivers live events.
-    void getLatestSignals(FEED_CAP)
-      .then((fresh) => {
-        if (!mountedRef.current) return;
+    // Hydrate, then connect. Connecting only after hydration resolves avoids
+    // a Strict-Mode race where the first-mount's `.finally` would open an
+    // EventSource owned by an already-cleaned-up effect.
+    const hydrate = async () => {
+      try {
+        const fresh = await getLatestSignals(FEED_CAP);
+        if (cancelled) return;
         seedFromLatest(fresh);
-      })
-      .catch(() => {
+      } catch {
         // Leave items empty on hydration failure; the stream still gets a chance.
-      })
-      .finally(() => {
-        if (!mountedRef.current) return;
-        connect();
-      });
+      }
+      if (cancelled) return;
+      connect();
+    };
+    void hydrate();
 
     return () => {
-      mountedRef.current = false;
+      cancelled = true;
       if (reconnectTimerRef.current !== null) {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
       }
-      if (esRef.current) {
+      if (esRef.current !== null) {
         try {
           esRef.current.close();
         } catch {

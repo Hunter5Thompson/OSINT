@@ -226,4 +226,67 @@ describe("useSignalFeed · cleanup", () => {
     unmount();
     expect(es.readyState).toBe(2);
   });
+
+  it(
+    "does not leak an orphan EventSource under React 19 Strict-Mode " +
+      "double-invocation (mount → unmount → remount before hydration resolves)",
+    async () => {
+      mockFetchLatest([]);
+      // First mount: start hydration, immediately unmount before the fetch
+      // resolves, then remount — this mirrors what <React.StrictMode> does.
+      const first = renderHook(() => useSignalFeed());
+      first.unmount();
+      const second = renderHook(() => useSignalFeed());
+
+      // Let hydration + microtasks drain for both effects.
+      await waitFor(() =>
+        expect(MockEventSource.instances.length).toBeGreaterThanOrEqual(1),
+      );
+      // Allow extra microtasks — any orphan would show up as a second open
+      // EventSource here.
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+
+      const openSources = MockEventSource.instances.filter(
+        (es) => es.readyState !== 2,
+      );
+      expect(openSources.length).toBe(1);
+
+      second.unmount();
+      // After final unmount everything is closed.
+      const stillOpen = MockEventSource.instances.filter(
+        (es) => es.readyState !== 2,
+      );
+      expect(stillOpen.length).toBe(0);
+    },
+  );
+});
+
+describe("useSignalFeed · manual reconnect URL", () => {
+  it("includes ?last_event_id=<last> on the reconnect EventSource URL", async () => {
+    mockFetchLatest([]);
+    vi.useFakeTimers();
+
+    const { result } = renderHook(() => useSignalFeed());
+    await vi.waitFor(() => expect(MockEventSource.instances.length).toBe(1));
+    const first = currentEventSource();
+    act(() => first.open());
+
+    // Deliver a live event so `lastEventId` advances beyond the hydrated null.
+    const id = "0000000001000-000042";
+    act(() => {
+      first.trigger("signal.firms", JSON.stringify(envelope(id, "evt")), id);
+    });
+    await vi.waitFor(() => expect(result.current.lastEventId).toBe(id));
+
+    // Force a reconnect.
+    act(() => first.fail());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(MockEventSource.instances.length).toBe(2);
+    const reconnected = currentEventSource();
+    expect(reconnected.url).toContain("last_event_id=");
+    expect(reconnected.lastEventIdHint).toBe(id);
+  });
 });
