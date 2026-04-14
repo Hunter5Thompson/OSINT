@@ -22,6 +22,7 @@ from app.routers import (
     graph,
     hotspots,
     intel,
+    landing,
     rag,
     satellites,
     signals,
@@ -114,6 +115,7 @@ app.include_router(aircraft.router, prefix="/api/v1")
 app.include_router(eonet.router, prefix="/api/v1")
 app.include_router(gdacs.router, prefix="/api/v1")
 app.include_router(signals.router, prefix="/api")
+app.include_router(landing.router, prefix="/api")
 
 # WebSocket Routers
 app.include_router(flight_ws.router)
