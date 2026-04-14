@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     landing_point_geo_url: str = "https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json"
     cable_cache_ttl_s: int = 86400  # 24 hours
 
+    # Signals stream (SSE Ring-Buffer over Redis Stream)
+    redis_stream_events: str = "events:new"
+    signals_replay_window_seconds: int = 900  # 15 min
+    signals_poll_interval_ms: int = 1000
+    signals_ring_buffer_size: int = 2000
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

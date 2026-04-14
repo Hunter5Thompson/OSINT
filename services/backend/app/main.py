@@ -1,9 +1,9 @@
 """WorldView Backend — FastAPI Application."""
 
-from contextlib import asynccontextmanager
+import asyncio
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
-from typing import Any
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import FastAPI
@@ -24,11 +24,13 @@ from app.routers import (
     intel,
     rag,
     satellites,
+    signals,
     vessels,
 )
+from app.services import vessel_service
 from app.services.cache_service import CacheService
 from app.services.proxy_service import ProxyService
-from app.services import vessel_service
+from app.services.signal_stream import get_signal_stream, redis_consumer_loop
 from app.ws import flight_ws, vessel_ws
 
 structlog.configure(
@@ -57,10 +59,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Start AISStream background collector
     await vessel_service.start_collector(cache)
 
+    # Start Redis signals consumer
+    signal_stream = get_signal_stream()
+    signal_stop_event = asyncio.Event()
+    signal_task = asyncio.create_task(
+        redis_consumer_loop(signal_stream, signal_stop_event)
+    )
+    app.state.signal_stop_event = signal_stop_event
+    app.state.signal_task = signal_task
+
     logger.info("backend_started", vllm_url=settings.vllm_url, vllm_model=settings.vllm_model)
     yield
 
     # Shutdown
+    signal_stop_event.set()
+    signal_task.cancel()
+    try:
+        await signal_task
+    except (asyncio.CancelledError, Exception):
+        pass
     await vessel_service.stop_collector()
     await proxy.stop()
     await cache.close()
@@ -96,6 +113,7 @@ app.include_router(firms.router, prefix="/api/v1")
 app.include_router(aircraft.router, prefix="/api/v1")
 app.include_router(eonet.router, prefix="/api/v1")
 app.include_router(gdacs.router, prefix="/api/v1")
+app.include_router(signals.router, prefix="/api")
 
 # WebSocket Routers
 app.include_router(flight_ws.router)
@@ -118,7 +136,7 @@ class ClientConfig(BaseModel):
 async def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         version="0.1.0",
     )
 
