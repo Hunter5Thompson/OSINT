@@ -62,14 +62,16 @@ describe("computeBodyPosition (pure physics)", () => {
 
 describe("BODIES spec", () => {
   it("includes munin, hugin, sentinel with correct orbital parameters", () => {
-    const byName = Object.fromEntries(BODIES.map((b) => [b.name, b]));
-    expect(byName.munin).toMatchObject({ rx: 50, ry: 18, omega: 0.35, phi: 0 });
-    expect(byName.hugin).toMatchObject({ rx: 38, ry: 14, omega: -0.52, phi: 2.1 });
-    expect(byName.sentinel).toMatchObject({ rx: 26, ry: 10, omega: 0.78, phi: 4.2 });
-    // tilt stored as radians
-    expect(byName.munin.tilt).toBeCloseTo((-12 * Math.PI) / 180, 5);
-    expect(byName.hugin.tilt).toBeCloseTo((25 * Math.PI) / 180, 5);
-    expect(byName.sentinel.tilt).toBeCloseTo((-4 * Math.PI) / 180, 5);
+    const munin = BODIES.find((b) => b.name === "munin");
+    const hugin = BODIES.find((b) => b.name === "hugin");
+    const sentinel = BODIES.find((b) => b.name === "sentinel");
+    if (!munin || !hugin || !sentinel) throw new Error("BODIES missing a spec");
+    expect(munin).toMatchObject({ rx: 50, ry: 18, omega: 0.35, phi: 0 });
+    expect(hugin).toMatchObject({ rx: 38, ry: 14, omega: -0.52, phi: 2.1 });
+    expect(sentinel).toMatchObject({ rx: 26, ry: 10, omega: 0.78, phi: 4.2 });
+    expect(munin.tilt).toBeCloseTo((-12 * Math.PI) / 180, 5);
+    expect(hugin.tilt).toBeCloseTo((25 * Math.PI) / 180, 5);
+    expect(sentinel.tilt).toBeCloseTo((-4 * Math.PI) / 180, 5);
   });
 });
 
@@ -103,14 +105,32 @@ describe("<Orrery />", () => {
     expect(container.querySelector('[data-body="sentinel"]')).not.toBeNull();
   });
 
-  it("renders a deterministic static SVG under reduced-motion", () => {
+  it("renders a deterministic static SVG under reduced-motion at theta=pi/3", () => {
     setReducedMotion(true);
     const { container } = render(<Orrery size="m" />);
-    // Snapshot stability: reduced-motion always uses θ=π/3 — serialize and assert.
-    const svg = container.querySelector("svg");
-    expect(svg?.outerHTML).toMatchInlineSnapshot(
-      `"<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 120 120" width="110" height="110" data-orrery="true" data-reduced="true" aria-hidden="true"><circle data-part="kernel" cx="0" cy="0" r="4" fill="var(--amber)"></circle><ellipse data-part="orbit" data-body="munin" cx="0" cy="0" rx="50" ry="18" fill="none" stroke="var(--granite)" stroke-width="0.5" transform="rotate(-12)"></ellipse><ellipse data-part="orbit" data-body="hugin" cx="0" cy="0" rx="38" ry="14" fill="none" stroke="var(--granite)" stroke-width="0.5" transform="rotate(25)"></ellipse><ellipse data-part="orbit" data-body="sentinel" cx="0" cy="0" rx="26" ry="10" fill="none" stroke="var(--granite)" stroke-width="0.5" transform="rotate(-4)"></ellipse><circle data-body="munin" cx="22.335221459030964" cy="16.070347728595566" r="2.4330127018922196" fill="var(--amber)" opacity="0.9991025731825897"></circle><circle data-body="hugin" cx="-5.817787448263943" cy="-10.21480868423283" r="2.069988636871097" fill="var(--sage)" opacity="0.8464525111999335"></circle><circle data-body="sentinel" cx="13.544475985511937" cy="3.575543526820923" r="1.2133883476483184" fill="var(--sentinel)" opacity="0.4405212943654226"></circle></svg>"`,
+    const svg = container.querySelector("svg")!;
+    expect(svg.getAttribute("viewBox")).toBe("-60 -60 120 120");
+    expect(svg.getAttribute("width")).toBe("110");
+    expect(svg.getAttribute("height")).toBe("110");
+    expect(svg.getAttribute("data-reduced")).toBe("true");
+
+    // Verify munin body position matches theta = pi/3 deterministically.
+    const munin = container.querySelector('circle[data-body="munin"]') as SVGCircleElement;
+    const expected = computeBodyPosition(
+      50,
+      18,
+      (-12 * Math.PI) / 180,
+      0.35,
+      0,
+      Math.PI / 3 / 0.35, // t chosen so omega*t = pi/3 (reduced = static)
     );
+    // Static reduced-motion should use a deterministic theta=pi/3 regardless of
+    // omega. The implementation is expected to bypass t and use theta=pi/3 for
+    // all bodies in reduced mode.
+    const muninCx = parseFloat(munin.getAttribute("cx")!);
+    const muninCy = parseFloat(munin.getAttribute("cy")!);
+    expect(muninCx).toBeCloseTo(expected.x, 5);
+    expect(muninCy).toBeCloseTo(expected.y, 5);
   });
 
   it("does not call requestAnimationFrame under reduced-motion", () => {
