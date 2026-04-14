@@ -13,7 +13,7 @@ Extraction-LLM-Calls aus `services/data-ingestion` permanent gegen den Spark vLL
 - TEI-Embedding bleibt lokal auf deadpool-ultra (`http://localhost:8001`). ARM-Image-Klärung: Folge-Sprint.
 - Bestehende Modi (`up ingestion`, `up interactive`) bleiben funktional als Fallback. Wir fügen einen neuen Modus hinzu, statt die alten zu ersetzen.
 - Scheduler bleibt auf deadpool-ultra (kein Remote-Scheduling).
-- Kein lokaler LLM-Fallback wenn Spark offline. Items werden als "extraction pending" markiert und bei nächstem Run retried (siehe Retry-Strategie).
+- Kein lokaler LLM-Fallback wenn Spark offline. Bei transienten Fehlern wird der Qdrant-Upsert für das betroffene Item übersprungen; das Item wird **nicht** persistent als "pending" markiert. Der nächste Run findet es erneut über die Quelle (RSS-Re-Fetch, GDELT-Re-Query, etc.) und versucht erneut zu extrahieren — Hash-Dedup greift nicht, weil noch kein Qdrant-Eintrag existiert. Konsequenz: die Quelle muss das Item beim nächsten Tick noch ausliefern. Telegram-Items, die bereits aus dem Channel rotiert sind, gehen verloren — acceptable für diesen Sprint.
 
 ## Architektur
 
@@ -64,6 +64,8 @@ ingestion_vllm_timeout: float = 120.0
   - `ExtractionTransientError` (HTTP-Timeout, Connection-Refused, 5xx) → Caller MUSS Qdrant-Upsert überspringen, damit Hash-Dedup beim nächsten Run nicht greift und das Item retried wird.
   - Andere Exceptions / `None` (LLM lieferte leeres Ergebnis) → Caller speichert wie bisher mit `codebook_type="other.unclassified"` (kein Retry nötig — LLM hat geantwortet).
 - Signatur: `process_item` raised `ExtractionTransientError` statt `None` zurückzugeben, wenn Spark unerreichbar ist.
+- **Hard-Fail bei Konfigurationsfehlern:** HTTP 404 (Modell unbekannt) und HTTP 401/403 werden als `ExtractionConfigError` geraised, **nicht** als TransientError und **nicht** stillschweigend als `other.unclassified` gespeichert. Caller (Collector) loggt `error` und überspringt das Item ohne Qdrant-Upsert. Begründung: ein falscher Modellname würde sonst tausende Items irreversibel als `unclassified` persistieren. Recovery erfolgt durch Config-Fix + erneuten Run.
+- Healthcheck (siehe §6) prüft Modell-Verfügbarkeit beim Scheduler-Start zusätzlich präventiv.
 
 ### 4. `services/data-ingestion/feeds/rss_collector.py` — Retry-Verhalten
 
@@ -77,7 +79,17 @@ except ExtractionTransientError:
     continue  # KEIN Qdrant-Upsert → Hash-Dedup greift nicht → Retry beim nächsten Tick
 ```
 
-Andere Collectors (`gdelt_collector.py`, `telegram_collector.py`, etc.), die `process_item` aufrufen, bekommen denselben Try/Except-Block. Audit-Liste in der Implementation: alle Aufrufer von `process_item` müssen den Catch haben — Test prüft das per `grep`-basiertem Smoke-Test in CI.
+Andere Collectors (`gdelt_collector.py`, `telegram_collector.py`, etc.), die `process_item` aufrufen, bekommen denselben Try/Except-Block für `ExtractionTransientError` und `ExtractionConfigError`.
+
+**Audit per Verhaltenstest, nicht per grep:** Pro Collector, der `process_item` aufruft, gibt es einen dedizierten Test mit zwei Szenarien:
+1. `process_item` raised `ExtractionTransientError` → kein Qdrant-Upsert (assertet via Mock auf `qdrant.upsert`)
+2. `process_item` raised `ExtractionConfigError` → kein Qdrant-Upsert + Error-Log
+
+Liste der zu testenden Collectors in der Implementation:
+- `rss_collector.py`
+- `gdelt_collector.py`
+- `telegram_collector.py`
+- alle weiteren via `Grep` ermittelten Aufrufer von `process_item` (Implementation-Schritt 1: Grep-Liste fixieren, jeden Treffer testen).
 
 ### 5. `services/data-ingestion/nlm_ingest/extract.py` + `cli.py`
 
@@ -119,8 +131,9 @@ Neuer Service `data-ingestion-spark` (oder eleganter: `data-ingestion` bekommt z
 
 Duplikation ist akzeptabel (~30 Zeilen YAML), vermeidet Override-File-Komplexität.
 
-### 9. `odin.sh` — neuer Modus `interactive-spark`
+### 9. `odin.sh` — neuer Modus `interactive-spark` + Stop-Updates
 
+**Neuer Case:**
 ```bash
 interactive-spark)
   "${COMPOSE[@]}" --profile ingestion --profile interactive --profile interactive-spark stop \
@@ -131,7 +144,15 @@ interactive-spark)
   ;;
 ```
 
-Pre-flight-Check: `curl -sf http://192.168.178.39:8000/v1/models > /dev/null || echo "WARN: Spark unreachable"` (nicht-blockierend).
+**Bestehende Cases müssen ebenfalls angepasst werden**, damit ein Rückwechsel `data-ingestion-spark` sicher stoppt (sonst laufen zwei Scheduler parallel → doppelte Ingestion):
+
+- `ingestion)`-Branch: `stop`-Liste erweitern um `data-ingestion-spark` und Profil `interactive-spark` mit `--profile`-Flags inkludieren.
+- `interactive)`-Branch: `stop`-Liste erweitern um `data-ingestion-spark`.
+- `down)`-Branch (falls vorhanden): inkludiert `--profile interactive-spark` damit auch `data-ingestion-spark` mit runterfährt.
+
+Test (Bash-Integration, manuell oder in CI als Dry-Run): `up interactive-spark` → `up ingestion` → `docker ps | grep data-ingestion` zeigt nur **einen** Container.
+
+Pre-flight-Check für `interactive-spark`: `curl -sf http://192.168.178.39:8000/v1/models > /dev/null || echo "WARN: Spark unreachable"` (nicht-blockierend).
 
 `doctor` und `smoke` werden um den Spark-Reachability-Check erweitert.
 
@@ -152,7 +173,8 @@ Feed → Collector → process_item ─HTTP→ Spark vLLM (Spark down → Extrac
 | Spark offline beim Start | Warning-Log, Scheduler läuft, Collectors raisen ExtractionTransientError, Items übersprungen (kein Qdrant-Upsert), Retry beim nächsten Tick |
 | Spark offline während Run | HTTPException → ExtractionTransientError → Item übersprungen, retry |
 | Spark antwortet langsam | Timeout 120 s, dann ExtractionTransientError, retry |
-| Modellname falsch | vLLM 404, **kein** Transient-Error (Caller-Bug, nicht Retry-würdig) → Item wird mit `other.unclassified` upserted, manueller Eingriff nötig |
+| Modellname falsch (HTTP 404) | `ExtractionConfigError` → Item übersprungen, **kein** Qdrant-Upsert, Error-Log. Healthcheck warnt schon beim Scheduler-Start. Recovery: Config fixen, Items kommen beim nächsten Quellen-Tick erneut. |
+| Auth-Fehler (HTTP 401/403) | Wie Modellname falsch — `ExtractionConfigError` |
 | LLM liefert valides leeres Ergebnis | `other.unclassified`, gespeichert, kein Retry — wie bisher |
 
 ## Tests
@@ -165,7 +187,8 @@ Feed → Collector → process_item ─HTTP→ Spark vLLM (Spark down → Extrac
 - `_call_vllm` ruft genau `http://192.168.178.39:8000/v1/chat/completions` (Regex-Assert: kein `/v1/v1`)
 - Model im Payload ist `google/gemma-4-26B-A4B-it`
 - Bei `httpx.ConnectError` → `ExtractionTransientError` raised
-- Bei `httpx.HTTPStatusError 404` → kein Transient-Error, normale Exception
+- Bei `httpx.HTTPStatusError 404/401/403` → `ExtractionConfigError` (kein Transient)
+- Bei `httpx.HTTPStatusError 5xx` → `ExtractionTransientError`
 - Bei Timeout → `ExtractionTransientError`
 
 **Unit (`tests/test_rss_collector.py`):**
