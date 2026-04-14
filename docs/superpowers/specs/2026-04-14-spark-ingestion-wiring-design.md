@@ -1,19 +1,19 @@
 # Spark Ingestion Wiring (Minimal) — Design
 
 **Datum:** 2026-04-14
-**Scope:** Minimal-Wiring (Option A aus Brainstorming)
-**Status:** Approved (User)
+**Scope:** Minimal-Wiring (Option A aus Brainstorming) + Compose-Profil + Retry-Fix
+**Status:** Revision 2 (nach Code-Review)
 
 ## Ziel
 
-Extraction-LLM-Calls aus `services/data-ingestion` permanent gegen den Spark vLLM-Server (`http://192.168.178.39:8000/v1/`, Gemma-4 26B-A4B-it) routen. Dadurch entfällt der GPU-Swap zwischen Modus C (Interactive 9B) und Modus D (Ingestion 27B GGUF) auf der RTX 5090 — Ingestion und Interactive können parallel laufen.
+Extraction-LLM-Calls aus `services/data-ingestion` permanent gegen den Spark vLLM-Server (`http://192.168.178.39:8000`, Gemma-4 26B-A4B-it) routen. Dadurch entfällt der GPU-Swap zwischen Modus C (Interactive 9B) und Modus D (Ingestion 27B GGUF). Ingestion und Interactive laufen über `./odin.sh up interactive-spark` parallel.
 
 ## Nicht-Ziele
 
-- TEI-Embedding bleibt lokal auf deadpool-ultra (`http://localhost:8001`). ARM-Kompatibilität wird in einem späteren Sprint geklärt.
-- `docker-compose.yml` und `odin.sh` werden nicht angefasst. Der Ingestion-Modus existiert weiterhin als Fallback.
-- Kein Fallback auf lokales Modell wenn Spark offline ist. Feeds sind gepuffert; Scheduler retried beim nächsten Tick.
-- Scheduler bleibt auf deadpool-ultra (kein Remote-Scheduling auf Spark).
+- TEI-Embedding bleibt lokal auf deadpool-ultra (`http://localhost:8001`). ARM-Image-Klärung: Folge-Sprint.
+- Bestehende Modi (`up ingestion`, `up interactive`) bleiben funktional als Fallback. Wir fügen einen neuen Modus hinzu, statt die alten zu ersetzen.
+- Scheduler bleibt auf deadpool-ultra (kein Remote-Scheduling).
+- Kein lokaler LLM-Fallback wenn Spark offline. Items werden als "extraction pending" markiert und bei nächstem Run retried (siehe Retry-Strategie).
 
 ## Architektur
 
@@ -21,97 +21,189 @@ Extraction-LLM-Calls aus `services/data-ingestion` permanent gegen den Spark vLL
 RTX 5090 (deadpool-ultra)            DGX Spark (192.168.178.39)
 ─────────────────────────            ──────────────────────────
  vLLM 9B Interactive (8000)           vLLM Gemma-4 26B (8000)
- TEI Embed (8001)         ◄──────┐
- Backend / Frontend / Intel       │
- Scheduler + Pipeline ───HTTP─────┴──► /v1/chat/completions
+ TEI Embed (8001)
+ Backend / Frontend / Intel
+ data-ingestion ─────────HTTP─────────► /v1/chat/completions
  Qdrant / Neo4j / Redis
 ```
 
-Pipeline und NLM-Extract öffnen HTTPS/HTTP-Verbindungen ins LAN. Latenz ist im einstelligen ms-Bereich (Gigabit Ethernet, gleicher Switch).
+Latenz im LAN ist ms-Bereich (Gigabit Ethernet, gleicher Switch).
 
 ## Änderungen
 
 ### 1. `services/data-ingestion/config.py`
 
-Neue Settings-Felder (alphabetisch nach Block):
-
 ```python
 # Ingestion LLM (Spark — Gemma-4 26B)
-ingestion_vllm_url: str = "http://192.168.178.39:8000/v1"
+# URL OHNE /v1 — Aufrufer hängen `/v1/chat/completions` an (Konvention wie vllm_url)
+ingestion_vllm_url: str = "http://192.168.178.39:8000"
 ingestion_vllm_model: str = "google/gemma-4-26B-A4B-it"
 ingestion_vllm_timeout: float = 120.0
 ```
 
-`vllm_url` und `vllm_model` bleiben unverändert für Rückwärtskompatibilität, werden aber von Pipeline und NLM-Extract nicht mehr gelesen.
+`vllm_url` / `vllm_model` bleiben unverändert (für Backwards-Compat mit Modus D).
 
-### 2. `services/data-ingestion/pipeline.py`
+### 2. URL-Normalisierungs-Regel (verbindlich)
 
-Alle Stellen, die `settings.vllm_url` / `settings.vllm_model` für Extraction nutzen, lesen stattdessen `settings.ingestion_vllm_url` / `settings.ingestion_vllm_model`. HTTP-Timeout setzt `settings.ingestion_vllm_timeout`.
+**Konvention:** `ingestion_vllm_url` ist ein **Base-URL ohne `/v1`**. Alle Aufrufer hängen den vollen Pfad `/v1/chat/completions` an. Begründung: matched die bestehende `settings.vllm_url`-Konvention in `pipeline.py:199` und vermeidet `/v1/v1`-Bugs.
 
-### 3. `services/data-ingestion/nlm_ingest/extract.py`
+**Betroffene Call-Sites — alle drei werden auf gleiches Schema umgestellt:**
 
-Gleiche Umstellung: `ingestion_vllm_url` / `ingestion_vllm_model` / `ingestion_vllm_timeout` für die Extraction-Phase der NotebookLM-Pipeline.
+| Datei:Zeile | Vorher | Nachher |
+|---|---|---|
+| `pipeline.py:199` | `f"{settings.vllm_url}/v1/chat/completions"` | `f"{settings.ingestion_vllm_url}/v1/chat/completions"` |
+| `nlm_ingest/extract.py:66` | `f"{vllm_url}/chat/completions"` (Aufrufer übergibt URL mit `/v1`) | Funktion erwartet **Base-URL ohne `/v1`**, nutzt `f"{vllm_url}/v1/chat/completions"` |
+| `nlm_ingest/cli.py:221-222` | `vllm_url=settings.vllm_url + "/v1"`, `vllm_model=settings.vllm_model` | `vllm_url=settings.ingestion_vllm_url`, `vllm_model=settings.ingestion_vllm_model` |
 
-### 4. `.env.example`
+**Tests müssen `/v1/v1` explizit ausschließen** (Regex-Assertion auf den finalen Request-URL).
 
-Drei neue Variablen mit Spark-Defaults und einem Kommentar, der erklärt warum Ingestion auf Spark läuft.
+### 3. `services/data-ingestion/pipeline.py` — Modell + Timeout + Retry-Fix
 
-### 5. Lightweight Healthcheck
+- `_call_vllm` liest `settings.ingestion_vllm_url`, `settings.ingestion_vllm_model`, `settings.ingestion_vllm_timeout`.
+- **Retry-Fix (kritisch):** `process_item` unterscheidet zwei Fehlerklassen via Sentinel:
+  - `ExtractionTransientError` (HTTP-Timeout, Connection-Refused, 5xx) → Caller MUSS Qdrant-Upsert überspringen, damit Hash-Dedup beim nächsten Run nicht greift und das Item retried wird.
+  - Andere Exceptions / `None` (LLM lieferte leeres Ergebnis) → Caller speichert wie bisher mit `codebook_type="other.unclassified"` (kein Retry nötig — LLM hat geantwortet).
+- Signatur: `process_item` raised `ExtractionTransientError` statt `None` zurückzugeben, wenn Spark unerreichbar ist.
 
-Beim Start des Pipeline-Prozesses ein einmaliger `GET {ingestion_vllm_url}/models`-Call mit kurzem Timeout (5 s). Bei Erfolg: `INFO`-Log mit Modellnamen. Bei Fehler: `WARNING`-Log, Pipeline startet trotzdem (Scheduler retried). Kein Hard-Fail.
+### 4. `services/data-ingestion/feeds/rss_collector.py` — Retry-Verhalten
 
-Implementierung als Helper in `pipeline.py` — keine eigene Datei, da trivial.
+In der Schleife (`rss_collector.py:176-183`):
 
-## Datenfluss (unverändert)
+```python
+try:
+    enrichment = await process_item(...)
+except ExtractionTransientError:
+    log.warning("extraction_skipped_transient", url=link)
+    continue  # KEIN Qdrant-Upsert → Hash-Dedup greift nicht → Retry beim nächsten Tick
+```
+
+Andere Collectors (`gdelt_collector.py`, `telegram_collector.py`, etc.), die `process_item` aufrufen, bekommen denselben Try/Except-Block. Audit-Liste in der Implementation: alle Aufrufer von `process_item` müssen den Catch haben — Test prüft das per `grep`-basiertem Smoke-Test in CI.
+
+### 5. `services/data-ingestion/nlm_ingest/extract.py` + `cli.py`
+
+- `extract.py`: Funktion `extract_with_qwen` erwartet jetzt **Base-URL ohne `/v1`** (Breaking, aber interner Aufrufer ist nur `cli.py`). Hängt `/v1/chat/completions` selbst an.
+- `cli.py`: Übergibt `settings.ingestion_vllm_url` (ohne `+ "/v1"`) und `settings.ingestion_vllm_model`.
+- Funktionsname bleibt `extract_with_qwen` (Refactor zu `extract_with_llm` ist out-of-scope).
+
+### 6. Healthcheck — Platzierung verbindlich
+
+**Ort:** `services/data-ingestion/scheduler.py`, in der `main()`-Coroutine **nach `scheduler.start()` und vor `initial_collection_starting`** (also nach `scheduler.py:425`, vor `:428`).
+
+**Verhalten:**
+- Einmaliger `GET {ingestion_vllm_url}/v1/models` mit 5-s-Timeout
+- Erfolg: `log.info("ingestion_llm_ready", url=..., model=...)` mit Modellnamen aus Response
+- Fehler (Timeout/Connection/Non-200): `log.warning("ingestion_llm_unreachable", url=..., error=...)` — Scheduler läuft trotzdem, Items werden via `ExtractionTransientError`-Pfad retried.
+
+Implementiert als Helper `check_ingestion_llm()` in `scheduler.py` (keine eigene Datei, ~20 Zeilen).
+
+### 7. `.env.example`
+
+Drei neue Variablen mit Spark-Defaults und einem Kommentar:
+
+```bash
+# Ingestion LLM (Spark — eliminates GPU swap on RTX 5090)
+INGESTION_VLLM_URL=http://192.168.178.39:8000
+INGESTION_VLLM_MODEL=google/gemma-4-26B-A4B-it
+INGESTION_VLLM_TIMEOUT=120.0
+```
+
+### 8. `docker-compose.yml` — neues Profil `interactive-spark`
+
+Neuer Service `data-ingestion-spark` (oder eleganter: `data-ingestion` bekommt zusätzlich Profil `interactive-spark`, Dependency auf `vllm-27b` wird via Override entfernt).
+
+**Konkret — saubere Variante:** Zweiter Service-Eintrag `data-ingestion-spark`, identisch zu `data-ingestion` aber:
+- `profiles: ["interactive-spark"]`
+- Environment: `INGESTION_VLLM_URL=http://192.168.178.39:8000` (überschreibt `.env`-Default falls anders)
+- `depends_on`: nur `redis`, `qdrant`, `neo4j`, `tei-embed` — **kein** `vllm-27b`
+- Container-Name: `odin-data-ingestion-spark`
+
+Duplikation ist akzeptabel (~30 Zeilen YAML), vermeidet Override-File-Komplexität.
+
+### 9. `odin.sh` — neuer Modus `interactive-spark`
+
+```bash
+interactive-spark)
+  "${COMPOSE[@]}" --profile ingestion --profile interactive --profile interactive-spark stop \
+    vllm-27b data-ingestion 2>/dev/null || true
+  echo "Starting INTERACTIVE+SPARK mode: 9B local + Ingestion via Spark"
+  "${COMPOSE[@]}" --profile interactive-spark --profile interactive up -d --remove-orphans \
+    "${CORE_SERVICES[@]}" "${INTERACTIVE_SERVICES[@]}" data-ingestion-spark
+  ;;
+```
+
+Pre-flight-Check: `curl -sf http://192.168.178.39:8000/v1/models > /dev/null || echo "WARN: Spark unreachable"` (nicht-blockierend).
+
+`doctor` und `smoke` werden um den Spark-Reachability-Check erweitert.
+
+## Datenfluss (geändert)
 
 ```
-Feed → Collector → Redis Stream → Pipeline.extract() ─HTTP→ Spark vLLM
-                                       │
-                                       ▼
-                                 Pydantic Validate → Cypher Templates → Neo4j
-                                                  → TEI Embed (lokal) → Qdrant
+Feed → Collector → process_item ─HTTP→ Spark vLLM (Spark down → ExtractionTransientError → skip Qdrant)
+                       │
+                       ▼ (Erfolg)
+                 Pydantic → Cypher Templates → Neo4j
+                          → TEI Embed (lokal) → Qdrant
 ```
-
-Nur die `extract()`-HTTP-Calls wechseln den Endpoint. Alles andere bleibt identisch.
 
 ## Fehlerfälle
 
 | Szenario | Verhalten |
 |---|---|
-| Spark offline beim Start | Warning-Log, Pipeline läuft, erste Extraction schlägt fehl, Scheduler retried |
-| Spark offline während Run | HTTP-Exception, Item bleibt in Stream (kein ACK), retry beim nächsten Tick |
-| Spark antwortet langsam | Timeout 120 s, Item retry |
-| Modellname falsch | vLLM 404, Pipeline-Log zeigt Fehler, Item retry |
+| Spark offline beim Start | Warning-Log, Scheduler läuft, Collectors raisen ExtractionTransientError, Items übersprungen (kein Qdrant-Upsert), Retry beim nächsten Tick |
+| Spark offline während Run | HTTPException → ExtractionTransientError → Item übersprungen, retry |
+| Spark antwortet langsam | Timeout 120 s, dann ExtractionTransientError, retry |
+| Modellname falsch | vLLM 404, **kein** Transient-Error (Caller-Bug, nicht Retry-würdig) → Item wird mit `other.unclassified` upserted, manueller Eingriff nötig |
+| LLM liefert valides leeres Ergebnis | `other.unclassified`, gespeichert, kein Retry — wie bisher |
 
 ## Tests
 
-**Unit (`tests/test_config.py` — neu oder erweitert):**
-- Spark-Defaults werden korrekt geladen
-- Env-Override für `INGESTION_VLLM_URL` funktioniert
+**Unit (`tests/test_config.py`):**
+- Spark-Defaults werden geladen
+- Env-Override `INGESTION_VLLM_URL=http://x:9000` greift
 
 **Unit (`tests/test_pipeline.py`):**
-- Pipeline ruft `settings.ingestion_vllm_url` mit korrektem Model auf (mit `respx` gemockt)
-- Timeout wird aus `ingestion_vllm_timeout` übernommen
+- `_call_vllm` ruft genau `http://192.168.178.39:8000/v1/chat/completions` (Regex-Assert: kein `/v1/v1`)
+- Model im Payload ist `google/gemma-4-26B-A4B-it`
+- Bei `httpx.ConnectError` → `ExtractionTransientError` raised
+- Bei `httpx.HTTPStatusError 404` → kein Transient-Error, normale Exception
+- Bei Timeout → `ExtractionTransientError`
+
+**Unit (`tests/test_rss_collector.py`):**
+- Wenn `process_item` `ExtractionTransientError` raised → Item NICHT in Qdrant-Upsert-Liste
+- Wenn `process_item` `None` returned → Item WIRD upserted mit `other.unclassified`
+- Equivalent-Tests für gdelt/telegram/etc., die `process_item` aufrufen
 
 **Unit (`tests/test_nlm_extract.py`):**
-- Extract-Phase nutzt Spark-URL und -Model
+- `extract_with_qwen` ruft `{base_url}/v1/chat/completions` (Regex-Assert)
+- Nutzt `ingestion_vllm_model`
 
-**Healthcheck-Test:**
-- Erfolgsfall: Log enthält Modellnamen
-- Fehlerfall (URL unreachable): Warning-Log, kein Exception-Throw
+**Unit (`tests/test_nlm_cli.py` falls vorhanden, sonst neu):**
+- CLI ruft `extract_with_qwen` mit `settings.ingestion_vllm_url` (ohne `/v1`-Suffix)
+
+**Healthcheck-Test (`tests/test_scheduler.py`):**
+- Erfolg: Log enthält `ingestion_llm_ready` und Modellnamen
+- Fehler: Log `ingestion_llm_unreachable`, kein Exception-Throw, Scheduler startet weiter
 
 **Integration (Skip wenn Spark unreachable):**
-- Smoke-Test: Echter Call gegen Spark, validiert Response-Schema
+- Smoke-Test: Echter `_call_vllm` gegen Spark, Response valides JSON-Schema
+
+**Compose-Test:**
+- `docker compose --profile interactive-spark config --quiet` läuft sauber
+- `data-ingestion-spark` hat keine Dependency auf `vllm-27b`
 
 ## Rollout
 
 1. Feature-Branch `feature/spark-ingestion-wiring`
 2. TDD: Tests rot → Implementation → Tests grün
-3. Lokal `up interactive` + Pipeline manuell triggern → bestätigen dass Extraction über Spark läuft (`docker logs vllm-gemma4` auf Spark zeigt Requests)
-4. Merge → Memory-Update (`project_spark_ingestion_offload.md` → done)
+3. `./odin.sh up interactive-spark` — Pipeline manuell triggern
+4. Auf Spark `docker logs vllm-gemma4 | tail` — bestätigen dass Requests reinkommen
+5. Spark gezielt stoppen → bestätigen dass Items als pending übersprungen werden, nicht in Qdrant landen
+6. Spark wieder hoch → bestätigen dass Items beim nächsten Tick extrahiert werden
+7. Merge → Memory-Update (`project_spark_ingestion_offload.md` → done; `feedback`-Note über Retry-Pattern)
 
-## Offene Punkte (für Folge-Sprints)
+## Offene Punkte (Folge-Sprints)
 
-- TEI auf Spark (ARM-Image klären)
-- Healthcheck-Endpoint im Backend exposen, sodass Frontend Spark-Status anzeigen kann
-- Prompt-Migration Qwen → Gemma (falls Extraction-Qualität abweicht)
+- TEI auf Spark (ARM-Image)
+- `/health/ingestion-llm`-Endpoint im Backend für Frontend-Status-Anzeige
+- Prompt-Migration Qwen → Gemma falls Extraction-Qualität abweicht
+- Optional: alten `up ingestion`-Modus deprecaten sobald Spark-Wiring stabil ist
