@@ -195,16 +195,62 @@ export function Orrery({ size = "m", className, style, reducedMotion }: OrreryPr
   );
   const [frame, setFrame] = useState<Frame>(() => staticFrame());
 
-  // Post-mount refine: once we have the DOM ref, re-check ancestor chain.
+  // Post-mount refine + subscribe to runtime reduced-motion toggles.
   useEffect(() => {
     if (reducedMotion !== undefined) {
       setReduced(reducedMotion);
       return;
     }
-    setReduced((prev) => {
-      const detected = detectReducedMotion(rootRef.current);
-      return detected !== prev ? detected : prev;
-    });
+
+    const sync = () => {
+      setReduced((prev) => {
+        const detected = detectReducedMotion(rootRef.current);
+        return detected !== prev ? detected : prev;
+      });
+    };
+
+    // Initial post-mount re-evaluation (ancestor chain now available).
+    sync();
+
+    // 1) matchMedia change listener — OS-level prefers-reduced-motion toggles.
+    let mql: MediaQueryList | null = null;
+    const mqlHandler = () => sync();
+    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+      try {
+        mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+        if (typeof mql.addEventListener === "function") {
+          mql.addEventListener("change", mqlHandler);
+        } else if (typeof (mql as MediaQueryList).addListener === "function") {
+          // Legacy Safari fallback.
+          (mql as MediaQueryList).addListener(mqlHandler);
+        }
+      } catch {
+        mql = null;
+      }
+    }
+
+    // 2) MutationObserver — watch for [data-reduced-motion] attribute changes
+    //    anywhere in the document tree (ancestors or documentElement).
+    let observer: MutationObserver | null = null;
+    if (typeof document !== "undefined" && typeof MutationObserver !== "undefined") {
+      observer = new MutationObserver(() => sync());
+      observer.observe(document.documentElement, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ["data-reduced-motion"],
+      });
+    }
+
+    return () => {
+      if (mql) {
+        if (typeof mql.removeEventListener === "function") {
+          mql.removeEventListener("change", mqlHandler);
+        } else if (typeof (mql as MediaQueryList).removeListener === "function") {
+          (mql as MediaQueryList).removeListener(mqlHandler);
+        }
+      }
+      if (observer) observer.disconnect();
+    };
   }, [reducedMotion]);
 
   // Subscribe to the shared rAF engine unless reduced-motion.

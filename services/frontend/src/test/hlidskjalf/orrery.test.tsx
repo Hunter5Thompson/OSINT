@@ -10,7 +10,7 @@
  *  - Unmounting all Orreries releases the loop (no leaked frame)
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, cleanup } from "@testing-library/react";
+import { render, cleanup, act, waitFor } from "@testing-library/react";
 import {
   Orrery,
   computeBodyPosition,
@@ -162,6 +162,27 @@ describe("<Orrery />", () => {
     expect(rafSpy).toHaveBeenCalledTimes(1);
     unmount();
     expect(cafSpy).toHaveBeenCalled();
+    expect(__orreryEngine.isRunning()).toBe(false);
+  });
+
+  it("tears down the rAF loop when data-reduced-motion toggles on at runtime", async () => {
+    setReducedMotion(false);
+    render(<Orrery size="m" />);
+    // Engine is running with one subscriber.
+    expect(__orreryEngine.subscriberCount()).toBe(1);
+    expect(rafSpy).toHaveBeenCalledTimes(1);
+
+    // Flip the ancestor attribute at runtime — the MutationObserver should
+    // pick this up and cause the Orrery to unsubscribe from the engine.
+    act(() => {
+      setReducedMotion(true);
+    });
+
+    // MutationObserver callbacks flush as microtasks, so wait for the
+    // subscriber count to drop.
+    await waitFor(() => {
+      expect(__orreryEngine.subscriberCount()).toBe(0);
+    });
     expect(__orreryEngine.isRunning()).toBe(false);
   });
 });

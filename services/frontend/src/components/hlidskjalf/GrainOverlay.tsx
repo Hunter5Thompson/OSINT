@@ -4,7 +4,7 @@
  * Drop-in over any panel root; applies `mix-blend-mode: screen` for a subtle
  * film-grain texture per spec §2.3. Stub for S1 Task 3.
  */
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 
 export interface GrainOverlayProps {
   opacity?: number;
@@ -19,6 +19,11 @@ export function GrainOverlay({
   className,
   style,
 }: GrainOverlayProps) {
+  // useId() guarantees a unique filter id per component instance, so two
+  // GrainOverlays sharing the same `seed` don't collide on `<filter id>`.
+  // The `seed` prop still drives the `feTurbulence seed` attribute.
+  const rawId = useId();
+  const filterId = `grain-${rawId.replace(/:/g, "")}`;
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -36,7 +41,7 @@ export function GrainOverlay({
         ...style,
       }}
     >
-      <filter id={`grain-${seed}`}>
+      <filter id={filterId}>
         <feTurbulence
           type="fractalNoise"
           baseFrequency="0.9"
@@ -49,7 +54,7 @@ export function GrainOverlay({
           values="0 0 0 0 0.91  0 0 0 0 0.89  0 0 0 0 0.83  0 0 0 0.6 0"
         />
       </filter>
-      <rect width="100%" height="100%" filter={`url(#grain-${seed})`} />
+      <rect width="100%" height="100%" filter={`url(#${filterId})`} />
     </svg>
   );
 }
