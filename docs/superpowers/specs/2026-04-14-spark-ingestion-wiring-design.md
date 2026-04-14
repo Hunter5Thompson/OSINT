@@ -60,11 +60,16 @@ ingestion_vllm_timeout: float = 120.0
 ### 3. `services/data-ingestion/pipeline.py` — Modell + Timeout + Retry-Fix
 
 - `_call_vllm` liest `settings.ingestion_vllm_url`, `settings.ingestion_vllm_model`, `settings.ingestion_vllm_timeout`.
-- **Retry-Fix (kritisch):** `process_item` unterscheidet zwei Fehlerklassen via Sentinel:
-  - `ExtractionTransientError` (HTTP-Timeout, Connection-Refused, 5xx) → Caller MUSS Qdrant-Upsert überspringen, damit Hash-Dedup beim nächsten Run nicht greift und das Item retried wird.
-  - Andere Exceptions / `None` (LLM lieferte leeres Ergebnis) → Caller speichert wie bisher mit `codebook_type="other.unclassified"` (kein Retry nötig — LLM hat geantwortet).
-- Signatur: `process_item` raised `ExtractionTransientError` statt `None` zurückzugeben, wenn Spark unerreichbar ist.
-- **Hard-Fail bei Konfigurationsfehlern:** HTTP 404 (Modell unbekannt) und HTTP 401/403 werden als `ExtractionConfigError` geraised, **nicht** als TransientError und **nicht** stillschweigend als `other.unclassified` gespeichert. Caller (Collector) loggt `error` und überspringt das Item ohne Qdrant-Upsert. Begründung: ein falscher Modellname würde sonst tausende Items irreversibel als `unclassified` persistieren. Recovery erfolgt durch Config-Fix + erneuten Run.
+- **Drei exklusive Fehlerklassen** (`process_item` raised oder returned je nach Klasse):
+
+| Klasse | Auslöser | Signatur | Caller-Verhalten |
+|---|---|---|---|
+| `ExtractionTransientError` | HTTP-Timeout, ConnectError, HTTP 5xx | raised | Skip Qdrant, Warning-Log, Retry über Quellen-Re-Fetch |
+| `ExtractionConfigError` | HTTP 404, 401, 403 | raised | Skip Qdrant, **Error**-Log, kein Retry sinnvoll bis Config gefixt |
+| `ValidEmpty` (kein Sentinel — Funktion returned `None` oder dict) | LLM lieferte leeres/parsbares Ergebnis (auch JSON-Parse-Fehler nach erfolgreicher HTTP-Response) | return `None` oder dict | Upsert wie bisher mit `codebook_type="other.unclassified"` falls leer |
+
+Andere unerwartete Exceptions werden NICHT abgefangen — sie propagieren und stoppen den Collector-Run (sichtbar im Log, kein silent failure).
+
 - Healthcheck (siehe §6) prüft Modell-Verfügbarkeit beim Scheduler-Start zusätzlich präventiv.
 
 ### 4. `services/data-ingestion/feeds/rss_collector.py` — Retry-Verhalten
@@ -74,9 +79,12 @@ In der Schleife (`rss_collector.py:176-183`):
 ```python
 try:
     enrichment = await process_item(...)
-except ExtractionTransientError:
-    log.warning("extraction_skipped_transient", url=link)
-    continue  # KEIN Qdrant-Upsert → Hash-Dedup greift nicht → Retry beim nächsten Tick
+except ExtractionTransientError as exc:
+    log.warning("extraction_skipped_transient", url=link, error=str(exc))
+    continue  # KEIN Qdrant-Upsert → Hash-Dedup greift nicht → Retry über Quellen-Re-Fetch
+except ExtractionConfigError as exc:
+    log.error("extraction_skipped_config", url=link, error=str(exc))
+    continue  # KEIN Qdrant-Upsert → Recovery erst nach Config-Fix
 ```
 
 Andere Collectors (`gdelt_collector.py`, `telegram_collector.py`, etc.), die `process_item` aufrufen, bekommen denselben Try/Except-Block für `ExtractionTransientError` und `ExtractionConfigError`.
@@ -101,12 +109,20 @@ Liste der zu testenden Collectors in der Implementation:
 
 **Ort:** `services/data-ingestion/scheduler.py`, in der `main()`-Coroutine **nach `scheduler.start()` und vor `initial_collection_starting`** (also nach `scheduler.py:425`, vor `:428`).
 
-**Verhalten:**
-- Einmaliger `GET {ingestion_vllm_url}/v1/models` mit 5-s-Timeout
-- Erfolg: `log.info("ingestion_llm_ready", url=..., model=...)` mit Modellnamen aus Response
-- Fehler (Timeout/Connection/Non-200): `log.warning("ingestion_llm_unreachable", url=..., error=...)` — Scheduler läuft trotzdem, Items werden via `ExtractionTransientError`-Pfad retried.
+**Verhalten — drei exklusive Outcomes (matched die Fehlerklassen aus §3):**
 
-Implementiert als Helper `check_ingestion_llm()` in `scheduler.py` (keine eigene Datei, ~20 Zeilen).
+1. **Reachable + Modell verfügbar:** `GET {ingestion_vllm_url}/v1/models` liefert 200 UND `settings.ingestion_vllm_model` ist in `data[].id` enthalten.
+   - Log: `log.info("ingestion_llm_ready", url=..., model=...)`
+
+2. **Reachable, aber Modell fehlt:** 200, aber `ingestion_vllm_model` nicht in `data[].id`.
+   - Log: `log.error("ingestion_llm_model_mismatch", url=..., expected=..., available=[...])`
+   - Scheduler läuft trotzdem; Collectors werden bei der ersten Extraction `ExtractionConfigError` raisen (404 vom vLLM).
+
+3. **Unreachable:** Timeout, ConnectError, Non-200 von `/v1/models`.
+   - Log: `log.warning("ingestion_llm_unreachable", url=..., error=...)`
+   - Scheduler läuft trotzdem; Items werden via `ExtractionTransientError`-Pfad retried.
+
+Implementiert als Helper `check_ingestion_llm()` in `scheduler.py` (~25 Zeilen). Hard-Fail (Scheduler-Abort) wird **nicht** gemacht — selbst bei `model_mismatch` startet der Scheduler, damit andere Wartungs-Jobs (TLE-Update, Hotspot-Update) ohne LLM-Bedarf weiterlaufen können.
 
 ### 7. `.env.example`
 
@@ -173,7 +189,7 @@ Feed → Collector → process_item ─HTTP→ Spark vLLM (Spark down → Extrac
 | Spark offline beim Start | Warning-Log, Scheduler läuft, Collectors raisen ExtractionTransientError, Items übersprungen (kein Qdrant-Upsert), Retry beim nächsten Tick |
 | Spark offline während Run | HTTPException → ExtractionTransientError → Item übersprungen, retry |
 | Spark antwortet langsam | Timeout 120 s, dann ExtractionTransientError, retry |
-| Modellname falsch (HTTP 404) | `ExtractionConfigError` → Item übersprungen, **kein** Qdrant-Upsert, Error-Log. Healthcheck warnt schon beim Scheduler-Start. Recovery: Config fixen, Items kommen beim nächsten Quellen-Tick erneut. |
+| Modellname falsch (HTTP 404) | `ExtractionConfigError` → Item übersprungen, **kein** Qdrant-Upsert, Error-Log. Healthcheck loggt beim Start `ingestion_llm_model_mismatch` (wenn `/v1/models` 200 liefert aber Modell fehlt). Recovery: Config fixen, Items kommen beim nächsten Quellen-Tick erneut. |
 | Auth-Fehler (HTTP 401/403) | Wie Modellname falsch — `ExtractionConfigError` |
 | LLM liefert valides leeres Ergebnis | `other.unclassified`, gespeichert, kein Retry — wie bisher |
 
@@ -203,9 +219,11 @@ Feed → Collector → process_item ─HTTP→ Spark vLLM (Spark down → Extrac
 **Unit (`tests/test_nlm_cli.py` falls vorhanden, sonst neu):**
 - CLI ruft `extract_with_qwen` mit `settings.ingestion_vllm_url` (ohne `/v1`-Suffix)
 
-**Healthcheck-Test (`tests/test_scheduler.py`):**
-- Erfolg: Log enthält `ingestion_llm_ready` und Modellnamen
-- Fehler: Log `ingestion_llm_unreachable`, kein Exception-Throw, Scheduler startet weiter
+**Healthcheck-Test (`tests/test_scheduler.py`) — drei Outcomes:**
+- 200 + Modell in `data[].id` → Log `ingestion_llm_ready`
+- 200 + Modell NICHT in `data[].id` → Log `ingestion_llm_model_mismatch` mit `expected` und `available` Feldern
+- ConnectError/Timeout/Non-200 → Log `ingestion_llm_unreachable`
+- Alle drei: kein Exception-Throw, Scheduler startet weiter
 
 **Integration (Skip wenn Spark unreachable):**
 - Smoke-Test: Echter `_call_vllm` gegen Spark, Response valides JSON-Schema
