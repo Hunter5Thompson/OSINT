@@ -140,11 +140,11 @@ describe("<TopBar /> — timestamp ticks", () => {
     expect(initial).toMatch(/16:42Z/);
 
     await act(async () => {
-      vi.setSystemTime(new Date("2026-04-14T16:43:05Z"));
       await vi.advanceTimersByTimeAsync(65_000);
     });
 
     const updated = screen.getByTestId("topbar-clock").textContent ?? "";
+    // After 65s of advanced time, the minute rolled from 42 to 43.
     expect(updated).toMatch(/16:43Z/);
     expect(updated).not.toBe(initial);
   });
