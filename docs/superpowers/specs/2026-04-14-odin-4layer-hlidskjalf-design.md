@@ -396,7 +396,7 @@ Alle Stream-Endpoints folgen einem gemeinsamen Event-Schema, damit Reconnect-Rep
 
 Service-Ausfälle dürfen die App nicht weiß lassen. Konkrete Failure-Modes:
 
-- **SSE-Drop (`/api/incidents/stream` oder `/api/signals/stream`)** — Client versucht Reconnect mit Exponential Backoff (1s, 2s, 4s, max 30s) und sendet beim Reconnect `Last-Event-ID` (siehe §6.2 Realtime-Contract) für Replay. Während der Reconnect-Phase zeigt der Signal-Feed einen Stone-Ash-State: `§ Signal · reconnecting…` in Eyebrow + spinnende Mini-Orrery (S-Größe). Keine destruktive Meldung.
+- **SSE-Drop (`/api/incidents/stream` oder `/api/signals/stream`)** — Client versucht Reconnect mit Exponential Backoff (1s, 2s, 4s, max 30s) und sendet beim Reconnect `Last-Event-ID` (siehe §6.1 Realtime-Contract) für Replay. Während der Reconnect-Phase zeigt der Signal-Feed einen Stone-Ash-State: `§ Signal · reconnecting…` in Eyebrow + spinnende Mini-Orrery (S-Größe). Keine destruktive Meldung.
 - **Intelligence-Service (Munin) down** — Das Munin-Panel in Briefing / War Room zeigt: `§ Munin · silent.` in Instrument Serif italic 14 px Stone, darunter Mono-Detail `service unreachable · retry in {n}s`. Eingabefeld bleibt disabled mit Placeholder `▸ munin is resting`. Keine Fehlermeldung als Toast.
 - **Report-Fetch-Fehler** — Briefing-Index zeigt stattdessen: `§ — · dossier archive unreachable` als einzigen Eintrag, darunter ein unauffälliger `▸ retry`-Link (Hanken Grotesk 10px Ash, Klick triggert Re-Fetch). Browser-Refresh (`F5` / `Ctrl+R` / `⌘R`) bleibt ebenfalls möglich.
 - **Globe-Tile-Fehler (Cesium)** — Der existierende Cesium-Error-Handler bleibt zuständig; Overlay-Panels funktionieren weiter.
