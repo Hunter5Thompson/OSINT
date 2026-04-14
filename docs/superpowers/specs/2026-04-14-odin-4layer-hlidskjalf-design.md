@@ -301,6 +301,13 @@ React Router mit vier Top-Level-Routen:
 | `/briefing` · `/briefing/:reportId` | `<BriefingPage />` |
 | `/warroom` · `/warroom/:incidentId` | `<WarRoomPage />` |
 
+**Migrations-Regel für bisherige Deep-Links:** Die Pre-Restructure-App war faktisch Globe-zentriert unter `/`. Damit existierende Bookmarks / Telegram-Links / externe Referenzen nicht brechen:
+- Legacy-Patterns wie `/?entity=…` oder `/?layer=…` werden auf `/worldview?…` redirected (301 auf Server-Seite, `<Navigate replace>` client-seitig).
+- Der Root-Pfad `/` zeigt aber künftig die Landing-Page. User ohne Query-Parameter landen dort — das ist bewusst, weil Landing das Command Center für Session-Start ist.
+- Es gibt keine Legacy-Deep-Links für Briefing oder War Room (beide sind neu); keine Migration nötig.
+
+**API-Prefix-Konvention:** **Alle Backend-Calls vom Frontend nutzen `/api/*`.** Kein gemischter Gebrauch. Jeder Stream-Endpoint, jede REST-Route. In Dokumenten, Error-State-Texten und Logs ist der vollständige Pfad inklusive `/api`-Prefix anzugeben.
+
 ### 5.2 Shared Shell
 
 ```
@@ -346,7 +353,7 @@ Keine Tailwind-Migration erforderlich — pures CSS mit Variablen reicht für di
 
 - **Vitest + React Testing Library** für Komponenten, bestehendes Setup.
 - Snapshot-Test für Orrery-SVG-Struktur (nicht Animation).
-- Visual Regression via Playwright für die vier Page-Routen (Landing, Worldview leer, Briefing mit Mock-Report, WarRoom mit Mock-Incident) — neu einzuführen, optional in Sprint 2.
+- **Visual Regression** (Playwright o.ä.) ist explizit Out of Scope für alle vier Sprints und Thema einer eigenen Folge-Spec. Manueller visueller Abgleich in Code-Review genügt bis dahin.
 
 ## 6 · Backend-Ergänzungen
 
@@ -357,13 +364,41 @@ Notwendig für die Umstellung, nicht Kernfokus dieser Spec:
 - **`/api/signals/stream`** · SSE-Stream der letzten Ingestion-Events für Signal-Feed (Landing + Worldview-Ticker).
 - **`services/intelligence`** · existiert, bleibt. Agent-Stream wird für War Room auf WebSocket (nicht SSE) umgestellt, weil bidirektional (User kann während des Streams Zwischenfragen stellen). Fallback SSE zulässig für v1.
 
-## 6.1 · Error-States
+## 6.1 · Realtime-Contract (SSE/WS)
+
+Alle Stream-Endpoints folgen einem gemeinsamen Event-Schema, damit Reconnect-Replay, Dedupe und Ordering klar sind.
+
+**Event-Envelope (JSON pro Message):**
+```json
+{
+  "event_id": "01J7Z8K2...",   // ULID, monoton steigend, global eindeutig
+  "ts": "2026-04-14T16:42:03.482Z",
+  "type": "incident.open" | "signal.firms" | "report.updated" | ...,
+  "payload": { ... }
+}
+```
+
+**SSE-spezifisch:**
+- `id:`-Feld jedes SSE-Chunks enthält `event_id`.
+- Client sendet beim Reconnect `Last-Event-ID`-Header. Server replay-t alle Events mit `event_id > last` aus einem **Ring-Buffer der letzten 15 Minuten**. Events älter als 15 min gelten als verloren — Client re-fetched Basis-Zustand (z. B. `/api/incidents` für aktive Incidents) und startet Stream neu.
+- Ordering: **pro-Topic garantiert monoton**. Cross-Topic nicht garantiert.
+
+**Client-Dedupe:**
+- Signal-Feed und Incident-Liste halten ein `Set<event_id>` der letzten 500 IDs. Bereits gesehene IDs werden verworfen. Verhindert Duplikate nach Reconnect-Replay.
+
+**WebSocket (Munin-Stream im War Room):**
+- Gleiches Envelope. Reconnect mit `last_event_id` als erstem Client-→Server-Frame. Server schickt dann verpasste Events, danach live.
+- Fallback auf SSE (`/api/munin/incidents/:id/stream`) falls WS nicht verfügbar.
+
+**Abnahme dieses Contracts:** integration-tests in `services/backend/tests/streams/` simulieren: (a) Client verbindet, erhält N Events, disconnected, neu verbindet mit Last-Event-ID → erhält nur Events `>` last, in korrekter Reihenfolge, keine Duplikate; (b) Reconnect nach > 15 min erzwingt `reset`-Event.
+
+## 6.2 · Error-States
 
 Service-Ausfälle dürfen die App nicht weiß lassen. Konkrete Failure-Modes:
 
-- **SSE-Drop (`/incidents/stream` oder `/signals/stream`)** — Client versucht Reconnect mit Exponential Backoff (1s, 2s, 4s, max 30s). Während der Reconnect-Phase zeigt der Signal-Feed einen Stone-Ash-State: `§ Signal · reconnecting…` in Eyebrow + spinnende Mini-Orrery (S-Größe). Keine destruktive Meldung.
+- **SSE-Drop (`/api/incidents/stream` oder `/api/signals/stream`)** — Client versucht Reconnect mit Exponential Backoff (1s, 2s, 4s, max 30s) und sendet beim Reconnect `Last-Event-ID` (siehe §6.2 Realtime-Contract) für Replay. Während der Reconnect-Phase zeigt der Signal-Feed einen Stone-Ash-State: `§ Signal · reconnecting…` in Eyebrow + spinnende Mini-Orrery (S-Größe). Keine destruktive Meldung.
 - **Intelligence-Service (Munin) down** — Das Munin-Panel in Briefing / War Room zeigt: `§ Munin · silent.` in Instrument Serif italic 14 px Stone, darunter Mono-Detail `service unreachable · retry in {n}s`. Eingabefeld bleibt disabled mit Placeholder `▸ munin is resting`. Keine Fehlermeldung als Toast.
-- **Report-Fetch-Fehler** — Briefing-Index zeigt stattdessen: `§ — · dossier archive unreachable` als einzigen Eintrag. Kein Retry-Button; User kann `⌘R` nutzen.
+- **Report-Fetch-Fehler** — Briefing-Index zeigt stattdessen: `§ — · dossier archive unreachable` als einzigen Eintrag, darunter ein unauffälliger `▸ retry`-Link (Hanken Grotesk 10px Ash, Klick triggert Re-Fetch). Browser-Refresh (`F5` / `Ctrl+R` / `⌘R`) bleibt ebenfalls möglich.
 - **Globe-Tile-Fehler (Cesium)** — Der existierende Cesium-Error-Handler bleibt zuständig; Overlay-Panels funktionieren weiter.
 - **Worst-Case (alle Backends down)** — Landing zeigt die vier Numerals mit `—` in Parchment statt Zahlen, Eyebrow-Label mit `stale`-Tag. Die App bleibt navigierbar; nichts ist zerstört.
 
@@ -406,9 +441,13 @@ Jeder Sprint ist einzeln mergeable. Nach S1 + S2 ist die App visuell bereits umg
 
 ## 9 · Success Criteria
 
-1. Ein neuer User erkennt am Orrery + der Typografie in unter 2 s, dass alle vier Ansichten zu derselben App gehören.
-2. "Was ist in den letzten 24 h passiert?" ist von der Landing-Page in unter 10 s beantwortet ohne Klick in eine andere Ansicht.
-3. Ein Briefing-Report (Header + Body + 3 Quellen) lässt sich in unter 2 Minuten vom User verfassen bzw. mit Munin generieren lassen.
-4. Beim Eintritt eines Incidents erscheint innerhalb von 2 s ein Toast in der aktiven Ansicht mit Incident-Titel + Coords + `Open War Room`-Button. Klick öffnet den War Room mit gezoomtem Globe und laufendem Munin-Stream. Kein automatisches Navigieren.
-5. Kein Page-Reload nötig, um zwischen den vier Ansichten zu wechseln (Client-Side-Routing).
-6. Alle Typographie lädt in unter 200 ms (lokale Fonts bevorzugt); Grain-Overlay hat keinen messbaren FPS-Impact auf den Globe.
+Jedes Kriterium hat ein **Messprotokoll** — wie wird abgenommen.
+
+1. **Visuelle Kohärenz.** *Nicht automatisiert messbar.* Abnahme via manueller Review: Dritter betrachtet Screenshots aller vier Ansichten nebeneinander und bestätigt ohne Erklärung, dass sie zur selben App gehören. Dokumentiert als Abnahme-Notiz im Sprint-Review.
+2. **24-h-Awareness auf Landing.** Messprotokoll: Tester öffnet `/` kalt (Cache geleert), Stoppuhr läuft bis zur ersten gesprochenen Antwort auf "Was ist in den letzten 24 h passiert?". **Ziel: ≤ 10 s** (p95 über 5 Läufe). Ohne Tab-Wechsel.
+3. **Briefing-Report in 2 min.** Messprotokoll: Tester startet "+ New Dossier", gibt freien Brief-Prompt ein (z. B. "Brief me on Sinjar"), editiert Header/Body bis Publish-fähig. Stoppuhr vom Klick auf "+ New Dossier" bis "Publish". **Ziel: ≤ 120 s** (p95 über 3 Läufe, verschiedene Themen).
+4. **Incident-Toast Latenz.** Messprotokoll: Backend-Test triggert künstlichen Incident via Admin-API, Client-seitiger E2E-Assertion (`expect(toast).toBeVisible()`) mit Timestamp. **Ziel: t_toast − t_trigger ≤ 2 s** (p99 über 20 Läufe).
+5. **Kein Page-Reload.** Messprotokoll: `window.performance.navigation.type === 0` beim Wechsel zwischen allen vier Routen (Unit-Test mit React Router).
+6. **Typografie-Ladezeit.** Messprotokoll: Chrome DevTools Performance-Tab → Event `font load` für alle drei Familien. **Ziel: ≤ 200 ms** bei Cold-Cache und lokalem Backend. Grain-Overlay: Lighthouse-Profile auf Worldview mit aktivem Globe. **Ziel: ≥ 55 FPS bei Kamera-Rotation** (derselbe Benchmark ohne Grain als Baseline).
+
+Kriterium 1 bleibt qualitativ; 2 und 3 sind UX-Zeiten mit expliziter p95-Grenze; 4–6 sind messbar und testbar und werden in den jeweiligen Sprint-Abnahmen geprüft.
