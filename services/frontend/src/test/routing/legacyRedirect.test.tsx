@@ -27,7 +27,7 @@ describe("legacy query redirect + AppShell", () => {
   it("redirects /?entity=sinjar to /worldview?entity=sinjar", async () => {
     renderAt("/?entity=sinjar");
     expect(await screen.findByTestId("worldview-page")).toBeInTheDocument();
-    expect(screen.queryByText(/§ Landing · S1/)).not.toBeInTheDocument();
+    // LandingPage no longer renders as placeholder after Task 6.
   });
 
   it("redirects /?layer=firmsHotspots to /worldview?layer=firmsHotspots", async () => {
@@ -37,7 +37,7 @@ describe("legacy query redirect + AppShell", () => {
 
   it("stays on Landing when / has no migration query", async () => {
     renderAt("/");
-    expect(await screen.findByText(/§ Landing · S1/)).toBeInTheDocument();
+    expect(await screen.findByText(/Index Rerum/i)).toBeInTheDocument();
     expect(screen.queryByTestId("worldview-page")).not.toBeInTheDocument();
   });
 

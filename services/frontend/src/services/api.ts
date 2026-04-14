@@ -23,6 +23,37 @@ import type {
 
 const BASE = "/api/v1";
 
+// ── S1 endpoints — mounted at /api (not /api/v1) ────────────────────────────
+// The Hlíðskjalf S1 backend router mounts at bare /api. Keep these helpers
+// separate from the legacy /api/v1 client rather than reshuffling everything.
+
+import type { LandingSummary } from "../types/landing";
+import type { SignalEnvelope } from "../types/signals";
+
+export const SIGNAL_STREAM_URL = "/api/signals/stream";
+
+export async function getLandingSummary(
+  window: "24h" = "24h",
+): Promise<LandingSummary> {
+  const res = await fetch(`/api/landing/summary?window=${window}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error(`landing summary failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as LandingSummary;
+}
+
+export async function getLatestSignals(limit = 6): Promise<SignalEnvelope[]> {
+  const res = await fetch(`/api/signals/latest?limit=${limit}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error(`latest signals failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as SignalEnvelope[];
+}
+
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) {
