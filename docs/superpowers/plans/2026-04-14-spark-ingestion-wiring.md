@@ -4,7 +4,9 @@
 
 **Goal:** Route extraction-LLM-Calls from `services/data-ingestion` permanently to the DGX Spark vLLM (Gemma-4 26B) so Ingestion + Interactive can run in parallel without GPU swap.
 
-**Architecture:** New `ingestion_vllm_*` settings in `data-ingestion/config.py`. `process_item` raises one of three exclusive error classes (`ExtractionTransientError`, `ExtractionConfigError`, or returns `None`/dict for valid-empty). All collectors that call `process_item` get matching except-blocks that skip Qdrant on errors → retry happens via source re-fetch (Hash-Dedup doesn't trip). New compose service `data-ingestion-spark` and odin.sh mode `interactive-spark` enable parallel operation.
+**Architecture:** New `ingestion_vllm_*` settings in `data-ingestion/config.py`. `process_item` raises one of three exclusive error classes (`ExtractionTransientError`, `ExtractionConfigError`, or returns `None`/dict for valid-empty). All collectors that call `process_item` get matching except-blocks that skip Qdrant on errors → retry happens via source re-fetch (Hash-Dedup doesn't trip). New compose service `data-ingestion-spark` and odin.sh mode `interactive-spark` enable parallel operation. Old compose service `data-ingestion` keeps working by also receiving `INGESTION_VLLM_URL=http://vllm:8000` so `up ingestion` continues to use the local 27B model.
+
+**Sequencing note:** Tasks 3 (rewire `_call_vllm`) and 4-7 (collector wraps) leave the branch in an intermediate state between commits where typed exceptions can propagate from `_call_vllm` while not all collectors catch them yet. **This is intentional for this single feature branch — do not cherry-pick individual commits to other branches.** Run all of Tasks 3-7 in one merge unit. Task 14's full test sweep validates the end-state.
 
 **Tech Stack:** Python 3.12, httpx, pytest + pytest-asyncio, pydantic-settings, structlog, Docker Compose, bash.
 
@@ -588,8 +590,18 @@ async def test_transient_error_skips_qdrant_upsert(mock_qdrant, monkeypatch):
     with patch("feeds.rss_collector.feedparser.parse", return_value=parsed), \
          patch("feeds.rss_collector.process_item",
                new=AsyncMock(side_effect=ExtractionTransientError("down"))), \
-         patch("feeds.rss_collector.httpx.AsyncClient"):
-        await collector._fetch_and_store("test", "http://feed/x")
+         patch("feeds.rss_collector.httpx.AsyncClient") as mock_http:
+        # Mock the feed-fetch HTTP response (any 200 with text body).
+        feed_resp = MagicMock()
+        feed_resp.status_code = 200
+        feed_resp.text = "<rss/>"
+        feed_resp.raise_for_status = MagicMock()
+        mc = AsyncMock()
+        mc.get.return_value = feed_resp
+        mock_http.return_value.__aenter__ = AsyncMock(return_value=mc)
+        mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await collector._process_feed({"name": "test", "url": "http://feed/x"})
 
     mock_qdrant.upsert.assert_not_called()
 
@@ -611,13 +623,25 @@ async def test_config_error_skips_qdrant_upsert(mock_qdrant):
     with patch("feeds.rss_collector.feedparser.parse", return_value=parsed), \
          patch("feeds.rss_collector.process_item",
                new=AsyncMock(side_effect=ExtractionConfigError("404 model"))), \
-         patch("feeds.rss_collector.httpx.AsyncClient"):
-        await collector._fetch_and_store("test", "http://feed/x")
+         patch("feeds.rss_collector.httpx.AsyncClient") as mock_http, \
+         patch("feeds.rss_collector.log.error") as mock_err:
+        feed_resp = MagicMock()
+        feed_resp.status_code = 200
+        feed_resp.text = "<rss/>"
+        feed_resp.raise_for_status = MagicMock()
+        mc = AsyncMock()
+        mc.get.return_value = feed_resp
+        mock_http.return_value.__aenter__ = AsyncMock(return_value=mc)
+        mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await collector._process_feed({"name": "test", "url": "http://feed/x"})
 
     mock_qdrant.upsert.assert_not_called()
+    # Error log was emitted with the canonical key.
+    assert any(c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list)
 ```
 
-(Note: method `_fetch_and_store` is the one containing the loop in `rss_collector.py:140-217`. If the actual method name differs in the source, adjust accordingly — verify with `grep -n "def " services/data-ingestion/feeds/rss_collector.py`.)
+(Method `_process_feed` is defined at `rss_collector.py:119` and contains the loop with the `process_item` call at `:176`. Pass `feed_meta={"name": "test", "url": "http://feed/x"}`.)
 
 - [ ] **Step 3: Run tests to verify they fail**
 
@@ -742,8 +766,34 @@ async def test_gdelt_transient_skips_upsert():
 
 @pytest.mark.asyncio
 async def test_gdelt_config_skips_upsert():
-    # Same setup but raise ExtractionConfigError instead.
-    ...  # mirror above with side_effect=ExtractionConfigError("404")
+    qdrant = MagicMock()
+    qdrant.retrieve.return_value = []
+    collector = GDELTCollector.__new__(GDELTCollector)
+    collector.qdrant = qdrant
+    collector._redis = None
+    collector._embed = AsyncMock(return_value=[0.0] * 1024)
+
+    gdelt_resp = MagicMock()
+    gdelt_resp.status_code = 200
+    gdelt_resp.json.return_value = {"articles": [{
+        "title": "x", "url": "http://e/1", "seendate": "20260101T000000Z",
+        "domain": "ex.com", "language": "English",
+    }]}
+    gdelt_resp.raise_for_status = MagicMock()
+
+    with patch("feeds.gdelt_collector.httpx.AsyncClient") as mock_cls, \
+         patch("feeds.gdelt_collector.process_item",
+               new=AsyncMock(side_effect=ExtractionConfigError("404"))), \
+         patch("feeds.gdelt_collector.log.error") as mock_err:
+        mc = AsyncMock()
+        mc.get.return_value = gdelt_resp
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mc)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await collector.collect()
+
+    qdrant.upsert.assert_not_called()
+    assert any(c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list)
 ```
 
 (Engineer: verify the actual public collect method name and GDELT response shape against the source. Adjust accordingly.)
@@ -791,42 +841,132 @@ Note: each site does its own `from pipeline import process_item` lazy import ins
 
 - [ ] **Step 2: Write failing test for single-message transient skip**
 
-Append to `services/data-ingestion/tests/test_telegram_collector.py`:
+First inspect existing setup in `tests/test_telegram_collector.py:740-744` to understand how the suite mocks Telethon clients and qdrant. The four new tests follow the same pattern but vary `process_item`'s `side_effect`. Append:
 
 ```python
 from pipeline import ExtractionConfigError, ExtractionTransientError
 
 
 @pytest.mark.asyncio
-async def test_telegram_single_message_transient_skips_upsert(...):
-    """Mirror existing test patterns; assert qdrant.upsert not called when
-    process_item raises ExtractionTransientError."""
-    # See tests/test_telegram_collector.py:740-744 for existing patch pattern.
+async def test_telegram_single_message_transient_skips_upsert(
+    tmp_path, monkeypatch
+):
+    """Single-message path: ExtractionTransientError → no Qdrant upsert."""
+    from feeds.telegram_collector import TelegramCollector
+
+    collector = TelegramCollector.__new__(TelegramCollector)
+    collector.qdrant = MagicMock()
+    collector.qdrant.retrieve.return_value = []
+    collector._redis = None
+    collector._embed = AsyncMock(return_value=[0.0] * 1024)
+
+    msg = MagicMock()
+    msg.id = 1
+    msg.message = "hello"
+    msg.date = MagicMock()
+    msg.date.isoformat.return_value = "2026-01-01T00:00:00+00:00"
+    msg.media = None
+    msg.grouped_id = None
+
+    chan_cfg = MagicMock(handle="@x", display_name="x")
+
     with patch("pipeline.process_item",
                new_callable=AsyncMock,
                side_effect=ExtractionTransientError("down")):
-        ...
-    qdrant_mock.upsert.assert_not_called()
+        await collector._process_single_message(msg, chan_cfg)
+
+    collector.qdrant.upsert.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_telegram_single_message_config_skips_upsert(...):
-    """Same with ExtractionConfigError."""
-    ...
+async def test_telegram_single_message_config_skips_upsert():
+    """Single-message path: ExtractionConfigError → no Qdrant upsert + error log."""
+    from feeds.telegram_collector import TelegramCollector
+    from feeds import telegram_collector as tcm
+
+    collector = TelegramCollector.__new__(TelegramCollector)
+    collector.qdrant = MagicMock()
+    collector.qdrant.retrieve.return_value = []
+    collector._redis = None
+    collector._embed = AsyncMock(return_value=[0.0] * 1024)
+
+    msg = MagicMock()
+    msg.id = 1
+    msg.message = "hello"
+    msg.date = MagicMock()
+    msg.date.isoformat.return_value = "2026-01-01T00:00:00+00:00"
+    msg.media = None
+    msg.grouped_id = None
+
+    chan_cfg = MagicMock(handle="@x", display_name="x")
+
+    with patch("pipeline.process_item",
+               new_callable=AsyncMock,
+               side_effect=ExtractionConfigError("404")), \
+         patch.object(tcm.log, "error") as mock_err:
+        await collector._process_single_message(msg, chan_cfg)
+
+    collector.qdrant.upsert.assert_not_called()
+    assert any(c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list)
 
 
 @pytest.mark.asyncio
-async def test_telegram_album_transient_skips_upsert(...):
-    """Same for the album code path (telegram_collector.py:432)."""
-    ...
+async def test_telegram_album_transient_skips_upsert():
+    """Album path (telegram_collector.py:432): same skip semantics."""
+    from feeds.telegram_collector import TelegramCollector
+
+    collector = TelegramCollector.__new__(TelegramCollector)
+    collector.qdrant = MagicMock()
+    collector.qdrant.retrieve.return_value = []
+    collector._redis = None
+    collector._embed = AsyncMock(return_value=[0.0] * 1024)
+
+    album_msg = MagicMock()
+    album_msg.id = 10
+    album_msg.message = "caption"
+    album_msg.date = MagicMock()
+    album_msg.date.isoformat.return_value = "2026-01-01T00:00:00+00:00"
+    album_msg.grouped_id = 99
+    chan_cfg = MagicMock(handle="@x", display_name="x")
+
+    with patch("pipeline.process_item",
+               new_callable=AsyncMock,
+               side_effect=ExtractionTransientError("down")):
+        await collector._process_album([album_msg], chan_cfg)
+
+    collector.qdrant.upsert.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_telegram_album_config_skips_upsert(...):
-    ...
+async def test_telegram_album_config_skips_upsert():
+    from feeds.telegram_collector import TelegramCollector
+    from feeds import telegram_collector as tcm
+
+    collector = TelegramCollector.__new__(TelegramCollector)
+    collector.qdrant = MagicMock()
+    collector.qdrant.retrieve.return_value = []
+    collector._redis = None
+    collector._embed = AsyncMock(return_value=[0.0] * 1024)
+
+    album_msg = MagicMock()
+    album_msg.id = 10
+    album_msg.message = "caption"
+    album_msg.date = MagicMock()
+    album_msg.date.isoformat.return_value = "2026-01-01T00:00:00+00:00"
+    album_msg.grouped_id = 99
+    chan_cfg = MagicMock(handle="@x", display_name="x")
+
+    with patch("pipeline.process_item",
+               new_callable=AsyncMock,
+               side_effect=ExtractionConfigError("404")), \
+         patch.object(tcm.log, "error") as mock_err:
+        await collector._process_album([album_msg], chan_cfg)
+
+    collector.qdrant.upsert.assert_not_called()
+    assert any(c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list)
 ```
 
-(Engineer: build out these tests using the existing `test_telegram_collector.py:744` patch pattern as template. Use the same fixtures and Telethon mocks already in that file.)
+(Method names `_process_single_message` and `_process_album` are derived from the surrounding code; verify with `grep -n "async def _process" services/data-ingestion/feeds/telegram_collector.py` and adjust if naming differs. Field names on `chan_cfg` follow `feeds/telegram_models.py`'s `ChannelConfig` schema — read it before adapting.)
 
 - [ ] **Step 3: Run tests — expect FAIL**
 
@@ -939,15 +1079,24 @@ from nlm_ingest.schemas import Transcript
 
 
 def _transcript():
-    return Transcript(notebook_id="nb1", full_text="hello world", segments=[])
+    # Transcript requires notebook_id, duration_seconds, language, segments, full_text
+    # (see nlm_ingest/schemas.py:33-38).
+    return Transcript(
+        notebook_id="nb1",
+        duration_seconds=10.0,
+        language="en",
+        segments=[],
+        full_text="hello world",
+    )
 
 
 def _ok_resp():
+    # extract_with_qwen parses entities/relations/claims (see extract.py:79-81).
     resp = MagicMock()
     resp.status_code = 200
     resp.raise_for_status = MagicMock()
     resp.json.return_value = {"choices": [{"message": {"content": json.dumps({
-        "entities": [], "claims": [], "events": [], "citations": [],
+        "entities": [], "relations": [], "claims": [],
     })}}]}
     return resp
 
@@ -1050,8 +1199,14 @@ async def test_cli_extract_uses_ingestion_vllm_settings(tmp_path, monkeypatch):
     async def fake_extract(**kwargs):
         captured.update(kwargs)
         from nlm_ingest.schemas import Extraction
-        return Extraction(notebook_id=kwargs["transcript"].notebook_id,
-                          entities=[], claims=[], events=[], citations=[])
+        return Extraction(
+            notebook_id=kwargs["transcript"].notebook_id,
+            entities=[],
+            relations=[],
+            claims=[],
+            extraction_model=kwargs["vllm_model"],
+            prompt_version="v0-test",
+        )
 
     # Use whatever entry is the smallest unit that drives the call.
     # If cli has a function `_run_extract_for_one(...)`, prefer that.
@@ -1310,7 +1465,7 @@ git commit -m "feat(scheduler): add startup healthcheck for Spark ingestion LLM"
 
 ---
 
-## Task 11: docker-compose — `data-ingestion-spark` service
+## Task 11: docker-compose — preserve `up ingestion` fallback + add `data-ingestion-spark`
 
 **Files:**
 - Modify: `docker-compose.yml`
@@ -1320,7 +1475,21 @@ git commit -m "feat(scheduler): add startup healthcheck for Spark ingestion LLM"
 Run: `grep -n "data-ingestion:" docker-compose.yml`
 Note the line range (currently lines 263-293).
 
-- [ ] **Step 2: Add new service immediately after `data-ingestion`**
+- [ ] **Step 2: Add INGESTION_VLLM_URL to existing `data-ingestion` service (Fallback fix)**
+
+Since the new `_call_vllm` reads `INGESTION_VLLM_URL` instead of the legacy `VLLM_URL`, the existing `data-ingestion` service (used by `up ingestion`) MUST also export the ingestion vars — otherwise `up ingestion` would silently route to Spark instead of the local 27B vLLM, breaking the Fallback contract from spec §Nicht-Ziele.
+
+In the `data-ingestion` service `environment:` block (currently lines ~269-279), add three new lines next to the existing `VLLM_URL=http://vllm:8000`:
+
+```yaml
+      - INGESTION_VLLM_URL=http://vllm:8000
+      - INGESTION_VLLM_MODEL=qwen3.5
+      - INGESTION_VLLM_TIMEOUT=120.0
+```
+
+(Keep the existing `VLLM_URL` / `VLLM_MODEL` lines for backwards-compat; they are no longer read by the pipeline but are documented as the legacy vars.)
+
+- [ ] **Step 3: Add new service immediately after `data-ingestion`**
 
 Insert (after the `restart: unless-stopped` line of `data-ingestion`):
 
@@ -1362,17 +1531,41 @@ Insert (after the `restart: unless-stopped` line of `data-ingestion`):
     restart: unless-stopped
 ```
 
-- [ ] **Step 3: Validate compose syntax**
+- [ ] **Step 4: Validate compose syntax**
 
 Run: `docker compose --profile interactive-spark config --quiet`
 Expected: exit 0, no output.
 
-- [ ] **Step 4: Verify `data-ingestion-spark` has no `vllm-27b` dep**
+- [ ] **Step 5: Verify `data-ingestion-spark` has no `vllm-27b` dep (robust check via Python YAML)**
 
-Run: `docker compose --profile interactive-spark config | grep -A2 "data-ingestion-spark" | grep -c "vllm-27b" || true`
-Expected: `0`
+Run:
+```bash
+docker compose --profile interactive-spark config | uv run --with pyyaml python -c '
+import sys, yaml
+cfg = yaml.safe_load(sys.stdin)
+deps = cfg["services"]["data-ingestion-spark"].get("depends_on", {})
+deps_list = list(deps.keys()) if isinstance(deps, dict) else list(deps)
+assert "vllm-27b" not in deps_list, f"unexpected dep on vllm-27b: {deps_list}"
+print("OK: no vllm-27b dep, depends_on =", deps_list)
+'
+```
+Expected: `OK: no vllm-27b dep, depends_on = ['redis', 'qdrant', 'neo4j', 'tei-embed']`
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Verify `up ingestion` still routes to local vllm (Fallback check)**
+
+Run:
+```bash
+docker compose --profile ingestion config | uv run --with pyyaml python -c '
+import sys, yaml
+cfg = yaml.safe_load(sys.stdin)
+env = cfg["services"]["data-ingestion"].get("environment", [])
+env_dict = dict(s.split("=", 1) for s in env) if isinstance(env, list) else env
+assert env_dict.get("INGESTION_VLLM_URL") == "http://vllm:8000", env_dict.get("INGESTION_VLLM_URL")
+print("OK: up ingestion routes to local vllm")
+'
+```
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add docker-compose.yml
@@ -1458,26 +1651,65 @@ If a `down)` case or `down` function exists, ensure it includes `--profile inter
 "${COMPOSE[@]}" --profile ingestion --profile interactive --profile interactive-spark down
 ```
 
-- [ ] **Step 6: Bash syntax check**
+- [ ] **Step 6: Extend `doctor()` with Spark reachability check**
+
+In `odin.sh`, find the `doctor()` function (`odin.sh:67`). Append before its closing `}`:
+
+```bash
+  echo "Spark vLLM reachability..."
+  if curl -sf --max-time 5 http://192.168.178.39:8000/v1/models > /dev/null; then
+    echo "  OK (Spark reachable)"
+  else
+    echo "  WARN: Spark unreachable — interactive-spark mode will retry but extraction blocks"
+  fi
+```
+
+- [ ] **Step 7: Extend `smoke()` with Spark check**
+
+In `odin.sh`, the `smoke()` function (`odin.sh:112`) uses `_check` and `_check_if_running` helpers. Add a new conditional line in the appropriate position (next to other `_check` calls; verify by reading lines 112-200 first):
+
+```bash
+  # Spark vLLM (used by interactive-spark mode). Always probed; SKIP if unreachable.
+  if curl -sf --max-time 3 http://192.168.178.39:8000/v1/models > /dev/null 2>&1; then
+    _check "spark-vllm" "http://192.168.178.39:8000/v1/models" 200
+  else
+    printf "  %-28s %s\n" "spark-vllm" "SKIP (unreachable)"
+    _inc_skip
+  fi
+```
+
+- [ ] **Step 8: Bash syntax check**
 
 Run: `bash -n odin.sh`
 Expected: exit 0.
 
-- [ ] **Step 7: Manual mode-switch test (skip if Docker daemon unavailable)**
+- [ ] **Step 9: Run doctor + smoke**
+
+```bash
+./odin.sh doctor
+./odin.sh smoke
+```
+Expected: doctor prints Spark line; smoke includes a `spark-vllm` row (OK or SKIP).
+
+- [ ] **Step 10: Manual mode-switch test (skip if Docker daemon unavailable)**
 
 ```bash
 ./odin.sh up interactive-spark
 sleep 5
-docker ps --format '{{.Names}}' | grep data-ingestion | sort  # should show only odin-data-ingestion-spark
+docker compose ps --status running --format '{{.Service}}' | grep data-ingestion | sort
+# Expected: only "data-ingestion-spark"
+
 ./odin.sh up ingestion
 sleep 5
-docker ps --format '{{.Names}}' | grep data-ingestion | sort  # should show only odin-data-ingestion
+docker compose ps --status running --format '{{.Service}}' | grep data-ingestion | sort
+# Expected: only "data-ingestion"
+
 ./odin.sh down
 ```
 
-If running both schedulers shows two containers at any switch, the stop-update is wrong — fix and retest.
+If both schedulers show up at any switch, the stop-update is wrong — fix and retest. Note: the existing `data-ingestion` service has no `container_name` (uses the auto-generated `odin-data-ingestion-1`), while the new `data-ingestion-spark` pins `container_name: odin-data-ingestion-spark`. Use `docker compose ps --format` (which shows compose service names, not container names) for portability.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add odin.sh
@@ -1590,6 +1822,7 @@ Expected: ALL PASS (integration may SKIP).
 
 ```bash
 ./odin.sh up interactive-spark
+# data-ingestion-spark pins container_name: odin-data-ingestion-spark
 docker logs -f odin-data-ingestion-spark 2>&1 | head -60
 ```
 
@@ -1651,11 +1884,11 @@ Add line to `MEMORY.md`:
 - [Extraction retry pattern](feedback_extraction_retry_pattern.md) — collectors must skip Qdrant upsert on ExtractionTransientError + ExtractionConfigError
 ```
 
-- [ ] **Step 7: Final commit + open PR**
+- [ ] **Step 7: Push branch + open PR**
+
+The memory files at `/home/deadpool-ultra/.claude/projects/-home-deadpool-ultra-ODIN-OSINT/memory/` are NOT part of this git repo — Step 6 wrote them directly to the auto-memory store (no commit needed for them).
 
 ```bash
-git add /home/deadpool-ultra/.claude/projects/-home-deadpool-ultra-ODIN-OSINT/memory/
-# (Memory dir is outside the repo — this commit is for the repo only.)
 git push -u origin feature/spark-ingestion-wiring
 gh pr create --title "feat(ingestion): wire ingestion LLM to DGX Spark" --body "$(cat <<'EOF'
 ## Summary
@@ -1686,3 +1919,14 @@ EOF
 - Per-collector behavioral tests (spec §4) are scaffolded in tasks 4-7 — Telegram and the lazy-import collectors get their own task because they need bespoke mock setup.
 - Compose + odin.sh changes (spec §8 + §9) covered in tasks 11 + 12, including the cross-mode stop cleanup that prevents two parallel schedulers.
 - Memory + Rollout from spec §rollout covered in task 14.
+
+### Rev-2 changes (after Codex review)
+
+- **Fallback fix (Kritisch):** Task 11 Step 2 adds `INGESTION_VLLM_*` env vars to the existing `data-ingestion` service so `up ingestion` keeps using local 27B vLLM after the rewire.
+- **doctor + smoke (Hoch):** Task 12 Steps 6-7 add Spark reachability checks to `doctor()` and `smoke()`.
+- **Test scaffolds fully written (Hoch):** Telegram (Task 6) and GDELT-Config (Task 5) tests no longer use `...` placeholders.
+- **rss method name (Mittel):** `_process_feed` (was `_fetch_and_store`); test passes `feed_meta` dict and mocks the RSS feed-fetch HTTP call.
+- **Transcript schema (Mittel):** Task 8 test includes `duration_seconds` + `language`; mock response uses `entities/relations/claims` (not `events/citations`).
+- **Compose dep check (Mittel):** Task 11 Step 5 parses YAML via Python instead of fragile `grep -A2`.
+- **Sequencing risk (Mittel):** Documented as feature-branch-only constraint in plan header.
+- **Memory + container name (Niedrig):** Task 14 Step 7 dropped invalid `git add` of `~/.claude/...`; Step 3 uses pinned `container_name: odin-data-ingestion-spark`.
