@@ -20,6 +20,21 @@ from config import Settings
 
 log = structlog.get_logger(__name__)
 
+
+class ExtractionTransientError(Exception):
+    """vLLM extraction failed transiently (timeout, connect-error, 5xx, JSON-parse).
+
+    Caller MUST skip Qdrant upsert so the item is retried via source re-fetch.
+    """
+
+
+class ExtractionConfigError(Exception):
+    """vLLM extraction failed due to misconfiguration (404 model, 401/403 auth).
+
+    Caller MUST skip Qdrant upsert. Recovery requires fixing config — no auto-retry.
+    """
+
+
 # Load event types from the canonical codebook YAML (single source of truth)
 _CODEBOOK_PATH = Path(__file__).parent.parent / "intelligence" / "codebook" / "event_codebook.yaml"
 
