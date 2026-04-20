@@ -345,15 +345,32 @@ _RESPONSE_SCHEMA = {
 Run: `cd services/data-ingestion && uv run pytest tests/test_response_schema.py -v`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Run full pipeline regression suite**
+- [ ] **Step 5: Update mock fixtures that omit `summary` before running regression suite**
 
-Run: `cd services/data-ingestion && uv run pytest tests/ -v -k "pipeline or response_schema or codebook"`
-Expected: PASS. Events that previously slipped through without `summary` will now be rejected by the decoder at runtime — but existing tests mock the vLLM response shape, so they must already emit `summary`. If any test breaks because the fixture omits `summary`, update the fixture to include it (this is a correctness fix, not a test regression).
+The schema hardening doesn't affect runtime behavior of mocked tests (mocks bypass vLLM's constrained decoder), but fixtures that omit `summary` are now semantically inconsistent with what Qwen will actually emit, and future tests that run against the real schema (or pydantic validation built on `_RESPONSE_SCHEMA`) will fail.
 
-- [ ] **Step 6: Commit**
+**Known fixtures that need `summary` added** (grep for events that only have `title/codebook_type/severity/confidence/timestamp`):
+
+- `services/data-ingestion/tests/test_pipeline.py:92-101` — `test_writes_to_neo4j` event dict. Add `"summary": "Test event summary"` between `"title"` and `"codebook_type"`.
+- `services/data-ingestion/tests/test_pipeline.py:124-133` — `test_publishes_to_redis_stream` (or the test that uses `"space.satellite_launch"`). Add `"summary": "Stream event summary"` at the same position.
+
+Verify coverage with:
 
 ```bash
-git add services/data-ingestion/pipeline.py services/data-ingestion/tests/test_response_schema.py
+cd services/data-ingestion && grep -rn -B1 -A1 '"codebook_type":' tests/ | grep -B2 '"codebook_type":' | grep -L '"summary":'
+```
+
+If that returns any test file:line, add `summary` there too.
+
+- [ ] **Step 6: Run full pipeline regression suite**
+
+Run: `cd services/data-ingestion && uv run pytest tests/ -v -k "pipeline or response_schema or codebook"`
+Expected: PASS. If a test breaks with a missing-`summary` assertion error from anything inside `pipeline.py`, update the fixture (this is a correctness fix, not a test regression).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add services/data-ingestion/pipeline.py services/data-ingestion/tests/test_response_schema.py services/data-ingestion/tests/test_pipeline.py
 git commit -m "fix(ingestion): tighten _RESPONSE_SCHEMA to forbid additionalProperties + require summary"
 ```
 
