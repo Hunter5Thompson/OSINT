@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Route extraction-LLM-Calls from `services/data-ingestion` permanently to the DGX Spark vLLM (Gemma-4 26B) so Ingestion + Interactive can run in parallel without GPU swap.
+**Goal:** Route extraction-LLM-Calls from `services/data-ingestion` permanently to the DGX Spark vLLM (`Qwen/Qwen3.6-35B-A3B` — multimodal MoE, ~3B active) so Ingestion + Interactive can run in parallel without GPU swap.
 
-**Architecture:** New `ingestion_vllm_*` settings in `data-ingestion/config.py`. `process_item` raises one of three exclusive error classes (`ExtractionTransientError`, `ExtractionConfigError`, or returns `None`/dict for valid-empty). All collectors that call `process_item` get matching except-blocks that skip Qdrant on errors → retry happens via source re-fetch (Hash-Dedup doesn't trip). New compose service `data-ingestion-spark` and odin.sh mode `interactive-spark` enable parallel operation. Old compose service `data-ingestion` keeps working by also receiving `INGESTION_VLLM_URL=http://vllm:8000` so `up ingestion` continues to use the local 27B model.
+**Revision history:** Rev-1..3 targeted Gemma-4. Rev-4 (2026-04-20) switches the ingestion model to `Qwen/Qwen3.6-35B-A3B` after the Spark container swap and adds mandatory `response_format=json_schema` + `chat_template_kwargs.enable_thinking=false` guardrails in `_call_vllm` (see Task 3, Step 5). Live-test 2026-04-20 showed Qwen3.6 drifts field names (`type` vs `codebook_type`) and emits Chain-of-Thought pre-responses without these two payload fields — see spec §10.
+
+**Architecture:** New `ingestion_vllm_*` settings in `data-ingestion/config.py`. `_call_vllm` sends strict JSON-schema enforced payloads so Qwen3.6 returns Pydantic-parseable JSON without thinking-mode preambles. `process_item` raises one of three exclusive error classes (`ExtractionTransientError`, `ExtractionConfigError`, or returns `None`/dict for valid-empty). All collectors that call `process_item` get matching except-blocks that skip Qdrant on errors → retry happens via source re-fetch (Hash-Dedup doesn't trip). New compose service `data-ingestion-spark` and odin.sh mode `interactive-spark` enable parallel operation. Old compose service `data-ingestion` keeps working by also receiving `INGESTION_VLLM_URL=http://vllm:8000` so `up ingestion` continues to use the local 27B model.
 
 **Sequencing note:** Tasks 3 (rewire `_call_vllm`) and 4-7 (collector wraps) leave the branch in an intermediate state between commits where typed exceptions can propagate from `_call_vllm` while not all collectors catch them yet. **This is intentional for this single feature branch — do not cherry-pick individual commits to other branches.** Run all of Tasks 3-7 in one merge unit. Task 14's full test sweep validates the end-state.
 
@@ -88,7 +90,7 @@ class TestIngestionVllmSettings:
     def test_defaults_point_to_spark(self):
         s = Settings(_env_file=None)
         assert s.ingestion_vllm_url == "http://192.168.178.39:8000"
-        assert s.ingestion_vllm_model == "google/gemma-4-26B-A4B-it"
+        assert s.ingestion_vllm_model == "Qwen/Qwen3.6-35B-A3B"
         assert s.ingestion_vllm_timeout == 120.0
 
     def test_env_override(self):
@@ -119,9 +121,9 @@ Expected: FAIL — `AttributeError: ... has no attribute 'ingestion_vllm_url'`
 In `services/data-ingestion/config.py`, after the existing `vllm_model` line (currently line 30), insert:
 
 ```python
-    # Ingestion LLM (Spark — Gemma-4 26B). URL WITHOUT /v1 — callers append full path.
+    # Ingestion LLM (Spark — Qwen3.6-35B-A3B MoE). URL WITHOUT /v1 — callers append full path.
     ingestion_vllm_url: str = "http://192.168.178.39:8000"
-    ingestion_vllm_model: str = "google/gemma-4-26B-A4B-it"
+    ingestion_vllm_model: str = "Qwen/Qwen3.6-35B-A3B"
     ingestion_vllm_timeout: float = 120.0
 ```
 
@@ -138,7 +140,7 @@ Append to `.env.example`:
 
 # Ingestion LLM (Spark — eliminates GPU swap on RTX 5090)
 INGESTION_VLLM_URL=http://192.168.178.39:8000
-INGESTION_VLLM_MODEL=google/gemma-4-26B-A4B-it
+INGESTION_VLLM_MODEL=Qwen/Qwen3.6-35B-A3B
 INGESTION_VLLM_TIMEOUT=120.0
 ```
 
@@ -257,7 +259,7 @@ def _settings(**overrides) -> Settings:
         "vllm_url": "http://localhost:8000",
         "vllm_model": "legacy",
         "ingestion_vllm_url": "http://192.168.178.39:8000",
-        "ingestion_vllm_model": "google/gemma-4-26B-A4B-it",
+        "ingestion_vllm_model": "Qwen/Qwen3.6-35B-A3B",
         "ingestion_vllm_timeout": 120.0,
         "neo4j_url": "http://localhost:7474",
         "neo4j_user": "neo4j",
@@ -303,7 +305,38 @@ async def test_call_vllm_uses_spark_url_and_model():
 
     assert captured["url"] == "http://192.168.178.39:8000/v1/chat/completions"
     assert not re.search(r"/v1/v1", captured["url"])
-    assert captured["model"] == "google/gemma-4-26B-A4B-it"
+    assert captured["model"] == "Qwen/Qwen3.6-35B-A3B"
+
+
+@pytest.mark.asyncio
+async def test_call_vllm_enforces_json_schema_and_disables_thinking():
+    """Rev-6: Qwen3.6 drifts field names + emits thinking-traces without these two guardrails.
+    See spec §10. These must be in every _call_vllm payload."""
+    captured = {}
+
+    async def fake_post(url, json=None, **kw):
+        captured["payload"] = json
+        return _ok_resp()
+
+    with patch("pipeline.httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = fake_post
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await process_item(
+            title="t", text="x", url="http://e/1", source="rss",
+            settings=_settings(),
+        )
+
+    rf = captured["payload"]["response_format"]
+    assert rf["type"] == "json_schema"
+    assert rf["json_schema"]["strict"] is True
+    # Schema must at minimum require the three top-level arrays Pydantic downstream expects
+    schema = rf["json_schema"]["schema"]
+    assert set(schema["required"]) >= {"events", "entities", "locations"}
+    # Qwen3.6 thinking-mode must be off
+    assert captured["payload"]["chat_template_kwargs"] == {"enable_thinking": False}
 
 
 @pytest.mark.asyncio
@@ -476,7 +509,7 @@ Replace the existing `process_item` Step 1 try/except (currently `pipeline.py:12
 - [ ] **Step 4: Run new error tests to verify pass**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_pipeline_errors.py -v`
-Expected: PASS (all 9 tests)
+Expected: PASS (all 10 tests — includes the Rev-6 JSON-schema + thinking-off guardrail test)
 
 - [ ] **Step 5: Update existing test_pipeline.py for new settings**
 
@@ -491,7 +524,7 @@ def _make_settings(**overrides) -> Settings:
         "vllm_url": "http://localhost:8000",
         "vllm_model": "models/qwen3.5-27b-awq",
         "ingestion_vllm_url": "http://192.168.178.39:8000",
-        "ingestion_vllm_model": "google/gemma-4-26B-A4B-it",
+        "ingestion_vllm_model": "Qwen/Qwen3.6-35B-A3B",
         "ingestion_vllm_timeout": 120.0,
         "neo4j_url": "http://localhost:7474",
         "neo4j_user": "neo4j",
@@ -1120,12 +1153,12 @@ async def test_extract_appends_v1_chat_completions_to_base_url():
         metadata={},
         client=client,
         vllm_url="http://192.168.178.39:8000",
-        vllm_model="google/gemma-4-26B-A4B-it",
+        vllm_model="Qwen/Qwen3.6-35B-A3B",
     )
 
     assert captured["url"] == "http://192.168.178.39:8000/v1/chat/completions"
     assert not re.search(r"/v1/v1", captured["url"])
-    assert captured["model"] == "google/gemma-4-26B-A4B-it"
+    assert captured["model"] == "Qwen/Qwen3.6-35B-A3B"
 ```
 
 (Engineer: adjust `Transcript` and response-content shape if `nlm_ingest/schemas.py` defines them differently. Read that file first.)
@@ -1221,7 +1254,7 @@ def test_cli_extract_uses_ingestion_vllm_settings(tmp_path, monkeypatch):
     # Force settings.nlm_data_dir + Spark URL/model into a known state.
     monkeypatch.setenv("NLM_DATA_DIR", str(data_dir))
     monkeypatch.setenv("INGESTION_VLLM_URL", "http://192.168.178.39:8000")
-    monkeypatch.setenv("INGESTION_VLLM_MODEL", "google/gemma-4-26B-A4B-it")
+    monkeypatch.setenv("INGESTION_VLLM_MODEL", "Qwen/Qwen3.6-35B-A3B")
 
     captured = {}
 
@@ -1249,7 +1282,7 @@ def test_cli_extract_uses_ingestion_vllm_settings(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert captured["vllm_url"] == "http://192.168.178.39:8000"
     assert "/v1" not in captured["vllm_url"]
-    assert captured["vllm_model"] == "google/gemma-4-26B-A4B-it"
+    assert captured["vllm_model"] == "Qwen/Qwen3.6-35B-A3B"
 ```
 
 (If `cli.extract` is registered under a different attribute name, verify with `python -c "from nlm_ingest import cli; print([c for c in dir(cli) if not c.startswith('_')])"`. If `get_all_status` / `set_phase_status` / `_get_db` live in a sibling module instead of `cli`, adjust the `patch.object` targets accordingly — read `cli.py`'s import block first.)
@@ -1327,7 +1360,7 @@ async def test_ready_when_model_in_response(caplog):
     resp.status_code = 200
     resp.raise_for_status = MagicMock()
     resp.json.return_value = {"data": [
-        {"id": "google/gemma-4-26B-A4B-it"},
+        {"id": "Qwen/Qwen3.6-35B-A3B"},
         {"id": "other/model"},
     ]}
 
@@ -1579,7 +1612,7 @@ Insert (after the `restart: unless-stopped` line of `data-ingestion`):
       - QDRANT_URL=http://qdrant:6333
       - TEI_EMBED_URL=http://tei-embed:80
       - INGESTION_VLLM_URL=http://192.168.178.39:8000
-      - INGESTION_VLLM_MODEL=google/gemma-4-26B-A4B-it
+      - INGESTION_VLLM_MODEL=Qwen/Qwen3.6-35B-A3B
       - INGESTION_VLLM_TIMEOUT=120.0
       - NEO4J_URL=http://neo4j:7474
       - NEO4J_USER=${NEO4J_USER:-neo4j}
@@ -1896,20 +1929,20 @@ docker logs -f odin-data-ingestion-spark 2>&1 | head -60
 ```
 
 Expected log lines:
-- `ingestion_llm_ready url=... model=google/gemma-4-26B-A4B-it`
+- `ingestion_llm_ready url=... model=Qwen/Qwen3.6-35B-A3B`
 - Then collector startup logs.
 
 - [ ] **Step 4: Verify Spark sees requests**
 
 ```bash
-ssh spark "docker logs vllm-gemma4 --tail 40 2>&1 | grep POST"
+ssh spark "docker logs vllm-qwen36 --tail 40 2>&1 | grep POST"
 ```
 
 Expected: at least one `POST /v1/chat/completions` line within ~5 minutes (after first collector run).
 
 - [ ] **Step 5: Verify Spark-down → no Qdrant pollution**
 
-Stop Spark vLLM (on Spark host: `docker stop vllm-gemma4`). Wait one collector tick (~5 min for RSS). Then:
+Stop Spark vLLM (on Spark host: `docker stop vllm-qwen36`). Wait one collector tick (~5 min for RSS). Then:
 
 ```bash
 docker logs odin-data-ingestion-spark --tail 30 | grep extraction_skipped_transient
@@ -1917,7 +1950,7 @@ docker logs odin-data-ingestion-spark --tail 30 | grep extraction_skipped_transi
 
 Expected: warning lines for skipped items.
 
-Restart Spark: `docker start vllm-gemma4`. Wait next tick. Items should now be extracted (visible in `docker logs vllm-gemma4`).
+Restart Spark: `docker start vllm-qwen36`. Wait next tick. Items should now be extracted (visible in `docker logs vllm-qwen36`).
 
 - [ ] **Step 6: Update memory**
 
@@ -1961,7 +1994,7 @@ The memory files at `/home/deadpool-ultra/.claude/projects/-home-deadpool-ultra-
 git push -u origin feature/spark-ingestion-wiring
 gh pr create --title "feat(ingestion): wire ingestion LLM to DGX Spark" --body "$(cat <<'EOF'
 ## Summary
-- Routes data-ingestion extraction calls to Spark vLLM (Gemma-4 26B), eliminating GPU-swap on RTX 5090.
+- Routes data-ingestion extraction calls to Spark vLLM (`Qwen/Qwen3.6-35B-A3B` MoE, multimodal), eliminating GPU-swap on RTX 5090.
 - New compose service `data-ingestion-spark` and odin.sh mode `interactive-spark`.
 - `process_item` now raises typed errors (`ExtractionTransientError` / `ExtractionConfigError`); collectors skip Qdrant upsert on errors so source re-fetch acts as retry.
 - Startup healthcheck logs three exclusive outcomes (ready / model_mismatch / config_error / unreachable).
@@ -1970,7 +2003,7 @@ gh pr create --title "feat(ingestion): wire ingestion LLM to DGX Spark" --body "
 - [ ] `uv run pytest` (data-ingestion) green
 - [ ] `./odin.sh up interactive-spark` shows `ingestion_llm_ready`
 - [ ] Stop Spark vLLM → collectors log `extraction_skipped_transient`, no Qdrant upsert
-- [ ] Restart Spark → next tick processes items, visible in vllm-gemma4 logs
+- [ ] Restart Spark → next tick processes items, visible in vllm-qwen36 logs
 - [ ] Mode-switch sanity: `up interactive-spark` → `up ingestion` → only one `data-ingestion*` container at a time
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
