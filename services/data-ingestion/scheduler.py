@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import signal
 import sys
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import redis.asyncio as aioredis
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -62,6 +64,108 @@ structlog.configure(
 )
 
 log = structlog.get_logger("scheduler")
+
+# Stdlib logger used for structured health-check events so that pytest's
+# `caplog` fixture (which only captures stdlib logging) can observe them.
+# structlog's PrintLoggerFactory writes directly to stderr and bypasses
+# stdlib logging, which means caplog wouldn't see events emitted via `log`.
+_healthcheck_logger = logging.getLogger("scheduler.healthcheck")
+
+
+# ---------------------------------------------------------------------------
+# Startup healthcheck — Spark / local ingestion vLLM reachability
+# ---------------------------------------------------------------------------
+async def check_ingestion_llm() -> None:
+    """Probe the ingestion vLLM at startup. Never raises — only logs.
+
+    Three exclusive outcomes:
+      - ready:         200 + ingestion_vllm_model in /v1/models data[].id
+      - config error:  200 without model OR 401/403/404
+      - unreachable:   connect error / timeout / 5xx / unexpected response shape
+
+    The scheduler must keep running regardless of outcome, so this helper
+    swallows every exception and only emits structured log events.
+    """
+    base_url = settings.ingestion_vllm_url
+    url = f"{base_url}/v1/models"
+    expected_model = settings.ingestion_vllm_model
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            payload = resp.json()
+            data = payload.get("data", []) if isinstance(payload, dict) else []
+            ids = [
+                m.get("id")
+                for m in data
+                if isinstance(m, dict) and m.get("id") is not None
+            ]
+            if expected_model in ids:
+                _healthcheck_logger.info(
+                    "ingestion_llm_ready url=%s model=%s",
+                    base_url,
+                    expected_model,
+                )
+                log.info(
+                    "ingestion_llm_ready",
+                    url=base_url,
+                    model=expected_model,
+                )
+            else:
+                _healthcheck_logger.error(
+                    "ingestion_llm_model_mismatch url=%s expected=%s available=%s",
+                    base_url,
+                    expected_model,
+                    ids,
+                )
+                log.error(
+                    "ingestion_llm_model_mismatch",
+                    url=base_url,
+                    expected=expected_model,
+                    available=ids,
+                )
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if status in (401, 403, 404):
+            _healthcheck_logger.error(
+                "ingestion_llm_config_error url=%s status=%s error=%s",
+                url,
+                status,
+                exc,
+            )
+            log.error(
+                "ingestion_llm_config_error",
+                url=url,
+                status=status,
+                error=str(exc),
+            )
+        else:
+            _healthcheck_logger.warning(
+                "ingestion_llm_unreachable url=%s error=http %s",
+                url,
+                status,
+            )
+            log.warning(
+                "ingestion_llm_unreachable",
+                url=url,
+                error=f"http {status}",
+            )
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        _healthcheck_logger.warning(
+            "ingestion_llm_unreachable url=%s error=%s",
+            url,
+            exc,
+        )
+        log.warning("ingestion_llm_unreachable", url=url, error=str(exc))
+    except Exception as exc:  # noqa: BLE001 — must never propagate
+        # Malformed JSON, unexpected response shape, DNS errors, etc.
+        _healthcheck_logger.warning(
+            "ingestion_llm_unreachable url=%s error=%s",
+            url,
+            exc,
+        )
+        log.warning("ingestion_llm_unreachable", url=url, error=str(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -423,6 +527,11 @@ async def main() -> None:
         "scheduler_running",
         jobs=[j.name for j in scheduler.get_jobs()],
     )
+
+    # Probe the ingestion vLLM (Spark or local) so a misconfigured URL
+    # shows up in logs immediately instead of as a flood of pipeline errors
+    # later.  Never raises — jobs continue regardless of outcome.
+    await check_ingestion_llm()
 
     # Run initial collection on startup (don't wait for first interval)
     log.info("initial_collection_starting")
