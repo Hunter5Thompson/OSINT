@@ -50,10 +50,12 @@ describe("legacy query redirect + AppShell", () => {
     expect(screen.getByRole("link", { name: /war room/i })).toBeInTheDocument();
   });
 
-  it("renders AppShell TopBar stub on Worldview", async () => {
+  it("hides TopBar on Worldview and lets legacy chrome take over (S1 temporary)", async () => {
     renderAt("/worldview");
-    expect(await screen.findByText("Hlíðskjalf")).toBeInTheDocument();
-    expect(screen.getByTestId("worldview-page")).toBeInTheDocument();
+    // S1 workaround: App.tsx StatusBar+ClockBar collide with TopBar and
+    // Cesium needs a 100vh parent. S2 Worldview-Port will restore TopBar.
+    expect(screen.queryByText("Hlíðskjalf")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("worldview-page")).toBeInTheDocument();
   });
 
   it("renders AppShell TopBar stub on Briefing", async () => {
