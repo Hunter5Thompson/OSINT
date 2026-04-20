@@ -10,6 +10,9 @@ INGESTION_SERVICES=(vllm-27b data-ingestion)
 INTERACTIVE_SERVICES=(vllm-9b tei-rerank intelligence backend frontend)
 VISION_SERVICES=(vllm-vision vision-enrichment)
 
+# Spark (DGX GB10) — ingestion LLM host, overridable for staging/lab setups.
+SPARK_VLLM_URL="${SPARK_VLLM_URL:-http://192.168.178.39:8000}"
+
 MODE="${2:-}"
 COMMAND="${1:-help}"
 
@@ -21,6 +24,7 @@ Usage:
   ./odin.sh up interactive-spark  # Interactive on 5090 + Ingestion via Spark (no GPU swap)
   ./odin.sh swap ingestion     # Swap to ingestion mode (stops active vLLM first)
   ./odin.sh swap interactive   # Swap to interactive mode
+  ./odin.sh swap interactive-spark  # Swap to interactive-spark (local 9B + Spark ingestion)
   ./odin.sh down               # Stop all services
   ./odin.sh ps                 # Show running compose services
   ./odin.sh logs [service]     # Tail logs (optional service)
@@ -62,7 +66,7 @@ start_mode() {
       "${COMPOSE[@]}" --profile ingestion --profile interactive --profile interactive-spark stop \
         vllm-27b data-ingestion 2>/dev/null || true
       echo "Pre-flight: checking Spark vLLM..."
-      if curl -sf --max-time 5 http://192.168.178.39:8000/v1/models > /dev/null; then
+      if curl -sf --max-time 5 ${SPARK_VLLM_URL}/v1/models > /dev/null; then
         echo "  Spark reachable"
       else
         echo "  WARN: Spark unreachable — scheduler will retry"
@@ -101,7 +105,7 @@ doctor() {
   fi
 
   echo "Spark vLLM reachability..."
-  if curl -sf --max-time 5 http://192.168.178.39:8000/v1/models > /dev/null; then
+  if curl -sf --max-time 5 ${SPARK_VLLM_URL}/v1/models > /dev/null; then
     echo "  OK (Spark reachable)"
   else
     echo "  WARN: Spark unreachable — interactive-spark mode will retry but extraction blocks"
@@ -302,8 +306,8 @@ smoke() {
   _check_container "data-ingestion"
   _check_container "data-ingestion-spark"
   # Spark vLLM (used by interactive-spark mode). Always probed; SKIP if unreachable.
-  if curl -sf --max-time 3 http://192.168.178.39:8000/v1/models > /dev/null 2>&1; then
-    _check "spark-vllm" "http://192.168.178.39:8000/v1/models" 200
+  if curl -sf --max-time 3 ${SPARK_VLLM_URL}/v1/models > /dev/null 2>&1; then
+    _check "spark-vllm" "${SPARK_VLLM_URL}/v1/models" 200
   else
     printf "  %-28s %s\n" "spark-vllm" "SKIP (unreachable)"
     _inc_skip
