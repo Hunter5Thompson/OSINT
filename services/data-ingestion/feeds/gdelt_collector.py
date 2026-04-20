@@ -13,7 +13,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
-from pipeline import process_item
+from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
 
 log = structlog.get_logger(__name__)
 
@@ -147,15 +147,23 @@ class GDELTCollector:
 
             embed_text = f"{title}"[:2000]
 
-            # Intelligence extraction
-            enrichment = await process_item(
-                title=title,
-                text=embed_text,
-                url=url,
-                source="gdelt",
-                settings=settings,
-                redis_client=self._redis,
-            )
+            # Intelligence extraction. Transient/config errors skip Qdrant upsert
+            # so the item is retried on the next source re-fetch (Hash-Dedup doesn't trip).
+            try:
+                enrichment = await process_item(
+                    title=title,
+                    text=embed_text,
+                    url=url,
+                    source="gdelt",
+                    settings=settings,
+                    redis_client=self._redis,
+                )
+            except ExtractionTransientError as exc:
+                log.warning("extraction_skipped_transient", url=url, error=str(exc))
+                continue
+            except ExtractionConfigError as exc:
+                log.error("extraction_skipped_config", url=url, error=str(exc))
+                continue
 
             try:
                 vector = await self._embed(embed_text)
