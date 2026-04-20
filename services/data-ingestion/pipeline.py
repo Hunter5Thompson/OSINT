@@ -145,11 +145,8 @@ async def process_item(
     Caller continues with Qdrant upsert regardless.
     """
     # Step 1: Call vLLM for extraction
-    try:
-        extraction = await _call_vllm(title, text, url, settings)
-    except Exception as e:
-        log.error("pipeline_extraction_failed", url=url, error=str(e))
-        return None
+    # ExtractionTransientError / ExtractionConfigError propagate to caller (collector).
+    extraction = await _call_vllm(title, text, url, settings)
 
     if extraction is None:
         return None
@@ -192,10 +189,15 @@ async def process_item(
     }
 
 
-async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dict | None:
-    """Call vLLM for intelligence extraction. Returns parsed dict or None."""
+async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dict:
+    """Call vLLM for intelligence extraction.
+
+    Returns parsed dict on success.
+    Raises ExtractionTransientError for timeout/connect/5xx/JSON-parse failure.
+    Raises ExtractionConfigError for 404/401/403 (model/auth misconfiguration).
+    """
     payload = {
-        "model": settings.vllm_model,
+        "model": settings.ingestion_vllm_model,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": f"Source: {url}\n\nText: {text[:4000]}"},
@@ -213,15 +215,41 @@ async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dic
         "chat_template_kwargs": {"enable_thinking": False},
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            f"{settings.vllm_url}/v1/chat/completions",
-            json=payload,
-        )
-        resp.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=settings.ingestion_vllm_timeout) as client:
+            resp = await client.post(
+                f"{settings.ingestion_vllm_url}/v1/chat/completions",
+                json=payload,
+            )
+            resp.raise_for_status()
+    except httpx.TimeoutException as exc:
+        raise ExtractionTransientError(f"timeout: {exc}") from exc
+    except httpx.ConnectError as exc:
+        raise ExtractionTransientError(f"connect: {exc}") from exc
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if status in (401, 403, 404):
+            raise ExtractionConfigError(f"http {status}: {exc}") from exc
+        if 500 <= status < 600:
+            raise ExtractionTransientError(f"http {status}: {exc}") from exc
+        raise ExtractionTransientError(f"http {status}: {exc}") from exc
 
-    content = resp.json()["choices"][0]["message"]["content"]
-    return json.loads(content)
+    try:
+        data = resp.json()
+        choice = data["choices"][0]
+        # Rev-5 (Codex-Review): truncation must surface as an explicit transient error,
+        # otherwise the JSON-decode failure below hides the root cause ("llm_truncated"
+        # vs. cryptic "parse: Expecting ',' delimiter").
+        if choice.get("finish_reason") == "length":
+            raise ExtractionTransientError(
+                f"llm_truncated: completion hit max_tokens={payload['max_tokens']}"
+            )
+        content = choice["message"]["content"]
+        return json.loads(content)
+    except ExtractionTransientError:
+        raise  # Already the right class — don't re-wrap.
+    except (KeyError, ValueError, json.JSONDecodeError) as exc:
+        raise ExtractionTransientError(f"parse: {exc}") from exc
 
 
 async def _write_to_neo4j(
