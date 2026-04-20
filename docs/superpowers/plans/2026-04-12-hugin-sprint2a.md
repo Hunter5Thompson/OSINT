@@ -303,13 +303,13 @@ class TestEONETParser:
 
 class TestEONETContentHash:
     def test_stable_hash_for_same_id(self, collector):
-        h1 = collector._eonet_content_hash("EONET_1234")
-        h2 = collector._eonet_content_hash("EONET_1234")
+        h1 = collector._content_hash("eonet", "EONET_1234")
+        h2 = collector._content_hash("eonet", "EONET_1234")
         assert h1 == h2
 
     def test_different_hash_for_different_id(self, collector):
-        h1 = collector._eonet_content_hash("EONET_1234")
-        h2 = collector._eonet_content_hash("EONET_5678")
+        h1 = collector._content_hash("eonet", "EONET_1234")
+        h2 = collector._content_hash("eonet", "EONET_5678")
         assert h1 != h2
 ```
 
@@ -333,14 +333,12 @@ updates are Qdrant-only to avoid Neo4j duplicates.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import time
 from typing import Any
 
 import structlog
 from qdrant_client.models import PointStruct
 
-from config import settings
 from feeds.base import BaseCollector
 
 log = structlog.get_logger("eonet_collector")
@@ -350,11 +348,6 @@ _EONET_URL = "https://eonet.gsfc.nasa.gov/api/v3/events"
 
 class EONETCollector(BaseCollector):
     """Collect natural events from NASA EONET API."""
-
-    def _eonet_content_hash(self, event_id: str) -> int:
-        """Stable point ID from EONET event ID."""
-        digest = hashlib.sha256(event_id.encode()).hexdigest()
-        return int(digest[:16], 16)
 
     def _parse_events(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         """Parse EONET response into normalized event dicts."""
@@ -408,13 +401,14 @@ class EONETCollector(BaseCollector):
         points = []
 
         for event in events:
-            point_id = self._eonet_content_hash(event["eonet_id"])
+            chash = self._content_hash("eonet", event["eonet_id"])
+            point_id = self._point_id(chash)
             description = f"{event['title']} - {event['category']} event"
 
             # Check if already exists in Qdrant
             existing = await asyncio.to_thread(
                 self.qdrant.retrieve,
-                collection_name=settings.qdrant_collection,
+                collection_name=self.settings.qdrant_collection,
                 ids=[point_id],
             )
             is_new = len(existing) == 0
@@ -584,13 +578,13 @@ class TestGDACSParser:
 
 class TestGDACSContentHash:
     def test_stable_hash(self, collector):
-        h1 = collector._gdacs_content_hash("EQ", "1001")
-        h2 = collector._gdacs_content_hash("EQ", "1001")
+        h1 = collector._content_hash("gdacs", "EQ", "1001")
+        h2 = collector._content_hash("gdacs", "EQ", "1001")
         assert h1 == h2
 
     def test_different_type_different_hash(self, collector):
-        h1 = collector._gdacs_content_hash("EQ", "1001")
-        h2 = collector._gdacs_content_hash("TC", "1001")
+        h1 = collector._content_hash("gdacs", "EQ", "1001")
+        h2 = collector._content_hash("gdacs", "TC", "1001")
         assert h1 != h2
 ```
 
@@ -613,14 +607,12 @@ Mutable events: first-seen through Pipeline, updates Qdrant-only.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import time
 from typing import Any
 
 import structlog
 from qdrant_client.models import PointStruct
 
-from config import settings
 from feeds.base import BaseCollector
 
 log = structlog.get_logger("gdacs_collector")
@@ -630,10 +622,6 @@ _GDACS_URL = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP"
 
 class GDACSCollector(BaseCollector):
     """Collect disaster alerts from GDACS API."""
-
-    def _gdacs_content_hash(self, event_type: str, event_id: str) -> int:
-        digest = hashlib.sha256(f"{event_type}{event_id}".encode()).hexdigest()
-        return int(digest[:16], 16)
 
     def _parse_features(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
@@ -685,12 +673,14 @@ class GDACSCollector(BaseCollector):
         points = []
 
         for event in events:
-            point_id = self._gdacs_content_hash(event["event_type"], event["gdacs_id"].split("_")[-1])
+            raw_event_id = event["gdacs_id"].split("_")[-1]
+            chash = self._content_hash("gdacs", event["event_type"], raw_event_id)
+            point_id = self._point_id(chash)
             description = f"{event['event_name']} - {event['event_type']} alert ({event['alert_level']})"
 
             existing = await asyncio.to_thread(
                 self.qdrant.retrieve,
-                collection_name=settings.qdrant_collection,
+                collection_name=self.settings.qdrant_collection,
                 ids=[point_id],
             )
             is_new = len(existing) == 0
@@ -868,13 +858,10 @@ Standard insert-only dedup (not mutable events).
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import time
 from typing import Any
 
 import structlog
 
-from config import settings
 from feeds.base import BaseCollector
 
 log = structlog.get_logger("hapi_collector")
@@ -911,8 +898,8 @@ class HAPICollector(BaseCollector):
         await self._ensure_collection()
 
         headers = {}
-        if settings.hapi_app_identifier:
-            headers["app_identifier"] = settings.hapi_app_identifier
+        if self.settings.hapi_app_identifier:
+            headers["app_identifier"] = self.settings.hapi_app_identifier
 
         total_ingested = 0
 
@@ -1109,13 +1096,10 @@ Collects active tropical cyclone advisories. Standard insert-only dedup.
 
 from __future__ import annotations
 
-import hashlib
-import time
 from typing import Any
 
 import structlog
 
-from config import settings
 from feeds.base import BaseCollector
 
 log = structlog.get_logger("noaa_nhc_collector")
@@ -1369,13 +1353,10 @@ ArcGIS FeatureServer with paginated queries. Standard insert-only dedup.
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import time
 from typing import Any
 
 import structlog
 
-from config import settings
 from feeds.base import BaseCollector
 
 log = structlog.get_logger("portwatch_collector")
