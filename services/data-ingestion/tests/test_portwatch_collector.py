@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from feeds.portwatch_collector import PortWatchCollector, CHOKEPOINT_COORDS
+from pipeline import ExtractionConfigError, ExtractionTransientError
 
 SAMPLE_CHOKEPOINT_RESPONSE = {
     "features": [
@@ -100,3 +101,57 @@ class TestChokepoints:
             lat, lon = coords
             assert -90 <= lat <= 90
             assert -180 <= lon <= 180
+
+
+# ── Extraction error skip tests (Task 7) ────────────────────────────
+# Covers BOTH call sites: _CHOKEPOINTS_URL (line 124) and _DISRUPTIONS_URL (line 170)
+
+
+@pytest.mark.asyncio
+async def test_portwatch_transient_skips_both_upserts(collector):
+    """Transient error in either call site → no Qdrant upsert for that record."""
+    collector._ensure_collection = AsyncMock()
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._batch_upsert = AsyncMock()
+    collector._build_point = AsyncMock()
+    # Return chokepoint records first, disruption records second
+    collector._fetch_paginated = AsyncMock(
+        side_effect=[SAMPLE_CHOKEPOINT_RESPONSE, SAMPLE_DISRUPTION_RESPONSE]
+    )
+
+    with patch(
+        "pipeline.process_item",
+        new=AsyncMock(side_effect=ExtractionTransientError("vllm down")),
+    ):
+        await collector.collect()
+
+    # Neither call site upserted anything
+    collector._build_point.assert_not_called()
+    collector._batch_upsert.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_portwatch_config_skips_both_upserts(collector):
+    """Config error in either call site → no Qdrant upsert + error log."""
+    collector._ensure_collection = AsyncMock()
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._batch_upsert = AsyncMock()
+    collector._build_point = AsyncMock()
+    collector._fetch_paginated = AsyncMock(
+        side_effect=[SAMPLE_CHOKEPOINT_RESPONSE, SAMPLE_DISRUPTION_RESPONSE]
+    )
+
+    with (
+        patch(
+            "pipeline.process_item",
+            new=AsyncMock(side_effect=ExtractionConfigError("404 model")),
+        ),
+        patch("feeds.portwatch_collector.log.error") as mock_err,
+    ):
+        await collector.collect()
+
+    collector._build_point.assert_not_called()
+    collector._batch_upsert.assert_not_called()
+    # Error log emitted for both call sites (chokepoint + disruption)
+    err_keys = [c.args[0] for c in mock_err.call_args_list]
+    assert err_keys.count("extraction_skipped_config") >= 2

@@ -83,8 +83,15 @@ class HAPICollector(BaseCollector):
                     f"{record['fatalities']} fatalities in {country} ({record['reference_period']})"
                 )
 
+                from pipeline import (
+                    ExtractionConfigError,
+                    ExtractionTransientError,
+                    process_item,
+                )
+
+                # Transient/config errors skip Qdrant upsert so the record is
+                # retried on the next source re-fetch.
                 try:
-                    from pipeline import process_item
                     await process_item(
                         title=f"HAPI {country} {record['reference_period']}",
                         text=description,
@@ -93,6 +100,22 @@ class HAPICollector(BaseCollector):
                         settings=self.settings,
                         redis_client=self.redis,
                     )
+                except ExtractionTransientError as exc:
+                    log.warning(
+                        "extraction_skipped_transient",
+                        url=_HAPI_URL,
+                        country=country,
+                        error=str(exc),
+                    )
+                    continue
+                except ExtractionConfigError as exc:
+                    log.error(
+                        "extraction_skipped_config",
+                        url=_HAPI_URL,
+                        country=country,
+                        error=str(exc),
+                    )
+                    continue
                 except Exception:
                     log.warning("hapi_pipeline_failed", country=country)
 

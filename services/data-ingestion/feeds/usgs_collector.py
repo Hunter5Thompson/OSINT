@@ -12,7 +12,7 @@ from qdrant_client.models import PointStruct
 from config import Settings
 from feeds.base import BaseCollector
 from feeds.geo import haversine_km
-from pipeline import process_item
+from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
 
 log = structlog.get_logger(__name__)
 
@@ -270,14 +270,27 @@ ON CREATE SET r.distance_km   = $distance_km,
             if event["concern_level"]:
                 embed_text += f" Nuclear concern level: {event['concern_level']}."
 
-            await process_item(
-                title=title,
-                text=embed_text,
-                url=event["url"],
-                source="usgs",
-                settings=self.settings,
-                redis_client=self.redis,
-            )
+            # Intelligence extraction. Transient/config errors skip Qdrant upsert
+            # so the event is retried on the next source re-fetch (dedup doesn't trip).
+            try:
+                await process_item(
+                    title=title,
+                    text=embed_text,
+                    url=event["url"],
+                    source="usgs",
+                    settings=self.settings,
+                    redis_client=self.redis,
+                )
+            except ExtractionTransientError as exc:
+                log.warning(
+                    "extraction_skipped_transient", url=event["url"], error=str(exc)
+                )
+                continue
+            except ExtractionConfigError as exc:
+                log.error(
+                    "extraction_skipped_config", url=event["url"], error=str(exc)
+                )
+                continue
 
             # Nuclear proximity (eventual consistency, see docstring)
             if event["nearest_test_site"]:

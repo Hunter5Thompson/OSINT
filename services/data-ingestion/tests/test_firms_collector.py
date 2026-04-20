@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -12,6 +12,7 @@ from feeds.firms_collector import (
     FIRMSCollector,
     is_possible_explosion,
 )
+from pipeline import ExtractionConfigError, ExtractionTransientError
 
 
 @pytest.fixture
@@ -89,3 +90,57 @@ def test_dedup_hash_ignores_satellite(collector):
     h1 = collector._firms_content_hash(36.5, 40.7, "2026-04-01", "0130")
     h2 = collector._firms_content_hash(36.5, 40.7, "2026-04-01", "0130")
     assert h1 == h2  # same location+time = same hash regardless of satellite
+
+
+# ── Extraction error skip tests (Task 7) ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_firms_transient_skips_upsert(collector):
+    """When process_item raises ExtractionTransientError, row is NOT upserted."""
+    collector._fetch_csv = AsyncMock(return_value=SAMPLE_CSV)
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._build_point = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._ensure_collection = AsyncMock()
+
+    # Force only ONE satellite/bbox iteration for a fast test
+    with (
+        patch("feeds.firms_collector.FIRMS_SATELLITES", ["VIIRS_SNPP_NRT"]),
+        patch("feeds.firms_collector.FIRMS_BBOXES", {"ukraine": "22,44,40,52"}),
+        patch(
+            "feeds.firms_collector.process_item",
+            new=AsyncMock(side_effect=ExtractionTransientError("vllm down")),
+        ),
+    ):
+        await collector.collect()
+
+    collector._build_point.assert_not_called()
+    collector._batch_upsert.assert_called_once_with([])
+
+
+@pytest.mark.asyncio
+async def test_firms_config_skips_upsert(collector):
+    """When process_item raises ExtractionConfigError, row is NOT upserted + error log."""
+    collector._fetch_csv = AsyncMock(return_value=SAMPLE_CSV)
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._build_point = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._ensure_collection = AsyncMock()
+
+    with (
+        patch("feeds.firms_collector.FIRMS_SATELLITES", ["VIIRS_SNPP_NRT"]),
+        patch("feeds.firms_collector.FIRMS_BBOXES", {"ukraine": "22,44,40,52"}),
+        patch(
+            "feeds.firms_collector.process_item",
+            new=AsyncMock(side_effect=ExtractionConfigError("404 model")),
+        ),
+        patch("feeds.firms_collector.log.error") as mock_err,
+    ):
+        await collector.collect()
+
+    collector._build_point.assert_not_called()
+    collector._batch_upsert.assert_called_once_with([])
+    assert any(
+        c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
+    )

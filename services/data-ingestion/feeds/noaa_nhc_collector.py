@@ -84,16 +84,40 @@ class NOAANHCCollector(BaseCollector):
                 f"moving {storm['movement']}"
             )
 
+            from pipeline import (
+                ExtractionConfigError,
+                ExtractionTransientError,
+                process_item,
+            )
+
+            storm_url = (
+                f"https://www.nhc.noaa.gov/text/refresh/{storm['storm_id']}+shtml"
+            )
+            # Transient/config errors skip Qdrant upsert so the storm advisory
+            # is retried on the next source re-fetch.
             try:
-                from pipeline import process_item
                 await process_item(
                     title=f"NHC Advisory: {storm['storm_name']}",
                     text=description,
-                    url=f"https://www.nhc.noaa.gov/text/refresh/{storm['storm_id']}+shtml",
+                    url=storm_url,
                     source="noaa_nhc",
                     settings=self.settings,
                     redis_client=self.redis,
                 )
+            except ExtractionTransientError as exc:
+                log.warning(
+                    "extraction_skipped_transient",
+                    url=storm_url,
+                    error=str(exc),
+                )
+                continue
+            except ExtractionConfigError as exc:
+                log.error(
+                    "extraction_skipped_config",
+                    url=storm_url,
+                    error=str(exc),
+                )
+                continue
             except Exception:
                 log.warning("noaa_nhc_pipeline_failed", storm_id=storm["storm_id"])
 

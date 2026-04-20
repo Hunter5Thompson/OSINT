@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from feeds.hapi_collector import HAPICollector, FOCUS_COUNTRIES
+from pipeline import ExtractionConfigError, ExtractionTransientError
 
 SAMPLE_RESPONSE = {
     "data": [
@@ -87,3 +88,64 @@ class TestHAPIContentHash:
         h1 = collector._content_hash("UKR", "2026-03", "political_violence")
         h2 = collector._content_hash("SYR", "2026-03", "political_violence")
         assert h1 != h2
+
+
+# ── Extraction error skip tests (Task 7) ────────────────────────────
+
+
+def _hapi_http_resp():
+    r = MagicMock()
+    r.status_code = 200
+    r.raise_for_status = MagicMock()
+    r.json.return_value = SAMPLE_RESPONSE
+    return r
+
+
+@pytest.mark.asyncio
+async def test_hapi_transient_skips_upsert(collector):
+    """When process_item raises ExtractionTransientError, record is NOT upserted."""
+    collector.http.get = AsyncMock(return_value=_hapi_http_resp())
+    collector._ensure_collection = AsyncMock()
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._batch_upsert = AsyncMock()
+    collector._build_point = AsyncMock()
+
+    with (
+        patch("feeds.hapi_collector.FOCUS_COUNTRIES", ["UKR"]),
+        patch("feeds.hapi_collector.asyncio.sleep", new=AsyncMock()),
+        patch(
+            "pipeline.process_item",
+            new=AsyncMock(side_effect=ExtractionTransientError("vllm down")),
+        ),
+    ):
+        await collector.collect()
+
+    collector._build_point.assert_not_called()
+    collector._batch_upsert.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_hapi_config_skips_upsert(collector):
+    """When process_item raises ExtractionConfigError, record is NOT upserted + error log."""
+    collector.http.get = AsyncMock(return_value=_hapi_http_resp())
+    collector._ensure_collection = AsyncMock()
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._batch_upsert = AsyncMock()
+    collector._build_point = AsyncMock()
+
+    with (
+        patch("feeds.hapi_collector.FOCUS_COUNTRIES", ["UKR"]),
+        patch("feeds.hapi_collector.asyncio.sleep", new=AsyncMock()),
+        patch(
+            "pipeline.process_item",
+            new=AsyncMock(side_effect=ExtractionConfigError("404 model")),
+        ),
+        patch("feeds.hapi_collector.log.error") as mock_err,
+    ):
+        await collector.collect()
+
+    collector._build_point.assert_not_called()
+    collector._batch_upsert.assert_not_called()
+    assert any(
+        c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
+    )

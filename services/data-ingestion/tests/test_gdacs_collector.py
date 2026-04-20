@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from feeds.gdacs_collector import GDACSCollector
+from pipeline import ExtractionConfigError, ExtractionTransientError
 
 SAMPLE_GEOJSON = {
     "type": "FeatureCollection",
@@ -150,3 +151,56 @@ class TestGDACSContentHash:
         h1 = collector._content_hash("gdacs", "EQ", "1001")
         h2 = collector._content_hash("gdacs", "TC", "1001")
         assert h1 != h2
+
+
+# ── Extraction error skip tests (Task 7) ────────────────────────────
+
+
+def _gdacs_http_resp():
+    r = MagicMock()
+    r.status_code = 200
+    r.raise_for_status = MagicMock()
+    r.json.return_value = SAMPLE_GEOJSON
+    return r
+
+
+@pytest.mark.asyncio
+async def test_gdacs_transient_skips_upsert(collector):
+    """When process_item raises ExtractionTransientError, event is NOT upserted."""
+    collector.http.get = AsyncMock(return_value=_gdacs_http_resp())
+    collector._ensure_collection = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._embed = AsyncMock(return_value=[0.0] * 1024)
+    collector.qdrant.retrieve.return_value = []
+
+    with patch(
+        "pipeline.process_item",
+        new=AsyncMock(side_effect=ExtractionTransientError("vllm down")),
+    ):
+        await collector.collect()
+
+    collector._batch_upsert.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_gdacs_config_skips_upsert(collector):
+    """When process_item raises ExtractionConfigError, event is NOT upserted + error log."""
+    collector.http.get = AsyncMock(return_value=_gdacs_http_resp())
+    collector._ensure_collection = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._embed = AsyncMock(return_value=[0.0] * 1024)
+    collector.qdrant.retrieve.return_value = []
+
+    with (
+        patch(
+            "pipeline.process_item",
+            new=AsyncMock(side_effect=ExtractionConfigError("404 model")),
+        ),
+        patch("feeds.gdacs_collector.log.error") as mock_err,
+    ):
+        await collector.collect()
+
+    collector._batch_upsert.assert_not_called()
+    assert any(
+        c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
+    )

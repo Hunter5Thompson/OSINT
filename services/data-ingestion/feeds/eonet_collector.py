@@ -94,17 +94,41 @@ class EONETCollector(BaseCollector):
             is_new = len(existing) == 0
 
             if is_new:
-                # First-seen: run through Pipeline for Neo4j
+                # First-seen: run through Pipeline for Neo4j.
+                # Transient/config errors skip Qdrant upsert so the event is
+                # retried on the next source re-fetch.
+                from pipeline import (
+                    ExtractionConfigError,
+                    ExtractionTransientError,
+                    process_item,
+                )
+
+                event_url = (
+                    f"https://eonet.gsfc.nasa.gov/api/v3/events/{event['eonet_id']}"
+                )
                 try:
-                    from pipeline import process_item
                     await process_item(
                         title=event["title"],
                         text=description,
-                        url=f"https://eonet.gsfc.nasa.gov/api/v3/events/{event['eonet_id']}",
+                        url=event_url,
                         source="eonet",
                         settings=self.settings,
                         redis_client=self.redis,
                     )
+                except ExtractionTransientError as exc:
+                    log.warning(
+                        "extraction_skipped_transient",
+                        url=event_url,
+                        error=str(exc),
+                    )
+                    continue
+                except ExtractionConfigError as exc:
+                    log.error(
+                        "extraction_skipped_config",
+                        url=event_url,
+                        error=str(exc),
+                    )
+                    continue
                 except Exception:
                     log.warning("eonet_pipeline_failed", event_id=event["eonet_id"])
                 new_count += 1
