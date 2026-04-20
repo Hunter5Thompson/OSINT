@@ -218,8 +218,8 @@ def extract(notebook_id: str | None):
                         transcript=transcript,
                         metadata=metadata,
                         client=client,
-                        vllm_url=settings.vllm_url + "/v1",
-                        vllm_model=settings.vllm_model,
+                        vllm_url=settings.ingestion_vllm_url,
+                        vllm_model=settings.ingestion_vllm_model,
                     )
 
                     if claude_client:
