@@ -79,11 +79,13 @@ _SYSTEM_PROMPT = _build_system_prompt()
 
 _RESPONSE_SCHEMA = {
     "type": "object",
+    "additionalProperties": False,
     "properties": {
         "events": {
             "type": "array",
             "items": {
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     "title": {"type": "string"},
                     "summary": {"type": "string"},
@@ -92,13 +94,14 @@ _RESPONSE_SCHEMA = {
                     "confidence": {"type": "number"},
                     "timestamp": {"type": "string"},
                 },
-                "required": ["title", "codebook_type", "severity", "confidence"],
+                "required": ["title", "summary", "codebook_type", "severity", "confidence"],
             },
         },
         "entities": {
             "type": "array",
             "items": {
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     "name": {"type": "string"},
                     "type": {"type": "string", "enum": [
@@ -114,6 +117,7 @@ _RESPONSE_SCHEMA = {
             "type": "array",
             "items": {
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     "name": {"type": "string"},
                     "country": {"type": "string"},

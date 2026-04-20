@@ -92,6 +92,7 @@ class TestProcessItem:
         vllm_resp = _mock_vllm_response(
             events=[{
                 "title": "Test event",
+                "summary": "Test event summary",
                 "codebook_type": "military.airstrike",
                 "severity": "medium",
                 "confidence": 0.7,
@@ -124,6 +125,7 @@ class TestProcessItem:
         vllm_resp = _mock_vllm_response(
             events=[{
                 "title": "Stream event",
+                "summary": "Stream event summary",
                 "codebook_type": "space.satellite_launch",
                 "severity": "low",
                 "confidence": 0.8,
