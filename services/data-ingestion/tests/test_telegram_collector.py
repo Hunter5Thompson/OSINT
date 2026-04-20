@@ -779,3 +779,178 @@ class TestSchedulerIntegration:
         job = scheduler.get_job("telegram_collector")
         assert job is not None
         assert job.trigger.interval.total_seconds() == 300
+
+
+# ── Extraction error skip tests (Task 6) ─────────────────────────────
+
+
+class TestExtractionErrorSkipsUpsert:
+    """Both call sites must skip Qdrant upsert when process_item raises
+    ExtractionTransientError or ExtractionConfigError.
+
+    Call sites:
+      - feeds/telegram_collector.py:351  (single-message path, _process_single)
+      - feeds/telegram_collector.py:432  (album path, _process_album)
+    """
+
+    def _channel(self):
+        from feeds.telegram_models import ChannelConfig
+
+        return ChannelConfig(
+            handle="testchan", name="Test", category="osint",
+            source_bias="neutral", language="en", priority="medium", media=False,
+        )
+
+    def _single_msg(self):
+        msg = MagicMock()
+        msg.id = 1
+        msg.message = "hello world"
+        msg.date = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+        msg.forward = None
+        msg.photo = None
+        msg.video = None
+        msg.document = None
+        msg.file = None
+        msg.grouped_id = None
+        return msg
+
+    def _album_msg(self, msg_id=10):
+        m = MagicMock()
+        m.id = msg_id
+        m.message = "caption"
+        m.date = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+        m.forward = None
+        m.photo = None
+        m.video = None
+        m.document = None
+        m.file = None
+        m.grouped_id = 99
+        return m
+
+    async def test_single_transient_skips_upsert_and_warns(self):
+        """Single-message path: ExtractionTransientError → no upsert, warn log."""
+        from feeds import telegram_collector as tcm
+        from pipeline import ExtractionTransientError
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+        collector._settings = _make_settings()
+        collector._embed_and_upsert = AsyncMock(return_value=True)
+        collector._mark_seen = AsyncMock()
+
+        ch = self._channel()
+        msg = self._single_msg()
+
+        with (
+            patch(
+                "pipeline.process_item",
+                new_callable=AsyncMock,
+                side_effect=ExtractionTransientError("vllm down"),
+            ),
+            patch.object(tcm.log, "warning") as mock_warn,
+        ):
+            result = await collector._process_single(ch, msg, "chash1")
+
+        assert result == 0, "Transient error must signal skip (return 0)"
+        collector._embed_and_upsert.assert_not_called()
+        collector._mark_seen.assert_not_called()
+        assert any(
+            c.args[0] == "extraction_skipped_transient"
+            for c in mock_warn.call_args_list
+        )
+
+    async def test_single_config_skips_upsert_and_errors(self):
+        """Single-message path: ExtractionConfigError → no upsert, error log."""
+        from feeds import telegram_collector as tcm
+        from pipeline import ExtractionConfigError
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+        collector._settings = _make_settings()
+        collector._embed_and_upsert = AsyncMock(return_value=True)
+        collector._mark_seen = AsyncMock()
+
+        ch = self._channel()
+        msg = self._single_msg()
+
+        with (
+            patch(
+                "pipeline.process_item",
+                new_callable=AsyncMock,
+                side_effect=ExtractionConfigError("404 model"),
+            ),
+            patch.object(tcm.log, "error") as mock_err,
+        ):
+            result = await collector._process_single(ch, msg, "chash1")
+
+        assert result == 0
+        collector._embed_and_upsert.assert_not_called()
+        collector._mark_seen.assert_not_called()
+        assert any(
+            c.args[0] == "extraction_skipped_config"
+            for c in mock_err.call_args_list
+        )
+
+    async def test_album_transient_skips_upsert_and_warns(self):
+        """Album path: ExtractionTransientError → no upsert, warn log."""
+        from feeds import telegram_collector as tcm
+        from pipeline import ExtractionTransientError
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+        collector._settings = _make_settings()
+        collector._embed_and_upsert = AsyncMock(return_value=True)
+        collector._mark_seen = AsyncMock()
+
+        ch = self._channel()
+        msgs = [self._album_msg(10), self._album_msg(11)]
+
+        with (
+            patch(
+                "pipeline.process_item",
+                new_callable=AsyncMock,
+                side_effect=ExtractionTransientError("vllm down"),
+            ),
+            patch.object(tcm.log, "warning") as mock_warn,
+        ):
+            result = await collector._process_album(ch, msgs, "chash_album")
+
+        assert result == 0
+        collector._embed_and_upsert.assert_not_called()
+        collector._mark_seen.assert_not_called()
+        assert any(
+            c.args[0] == "extraction_skipped_transient"
+            for c in mock_warn.call_args_list
+        )
+
+    async def test_album_config_skips_upsert_and_errors(self):
+        """Album path: ExtractionConfigError → no upsert, error log."""
+        from feeds import telegram_collector as tcm
+        from pipeline import ExtractionConfigError
+
+        with patch("feeds.telegram_collector._load_channels", return_value=[]):
+            collector = TelegramCollector(redis_client=None)
+        collector._settings = _make_settings()
+        collector._embed_and_upsert = AsyncMock(return_value=True)
+        collector._mark_seen = AsyncMock()
+
+        ch = self._channel()
+        msgs = [self._album_msg(10), self._album_msg(11)]
+
+        with (
+            patch(
+                "pipeline.process_item",
+                new_callable=AsyncMock,
+                side_effect=ExtractionConfigError("404 model"),
+            ),
+            patch.object(tcm.log, "error") as mock_err,
+        ):
+            result = await collector._process_album(ch, msgs, "chash_album")
+
+        assert result == 0
+        collector._embed_and_upsert.assert_not_called()
+        collector._mark_seen.assert_not_called()
+        assert any(
+            c.args[0] == "extraction_skipped_config"
+            for c in mock_err.call_args_list
+        )

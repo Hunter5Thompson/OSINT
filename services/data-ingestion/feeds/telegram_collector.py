@@ -305,7 +305,7 @@ class TelegramCollector:
         """Process a single (non-album) message."""
         import datetime
 
-        from pipeline import process_item
+        from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
 
         text = msg.message or ""
         title = text.split("\n")[0][:200] if text.strip() else f"{channel.name} #{msg.id}"
@@ -347,15 +347,24 @@ class TelegramCollector:
                 channel, msg.id, media_paths[0]
             )
 
-        # Intelligence extraction via existing pipeline
-        enrichment = await process_item(
-            title=title,
-            text=text,
-            url=url,
-            source="telegram",
-            settings=self._settings,
-            redis_client=self._redis,
-        )
+        # Intelligence extraction via existing pipeline. Transient/config errors
+        # skip Qdrant upsert so the item is retried on the next poll (watermark
+        # freezes because we return 0, and dedup hash isn't marked seen).
+        try:
+            enrichment = await process_item(
+                title=title,
+                text=text,
+                url=url,
+                source="telegram",
+                settings=self._settings,
+                redis_client=self._redis,
+            )
+        except ExtractionTransientError as exc:
+            log.warning("extraction_skipped_transient", url=url, error=str(exc))
+            return 0
+        except ExtractionConfigError as exc:
+            log.error("extraction_skipped_config", url=url, error=str(exc))
+            return 0
 
         # Embed and upsert to Qdrant — only mark seen if persisted
         persisted = await self._embed_and_upsert(
@@ -384,7 +393,7 @@ class TelegramCollector:
         """Process a group of messages (Telegram album)."""
         import datetime
 
-        from pipeline import process_item
+        from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
 
         # Concatenate text from all messages in the album
         texts = [m.message for m in msgs if m.message]
@@ -429,14 +438,23 @@ class TelegramCollector:
                 )
                 break
 
-        enrichment = await process_item(
-            title=title,
-            text=text,
-            url=url,
-            source="telegram",
-            settings=self._settings,
-            redis_client=self._redis,
-        )
+        # Intelligence extraction via existing pipeline. Transient/config errors
+        # skip Qdrant upsert so the album is retried on the next poll.
+        try:
+            enrichment = await process_item(
+                title=title,
+                text=text,
+                url=url,
+                source="telegram",
+                settings=self._settings,
+                redis_client=self._redis,
+            )
+        except ExtractionTransientError as exc:
+            log.warning("extraction_skipped_transient", url=url, error=str(exc))
+            return 0
+        except ExtractionConfigError as exc:
+            log.error("extraction_skipped_config", url=url, error=str(exc))
+            return 0
 
         persisted = await self._embed_and_upsert(
             content_hash=content_hash,
