@@ -1,6 +1,7 @@
 """Tests for rss_collector error-handling behavior."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from feeds.rss_collector import RSSCollector
