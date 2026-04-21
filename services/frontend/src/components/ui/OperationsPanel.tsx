@@ -20,6 +20,8 @@ const CORE_LAYERS: { key: keyof LayerVisibility; label: string; color: string }[
   { key: "events", label: "EVENTS", color: "#f97316" },
   { key: "cables", label: "CABLES", color: "#22c55e" },
   { key: "pipelines", label: "PIPELINES", color: "#eab308" },
+  { key: "countryBorders", label: "COUNTRY BORDERS", color: "#7dd3fc" },
+  { key: "cityBuildings", label: "3D BUILDINGS", color: "#93c5fd" },
   { key: "datacenters", label: "DATACENTERS", color: "#00e5ff" },
   { key: "refineries",  label: "REFINERIES",  color: "#ff8f00" },
 ];
@@ -50,6 +52,21 @@ function LayerIcon({ layerKey, color }: { layerKey: string; color: string }) {
       return (<svg {...s}><path d="M4 24 C10 24 10 8 16 8 C22 8 22 24 28 24" stroke={color} strokeWidth={2} opacity={0.7} fill="none" /></svg>);
     case "pipelines":
       return (<svg {...s}><path d="M4 16 Q10 10 16 16 Q22 22 28 16" stroke={color} strokeWidth={2.5} opacity={0.7} fill="none" /><circle cx={4} cy={16} r={3} fill={color} opacity={0.6} /><circle cx={28} cy={16} r={3} fill={color} opacity={0.6} /></svg>);
+    case "countryBorders":
+      return (
+        <svg {...s}>
+          <circle cx={16} cy={16} r={10} stroke={color} strokeWidth={1.5} opacity={0.45} fill="none" />
+          <path d="M7 16 H25 M16 7 V25 M10 10 C12 11 14 11 16 10 C18 9 20 9 22 10" stroke={color} strokeWidth={1.2} opacity={0.8} fill="none" />
+        </svg>
+      );
+    case "cityBuildings":
+      return (
+        <svg {...s}>
+          <rect x={6} y={14} width={6} height={12} fill={color} opacity={0.5} />
+          <rect x={13} y={9} width={7} height={17} fill={color} opacity={0.7} />
+          <rect x={22} y={12} width={4} height={14} fill={color} opacity={0.5} />
+        </svg>
+      );
     case "firmsHotspots":
       return (
         <svg {...s}>

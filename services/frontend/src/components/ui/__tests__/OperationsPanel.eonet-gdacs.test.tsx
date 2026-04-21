@@ -6,6 +6,7 @@ import type { LayerVisibility } from "../../../types";
 const baseLayers: LayerVisibility = {
   flights: true, satellites: true, earthquakes: true, vessels: false,
   cctv: false, events: false, cables: false, pipelines: false,
+  countryBorders: true, cityBuildings: true,
   firmsHotspots: true, milAircraft: true,
   datacenters: false, refineries: false,
   eonet: false, gdacs: false,
@@ -35,9 +36,9 @@ describe("OperationsPanel — EONET/GDACS layers", () => {
         onShaderChange={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByText("EONET EVENTS"));
+    fireEvent.click(screen.getAllByRole("button", { name: "EONET EVENTS" }).at(-1)!);
     expect(toggle).toHaveBeenCalledWith("eonet");
-    fireEvent.click(screen.getByText("GDACS ALERTS"));
+    fireEvent.click(screen.getAllByRole("button", { name: "GDACS ALERTS" }).at(-1)!);
     expect(toggle).toHaveBeenCalledWith("gdacs");
   });
 });

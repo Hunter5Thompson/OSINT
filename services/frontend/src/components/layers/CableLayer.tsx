@@ -10,6 +10,26 @@ interface CableLayerProps {
 }
 
 const LABEL_ALTITUDE_THRESHOLD = 5_000_000;
+const CABLE_ALTITUDE_M = 150;
+const LANDING_POINT_ALTITUDE_M = 250;
+
+function isValidCoord(coord: number[] | undefined): coord is [number, number] {
+  if (!coord || coord.length < 2) return false;
+  const [lon, lat] = coord;
+  return Number.isFinite(lon) && Number.isFinite(lat);
+}
+
+function getCableMidpoint(segments: number[][][]): [number, number] | null {
+  let bestSegment: number[][] | null = null;
+  for (const segment of segments) {
+    if (segment.length < 2) continue;
+    if (!bestSegment || segment.length > bestSegment.length) bestSegment = segment;
+  }
+  if (!bestSegment) return null;
+  const mid = bestSegment[Math.floor(bestSegment.length / 2)];
+  if (!isValidCoord(mid)) return null;
+  return [mid[0], mid[1]];
+}
 
 export function CableLayer({ viewer, cables, landingPoints, visible }: CableLayerProps) {
   const polylineCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
@@ -94,6 +114,7 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
     const lpNameMap = new Map(landingPoints.map((lp) => [lp.id, lp.name]));
 
     // Draw cables
+    const usedLabelCells = new Set<string>();
     for (const cable of cables) {
       const alpha = cable.is_planned ? 0.3 : 0.8;
       const width = cable.is_planned ? 1.5 : 2.0;
@@ -102,14 +123,14 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
       for (const segment of cable.coordinates) {
         if (segment.length < 2) continue;
 
-        const positions: Cesium.Cartesian3[] = [];
-        for (const coord of segment) {
-          const lon = coord[0];
-          const lat = coord[1];
-          if (lon == null || lat == null || !Number.isFinite(lon) || !Number.isFinite(lat)) continue;
-          positions.push(Cesium.Cartesian3.fromDegrees(lon, lat, 0));
+        const flat: number[] = [];
+        for (const coord of segment as number[][]) {
+          if (!isValidCoord(coord)) continue;
+          flat.push(coord[0], coord[1], CABLE_ALTITUDE_M);
         }
-        if (positions.length < 2) continue;
+        if (flat.length < 6) continue;
+
+        const positions = Cesium.Cartesian3.fromDegreesArrayHeights(flat);
 
         pc.add({
           positions,
@@ -118,21 +139,18 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
         });
       }
 
-      // Midpoint billboard for click handling (first segment)
-      const firstSeg = cable.coordinates[0];
-      if (firstSeg && firstSeg.length >= 2) {
-        const midIdx = Math.floor(firstSeg.length / 2);
-        const midCoord = firstSeg[midIdx];
-        if (!midCoord || midCoord[0] == null || midCoord[1] == null) continue;
-        const midLon = midCoord[0];
-        const midLat = midCoord[1];
-        const midPos = Cesium.Cartesian3.fromDegrees(midLon, midLat, 0);
+      const midpoint = getCableMidpoint(cable.coordinates);
+      if (midpoint) {
+        const [midLon, midLat] = midpoint;
+        const midPos = Cesium.Cartesian3.fromDegrees(midLon, midLat, CABLE_ALTITUDE_M);
 
         const billboard = bc.add({
           position: midPos,
           image: createCableDotCanvas(cable.color),
           scale: 0.4,
           eyeOffset: new Cesium.Cartesian3(0, 0, -50),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          translucencyByDistance: new Cesium.NearFarScalar(100_000, 1.0, 10_000_000, 0.3),
         });
         // Resolve landing point names for click panel
         const lpNames = cable.landing_point_ids
@@ -153,28 +171,35 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
           lon: midLon,
         };
 
-        // Label at midpoint
-        lc.add({
-          position: midPos,
-          text: cable.name.length > 25 ? cable.name.substring(0, 22) + "..." : cable.name,
-          font: "10px monospace",
-          fillColor: cableColor,
-          outlineColor: Cesium.Color.BLACK,
-          outlineWidth: 2,
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          pixelOffset: new Cesium.Cartesian2(0, -12),
-          eyeOffset: new Cesium.Cartesian3(0, 0, -50),
-        });
+        const labelCell = `${Math.round(midLat * 2) / 2}:${Math.round(midLon * 2) / 2}`;
+        if (!usedLabelCells.has(labelCell)) {
+          usedLabelCells.add(labelCell);
+          lc.add({
+            position: midPos,
+            text: cable.name.length > 25 ? cable.name.substring(0, 22) + "..." : cable.name,
+            font: "10px monospace",
+            fillColor: cableColor,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -12),
+            eyeOffset: new Cesium.Cartesian3(0, 0, -50),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, LABEL_ALTITUDE_THRESHOLD),
+          });
+        }
       }
     }
 
     // Draw landing points
     for (const lp of landingPoints) {
       bc.add({
-        position: Cesium.Cartesian3.fromDegrees(lp.longitude, lp.latitude, 0),
+        position: Cesium.Cartesian3.fromDegrees(lp.longitude, lp.latitude, LANDING_POINT_ALTITUDE_M),
         image: createLandingPointCanvas(),
         scale: 0.3,
         eyeOffset: new Cesium.Cartesian3(0, 0, -30),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        translucencyByDistance: new Cesium.NearFarScalar(100_000, 1.0, 8_000_000, 0.2),
       });
     }
   }, [cables, landingPoints, visible]);

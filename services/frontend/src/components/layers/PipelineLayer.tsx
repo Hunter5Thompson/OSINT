@@ -23,6 +23,9 @@ interface PipelineBillboard extends Cesium.Billboard {
   };
 }
 
+const PIPELINE_ALTITUDE_M = 250;
+const LABEL_ALTITUDE_THRESHOLD = 3_000_000;
+
 function getVisibleTier(altitudeMeters: number): Set<string> {
   const tiers = new Set<string>();
   for (const [tier, threshold] of Object.entries(PIPELINE_LOD_THRESHOLDS)) {
@@ -34,11 +37,31 @@ function getVisibleTier(altitudeMeters: number): Set<string> {
   return tiers;
 }
 
-function getCoordinatesFlat(feature: PipelineFeature): number[][] {
+function getCoordinateSegments(feature: PipelineFeature): number[][][] {
   if (feature.geometry.type === "LineString") {
-    return feature.geometry.coordinates as number[][];
+    return [feature.geometry.coordinates as number[][]];
   }
-  return (feature.geometry.coordinates as number[][][])[0] ?? [];
+  return feature.geometry.coordinates as number[][][];
+}
+
+function isValidCoord(coord: number[] | undefined): coord is [number, number] {
+  if (!coord || coord.length < 2) return false;
+  const [lon, lat] = coord;
+  return Number.isFinite(lon) && Number.isFinite(lat);
+}
+
+function getPipelineMidpoint(segments: number[][][]): [number, number] | null {
+  let bestSegment: number[][] | null = null;
+  for (const segment of segments) {
+    if (segment.length < 2) continue;
+    if (!bestSegment || segment.length > bestSegment.length) {
+      bestSegment = segment;
+    }
+  }
+  if (!bestSegment) return null;
+  const mid = bestSegment[Math.floor(bestSegment.length / 2)];
+  if (!isValidCoord(mid)) return null;
+  return [mid[0], mid[1]];
 }
 
 export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps) {
@@ -47,8 +70,6 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
   const labelCollectionRef = useRef<Cesium.LabelCollection | null>(null);
   const currentTiersRef = useRef<Set<string>>(new Set<string>());
   const labelsVisibleRef = useRef(false);
-
-  const LABEL_ALTITUDE_THRESHOLD = 5_000_000;
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -88,39 +109,45 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
         const props = feature.properties;
         if (!tiers.has(props.tier)) continue;
 
-        const coords = getCoordinatesFlat(feature);
-        if (coords.length < 2) continue;
-
-        const flat: number[] = [];
-        for (const c of coords) {
-          flat.push(c[0] as number, c[1] as number);
-        }
-        const positions = Cesium.Cartesian3.fromDegreesArray(flat);
-
+        const segments = getCoordinateSegments(feature);
         const color = Cesium.Color.fromCssColorString(
           PIPELINE_COLORS[props.type] ?? PIPELINE_COLORS.mixed,
         );
-
         const isDashed = props.status !== "active";
         const width = props.status === "active" ? 2.0 : 1.5;
 
-        pc.add({
-          positions,
-          width,
-          material: isDashed
-            ? Cesium.Material.fromType("PolylineDash", { color, dashLength: 16.0 })
-            : Cesium.Material.fromType("Color", { color }),
-        });
+        let renderedSegments = 0;
+        for (const segment of segments) {
+          if (segment.length < 2) continue;
+          const flat: number[] = [];
+          for (const coord of segment) {
+            if (!isValidCoord(coord)) continue;
+            flat.push(coord[0], coord[1], PIPELINE_ALTITUDE_M);
+          }
+          if (flat.length < 6) continue;
 
-        const midIdx = Math.floor(coords.length / 2);
-        const midCoord = coords[midIdx]!;
-        const midLon = midCoord[0] as number;
-        const midLat = midCoord[1] as number;
+          const positions = Cesium.Cartesian3.fromDegreesArrayHeights(flat);
+          pc.add({
+            positions,
+            width,
+            material: isDashed
+              ? Cesium.Material.fromType("PolylineDash", { color, dashLength: 16.0 })
+              : Cesium.Material.fromType("Color", { color }),
+          });
+          renderedSegments += 1;
+        }
+        if (renderedSegments === 0) continue;
+
+        const midpoint = getPipelineMidpoint(segments);
+        if (!midpoint) continue;
+        const [midLon, midLat] = midpoint;
+
         const bb = bc.add({
-          position: Cesium.Cartesian3.fromDegrees(midLon, midLat),
+          position: Cesium.Cartesian3.fromDegrees(midLon, midLat, PIPELINE_ALTITUDE_M),
           image: createPipelineDot(PIPELINE_COLORS[props.type] ?? PIPELINE_COLORS.mixed),
           scale: 1.0,
           translucencyByDistance: new Cesium.NearFarScalar(1e5, 1.0, 1e7, 0.3),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
         }) as PipelineBillboard;
 
         bb._pipelineData = {
@@ -136,7 +163,7 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
         };
 
         lc.add({
-          position: Cesium.Cartesian3.fromDegrees(midLon, midLat),
+          position: Cesium.Cartesian3.fromDegrees(midLon, midLat, PIPELINE_ALTITUDE_M),
           text: props.name,
           font: "11px monospace",
           fillColor: color.withAlpha(0.8),
@@ -146,6 +173,7 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
           pixelOffset: new Cesium.Cartesian2(0, -12),
           show: labelsVisibleRef.current,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, LABEL_ALTITUDE_THRESHOLD),
         });
       }
     },
@@ -175,9 +203,7 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
         labelsVisibleRef.current = shouldShowLabels;
         const lc = labelCollectionRef.current;
         if (lc) {
-          for (let i = 0; i < lc.length; i++) {
-            lc.get(i).show = shouldShowLabels;
-          }
+          lc.show = shouldShowLabels && visible;
         }
       }
     };
@@ -190,12 +216,12 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
         viewer.camera.moveEnd.removeEventListener(updateLOD);
       }
     };
-  }, [viewer, pipelines, renderPipelines]);
+  }, [viewer, pipelines, renderPipelines, visible]);
 
   useEffect(() => {
     if (polylineCollectionRef.current) polylineCollectionRef.current.show = visible;
     if (billboardCollectionRef.current) billboardCollectionRef.current.show = visible;
-    if (labelCollectionRef.current) labelCollectionRef.current.show = visible;
+    if (labelCollectionRef.current) labelCollectionRef.current.show = visible && labelsVisibleRef.current;
   }, [visible]);
 
   return null;

@@ -8,12 +8,26 @@ interface GlobeViewerProps {
   onViewerReady: (viewer: Cesium.Viewer) => void;
   cesiumToken: string;
   activeShader: ShaderType;
+  showCountryBorders: boolean;
+  showCityBuildings: boolean;
 }
 
-export function GlobeViewer({ onViewerReady, cesiumToken, activeShader }: GlobeViewerProps) {
+export function GlobeViewer({
+  onViewerReady,
+  cesiumToken,
+  activeShader,
+  showCountryBorders,
+  showCityBuildings,
+}: GlobeViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const nightLayerRef = useRef<Cesium.ImageryLayer | null>(null);
+  const borderLayerRef = useRef<Cesium.ImageryLayer | null>(null);
+  const buildingsTilesetRef = useRef<Cesium.Cesium3DTileset | null>(null);
+  const showBordersRef = useRef(showCountryBorders);
+  const showBuildingsRef = useRef(showCityBuildings);
+  showBordersRef.current = showCountryBorders;
+  showBuildingsRef.current = showCityBuildings;
 
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return;
@@ -58,21 +72,58 @@ export function GlobeViewer({ onViewerReady, cesiumToken, activeShader }: GlobeV
     }
 
     // Google Photorealistic 3D Tiles with night-side darkening
-    void Cesium.createGooglePhotorealistic3DTileset().then((tileset) => {
-      tileset.customShader = new Cesium.CustomShader({
-        fragmentShaderText: /* glsl */ `
-          void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
-            // Darken fragments on the night side of the Earth
-            vec3 normalEC = fsInput.attributes.normalEC;
-            float NdotL = dot(normalEC, czm_sunDirectionEC);
-            // Smooth day-to-night transition at the terminator
-            float nightFactor = smoothstep(-0.05, 0.15, -NdotL);
-            material.diffuse *= mix(1.0, 0.03, nightFactor);
-          }
-        `,
-      });
+    const addBuildingsTileset = (tileset: Cesium.Cesium3DTileset) => {
+      if (viewer.isDestroyed()) return;
+      tileset.maximumScreenSpaceError = 2;
+      tileset.show = showBuildingsRef.current;
       viewer.scene.primitives.add(tileset);
-    });
+      buildingsTilesetRef.current = tileset;
+    };
+
+    void Cesium.createGooglePhotorealistic3DTileset()
+      .then((tileset) => {
+        tileset.customShader = new Cesium.CustomShader({
+          fragmentShaderText: /* glsl */ `
+            void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+              // Darken fragments on the night side of the Earth
+              vec3 normalEC = fsInput.attributes.normalEC;
+              float NdotL = dot(normalEC, czm_sunDirectionEC);
+              // Smooth day-to-night transition at the terminator
+              float nightFactor = smoothstep(-0.05, 0.15, -NdotL);
+              material.diffuse *= mix(1.0, 0.03, nightFactor);
+            }
+          `,
+        });
+        addBuildingsTileset(tileset);
+      })
+      .catch(() => {
+        // Fallback: OpenStreetMap buildings if Google Photorealistic is unavailable.
+        void Cesium.createOsmBuildingsAsync()
+          .then((tileset) => {
+            tileset.style = new Cesium.Cesium3DTileStyle({
+              color: "color('rgb(146,158,175)', 0.55)",
+            });
+            addBuildingsTileset(tileset);
+          })
+          .catch(() => {
+            // No 3D buildings available — continue with terrain-only.
+          });
+      });
+
+    // Country borders + place labels overlay.
+    void Cesium.createWorldImageryAsync({ style: Cesium.IonWorldImageryStyle.ROAD })
+      .then((provider) => {
+        if (viewer.isDestroyed()) return;
+        const bordersLayer = viewer.imageryLayers.addImageryProvider(provider);
+        bordersLayer.show = showBordersRef.current;
+        bordersLayer.alpha = 0.45;
+        bordersLayer.brightness = 0.9;
+        bordersLayer.contrast = 1.15;
+        borderLayerRef.current = bordersLayer;
+      })
+      .catch(() => {
+        // Overlay unavailable (token/access) — keep globe running without borders.
+      });
 
     // NASA Black Marble (VIIRS) for night side city lights
     // Cesium ion asset id: 3812
@@ -105,12 +156,32 @@ export function GlobeViewer({ onViewerReady, cesiumToken, activeShader }: GlobeV
         viewerRef.current.imageryLayers.remove(nightLayerRef.current, false);
         nightLayerRef.current = null;
       }
+      if (borderLayerRef.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
+        viewerRef.current.imageryLayers.remove(borderLayerRef.current, false);
+        borderLayerRef.current = null;
+      }
+      if (buildingsTilesetRef.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
+        viewerRef.current.scene.primitives.remove(buildingsTilesetRef.current);
+        buildingsTilesetRef.current = null;
+      }
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {
         viewerRef.current.destroy();
         viewerRef.current = null;
       }
     };
   }, [cesiumToken, onViewerReady]);
+
+  useEffect(() => {
+    if (borderLayerRef.current) {
+      borderLayerRef.current.show = showCountryBorders;
+    }
+  }, [showCountryBorders]);
+
+  useEffect(() => {
+    if (buildingsTilesetRef.current) {
+      buildingsTilesetRef.current.show = showCityBuildings;
+    }
+  }, [showCityBuildings]);
 
   // Handle shader changes
   useEffect(() => {

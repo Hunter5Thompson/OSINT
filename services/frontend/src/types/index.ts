@@ -193,6 +193,8 @@ export interface LayerVisibility {
   events: boolean;
   cables: boolean;
   pipelines: boolean;
+  countryBorders: boolean;
+  cityBuildings: boolean;
   firmsHotspots: boolean;
   milAircraft: boolean;
   datacenters: boolean;

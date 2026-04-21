@@ -53,6 +53,8 @@ export function App() {
     events: false,
     cables: false,
     pipelines: false,
+    countryBorders: true,
+    cityBuildings: true,
     firmsHotspots: true,
     milAircraft: true,
     datacenters: false,
@@ -87,7 +89,24 @@ export function App() {
       .catch(() => {
         setConfig({
           cesium_ion_token: "",
-          default_layers: { flights: true, satellites: true, earthquakes: true, vessels: false, cctv: false, events: false, cables: false, pipelines: false, firmsHotspots: true, milAircraft: true, datacenters: false, refineries: false, eonet: false, gdacs: false },
+          default_layers: {
+            flights: true,
+            satellites: true,
+            earthquakes: true,
+            vessels: false,
+            cctv: false,
+            events: false,
+            cables: false,
+            pipelines: false,
+            countryBorders: true,
+            cityBuildings: true,
+            firmsHotspots: true,
+            milAircraft: true,
+            datacenters: false,
+            refineries: false,
+            eonet: false,
+            gdacs: false,
+          },
           api_version: "v1",
         });
       });
@@ -145,6 +164,8 @@ export function App() {
         onViewerReady={handleViewerReady}
         cesiumToken={config.cesium_ion_token}
         activeShader={activeShader}
+        showCountryBorders={layers.countryBorders}
+        showCityBuildings={layers.cityBuildings}
       />
 
       <FlightLayer viewer={viewer} flights={flights} visible={layers.flights} />

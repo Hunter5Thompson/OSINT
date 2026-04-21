@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { IntelEvent } from "../../types";
 import { usePerformance } from "../globe/PerformanceGuard";
@@ -19,6 +19,10 @@ const EVENT_COLORS: Record<string, string> = {
 };
 
 const DEFAULT_COLOR = "#6b7280";
+const LABEL_ALTITUDE_THRESHOLD = 2_500_000;
+const EVENT_ALTITUDE_M = 300;
+const POSITION_BUCKET_DEG = 0.12;
+const STACK_RADIUS_KM = 18;
 
 function getCategoryColor(codebook_type: string): string {
   const category = codebook_type.split(".")[0] ?? "";
@@ -28,6 +32,69 @@ function getCategoryColor(codebook_type: string): string {
 interface EventPulse {
   billboard: Cesium.Billboard;
   severity: string;
+}
+
+export interface EventPlacement {
+  event: IntelEvent;
+  renderLat: number;
+  renderLon: number;
+  stackIndex: number;
+  stackSize: number;
+}
+
+function bucketKey(lat: number, lon: number): string {
+  const latKey = Math.round(lat / POSITION_BUCKET_DEG);
+  const lonKey = Math.round(lon / POSITION_BUCKET_DEG);
+  return `${latKey}:${lonKey}`;
+}
+
+function offsetPosition(lat: number, lon: number, idx: number, count: number): [number, number] {
+  if (count <= 1) return [lat, lon];
+  const ring = Math.floor(idx / 8);
+  const slot = idx % 8;
+  const steps = Math.min(8, count - ring * 8);
+  const angle = (2 * Math.PI * slot) / steps;
+  const radiusKm = STACK_RADIUS_KM * (1 + ring * 0.7);
+
+  const latDegPerKm = 1 / 111;
+  const lonDegPerKm = 1 / (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+
+  const nextLat = lat + Math.sin(angle) * radiusKm * latDegPerKm;
+  const nextLon = lon + Math.cos(angle) * radiusKm * lonDegPerKm;
+
+  return [Math.max(-85, Math.min(85, nextLat)), nextLon];
+}
+
+export function buildPlacements(events: IntelEvent[]): EventPlacement[] {
+  const byBucket = new Map<string, IntelEvent[]>();
+  for (const event of events) {
+    if (event.lat == null || event.lon == null) continue;
+    const key = bucketKey(event.lat, event.lon);
+    const list = byBucket.get(key);
+    if (list) {
+      list.push(event);
+    } else {
+      byBucket.set(key, [event]);
+    }
+  }
+
+  const result: EventPlacement[] = [];
+  for (const groupedEvents of byBucket.values()) {
+    const stackSize = groupedEvents.length;
+    for (let i = 0; i < groupedEvents.length; i += 1) {
+      const event = groupedEvents[i]!;
+      const [renderLat, renderLon] = offsetPosition(event.lat as number, event.lon as number, i, stackSize);
+      result.push({
+        event,
+        renderLat,
+        renderLon,
+        stackIndex: i,
+        stackSize,
+      });
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -41,6 +108,7 @@ export function EventLayer({ viewer, events, visible }: EventLayerProps) {
   const labelCollectionRef = useRef<Cesium.LabelCollection | null>(null);
   const pulsesRef = useRef<EventPulse[]>([]);
   const animFrameRef = useRef<number | null>(null);
+  const labelsVisibleRef = useRef(false);
   const { degradation } = usePerformance();
   const degradationRef = useRef(degradation);
   degradationRef.current = degradation;
@@ -69,6 +137,25 @@ export function EventLayer({ viewer, events, visible }: EventLayerProps) {
     };
   }, [viewer]);
 
+  const updateLabelVisibility = useCallback(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const lc = labelCollectionRef.current;
+    if (!lc) return;
+
+    const shouldShow = viewer.camera.positionCartographic.height < LABEL_ALTITUDE_THRESHOLD;
+    if (shouldShow !== labelsVisibleRef.current) {
+      labelsVisibleRef.current = shouldShow;
+      lc.show = shouldShow && visible;
+    }
+  }, [viewer, visible]);
+
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const removeListener = viewer.camera.moveEnd.addEventListener(updateLabelVisibility);
+    updateLabelVisibility();
+    return () => removeListener();
+  }, [viewer, updateLabelVisibility]);
+
   useEffect(() => {
     const bc = collectionRef.current;
     const lc = labelCollectionRef.current;
@@ -80,17 +167,21 @@ export function EventLayer({ viewer, events, visible }: EventLayerProps) {
 
     if (!visible) return;
 
-    for (const event of events) {
-      if (event.lat == null || event.lon == null) continue;
+    const placements = buildPlacements(events);
 
-      const position = Cesium.Cartesian3.fromDegrees(event.lon, event.lat, 0);
+    for (const placement of placements) {
+      const event = placement.event;
+      const position = Cesium.Cartesian3.fromDegrees(placement.renderLon, placement.renderLat, EVENT_ALTITUDE_M);
       const color = getCategoryColor(event.codebook_type);
 
       const billboard = bc.add({
         position,
         image: createEventCanvas(color),
-        scale: 1.0,
+        scale: placement.stackSize > 1 ? 0.9 : 1.0,
         eyeOffset: new Cesium.Cartesian3(0, 0, -100),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        scaleByDistance: new Cesium.NearFarScalar(100_000, 1.0, 12_000_000, 0.45),
+        translucencyByDistance: new Cesium.NearFarScalar(100_000, 1.0, 14_000_000, 0.35),
       });
 
       (billboard as unknown as Record<string, unknown>)._eventData = {
@@ -103,23 +194,34 @@ export function EventLayer({ viewer, events, visible }: EventLayerProps) {
         lon: event.lon,
       };
 
-      const label = event.title.length > 20 ? event.title.slice(0, 18) + "…" : event.title;
-      lc.add({
-        position,
-        text: label,
-        font: "10px monospace",
-        fillColor: Cesium.Color.fromCssColorString(color),
-        outlineColor: Cesium.Color.BLACK,
-        outlineWidth: 2,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        pixelOffset: new Cesium.Cartesian2(0, -18),
-        eyeOffset: new Cesium.Cartesian3(0, 0, -100),
-      });
+      const shouldLabel = placement.stackIndex === 0;
+      if (shouldLabel) {
+        const baseLabel = event.title.length > 20 ? event.title.slice(0, 18) + "…" : event.title;
+        const labelText = placement.stackSize > 1 ? `${baseLabel} (+${placement.stackSize - 1})` : baseLabel;
+
+        lc.add({
+          position,
+          text: labelText,
+          font: "10px monospace",
+          fillColor: Cesium.Color.fromCssColorString(color),
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(0, -18),
+          eyeOffset: new Cesium.Cartesian3(0, 0, -100),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, LABEL_ALTITUDE_THRESHOLD),
+          show: labelsVisibleRef.current,
+        });
+      }
 
       if (event.severity === "critical" || event.severity === "high") {
         pulsesRef.current.push({ billboard, severity: event.severity });
       }
     }
+
+    bc.show = visible;
+    lc.show = visible && labelsVisibleRef.current;
   }, [events, visible]);
 
   // Pulse animation loop
