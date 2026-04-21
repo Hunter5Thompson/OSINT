@@ -7,7 +7,6 @@ import {
 import { AppShell } from "./AppShell";
 import { LandingPage } from "../pages/LandingPage";
 import { WorldviewPage } from "../pages/WorldviewPage";
-import { WorldviewErrorBoundary } from "../pages/WorldviewErrorBoundary";
 import { BriefingPage } from "../pages/BriefingPage";
 import { WarRoomPage } from "../pages/WarRoomPage";
 
@@ -35,7 +34,6 @@ export const routes: RouteObject[] = [
       {
         path: "/worldview",
         element: <WorldviewPage />,
-        errorElement: <WorldviewErrorBoundary />,
       },
       { path: "/briefing", element: <BriefingPage /> },
       { path: "/briefing/:reportId", element: <BriefingPage /> },
