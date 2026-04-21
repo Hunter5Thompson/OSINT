@@ -4,6 +4,16 @@ import * as satellite from "satellite.js";
 import type { Satellite } from "../../types";
 import { usePerformance } from "../globe/PerformanceGuard";
 
+export function shouldRenderCone(sat: {
+  lat: number;
+  lon: number;
+  footprint_radius_km?: number;
+}): boolean {
+  if (!Number.isFinite(sat.lat) || !Number.isFinite(sat.lon)) return false;
+  if (!sat.footprint_radius_km || sat.footprint_radius_km <= 0) return false;
+  return true;
+}
+
 interface SatelliteLayerProps {
   viewer: Cesium.Viewer | null;
   satellites: Satellite[];
@@ -246,10 +256,10 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
 
       clearCone();
 
-      if (!satData || !satData.footprint_radius_km || satData.footprint_radius_km <= 0) return;
+      if (!satData || !shouldRenderCone(satData)) return;
 
       const color = CATEGORY_COLORS[satData.category ?? "active"] ?? CATEGORY_COLORS["active"]!;
-      const radiusM = satData.footprint_radius_km * 1000;
+      const radiusM = satData.footprint_radius_km! * 1000;
       const altM = (satData.altitude_km ?? 400) * 1000;
       const satPosition = Cesium.Cartesian3.fromDegrees(satData.lon, satData.lat, altM);
       const cc = coneCollectionRef.current;
