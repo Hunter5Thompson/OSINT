@@ -163,5 +163,17 @@ async def client_config() -> ClientConfig:
 # Primary mounts at /api + /api/v1 back-compat aliases (remove 2026-05-21)
 app.add_api_route("/api/health", health, response_model=HealthResponse, methods=["GET"])
 app.add_api_route("/api/config", client_config, response_model=ClientConfig, methods=["GET"])
-app.add_api_route("/api/v1/health", health, response_model=HealthResponse, methods=["GET"], include_in_schema=False)
-app.add_api_route("/api/v1/config", client_config, response_model=ClientConfig, methods=["GET"], include_in_schema=False)
+app.add_api_route(
+    "/api/v1/health",
+    health,
+    response_model=HealthResponse,
+    methods=["GET"],
+    include_in_schema=False,
+)
+app.add_api_route(
+    "/api/v1/config",
+    client_config,
+    response_model=ClientConfig,
+    methods=["GET"],
+    include_in_schema=False,
+)

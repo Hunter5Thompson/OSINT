@@ -60,6 +60,7 @@ async def sse_generator(
         replay_ids: set[str] = set()
         for envelope in replay:
             yield _frame(envelope)
+            yield _frame_wildcard(envelope)
             replay_ids.add(envelope.event_id)
 
         # Highest id already delivered via replay — any live-queue items at
@@ -81,6 +82,7 @@ async def sse_generator(
                 if last_delivered is not None and envelope.event_id <= last_delivered:
                     continue
                 yield _frame(envelope)
+                yield _frame_wildcard(envelope)
                 last_delivered = envelope.event_id
             except TimeoutError:
                 yield {"comment": "heartbeat"}
@@ -109,5 +111,19 @@ def _frame(envelope: SignalEnvelope) -> dict[str, str]:
     return {
         "id": envelope.event_id,
         "event": envelope.type,
+        "data": envelope.model_dump_json(),
+    }
+
+
+def _frame_wildcard(envelope: SignalEnvelope) -> dict[str, str]:
+    """Unnamed SSE frame — triggers EventSource.onmessage in real browsers.
+
+    Paired with _frame() so clients that register per-type addEventListener
+    AND clients that rely on onmessage both receive every envelope. The
+    frontend dedupes via event_id (see hooks/useSignalFeed.ts::rememberSeen)
+    so the double-emit is safe.
+    """
+    return {
+        "id": envelope.event_id,
         "data": envelope.model_dump_json(),
     }
