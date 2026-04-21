@@ -80,6 +80,24 @@ export function useSignalFeed(): UseSignalFeedResult {
     attemptRef.current = 0;
     setStatus("idle");
 
+    // Lazy named-listener registry. Types registered here forward their SSE
+    // frames to `handleEnvelope`, same as the generic onmessage wildcard.
+    const seenTypes = new Set<string>();
+    const registerNamed = (type: string) => {
+      if (seenTypes.has(type)) return;
+      seenTypes.add(type);
+      esRef.current?.addEventListener(type, ((ev: Event) => {
+        if (cancelled) return;
+        const msg = ev as MessageEvent<string>;
+        handleEnvelope(msg.data, (msg.lastEventId ?? "") as string);
+      }) as EventListener);
+    };
+    const onRegister = (ev: Event) => {
+      const custom = ev as CustomEvent<{ type?: string }>;
+      if (custom.detail?.type) registerNamed(custom.detail.type);
+    };
+    window.addEventListener("signal-feed:register", onRegister as EventListener);
+
     function rememberSeen(id: string) {
       if (dedupeRef.current.has(id)) return false;
       dedupeRef.current.add(id);
@@ -160,11 +178,10 @@ export function useSignalFeed(): UseSignalFeedResult {
         handleEnvelope(ev.data, ev.lastEventId ?? "");
       };
 
-      // Named events — we don't know the full type set ahead of time, so we
-      // catch-all via addEventListener for the known ones and a wildcard via
-      // the underlying EventTarget for any `signal.*` type. EventSource doesn't
-      // support wildcards natively; instead we rely on `onmessage` for unnamed
-      // frames and addEventListener for the ones the backend is known to emit.
+      // Named events — any codebook_type is accepted. Seed with the S1 list for
+      // back-compat, but allow late registration via a `signal-feed:register`
+      // window event so new taxonomy types (military.*, other.*, …) can opt into
+      // the named-event channel without touching this file.
       const SIGNAL_EVENT_TYPES = [
         "signal.firms",
         "signal.ucdp",
@@ -175,10 +192,12 @@ export function useSignalFeed(): UseSignalFeedResult {
         "signal.unknown",
       ];
       for (const type of SIGNAL_EVENT_TYPES) {
-        es.addEventListener(type, ((ev: MessageEvent) => {
+        es.addEventListener(type, ((ev: Event) => {
           if (cancelled) return;
-          handleEnvelope(ev.data, ev.lastEventId ?? "");
+          const msg = ev as MessageEvent<string>;
+          handleEnvelope(msg.data, (msg.lastEventId ?? "") as string);
         }) as EventListener);
+        seenTypes.add(type);
       }
 
       es.addEventListener("reset", (() => {
@@ -243,6 +262,8 @@ export function useSignalFeed(): UseSignalFeedResult {
         }
         esRef.current = null;
       }
+      window.removeEventListener("signal-feed:register", onRegister as EventListener);
+      seenTypes.clear();
     };
     // Intentionally run-once: the hook owns the lifecycle internally.
   }, []);
