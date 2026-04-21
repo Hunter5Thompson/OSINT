@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type { FIRMSHotspot } from "../types";
 import { getFIRMSHotspots } from "../services/api";
 
@@ -9,30 +9,33 @@ export function useFIRMSHotspots(enabled: boolean, sinceHours = 24) {
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  const fetchData = useCallback(async () => {
-    if (!enabled) return;
-    if (typeof document !== "undefined" && document.hidden) return;
-    setLoading(true);
-    try {
-      const data = await getFIRMSHotspots(sinceHours);
-      setHotspots(data);
-      setLastUpdate(new Date());
-    } catch {
-      // keep stale data
-    } finally {
-      setLoading(false);
-    }
-  }, [enabled, sinceHours]);
-
   useEffect(() => {
     if (!enabled) {
       setHotspots([]);
       return;
     }
-    void fetchData();
-    const timer = setInterval(() => void fetchData(), POLL_INTERVAL);
-    return () => clearInterval(timer);
-  }, [enabled, fetchData]);
+    let cancelled = false;
+    const run = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      setLoading(true);
+      try {
+        const data = await getFIRMSHotspots(sinceHours);
+        if (cancelled) return;
+        setHotspots(data);
+        setLastUpdate(new Date());
+      } catch {
+        // keep stale data
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void run();
+    const timer = setInterval(() => { void run(); }, POLL_INTERVAL);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [enabled, sinceHours]);
 
   return { hotspots, loading, lastUpdate };
 }
