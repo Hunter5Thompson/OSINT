@@ -272,6 +272,9 @@ services:
       - TEI_EMBED_URL=http://tei-embed:80
       - VLLM_URL=http://vllm:8000
       - VLLM_MODEL=qwen3.5
+      - INGESTION_VLLM_URL=http://vllm:8000
+      - INGESTION_VLLM_MODEL=qwen3.5
+      - INGESTION_VLLM_TIMEOUT=120.0
       - NEO4J_URL=http://neo4j:7474
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
@@ -289,6 +292,43 @@ services:
       tei-embed:
         condition: service_healthy
       vllm-27b:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ═══ DATA INGESTION (interactive-spark mode) ═══
+  # Identical to data-ingestion but uses Spark vLLM as ingestion backend
+  # → no GPU swap on RTX 5090.
+  data-ingestion-spark:
+    profiles: ["interactive-spark"]
+    container_name: odin-data-ingestion-spark
+    build:
+      context: ./services/data-ingestion
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - TEI_EMBED_URL=http://tei-embed:80
+      # SPARK_VLLM_URL is overridable from .env or shell (odin.sh exports it)
+      # so preflight (odin.sh:14) and scheduler container resolve to the same host.
+      - INGESTION_VLLM_URL=${SPARK_VLLM_URL:-http://192.168.178.39:8000}
+      - INGESTION_VLLM_MODEL=${INGESTION_VLLM_MODEL:-Qwen/Qwen3.6-35B-A3B}
+      - INGESTION_VLLM_TIMEOUT=${INGESTION_VLLM_TIMEOUT:-120.0}
+      - NEO4J_URL=http://neo4j:7474
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID:-0}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH:-}
+    volumes:
+      - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram:/data/telegram
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      tei-embed:
         condition: service_healthy
     restart: unless-stopped
 

@@ -63,7 +63,7 @@ async def extract_with_qwen(
     }
 
     response = await client.post(
-        f"{vllm_url}/chat/completions",
+        f"{vllm_url}/v1/chat/completions",
         json=payload,
         timeout=120.0,
     )

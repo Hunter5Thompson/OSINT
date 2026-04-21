@@ -14,7 +14,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
-from pipeline import process_item
+from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
 
 log = structlog.get_logger(__name__)
 
@@ -172,15 +172,23 @@ class RSSCollector:
             else:
                 published_dt = published or datetime.now(timezone.utc).isoformat()
 
-            # Intelligence extraction (graceful — failure doesn't block ingest)
-            enrichment = await process_item(
-                title=title,
-                text=embed_text,
-                url=link,
-                source="rss",
-                settings=settings,
-                redis_client=self._redis,
-            )
+            # Intelligence extraction. Transient/config errors skip Qdrant upsert
+            # so the item is retried on the next source re-fetch (Hash-Dedup doesn't trip).
+            try:
+                enrichment = await process_item(
+                    title=title,
+                    text=embed_text,
+                    url=link,
+                    source="rss",
+                    settings=settings,
+                    redis_client=self._redis,
+                )
+            except ExtractionTransientError as exc:
+                log.warning("extraction_skipped_transient", url=link, error=str(exc))
+                continue
+            except ExtractionConfigError as exc:
+                log.error("extraction_skipped_config", url=link, error=str(exc))
+                continue
 
             try:
                 vector = await self._embed(embed_text)

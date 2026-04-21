@@ -2,6 +2,8 @@
 
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
 import pytest
 
 from pipeline import process_item
@@ -15,13 +17,16 @@ def _make_settings(**overrides) -> Settings:
         "tei_embed_url": "http://localhost:8001",
         "vllm_url": "http://localhost:8000",
         "vllm_model": "models/qwen3.5-27b-awq",
+        "ingestion_vllm_url": "http://192.168.178.39:8000",
+        "ingestion_vllm_model": "Qwen/Qwen3.6-35B-A3B",
+        "ingestion_vllm_timeout": 120.0,
         "neo4j_url": "http://localhost:7474",
         "neo4j_user": "neo4j",
         "neo4j_password": "test",
         "redis_stream_events": "events:new",
     }
     defaults.update(overrides)
-    return Settings(**defaults)
+    return Settings(_env_file=None, **defaults)
 
 
 def _mock_vllm_response(events=None, entities=None, locations=None):
@@ -92,6 +97,7 @@ class TestProcessItem:
         vllm_resp = _mock_vllm_response(
             events=[{
                 "title": "Test event",
+                "summary": "Test event summary",
                 "codebook_type": "military.airstrike",
                 "severity": "medium",
                 "confidence": 0.7,
@@ -124,6 +130,7 @@ class TestProcessItem:
         vllm_resp = _mock_vllm_response(
             events=[{
                 "title": "Stream event",
+                "summary": "Stream event summary",
                 "codebook_type": "space.satellite_launch",
                 "severity": "low",
                 "confidence": 0.8,
@@ -154,23 +161,21 @@ class TestProcessItem:
         call_args = mock_redis.xadd.call_args
         assert call_args.args[0] == "events:new"
 
-    async def test_extraction_failure_returns_none(self):
-        """If vLLM call fails, process_item returns None (graceful degradation)."""
+    async def test_raises_transient_on_vllm_failure(self):
+        """If vLLM call fails transiently, process_item raises ExtractionTransientError."""
+        from pipeline import ExtractionTransientError
+
         with patch("pipeline.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
-            mock_client.post.side_effect = Exception("vLLM is down")
+            mock_client.post.side_effect = httpx.ConnectError("down")
             mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            result = await process_item(
-                title="Test",
-                text="Some text",
-                url="http://test.com",
-                source="rss",
-                settings=_make_settings(),
-            )
-
-        assert result is None
+            with pytest.raises(ExtractionTransientError):
+                await process_item(
+                    title="t", text="x", url="http://e/1", source="rss",
+                    settings=_make_settings(),
+                )
 
     async def test_no_events_still_returns_entities(self):
         """Even if no events classified, entities are still returned."""

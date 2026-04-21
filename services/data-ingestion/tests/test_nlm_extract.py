@@ -81,7 +81,7 @@ class TestExtractWithQwen:
             transcript=_make_transcript(),
             metadata={"source_name": "RAND", "title": "Test Report"},
             client=client,
-            vllm_url="http://localhost:8000/v1",
+            vllm_url="http://localhost:8000",
             vllm_model="qwen3.5",
         )
         assert extraction.notebook_id == "nb1"
@@ -101,7 +101,7 @@ class TestExtractWithQwen:
                 transcript=_make_transcript(),
                 metadata={"source_name": "X", "title": "Y"},
                 client=client,
-                vllm_url="http://localhost:8000/v1",
+                vllm_url="http://localhost:8000",
                 vllm_model="qwen3.5",
             )
 

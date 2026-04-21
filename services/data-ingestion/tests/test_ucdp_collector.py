@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from feeds.ucdp_collector import VIOLENCE_TYPES, UCDPCollector
+from pipeline import ExtractionConfigError, ExtractionTransientError
 
 
 @pytest.fixture
@@ -102,3 +103,61 @@ async def test_discover_version_tries_fallbacks(collector):
     version = await collector._discover_version()
     assert version is not None
     assert collector.http.get.call_count == 3
+
+
+# ── Extraction error skip tests (Task 7) ────────────────────────────
+
+
+def _ucdp_page_resp():
+    r = MagicMock()
+    r.status_code = 200
+    r.raise_for_status = MagicMock()
+    r.json.return_value = SAMPLE_UCDP_RESPONSE
+    return r
+
+
+@pytest.mark.asyncio
+async def test_ucdp_transient_skips_upsert(collector):
+    """When process_item raises ExtractionTransientError, event is NOT upserted."""
+    collector._discover_version = AsyncMock(return_value="v1")
+    collector.http.get = AsyncMock(return_value=_ucdp_page_resp())
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._build_point = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._ensure_collection = AsyncMock()
+
+    with patch(
+        "feeds.ucdp_collector.process_item",
+        new=AsyncMock(side_effect=ExtractionTransientError("vllm down")),
+    ):
+        await collector.collect()
+
+    collector._build_point.assert_not_called()
+    # Each page ends with a _batch_upsert([]) — so at least one call with empty list
+    assert all(c.args[0] == [] for c in collector._batch_upsert.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_ucdp_config_skips_upsert(collector):
+    """When process_item raises ExtractionConfigError, event is NOT upserted + error log."""
+    collector._discover_version = AsyncMock(return_value="v1")
+    collector.http.get = AsyncMock(return_value=_ucdp_page_resp())
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._build_point = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._ensure_collection = AsyncMock()
+
+    with (
+        patch(
+            "feeds.ucdp_collector.process_item",
+            new=AsyncMock(side_effect=ExtractionConfigError("404 model")),
+        ),
+        patch("feeds.ucdp_collector.log.error") as mock_err,
+    ):
+        await collector.collect()
+
+    collector._build_point.assert_not_called()
+    assert all(c.args[0] == [] for c in collector._batch_upsert.call_args_list)
+    assert any(
+        c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
+    )

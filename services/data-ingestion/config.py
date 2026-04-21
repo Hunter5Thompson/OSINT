@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     vllm_url: str = "http://localhost:8000"
     vllm_model: str = "qwen3.5"
 
+    # Ingestion LLM (Spark — Qwen3.6-35B-A3B MoE). URL WITHOUT /v1 — callers append full path.
+    ingestion_vllm_url: str = "http://192.168.178.39:8000"
+    ingestion_vllm_model: str = "Qwen/Qwen3.6-35B-A3B"
+    ingestion_vllm_timeout: float = 120.0
+
     # Neo4j (graph writes via HTTP transactional API)
     neo4j_url: str = "http://localhost:7474"
     neo4j_user: str = "neo4j"

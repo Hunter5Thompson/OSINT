@@ -1,14 +1,14 @@
 # Spark Ingestion Wiring (Minimal) — Design
 
-**Datum:** 2026-04-14 (Rev-6: 2026-04-20)
+**Datum:** 2026-04-14 (Rev-6: 2026-04-20, Rev-7: 2026-04-20)
 **Scope:** Minimal-Wiring (Option A aus Brainstorming) + Compose-Profil + Retry-Fix
-**Status:** Revision 6 (Qwen3.6 switch + JSON-schema + thinking-mode guardrails)
+**Status:** Revision 7 (Codex-Review-Findings eingearbeitet — Schema-Tightening, `strict`-Semantik korrigiert, Rollback-Sequence)
 
 ## Ziel
 
 Extraction-LLM-Calls aus `services/data-ingestion` permanent gegen den Spark vLLM-Server (`http://192.168.178.39:8000`, **`Qwen/Qwen3.6-35B-A3B`** — multimodales MoE, ~3 B aktiv, BF16) routen. Dadurch entfällt der GPU-Swap zwischen Modus C (Interactive 9B) und Modus D (Ingestion 27B GGUF). Ingestion und Interactive laufen über `./odin.sh up interactive-spark` parallel.
 
-**Modell-Wechsel Rev-6:** Gemma-4 wurde während Rev-5 auf dem Spark durch Qwen3.6-35B-A3B ersetzt (Container `vllm-qwen36`, Gemma-Container bleibt als Rollback-Option via `docker start vllm-gemma4`). Live-Test am 2026-04-20 mit ODIN-System-Prompt zeigte: Qwen3.6 produziert valides JSON (26.7 tok/s, ctx 32k), liefert aber andere Feldnamen als `_RESPONSE_SCHEMA` erwartet (`type` statt `codebook_type`, kein `title`, `description` statt `summary`) und hängt ohne expliziten Opt-out Chain-of-Thought-Traces vor die Antwort. Beide Drifts werden in §3 und §10 mit `response_format=json_schema` und `chat_template_kwargs.enable_thinking=false` abgefangen.
+**Modell-Wechsel Rev-6:** Gemma-4 wurde während Rev-5 auf dem Spark durch Qwen3.6-35B-A3B ersetzt (Container `vllm-qwen36`, Gemma-Container bleibt als Rollback-Option — Sequence siehe §Rollout 5). Live-Test am 2026-04-20 mit ODIN-System-Prompt zeigte: Qwen3.6 produziert valides JSON (eine Messung: 26.7 tok/s, 18.3 s Gesamtlatenz — keine Warmup/Load-Variation gemessen, als Baseline zu verstehen nicht als SLA), liefert aber andere Feldnamen als `_RESPONSE_SCHEMA` erwartet (`type` statt `codebook_type`, kein `title`, `description` statt `summary`) und hängt ohne expliziten Opt-out Chain-of-Thought-Traces vor die Antwort. Beide Drifts werden in §3 und §10 mit `response_format=json_schema` und `chat_template_kwargs.enable_thinking=false` abgefangen — **wichtig**: die echte Anti-Drift-Enforcement kommt aus dem Schema selbst, nicht aus dem `strict`-Flag (Begründung in §10).
 
 ## Nicht-Ziele
 
@@ -72,11 +72,11 @@ ingestion_vllm_timeout: float = 120.0
 |---|---|---|---|
 | `ExtractionTransientError` | HTTP-Timeout, ConnectError, HTTP 5xx | raised | Skip Qdrant, Warning-Log, Retry über Quellen-Re-Fetch |
 | `ExtractionConfigError` | HTTP 404, 401, 403 | raised | Skip Qdrant, **Error**-Log, kein Retry sinnvoll bis Config gefixt |
-| `ValidEmpty` (kein Sentinel — Funktion returned `None` oder dict) | LLM lieferte ein valides, aber fachlich leeres Ergebnis (z. B. keine Events/Entities) | return `None` oder dict | Upsert wie bisher mit `codebook_type="other.unclassified"` falls leer |
+| "valid-empty" Rückgabe (keine Exception-Klasse — Funktion returned `None` oder dict) | LLM lieferte ein valides, aber fachlich leeres Ergebnis (z. B. keine Events/Entities) | return `None` oder dict | Upsert wie bisher mit `codebook_type="other.unclassified"` falls leer |
 
 Andere unerwartete Exceptions werden NICHT abgefangen — sie propagieren und stoppen den Collector-Run (sichtbar im Log, kein silent failure).
 
-JSON-Parse-Fehler nach erfolgreicher HTTP-Response gelten **nicht** als `ValidEmpty`, sondern als `ExtractionTransientError` (Warning-Log + Retry), um stille Qualitäts-Degradation durch massenhaftes `unclassified` zu vermeiden.
+JSON-Parse-Fehler nach erfolgreicher HTTP-Response gelten **nicht** als "valid-empty"-Rückgabe, sondern als `ExtractionTransientError` (Warning-Log + Retry), um stille Qualitäts-Degradation durch massenhaftes `unclassified` zu vermeiden.
 
 - Healthcheck (siehe §6) prüft Modell-Verfügbarkeit beim Scheduler-Start zusätzlich präventiv.
 
@@ -249,10 +249,16 @@ Feed → Collector → process_item ─HTTP→ Spark vLLM (Spark down → Extrac
 1. Feature-Branch `feature/spark-ingestion-wiring`
 2. TDD: Tests rot → Implementation → Tests grün
 3. `./odin.sh up interactive-spark` — Pipeline manuell triggern
-4. Auf Spark `docker logs vllm-qwen36 | tail` — bestätigen dass Requests reinkommen (Container-Name ist `vllm-qwen36` seit Rev-6, `vllm-gemma4` steht als Rollback bereit)
-5. Spark gezielt stoppen → bestätigen dass Items übersprungen werden (kein persistenter Pending-State), nicht in Qdrant landen
-6. Spark wieder hoch → bestätigen dass Items beim nächsten Tick extrahiert werden
-7. Merge → Memory-Update (`project_spark_ingestion_offload.md` → done; `feedback`-Note über Retry-Pattern)
+4. Auf Spark `docker logs vllm-qwen36 | tail` — bestätigen dass Requests reinkommen (Container-Name ist `vllm-qwen36` seit Rev-6)
+5. **Rollback-Sequence** falls Qwen3.6 Probleme macht:
+   ```bash
+   ssh spark "docker stop vllm-qwen36 && docker start vllm-gemma4"
+   # dann lokal INGESTION_VLLM_MODEL=google/gemma-4-26B-A4B-it setzen und odin.sh down && odin.sh up interactive-spark
+   ```
+   **Reihenfolge wichtig:** erst `stop vllm-qwen36`, sonst kollidiert Gemma auf :8000 beim Start (Port-Konflikt).
+6. Spark gezielt stoppen → bestätigen dass Items übersprungen werden (kein persistenter Pending-State), nicht in Qdrant landen
+7. Spark wieder hoch → bestätigen dass Items beim nächsten Tick extrahiert werden
+8. Merge → Memory-Update (`project_spark_ingestion_offload.md` → done; `feedback`-Note über Retry-Pattern)
 
 ## §10 JSON-Schema & Thinking-Mode Handling (Rev-6)
 
@@ -272,13 +278,13 @@ payload = {
     "model": settings.ingestion_vllm_model,
     "messages": [...],
     "temperature": 0.1,
-    "max_tokens": 2048,
-    # (A) Strict JSON-Schema enforcement (vLLM ≥0.8.0, bestätigt mit 0.19.0 auf Spark)
+    "max_tokens": 2000,
+    # (A) JSON-Schema constrained decoding (vLLM ≥0.8.0, bestätigt mit 0.19.0 auf Spark)
     "response_format": {
         "type": "json_schema",
         "json_schema": {
             "name": "odin_extraction",
-            "schema": _RESPONSE_SCHEMA,  # aus pipeline.py, unverändert
+            "schema": _RESPONSE_SCHEMA,  # MUSS tight sein — siehe Hinweis unten
             "strict": True,
         },
     },
@@ -287,19 +293,26 @@ payload = {
 }
 ```
 
+**Wichtig — `strict`-Flag-Semantik in vLLM 0.19** (nach Codex-Review):
+vLLM's `OpenAIServingChat` parst `response_format.json_schema.strict` in das Protocol-Model, weitergereicht wird in der Chat-Konversion in `structured_outputs` aber **nur** das `schema`-Feld — `strict` wird de-facto ignoriert. Die **echte** Anti-Drift-Enforcement kommt daher aus der **Tightness des Schemas selbst**: `additionalProperties: false` auf jeder Objekt-Ebene und vollständige `required`-Listen. `strict: True` bleibt drin als Signal an zukünftige vLLM-Versionen und für zusätzliche OpenAI-SDK-Compat, ist aber kein Runtime-Verlass.
+
+**Konsequenz:** `_RESPONSE_SCHEMA` in `pipeline.py` muss **vor** dem Spark-Wiring gehärtet werden — siehe Plan Task 2b. Ohne diesen Schritt droht Restdrift (z. B. kann Qwen `description` als extra Feld einfügen solange `additionalProperties: false` fehlt).
+
 **Test-Evidenz:**
-- Ohne (A): Event-Felder heißen `type`/`description`, `title` fehlt → Pydantic `ValidationError`.
+- Ohne (A) + ohne tight Schema: Event-Felder heißen `type`/`description`, `title` fehlt → Pydantic `ValidationError`.
 - Ohne (B): Completion beginnt mit `"Here's a thinking process: ..."` → JSON-Parse schlägt fehl → `ExtractionTransientError` → permanente Retry-Schleife ohne Datenextraktion.
-- Mit beiden: Live-Test 2026-04-20 an realistischem NATO-Drohnen-Item lieferte schema-konformes JSON (1 Event, 13 Entities, 3 Locations) bei 26.7 tok/s / 18.3 s Gesamtlatenz.
+- Mit beiden + tight Schema: Live-Test 2026-04-20 an realistischem NATO-Drohnen-Item (gegen das ungehärtete Schema!) lieferte schema-konformes JSON (1 Event, 13 Entities, 3 Locations) bei einmalig gemessenen 26.7 tok/s / 18.3 s. Ein wiederholter Canary mit gehärtetem Schema ist Teil von Task 13 (Integration smoke).
 
-**Wenn `_RESPONSE_SCHEMA` in `pipeline.py` erweitert wird, muss `strict: True` im `response_format` überprüft werden** — vLLM kompiliert das Schema einmal beim ersten Call zu einem FSM; zu locker definierte Felder erlauben wieder Drift.
+**Nicht-Fallback:** Das Schema wird **nicht** als nachgelagerte Pydantic-Validation mit Reprompt gelöst ("Parse, bei Fehler LLM nochmal fragen"). Das würde bei jedem Drift einen zweiten LLM-Call auslösen — zu teuer und maskiert echte Schema-Bugs. Siehe Plan Task 3: bei `json.JSONDecodeError` wird `ExtractionTransientError` geworfen, kein Zweit-Call.
 
-**Nicht-Fallback:** Das Schema wird **nicht** als nachgelagerte Pydantic-Validation gelöst (also "Parse und bei Fehler Prompt neu fahren"). Das würde bei jedem Drift einen zweiten LLM-Call auslösen — zu teuer und maskiert echte Schema-Bugs. vLLM's constrained decoding kostet einmalig die Schema-Kompilierung und erzwingt danach Compliance auf Token-Ebene.
+**Max-Tokens-Truncation (Codex-Review Edge-Case):** Bei `finish_reason == "length"` ist die JSON-Antwort mit hoher Wahrscheinlichkeit mitten im Objekt abgeschnitten → `json.loads` failt → `ExtractionTransientError` → Retry. Das ist Verhalten-mäßig OK für einzelne Items, kann aber bei systematisch zu langen Outputs (> `max_tokens`) zu Dauerschleifen führen. Task 3 prüft explizit auf `finish_reason` und wirft `ExtractionTransientError` mit klarer Fehlermeldung (`"llm_truncated"`) damit der Log-Auditor das erkennen kann. Schutz gegen Dauerschleifen (Circuit-Breaker mit Backoff) ist in §Offene Punkte vertagt — akzeptabel, weil bei Reise-Run-Lasten < 500 RSS-Items/h der Schaden begrenzt ist.
 
 ## Offene Punkte (Folge-Sprints)
 
 - TEI auf Spark (ARM-Image)
 - `/health/ingestion-llm`-Endpoint im Backend für Frontend-Status-Anzeige
 - **Vision-Enrichment via Qwen3.6 Multimodal**: Qwen3.6-35B-A3B ist multimodal (`image-text-to-text`). Das bestehende `vision_vllm_url` in `config.py` kann auf den Spark zeigen und Bild-basierte Anreicherung (Telegram-Attachments, OSINT-Satellitenbilder) erschließen. Eigener Plan + Spec, da orthogonal zum Text-Ingestion-Flow.
-- **NLM `extract_with_qwen` Schema-Enforcement** (`services/data-ingestion/nlm_ingest/extract.py`): Funktion hat bereits `chat_template_kwargs.enable_thinking=False` (gegen Thinking-Preamble), aber kein `response_format=json_schema`. Schema `Extraction(entities, relations, claims)` drift-risiko ist kleiner als im Main-Pipeline (einfachere Top-Level-Keys), trotzdem sollte Rev-6-Konsistenz hergestellt werden sobald das Haupt-Wiring grün ist. Eigene Mini-Task im Folge-Sprint.
+- **NLM `extract_with_qwen` Schema-Enforcement** (`services/data-ingestion/nlm_ingest/extract.py`): Funktion hat bereits `chat_template_kwargs.enable_thinking=False` (gegen Thinking-Preamble), aber kein `response_format=json_schema`. Schema `Extraction(entities, relations, claims)` drift-risiko ist kleiner als im Main-Pipeline (einfachere Top-Level-Keys), trotzdem sollte Rev-7-Konsistenz hergestellt werden sobald das Haupt-Wiring grün ist. Eigene Mini-Task im Folge-Sprint.
+- **Circuit-Breaker für wiederholte `ExtractionTransientError`** — aktuell retried jeder Collector-Tick. Bei strukturellen Bugs (Modell-Regression, Spark-Infra-Ausfall > mehrere Stunden) ist das verschwenderisch und kann Qdrant-Backlog aufbauen. Folge-Sprint: Backoff mit exponentiellem Delay + Escalation-Log wenn > N Items in Folge transient failen. Out-of-Scope hier weil Auswirkung bei <500 RSS-Items/h klein ist.
+- **Multi-Run-Performance-Baseline** — eine einzelne Messung (Live-Test 2026-04-20) ist für SLA-Aussagen zu wenig. Folge-Sprint: 20-Item-Canary mit Cold/Warm-Split, p50/p95-Latenz, damit Task 13 Smoke-Test realistische Zielwerte statt eines Einzel-Datenpunkts bekommt.
 - Optional: alten `up ingestion`-Modus deprecaten sobald Spark-Wiring stabil ist

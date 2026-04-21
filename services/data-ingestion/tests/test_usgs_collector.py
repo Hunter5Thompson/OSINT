@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -13,6 +13,7 @@ from feeds.usgs_collector import (
     concern_score,
     haversine_km,
 )
+from pipeline import ExtractionConfigError, ExtractionTransientError
 
 
 @pytest.fixture
@@ -123,3 +124,61 @@ def test_parse_features(collector):
     assert far["usgs_id"] == "us7000far"
     assert far["nearest_test_site"] is None
     assert far["concern_score"] is None
+
+
+# ── Extraction error skip tests (Task 7) ────────────────────────────
+
+
+def _usgs_http_resp():
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = SAMPLE_GEOJSON
+    return resp
+
+
+@pytest.mark.asyncio
+async def test_usgs_transient_skips_upsert(collector):
+    """When process_item raises ExtractionTransientError, event is NOT upserted."""
+    collector.http.get = AsyncMock(return_value=_usgs_http_resp())
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._build_point = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._ensure_collection = AsyncMock()
+    collector._write_near_test_site = AsyncMock()
+
+    with patch(
+        "feeds.usgs_collector.process_item",
+        new=AsyncMock(side_effect=ExtractionTransientError("vllm down")),
+    ):
+        await collector.collect()
+
+    collector._build_point.assert_not_called()
+    # batch_upsert called once with an empty list (no points accumulated)
+    collector._batch_upsert.assert_called_once_with([])
+
+
+@pytest.mark.asyncio
+async def test_usgs_config_skips_upsert(collector):
+    """When process_item raises ExtractionConfigError, event is NOT upserted + error log."""
+    collector.http.get = AsyncMock(return_value=_usgs_http_resp())
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._build_point = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._ensure_collection = AsyncMock()
+    collector._write_near_test_site = AsyncMock()
+
+    with (
+        patch(
+            "feeds.usgs_collector.process_item",
+            new=AsyncMock(side_effect=ExtractionConfigError("404 model")),
+        ),
+        patch("feeds.usgs_collector.log.error") as mock_err,
+    ):
+        await collector.collect()
+
+    collector._build_point.assert_not_called()
+    collector._batch_upsert.assert_called_once_with([])
+    assert any(
+        c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
+    )

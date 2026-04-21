@@ -4,7 +4,10 @@
 
 **Goal:** Route extraction-LLM-Calls from `services/data-ingestion` permanently to the DGX Spark vLLM (`Qwen/Qwen3.6-35B-A3B` — multimodal MoE, ~3B active) so Ingestion + Interactive can run in parallel without GPU swap.
 
-**Revision history:** Rev-1..3 targeted Gemma-4. Rev-4 (2026-04-20) switches the ingestion model to `Qwen/Qwen3.6-35B-A3B` after the Spark container swap and adds mandatory `response_format=json_schema` + `chat_template_kwargs.enable_thinking=false` guardrails in `_call_vllm` (see Task 3, Step 5). Live-test 2026-04-20 showed Qwen3.6 drifts field names (`type` vs `codebook_type`) and emits Chain-of-Thought pre-responses without these two payload fields — see spec §10.
+**Revision history:**
+- Rev-1..3 targeted Gemma-4.
+- Rev-4 (2026-04-20) switches the ingestion model to `Qwen/Qwen3.6-35B-A3B` after the Spark container swap and adds mandatory `response_format=json_schema` + `chat_template_kwargs.enable_thinking=false` guardrails in `_call_vllm` (implementation lives in Task 3, Step 3). Live-test 2026-04-20 showed Qwen3.6 drifts field names (`type` vs `codebook_type`) and emits Chain-of-Thought pre-responses without these two payload fields — see spec §10.
+- Rev-5 (2026-04-20, post-Codex-review) addresses three findings: (a) new **Task 2b** hardens `_RESPONSE_SCHEMA` with `additionalProperties: false` + full `required` lists — that's the **actual** anti-drift mechanism since vLLM 0.19 parses but does not enforce `response_format.json_schema.strict` in the chat-completion conversion path; (b) Task 3 Step 3 now checks `finish_reason == "length"` and raises `ExtractionTransientError("llm_truncated")` so constrained-decoding truncations surface in logs instead of silently looping; (c) Task 3 Step 2 prose clarifies which assertions are genuinely red-to-green vs. regression guards because `_call_vllm` in current `pipeline.py:186-194` already has `response_format` + `chat_template_kwargs` (the guardrail-specific test thus passes immediately — fails only after the URL/model/error-mapping rewire is complete because the surrounding path shifts).
 
 **Architecture:** New `ingestion_vllm_*` settings in `data-ingestion/config.py`. `_call_vllm` sends strict JSON-schema enforced payloads so Qwen3.6 returns Pydantic-parseable JSON without thinking-mode preambles. `process_item` raises one of three exclusive error classes (`ExtractionTransientError`, `ExtractionConfigError`, or returns `None`/dict for valid-empty). All collectors that call `process_item` get matching except-blocks that skip Qdrant on errors → retry happens via source re-fetch (Hash-Dedup doesn't trip). New compose service `data-ingestion-spark` and odin.sh mode `interactive-spark` enable parallel operation. Old compose service `data-ingestion` keeps working by also receiving `INGESTION_VLLM_URL=http://vllm:8000` so `up ingestion` continues to use the local 27B model.
 
@@ -225,6 +228,154 @@ git commit -m "feat(ingestion): add ExtractionTransientError and ExtractionConfi
 
 ---
 
+## Task 2b: Harden `_RESPONSE_SCHEMA` for constrained decoding (Rev-5)
+
+Why this task exists (Codex-Review 2026-04-20): vLLM 0.19's OpenAI-compat chat-completion path parses `response_format.json_schema.strict` into the protocol model but does **not** forward it into the structured-decoding engine — only `json_schema.schema` is used. Anti-drift enforcement therefore comes entirely from the schema itself. The current `_RESPONSE_SCHEMA` allows extra properties (`description` next to `summary`) and omits `summary` from `required`, which weakens the guarantee promised in spec §10.
+
+**Files:**
+- Modify: `services/data-ingestion/pipeline.py`
+- Create: `services/data-ingestion/tests/test_response_schema.py`
+
+- [ ] **Step 1: Write failing test for schema tightness**
+
+Create `services/data-ingestion/tests/test_response_schema.py`:
+
+```python
+"""Verify _RESPONSE_SCHEMA is tight enough for constrained-decoding anti-drift."""
+
+from pipeline import _RESPONSE_SCHEMA
+
+
+def test_top_level_rejects_additional_properties():
+    assert _RESPONSE_SCHEMA.get("additionalProperties") is False
+    assert set(_RESPONSE_SCHEMA["required"]) == {"events", "entities", "locations"}
+
+
+def test_event_object_rejects_extra_fields_and_requires_summary():
+    event_obj = _RESPONSE_SCHEMA["properties"]["events"]["items"]
+    assert event_obj.get("additionalProperties") is False
+    # Qwen3.6 drifts "description" instead of "summary" — forcing it into required
+    # + additionalProperties:false means the decoder rejects "description".
+    assert "summary" in event_obj["required"]
+    assert "title" in event_obj["required"]
+    assert "codebook_type" in event_obj["required"]
+
+
+def test_entity_object_rejects_extra_fields():
+    entity_obj = _RESPONSE_SCHEMA["properties"]["entities"]["items"]
+    assert entity_obj.get("additionalProperties") is False
+    assert "name" in entity_obj["required"]
+    assert "type" in entity_obj["required"]
+
+
+def test_location_object_rejects_extra_fields():
+    location_obj = _RESPONSE_SCHEMA["properties"]["locations"]["items"]
+    assert location_obj.get("additionalProperties") is False
+    assert "name" in location_obj["required"]
+    assert "country" in location_obj["required"]
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd services/data-ingestion && uv run pytest tests/test_response_schema.py -v`
+Expected: FAIL — current schema has `additionalProperties` missing on every object level, and `summary` is not in the event `required` list.
+
+- [ ] **Step 3: Harden `_RESPONSE_SCHEMA` in pipeline.py**
+
+Replace the existing `_RESPONSE_SCHEMA = {...}` block (currently `pipeline.py:65-111`) with the tightened version below. The only structural changes vs. Rev-4 are:
+- `additionalProperties: false` added at top-level and to every `items` object.
+- `summary` moved into event `required` (forces Qwen to emit `summary` instead of drifting to `description`, which is now rejected as additional property).
+
+```python
+_RESPONSE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "events": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "title": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "codebook_type": {"type": "string"},
+                    "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+                    "confidence": {"type": "number"},
+                    "timestamp": {"type": "string"},
+                },
+                "required": ["title", "summary", "codebook_type", "severity", "confidence"],
+            },
+        },
+        "entities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "name": {"type": "string"},
+                    "type": {"type": "string", "enum": [
+                        "person", "organization", "location", "weapon_system",
+                        "satellite", "vessel", "aircraft", "military_unit",
+                    ]},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["name", "type"],
+            },
+        },
+        "locations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "name": {"type": "string"},
+                    "country": {"type": "string"},
+                },
+                "required": ["name", "country"],
+            },
+        },
+    },
+    "required": ["events", "entities", "locations"],
+}
+```
+
+- [ ] **Step 4: Run schema test to verify pass**
+
+Run: `cd services/data-ingestion && uv run pytest tests/test_response_schema.py -v`
+Expected: PASS (4 tests)
+
+- [ ] **Step 5: Update mock fixtures that omit `summary` before running regression suite**
+
+The schema hardening doesn't affect runtime behavior of mocked tests (mocks bypass vLLM's constrained decoder), but fixtures that omit `summary` are now semantically inconsistent with what Qwen will actually emit, and future tests that run against the real schema (or pydantic validation built on `_RESPONSE_SCHEMA`) will fail.
+
+**Known fixtures that need `summary` added** (grep for events that only have `title/codebook_type/severity/confidence/timestamp`):
+
+- `services/data-ingestion/tests/test_pipeline.py:92-101` — `test_writes_to_neo4j` event dict. Add `"summary": "Test event summary"` between `"title"` and `"codebook_type"`.
+- `services/data-ingestion/tests/test_pipeline.py:124-133` — `test_publishes_to_redis_stream` (or the test that uses `"space.satellite_launch"`). Add `"summary": "Stream event summary"` at the same position.
+
+Verify coverage with:
+
+```bash
+cd services/data-ingestion && grep -rn -B1 -A1 '"codebook_type":' tests/ | grep -B2 '"codebook_type":' | grep -L '"summary":'
+```
+
+If that returns any test file:line, add `summary` there too.
+
+- [ ] **Step 6: Run full pipeline regression suite**
+
+Run: `cd services/data-ingestion && uv run pytest tests/ -v -k "pipeline or response_schema or codebook"`
+Expected: PASS. If a test breaks with a missing-`summary` assertion error from anything inside `pipeline.py`, update the fixture (this is a correctness fix, not a test regression).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add services/data-ingestion/pipeline.py services/data-ingestion/tests/test_response_schema.py services/data-ingestion/tests/test_pipeline.py
+git commit -m "fix(ingestion): tighten _RESPONSE_SCHEMA to forbid additionalProperties + require summary"
+```
+
+---
+
 ## Task 3: Switch `_call_vllm` to ingestion settings + error mapping
 
 **Files:**
@@ -429,12 +580,54 @@ async def test_json_parse_error_raises_transient():
                 title="t", text="x", url="http://e/1", source="rss",
                 settings=_settings(),
             )
+
+
+@pytest.mark.asyncio
+async def test_truncated_completion_raises_transient():
+    """Rev-5 (Codex-Review edge case): finish_reason=='length' means the constrained-decoded JSON
+    is almost certainly mid-object. Treat as ExtractionTransientError('llm_truncated') so the
+    auditor sees it in logs, rather than a cryptic JSONDecodeError."""
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {
+        "choices": [{
+            "finish_reason": "length",
+            "message": {"content": '{"events": [{"title": "trun'},  # cut mid-string
+        }]
+    }
+
+    with patch("pipeline.httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = resp
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with pytest.raises(ExtractionTransientError, match="llm_truncated"):
+            await process_item(
+                title="t", text="x", url="http://e/1", source="rss",
+                settings=_settings(),
+            )
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run tests to verify they fail (with one nuance)**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_pipeline_errors.py -v`
-Expected: All new tests FAIL (current `_call_vllm` uses `vllm_url`, doesn't raise the new classes).
+
+Expected — **not uniform**: most new tests must FAIL before Step 3, but one will pass as a regression guard.
+
+| Test | Expected before Step 3 | Reason |
+|------|------------------------|--------|
+| `test_call_vllm_uses_spark_url_and_model` | FAIL | current `_call_vllm` reads `settings.vllm_url` / `settings.vllm_model`, asserts check for `ingestion_vllm_*` |
+| `test_call_vllm_enforces_json_schema_and_disables_thinking` | **PASS** (regression guard) | `pipeline.py:186-194` already has `response_format` + `chat_template_kwargs`. Rev-5 keeps this test as a guard against future removal of the guardrails, not as a red-to-green TDD step. The guardrails were introduced in an earlier edit; Rev-5 locks them in with a test. |
+| `test_connect_error_raises_transient` | FAIL | current `_call_vllm` does not raise `ExtractionTransientError` |
+| `test_timeout_raises_transient` | FAIL | same |
+| `test_http_5xx_raises_transient` | FAIL | same |
+| `test_http_4xx_raises_config` (x3 parameterized) | FAIL | same |
+| `test_json_parse_error_raises_transient` | FAIL | current `_call_vllm` lets `json.JSONDecodeError` propagate, not wrapped |
+| `test_truncated_completion_raises_transient` (Rev-5 addition — see Step 1) | FAIL | current `_call_vllm` doesn't check `finish_reason` |
+
+**Do not proceed to Step 3 until this exact pattern is observed** — if the guardrail test FAILS unexpectedly, `pipeline.py:186-194` has regressed and the Rev-6 payload fields were lost; fix `pipeline.py` first, then re-run the test suite.
 
 - [ ] **Step 3: Update `_call_vllm` and `process_item` in pipeline.py**
 
@@ -487,8 +680,19 @@ async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dic
         raise ExtractionTransientError(f"http {status}: {exc}") from exc
 
     try:
-        content = resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        choice = data["choices"][0]
+        # Rev-5 (Codex-Review): truncation must surface as an explicit transient error,
+        # otherwise the JSON-decode failure below hides the root cause ("llm_truncated"
+        # vs. cryptic "parse: Expecting ',' delimiter").
+        if choice.get("finish_reason") == "length":
+            raise ExtractionTransientError(
+                f"llm_truncated: completion hit max_tokens={payload['max_tokens']}"
+            )
+        content = choice["message"]["content"]
         return json.loads(content)
+    except ExtractionTransientError:
+        raise  # Already the right class — don't re-wrap.
     except (KeyError, ValueError, json.JSONDecodeError) as exc:
         raise ExtractionTransientError(f"parse: {exc}") from exc
 ```
@@ -509,7 +713,7 @@ Replace the existing `process_item` Step 1 try/except (currently `pipeline.py:12
 - [ ] **Step 4: Run new error tests to verify pass**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_pipeline_errors.py -v`
-Expected: PASS (all 10 tests — includes the Rev-6 JSON-schema + thinking-off guardrail test)
+Expected: PASS (all 11 test cases — the 4xx test is parameterized over 401/403/404, so pytest reports 3 cases for that test function; total individual cases: URL/model + JSON-schema guardrail + connect + timeout + 5xx + 4xx×3 + parse + truncation).
 
 - [ ] **Step 5: Update existing test_pipeline.py for new settings**
 

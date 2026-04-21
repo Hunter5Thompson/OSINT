@@ -20,6 +20,21 @@ from config import Settings
 
 log = structlog.get_logger(__name__)
 
+
+class ExtractionTransientError(Exception):
+    """vLLM extraction failed transiently (timeout, connect-error, 5xx, JSON-parse).
+
+    Caller MUST skip Qdrant upsert so the item is retried via source re-fetch.
+    """
+
+
+class ExtractionConfigError(Exception):
+    """vLLM extraction failed due to misconfiguration (404 model, 401/403 auth).
+
+    Caller MUST skip Qdrant upsert. Recovery requires fixing config — no auto-retry.
+    """
+
+
 # Load event types from the canonical codebook YAML (single source of truth)
 _CODEBOOK_PATH = Path(__file__).parent.parent / "intelligence" / "codebook" / "event_codebook.yaml"
 
@@ -64,11 +79,13 @@ _SYSTEM_PROMPT = _build_system_prompt()
 
 _RESPONSE_SCHEMA = {
     "type": "object",
+    "additionalProperties": False,
     "properties": {
         "events": {
             "type": "array",
             "items": {
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     "title": {"type": "string"},
                     "summary": {"type": "string"},
@@ -77,13 +94,14 @@ _RESPONSE_SCHEMA = {
                     "confidence": {"type": "number"},
                     "timestamp": {"type": "string"},
                 },
-                "required": ["title", "codebook_type", "severity", "confidence"],
+                "required": ["title", "summary", "codebook_type", "severity", "confidence"],
             },
         },
         "entities": {
             "type": "array",
             "items": {
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     "name": {"type": "string"},
                     "type": {"type": "string", "enum": [
@@ -99,6 +117,7 @@ _RESPONSE_SCHEMA = {
             "type": "array",
             "items": {
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     "name": {"type": "string"},
                     "country": {"type": "string"},
@@ -126,11 +145,8 @@ async def process_item(
     Caller continues with Qdrant upsert regardless.
     """
     # Step 1: Call vLLM for extraction
-    try:
-        extraction = await _call_vllm(title, text, url, settings)
-    except Exception as e:
-        log.error("pipeline_extraction_failed", url=url, error=str(e))
-        return None
+    # ExtractionTransientError / ExtractionConfigError propagate to caller (collector).
+    extraction = await _call_vllm(title, text, url, settings)
 
     if extraction is None:
         return None
@@ -173,10 +189,15 @@ async def process_item(
     }
 
 
-async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dict | None:
-    """Call vLLM for intelligence extraction. Returns parsed dict or None."""
+async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dict:
+    """Call vLLM for intelligence extraction.
+
+    Returns parsed dict on success.
+    Raises ExtractionTransientError for timeout/connect/5xx/JSON-parse failure.
+    Raises ExtractionConfigError for 404/401/403 (model/auth misconfiguration).
+    """
     payload = {
-        "model": settings.vllm_model,
+        "model": settings.ingestion_vllm_model,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": f"Source: {url}\n\nText: {text[:4000]}"},
@@ -194,15 +215,48 @@ async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dic
         "chat_template_kwargs": {"enable_thinking": False},
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            f"{settings.vllm_url}/v1/chat/completions",
-            json=payload,
-        )
-        resp.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=settings.ingestion_vllm_timeout) as client:
+            resp = await client.post(
+                f"{settings.ingestion_vllm_url}/v1/chat/completions",
+                json=payload,
+            )
+            resp.raise_for_status()
+    except httpx.TimeoutException as exc:
+        raise ExtractionTransientError(f"timeout: {exc}") from exc
+    except httpx.ConnectError as exc:
+        raise ExtractionTransientError(f"connect: {exc}") from exc
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        # Rev-6 (post-merge review): 400/405/422 are deterministic request/schema errors —
+        # retrying won't fix an incompatible vLLM version or a malformed payload shape, so
+        # they belong in ConfigError so operators stop the spin instead of looping forever.
+        if status in (400, 401, 403, 404, 405, 422):
+            raise ExtractionConfigError(f"http {status}: {exc}") from exc
+        if 500 <= status < 600:
+            raise ExtractionTransientError(f"http {status}: {exc}") from exc
+        raise ExtractionTransientError(f"http {status}: {exc}") from exc
 
-    content = resp.json()["choices"][0]["message"]["content"]
-    return json.loads(content)
+    try:
+        data = resp.json()
+        choice = data["choices"][0]
+        # Rev-5 (Codex-Review): truncation must surface as an explicit transient error,
+        # otherwise the JSON-decode failure below hides the root cause ("llm_truncated"
+        # vs. cryptic "parse: Expecting ',' delimiter").
+        if choice.get("finish_reason") == "length":
+            raise ExtractionTransientError(
+                f"llm_truncated: completion hit max_tokens={payload['max_tokens']}"
+            )
+        content = choice["message"]["content"]
+        return json.loads(content)
+    except ExtractionTransientError:
+        raise  # Already the right class — don't re-wrap.
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        # Rev-6 (post-merge review): IndexError (empty choices array) and TypeError
+        # (content is None, or non-subscriptable) are equally "transient: LLM returned
+        # garbage shape"; wrapping them keeps _call_vllm's contract that only the two
+        # typed errors escape, so collector try/except blocks behave uniformly.
+        raise ExtractionTransientError(f"parse: {exc}") from exc
 
 
 async def _write_to_neo4j(

@@ -10,6 +10,12 @@ INGESTION_SERVICES=(vllm-27b data-ingestion)
 INTERACTIVE_SERVICES=(vllm-9b tei-rerank intelligence backend frontend)
 VISION_SERVICES=(vllm-vision vision-enrichment)
 
+# Spark (DGX GB10) — ingestion LLM host, overridable for staging/lab setups.
+# Exported so docker-compose substitutes the same value into data-ingestion-spark
+# (compose env: INGESTION_VLLM_URL=${SPARK_VLLM_URL:-...}). Without export, preflight
+# would check one host and the scheduler container would talk to another.
+export SPARK_VLLM_URL="${SPARK_VLLM_URL:-http://192.168.178.39:8000}"
+
 MODE="${2:-}"
 COMMAND="${1:-help}"
 
@@ -18,8 +24,10 @@ usage() {
 Usage:
   ./odin.sh up ingestion       # Start background ingestion stack (27B + embed)
   ./odin.sh up interactive     # Start interactive stack (9B + reranker + UI)
+  ./odin.sh up interactive-spark  # Interactive on 5090 + Ingestion via Spark (no GPU swap)
   ./odin.sh swap ingestion     # Swap to ingestion mode (stops active vLLM first)
   ./odin.sh swap interactive   # Swap to interactive mode
+  ./odin.sh swap interactive-spark  # Swap to interactive-spark (local 9B + Spark ingestion)
   ./odin.sh down               # Stop all services
   ./odin.sh ps                 # Show running compose services
   ./odin.sh logs [service]     # Tail logs (optional service)
@@ -41,20 +49,34 @@ start_mode() {
   local mode="$1"
   case "$mode" in
     ingestion)
-      # Prevent port/GPU conflicts when switching from interactive profile.
-      "${COMPOSE[@]}" --profile ingestion --profile interactive stop \
-        vllm-9b tei-rerank intelligence backend frontend 2>/dev/null || true
+      # Prevent port/GPU conflicts when switching from interactive or interactive-spark profile.
+      "${COMPOSE[@]}" --profile ingestion --profile interactive --profile interactive-spark stop \
+        vllm-9b tei-rerank intelligence backend frontend data-ingestion-spark 2>/dev/null || true
       echo "Starting INGESTION mode: Qwen3.5-27B + Embedding + Data Ingestion"
       "${COMPOSE[@]}" --profile ingestion up -d --remove-orphans \
         "${CORE_SERVICES[@]}" "${INGESTION_SERVICES[@]}"
       ;;
     interactive)
-      # Prevent port/GPU conflicts when switching from ingestion profile.
-      "${COMPOSE[@]}" --profile ingestion --profile interactive stop \
-        vllm-27b data-ingestion 2>/dev/null || true
+      # Prevent port/GPU conflicts when switching from ingestion or interactive-spark profile.
+      "${COMPOSE[@]}" --profile ingestion --profile interactive --profile interactive-spark stop \
+        vllm-27b data-ingestion data-ingestion-spark 2>/dev/null || true
       echo "Starting INTERACTIVE mode: Qwen3.5-9B + Reranker + API + UI"
       "${COMPOSE[@]}" --profile interactive up -d --remove-orphans \
         "${CORE_SERVICES[@]}" "${INTERACTIVE_SERVICES[@]}"
+      ;;
+    interactive-spark)
+      # Prevent conflicts: stop local 27B ingestion stack so only Spark-backed ingestion runs.
+      "${COMPOSE[@]}" --profile ingestion --profile interactive --profile interactive-spark stop \
+        vllm-27b data-ingestion 2>/dev/null || true
+      echo "Pre-flight: checking Spark vLLM..."
+      if curl -sf --max-time 5 ${SPARK_VLLM_URL}/v1/models > /dev/null; then
+        echo "  Spark reachable"
+      else
+        echo "  WARN: Spark unreachable — scheduler will retry"
+      fi
+      echo "Starting INTERACTIVE+SPARK mode: 9B local + Ingestion via Spark"
+      "${COMPOSE[@]}" --profile interactive --profile interactive-spark up -d --remove-orphans \
+        "${CORE_SERVICES[@]}" "${INTERACTIVE_SERVICES[@]}" data-ingestion-spark
       ;;
     *)
       echo "Unknown mode: $mode"
@@ -83,6 +105,13 @@ doctor() {
     echo "OK  qwen3.5-9b-awq found"
   else
     echo "WARN qwen3.5-9b-awq missing"
+  fi
+
+  echo "Spark vLLM reachability..."
+  if curl -sf --max-time 5 ${SPARK_VLLM_URL}/v1/models > /dev/null; then
+    echo "  OK (Spark reachable)"
+  else
+    echo "  WARN: Spark unreachable — interactive-spark mode will retry but extraction blocks"
   fi
 }
 
@@ -278,6 +307,14 @@ smoke() {
   # Ingestion-profile services
   echo "[Ingestion Services]"
   _check_container "data-ingestion"
+  _check_container "data-ingestion-spark"
+  # Spark vLLM (used by interactive-spark mode). Always probed; SKIP if unreachable.
+  if curl -sf --max-time 3 ${SPARK_VLLM_URL}/v1/models > /dev/null 2>&1; then
+    _check "spark-vllm" "${SPARK_VLLM_URL}/v1/models" 200
+  else
+    printf "  %-28s %s\n" "spark-vllm" "SKIP (unreachable)"
+    _inc_skip
+  fi
   echo ""
 
   # Summary
@@ -292,7 +329,7 @@ require_docker
 case "$COMMAND" in
   up)
     if [[ -z "$MODE" ]]; then
-      echo "Missing mode: ingestion | interactive"
+      echo "Missing mode: ingestion | interactive | interactive-spark"
       usage
       exit 1
     fi
@@ -300,17 +337,17 @@ case "$COMMAND" in
     ;;
   swap)
     if [[ -z "$MODE" ]]; then
-      echo "Missing mode: ingestion | interactive"
+      echo "Missing mode: ingestion | interactive | interactive-spark"
       usage
       exit 1
     fi
     echo "Stopping active vLLM services..."
-    "${COMPOSE[@]}" --profile ingestion --profile interactive stop vllm-27b vllm-9b 2>/dev/null || true
+    "${COMPOSE[@]}" --profile ingestion --profile interactive --profile interactive-spark stop vllm-27b vllm-9b 2>/dev/null || true
     echo "Swapping mode to: $MODE"
     start_mode "$MODE"
     ;;
   down)
-    "${COMPOSE[@]}" --profile ingestion --profile interactive down --remove-orphans
+    "${COMPOSE[@]}" --profile ingestion --profile interactive --profile interactive-spark down --remove-orphans
     ;;
   ps)
     "${COMPOSE[@]}" ps

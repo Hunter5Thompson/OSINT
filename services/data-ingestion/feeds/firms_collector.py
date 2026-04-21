@@ -13,7 +13,7 @@ from qdrant_client.models import PointStruct
 
 from config import Settings
 from feeds.base import BaseCollector
-from pipeline import process_item
+from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
 
 log = structlog.get_logger(__name__)
 
@@ -180,17 +180,28 @@ class FIRMSCollector(BaseCollector):
                         f"Date: {row['acq_date']} {row['acq_time']}."
                     )
 
-                    await process_item(
-                        title=title,
-                        text=embed_text,
-                        url=(
-                            f"https://firms.modaps.eosdis.nasa.gov/map/#d:{row['acq_date']};"
-                            f"@{row['longitude']:.4f},{row['latitude']:.4f},10z"
-                        ),
-                        source="firms",
-                        settings=self.settings,
-                        redis_client=self.redis,
+                    url = (
+                        f"https://firms.modaps.eosdis.nasa.gov/map/#d:{row['acq_date']};"
+                        f"@{row['longitude']:.4f},{row['latitude']:.4f},10z"
                     )
+                    # Intelligence extraction. Transient/config errors skip Qdrant
+                    # upsert so the row is retried on the next source re-fetch
+                    # (Hash-Dedup doesn't trip).
+                    try:
+                        await process_item(
+                            title=title,
+                            text=embed_text,
+                            url=url,
+                            source="firms",
+                            settings=self.settings,
+                            redis_client=self.redis,
+                        )
+                    except ExtractionTransientError as exc:
+                        log.warning("extraction_skipped_transient", url=url, error=str(exc))
+                        continue
+                    except ExtractionConfigError as exc:
+                        log.error("extraction_skipped_config", url=url, error=str(exc))
+                        continue
 
                     try:
                         point = await self._build_point(embed_text, row, chash)

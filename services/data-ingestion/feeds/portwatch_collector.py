@@ -119,8 +119,15 @@ class PortWatchCollector(BaseCollector):
                 f"${record['trade_value_usd']:,.0f} trade, {record['vessel_count']} vessels"
             )
 
+            from pipeline import (
+                ExtractionConfigError,
+                ExtractionTransientError,
+                process_item,
+            )
+
+            # Transient/config errors skip Qdrant upsert so the flow record is
+            # retried on the next source re-fetch.
             try:
-                from pipeline import process_item
                 await process_item(
                     title=f"PortWatch {record['chokepoint']}",
                     text=description,
@@ -129,6 +136,22 @@ class PortWatchCollector(BaseCollector):
                     settings=self.settings,
                     redis_client=self.redis,
                 )
+            except ExtractionTransientError as exc:
+                log.warning(
+                    "extraction_skipped_transient",
+                    url=_CHOKEPOINTS_URL,
+                    chokepoint=record["chokepoint"],
+                    error=str(exc),
+                )
+                continue
+            except ExtractionConfigError as exc:
+                log.error(
+                    "extraction_skipped_config",
+                    url=_CHOKEPOINTS_URL,
+                    chokepoint=record["chokepoint"],
+                    error=str(exc),
+                )
+                continue
             except Exception:
                 log.warning("portwatch_pipeline_failed", chokepoint=record["chokepoint"])
 
@@ -165,8 +188,15 @@ class PortWatchCollector(BaseCollector):
             coords = CHOKEPOINT_COORDS.get(record["chokepoint"], (0.0, 0.0))
             description = f"PortWatch Disruption: {record['chokepoint']} — {record['description']}"
 
+            from pipeline import (
+                ExtractionConfigError,
+                ExtractionTransientError,
+                process_item,
+            )
+
+            # Transient/config errors skip Qdrant upsert so the disruption
+            # record is retried on the next source re-fetch.
             try:
-                from pipeline import process_item
                 await process_item(
                     title=f"PortWatch Disruption: {record['chokepoint']}",
                     text=description,
@@ -175,6 +205,22 @@ class PortWatchCollector(BaseCollector):
                     settings=self.settings,
                     redis_client=self.redis,
                 )
+            except ExtractionTransientError as exc:
+                log.warning(
+                    "extraction_skipped_transient",
+                    url=_DISRUPTIONS_URL,
+                    chokepoint=record["chokepoint"],
+                    error=str(exc),
+                )
+                continue
+            except ExtractionConfigError as exc:
+                log.error(
+                    "extraction_skipped_config",
+                    url=_DISRUPTIONS_URL,
+                    chokepoint=record["chokepoint"],
+                    error=str(exc),
+                )
+                continue
             except Exception:
                 log.warning("portwatch_disruption_pipeline_failed")
 
