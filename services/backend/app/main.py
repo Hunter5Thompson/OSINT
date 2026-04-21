@@ -100,20 +100,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# REST Routers
-app.include_router(flights.router, prefix="/api/v1")
-app.include_router(satellites.router, prefix="/api/v1")
-app.include_router(earthquakes.router, prefix="/api/v1")
-app.include_router(vessels.router, prefix="/api/v1")
-app.include_router(hotspots.router, prefix="/api/v1")
-app.include_router(intel.router, prefix="/api/v1")
-app.include_router(rag.router, prefix="/api/v1")
-app.include_router(graph.router, prefix="/api/v1")
-app.include_router(cables.router, prefix="/api/v1")
-app.include_router(firms.router, prefix="/api/v1")
-app.include_router(aircraft.router, prefix="/api/v1")
-app.include_router(eonet.router, prefix="/api/v1")
-app.include_router(gdacs.router, prefix="/api/v1")
+# REST Routers — unified prefix with /api/v1 back-compat aliases (remove 2026-05-21)
+for r in (
+    flights.router, satellites.router, earthquakes.router, vessels.router,
+    hotspots.router, intel.router, rag.router, graph.router, cables.router,
+    firms.router, aircraft.router, eonet.router, gdacs.router,
+):
+    app.include_router(r, prefix="/api")
+    app.include_router(r, prefix="/api/v1")
+
+# S1 Hlidskjalf routers (already at /api, no alias needed)
 app.include_router(signals.router, prefix="/api")
 app.include_router(landing.router, prefix="/api")
 
@@ -134,7 +130,6 @@ class ClientConfig(BaseModel):
     api_version: str
 
 
-@app.get("/api/v1/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
@@ -143,7 +138,6 @@ async def health() -> HealthResponse:
     )
 
 
-@app.get("/api/v1/config", response_model=ClientConfig)
 async def client_config() -> ClientConfig:
     """Return client configuration. Never exposes secret keys."""
     return ClientConfig(
@@ -164,3 +158,10 @@ async def client_config() -> ClientConfig:
         },
         api_version="v1",
     )
+
+
+# Primary mounts at /api + /api/v1 back-compat aliases (remove 2026-05-21)
+app.add_api_route("/api/health", health, response_model=HealthResponse, methods=["GET"])
+app.add_api_route("/api/config", client_config, response_model=ClientConfig, methods=["GET"])
+app.add_api_route("/api/v1/health", health, response_model=HealthResponse, methods=["GET"], include_in_schema=False)
+app.add_api_route("/api/v1/config", client_config, response_model=ClientConfig, methods=["GET"], include_in_schema=False)

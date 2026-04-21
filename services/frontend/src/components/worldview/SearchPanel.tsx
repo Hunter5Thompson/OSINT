@@ -36,7 +36,7 @@ export function SearchPanel(_props: SearchPanelProps) {
       setLoading(true);
       try {
         const res = await fetch(
-          `/api/v1/graph/search?q=${encodeURIComponent(q.trim())}&limit=20`,
+          `/api/graph/search?q=${encodeURIComponent(q.trim())}&limit=20`,
         );
         if (!res.ok) throw new Error("search failed");
         const data = (await res.json()) as GraphSearchResponse;

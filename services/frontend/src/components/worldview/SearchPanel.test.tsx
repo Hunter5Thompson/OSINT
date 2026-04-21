@@ -30,7 +30,7 @@ describe("SearchPanel", () => {
     const firstCallArgs = fetchMock.mock.calls[0];
     expect(firstCallArgs).toBeDefined();
     const calledUrl = firstCallArgs![0] as string;
-    expect(calledUrl).toMatch(/\/api\/v1\/graph\/search\?q=sinj/);
+    expect(calledUrl).toMatch(/\/api\/graph\/search\?q=sinj/);
   });
 
   it("renders node.type as an Eyebrow next to the name", async () => {

@@ -21,7 +21,7 @@ import type {
   Vessel,
 } from "../types";
 
-const BASE = "/api/v1";
+const BASE = "/api";
 
 // ── S1 endpoints — mounted at /api (not /api/v1) ────────────────────────────
 // The Hlíðskjalf S1 backend router mounts at bare /api. Keep these helpers
