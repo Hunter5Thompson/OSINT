@@ -78,6 +78,11 @@
   --sage: #7a8a68;      /* Hugin · Ingestion */
   --sentinel: #b85a2a;  /* Sentinel · Incident */
   --rust: #8a4a3a;      /* Critical */
+
+  /* Panel / overlay (Hlíðskjalf § surfaces — Worldview, Briefing, War Room) */
+  --hl-panel-bg: rgba(18, 17, 14, 0.84);
+  --hl-panel-border: 1px solid var(--granite);
+  --hl-panel-blur: blur(12px);
 }
 
 /* ── Scope ─────────────────────────────────────────────────────────────── */
