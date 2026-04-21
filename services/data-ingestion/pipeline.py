@@ -228,7 +228,10 @@ async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dic
         raise ExtractionTransientError(f"connect: {exc}") from exc
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
-        if status in (401, 403, 404):
+        # Rev-6 (post-merge review): 400/405/422 are deterministic request/schema errors —
+        # retrying won't fix an incompatible vLLM version or a malformed payload shape, so
+        # they belong in ConfigError so operators stop the spin instead of looping forever.
+        if status in (400, 401, 403, 404, 405, 422):
             raise ExtractionConfigError(f"http {status}: {exc}") from exc
         if 500 <= status < 600:
             raise ExtractionTransientError(f"http {status}: {exc}") from exc
@@ -248,7 +251,11 @@ async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dic
         return json.loads(content)
     except ExtractionTransientError:
         raise  # Already the right class — don't re-wrap.
-    except (KeyError, ValueError, json.JSONDecodeError) as exc:
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        # Rev-6 (post-merge review): IndexError (empty choices array) and TypeError
+        # (content is None, or non-subscriptable) are equally "transient: LLM returned
+        # garbage shape"; wrapping them keeps _call_vllm's contract that only the two
+        # typed errors escape, so collector try/except blocks behave uniformly.
         raise ExtractionTransientError(f"parse: {exc}") from exc
 
 

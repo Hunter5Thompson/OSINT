@@ -11,7 +11,10 @@ INTERACTIVE_SERVICES=(vllm-9b tei-rerank intelligence backend frontend)
 VISION_SERVICES=(vllm-vision vision-enrichment)
 
 # Spark (DGX GB10) — ingestion LLM host, overridable for staging/lab setups.
-SPARK_VLLM_URL="${SPARK_VLLM_URL:-http://192.168.178.39:8000}"
+# Exported so docker-compose substitutes the same value into data-ingestion-spark
+# (compose env: INGESTION_VLLM_URL=${SPARK_VLLM_URL:-...}). Without export, preflight
+# would check one host and the scheduler container would talk to another.
+export SPARK_VLLM_URL="${SPARK_VLLM_URL:-http://192.168.178.39:8000}"
 
 MODE="${2:-}"
 COMMAND="${1:-help}"

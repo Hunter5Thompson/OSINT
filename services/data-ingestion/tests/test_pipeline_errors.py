@@ -170,7 +170,7 @@ async def test_http_5xx_raises_transient():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", [401, 403, 404])
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 405, 422])
 async def test_http_4xx_raises_config(status):
     bad = MagicMock()
     bad.status_code = status
@@ -205,6 +205,37 @@ async def test_json_parse_error_raises_transient():
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
         with pytest.raises(ExtractionTransientError):
+            await process_item(
+                title="t", text="x", url="http://e/1", source="rss",
+                settings=_settings(),
+            )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "malformed_payload",
+    [
+        pytest.param({"choices": []}, id="empty_choices_array_IndexError"),
+        pytest.param({"choices": [{"message": {"content": None}}]}, id="content_none_TypeError"),
+        pytest.param({"choices": [{"message": None}]}, id="message_none_TypeError"),
+    ],
+)
+async def test_unexpected_response_shape_raises_transient(malformed_payload):
+    """Rev-6 (post-merge review): IndexError / TypeError on malformed 200 responses
+    must surface as ExtractionTransientError, not leak out as uncaught engine errors
+    that only ExtractionTransientError/ExtractionConfigError-catching collectors miss."""
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = malformed_payload
+
+    with patch("pipeline.httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = resp
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with pytest.raises(ExtractionTransientError, match="parse:"):
             await process_item(
                 title="t", text="x", url="http://e/1", source="rss",
                 settings=_settings(),
