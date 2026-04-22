@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import * as api from "../../services/api";
 import { useEarthquakes } from "../../hooks/useEarthquakes";
+import { useFIRMSHotspots } from "../../hooks/useFIRMSHotspots";
+import { useAircraftTracks } from "../../hooks/useAircraftTracks";
 
 describe("useEarthquakes cancelled guard", () => {
   beforeEach(() => {
@@ -46,6 +48,68 @@ describe("useEarthquakes cancelled guard", () => {
     rerender({ enabled: false });
 
     // The late resolve must not leave loading stuck at true.
+    await act(async () => {
+      resolveFetch([]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.loading).toBe(false);
+  });
+});
+
+describe("useFIRMSHotspots cancelled guard", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("resets loading to false when disabled mid-fetch", async () => {
+    let resolveFetch!: (v: unknown) => void;
+    const pending = new Promise<unknown>((r) => { resolveFetch = r; });
+    vi.spyOn(api, "getFIRMSHotspots").mockReturnValue(pending as never);
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useFIRMSHotspots(enabled),
+      { initialProps: { enabled: true } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(true));
+    rerender({ enabled: false });
+
+    await act(async () => {
+      resolveFetch([]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.loading).toBe(false);
+  });
+});
+
+describe("useAircraftTracks cancelled guard", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("resets loading to false when disabled mid-fetch", async () => {
+    let resolveFetch!: (v: unknown) => void;
+    const pending = new Promise<unknown>((r) => { resolveFetch = r; });
+    vi.spyOn(api, "getAircraftTracks").mockReturnValue(pending as never);
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useAircraftTracks(enabled),
+      { initialProps: { enabled: true } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(true));
+    rerender({ enabled: false });
+
     await act(async () => {
       resolveFetch([]);
       await Promise.resolve();
