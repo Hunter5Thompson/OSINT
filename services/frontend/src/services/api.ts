@@ -1,6 +1,7 @@
 /**
  * Typed API client for WorldView backend.
- * All calls go through the Vite proxy to /api/v1/*.
+ * All calls go through the Vite proxy to /api/*. The /api/v1/* alias
+ * remains live until 2026-05-21 for external callers (see ADR-0001).
  */
 
 import type {
@@ -21,7 +22,7 @@ import type {
   Vessel,
 } from "../types";
 
-const BASE = "/api/v1";
+const BASE = "/api";
 
 // ── S1 endpoints — mounted at /api (not /api/v1) ────────────────────────────
 // The Hlíðskjalf S1 backend router mounts at bare /api. Keep these helpers

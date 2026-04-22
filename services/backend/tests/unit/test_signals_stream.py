@@ -315,8 +315,8 @@ async def test_stream_with_valid_last_event_id_replays_newer(
         assert env is not None
         envelopes.append(env)
 
-    # Expect: ready-comment + 2 replay frames (envelopes[3], envelopes[4])
-    frames = await _drain_generator(envelopes[2].event_id, max_frames=3)
+    # Expect: ready-comment + 4 replay frames (2×named+wildcard for envelopes[3,4])
+    frames = await _drain_generator(envelopes[2].event_id, max_frames=5)
 
     data_frames = [f for f in frames if "data" in f and "event" in f]
     ids = [f["id"] for f in data_frames]
@@ -431,7 +431,7 @@ async def test_stream_with_header_replays(
     frames = await _drive_endpoint(
         headers={"Last-Event-ID": envelopes[2].event_id},
         query=None,
-        max_frames=3,
+        max_frames=5,
     )
     ids = [f["id"] for f in frames if "id" in f]
     assert envelopes[3].event_id in ids
@@ -456,7 +456,7 @@ async def test_stream_with_query_param_replays_when_header_absent(
     frames = await _drive_endpoint(
         headers=None,
         query=f"last_event_id={envelopes[2].event_id}",
-        max_frames=3,
+        max_frames=5,
     )
     ids = [f["id"] for f in frames if "id" in f]
     assert envelopes[3].event_id in ids
@@ -485,7 +485,7 @@ async def test_stream_header_wins_over_query_param(
     frames = await _drive_endpoint(
         headers={"Last-Event-ID": envelopes[3].event_id},
         query=f"last_event_id={envelopes[0].event_id}",
-        max_frames=2,
+        max_frames=3,
     )
     ids = [f["id"] for f in frames if "id" in f]
     # Only envelopes[4] should have been replayed (header replay from [3]).
@@ -527,6 +527,57 @@ def test_signals_router_registered_under_api_prefix() -> None:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Dual-frame emission (named + wildcard)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sse_generator_emits_named_and_wildcard_frame_per_envelope(
+    reset_signal_stream: SignalStream,
+) -> None:
+    """Each envelope must produce a typed frame AND an unnamed (wildcard) frame.
+
+    The named frame (`event` key present) fires addEventListener('<type>') in
+    browsers. The unnamed frame (no `event` key) fires EventSource.onmessage.
+    Both must be emitted for every envelope so that both listener styles work.
+    The frontend dedupes via event_id, so the double-emit is safe.
+    """
+    stream = reset_signal_stream
+    base_ms = int(time.time() * 1000)
+    # Insert two envelopes; replay from before the first one so both are replayed.
+    anchor = stream.insert_record(_record_id(base_ms, 0), _fields(title="dual-anchor"))
+    env = stream.insert_record(_record_id(base_ms, 1), _fields(title="dual-test"))
+    assert anchor is not None and env is not None
+
+    # Replay from before anchor → we get 1 ready comment + 2×2 frames (named+wildcard).
+    # Drive just the first 3 frames after the ready comment to confirm the pair.
+    # Use anchor.event_id as last_event_id so only `env` is replayed → 2 frames.
+    frames = await _drain_generator(anchor.event_id, max_frames=3)
+
+    # Filter to frames that carry an envelope payload (have "data" and an "id").
+    data_frames = [f for f in frames if "data" in f and "id" in f]
+
+    assert len(data_frames) == 2, (
+        f"Expected 2 frames (typed + wildcard) per envelope, got {len(data_frames)}: "
+        f"{data_frames}"
+    )
+
+    named_frames = [f for f in data_frames if "event" in f]
+    wildcard_frames = [f for f in data_frames if "event" not in f]
+
+    assert len(named_frames) == 1, "Expected exactly one named (typed) frame"
+    assert len(wildcard_frames) == 1, "Expected exactly one unnamed (wildcard) frame"
+
+    # Both frames carry identical payload and id.
+    assert named_frames[0]["id"] == env.event_id
+    assert wildcard_frames[0]["id"] == env.event_id
+    assert named_frames[0]["data"] == wildcard_frames[0]["data"]
+
+    # Named frame has the correct event type.
+    assert named_frames[0]["event"] == env.type
 
 
 def _collect_sse_frames(
