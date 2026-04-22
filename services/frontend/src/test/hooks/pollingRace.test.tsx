@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import * as api from "../../services/api";
 import { useEarthquakes } from "../../hooks/useEarthquakes";
 
@@ -27,5 +27,30 @@ describe("useEarthquakes cancelled guard", () => {
     });
 
     expect(result.current.earthquakes).toEqual([]);
+  });
+
+  it("resets loading to false when disabled mid-fetch", async () => {
+    let resolveFetch!: (v: unknown) => void;
+    const pending = new Promise<unknown>((r) => { resolveFetch = r; });
+    vi.spyOn(api, "getEarthquakes").mockReturnValue(pending as never);
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useEarthquakes(enabled),
+      { initialProps: { enabled: true } },
+    );
+
+    // Wait for the fetch to start and loading to flip true.
+    await waitFor(() => expect(result.current.loading).toBe(true));
+
+    // Toggle off BEFORE the fetch resolves.
+    rerender({ enabled: false });
+
+    // The late resolve must not leave loading stuck at true.
+    await act(async () => {
+      resolveFetch([]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.loading).toBe(false);
   });
 });

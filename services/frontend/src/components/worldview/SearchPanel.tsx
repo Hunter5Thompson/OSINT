@@ -29,6 +29,7 @@ export function SearchPanel(_props: SearchPanelProps) {
   useEffect(() => {
     if (q.trim().length < 2) {
       setResults(null);
+      setLoading(false);
       return;
     }
     let cancelled = false;

@@ -62,4 +62,21 @@ describe("SearchPanel", () => {
     });
     await waitFor(() => expect(screen.getByText(/— no matches —/i)).toBeInTheDocument());
   });
+
+  it("resets loading when query drops below 2 chars while a fetch is in flight", async () => {
+    // Leave fetch pending indefinitely so the component observes `loading: true`
+    // at the moment the user deletes back below the debounce threshold.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockReturnValue(new Promise(() => {})),
+    );
+    render(<SearchPanel viewer={null} />);
+    const input = screen.getByPlaceholderText(/search entities/i);
+    fireEvent.change(input, { target: { value: "sinj" } });
+    // Wait for the 180ms debounce to elapse and loading to flip true.
+    await waitFor(() => expect(screen.getByText(/§ searching…/i)).toBeInTheDocument());
+    // Delete back to one character — regressed behaviour: "§ searching…" stays.
+    fireEvent.change(input, { target: { value: "s" } });
+    await waitFor(() => expect(screen.queryByText(/§ searching…/i)).not.toBeInTheDocument());
+  });
 });

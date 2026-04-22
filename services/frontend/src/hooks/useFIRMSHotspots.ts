@@ -12,6 +12,7 @@ export function useFIRMSHotspots(enabled: boolean, sinceHours = 24) {
   useEffect(() => {
     if (!enabled) {
       setHotspots([]);
+      setLoading(false);
       return;
     }
     let cancelled = false;

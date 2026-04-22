@@ -12,6 +12,7 @@ export function useEarthquakes(enabled: boolean) {
   useEffect(() => {
     if (!enabled) {
       setEarthquakes([]);
+      setLoading(false);
       return;
     }
     let cancelled = false;

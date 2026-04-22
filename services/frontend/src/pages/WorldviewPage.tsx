@@ -111,12 +111,15 @@ export function WorldviewPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "/") {
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        !!target &&
+        (["INPUT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable);
+
+      if (e.key === "/" && !isTyping) {
         e.preventDefault();
         setExpanded((p) => ({ ...p, search: true }));
-      } else if (e.key.toLowerCase() === "l" && !e.ctrlKey && !e.metaKey) {
-        const target = e.target as HTMLElement | null;
-        if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
+      } else if (e.key.toLowerCase() === "l" && !e.ctrlKey && !e.metaKey && !isTyping) {
         setExpanded((p) => ({ ...p, layers: !p.layers }));
       }
     };

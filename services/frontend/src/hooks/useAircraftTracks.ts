@@ -12,6 +12,7 @@ export function useAircraftTracks(enabled: boolean, sinceHours = 24) {
   useEffect(() => {
     if (!enabled) {
       setTracks([]);
+      setLoading(false);
       return;
     }
     let cancelled = false;
