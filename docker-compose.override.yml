@@ -1,0 +1,10 @@
+services:
+  data-ingestion:
+    environment:
+      - TELEGRAM_SESSION_PATH=/data/telegram/odin
+      - TELEGRAM_MEDIA_PATH=/data/telegram/media
+
+  data-ingestion-spark:
+    environment:
+      - TELEGRAM_SESSION_PATH=/data/telegram/odin
+      - TELEGRAM_MEDIA_PATH=/data/telegram/media

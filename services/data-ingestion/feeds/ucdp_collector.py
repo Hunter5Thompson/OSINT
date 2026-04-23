@@ -18,8 +18,8 @@ log = structlog.get_logger(__name__)
 
 UCDP_BASE_URL = "https://ucdpapi.pcr.uu.se/api/gedevents"
 UCDP_TIMEOUT = 90.0
-PAGE_SIZE = 1000
-MAX_PAGES = 6
+PAGE_SIZE = 100
+MAX_PAGES = 3
 
 VIOLENCE_TYPES: dict[int, str] = {
     1: "state-based",
