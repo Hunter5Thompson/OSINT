@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../../components/globe/GlobeViewer", () => ({
   GlobeViewer: ({ onViewerReady }: { onViewerReady: (v: unknown) => void }) => {
@@ -22,9 +23,17 @@ vi.mock("../../services/api", () => ({
 
 import { WorldviewPage } from "../../pages/WorldviewPage";
 
+function renderWorldview() {
+  return render(
+    <MemoryRouter initialEntries={["/worldview"]}>
+      <WorldviewPage />
+    </MemoryRouter>,
+  );
+}
+
 describe("WorldviewPage", () => {
   it("renders the globe and four overlay panel tabs/expanded forms", async () => {
-    render(<WorldviewPage />);
+    renderWorldview();
     expect(await screen.findByTestId("globe-viewer")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /expand Layers/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /expand Search/i })).toBeInTheDocument();
@@ -32,7 +41,7 @@ describe("WorldviewPage", () => {
   });
 
   it("does not render legacy ClockBar / StatusBar / ThreatRegister", () => {
-    render(<WorldviewPage />);
+    renderWorldview();
     expect(screen.queryByTestId("clock-bar")).not.toBeInTheDocument();
     expect(screen.queryByTestId("status-bar")).not.toBeInTheDocument();
     expect(screen.queryByTestId("threat-register")).not.toBeInTheDocument();

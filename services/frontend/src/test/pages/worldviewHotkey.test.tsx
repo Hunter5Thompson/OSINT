@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../../components/globe/GlobeViewer", () => ({
   GlobeViewer: ({ onViewerReady }: { onViewerReady: (v: unknown) => void }) => {
@@ -22,9 +23,17 @@ vi.mock("../../services/api", () => ({
 
 import { WorldviewPage } from "../../pages/WorldviewPage";
 
+function renderWorldview() {
+  return render(
+    <MemoryRouter initialEntries={["/worldview"]}>
+      <WorldviewPage />
+    </MemoryRouter>,
+  );
+}
+
 describe("WorldviewPage hotkeys", () => {
   it("does NOT trigger the Search panel when / is typed inside an input", async () => {
-    render(<WorldviewPage />);
+    renderWorldview();
     // Expand the search panel first so its <input> is in the DOM.
     fireEvent.click(await screen.findByRole("button", { name: /expand Search/i }));
     const searchInput = await screen.findByPlaceholderText(/search entities/i);
@@ -45,7 +54,7 @@ describe("WorldviewPage hotkeys", () => {
   });
 
   it("DOES trigger the Search panel when / is pressed outside any input", async () => {
-    render(<WorldviewPage />);
+    renderWorldview();
     // Collapsed by default — the expand button is visible.
     expect(await screen.findByRole("button", { name: /expand Search/i })).toBeInTheDocument();
 

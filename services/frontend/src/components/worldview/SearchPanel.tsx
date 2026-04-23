@@ -43,9 +43,14 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "" }: SearchPanelP
     const timeout = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/v1/graph/search?q=${encodeURIComponent(normalized)}&limit=20`, {
+        let res = await fetch(`/api/graph/search?q=${encodeURIComponent(normalized)}&limit=20`, {
           signal: controller.signal,
         });
+        if (res.status === 404) {
+          res = await fetch(`/api/v1/graph/search?q=${encodeURIComponent(normalized)}&limit=20`, {
+            signal: controller.signal,
+          });
+        }
         if (!res.ok) {
           throw new Error(`search failed: ${res.status}`);
         }
@@ -95,13 +100,13 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "" }: SearchPanelP
       <div style={{ marginTop: "0.7rem", minHeight: 28 }}>
         {loading ? (
           <span className="mono" style={{ color: "var(--ash)", fontSize: "0.66rem" }}>
-            § searching...
+            § searching…
           </span>
         ) : null}
 
         {!loading && results?.length === 0 ? (
           <span className="mono" style={{ color: "var(--ash)", fontSize: "0.66rem" }}>
-            - no matches -
+            — no matches —
           </span>
         ) : null}
 

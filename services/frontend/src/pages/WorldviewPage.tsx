@@ -111,7 +111,7 @@ export function WorldviewPage() {
   const [selected, setSelected] = useState<Selected | null>(null);
   const [searchSeed, setSearchSeed] = useState("");
   const [expandedPanels, setExpandedPanels] = useState<Record<PanelId, boolean>>({
-    layers: true,
+    layers: false,
     search: false,
   });
 
@@ -213,7 +213,7 @@ export function WorldviewPage() {
   return (
     <PerformanceGuard>
       <div style={{ flex: 1, position: "relative", minHeight: 0 }} data-page="worldview">
-        <div data-testid="globe-viewer" style={{ position: "absolute", inset: 0 }}>
+        <div style={{ position: "absolute", inset: 0 }}>
           <GlobeViewer
             onViewerReady={handleViewerReady}
             cesiumToken={config.cesium_ion_token}

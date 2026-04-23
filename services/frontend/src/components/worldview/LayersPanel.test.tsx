@@ -11,7 +11,7 @@ const allOff: LayerVisibility = {
 };
 
 describe("LayersPanel", () => {
-  it("groups toggles by dimension and shows amber dot when active", () => {
+  it("groups toggles by dimension and marks active layer as pressed", () => {
     render(
       <LayersPanel
         layers={{ ...allOff, flights: true }}
@@ -23,8 +23,11 @@ describe("LayersPanel", () => {
     expect(screen.getByText(/Transport/i)).toBeInTheDocument();
     expect(screen.getByText(/Incidents/i)).toBeInTheDocument();
     expect(screen.getByText(/Infrastructure/i)).toBeInTheDocument();
-    expect(screen.getByText(/Atmosphere/i)).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /flights/i })).toBeChecked();
+    expect(screen.getByText(/Visual Filter/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /flights/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("calls onToggle with the layer key when clicked", () => {
@@ -37,7 +40,7 @@ describe("LayersPanel", () => {
         onShaderChange={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("checkbox", { name: /satellites/i }));
+    fireEvent.click(screen.getByRole("button", { name: /satellites/i }));
     expect(onToggle).toHaveBeenCalledWith("satellites");
   });
 });
