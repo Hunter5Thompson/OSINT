@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import * as Cesium from "cesium";
 import { PerformanceGuard } from "../components/globe/PerformanceGuard";
 import { GlobeViewer } from "../components/globe/GlobeViewer";
@@ -20,8 +21,9 @@ import { GDACSLayer } from "../components/layers/GDACSLayer";
 import { OverlayPanel } from "../components/hlidskjalf/OverlayPanel";
 import { LayersPanel } from "../components/worldview/LayersPanel";
 import { SearchPanel } from "../components/worldview/SearchPanel";
-import { InspectorPanel } from "../components/worldview/InspectorPanel";
+import { InspectorPanel, type Selected } from "../components/worldview/InspectorPanel";
 import { TickerPanel } from "../components/worldview/TickerPanel";
+import { WorldviewHudLoader } from "../components/worldview/WorldviewHudLoader";
 import { useFlights } from "../hooks/useFlights";
 import { useSatellites } from "../hooks/useSatellites";
 import { useEarthquakes } from "../hooks/useEarthquakes";
@@ -36,16 +38,11 @@ import { useRefineries } from "../hooks/useRefineries";
 import { useEONETEvents } from "../hooks/useEONETEvents";
 import { useGDACSEvents } from "../hooks/useGDACSEvents";
 import { getConfig } from "../services/api";
-import type {
-  LayerVisibility,
-  ShaderType,
-  ClientConfig,
-  DatacenterProperties,
-  RefineryProperties,
-} from "../types";
-import type { Selected } from "../components/worldview/InspectorPanel";
+import type { ClientConfig, LayerVisibility, ShaderType } from "../types";
 
 type PanelId = "layers" | "search";
+
+type LandingFilter = "hotspots" | "conflict" | "nuntii" | "libri";
 
 const DEFAULT_LAYERS: LayerVisibility = {
   flights: true,
@@ -66,14 +63,55 @@ const DEFAULT_LAYERS: LayerVisibility = {
   gdacs: false,
 };
 
+const FILTER_LAYER_PRESETS: Record<LandingFilter, Partial<LayerVisibility>> = {
+  hotspots: {
+    firmsHotspots: true,
+    milAircraft: true,
+  },
+  conflict: {
+    events: true,
+    gdacs: true,
+    eonet: true,
+    earthquakes: true,
+  },
+  nuntii: {
+    events: true,
+    gdacs: true,
+    eonet: true,
+    satellites: true,
+  },
+  libri: {
+    cables: true,
+    pipelines: true,
+    datacenters: true,
+    refineries: true,
+    countryBorders: true,
+  },
+};
+
+function isLayerKey(value: string): value is keyof LayerVisibility {
+  return value in DEFAULT_LAYERS;
+}
+
+function decodeEntityQuery(value: string | null): string {
+  if (!value) return "";
+  const decoded = value.trim();
+  // Landing deep-links currently use `source:id` payloads; search works best
+  // on human-readable names, so only keep the left segment when present.
+  return decoded.includes(":") ? (decoded.split(":")[0] ?? "").trim() : decoded.trim();
+}
+
 export function WorldviewPage() {
+  const location = useLocation();
+
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [config, setConfig] = useState<ClientConfig | null>(null);
   const [layers, setLayers] = useState<LayerVisibility>(DEFAULT_LAYERS);
   const [activeShader, setActiveShader] = useState<ShaderType>("none");
   const [selected, setSelected] = useState<Selected | null>(null);
-  const [expanded, setExpanded] = useState<Record<PanelId, boolean>>({
-    layers: false,
+  const [searchSeed, setSearchSeed] = useState("");
+  const [expandedPanels, setExpandedPanels] = useState<Record<PanelId, boolean>>({
+    layers: true,
     search: false,
   });
 
@@ -91,6 +129,8 @@ export function WorldviewPage() {
   const { events: eonetEvents } = useEONETEvents(layers.eonet);
   const { events: gdacsEvents } = useGDACSEvents(layers.gdacs);
 
+  const hasViewer = useMemo(() => viewer != null && !viewer.isDestroyed(), [viewer]);
+
   useEffect(() => {
     void getConfig()
       .then(setConfig)
@@ -104,25 +144,52 @@ export function WorldviewPage() {
   }, []);
 
   useEffect(() => {
-    if (config?.default_layers) {
-      setLayers((prev) => ({ ...prev, ...config.default_layers }));
-    }
+    if (!config?.default_layers) return;
+    setLayers((prev) => ({ ...prev, ...config.default_layers }));
   }, [config]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const isTyping =
-        !!target &&
-        (["INPUT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable);
+    if (!config) return;
 
-      if (e.key === "/" && !isTyping) {
-        e.preventDefault();
-        setExpanded((p) => ({ ...p, search: true }));
-      } else if (e.key.toLowerCase() === "l" && !e.ctrlKey && !e.metaKey && !isTyping) {
-        setExpanded((p) => ({ ...p, layers: !p.layers }));
+    const params = new URLSearchParams(location.search);
+    const layerParam = params.get("layer");
+    const filterParam = params.get("filter");
+    const entityParam = params.get("entity");
+
+    if (layerParam && isLayerKey(layerParam)) {
+      setLayers((prev) => ({ ...prev, [layerParam]: true }));
+      setExpandedPanels((prev) => ({ ...prev, layers: true }));
+    }
+
+    if (filterParam && filterParam in FILTER_LAYER_PRESETS) {
+      const preset = FILTER_LAYER_PRESETS[filterParam as LandingFilter];
+      setLayers((prev) => ({ ...prev, ...preset }));
+      setExpandedPanels((prev) => ({ ...prev, layers: true }));
+    }
+
+    const searchFromEntity = decodeEntityQuery(entityParam);
+    if (searchFromEntity) {
+      setSearchSeed(searchFromEntity);
+      setExpandedPanels((prev) => ({ ...prev, search: true }));
+    }
+  }, [config, location.search]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "/") {
+        const target = event.target as HTMLElement | null;
+        if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
+        event.preventDefault();
+        setExpandedPanels((prev) => ({ ...prev, search: true }));
+      }
+
+      if (event.key.toLowerCase() === "l" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const target = event.target as HTMLElement | null;
+        if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
+        setExpandedPanels((prev) => ({ ...prev, layers: !prev.layers }));
       }
     };
+
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -131,28 +198,30 @@ export function WorldviewPage() {
     setLayers((prev) => ({ ...prev, [layer]: !prev[layer] }));
   }, []);
 
-  const handleViewerReady = useCallback((v: Cesium.Viewer) => {
-    setViewer(v);
+  const handleViewerReady = useCallback((createdViewer: Cesium.Viewer) => {
+    setViewer(createdViewer);
   }, []);
 
   if (!config) {
     return (
-      <div style={{ flex: 1, display: "grid", placeItems: "center", color: "var(--stone)" }}>
-        <span className="mono">§ Initializing worldview…</span>
+      <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+        <WorldviewHudLoader />
       </div>
     );
   }
 
   return (
     <PerformanceGuard>
-      <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-        <GlobeViewer
-          onViewerReady={handleViewerReady}
-          cesiumToken={config.cesium_ion_token}
-          activeShader={activeShader}
-          showCountryBorders={layers.countryBorders}
-          showCityBuildings={layers.cityBuildings}
-        />
+      <div style={{ flex: 1, position: "relative", minHeight: 0 }} data-page="worldview">
+        <div data-testid="globe-viewer" style={{ position: "absolute", inset: 0 }}>
+          <GlobeViewer
+            onViewerReady={handleViewerReady}
+            cesiumToken={config.cesium_ion_token}
+            activeShader={activeShader}
+            showCountryBorders={layers.countryBorders}
+            showCityBuildings={layers.cityBuildings}
+          />
+        </div>
 
         <FlightLayer viewer={viewer} flights={flights} visible={layers.flights} />
         <SatelliteLayer viewer={viewer} satellites={satellites} visible={layers.satellites} />
@@ -166,48 +235,51 @@ export function WorldviewPage() {
           viewer={viewer}
           hotspots={firmsHotspots}
           visible={layers.firmsHotspots}
-          onSelect={(h) => setSelected({ type: "firms", data: h })}
+          onSelect={(hotspot) => setSelected({ type: "firms", data: hotspot })}
         />
         <MilAircraftLayer
           viewer={viewer}
           tracks={milTracks}
           visible={layers.milAircraft}
-          onSelect={(t) => setSelected({ type: "aircraft", data: t })}
+          onSelect={(track) => setSelected({ type: "aircraft", data: track })}
         />
         <DatacenterLayer
           viewer={viewer}
           datacenters={datacenterData}
           visible={layers.datacenters}
-          onSelect={(d: DatacenterProperties) => setSelected({ type: "datacenter", data: d })}
+          onSelect={(datacenter) => setSelected({ type: "datacenter", data: datacenter })}
         />
         <RefineryLayer
           viewer={viewer}
           refineries={refineryData}
           visible={layers.refineries}
-          onSelect={(r: RefineryProperties) => setSelected({ type: "refinery", data: r })}
+          onSelect={(refinery) => setSelected({ type: "refinery", data: refinery })}
         />
         <EONETLayer
           viewer={viewer}
           events={eonetEvents}
           visible={layers.eonet}
-          onSelect={(e) => setSelected({ type: "eonet", data: e })}
+          onSelect={(event) => setSelected({ type: "eonet", data: event })}
         />
         <GDACSLayer
           viewer={viewer}
           events={gdacsEvents}
           visible={layers.gdacs}
-          onSelect={(e) => setSelected({ type: "gdacs", data: e })}
+          onSelect={(event) => setSelected({ type: "gdacs", data: event })}
         />
+
         <EntityClickHandler viewer={viewer} />
 
-        {/* § Layers — top-left, default collapsed */}
+        {!hasViewer ? <WorldviewHudLoader /> : null}
+
         <div style={{ position: "absolute", top: 16, left: 16, zIndex: 10 }}>
-          {expanded.layers ? (
+          {expandedPanels.layers ? (
             <OverlayPanel
               paragraph="I"
               label="Layers"
               variant="expanded"
-              onClose={() => setExpanded((p) => ({ ...p, layers: false }))}
+              onClose={() => setExpandedPanels((prev) => ({ ...prev, layers: false }))}
+              width={322}
             >
               <LayersPanel
                 layers={layers}
@@ -221,47 +293,41 @@ export function WorldviewPage() {
               paragraph="I"
               label="Layers"
               variant="collapsed"
-              onExpand={() => setExpanded((p) => ({ ...p, layers: true }))}
+              onExpand={() => setExpandedPanels((prev) => ({ ...prev, layers: true }))}
             >
               {null}
             </OverlayPanel>
           )}
         </div>
 
-        {/* § Search — top-right, default collapsed, / hotkey */}
         <div style={{ position: "absolute", top: 16, right: 16, zIndex: 10 }}>
-          {expanded.search ? (
+          {expandedPanels.search ? (
             <OverlayPanel
               paragraph="II"
               label="Search"
               variant="expanded"
-              onClose={() => setExpanded((p) => ({ ...p, search: false }))}
+              onClose={() => setExpandedPanels((prev) => ({ ...prev, search: false }))}
+              width={330}
             >
-              <SearchPanel viewer={viewer} />
+              <SearchPanel viewer={viewer} initialQuery={searchSeed} />
             </OverlayPanel>
           ) : (
             <OverlayPanel
               paragraph="II"
               label="Search"
               variant="collapsed"
-              onExpand={() => setExpanded((p) => ({ ...p, search: true }))}
+              onExpand={() => setExpandedPanels((prev) => ({ ...prev, search: true }))}
             >
               {null}
             </OverlayPanel>
           )}
         </div>
 
-        {/* § Inspector — right slide-in on entity click */}
-        <div style={{ position: "absolute", top: 16, right: 64, zIndex: 10 }}>
-          <InspectorPanel
-            selected={selected}
-            onClose={() => setSelected(null)}
-            viewer={viewer}
-          />
+        <div style={{ position: "absolute", top: 86, right: 16, zIndex: 10 }}>
+          <InspectorPanel selected={selected} onClose={() => setSelected(null)} viewer={viewer} />
         </div>
 
-        {/* § Ticker — bottom-left, default expanded */}
-        <div style={{ position: "absolute", bottom: 16, left: 16, zIndex: 10 }}>
+        <div style={{ position: "absolute", left: 16, bottom: 16, zIndex: 10 }}>
           <TickerPanel />
         </div>
       </div>

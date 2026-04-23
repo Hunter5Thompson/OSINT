@@ -63,16 +63,16 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         interpolationTimerRef.current = null;
       }
 
-      if (trailCollectionRef.current) {
+      if (trailCollectionRef.current && !viewer.isDestroyed()) {
         viewer.scene.primitives.remove(trailCollectionRef.current);
-        trailCollectionRef.current = null;
       }
+      trailCollectionRef.current = null;
       trailBuffersRef.current.clear();
 
       if (collectionRef.current && !viewer.isDestroyed()) {
         viewer.scene.primitives.remove(collectionRef.current);
-        collectionRef.current = null;
       }
+      collectionRef.current = null;
 
       flightMapRef.current.clear();
     };

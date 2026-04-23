@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import type { PipelineGeoJSON, PipelineFeature } from "../../types";
 import { PIPELINE_COLORS, PIPELINE_LOD_THRESHOLDS } from "../../types/pipeline";
+import { densifyLonLatSegment } from "./geoPath";
 
 interface PipelineLayerProps {
   viewer: Cesium.Viewer | null;
@@ -23,7 +24,8 @@ interface PipelineBillboard extends Cesium.Billboard {
   };
 }
 
-const PIPELINE_ALTITUDE_M = 250;
+// Pipelines run across elevated terrain; render above surface to avoid clipping.
+const PIPELINE_ALTITUDE_M = 5_000;
 const LABEL_ALTITUDE_THRESHOLD = 3_000_000;
 
 function getVisibleTier(altitudeMeters: number): Set<string> {
@@ -120,7 +122,8 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
         for (const segment of segments) {
           if (segment.length < 2) continue;
           const flat: number[] = [];
-          for (const coord of segment) {
+          const densified = densifyLonLatSegment(segment, 80);
+          for (const coord of densified) {
             if (!isValidCoord(coord)) continue;
             flat.push(coord[0], coord[1], PIPELINE_ALTITUDE_M);
           }

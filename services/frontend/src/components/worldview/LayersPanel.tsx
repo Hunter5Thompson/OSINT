@@ -8,92 +8,153 @@ export interface LayersPanelProps {
   onShaderChange: (shader: ShaderType) => void;
 }
 
-interface Group {
-  title: string;
-  keys: (keyof LayerVisibility)[];
+interface LayerDef {
+  key: keyof LayerVisibility;
+  label: string;
 }
 
-const GROUPS: Group[] = [
-  { title: "Incidents", keys: ["earthquakes", "firmsHotspots", "events", "eonet", "gdacs"] },
-  { title: "Transport", keys: ["flights", "milAircraft", "vessels"] },
-  { title: "Infrastructure", keys: ["cables", "pipelines", "datacenters", "refineries", "countryBorders", "cityBuildings"] },
-  { title: "Atmosphere", keys: ["satellites", "cctv"] },
+interface GroupDef {
+  title: string;
+  layers: LayerDef[];
+}
+
+const GROUPS: GroupDef[] = [
+  {
+    title: "Incidents",
+    layers: [
+      { key: "earthquakes", label: "Earthquakes" },
+      { key: "firmsHotspots", label: "FIRMS Hotspots" },
+      { key: "events", label: "Events" },
+      { key: "eonet", label: "EONET" },
+      { key: "gdacs", label: "GDACS" },
+    ],
+  },
+  {
+    title: "Transport",
+    layers: [
+      { key: "flights", label: "Flights" },
+      { key: "milAircraft", label: "Military Aircraft" },
+      { key: "vessels", label: "Vessels" },
+      { key: "satellites", label: "Satellites" },
+    ],
+  },
+  {
+    title: "Infrastructure",
+    layers: [
+      { key: "cables", label: "Submarine Cables" },
+      { key: "pipelines", label: "Pipelines" },
+      { key: "datacenters", label: "Datacenters" },
+      { key: "refineries", label: "Refineries" },
+      { key: "countryBorders", label: "Country Borders" },
+      { key: "cityBuildings", label: "3D Buildings" },
+      { key: "cctv", label: "CCTV" },
+    ],
+  },
 ];
 
-const groupStyle: CSSProperties = {
-  marginBottom: "14px",
-};
+const SHADERS: Array<{ id: ShaderType; label: string }> = [
+  { id: "none", label: "Standard" },
+  { id: "crt", label: "CRT" },
+  { id: "nightvision", label: "Night Vision" },
+  { id: "flir", label: "FLIR" },
+];
 
 const groupTitle: CSSProperties = {
-  fontFamily: "'Hanken Grotesk', sans-serif",
-  fontSize: "10px",
-  letterSpacing: "0.3em",
+  marginBottom: "0.4rem",
+  fontFamily: '"Martian Mono", ui-monospace, monospace',
+  fontSize: "0.62rem",
+  letterSpacing: "0.16em",
   textTransform: "uppercase",
   color: "var(--ash)",
-  marginBottom: "6px",
 };
 
-const rowStyle: CSSProperties = {
+const row: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "8px",
-  padding: "4px 0",
-  fontFamily: "'Hanken Grotesk', sans-serif",
-  fontSize: "12px",
+  justifyContent: "space-between",
+  gap: "0.5rem",
+  padding: "0.24rem 0",
+};
+
+const toggleBtn: CSSProperties = {
+  width: 18,
+  height: 18,
+  border: "1px solid var(--granite)",
+  background: "transparent",
   color: "var(--bone)",
   cursor: "pointer",
+  fontFamily: '"Martian Mono", ui-monospace, monospace',
+  fontSize: "0.62rem",
+  lineHeight: 1,
 };
 
-const dotOn: CSSProperties = {
-  width: "6px",
-  height: "6px",
-  borderRadius: "50%",
-  background: "var(--amber)",
-};
-
-const dotOff: CSSProperties = {
-  width: "6px",
-  height: "6px",
-  borderRadius: "50%",
-  background: "transparent",
-  border: "1px solid var(--granite)",
-};
-
-// Visually hidden but keeps the input in the accessibility tree so
-// getByRole("checkbox") still finds it. `display: none` would remove it.
-const visuallyHidden: CSSProperties = {
-  position: "absolute",
-  width: 1,
-  height: 1,
-  padding: 0,
-  margin: -1,
-  overflow: "hidden",
-  clip: "rect(0 0 0 0)",
-  whiteSpace: "nowrap",
-  border: 0,
-};
-
-export function LayersPanel({ layers, onToggle }: LayersPanelProps) {
+export function LayersPanel({
+  layers,
+  onToggle,
+  activeShader,
+  onShaderChange,
+}: LayersPanelProps) {
   return (
-    <div>
+    <div style={{ display: "grid", gap: "0.8rem" }}>
       {GROUPS.map((group) => (
-        <div key={group.title} style={groupStyle}>
-          <div style={groupTitle}>§ {group.title}</div>
-          {group.keys.map((key) => (
-            <label key={key} style={rowStyle}>
-              <input
-                type="checkbox"
-                checked={layers[key]}
-                onChange={() => onToggle(key)}
-                aria-label={key}
-                style={visuallyHidden}
-              />
-              <span style={layers[key] ? dotOn : dotOff} aria-hidden="true" />
-              <span>{key}</span>
-            </label>
-          ))}
-        </div>
+        <section key={group.title}>
+          <div style={groupTitle}>{`§ ${group.title}`}</div>
+          <div style={{ display: "grid", gap: "0.15rem" }}>
+            {group.layers.map((layer) => {
+              const enabled = layers[layer.key];
+              return (
+                <div key={layer.key} style={row}>
+                  <span style={{ color: enabled ? "var(--bone)" : "var(--stone)", fontSize: "0.78rem" }}>
+                    {layer.label}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={layer.key}
+                    aria-pressed={enabled}
+                    onClick={() => onToggle(layer.key)}
+                    style={{
+                      ...toggleBtn,
+                      borderColor: enabled ? "var(--amber)" : "var(--granite)",
+                      color: enabled ? "var(--amber)" : "var(--stone)",
+                    }}
+                  >
+                    {enabled ? "ON" : "OFF"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       ))}
+
+      <section>
+        <div style={groupTitle}>§ Visual Filter</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.4rem" }}>
+          {SHADERS.map((shader) => {
+            const active = activeShader === shader.id;
+            return (
+              <button
+                key={shader.id}
+                type="button"
+                onClick={() => onShaderChange(shader.id)}
+                style={{
+                  border: `1px solid ${active ? "var(--amber)" : "var(--granite)"}`,
+                  background: active ? "rgba(196, 129, 58, 0.12)" : "transparent",
+                  color: active ? "var(--parchment)" : "var(--stone)",
+                  padding: "0.34rem 0.45rem",
+                  cursor: "pointer",
+                  fontFamily: '"Martian Mono", ui-monospace, monospace',
+                  fontSize: "0.62rem",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {shader.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

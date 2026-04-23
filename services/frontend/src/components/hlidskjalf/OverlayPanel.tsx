@@ -1,4 +1,4 @@
-import type { ReactNode, CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 export type OverlayPanelVariant = "expanded" | "collapsed" | "hidden";
 
@@ -19,44 +19,55 @@ const panelBase: CSSProperties = {
   backdropFilter: "var(--hl-panel-blur)",
   WebkitBackdropFilter: "var(--hl-panel-blur)",
   color: "var(--bone)",
-  fontFamily: "'Hanken Grotesk', sans-serif",
-  fontSize: "12px",
+  fontFamily: '"Hanken Grotesk", system-ui, sans-serif',
+  fontSize: 12,
   pointerEvents: "auto",
 };
 
-const headerStyle: CSSProperties = {
+const panelHeader: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  padding: "10px 12px",
+  gap: "0.75rem",
+  padding: "0.55rem 0.75rem",
   borderBottom: "var(--hl-panel-border)",
 };
 
-const paragraphStyle: CSSProperties = {
-  fontFamily: "'Hanken Grotesk', sans-serif",
-  fontSize: "10px",
-  letterSpacing: "0.22em",
+const panelTag: CSSProperties = {
+  fontFamily: '"Martian Mono", ui-monospace, monospace',
+  fontSize: "0.62rem",
+  letterSpacing: "0.14em",
   textTransform: "uppercase",
   color: "var(--stone)",
 };
 
-const closeBtn: CSSProperties = {
-  background: "transparent",
+const panelCloseBtn: CSSProperties = {
   border: "none",
+  background: "transparent",
   color: "var(--ash)",
   cursor: "pointer",
-  fontFamily: "'Martian Mono', monospace",
-  fontSize: "11px",
-  padding: "0 4px",
+  fontFamily: '"Martian Mono", ui-monospace, monospace',
+  fontSize: "0.78rem",
+  lineHeight: 1,
+  padding: 0,
 };
 
-const tabStyle: CSSProperties = {
+const collapsedTab: CSSProperties = {
   ...panelBase,
-  width: "32px",
-  padding: "12px 6px",
+  width: 30,
+  minHeight: 122,
+  padding: "0.6rem 0.4rem",
   writingMode: "vertical-rl",
   transform: "rotate(180deg)",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 0,
   cursor: "pointer",
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  fontFamily: '"Martian Mono", ui-monospace, monospace',
+  fontSize: "0.62rem",
 };
 
 export function OverlayPanel({
@@ -77,9 +88,9 @@ export function OverlayPanel({
         type="button"
         aria-label={`expand ${label}`}
         onClick={onExpand}
-        style={{ ...tabStyle, ...style }}
+        style={{ ...collapsedTab, ...style }}
       >
-        § {paragraph} · {label}
+        {`§ ${paragraph} · ${label}`}
       </button>
     );
   }
@@ -88,22 +99,22 @@ export function OverlayPanel({
     <section
       role="region"
       aria-label={label}
-      style={{ ...panelBase, width: `${width}px`, ...style }}
+      style={{ ...panelBase, ...style, width: `min(calc(100vw - 2rem), ${width}px)` }}
     >
-      <header style={headerStyle}>
-        <span style={paragraphStyle}>§ {paragraph} · {label}</span>
+      <header style={panelHeader}>
+        <span style={panelTag}>{`§ ${paragraph} · ${label}`}</span>
         {onClose ? (
           <button
             type="button"
             aria-label={`close ${label}`}
             onClick={onClose}
-            style={closeBtn}
+            style={panelCloseBtn}
           >
             ×
           </button>
         ) : null}
       </header>
-      <div style={{ padding: "12px" }}>{children}</div>
+      <div style={{ padding: "0.75rem" }}>{children}</div>
     </section>
   );
 }

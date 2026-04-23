@@ -32,7 +32,18 @@ async def gdelt_query(query: str, max_records: int = 20) -> str:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(GDELT_API_URL, params=params)
             resp.raise_for_status()
-            data = resp.json()
+            try:
+                data = resp.json()
+            except ValueError as exc:
+                content_type = (resp.headers.get("content-type") or "").lower()
+                body_preview = (resp.text or "").replace("\n", " ")[:160]
+                logger.warning(
+                    "gdelt_non_json_response",
+                    content_type=content_type,
+                    preview=body_preview,
+                    error=str(exc),
+                )
+                return f"GDELT query temporarily unavailable for: {query}"
 
         articles = data.get("articles", [])
         if not articles:

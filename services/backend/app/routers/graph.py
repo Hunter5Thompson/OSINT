@@ -24,14 +24,14 @@ async def get_entity(name: str, limit: int = Query(default=50, le=200)) -> Graph
     limit = _cap_limit(limit)
     rows = await _read_query(
         "MATCH (e:Entity {name: $name}) "
-        "RETURN e.id AS id, e.name AS name, e.type AS type, "
+        "RETURN elementId(e) AS id, e.name AS name, e.type AS type, "
         "e.aliases AS aliases, e.confidence AS confidence "
         "LIMIT $limit",
         {"name": name, "limit": limit},
     )
     nodes = [
         GraphNode(
-            id=r.get("id", r.get("name", "")),
+            id=r.get("id") or r.get("name", ""),
             name=r.get("name", ""),
             type=r.get("type", "unknown"),
             properties={k: v for k, v in r.items() if k not in ("id", "name", "type") and v is not None},
@@ -53,8 +53,8 @@ async def get_neighbors(
     rows = await _read_query(
         f"MATCH (e:Entity {{name: $name}})-[r]-(n) "
         f"WHERE true {type_filter} "
-        f"RETURN e.name AS source, type(r) AS relationship, "
-        f"n.name AS target, labels(n)[0] AS target_type, "
+        f"RETURN coalesce(e.name, elementId(e)) AS source, type(r) AS relationship, "
+        f"coalesce(n.name, n.title, elementId(n)) AS target, labels(n)[0] AS target_type, "
         f"n.type AS target_subtype "
         f"LIMIT $limit",
         {"name": name, "limit": limit, "entity_type": entity_type},
@@ -63,17 +63,18 @@ async def get_neighbors(
     edges = []
     nodes_map[name] = GraphNode(id=name, name=name, type="Entity")
     for r in rows:
-        target = r.get("target", "")
+        target = str(r.get("target") or "")
         if target and target not in nodes_map:
             nodes_map[target] = GraphNode(
                 id=target, name=target,
                 type=r.get("target_subtype") or r.get("target_type", "unknown"),
             )
-        edges.append(GraphEdge(
-            source=name, target=target,
-            relationship=r.get("relationship", "RELATED"),
-        ))
-    return GraphResponse(nodes=list(nodes_map.values()), edges=edges, total_count=len(rows))
+        if target:
+            edges.append(GraphEdge(
+                source=name, target=target,
+                relationship=str(r.get("relationship") or "RELATED"),
+            ))
+    return GraphResponse(nodes=list(nodes_map.values()), edges=edges, total_count=len(edges))
 
 
 @router.get("/network/{name}", response_model=GraphResponse)
@@ -90,17 +91,17 @@ async def get_network(
         f"UNWIND relationships(path) AS r "
         f"WITH startNode(r) AS s, type(r) AS rel, endNode(r) AS t "
         f"WHERE true {type_filter} "
-        f"RETURN DISTINCT s.name AS source, rel AS relationship, "
-        f"t.name AS target, labels(t)[0] AS target_type, "
+        f"RETURN DISTINCT coalesce(s.name, s.title, elementId(s)) AS source, rel AS relationship, "
+        f"coalesce(t.name, t.title, elementId(t)) AS target, labels(t)[0] AS target_type, "
         f"t.type AS target_subtype "
         f"LIMIT $limit",
         {"name": name, "limit": limit, "entity_type": entity_type},
     )
-    nodes_map: dict[str, GraphNode] = {}
+    nodes_map: dict[str, GraphNode] = {name: GraphNode(id=name, name=name, type="Entity")}
     edges = []
     for r in rows:
-        src = r.get("source", "")
-        tgt = r.get("target", "")
+        src = str(r.get("source") or "")
+        tgt = str(r.get("target") or "")
         if src and src not in nodes_map:
             nodes_map[src] = GraphNode(id=src, name=src, type="Entity")
         if tgt and tgt not in nodes_map:
@@ -108,11 +109,12 @@ async def get_network(
                 id=tgt, name=tgt,
                 type=r.get("target_subtype") or r.get("target_type", "unknown"),
             )
-        edges.append(GraphEdge(
-            source=src, target=tgt,
-            relationship=r.get("relationship", "RELATED"),
-        ))
-    return GraphResponse(nodes=list(nodes_map.values()), edges=edges, total_count=len(rows))
+        if src and tgt:
+            edges.append(GraphEdge(
+                source=src, target=tgt,
+                relationship=str(r.get("relationship") or "RELATED"),
+            ))
+    return GraphResponse(nodes=list(nodes_map.values()), edges=edges, total_count=len(edges))
 
 
 @router.get("/events", response_model=GraphResponse)
@@ -125,7 +127,7 @@ async def get_events(
     if entity:
         rows = await _read_query(
             "MATCH (e:Entity {name: $entity})<-[:INVOLVES]-(ev:Event) "
-            "RETURN ev.id AS id, ev.title AS name, ev.codebook_type AS type, "
+            "RETURN elementId(ev) AS id, ev.title AS name, ev.codebook_type AS type, "
             "ev.severity AS severity, ev.timestamp AS timestamp "
             "ORDER BY ev.timestamp DESC LIMIT $limit",
             {"entity": entity, "limit": limit},
@@ -133,7 +135,7 @@ async def get_events(
     else:
         rows = await _read_query(
             "MATCH (ev:Event) "
-            "RETURN ev.id AS id, ev.title AS name, ev.codebook_type AS type, "
+            "RETURN elementId(ev) AS id, ev.title AS name, ev.codebook_type AS type, "
             "ev.severity AS severity, ev.timestamp AS timestamp "
             "ORDER BY ev.timestamp DESC LIMIT $limit",
             {"limit": limit},
@@ -175,7 +177,7 @@ async def get_geo_events(
         f"{entity_match}"
         f"OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location) "
         f"{type_filter}"
-        f"RETURN ev.id AS id, ev.title AS title, ev.codebook_type AS codebook_type, "
+        f"RETURN elementId(ev) AS id, ev.title AS title, ev.codebook_type AS codebook_type, "
         f"ev.severity AS severity, ev.timestamp AS timestamp, "
         f"l.name AS location_name, l.country AS country, "
         f"l.lat AS lat, l.lon AS lon "
@@ -209,12 +211,12 @@ async def search_entities(
     limit = _cap_limit(limit)
     rows = await _read_query(
         "MATCH (e:Entity) WHERE toLower(e.name) CONTAINS toLower($q) "
-        "RETURN e.id AS id, e.name AS name, e.type AS type "
+        "RETURN elementId(e) AS id, e.name AS name, e.type AS type "
         "ORDER BY e.name LIMIT $limit",
         {"q": q, "limit": limit},
     )
     nodes = [
-        GraphNode(id=r.get("id", r.get("name", "")), name=r.get("name", ""), type=r.get("type", "unknown"))
+        GraphNode(id=r.get("id") or r.get("name", ""), name=r.get("name", ""), type=r.get("type", "unknown"))
         for r in rows
     ]
     return GraphResponse(nodes=nodes, total_count=len(nodes))

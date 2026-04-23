@@ -24,6 +24,11 @@ function renderAt(path: string) {
 }
 
 describe("legacy query redirect + AppShell", () => {
+  it("does not register a worldview route error boundary", () => {
+    const worldview = routes[0]?.children?.find((route) => route.path === "/worldview");
+    expect(worldview?.errorElement).toBeUndefined();
+  });
+
   it("redirects /?entity=sinjar to /worldview?entity=sinjar", async () => {
     renderAt("/?entity=sinjar");
     expect(await screen.findByTestId("worldview-page")).toBeInTheDocument();
@@ -50,10 +55,10 @@ describe("legacy query redirect + AppShell", () => {
     expect(screen.getByRole("link", { name: /war room/i })).toBeInTheDocument();
   });
 
-  it("renders AppShell TopBar on Worldview", async () => {
+  it("renders AppShell TopBar stub on Worldview", async () => {
     renderAt("/worldview");
     expect(await screen.findByText("Hlíðskjalf")).toBeInTheDocument();
-    expect(screen.getByTestId("worldview-page")).toBeInTheDocument();
+    expect(await screen.findByTestId("worldview-page")).toBeInTheDocument();
   });
 
   it("renders AppShell TopBar stub on Briefing", async () => {

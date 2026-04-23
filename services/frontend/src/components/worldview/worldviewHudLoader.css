@@ -1,0 +1,204 @@
+.wv-loader-wrap {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 24;
+  background-image:
+    linear-gradient(transparent 0 1px, rgba(255, 255, 255, 0.014) 1px 2px),
+    radial-gradient(circle at 50% 50%, rgba(30, 36, 44, 0.42), rgba(10, 11, 13, 0.7) 60%);
+}
+
+.wv-loader {
+  --hud: rgba(210, 222, 232, 0.55);
+  --hud-dim: rgba(210, 222, 232, 0.24);
+  --hud-faint: rgba(210, 222, 232, 0.1);
+  --accent: oklch(0.68 0.19 28);
+  position: relative;
+  width: 220px;
+  height: 220px;
+}
+
+.wv-loader-orbit,
+.wv-loader-ring,
+.wv-loader-cross,
+.wv-loader-reticle,
+.wv-loader-grain,
+.wv-loader-vignette,
+.wv-loader-sweep {
+  position: absolute;
+  inset: 0;
+}
+
+.wv-loader-orbit {
+  border: 1px dashed var(--hud-dim);
+  border-radius: 50%;
+  animation: wv-spin-cw 7.5s linear infinite;
+}
+
+.wv-loader-orbit::before,
+.wv-loader-orbit::after {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border: 1px dotted var(--hud-faint);
+  border-radius: 50%;
+}
+
+.wv-loader-orbit::before {
+  animation: wv-spin-ccw 4.6s linear infinite;
+}
+
+.wv-loader-orbit::after {
+  inset: 24%;
+  animation: wv-spin-cw 3.2s linear infinite;
+}
+
+.wv-loader-ring {
+  inset: 19%;
+  border-radius: 50%;
+  border: 1px solid rgba(230, 236, 242, 0.6);
+  box-shadow:
+    inset 0 0 0 1px rgba(230, 236, 242, 0.08),
+    0 0 42px rgba(180, 210, 240, 0.1);
+  background: radial-gradient(circle at 38% 32%, #2a3138 0%, #14181c 58%, #07090b 100%);
+}
+
+.wv-loader-cross {
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--hud-faint), var(--hud-faint)) center / 100% 1px no-repeat,
+    linear-gradient(var(--hud-faint), var(--hud-faint)) center / 1px 100% no-repeat;
+}
+
+.wv-loader-sweep {
+  inset: 19%;
+  border-radius: 50%;
+  animation: wv-spin-cw 4.2s linear infinite;
+  mix-blend-mode: screen;
+  opacity: 0.58;
+  background: conic-gradient(
+    from -15deg,
+    rgba(180, 210, 240, 0.02) 0deg,
+    rgba(180, 210, 240, 0.36) 64deg,
+    rgba(180, 210, 240, 0.02) 88deg,
+    rgba(180, 210, 240, 0.01) 360deg
+  );
+}
+
+.wv-loader-reticle {
+  inset: 0;
+}
+
+.wv-loader-reticle::before,
+.wv-loader-reticle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+
+.wv-loader-reticle::before {
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--accent);
+  animation: wv-blink 1.35s steps(2, end) infinite;
+}
+
+.wv-loader-reticle::after {
+  width: 4px;
+  height: 4px;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(196, 129, 58, 0.6);
+  animation: wv-pulse 1.8s ease-out infinite;
+}
+
+.wv-loader-label {
+  position: absolute;
+  left: 50%;
+  bottom: -18px;
+  transform: translateX(-50%);
+  color: var(--hud);
+  font-family: "Martian Mono", ui-monospace, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.wv-loader-grain {
+  opacity: 0.14;
+  mix-blend-mode: overlay;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.14) 0.4px, transparent 0.6px);
+  background-size: 3px 3px;
+  animation: wv-grain 0.95s steps(4) infinite;
+}
+
+.wv-loader-vignette {
+  inset: -12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, transparent 54%, rgba(0, 0, 0, 0.55) 85%);
+}
+
+@keyframes wv-spin-cw {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes wv-spin-ccw {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes wv-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(196, 129, 58, 0.58);
+  }
+  85% {
+    box-shadow: 0 0 0 16px rgba(196, 129, 58, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(196, 129, 58, 0);
+  }
+}
+
+@keyframes wv-blink {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  61%,
+  100% {
+    opacity: 0.2;
+  }
+}
+
+@keyframes wv-grain {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-3px, 2px);
+  }
+  50% {
+    transform: translate(2px, -2px);
+  }
+  75% {
+    transform: translate(-2px, -3px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wv-loader-wrap *,
+  .wv-loader-wrap *::before,
+  .wv-loader-wrap *::after {
+    animation: none !important;
+  }
+}

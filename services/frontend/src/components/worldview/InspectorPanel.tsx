@@ -1,15 +1,22 @@
 import type { CSSProperties } from "react";
-import type * as Cesium from "cesium";
-import type { FIRMSHotspot } from "../../types";
+import * as Cesium from "cesium";
+import type {
+  AircraftTrack,
+  DatacenterProperties,
+  EONETEvent,
+  FIRMSHotspot,
+  GDACSEvent,
+  RefineryProperties,
+} from "../../types";
 import { OverlayPanel } from "../hlidskjalf/OverlayPanel";
 
 export type Selected =
   | { type: "firms"; data: FIRMSHotspot }
-  | { type: "aircraft"; data: { icao24?: string; callsign?: string | null; latitude?: number; longitude?: number; altitude_m?: number } }
-  | { type: "datacenter"; data: { name?: string; operator?: string; latitude?: number; longitude?: number } }
-  | { type: "refinery"; data: { name?: string; capacity_bpd?: number; latitude?: number; longitude?: number } }
-  | { type: "eonet"; data: { title?: string; category?: string; latitude?: number; longitude?: number } }
-  | { type: "gdacs"; data: { title?: string; severity?: string | number; latitude?: number; longitude?: number } };
+  | { type: "aircraft"; data: AircraftTrack }
+  | { type: "datacenter"; data: DatacenterProperties }
+  | { type: "refinery"; data: RefineryProperties }
+  | { type: "eonet"; data: EONETEvent }
+  | { type: "gdacs"; data: GDACSEvent };
 
 export interface InspectorPanelProps {
   selected: Selected | null;
@@ -18,81 +25,125 @@ export interface InspectorPanelProps {
 }
 
 const labelStyle: CSSProperties = {
-  fontFamily: "'Hanken Grotesk', sans-serif",
-  fontSize: 10,
-  letterSpacing: "0.22em",
+  fontFamily: '"Martian Mono", ui-monospace, monospace',
+  fontSize: "0.62rem",
+  letterSpacing: "0.14em",
   textTransform: "uppercase",
   color: "var(--ash)",
 };
 
 const valueStyle: CSSProperties = {
-  fontFamily: "'Martian Mono', monospace",
-  fontSize: 11,
+  marginTop: "0.2rem",
+  marginBottom: "0.65rem",
   color: "var(--bone)",
-  marginTop: 2,
-  marginBottom: 10,
+  fontSize: "0.8rem",
 };
 
 const titleStyle: CSSProperties = {
-  fontFamily: "'Instrument Serif', serif",
-  fontStyle: "italic",
-  fontSize: 18,
+  marginBottom: "0.8rem",
   color: "var(--parchment)",
-  marginBottom: 12,
+  fontFamily: '"Instrument Serif", "Times New Roman", serif',
+  fontStyle: "italic",
+  fontSize: "1.14rem",
 };
 
-function coords(lat?: number, lon?: number): string {
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "—";
-  const ns = (lat as number) >= 0 ? "N" : "S";
-  const ew = (lon as number) >= 0 ? "E" : "W";
-  return `${Math.abs(lat as number).toFixed(3)}° ${ns} · ${Math.abs(lon as number).toFixed(3)}° ${ew}`;
+function formatCoord(lat: number, lon: number): string {
+  const ns = lat >= 0 ? "N" : "S";
+  const ew = lon >= 0 ? "E" : "W";
+  return `${Math.abs(lat).toFixed(3)} ${ns}, ${Math.abs(lon).toFixed(3)} ${ew}`;
 }
 
-function Body({ selected }: { selected: Selected }) {
+function Property({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div style={labelStyle}>{label}</div>
+      <div style={valueStyle}>{value}</div>
+    </div>
+  );
+}
+
+function AircraftInspector({
+  track,
+  viewer,
+}: {
+  track: AircraftTrack;
+  viewer: Cesium.Viewer | null;
+}) {
+  const lastPoint = track.points[track.points.length - 1];
+
+  const handleCenter = () => {
+    if (!viewer || viewer.isDestroyed() || !lastPoint) return;
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(lastPoint.lon, lastPoint.lat, 500_000),
+      duration: 1.2,
+    });
+  };
+
+  return (
+    <>
+      <div style={titleStyle}>{track.callsign || track.icao24}</div>
+      <Property label="§ ICAO24" value={track.icao24} />
+      <Property label="§ Track Points" value={`${track.points.length}`} />
+      <Property
+        label="§ Last Position"
+        value={lastPoint ? formatCoord(lastPoint.lat, lastPoint.lon) : "-"}
+      />
+      <Property
+        label="§ Altitude"
+        value={lastPoint?.altitude_m != null ? `${Math.round(lastPoint.altitude_m)} m` : "-"}
+      />
+      <button
+        type="button"
+        onClick={handleCenter}
+        style={{
+          marginTop: "0.45rem",
+          width: "100%",
+          border: "1px solid var(--granite)",
+          background: "transparent",
+          color: "var(--stone)",
+          padding: "0.5rem 0.65rem",
+          cursor: "pointer",
+          fontFamily: '"Martian Mono", ui-monospace, monospace',
+          fontSize: "0.65rem",
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+        }}
+      >
+        Center On Track
+      </button>
+    </>
+  );
+}
+
+function InspectorBody({ selected, viewer }: { selected: Selected; viewer: Cesium.Viewer | null }) {
   switch (selected.type) {
     case "firms": {
       const h = selected.data;
       return (
         <>
-          <div style={titleStyle}>FIRMS hotspot · {h.satellite}</div>
-          <div style={labelStyle}>§ coords</div>
-          <div style={valueStyle}>{coords(h.latitude, h.longitude)}</div>
-          <div style={labelStyle}>§ FRP / brightness</div>
-          <div style={valueStyle}>{h.frp.toFixed(1)} MW · {h.brightness.toFixed(1)} K · {h.confidence}</div>
-          <div style={labelStyle}>§ acquired</div>
-          <div style={valueStyle}>{h.acq_date} {h.acq_time}Z</div>
+          <div style={titleStyle}>{`FIRMS hotspot · ${h.satellite}`}</div>
+          <Property label="§ Coordinates" value={formatCoord(h.latitude, h.longitude)} />
+          <Property label="§ FRP" value={`${h.frp.toFixed(1)} MW`} />
+          <Property label="§ Brightness" value={`${h.brightness.toFixed(1)} K`} />
+          <Property label="§ Region" value={h.bbox_name || "-"} />
+          <Property label="§ Confidence" value={h.confidence || "-"} />
           {h.possible_explosion ? (
-            <>
-              <div style={labelStyle}>§ flag</div>
-              <div style={{ ...valueStyle, color: "var(--sentinel)" }}>possible explosion</div>
-            </>
+            <Property label="§ Flag" value="possible explosion" />
           ) : null}
         </>
       );
     }
-    case "aircraft": {
-      const a = selected.data;
-      return (
-        <>
-          <div style={titleStyle}>{a.callsign ?? a.icao24 ?? "aircraft"}</div>
-          <div style={labelStyle}>§ icao24</div>
-          <div style={valueStyle}>{a.icao24 ?? "—"}</div>
-          <div style={labelStyle}>§ coords</div>
-          <div style={valueStyle}>{coords(a.latitude, a.longitude)}</div>
-          <div style={labelStyle}>§ altitude</div>
-          <div style={valueStyle}>{Number.isFinite(a.altitude_m) ? `${a.altitude_m} m` : "—"}</div>
-        </>
-      );
-    }
+    case "aircraft":
+      return <AircraftInspector track={selected.data} viewer={viewer} />;
     case "datacenter": {
       const d = selected.data;
       return (
         <>
-          <div style={titleStyle}>{d.name ?? "datacenter"}</div>
-          <div style={labelStyle}>§ operator</div>
-          <div style={valueStyle}>{d.operator ?? "—"}</div>
-          <div style={labelStyle}>§ coords</div>
-          <div style={valueStyle}>{coords(d.latitude, d.longitude)}</div>
+          <div style={titleStyle}>{d.name}</div>
+          <Property label="§ Operator" value={d.operator || "-"} />
+          <Property label="§ Tier" value={d.tier || "-"} />
+          <Property label="§ Capacity" value={d.capacity_mw != null ? `${d.capacity_mw} MW` : "-"} />
+          <Property label="§ Location" value={`${d.city}, ${d.country}`} />
         </>
       );
     }
@@ -100,11 +151,11 @@ function Body({ selected }: { selected: Selected }) {
       const r = selected.data;
       return (
         <>
-          <div style={titleStyle}>{r.name ?? "refinery"}</div>
-          <div style={labelStyle}>§ capacity</div>
-          <div style={valueStyle}>{r.capacity_bpd ? `${r.capacity_bpd.toLocaleString()} bpd` : "—"}</div>
-          <div style={labelStyle}>§ coords</div>
-          <div style={valueStyle}>{coords(r.latitude, r.longitude)}</div>
+          <div style={titleStyle}>{r.name}</div>
+          <Property label="§ Operator" value={r.operator || "-"} />
+          <Property label="§ Capacity" value={`${r.capacity_bpd.toLocaleString()} bpd`} />
+          <Property label="§ Country" value={r.country || "-"} />
+          <Property label="§ Status" value={r.status || "-"} />
         </>
       );
     }
@@ -112,11 +163,11 @@ function Body({ selected }: { selected: Selected }) {
       const e = selected.data;
       return (
         <>
-          <div style={titleStyle}>{e.title ?? "EONET event"}</div>
-          <div style={labelStyle}>§ category</div>
-          <div style={valueStyle}>{e.category ?? "—"}</div>
-          <div style={labelStyle}>§ coords</div>
-          <div style={valueStyle}>{coords(e.latitude, e.longitude)}</div>
+          <div style={titleStyle}>{e.title}</div>
+          <Property label="§ Category" value={e.category || "-"} />
+          <Property label="§ Status" value={e.status || "-"} />
+          <Property label="§ Coordinates" value={formatCoord(e.latitude, e.longitude)} />
+          <Property label="§ Date" value={e.event_date.slice(0, 10)} />
         </>
       );
     }
@@ -124,18 +175,21 @@ function Body({ selected }: { selected: Selected }) {
       const g = selected.data;
       return (
         <>
-          <div style={titleStyle}>{g.title ?? "GDACS event"}</div>
-          <div style={labelStyle}>§ severity</div>
-          <div style={valueStyle}>{g.severity ?? "—"}</div>
-          <div style={labelStyle}>§ coords</div>
-          <div style={valueStyle}>{coords(g.latitude, g.longitude)}</div>
+          <div style={titleStyle}>{g.event_name || g.id}</div>
+          <Property label="§ Type" value={g.event_type || "-"} />
+          <Property label="§ Alert" value={g.alert_level || "-"} />
+          <Property label="§ Severity" value={Number.isFinite(g.severity) ? `${g.severity}` : "-"} />
+          <Property label="§ Country" value={g.country || "-"} />
+          <Property label="§ Coordinates" value={formatCoord(g.latitude, g.longitude)} />
         </>
       );
     }
+    default:
+      return null;
   }
 }
 
-export function InspectorPanel({ selected, onClose }: InspectorPanelProps) {
+export function InspectorPanel({ selected, onClose, viewer }: InspectorPanelProps) {
   return (
     <OverlayPanel
       paragraph="III"
@@ -144,7 +198,7 @@ export function InspectorPanel({ selected, onClose }: InspectorPanelProps) {
       onClose={onClose}
       width={360}
     >
-      {selected ? <Body selected={selected} /> : null}
+      {selected ? <InspectorBody selected={selected} viewer={viewer} /> : null}
     </OverlayPanel>
   );
 }

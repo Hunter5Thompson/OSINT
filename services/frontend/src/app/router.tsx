@@ -31,10 +31,7 @@ export const routes: RouteObject[] = [
     element: <AppShell />,
     children: [
       { path: "/", loader: rootLoader, element: <LandingPage /> },
-      {
-        path: "/worldview",
-        element: <WorldviewPage />,
-      },
+      { path: "/worldview", element: <WorldviewPage /> },
       { path: "/briefing", element: <BriefingPage /> },
       { path: "/briefing/:reportId", element: <BriefingPage /> },
       { path: "/warroom", element: <WarRoomPage /> },

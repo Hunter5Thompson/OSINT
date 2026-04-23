@@ -1,43 +1,54 @@
 import { useSignalFeed } from "../../hooks/useSignalFeed";
-import { SignalFeedItem } from "../hlidskjalf/SignalFeedItem";
 import { OverlayPanel } from "../hlidskjalf/OverlayPanel";
+import { SignalFeedItem } from "../hlidskjalf/SignalFeedItem";
 
 type Severity = "sent" | "amb" | "sage" | "dim";
 
-function mapSeverity(s: string | undefined): Severity {
-  switch (s) {
-    case "critical": return "sent";
-    case "high": return "amb";
-    case "medium": return "sage";
-    default: return "dim";
+function mapSeverity(severity: string | undefined): Severity {
+  switch (severity) {
+    case "critical":
+      return "sent";
+    case "high":
+      return "amb";
+    case "medium":
+      return "sage";
+    default:
+      return "dim";
   }
 }
 
-function formatTime(ts: string): string {
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return "—";
-  const hh = d.getUTCHours().toString().padStart(2, "0");
-  const mm = d.getUTCMinutes().toString().padStart(2, "0");
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "--:--Z";
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
   return `${hh}:${mm}Z`;
 }
 
 export function TickerPanel() {
   const { items, status } = useSignalFeed();
+
   return (
-    <OverlayPanel paragraph="IV" label="Ticker" variant="expanded" width={320}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" }}>
-        {status === "reconnecting" && (
-          <span className="mono" style={{ color: "var(--ash)", fontSize: 10 }}>§ reconnecting…</span>
-        )}
-        {items.length === 0 && status !== "reconnecting" && (
-          <span className="mono" style={{ color: "var(--ash)", fontSize: 10 }}>— no signals yet —</span>
-        )}
-        {items.map((env) => (
+    <OverlayPanel paragraph="IV" label="Ticker" variant="expanded" width={340}>
+      <div style={{ display: "grid", gap: "0.15rem", maxHeight: 228, overflowY: "auto" }}>
+        {status === "reconnecting" ? (
+          <span className="mono" style={{ color: "var(--ash)", fontSize: "0.65rem" }}>
+            § reconnecting...
+          </span>
+        ) : null}
+
+        {items.length === 0 && status !== "reconnecting" ? (
+          <span className="mono" style={{ color: "var(--ash)", fontSize: "0.65rem" }}>
+            - no signals yet -
+          </span>
+        ) : null}
+
+        {items.map((entry) => (
           <SignalFeedItem
-            key={env.event_id}
-            severity={mapSeverity(env.payload.severity)}
-            ts={formatTime(env.ts)}
-            text={env.payload.title || env.type}
+            key={entry.event_id}
+            severity={mapSeverity(entry.payload.severity)}
+            ts={formatTime(entry.ts)}
+            text={entry.payload.title || entry.type}
           />
         ))}
       </div>

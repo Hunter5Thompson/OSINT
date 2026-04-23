@@ -9,17 +9,17 @@ export interface GraphNode {
 
 interface GraphSearchResponse {
   nodes: GraphNode[];
-  total_count: number;
 }
 
 export interface SearchPanelProps {
   viewer: Cesium.Viewer | null;
+  initialQuery?: string;
 }
 
-export function SearchPanel(_props: SearchPanelProps) {
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<GraphNode[] | null>(null);
+export function SearchPanel({ viewer: _viewer, initialQuery = "" }: SearchPanelProps) {
+  const [query, setQuery] = useState(initialQuery);
   const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<GraphNode[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -27,94 +27,127 @@ export function SearchPanel(_props: SearchPanelProps) {
   }, []);
 
   useEffect(() => {
-    if (q.trim().length < 2) {
+    setQuery(initialQuery);
+  }, [initialQuery]);
+
+  useEffect(() => {
+    const normalized = query.trim();
+    if (normalized.length < 2) {
       setResults(null);
       setLoading(false);
       return;
     }
+
     let cancelled = false;
-    const t = setTimeout(async () => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(
-          `/api/graph/search?q=${encodeURIComponent(q.trim())}&limit=20`,
-        );
-        if (!res.ok) throw new Error("search failed");
+        const res = await fetch(`/api/v1/graph/search?q=${encodeURIComponent(normalized)}&limit=20`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          throw new Error(`search failed: ${res.status}`);
+        }
         const data = (await res.json()) as GraphSearchResponse;
-        if (cancelled) return;
-        setResults(data.nodes);
+        if (!cancelled) {
+          setResults(data.nodes);
+        }
       } catch {
-        if (!cancelled) setResults([]);
+        if (!cancelled) {
+          setResults([]);
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }, 180);
+
     return () => {
       cancelled = true;
-      clearTimeout(t);
+      controller.abort();
+      window.clearTimeout(timeout);
     };
-  }, [q]);
+  }, [query]);
 
   return (
     <div>
       <input
         ref={inputRef}
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="search entities…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="search entities..."
         style={{
           width: "100%",
           background: "transparent",
           border: "none",
           borderBottom: "1px solid var(--granite)",
-          color: "var(--bone)",
-          fontFamily: "'Instrument Serif', serif",
+          color: "var(--parchment)",
+          fontFamily: '"Instrument Serif", "Times New Roman", serif',
           fontStyle: "italic",
-          fontSize: "14px",
-          padding: "6px 0",
+          fontSize: "1rem",
           outline: "none",
+          padding: "0.2rem 0",
         }}
       />
-      <div style={{ marginTop: 10, minHeight: 24 }}>
-        {loading && (
-          <span className="mono" style={{ color: "var(--ash)", fontSize: 10 }}>
-            § searching…
+
+      <div style={{ marginTop: "0.7rem", minHeight: 28 }}>
+        {loading ? (
+          <span className="mono" style={{ color: "var(--ash)", fontSize: "0.66rem" }}>
+            § searching...
           </span>
-        )}
-        {!loading && results?.length === 0 && (
-          <span className="mono" style={{ color: "var(--ash)", fontSize: 10 }}>
-            — no matches —
+        ) : null}
+
+        {!loading && results?.length === 0 ? (
+          <span className="mono" style={{ color: "var(--ash)", fontSize: "0.66rem" }}>
+            - no matches -
           </span>
-        )}
-        {!loading && results && results.length > 0 && (
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+        ) : null}
+
+        {!loading && results && results.length > 0 ? (
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 220, overflowY: "auto" }}>
             {results.map((node) => (
-              <li key={node.id} style={{ padding: "6px 0", display: "flex", flexDirection: "column", gap: 2 }}>
-                <span
-                  className="mono"
+              <li key={node.id} style={{ padding: "0.42rem 0", borderBottom: "1px solid rgba(107,99,88,0.25)" }}>
+                <button
+                  type="button"
                   style={{
-                    color: "var(--ash)",
-                    fontSize: 10,
-                    letterSpacing: "0.22em",
-                    textTransform: "uppercase",
+                    border: "none",
+                    background: "transparent",
+                    color: "inherit",
+                    textAlign: "left",
+                    width: "100%",
+                    cursor: "default",
+                    padding: 0,
                   }}
                 >
-                  § {node.type}
-                </span>
-                <span
-                  style={{
-                    color: "var(--bone)",
-                    fontFamily: "'Instrument Serif', serif",
-                    fontStyle: "italic",
-                    fontSize: 13,
-                  }}
-                >
-                  {node.name}
-                </span>
+                  <div
+                    className="mono"
+                    style={{
+                      color: "var(--stone)",
+                      fontSize: "0.62rem",
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {`§ ${node.type}`}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: "0.2rem",
+                      color: "var(--parchment)",
+                      fontFamily: '"Instrument Serif", "Times New Roman", serif',
+                      fontStyle: "italic",
+                      fontSize: "0.98rem",
+                    }}
+                  >
+                    {node.name}
+                  </div>
+                </button>
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
       </div>
     </div>
   );

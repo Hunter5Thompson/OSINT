@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import type { SubmarineCable, LandingPoint } from "../../types";
+import { densifyLonLatSegment } from "./geoPath";
 
 interface CableLayerProps {
   viewer: Cesium.Viewer | null;
@@ -10,8 +11,9 @@ interface CableLayerProps {
 }
 
 const LABEL_ALTITUDE_THRESHOLD = 5_000_000;
-const CABLE_ALTITUDE_M = 150;
-const LANDING_POINT_ALTITUDE_M = 250;
+// Keep cables above terrain to avoid depth fighting / terrain occlusion artifacts.
+const CABLE_ALTITUDE_M = 3_000;
+const LANDING_POINT_ALTITUDE_M = 3_500;
 
 function isValidCoord(coord: number[] | undefined): coord is [number, number] {
   if (!coord || coord.length < 2) return false;
@@ -124,7 +126,8 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
         if (segment.length < 2) continue;
 
         const flat: number[] = [];
-        for (const coord of segment as number[][]) {
+        const densified = densifyLonLatSegment(segment as number[][], 80);
+        for (const coord of densified) {
           if (!isValidCoord(coord)) continue;
           flat.push(coord[0], coord[1], CABLE_ALTITUDE_M);
         }

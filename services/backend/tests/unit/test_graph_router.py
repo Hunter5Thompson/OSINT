@@ -41,6 +41,30 @@ class TestGraphEndpoints:
             data = resp.json()
             assert len(data["edges"]) >= 1
 
+    def test_network_ignores_rows_with_missing_source_or_target(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = [
+                {"source": None, "relationship": "INVOLVES", "target": "EU", "target_type": "Entity", "target_subtype": "organization"},
+                {"source": "NATO", "relationship": "INVOLVES", "target": None, "target_type": "Entity", "target_subtype": "organization"},
+                {"source": "NATO", "relationship": "INVOLVES", "target": "EU", "target_type": "Entity", "target_subtype": "organization"},
+            ]
+            resp = client.get("/api/v1/graph/network/NATO")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data["edges"]) == 1
+            assert data["edges"][0]["source"] == "NATO"
+            assert data["edges"][0]["target"] == "EU"
+
+    def test_network_keeps_root_node_when_no_edges(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = []
+            resp = client.get("/api/v1/graph/network/NATO")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data["nodes"]) == 1
+            assert data["nodes"][0]["id"] == "NATO"
+            assert data["edges"] == []
+
     def test_search_returns_matching(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = [
@@ -52,6 +76,23 @@ class TestGraphEndpoints:
             data = resp.json()
             assert len(data["nodes"]) == 2
 
+    def test_search_with_missing_id_falls_back_to_name(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = [{"name": "Iran", "type": "location", "id": None}]
+            resp = client.get("/api/v1/graph/search?q=ir&limit=10")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["nodes"][0]["id"] == "Iran"
+
+    def test_search_query_uses_element_id_not_e_id(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = []
+            resp = client.get("/api/v1/graph/search?q=ir&limit=10")
+            assert resp.status_code == 200
+            cypher = mock.call_args.args[0]
+            assert "elementId(e) AS id" in cypher
+            assert "e.id AS id" not in cypher
+
     def test_events_endpoint(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = [
@@ -61,6 +102,15 @@ class TestGraphEndpoints:
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["nodes"]) == 1
+
+    def test_events_query_uses_element_id_not_ev_id(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = []
+            resp = client.get("/api/v1/graph/events")
+            assert resp.status_code == 200
+            cypher = mock.call_args.args[0]
+            assert "elementId(ev) AS id" in cypher
+            assert "ev.id AS id" not in cypher
 
 
 class TestGeoEventsEndpoint:
@@ -139,6 +189,15 @@ class TestGeoEventsEndpoint:
             cypher = call_args.args[0]
             assert "STARTS WITH" in cypher
             assert call_args.args[1]["codebook_type"] == "military"
+
+    def test_geo_events_query_uses_element_id_not_ev_id(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = []
+            resp = client.get("/api/v1/graph/events/geo")
+            assert resp.status_code == 200
+            cypher = mock.call_args.args[0]
+            assert "elementId(ev) AS id" in cypher
+            assert "ev.id AS id" not in cypher
 
 
 class TestConfigEndpoint:
