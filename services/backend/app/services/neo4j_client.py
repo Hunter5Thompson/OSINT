@@ -27,3 +27,11 @@ async def read_query(cypher: str, params: dict[str, Any]) -> list[dict[str, Any]
     async with driver.session(default_access_mode=neo4j.READ_ACCESS) as session:
         result = await session.run(cypher, params)
         return [dict(record) async for record in result]
+
+
+async def write_query(cypher: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    """Execute a write Cypher query."""
+    driver = await get_graph_client()
+    async with driver.session(default_access_mode=neo4j.WRITE_ACCESS) as session:
+        result = await session.run(cypher, params)
+        return [dict(record) async for record in result]

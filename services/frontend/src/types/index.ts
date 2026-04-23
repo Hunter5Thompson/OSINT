@@ -112,6 +112,76 @@ export interface IntelQuery {
   region?: string;
   hotspot_id?: string;
   use_legacy?: boolean;
+  report_id?: string;
+  report_message?: string;
+}
+
+export type ReportStatus = "Draft" | "Published" | "Archived";
+export type MessageRole = "user" | "munin" | "system";
+export type MetricTone = "sentinel" | "amber" | "sage";
+
+export interface DossierMetric {
+  label: string;
+  value: string;
+  sub: string;
+  tone: MetricTone;
+}
+
+export interface MarginEntry {
+  label: string;
+  value: string;
+}
+
+export interface ReportRecord {
+  id: string;
+  paragraph_num: number;
+  stamp: string;
+  title: string;
+  status: ReportStatus;
+  confidence: number;
+  location: string;
+  coords: string;
+  findings: string[];
+  metrics: DossierMetric[];
+  context: string;
+  body_title: string;
+  body_paragraphs: string[];
+  margin: MarginEntry[];
+  sources: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReportCreateRequest {
+  title?: string;
+  status?: ReportStatus;
+  confidence?: number;
+  location?: string;
+  coords?: string;
+  findings?: string[];
+  metrics?: DossierMetric[];
+  context?: string;
+  body_title?: string;
+  body_paragraphs?: string[];
+  margin?: MarginEntry[];
+  sources?: string[];
+}
+
+export interface ReportUpdateRequest extends ReportCreateRequest {}
+
+export interface ReportMessage {
+  id: string;
+  role: MessageRole;
+  text: string;
+  ts: string;
+  refs: string[];
+}
+
+export interface ReportMessageCreate {
+  role: MessageRole;
+  text: string;
+  ts?: string;
+  refs?: string[];
 }
 
 export interface IntelEvent {

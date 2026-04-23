@@ -14,6 +14,8 @@ class IntelQuery(BaseModel):
     hotspot_id: str | None = None
     image_url: str | None = None
     use_legacy: bool = False
+    report_id: str | None = None
+    report_message: str | None = Field(default=None, max_length=8000)
 
 
 class IntelDocument(BaseModel):

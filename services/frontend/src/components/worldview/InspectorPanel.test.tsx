@@ -35,15 +35,25 @@ describe("InspectorPanel", () => {
       />,
     );
     expect(screen.getByRole("region", { name: /Inspector/i })).toBeInTheDocument();
-    expect(screen.getByText(/12.340° N · 56.780° E/)).toBeInTheDocument();
-    expect(screen.getByText(/VIIRS/)).toBeInTheDocument();
+    expect(screen.getByText(/12.340 N, 56.780 E/)).toBeInTheDocument();
+    expect(screen.getByText(/FIRMS hotspot · VIIRS/)).toBeInTheDocument();
   });
 
   it("calls onClose when × is clicked", () => {
     const onClose = vi.fn();
     render(
       <InspectorPanel
-        selected={{ type: "aircraft", data: { icao24: "abc123" } }}
+        selected={{
+          type: "aircraft",
+          data: {
+            icao24: "abc123",
+            callsign: null,
+            type_code: null,
+            military_branch: null,
+            registration: null,
+            points: [],
+          },
+        }}
         onClose={onClose}
         viewer={null}
       />,

@@ -23,6 +23,7 @@ from app.routers import (
     hotspots,
     intel,
     landing,
+    reports,
     rag,
     satellites,
     signals,
@@ -104,7 +105,7 @@ app.add_middleware(
 for r in (
     flights.router, satellites.router, earthquakes.router, vessels.router,
     hotspots.router, intel.router, rag.router, graph.router, cables.router,
-    firms.router, aircraft.router, eonet.router, gdacs.router,
+    firms.router, aircraft.router, eonet.router, gdacs.router, reports.router,
 ):
     app.include_router(r, prefix="/api")
     app.include_router(r, prefix="/api/v1")

@@ -1,7 +1,7 @@
 /**
  * Typed API client for WorldView backend.
- * All calls go through the Vite proxy to /api/*. The /api/v1/* alias
- * remains live until 2026-05-21 for external callers (see ADR-0001).
+ * All calls go through the Vite proxy to /api/*.
+ * If an endpoint is not mounted there yet, we transparently fall back to /api/v1/*.
  */
 
 import type {
@@ -18,11 +18,17 @@ import type {
   IntelAnalysis,
   IntelEvent,
   IntelQuery,
+  ReportCreateRequest,
+  ReportMessage,
+  ReportMessageCreate,
+  ReportRecord,
+  ReportUpdateRequest,
   Satellite,
   Vessel,
 } from "../types";
 
 const BASE = "/api";
+const LEGACY_BASE = "/api/v1";
 
 // ── S1 endpoints — mounted at /api (not /api/v1) ────────────────────────────
 // The Hlíðskjalf S1 backend router mounts at bare /api. Keep these helpers
@@ -55,8 +61,16 @@ export async function getLatestSignals(limit = 6): Promise<SignalEnvelope[]> {
   return (await res.json()) as SignalEnvelope[];
 }
 
+async function fetchWithFallback(path: string, init?: RequestInit): Promise<Response> {
+  let res = await fetch(`${BASE}${path}`, init);
+  if (res.status === 404) {
+    res = await fetch(`${LEGACY_BASE}${path}`, init);
+  }
+  return res;
+}
+
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, init);
+  const res = await fetchWithFallback(path, init);
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${res.statusText}`);
   }
@@ -117,7 +131,7 @@ export function queryIntel(
 ): AbortController {
   const controller = new AbortController();
 
-  fetch(`${BASE}/intel/query`, {
+  fetchWithFallback("/intel/query", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(query),
@@ -192,4 +206,62 @@ export async function getEONETEvents(sinceHours = 168): Promise<EONETEvent[]> {
 
 export async function getGDACSEvents(sinceHours = 168): Promise<GDACSEvent[]> {
   return fetchJSON<GDACSEvent[]>(`/gdacs/events?since_hours=${sinceHours}`);
+}
+
+export async function getReports(limit = 200): Promise<ReportRecord[]> {
+  return fetchJSON<ReportRecord[]>(`/reports?limit=${limit}`);
+}
+
+export async function getReport(reportId: string): Promise<ReportRecord> {
+  return fetchJSON<ReportRecord>(`/reports/${encodeURIComponent(reportId)}`);
+}
+
+export async function createReport(
+  payload: ReportCreateRequest = {},
+): Promise<ReportRecord> {
+  return fetchJSON<ReportRecord>("/reports", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateReport(
+  reportId: string,
+  payload: ReportUpdateRequest,
+): Promise<ReportRecord> {
+  return fetchJSON<ReportRecord>(`/reports/${encodeURIComponent(reportId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteReport(reportId: string): Promise<void> {
+  const res = await fetchWithFallback(`/reports/${encodeURIComponent(reportId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status} ${res.statusText}`);
+  }
+}
+
+export async function getReportMessages(
+  reportId: string,
+  limit = 500,
+): Promise<ReportMessage[]> {
+  return fetchJSON<ReportMessage[]>(
+    `/reports/${encodeURIComponent(reportId)}/messages?limit=${limit}`,
+  );
+}
+
+export async function appendReportMessage(
+  reportId: string,
+  payload: ReportMessageCreate,
+): Promise<ReportMessage> {
+  return fetchJSON<ReportMessage>(`/reports/${encodeURIComponent(reportId)}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
