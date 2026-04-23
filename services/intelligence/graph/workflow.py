@@ -93,14 +93,18 @@ async def react_synthesis_node(state: AgentState) -> dict:
             synthesis_sys(),
             HumanMessage(
                 content=(
-                    f"Synthesize a final intelligence report.\n\n"
-                    f"Query: {state['query']}\n\n"
-                    f"Research Findings:\n{research_text}\n\n"
-                    "Produce a concise, actionable intelligence report with:\n"
-                    "1. Executive Summary (2-3 sentences)\n"
-                    "2. Key Findings (bullet list)\n"
-                    "3. Threat Assessment (CRITICAL/HIGH/ELEVATED/MODERATE)\n"
-                    "4. Confidence Level (high/moderate/low)\n"
+                    f"Erstelle einen finalen Intelligence-Lagebericht auf Deutsch.\n\n"
+                    f"Anfrage: {state['query']}\n\n"
+                    f"Recherche-Ergebnisse:\n{research_text}\n\n"
+                    "Liefere einen knappen, handlungsrelevanten Report auf Deutsch mit:\n"
+                    "1. Executive Summary (2–3 Sätze)\n"
+                    "2. Key Findings (Bulletpoints)\n"
+                    "3. Threat Assessment — genau eines von: "
+                    "CRITICAL / HIGH / ELEVATED / MODERATE (Label englisch, "
+                    "Begründung deutsch)\n"
+                    "4. Confidence Level — genau einer der Strings "
+                    "\"high confidence\", \"moderate confidence\" oder "
+                    "\"low confidence\" im Text (Begründung deutsch)\n"
                     "5. Recommended Actions"
                 ),
             ),
