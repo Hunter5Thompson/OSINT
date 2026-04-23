@@ -1,0 +1,145 @@
+.munin-loader {
+  --munin-hud: rgba(210, 222, 232, 0.55);
+  --munin-hud-dim: rgba(210, 222, 232, 0.22);
+  --munin-hud-faint: rgba(210, 222, 232, 0.1);
+  --munin-accent: var(--amber);
+
+  position: relative;
+  width: 180px;
+  height: 180px;
+  margin: 0.4rem auto 0.2rem;
+}
+
+.munin-loader-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.munin-loader-layer svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  display: block;
+}
+
+.munin-loader-ring {
+  position: absolute;
+  inset: 0;
+}
+
+.munin-loader-spin-cw {
+  animation: munin-loader-spin-cw linear infinite;
+}
+
+.munin-loader-spin-ccw {
+  animation: munin-loader-spin-ccw linear infinite;
+}
+
+.munin-loader-r1 {
+  animation-duration: 3.4s;
+}
+
+.munin-loader-r2 {
+  animation-duration: 6.8s;
+}
+
+.munin-loader-r3 {
+  animation-duration: 11s;
+}
+
+.munin-loader-r4 {
+  animation-duration: 18s;
+}
+
+@keyframes munin-loader-spin-cw {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes munin-loader-spin-ccw {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+.munin-loader-sweep {
+  transform-origin: 100px 100px;
+  animation: munin-loader-spin-cw 4.2s linear infinite;
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+
+.munin-loader-blink {
+  animation: munin-loader-blink 1.3s steps(2, end) infinite;
+}
+
+@keyframes munin-loader-blink {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  61%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+.munin-loader-vignette {
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    transparent 50%,
+    rgba(0, 0, 0, 0.55) 85%
+  );
+  pointer-events: none;
+}
+
+.munin-loader-pulse {
+  transform-origin: center;
+  animation: munin-loader-pulse 1.8s ease-out infinite;
+}
+
+@keyframes munin-loader-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  80% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .munin-loader-spin-cw,
+  .munin-loader-spin-ccw,
+  .munin-loader-sweep,
+  .munin-loader-blink,
+  .munin-loader-pulse {
+    animation: none;
+  }
+}
+
+.munin-loader-chat {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.4rem 0.2rem 0.6rem;
+}
+
+.munin-loader-chat-caption {
+  text-align: center;
+  color: var(--ash);
+  font-family: "Martian Mono", ui-monospace, monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
