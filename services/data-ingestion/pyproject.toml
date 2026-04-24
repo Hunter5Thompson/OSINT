@@ -16,6 +16,9 @@ dependencies = [
     "pyyaml>=6.0",
     "telethon>=1.36",
     "cryptg>=0.4",
+    "polars>=1.0",
+    "pyarrow>=17.0",
+    "click>=8.0",
 ]
 
 [project.optional-dependencies]
@@ -33,6 +36,7 @@ notebooklm = [
 
 [project.scripts]
 odin-ingest-nlm = "nlm_ingest.cli:cli"
+odin-ingest-gdelt = "gdelt_raw.cli:main"
 
 [build-system]
 requires = ["hatchling"]
