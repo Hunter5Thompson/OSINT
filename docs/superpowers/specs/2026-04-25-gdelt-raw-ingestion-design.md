@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-25
 **Author:** RT + Claude (Opus 4.7)
-**Status:** Approved with must-fix edits applied (2026-04-25 review) — ready for implementation plan
+**Status:** Implementation-ready (must-fix + implementation-clarifications applied, 2026-04-25)
 **Codename:** Huginn-GDELT (Ingestion-Seite — Huginn = Memory-Rabe)
 
 ---
@@ -254,6 +254,7 @@ RETURN name, c ORDER BY c DESC;
 
 Dann die Constraints selbst:
 ```cypher
+-- Uniqueness (Community + Enterprise)
 CREATE CONSTRAINT gdelt_event_id_unique IF NOT EXISTS
   FOR (e:GDELTEvent) REQUIRE e.event_id IS UNIQUE;
 
@@ -265,6 +266,40 @@ CREATE CONSTRAINT source_name_unique IF NOT EXISTS
 
 CREATE CONSTRAINT theme_code_unique IF NOT EXISTS
   FOR (t:Theme) REQUIRE t.theme_code IS UNIQUE;
+```
+
+**EXISTENCE (NOT NULL) Constraints — Enterprise-only:**
+
+Neo4j 5-**Community** (unser Deployment — `docker-compose.yml`) unterstützt **nur UNIQUE**. `REQUIRE ... IS NOT NULL` und `NODE KEY` sind Enterprise-Features.
+
+Die Spec setzt daher EXISTENCE **application-side** via **Pydantic-Contracts** im Writer durch:
+
+```python
+# services/data-ingestion/gdelt_raw/schemas.py
+class GDELTEventWrite(BaseModel):
+    event_id: str                       # Required, muss "gdelt:event:*" Pattern
+    cameo_root: int
+    ...
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+class GDELTDocumentWrite(BaseModel):
+    doc_id: str                         # Required, muss "gdelt:gkg:*" Pattern
+    url: str
+    gdelt_date: datetime
+    ...
+    model_config = ConfigDict(extra="forbid", strict=True)
+```
+
+Writer-Pfad: **kein Event/Doc darf** den Neo4j-Writer erreichen ohne durch den Pydantic-Contract gegangen zu sein. Test `test_writer_rejects_event_without_event_id` garantiert das.
+
+**Wenn irgendwann Enterprise:** Migration ergänzen:
+```cypher
+-- Nur Neo4j Enterprise:
+CREATE CONSTRAINT gdelt_event_id_exists FOR (e:GDELTEvent) REQUIRE e.event_id IS NOT NULL;
+CREATE CONSTRAINT gdelt_doc_id_exists   FOR (d:GDELTDocument) REQUIRE d.doc_id IS NOT NULL;
+-- oder als kombinierter NODE KEY:
+CREATE CONSTRAINT gdelt_event_node_key FOR (e:GDELTEvent) REQUIRE (e.event_id) IS NODE KEY;
+CREATE CONSTRAINT gdelt_doc_node_key   FOR (d:GDELTDocument) REQUIRE (d.doc_id) IS NODE KEY;
 ```
 
 **Phase 2 — Performance-Indexes (additiv, null-risk):**
@@ -311,8 +346,12 @@ payload = {
   "organizations": ["NATO", "UN"],
   "locations": [{"name": "Kyiv", "lat": 50.45, "lon": 30.52}],
   "tone_polarity": 8.4,
-  "goldstein_linked": -6.5,                       # aus Parquet-Join (pre-materialized)
-  "cameo_root_linked": 19,                        # aus Parquet-Join
+  # Linked-Event-Metadaten (Listen — ein GKG-Doc kann N Events referenzieren)
+  "linked_event_ids": ["gdelt:event:1300904663", "gdelt:event:1300904664"],
+  "goldstein_min": -7.8,
+  "goldstein_avg": -6.3,
+  "cameo_roots_linked": [18, 19],
+  "codebook_types_linked": ["conflict.assault", "conflict.armed"],
   "gdelt_date": "2026-04-25T12:15:00Z",           # GDELT-observed time
   "published_at": null,                           # optional, leer wenn nicht aus <PAGE_PRECISEPUBTIMESTAMP>
   "ingested_at": "2026-04-25T12:17:30Z",
@@ -345,8 +384,8 @@ embed_text = f"{title}\nThemes: {themes_joined}\nActors: {persons_orgs_joined}"[
 │
 ├── gkg/date=2026-04-25/<slice>.parquet
 │   schema: {doc_id, url, source_name,
-│            gdelt_date,                  // GDELT observed/indexed time
-│            published_at,                // optional, nur wenn <PAGE_PRECISEPUBTIMESTAMP> vorhanden
+│            gdelt_date,                      // GDELT observed/indexed time
+│            published_at,                    // optional, nur wenn <PAGE_PRECISEPUBTIMESTAMP> vorhanden
 │            themes: list<string>,
 │            persons: list<string>,
 │            organizations: list<string>,
@@ -354,9 +393,13 @@ embed_text = f"{title}\nThemes: {themes_joined}\nActors: {persons_orgs_joined}"[
 │            tone: struct,
 │            quotations: list<string>,
 │            sharp_image_url, word_count,
-│            goldstein_linked,            // materialisierter Join-Wert aus Mentions+Events
-│            cameo_root_linked,           // materialisierter Join-Wert
-│            codebook_type_linked}        // materialisierter Join-Wert
+│            // Materialisierter Join — ein GKG-Doc kann N Events referenzieren,
+│            // daher Listen statt Skalaren. Null wenn keine Mentions-Verlinkung.
+│            linked_event_ids: list<string>,      // alle event_ids via Mentions
+│            goldstein_min: float,                // min über alle verlinkten Events
+│            goldstein_avg: float,                // mean über alle verlinkten Events
+│            cameo_roots_linked: list<int>,       // unique CAMEO-Roots der verlinkten Events
+│            codebook_types_linked: list<string>} // unique codebook_types der verlinkten Events
 │
 └── mentions/date=2026-04-25/<slice>.parquet
     schema: {event_id, mention_url, source_name, mention_time,
@@ -394,21 +437,45 @@ t+0:12  Parallel-Download (asyncio.gather):
 
 t+0:18  Unzip → /tmp/gdelt/<slice>/
 
-t+0:19  Polars streaming Parse (explizit Tab-separated, no header):
-          events_df = pl.read_csv(
-              events_path,
-              separator="\t",
-              has_header=False,
-              new_columns=EVENT_COLUMNS,
-              schema_overrides=EVENT_POLARS_SCHEMA,
-              ignore_errors=False,          # wir zählen Fehler explizit
-          )
-          mentions_df = pl.read_csv(mentions_path, separator="\t", has_header=False, ...)
-          gkg_df      = pl.read_csv(gkg_path,      separator="\t", has_header=False, ...)
+t+0:19  Polars streaming Parse — zwei-stufige Strategie:
 
-          # Quarantine-Strategie: Malformed rows → /data/gdelt/quarantine/<slice>/<stream>.jsonl
-          # parse_error_pct = quarantine_count / total_rows
-          # Wenn parse_error_pct > GDELT_MAX_PARSE_ERROR_PCT (default 5%) → skip Slice
+          # Stufe 1 — Strict Parse (schnell, 95% der Fälle)
+          try:
+              events_df = pl.read_csv(
+                  events_path,
+                  separator="\t",
+                  has_header=False,
+                  new_columns=EVENT_COLUMNS,
+                  schema_overrides=EVENT_POLARS_SCHEMA,
+                  ignore_errors=False,
+              )
+          except (pl.exceptions.ComputeError, pl.exceptions.SchemaFieldNotFoundError):
+              # Stufe 2 — Line-level Pre-Validation Fallback
+              # Bei strict-Abbruch: Raw-Datei zeilenweise lesen, Zeilen mit
+              # falscher Spaltenanzahl / Encoding-Problemen in Quarantine
+              # schieben, DANN validierte Zeilen erneut parsen.
+              valid_lines, quarantine_lines = pre_validate_csv(
+                  events_path,
+                  expected_cols=len(EVENT_COLUMNS),
+                  encoding="utf-8",
+              )
+              write_quarantine(
+                  f"/data/gdelt/quarantine/<slice>/events.jsonl",
+                  quarantine_lines,
+              )
+              events_df = pl.read_csv(
+                  io.StringIO("\n".join(valid_lines)),
+                  separator="\t", has_header=False,
+                  new_columns=EVENT_COLUMNS,
+                  schema_overrides=EVENT_POLARS_SCHEMA,
+                  ignore_errors=False,    # sollte jetzt durchlaufen
+              )
+
+          # Gleiches Muster für mentions_df und gkg_df.
+
+          # parse_error_pct = len(quarantine_lines) / total_raw_lines
+          # Wenn parse_error_pct > GDELT_MAX_PARSE_ERROR_PCT (default 5%):
+          #   Stream-State = "failed", Slice-Downstream-Regeln aus 6.1 greifen
 
 t+0:22  Filter (multi-stage mit Nuclear-Override):
           # 4a — Tactical Events (CAMEO-Root-Allowlist)
@@ -447,15 +514,30 @@ t+0:22  Filter (multi-stage mit Nuclear-Override):
           # gkg_filtered = gkg_alpha ∪ gkg_nuclear  (deduped by doc_id)
           gkg_filtered = pl.concat([gkg_alpha, gkg_nuclear]).unique("doc_id")
 
-          # Materialized Join: pre-compute goldstein_linked / cameo_root_linked
-          # für gkg_filtered, damit Qdrant Parquet-only-Quelle hat
+          # Materialized Join: pre-compute verlinkte Event-Metadaten für
+          # gkg_filtered, damit Qdrant Parquet-only-Quelle hat.
+          # WICHTIG: Ein GKG-Dokument kann N Events referenzieren. Direkter Join
+          # würde das Dokument N-mal duplizieren → stille Duplikate in Qdrant.
+          # Daher erst per mention_url aggregieren, DANN joinen (1:1).
+          linked_event_agg = (
+              mentions_filtered
+              .join(events_filtered, on="event_id")
+              .group_by("mention_url")
+              .agg([
+                  pl.col("event_id").unique().alias("linked_event_ids"),
+                  pl.col("goldstein").min().alias("goldstein_min"),
+                  pl.col("goldstein").mean().alias("goldstein_avg"),
+                  pl.col("cameo_root").unique().alias("cameo_roots_linked"),
+                  pl.col("codebook_type").unique().alias("codebook_types_linked"),
+              ])
+          )
+
           gkg_filtered = gkg_filtered.join(
-              mentions_filtered.join(events_filtered, on="event_id")
-                               .select(["mention_url", "goldstein", "cameo_root", "codebook_type"]),
-              left_on="url", right_on="mention_url", how="left"
-          ).rename({"goldstein": "goldstein_linked",
-                    "cameo_root": "cameo_root_linked",
-                    "codebook_type": "codebook_type_linked"})
+              linked_event_agg,
+              left_on="url", right_on="mention_url", how="left",
+          )
+          # Post-Assert: Row-Count unverändert gegenüber vor dem Join
+          assert gkg_filtered.n_unique("doc_id") == gkg_filtered.height
 
 t+0:25  WRITE — Parquet ZUERST (atomar, per Stream):
           for (stream, df) in [("events", events_filtered),
@@ -574,7 +656,7 @@ gdelt:slice:<slice>:events:parquet    = done | failed
 gdelt:slice:<slice>:gkg:parquet       = done | failed
 gdelt:slice:<slice>:mentions:parquet  = done | failed
 gdelt:slice:<slice>:neo4j             = done | partial | pending | failed:<reason>
-gdelt:slice:<slice>:qdrant            = done | pending_embed | failed:<reason>
+gdelt:slice:<slice>:qdrant            = done | pending_embed | skipped | failed:<reason>
 ```
 
 **Downstream-Regeln:**
@@ -634,6 +716,7 @@ test_gdelt_schemas.py                  # Pydantic models, edge cases
 test_gdelt_parser.py                   # Polars parse fixtures
 test_parser_uses_tab_separator         # explizit separator="\t", has_header=False
 test_malformed_rows_go_to_quarantine   # broken UTF-8 / schema-mismatch → quarantine jsonl
+test_strict_parse_fallback_quarantines_bad_rows   # Stufe-2-Fallback funktioniert
 test_gdelt_filter.py                   # Multi-stage filter inkl. Nuclear-Override
 test_nuclear_theme_override_keeps_event_outside_cameo_allowlist   # KRITISCH
 test_gdelt_theme_matching.py           # prefix-aware: CRISISLEX_* matcht CRISISLEX_T03_DEAD
@@ -661,7 +744,11 @@ test_source_node_reused                               # (:Source) MERGE, kein Du
 test_theme_node_reused
 test_corrupt_mentions_does_not_create_document_event_edges   # partial-slice Regel
 test_partial_slice_is_not_marked_fully_done                  # partial ≠ done
-test_gkg_parquet_contains_materialized_join_fields           # goldstein_linked etc.
+test_gkg_parquet_contains_materialized_join_fields           # linked_event_ids etc.
+test_gkg_join_does_not_duplicate_docs_with_multiple_events   # KRITISCH — stille Dup-Falle
+test_qdrant_payload_linked_fields_are_lists                  # cameo_roots_linked ∈ list<int>
+test_writer_rejects_event_without_event_id                   # Pydantic-Contract statt EXISTS
+test_writer_rejects_doc_without_doc_id
 ```
 
 ### 7.4 Contract Tests (Neo4j Schema)
@@ -904,6 +991,13 @@ Keine — alle Architektur-Entscheidungen sind getroffen:
 9. **Path-Konsistenz** — `gdelt_raw/schemas_parquet/` überall einheitlich.
 10. **Typo "gewiederverwendet" → "wiederverwendet"**.
 11. **Double-Negative "keine Phase danach nicht skipbar"** entfernt, durch klare Aussage ersetzt.
+
+### 2026-04-25 — Implementation-Clarifications (4 Detail-Fixes)
+
+12. **GKG-Join-Duplikate vermieden** — ein GKG-Doc kann N Events referenzieren. Direkter Join würde stille Duplikate in Qdrant erzeugen. Jetzt: Erst `mentions+events` per `mention_url` aggregieren (Listen/Min/Avg), dann 1:1-Join gegen GKG. Parquet/Qdrant-Schema: Listen-Felder statt Skalare (`linked_event_ids`, `cameo_roots_linked`, `codebook_types_linked` + `goldstein_min/_avg`).
+13. **EXISTS-Constraints application-side** — Neo4j Community unterstützt nur UNIQUE. NOT-NULL / NODE KEY sind Enterprise. Daher: Pydantic-Contract im Writer (`GDELTEventWrite`, `GDELTDocumentWrite` mit required `event_id`/`doc_id` + Pattern-Check). Tests `test_writer_rejects_event_without_event_id` etc. Enterprise-Migration-Snippet als Kommentar für den Upgrade-Tag.
+14. **Parser zwei-stufig** — Strict-Parse mit Polars zuerst. Bei `ComputeError`/`SchemaFieldNotFoundError`: Fallback auf Line-Level-Pre-Validation, Bad-Rows in Quarantine, dann erneuter Parse nur über validierte Zeilen. Test: `test_strict_parse_fallback_quarantines_bad_rows`.
+15. **Qdrant-State-Enum ergänzt** — `skipped` war in 6.1-Regeln verwendet, aber nicht im erlaubten State-Enum gelistet. Jetzt: `done | pending_embed | skipped | failed:<reason>`.
 
 ---
 
