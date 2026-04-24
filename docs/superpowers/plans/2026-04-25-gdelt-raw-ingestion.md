@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implementation-ready (review round 2 must-fix + should-fix applied, 2026-04-25)
+
 **Goal:** Ingest GDELT 2.0 raw CSVs (Events / Mentions / GKG) every 15 minutes into Parquet (truth) + Neo4j (graph projection) + Qdrant (semantic projection) — with Nuclear-Override filter, per-slice Redis state, recovery from Parquet.
 
 **Architecture:** Parquet-first write order. Polars streaming parser with strict + line-level-fallback. Two-stage filter (tactical CAMEO + Nuclear-Theme UNION). Neo4j and Qdrant are independent projections — both rehydrate from Parquet. Scoped `:GDELTEvent`/`:GDELTDocument` constraints (Community-edition UNIQUE; EXISTS enforced via Pydantic contract in writer).
@@ -28,8 +30,9 @@ services/data-ingestion/
 │   ├── schemas.py                   # Task 6 — Pydantic contracts
 │   ├── polars_schemas.py            # Task 7 — CSV column lists + type hints
 │   ├── parser.py                    # Task 8 — two-stage parser
-│   ├── downloader.py                # Task 9 — lastupdate + ZIP fetch + MD5
+│   ├── downloader.py                # Task 9 — lastupdate + ZIP fetch + MD5 (verify_md5 opt-out for backfill)
 │   ├── filter.py                    # Task 10 — multi-stage filter with nuclear override
+│   ├── transform.py                 # Task 10.5 — canonical transform raw → pydantic-writer schema
 │   ├── state.py                     # Task 11 — Redis per-slice + summary state
 │   ├── writers/
 │   │   ├── __init__.py
@@ -59,6 +62,7 @@ services/data-ingestion/
 │   ├── test_gdelt_parser.py
 │   ├── test_gdelt_downloader.py
 │   ├── test_gdelt_filter.py
+│   ├── test_gdelt_transform.py
 │   ├── test_gdelt_state.py
 │   ├── test_gdelt_parquet_writer.py
 │   ├── test_gdelt_neo4j_writer.py
@@ -197,13 +201,22 @@ settings = GDELTSettings()
 
 Modify `services/data-ingestion/pyproject.toml`:
 ```toml
-# Under [project.dependencies] add:
+# Under [project.dependencies] add (skip any already present):
 "polars>=1.0",
 "pyarrow>=17.0",
 "click>=8.0",
+"pydantic-settings>=2.0",       # base class for GDELTSettings
 
 # Under [project.scripts] add:
 odin-ingest-gdelt = "gdelt_raw.cli:main"
+```
+
+**Note on list-from-env parsing:** pydantic-settings v2 defaults to JSON-decoding list-typed env vars. Our CSV-style env (`GDELT_CAMEO_ROOT_ALLOWLIST=15,18,19,20`) is not JSON. The `@field_validator(mode="before")` from Step 3 intercepts the raw string **before** pydantic's JSON decoder runs — verified by the test `test_allowlist_parses_from_csv_env`.
+If that ever breaks (pydantic-settings version upgrade), switch to `Annotated[list[int], NoDecode]`:
+```python
+from pydantic_settings import NoDecode
+from typing import Annotated
+cameo_root_allowlist: Annotated[list[int], NoDecode] = Field(...)
 ```
 
 - [ ] **Step 5: Add pytest markers**
@@ -1080,19 +1093,36 @@ git commit -m "feat(gdelt): polars column lists + type overrides for 3 streams"
 - Create: `services/data-ingestion/tests/fixtures/gdelt/slice_malformed.export.CSV`
 - Create: `services/data-ingestion/tests/test_gdelt_parser.py`
 
-- [ ] **Step 1: Create fixtures**
+- [ ] **Step 1: Create fixtures (run from repo root)**
 
-Run:
 ```bash
-mkdir -p services/data-ingestion/tests/fixtures/gdelt
-cd /tmp && curl -s -o events.zip http://data.gdeltproject.org/gdeltv2/20260425120000.export.CSV.zip \
-  && unzip -o events.zip && head -10 20260425120000.export.CSV \
-  > /home/deadpool-ultra/ODIN/OSINT/services/data-ingestion/tests/fixtures/gdelt/slice_20260425_full.export.CSV
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+FIX_DIR="$REPO_ROOT/services/data-ingestion/tests/fixtures/gdelt"
+mkdir -p "$FIX_DIR"
+
+# Pull a known slice from GDELT — take first 10 rows as a small fixture
+TMP="$(mktemp -d)"
+curl -s -o "$TMP/events.zip" http://data.gdeltproject.org/gdeltv2/20260425120000.export.CSV.zip
+unzip -o -d "$TMP" "$TMP/events.zip"
+head -10 "$TMP"/20260425120000.export.CSV > "$FIX_DIR/slice_20260425_full.export.CSV"
+
+# Also pull mentions + gkg small fixtures for later tests
+curl -s -o "$TMP/mentions.zip" http://data.gdeltproject.org/gdeltv2/20260425120000.mentions.CSV.zip
+unzip -o -d "$TMP" "$TMP/mentions.zip"
+head -20 "$TMP"/20260425120000.mentions.CSV > "$FIX_DIR/slice_20260425_full.mentions.CSV"
+
+curl -s -o "$TMP/gkg.zip" http://data.gdeltproject.org/gdeltv2/20260425120000.gkg.csv.zip
+unzip -o -d "$TMP" "$TMP/gkg.zip"
+head -10 "$TMP"/20260425120000.gkg.csv > "$FIX_DIR/slice_20260425_full.gkg.csv"
+
+rm -rf "$TMP"
 ```
 
 Create the malformed fixture (manually — mimic real bad row):
 ```bash
-cat > /home/deadpool-ultra/ODIN/OSINT/services/data-ingestion/tests/fixtures/gdelt/slice_malformed.export.CSV <<'EOF'
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+FIX_DIR="$REPO_ROOT/services/data-ingestion/tests/fixtures/gdelt"
+cat > "$FIX_DIR/slice_malformed.export.CSV" <<'EOF'
 1300904663	20260425	202604	2026	2026.3164						MIL		MILITARY	AUS	AUSTRALIA	AUS	0	043	043	04	1	2.5	5	3	5	-2.1	4	Australia	AUS						Australia	AUS	-25.0	135.0	AS	20260425120000	https://example.com/a
 THIS_IS_A_BROKEN_ROW_WITH_TOO_FEW_COLUMNS
 1300904664	20260425	202604	2026	2026.3164						REB		REBELS	USA	NEW YORK	USA	0	190	190	19	4	-6.5	12	8	11	-4.2	4	New York	USA						New York	USA	40.7	-74.0	NY	20260425120000	https://example.com/b
@@ -1365,6 +1395,22 @@ async def test_download_slice_rejects_wrong_md5(tmp_path, httpx_mock):
     from gdelt_raw.downloader import MD5MismatchError
     with pytest.raises(MD5MismatchError):
         await download_slice(entry, tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_backfill_downloads_historical_slice_without_md5(tmp_path, httpx_mock):
+    """Backfill path: MD5 is '' because we don't fetch lastupdate for history.
+    download_slice must accept verify_md5=False."""
+    payload = b"historical-zip-payload"
+    url = "http://data.gdeltproject.org/gdeltv2/20260101000000.export.CSV.zip"
+    httpx_mock.add_response(url=url, content=payload)
+
+    entry = LastUpdateEntry(
+        size=0, md5="", url=url,
+        stream="events", slice_id="20260101000000",
+    )
+    out = await download_slice(entry, tmp_path, verify_md5=False)
+    assert out.read_bytes() == payload
 ```
 
 - [ ] **Step 2: Add dev deps and run — expect FAIL**
@@ -1445,28 +1491,35 @@ async def fetch_lastupdate() -> list[LastUpdateEntry]:
         return parse_lastupdate(resp.text)
 
 
-async def download_slice(entry: LastUpdateEntry, out_dir: Path) -> Path:
+async def download_slice(
+    entry: LastUpdateEntry, out_dir: Path, *, verify_md5: bool = True,
+) -> Path:
+    """Download a single slice file. If verify_md5=True and entry.md5 is non-empty,
+    validate and raise MD5MismatchError on drift. Backfill sets verify_md5=False
+    because we don't have MD5s for historical slices (they're not in lastupdate.txt)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / entry.url.rsplit("/", 1)[-1]
     async with httpx.AsyncClient(timeout=settings.download_timeout) as client:
         resp = await client.get(entry.url)
         resp.raise_for_status()
         content = resp.content
-    actual_md5 = hashlib.md5(content).hexdigest()
-    if actual_md5 != entry.md5:
-        raise MD5MismatchError(
-            f"expected={entry.md5} actual={actual_md5} url={entry.url}"
-        )
+    if verify_md5 and entry.md5:
+        actual_md5 = hashlib.md5(content).hexdigest()
+        if actual_md5 != entry.md5:
+            raise MD5MismatchError(
+                f"expected={entry.md5} actual={actual_md5} url={entry.url}"
+            )
     out_path.write_bytes(content)
     log.info("gdelt_downloaded",
-             stream=entry.stream, slice=entry.slice_id, bytes=len(content))
+             stream=entry.stream, slice=entry.slice_id, bytes=len(content),
+             md5_verified=(verify_md5 and bool(entry.md5)))
     return out_path
 ```
 
 - [ ] **Step 4: Run tests — expect PASS**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_gdelt_downloader.py -v`
-Expected: 4 passed
+Expected: 5 passed
 
 - [ ] **Step 5: Commit**
 
@@ -1732,6 +1785,311 @@ Expected: 4 passed
 git add services/data-ingestion/gdelt_raw/filter.py \
         services/data-ingestion/tests/test_gdelt_filter.py
 git commit -m "feat(gdelt): multi-stage filter with nuclear-override UNION"
+```
+
+---
+
+## Task 10.5: Canonical Transform Layer (raw GDELT → Pydantic-writer schema)
+
+**Why:** Filter output still carries raw GDELT column names (`event_code`, `goldstein_scale`, `v21_date`, `v2_document_identifier`, `v1_themes` string). But `GDELTEventWrite` / `GDELTDocumentWrite` expect canonical fields (`cameo_code`, `goldstein`, `gdelt_date`, `url`, `themes: list[str]`). Without a transform step, `Neo4jWriter.write_from_parquet()` would fail with a `ValidationError` on every single row. This task adds the transform that closes that gap — called between filter and parquet-write, so Parquet holds the canonical schema.
+
+**Files:**
+- Create: `services/data-ingestion/gdelt_raw/transform.py`
+- Create: `services/data-ingestion/tests/test_gdelt_transform.py`
+
+- [ ] **Step 1: Write failing tests**
+
+```python
+# services/data-ingestion/tests/test_gdelt_transform.py
+from datetime import datetime
+
+import polars as pl
+
+from gdelt_raw.transform import (
+    canonicalize_events, canonicalize_gkg, canonicalize_mentions,
+)
+
+
+def _raw_filtered_events() -> pl.DataFrame:
+    """Minimal raw-filtered events DataFrame as produced by filter.apply_filters."""
+    return pl.DataFrame({
+        "global_event_id": [1300904663],
+        "event_id": ["gdelt:event:1300904663"],
+        "event_code": ["193"],
+        "event_root_code": [19],
+        "quad_class": [4],
+        "goldstein_scale": [-6.5],
+        "avg_tone": [-4.2],
+        "num_mentions": [12],
+        "num_sources": [8],
+        "num_articles": [11],
+        "date_added": [20260425121500],
+        "fraction_date": [2026.3164],
+        "actor1_code": ["MIL"], "actor1_name": ["MILITARY"],
+        "actor2_code": ["REB"], "actor2_name": ["REBELS"],
+        "source_url": ["https://ex.com/a"],
+        "codebook_type": ["conflict.armed"],
+        "filter_reason": ["tactical"],
+    })
+
+
+def _raw_filtered_gkg() -> pl.DataFrame:
+    return pl.DataFrame({
+        "gkg_record_id": ["20260425121500-42"],
+        "doc_id": ["gdelt:gkg:20260425121500-42"],
+        "v21_date": [20260425121500],
+        "v2_document_identifier": ["https://ex.com/a"],
+        "v2_source_common_name": ["ex.com"],
+        "v1_themes": ["ARMEDCONFLICT;KILL;MILITARY"],
+        "v1_persons": ["Vladimir Putin;Joe Biden"],
+        "v1_organizations": ["NATO;UN"],
+        "v15_tone": ["2.1,5.0,-3.0,8.0,3.5,1.1,599"],
+        "v21_sharp_image": ["https://ex.com/img.jpg"],
+        "v21_quotations": [""],
+        "linked_event_ids": [["gdelt:event:1", "gdelt:event:2"]],
+        "goldstein_min": [-6.5],
+        "goldstein_avg": [-6.0],
+        "cameo_roots_linked": [[18, 19]],
+        "codebook_types_linked": [["conflict.assault", "conflict.armed"]],
+    })
+
+
+def _raw_filtered_mentions() -> pl.DataFrame:
+    return pl.DataFrame({
+        "global_event_id": [1300904663],
+        "mention_identifier": ["https://ex.com/a"],
+        "mention_doc_tone": [-6.1],
+        "confidence": [100],
+        "action_char_offset": [1664],
+    })
+
+
+def test_canonicalize_events_renames_and_adds_source():
+    out = canonicalize_events(_raw_filtered_events())
+    row = out.to_dicts()[0]
+    assert row["event_id"] == "gdelt:event:1300904663"
+    assert row["source"] == "gdelt"
+    assert row["cameo_code"] == "193"
+    assert row["cameo_root"] == 19
+    assert row["goldstein"] == -6.5
+    assert isinstance(row["date_added"], datetime)
+    assert row["date_added"].year == 2026
+    assert row["date_added"].month == 4
+    assert row["codebook_type"] == "conflict.armed"
+    assert row["filter_reason"] == "tactical"
+
+
+def test_canonicalize_events_drops_raw_columns():
+    out = canonicalize_events(_raw_filtered_events())
+    assert "global_event_id" not in out.columns
+    assert "event_code" not in out.columns
+    assert "event_root_code" not in out.columns
+    assert "goldstein_scale" not in out.columns
+
+
+def test_canonicalize_gkg_parses_themes_into_list():
+    out = canonicalize_gkg(_raw_filtered_gkg())
+    row = out.to_dicts()[0]
+    assert row["themes"] == ["ARMEDCONFLICT", "KILL", "MILITARY"]
+    assert row["persons"] == ["Vladimir Putin", "Joe Biden"]
+    assert row["organizations"] == ["NATO", "UN"]
+
+
+def test_canonicalize_gkg_renames_url_and_dates():
+    out = canonicalize_gkg(_raw_filtered_gkg())
+    row = out.to_dicts()[0]
+    assert row["doc_id"] == "gdelt:gkg:20260425121500-42"
+    assert row["url"] == "https://ex.com/a"
+    assert row["source_name"] == "ex.com"
+    assert row["source"] == "gdelt_gkg"
+    assert isinstance(row["gdelt_date"], datetime)
+    assert row["published_at"] is None
+
+
+def test_canonicalize_gkg_parses_v15_tone_seven_fields():
+    out = canonicalize_gkg(_raw_filtered_gkg())
+    row = out.to_dicts()[0]
+    # V1.5 tone format: avgTone,posTone,negTone,polarity,actRef,selfGrpRef,wordCount
+    assert row["tone_positive"] == 5.0
+    assert row["tone_negative"] == -3.0
+    assert row["tone_polarity"] == 8.0
+    assert row["word_count"] == 599
+
+
+def test_canonicalize_gkg_handles_empty_list_fields():
+    df = _raw_filtered_gkg().with_columns([
+        pl.lit("").alias("v1_persons"),
+        pl.lit("").alias("v1_organizations"),
+    ])
+    out = canonicalize_gkg(df)
+    row = out.to_dicts()[0]
+    assert row["persons"] == []
+    assert row["organizations"] == []
+
+
+def test_canonicalize_mentions_renames_and_builds_canonical_event_id():
+    out = canonicalize_mentions(_raw_filtered_mentions())
+    row = out.to_dicts()[0]
+    assert row["event_id"] == "gdelt:event:1300904663"
+    assert row["mention_url"] == "https://ex.com/a"
+    assert row["tone"] == -6.1
+    assert row["confidence"] == 100
+    assert row["char_offset"] == 1664
+
+
+def test_canonical_event_validates_against_pydantic_writer_contract():
+    """Integration check: canonical output must pass GDELTEventWrite."""
+    from gdelt_raw.schemas import GDELTEventWrite
+    out = canonicalize_events(_raw_filtered_events())
+    row = out.to_dicts()[0]
+    GDELTEventWrite.model_validate(row)  # raises if schema mismatch
+
+
+def test_canonical_doc_validates_against_pydantic_writer_contract():
+    from gdelt_raw.schemas import GDELTDocumentWrite
+    out = canonicalize_gkg(_raw_filtered_gkg())
+    row = out.to_dicts()[0]
+    GDELTDocumentWrite.model_validate(row)
+```
+
+- [ ] **Step 2: Run — expect FAIL (module missing)**
+
+Run: `cd services/data-ingestion && uv run pytest tests/test_gdelt_transform.py -v`
+Expected: FAIL
+
+- [ ] **Step 3: Implement transform.py**
+
+```python
+# services/data-ingestion/gdelt_raw/transform.py
+"""Canonical transform: raw-filtered GDELT DataFrames → Pydantic-writer schema.
+
+Without this layer, Parquet would hold raw GDELT column names while
+Neo4j/Qdrant writers expect canonical field names. This is the single place
+where that translation happens. Everything downstream speaks canonical.
+"""
+
+from __future__ import annotations
+
+import polars as pl
+
+from gdelt_raw.ids import build_event_id
+
+
+def _parse_gdelt_datetime(col: str) -> pl.Expr:
+    """GDELT date_added / v21_date is int YYYYMMDDHHMMSS → parse to datetime."""
+    return (
+        pl.col(col).cast(pl.Utf8)
+        .str.strptime(pl.Datetime, format="%Y%m%d%H%M%S", strict=False)
+    )
+
+
+def _split_semicolon_list(col: str) -> pl.Expr:
+    """GDELT semicolon-delimited strings (e.g. V1Themes) → list[str], empties dropped."""
+    return (
+        pl.col(col).fill_null("")
+        .str.split(";")
+        .list.eval(pl.element().filter(pl.element().str.len_chars() > 0))
+    )
+
+
+def canonicalize_events(df: pl.DataFrame) -> pl.DataFrame:
+    """Raw-filtered events DataFrame → canonical events DataFrame.
+
+    Input columns (from filter.apply_filters): global_event_id, event_id,
+    event_code, event_root_code, quad_class, goldstein_scale, avg_tone,
+    num_mentions, num_sources, num_articles, date_added (int), fraction_date,
+    actor1_*, actor2_*, source_url, codebook_type, filter_reason.
+
+    Output schema matches GDELTEventWrite exactly.
+    """
+    return df.select([
+        pl.col("event_id"),
+        pl.lit("gdelt").alias("source"),
+        pl.col("event_code").alias("cameo_code"),
+        pl.col("event_root_code").alias("cameo_root"),
+        pl.col("quad_class"),
+        pl.col("goldstein_scale").alias("goldstein"),
+        pl.col("avg_tone"),
+        pl.col("num_mentions"),
+        pl.col("num_sources"),
+        pl.col("num_articles"),
+        _parse_gdelt_datetime("date_added").alias("date_added"),
+        pl.col("fraction_date"),
+        pl.col("actor1_code"),
+        pl.col("actor1_name"),
+        pl.col("actor2_code"),
+        pl.col("actor2_name"),
+        pl.col("source_url"),
+        pl.col("codebook_type"),
+        pl.col("filter_reason"),
+    ])
+
+
+def canonicalize_gkg(df: pl.DataFrame) -> pl.DataFrame:
+    """Raw-filtered GKG → canonical GKG. Output matches GDELTDocumentWrite.
+
+    v15_tone is 7-field comma-separated: avgTone, posTone, negTone, polarity,
+    activityRef, selfGroupRef, wordCount.
+    """
+    # Split v15_tone once, then extract by position
+    tone_parts = pl.col("v15_tone").fill_null("0,0,0,0,0,0,0").str.split(",")
+
+    return df.select([
+        pl.col("doc_id"),
+        pl.lit("gdelt_gkg").alias("source"),
+        pl.col("v2_document_identifier").alias("url"),
+        pl.col("v2_source_common_name").alias("source_name"),
+        _parse_gdelt_datetime("v21_date").alias("gdelt_date"),
+        pl.lit(None, dtype=pl.Datetime).alias("published_at"),
+        _split_semicolon_list("v1_themes").alias("themes"),
+        _split_semicolon_list("v1_persons").alias("persons"),
+        _split_semicolon_list("v1_organizations").alias("organizations"),
+        tone_parts.list.get(1).cast(pl.Float64, strict=False).fill_null(0.0)
+            .alias("tone_positive"),
+        tone_parts.list.get(2).cast(pl.Float64, strict=False).fill_null(0.0)
+            .alias("tone_negative"),
+        tone_parts.list.get(3).cast(pl.Float64, strict=False).fill_null(0.0)
+            .alias("tone_polarity"),
+        tone_parts.list.get(4).cast(pl.Float64, strict=False).fill_null(0.0)
+            .alias("tone_activity"),
+        tone_parts.list.get(5).cast(pl.Float64, strict=False).fill_null(0.0)
+            .alias("tone_self_group"),
+        tone_parts.list.get(6).cast(pl.Int64, strict=False).fill_null(0)
+            .alias("word_count"),
+        pl.col("v21_sharp_image").alias("sharp_image_url"),
+        _split_semicolon_list("v21_quotations").alias("quotations"),
+        pl.col("linked_event_ids").fill_null([]),
+        pl.col("goldstein_min"),
+        pl.col("goldstein_avg"),
+        pl.col("cameo_roots_linked").fill_null([]),
+        pl.col("codebook_types_linked").fill_null([]),
+    ])
+
+
+def canonicalize_mentions(df: pl.DataFrame) -> pl.DataFrame:
+    """Raw mentions → canonical (event_id, mention_url, tone, confidence, char_offset)."""
+    return df.select([
+        pl.col("global_event_id")
+          .map_elements(lambda i: build_event_id(int(i)), return_dtype=pl.Utf8)
+          .alias("event_id"),
+        pl.col("mention_identifier").alias("mention_url"),
+        pl.col("mention_doc_tone").alias("tone"),
+        pl.col("confidence"),
+        pl.col("action_char_offset").alias("char_offset"),
+    ])
+```
+
+- [ ] **Step 4: Run tests — expect PASS**
+
+Run: `cd services/data-ingestion && uv run pytest tests/test_gdelt_transform.py -v`
+Expected: 8 passed
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add services/data-ingestion/gdelt_raw/transform.py \
+        services/data-ingestion/tests/test_gdelt_transform.py
+git commit -m "feat(gdelt): canonical transform layer (raw → pydantic-writer schema)"
 ```
 
 ---
@@ -2120,6 +2478,22 @@ def test_render_doc_params_handles_optional_published_at():
     params = render_doc_params(doc)
     assert params["doc_id"] == "gdelt:gkg:r1"
     assert params["published_at"] is None
+
+
+def test_merge_theme_template_is_idempotent():
+    """MERGE on the :ABOUT relationship must not carry a counter —
+    otherwise replay increments it unboundedly."""
+    assert "r.count = r.count + 1" not in MERGE_THEME
+    # Still writes themes
+    assert "UNWIND $themes" in MERGE_THEME
+    assert ":ABOUT" in MERGE_THEME
+
+
+def test_merge_mention_sets_properties_on_match_too():
+    """Replay must not leave stale tone/confidence; ON MATCH re-sets them."""
+    from gdelt_raw.writers.neo4j_writer import MERGE_MENTION
+    assert "ON MATCH" in MERGE_MENTION
+    assert "r.tone = $tone" in MERGE_MENTION
 ```
 
 - [ ] **Step 2: Run — expect FAIL**
@@ -2202,21 +2576,23 @@ MERGE (d)-[:FROM_SOURCE]->(s)
 """
 
 MERGE_THEME = """
+MATCH (d:GDELTDocument {doc_id: $doc_id})
 UNWIND $themes AS tcode
 MERGE (t:Theme {theme_code: tcode})
-WITH t, $doc_id AS did
-MATCH (d:GDELTDocument {doc_id: did})
-MERGE (d)-[r:ABOUT]->(t)
-  ON CREATE SET r.count = 1
-  ON MATCH SET  r.count = r.count + 1
+MERGE (d)-[:ABOUT]->(t)
 """
+# Idempotency: MERGE on the relationship is set-semantic — no count
+# increment on replay. If theme-frequency is ever needed, store it in
+# d.themes (list) and query with list functions.
 
 MERGE_MENTION = """
 MATCH (d:Document {url: $doc_url})
 MATCH (e:GDELTEvent {event_id: $event_id})
 MERGE (d)-[r:MENTIONS]->(e)
   ON CREATE SET r.tone = $tone, r.confidence = $confidence, r.char_offset = $char_offset
+  ON MATCH  SET r.tone = $tone, r.confidence = $confidence, r.char_offset = $char_offset
 """
+# ON MATCH also SETs — last-write-wins on properties, but edge count stays 1.
 
 
 def render_event_params(ev: GDELTEventWrite) -> dict[str, Any]:
@@ -2254,31 +2630,62 @@ class Neo4jWriter:
                         await tx.run(MERGE_THEME, {"themes": d.themes, "doc_id": d.doc_id})
                 await tx.commit()
 
+    async def write_mentions(self, mentions: list[dict]):
+        """mentions: list of canonical dicts with event_id, mention_url, tone,
+        confidence, char_offset. Requires corresponding Documents + GDELTEvents
+        to already exist in the graph."""
+        async with self._driver.session() as session:
+            async with await session.begin_transaction() as tx:
+                for m in mentions:
+                    await tx.run(MERGE_MENTION, {
+                        "doc_url": m["mention_url"],
+                        "event_id": m["event_id"],
+                        "tone": m.get("tone"),
+                        "confidence": m.get("confidence"),
+                        "char_offset": m.get("char_offset"),
+                    })
+                await tx.commit()
+
     async def write_from_parquet(self, parquet_base, slice_id: str, date: str):
+        """Read the three canonical parquet streams and write in dependency order:
+        Events → Documents (+ Sources, + Themes) → Mentions (Doc→Event edges).
+
+        Phase 1 scope: Events, Documents, Sources, Themes, Mentions.
+        Deferred to Phase 2 (separate spec): Entities (from V2Persons/V2Orgs),
+        Locations (from V2Locations), INVOLVES edges, OCCURRED_AT edges."""
         from pathlib import Path
         ev_path = Path(parquet_base) / "events" / f"date={date}" / f"{slice_id}.parquet"
         gkg_path = Path(parquet_base) / "gkg" / f"date={date}" / f"{slice_id}.parquet"
+        mentions_path = Path(parquet_base) / "mentions" / f"date={date}" / f"{slice_id}.parquet"
+
         if ev_path.exists():
             ev_df = pl.read_parquet(ev_path)
             events = [GDELTEventWrite.model_validate(r) for r in ev_df.to_dicts()]
             await self.write_events(events)
+
         if gkg_path.exists():
             gkg_df = pl.read_parquet(gkg_path)
             docs = [GDELTDocumentWrite.model_validate(r) for r in gkg_df.to_dicts()]
             await self.write_docs(docs)
+
+        # Mentions require both Events and Docs to already exist — only write
+        # if both parquet streams were present.
+        if mentions_path.exists() and ev_path.exists() and gkg_path.exists():
+            m_df = pl.read_parquet(mentions_path)
+            await self.write_mentions(m_df.to_dicts())
 ```
 
 - [ ] **Step 4: Run tests — expect PASS**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_gdelt_neo4j_writer.py -v`
-Expected: 5 passed
+Expected: 7 passed
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add services/data-ingestion/gdelt_raw/writers/neo4j_writer.py \
         services/data-ingestion/tests/test_gdelt_neo4j_writer.py
-git commit -m "feat(gdelt): neo4j writer — scoped merge templates + contract validation"
+git commit -m "feat(gdelt): neo4j writer — scoped merge templates + contract validation + mentions"
 ```
 
 ---
@@ -2749,12 +3156,71 @@ async def test_parquet_written_before_external_stores(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_store_state_not_advanced_on_failure(tmp_path):
-    """If neo4j write raises, neo4j state must NOT be advanced."""
-    # Detailed mocks omitted for brevity — this test drives the behavior;
-    # implementation should use try/except around each writer and only
-    # set state=done on success.
-    pass  # wired up in Task 22 integration — unit-level covered by recovery test
+async def test_store_state_not_advanced_on_failure(tmp_path, monkeypatch):
+    """If Neo4j raises, neo4j state must stay 'failed:*' and NOT advance
+    last_slice:neo4j. Parquet last_slice must still advance (truth-layer)."""
+    import fakeredis.aioredis
+    from gdelt_raw.run import run_forward_slice
+    from gdelt_raw.state import GDELTState
+    from gdelt_raw.downloader import LastUpdateEntry
+
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+
+    # Stub download + parse + filter — mark parquet streams as done
+    async def fake_download(entry, out_dir, **kwargs):
+        f = out_dir / entry.url.rsplit("/", 1)[-1]
+        f.write_bytes(b"z")
+        return f
+
+    async def fake_extract(entries, work):
+        from gdelt_raw.run import ParsedSlice
+        import polars as pl
+        return ParsedSlice(
+            events_df=pl.DataFrame({"global_event_id": []}),
+            mentions_df=pl.DataFrame({"global_event_id": []}),
+            gkg_df=pl.DataFrame({"gkg_record_id": []}),
+            stream_states={"events": "done", "mentions": "done", "gkg": "done"},
+        )
+
+    async def fake_filter_write(parsed, slice_id, *, state, parquet_base):
+        for st in ("events", "mentions", "gkg"):
+            await state.set_stream_parquet(slice_id, st, "done")
+        return None
+
+    monkeypatch.setattr("gdelt_raw.run.download_slice", fake_download)
+    monkeypatch.setattr("gdelt_raw.run._extract_and_parse", fake_extract)
+    monkeypatch.setattr("gdelt_raw.run._filter_and_write_parquet", fake_filter_write)
+
+    # Neo4j writer that raises, Qdrant writer that succeeds
+    from unittest.mock import MagicMock, AsyncMock
+    neo4j = MagicMock()
+    neo4j.write_from_parquet = AsyncMock(side_effect=RuntimeError("boom"))
+    qdrant = MagicMock()
+    qdrant.upsert_from_parquet = AsyncMock(return_value=0)
+
+    entries = [
+        LastUpdateEntry(0, "m", "http://x/y.export.CSV.zip", "events", "20260425120000"),
+        LastUpdateEntry(0, "m", "http://x/y.mentions.CSV.zip", "mentions", "20260425120000"),
+        LastUpdateEntry(0, "m", "http://x/y.gkg.csv.zip", "gkg", "20260425120000"),
+    ]
+    await run_forward_slice(
+        entries, state=state, parquet_base=tmp_path,
+        neo4j_writer=neo4j, qdrant_writer=qdrant, tmp_dir=tmp_path / "work",
+    )
+
+    # Neo4j failed — state reflects it, last_slice:neo4j NOT advanced
+    n_state = await state.get_store_state("20260425120000", "neo4j")
+    assert n_state and n_state.startswith("failed")
+    assert "20260425120000" in await state.list_pending("neo4j")
+    assert await state.get_last_slice("neo4j") is None
+
+    # Qdrant succeeded — independent of Neo4j
+    assert await state.get_store_state("20260425120000", "qdrant") == "done"
+    assert await state.get_last_slice("qdrant") == "20260425120000"
+
+    # Parquet last_slice DID advance — truth layer moves forward
+    assert await state.get_last_slice("parquet") == "20260425120000"
 ```
 
 - [ ] **Step 2: Run — expect FAIL**
@@ -2806,8 +3272,11 @@ def _slice_date(slice_id: str) -> str:
 
 async def _extract_and_parse(
     entries: list[LastUpdateEntry], tmp_dir: Path,
+    *, verify_md5: bool = True,
 ) -> ParsedSlice:
-    downloads = await asyncio.gather(*[download_slice(e, tmp_dir) for e in entries])
+    downloads = await asyncio.gather(*[
+        download_slice(e, tmp_dir, verify_md5=verify_md5) for e in entries
+    ])
     extracted: dict[str, Path] = {}
     for entry, zpath in zip(entries, downloads):
         with zipfile.ZipFile(zpath) as z:
@@ -2835,15 +3304,27 @@ async def _filter_and_write_parquet(
     parsed: ParsedSlice, slice_id: str, *,
     state: GDELTState, parquet_base: Path,
 ) -> FilterResult | None:
+    from gdelt_raw.transform import (
+        canonicalize_events, canonicalize_gkg, canonicalize_mentions,
+    )
     fr = apply_filters(
         parsed.events_df, parsed.mentions_df, parsed.gkg_df,
         cameo_roots=settings.cameo_root_allowlist,
         theme_alpha=settings.theme_allowlist,
         theme_nuclear_override=settings.nuclear_override_themes,
     )
+    # Canonicalize BEFORE persisting — parquet holds writer-schema directly.
+    canonical = {
+        "events": canonicalize_events(fr.events) if parsed.stream_states["events"] == "done"
+                  else None,
+        "gkg": canonicalize_gkg(fr.gkg) if parsed.stream_states["gkg"] == "done"
+               else None,
+        "mentions": canonicalize_mentions(fr.mentions) if parsed.stream_states["mentions"] == "done"
+                    else None,
+    }
     date = _slice_date(slice_id)
-    for stream, df in [("events", fr.events), ("mentions", fr.mentions), ("gkg", fr.gkg)]:
-        if parsed.stream_states.get(stream) != "done":
+    for stream, df in canonical.items():
+        if df is None:
             await state.set_stream_parquet(slice_id, stream, "failed")
             continue
         write_stream_parquet(df, base_path=parquet_base, stream=stream,
@@ -2860,17 +3341,28 @@ async def run_forward_slice(
     neo4j_writer,
     qdrant_writer,
     tmp_dir: Path,
+    verify_md5: bool = True,
 ) -> None:
     slice_id = entries[0].slice_id
     date = _slice_date(slice_id)
-    log.info("gdelt_forward_start", slice=slice_id)
+    log.info("gdelt_forward_start", slice=slice_id, verify_md5=verify_md5)
 
     work = tmp_dir / slice_id
     work.mkdir(parents=True, exist_ok=True)
 
-    parsed = await _extract_and_parse(entries, work)
+    parsed = await _extract_and_parse(entries, work, verify_md5=verify_md5)
     await _filter_and_write_parquet(parsed, slice_id, state=state,
                                     parquet_base=parquet_base)
+
+    # Advance parquet last_slice as soon as ALL 3 streams are persisted.
+    # Truth-layer progress is INDEPENDENT of Neo4j/Qdrant outcomes — otherwise
+    # a down Qdrant would cause forward() to re-download the same slice forever.
+    all_parquet_done = all(
+        await state.get_stream_parquet(slice_id, s) == "done"
+        for s in ("events", "mentions", "gkg")
+    )
+    if all_parquet_done:
+        await state.set_last_slice("parquet", slice_id)
 
     # Neo4j
     try:
@@ -2892,8 +3384,6 @@ async def run_forward_slice(
         await state.set_store_state(slice_id, "qdrant", "pending_embed")
         await state.add_pending("qdrant", slice_id)
 
-    if await state.is_slice_fully_done(slice_id):
-        await state.set_last_slice("parquet", slice_id)
     log.info("gdelt_forward_done", slice=slice_id)
 
 
@@ -2949,10 +3439,16 @@ git commit -m "feat(gdelt): run_forward — parquet-first, neo4j/qdrant independ
 ```python
 # services/data-ingestion/tests/test_gdelt_backfill.py
 from datetime import datetime
+from unittest.mock import AsyncMock
 
+import fakeredis.aioredis
 import pytest
 
-from gdelt_raw.run import enumerate_slices_for_range
+from gdelt_raw.run import (
+    enumerate_slices_for_range, BackfillJob, initialize_backfill,
+    mark_slice_done, mark_slice_failed,
+)
+from gdelt_raw.state import GDELTState
 
 
 def test_enumerate_slices_full_day():
@@ -2968,7 +3464,6 @@ def test_enumerate_slices_partial():
     slices = list(enumerate_slices_for_range(
         datetime(2026, 4, 25, 0, 0), datetime(2026, 4, 25, 1, 0)
     ))
-    # 00:00, 00:15, 00:30, 00:45, 01:00 → 5 slices
     assert slices == [
         "20260425000000", "20260425001500", "20260425003000",
         "20260425004500", "20260425010000",
@@ -2980,6 +3475,72 @@ def test_enumerate_slices_31_days():
         datetime(2026, 3, 26), datetime(2026, 4, 25, 23, 45)
     ))
     assert len(slices) == 31 * 96
+
+
+@pytest.mark.asyncio
+async def test_backfill_initializes_pending_set():
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+    job = await initialize_backfill(
+        state, job_id="job-a",
+        start=datetime(2026, 4, 25, 0, 0),
+        end=datetime(2026, 4, 25, 1, 0),
+    )
+    assert job.job_id == "job-a"
+    assert job.total == 5
+    pending = await r.zrange("gdelt:backfill:job-a:pending", 0, -1)
+    assert len(pending) == 5
+
+
+@pytest.mark.asyncio
+async def test_backfill_marks_slice_done_removes_from_pending():
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+    await initialize_backfill(
+        state, job_id="job-b",
+        start=datetime(2026, 4, 25, 0, 0),
+        end=datetime(2026, 4, 25, 0, 0),
+    )
+    await mark_slice_done(state, "job-b", "20260425000000")
+    pending = await r.zrange("gdelt:backfill:job-b:pending", 0, -1)
+    done = await r.smembers("gdelt:backfill:job-b:done")
+    assert pending == []
+    assert done == {"20260425000000"}
+
+
+@pytest.mark.asyncio
+async def test_backfill_failed_slice_is_retryable():
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+    await initialize_backfill(
+        state, job_id="job-c",
+        start=datetime(2026, 4, 25, 0, 0),
+        end=datetime(2026, 4, 25, 0, 0),
+    )
+    await mark_slice_failed(state, "job-c", "20260425000000", reason="boom")
+    # Failed slices move to :failed AND remain re-enqueueable via resume
+    failed = await r.smembers("gdelt:backfill:job-c:failed")
+    assert "20260425000000" in failed
+
+
+@pytest.mark.asyncio
+async def test_resume_reenqueues_failed_slices():
+    from gdelt_raw.run import resume_backfill_pending
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+    await initialize_backfill(
+        state, job_id="job-d",
+        start=datetime(2026, 4, 25, 0, 0),
+        end=datetime(2026, 4, 25, 0, 30),
+    )
+    await mark_slice_done(state, "job-d", "20260425000000")
+    await mark_slice_failed(state, "job-d", "20260425001500", reason="net")
+    # Pending now contains only 20260425003000
+    await resume_backfill_pending(state, "job-d")
+    # After resume, failed is empty and pending contains the retry
+    pending = await r.zrange("gdelt:backfill:job-d:pending", 0, -1)
+    assert "20260425001500" in pending
+    assert await r.smembers("gdelt:backfill:job-d:failed") == set()
 ```
 
 - [ ] **Step 2: Run — expect FAIL**
@@ -2987,17 +3548,17 @@ def test_enumerate_slices_31_days():
 Run: `cd services/data-ingestion && uv run pytest tests/test_gdelt_backfill.py -v`
 Expected: FAIL
 
-- [ ] **Step 3: Add `run_backfill` + `enumerate_slices_for_range` to run.py**
+- [ ] **Step 3: Add backfill machinery to run.py**
 
 Append to `services/data-ingestion/gdelt_raw/run.py`:
 ```python
 from datetime import datetime, timedelta
+from dataclasses import dataclass
 from typing import Iterator
 
 
 def enumerate_slices_for_range(start: datetime, end: datetime) -> Iterator[str]:
     """Yield slice_ids at 15-min steps, inclusive of both endpoints (aligned to :00,:15,:30,:45)."""
-    # Align start down to nearest 15-min
     start = start.replace(minute=(start.minute // 15) * 15, second=0, microsecond=0)
     cur = start
     while cur <= end:
@@ -3005,53 +3566,146 @@ def enumerate_slices_for_range(start: datetime, end: datetime) -> Iterator[str]:
         cur = cur + timedelta(minutes=15)
 
 
+@dataclass
+class BackfillJob:
+    job_id: str
+    total: int
+
+
+def _bf_key(job_id: str, suffix: str) -> str:
+    return f"gdelt:backfill:{job_id}:{suffix}"
+
+
+async def initialize_backfill(
+    state: GDELTState, *, job_id: str, start: datetime, end: datetime,
+) -> BackfillJob:
+    """Idempotent: re-running only adds slices not already done/failed/pending."""
+    slice_ids = list(enumerate_slices_for_range(start, end))
+    done = await state.r.smembers(_bf_key(job_id, "done"))
+    failed = await state.r.smembers(_bf_key(job_id, "failed"))
+    # Pending = slice_ids − done − failed (failed stays until resume)
+    to_enqueue = [s for s in slice_ids if s not in done and s not in failed]
+    if to_enqueue:
+        await state.r.zadd(
+            _bf_key(job_id, "pending"),
+            {s: int(s) for s in to_enqueue},
+        )
+    await state.r.set(_bf_key(job_id, "state"), "running")
+    await state.r.set(_bf_key(job_id, "total"), str(len(slice_ids)))
+    return BackfillJob(job_id=job_id, total=len(slice_ids))
+
+
+async def pop_next_pending(state: GDELTState, job_id: str) -> str | None:
+    """ZPOPMIN (single-slice atomic pop) — returns slice_id or None if empty."""
+    res = await state.r.zpopmin(_bf_key(job_id, "pending"), 1)
+    if not res:
+        return None
+    slice_id, _ = res[0]
+    return slice_id
+
+
+async def mark_slice_done(state: GDELTState, job_id: str, slice_id: str) -> None:
+    await state.r.srem(_bf_key(job_id, "failed"), slice_id)
+    await state.r.zrem(_bf_key(job_id, "pending"), slice_id)
+    await state.r.sadd(_bf_key(job_id, "done"), slice_id)
+
+
+async def mark_slice_failed(
+    state: GDELTState, job_id: str, slice_id: str, reason: str,
+) -> None:
+    await state.r.zrem(_bf_key(job_id, "pending"), slice_id)
+    await state.r.sadd(_bf_key(job_id, "failed"), slice_id)
+    await state.r.set(_bf_key(job_id, f"failed:{slice_id}:reason"), reason)
+
+
+async def resume_backfill_pending(state: GDELTState, job_id: str) -> int:
+    """Move all failed slices back into pending; returns re-enqueued count."""
+    failed = await state.r.smembers(_bf_key(job_id, "failed"))
+    if failed:
+        await state.r.zadd(
+            _bf_key(job_id, "pending"),
+            {s: int(s) for s in failed},
+        )
+        await state.r.delete(_bf_key(job_id, "failed"))
+    return len(failed)
+
+
 async def run_backfill(
     start: datetime, end: datetime, *,
     state: GDELTState, neo4j_writer, qdrant_writer,
     parquet_base: Path, job_id: str, parallel: int = 4,
 ) -> None:
-    """Backfill a date range. Resumable via Redis-tracked pending set."""
-    slice_ids = list(enumerate_slices_for_range(start, end))
-    log.info("gdelt_backfill_start", job_id=job_id, total=len(slice_ids))
-
-    # Register job in Redis (idempotent)
-    await state.r.sadd(f"gdelt:backfill:{job_id}:total", *slice_ids)
+    """Backfill a date range. Resumable: pending/done/failed sets in Redis."""
+    job = await initialize_backfill(state, job_id=job_id, start=start, end=end)
+    log.info("gdelt_backfill_start", job_id=job_id, total=job.total)
 
     sem = asyncio.Semaphore(parallel)
 
-    async def _process_one(sid: str):
-        # Skip if already done
-        if await state.is_slice_fully_done(sid):
-            return
-        async with sem:
-            # Build URLs deterministically (no lastupdate for historical)
-            entries = [
-                LastUpdateEntry(0, "",
-                    f"{settings.base_url}/{sid}.export.CSV.zip", "events", sid),
-                LastUpdateEntry(0, "",
-                    f"{settings.base_url}/{sid}.mentions.CSV.zip", "mentions", sid),
-                LastUpdateEntry(0, "",
-                    f"{settings.base_url}/{sid}.gkg.csv.zip", "gkg", sid),
-            ]
-            with tempfile.TemporaryDirectory() as tmp:
-                try:
-                    # MD5-verify skipped for backfill — use ZIP integrity instead
-                    await run_forward_slice(
-                        entries, state=state, parquet_base=parquet_base,
-                        neo4j_writer=neo4j_writer, qdrant_writer=qdrant_writer,
-                        tmp_dir=Path(tmp),
-                    )
-                except Exception as e:
-                    log.error("backfill_slice_failed", slice=sid, error=str(e))
+    async def _worker():
+        while True:
+            sid = await pop_next_pending(state, job_id)
+            if sid is None:
+                return
+            # Skip if already complete (fully-done predicate covers re-runs)
+            if await state.is_slice_fully_done(sid):
+                await mark_slice_done(state, job_id, sid)
+                continue
+            async with sem:
+                entries = [
+                    LastUpdateEntry(0, "",
+                        f"{settings.base_url}/{sid}.export.CSV.zip", "events", sid),
+                    LastUpdateEntry(0, "",
+                        f"{settings.base_url}/{sid}.mentions.CSV.zip", "mentions", sid),
+                    LastUpdateEntry(0, "",
+                        f"{settings.base_url}/{sid}.gkg.csv.zip", "gkg", sid),
+                ]
+                with tempfile.TemporaryDirectory() as tmp:
+                    try:
+                        # Historical slices: no lastupdate → no MD5 → verify_md5=False
+                        # (run_forward_slice honors this via download_slice's param)
+                        await run_forward_slice(
+                            entries, state=state, parquet_base=parquet_base,
+                            neo4j_writer=neo4j_writer, qdrant_writer=qdrant_writer,
+                            tmp_dir=Path(tmp), verify_md5=False,
+                        )
+                        await mark_slice_done(state, job_id, sid)
+                    except Exception as e:
+                        log.error("backfill_slice_failed", slice=sid, error=str(e))
+                        await mark_slice_failed(state, job_id, sid, reason=str(e))
 
-    await asyncio.gather(*[_process_one(s) for s in slice_ids])
+    await asyncio.gather(*[_worker() for _ in range(parallel)])
+    await state.r.set(_bf_key(job_id, "state"), "done")
     log.info("gdelt_backfill_done", job_id=job_id)
+```
+
+**Also update `run_forward_slice` signature and `download_slice` call** in the same file to accept `verify_md5`:
+
+```python
+# In run_forward_slice signature, add: verify_md5: bool = True
+async def run_forward_slice(
+    entries: list[LastUpdateEntry],
+    *,
+    state: GDELTState,
+    parquet_base: Path,
+    neo4j_writer,
+    qdrant_writer,
+    tmp_dir: Path,
+    verify_md5: bool = True,          # NEW — passed to downloader
+) -> None:
+    ...
+
+# In _extract_and_parse, update download_slice calls:
+# downloads = await asyncio.gather(*[
+#     download_slice(e, tmp_dir, verify_md5=verify_md5) for e in entries
+# ])
+# (pass verify_md5 through the call chain — simplest: thread it through
+#  _extract_and_parse signature too)
 ```
 
 - [ ] **Step 4: Run tests — expect PASS**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_gdelt_backfill.py -v`
-Expected: 3 passed
+Expected: 7 passed
 
 - [ ] **Step 5: Commit**
 
@@ -3460,6 +4114,8 @@ def doctor():
     """Health-check all dependencies."""
     async def _check():
         errors = []
+        state = neo4j = qdrant = None
+
         # GDELT CDN
         try:
             async with httpx.AsyncClient(timeout=10) as c:
@@ -3471,28 +4127,59 @@ def doctor():
 
         # Parquet volume
         path = Path(settings.parquet_path)
-        if path.exists():
-            click.echo(f"Parquet volume:  ✓ {path}")
+        if path.exists() and os.access(path, os.W_OK):
+            click.echo(f"Parquet volume:  ✓ {path} (writable)")
         else:
-            click.echo(f"Parquet volume:  ✗ {path} missing"); errors.append("parquet")
+            click.echo(f"Parquet volume:  ✗ {path} missing/not-writable")
+            errors.append("parquet")
 
-        # Redis, Neo4j, Qdrant, TEI
+        # Redis
         try:
             state, neo4j, qdrant = await _get_clients()
             await state.r.ping()
             click.echo("Redis:           ✓")
         except Exception as e:
             click.echo(f"Redis:           ✗ {e}"); errors.append("redis")
+
+        # Neo4j
         try:
             async with neo4j._driver.session() as s:
                 await s.run("RETURN 1")
             click.echo("Neo4j:           ✓")
         except Exception as e:
             click.echo(f"Neo4j:           ✗ {e}"); errors.append("neo4j")
+
+        # Qdrant — real call, not just assume
         try:
-            await neo4j.close()
+            cols = await qdrant._client.get_collections()
+            names = [c.name for c in cols.collections]
+            click.echo(f"Qdrant:          ✓ collections={names}")
+        except Exception as e:
+            click.echo(f"Qdrant:          ✗ {e}"); errors.append("qdrant")
+
+        # TEI — send a tiny embedding to confirm the dim
+        try:
+            tei_url = os.getenv("TEI_EMBED_URL", "http://localhost:8001")
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.post(f"{tei_url}/embed", json={"inputs": "health"})
+                r.raise_for_status()
+                data = r.json()
+                vec = data[0] if isinstance(data[0], list) else data
+                click.echo(f"TEI:             ✓ dim={len(vec)}")
+        except Exception as e:
+            click.echo(f"TEI:             ✗ {e}"); errors.append("tei")
+
+        try:
+            if neo4j is not None:
+                await neo4j.close()
         except Exception:
             pass
+
+        # Filter config summary (quick sanity check)
+        click.echo(f"Filter mode:     {settings.filter_mode}")
+        click.echo(f"CAMEO roots:     {settings.cameo_root_allowlist}")
+        click.echo(f"Themes: α={len(settings.theme_allowlist)} "
+                   f"nuclear={len(settings.nuclear_override_themes)}")
 
         if errors:
             raise SystemExit(1)
@@ -3642,7 +4329,8 @@ git commit -m "feat(gdelt): scheduler integration + odin.sh gdelt subcommand"
 
 - [ ] **Step 1: Add volume + mount + env**
 
-Modify `docker-compose.yml`:
+Modify `docker-compose.yml`. **Rule:** only pass through env vars that we *want* to override container defaults. Don't pass `GDELT_THEME_ALLOWLIST` raw — if the outer shell doesn't have it set, Compose resolves to empty string and silently filters everything out.
+
 ```yaml
 # Under data-ingestion service:
   data-ingestion:
@@ -3650,14 +4338,18 @@ Modify `docker-compose.yml`:
       - gdelt_parquet:/data/gdelt     # ADD
       # ... existing mounts
     environment:
+      # Always-set (come from .env):
       - GDELT_BASE_URL=${GDELT_BASE_URL:-http://data.gdeltproject.org/gdeltv2}
       - GDELT_FORWARD_INTERVAL_SECONDS=${GDELT_FORWARD_INTERVAL_SECONDS:-900}
       - GDELT_PARQUET_PATH=${GDELT_PARQUET_PATH:-/data/gdelt}
       - GDELT_FILTER_MODE=${GDELT_FILTER_MODE:-alpha}
       - GDELT_CAMEO_ROOT_ALLOWLIST=${GDELT_CAMEO_ROOT_ALLOWLIST:-15,18,19,20}
-      - GDELT_THEME_ALLOWLIST=${GDELT_THEME_ALLOWLIST}
-      - GDELT_NUCLEAR_OVERRIDE_THEMES=${GDELT_NUCLEAR_OVERRIDE_THEMES:-NUCLEAR,WMD,WEAPONS_PROLIFERATION,WEAPONS_*}
       - GDELT_BACKFILL_PARALLEL_SLICES=${GDELT_BACKFILL_PARALLEL_SLICES:-4}
+      # NOT passed through: GDELT_THEME_ALLOWLIST, GDELT_NUCLEAR_OVERRIDE_THEMES.
+      # Both have rich defaults in GDELTSettings — we only want them overridden
+      # when deliberately customized. Override at run-time:
+      #   GDELT_THEME_ALLOWLIST="FOO,BAR" docker compose up -d data-ingestion
+      # The env block above does NOT list them, so Pydantic picks defaults.
       # ... existing env
 
 # At bottom, under `volumes:`
@@ -3691,7 +4383,9 @@ git commit -m "feat(gdelt): add gdelt_parquet volume + GDELT_* env passthrough"
 # services/data-ingestion/tests/test_gdelt_integration.py
 """Integration test: run full forward tick against local dev-compose.
 
-Skip if services are not running. Uses fixture slice — no Live GDELT.
+Skip if services are not running. Uses fixture slice — no live GDELT.
+Bypasses download by feeding parsed DataFrames directly via
+_filter_and_write_parquet + writers.write_from_parquet.
 """
 
 from __future__ import annotations
@@ -3700,10 +4394,13 @@ import os
 from pathlib import Path
 
 import httpx
+import polars as pl
 import pytest
 
 
 pytestmark = pytest.mark.integration
+
+FIXTURES = Path(__file__).parent / "fixtures" / "gdelt"
 
 
 def _dev_services_up() -> bool:
@@ -3719,34 +4416,154 @@ def _dev_services_up() -> bool:
 @pytest.mark.asyncio
 async def test_full_forward_tick_against_real_stores(tmp_path):
     """Run forward with fixture slice + real Neo4j/Qdrant/Redis.
-    Asserts: node counts increased, Qdrant points upserted, parquet on disk."""
-    from gdelt_raw.config import settings
-    from gdelt_raw.writers.neo4j_writer import Neo4jWriter
-    from gdelt_raw.writers.qdrant_writer import QdrantWriter, default_tei_embed
+
+    Steps:
+      1. Parse fixture CSVs.
+      2. Run filter + transform + atomic parquet write.
+      3. Invoke Neo4j writer from parquet — asserts GDELTEvent count ≥ N.
+      4. Invoke Qdrant writer from parquet — asserts collection point count grew.
+      5. Assert Redis state: per-stream parquet done, neo4j done, qdrant done,
+         last_slice:parquet advanced.
+      6. Cleanup: delete written fixture test data to keep dev DB hygienic.
+    """
     from qdrant_client import AsyncQdrantClient
     import redis.asyncio as aioredis
+
+    from gdelt_raw.parser import parse_events, parse_mentions, parse_gkg
+    from gdelt_raw.run import _filter_and_write_parquet, ParsedSlice
     from gdelt_raw.state import GDELTState
+    from gdelt_raw.writers.neo4j_writer import Neo4jWriter
+    from gdelt_raw.writers.qdrant_writer import QdrantWriter, default_tei_embed
+
+    slice_id = "99999425120000"  # test-sentinel slice_id, safe to clean up
+    date = "9999-04-25"
 
     r = aioredis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"),
                           decode_responses=True)
     state = GDELTState(r)
+
     neo4j = Neo4jWriter(
-        uri="bolt://localhost:7687", user="neo4j",
+        uri=os.getenv("NEO4J_URL", "bolt://localhost:7687"),
+        user=os.getenv("NEO4J_USER", "neo4j"),
         password=os.environ["NEO4J_PASSWORD"],
     )
-    qclient = AsyncQdrantClient(url="http://localhost:6333")
+    qclient = AsyncQdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
 
     async def embed(text: str):
-        return await default_tei_embed(text, tei_url="http://localhost:8001")
-    qdrant = QdrantWriter(client=qclient, embed=embed, collection="odin_intel")
+        return await default_tei_embed(
+            text, tei_url=os.getenv("TEI_EMBED_URL", "http://localhost:8001"))
+    qdrant = QdrantWriter(
+        client=qclient, embed=embed,
+        collection=os.getenv("QDRANT_COLLECTION", "odin_intel"),
+    )
 
-    # Load local fixture slice (copy from tests/fixtures/gdelt/ into tmp)
-    fixture_dir = Path(__file__).parent / "fixtures" / "gdelt"
-    # TODO: Full implementation loads parsed DataFrames directly via
-    # _extract_and_parse, skipping download. Left as exercise — integration
-    # harness wires this in the real CI job.
+    # 1. Parse
+    ev_res = parse_events(FIXTURES / "slice_20260425_full.export.CSV",
+                          quarantine_dir=tmp_path / "q")
+    me_res = parse_mentions(FIXTURES / "slice_20260425_full.mentions.CSV",
+                             quarantine_dir=tmp_path / "q")
+    gk_res = parse_gkg(FIXTURES / "slice_20260425_full.gkg.csv",
+                       quarantine_dir=tmp_path / "q")
 
+    parsed = ParsedSlice(
+        events_df=ev_res.df, mentions_df=me_res.df, gkg_df=gk_res.df,
+        stream_states={"events": "done", "mentions": "done", "gkg": "done"},
+    )
+
+    # 2. Filter + transform + write parquet — use test slice_id + date
+    # Temporarily monkey the _slice_date inside run — OR just write under tmp_path
+    # with date="9999-04-25" so cleanup targets that partition.
+    parquet_base = tmp_path / "gdelt"
+    parquet_base.mkdir(parents=True)
+
+    from gdelt_raw.filter import apply_filters
+    from gdelt_raw.transform import (
+        canonicalize_events, canonicalize_gkg, canonicalize_mentions,
+    )
+    from gdelt_raw.writers.parquet_writer import write_stream_parquet
+    from gdelt_raw.config import settings
+
+    fr = apply_filters(
+        parsed.events_df, parsed.mentions_df, parsed.gkg_df,
+        cameo_roots=settings.cameo_root_allowlist,
+        theme_alpha=settings.theme_allowlist,
+        theme_nuclear_override=settings.nuclear_override_themes,
+    )
+
+    # Force deterministic event_id/doc_id for cleanup
+    sentinel_prefix_ev = f"gdelt:event:itest-{slice_id}-"
+    sentinel_prefix_doc = f"gdelt:gkg:itest-{slice_id}-"
+    ev_canon = canonicalize_events(fr.events).with_columns(
+        pl.lit(sentinel_prefix_ev) + pl.col("event_id").str.split(":").list.get(-1)
+        .alias("event_id")
+    )
+    gkg_canon = canonicalize_gkg(fr.gkg).with_columns(
+        pl.lit(sentinel_prefix_doc) + pl.col("doc_id").str.split(":").list.get(-1)
+        .alias("doc_id")
+    )
+    mentions_canon = canonicalize_mentions(fr.mentions)
+
+    write_stream_parquet(ev_canon, base_path=parquet_base, stream="events",
+                         date=date, slice_id=slice_id)
+    write_stream_parquet(gkg_canon, base_path=parquet_base, stream="gkg",
+                         date=date, slice_id=slice_id)
+    write_stream_parquet(mentions_canon, base_path=parquet_base, stream="mentions",
+                         date=date, slice_id=slice_id)
+
+    for st in ("events", "mentions", "gkg"):
+        await state.set_stream_parquet(slice_id, st, "done")
+
+    # 3. Neo4j write from parquet
+    await neo4j.write_from_parquet(parquet_base, slice_id, date)
+    await state.set_store_state(slice_id, "neo4j", "done")
+
+    # Assert at least one sentinel event exists
+    async with neo4j._driver.session() as s:
+        result = await s.run(
+            "MATCH (e:GDELTEvent) WHERE e.event_id STARTS WITH $p RETURN count(e) AS n",
+            {"p": sentinel_prefix_ev},
+        )
+        n = (await result.single())["n"]
+    assert n >= 1, "no sentinel GDELTEvent found in Neo4j"
+
+    # 4. Qdrant write from parquet
+    n_points = await qdrant.upsert_from_parquet(parquet_base, slice_id, date)
+    await state.set_store_state(slice_id, "qdrant", "done")
+    assert n_points >= 1, "no sentinel gkg_doc upserted to Qdrant"
+
+    # 5. State assertions
+    await state.set_last_slice("parquet", slice_id)
+    assert await state.is_slice_fully_done(slice_id) is True
+
+    # 6. Cleanup
+    async with neo4j._driver.session() as s:
+        await s.run(
+            "MATCH (e:GDELTEvent) WHERE e.event_id STARTS WITH $p DETACH DELETE e",
+            {"p": sentinel_prefix_ev},
+        )
+        await s.run(
+            "MATCH (d:GDELTDocument) WHERE d.doc_id STARTS WITH $p DETACH DELETE d",
+            {"p": sentinel_prefix_doc},
+        )
     await neo4j.close()
+
+    # Qdrant cleanup — filter-by-prefix delete
+    from qdrant_client.http.models import Filter, FieldCondition, MatchText
+    await qclient.delete(
+        collection_name=os.getenv("QDRANT_COLLECTION", "odin_intel"),
+        points_selector=Filter(must=[
+            FieldCondition(key="doc_id", match=MatchText(text=sentinel_prefix_doc)),
+        ]),
+    )
+
+    # Redis cleanup
+    await r.delete(
+        *[f"gdelt:slice:{slice_id}:events:parquet",
+          f"gdelt:slice:{slice_id}:gkg:parquet",
+          f"gdelt:slice:{slice_id}:mentions:parquet",
+          f"gdelt:slice:{slice_id}:neo4j",
+          f"gdelt:slice:{slice_id}:qdrant"]
+    )
 ```
 
 - [ ] **Step 2: Run (will skip if services down)**
@@ -3943,23 +4760,51 @@ Expected: Events count growing every 15 min.
 - [x] Architecture overview (Task 16 `run_forward`, Task 15 recovery)
 - [x] Per-stream per-slice Redis state (Task 11)
 - [x] Write-order invariant (Task 16 test `test_parquet_written_before_external_stores`)
-- [x] Nuclear-Override filter (Task 10)
+- [x] Nuclear-Override filter UNION (Task 10)
 - [x] Qdrant/Neo4j decoupling (Tasks 14, 15, 16)
-- [x] Canonical `doc_id` everywhere (Tasks 1, 14)
+- [x] Canonical `doc_id`/`event_id` everywhere (Tasks 1, 10.5, 13, 14)
+- [x] Canonical Transform Layer (Task 10.5) — gap between raw GDELT and Pydantic writer contracts
 - [x] Scoped constraints + preflight (Task 18)
 - [x] Two-stage parser (Task 8)
 - [x] Atomic Parquet writes (Task 12)
-- [x] CLI + scheduler integration (Tasks 19, 20, 21)
-- [x] Docker + env (Task 22)
-- [x] Integration + DuckDB + Live smokes (Tasks 23, 24, 25)
+- [x] Neo4j writer covers Events + Docs + Sources + Themes + Mentions (Task 13); Entities/Locations deferred
+- [x] Idempotent `:ABOUT` theme relationship (Task 13)
+- [x] `last_slice:parquet` independent of Neo4j/Qdrant (Task 16)
+- [x] Resumable backfill with pending/done/failed sets (Task 17)
+- [x] Backfill skips MD5 verification (`verify_md5=False` threaded through) (Tasks 9, 16, 17)
+- [x] CLI + scheduler integration, doctor pings Qdrant+TEI (Tasks 19, 20, 21)
+- [x] Docker + env — no blank passthroughs (Task 22)
+- [x] Integration test bypasses download, runs full write path with cleanup (Task 23)
+- [x] DuckDB + Live smokes (Tasks 24, 25)
 - [x] Migration + backfill rollout (Task 26)
 
-**2. Placeholder scan:** Task 23 has a `# TODO` for the CI wiring — it's a deliberate extension point that is safe because the integration test is gated by `_dev_services_up()`. No blocking placeholders.
+**2. Placeholder scan:**
+- ~~Task 16 had a pass-through test~~ → implemented in Task 16 as real behavior test.
+- ~~Task 23 had a TODO~~ → implemented as real end-to-end integration test with deterministic sentinel prefix + cleanup block.
+- No remaining blocking placeholders.
 
 **3. Type consistency:**
-- `build_event_id(int | str) → str` consistent in Tasks 1, 10
-- `GDELTState` async methods in Tasks 11, 15, 16
-- `QdrantWriter.upsert_from_parquet(base, slice, date)` signature matches Task 14 + 15 + 16
+- `build_event_id(int | str) → str` consistent in Tasks 1, 10, 10.5, 13
+- `GDELTState` async methods in Tasks 11, 15, 16, 17
+- `download_slice(entry, out_dir, *, verify_md5=True)` consistent across Tasks 9, 16, 17
+- `QdrantWriter.upsert_from_parquet(base, slice, date)` signature matches Tasks 14, 15, 16
+- `Neo4jWriter.write_from_parquet` covers Events + Docs + Mentions (Task 13)
+- Canonical column names produced by transform match Pydantic writer contracts 1:1 (verified by `test_canonical_event_validates_against_pydantic_writer_contract` in Task 10.5)
+
+**4. Review round 2 fixes applied:**
+- Must-Fix 1 (canonical transform layer) → Task 10.5
+- Must-Fix 2 (backfill MD5 path) → Task 9 `verify_md5` param + Tasks 16, 17 threading
+- Must-Fix 3 (`last_slice:parquet` semantics) → Task 16 rewrite
+- Must-Fix 4 (placeholder tests) → Task 16 real test
+- Must-Fix 5 (integration test TODO) → Task 23 real test with sentinel + cleanup
+- Must-Fix 6 (Neo4j mentions/themes/sources write_from_parquet) → Task 13 expanded
+- Must-Fix 7 (MERGE_THEME idempotent) → Task 13 no-count version
+- Must-Fix 8 (backfill truly resumable) → Task 17 pending/done/failed sets
+- Should-Fix 1 (pydantic-settings dep) → Task 0
+- Should-Fix 2 (CSV-list env parsing note) → Task 0 NoDecode fallback
+- Should-Fix 3 (docker-compose defaults) → Task 22 no raw passthroughs
+- Should-Fix 4 (doctor Qdrant+TEI checks) → Task 20
+- Should-Fix 5 (absolute fixture paths) → Task 8 relative paths via `git rev-parse`
 
 ---
 
