@@ -1,5 +1,6 @@
 export type DatacenterTier = "III" | "IV" | "hyperscaler";
 export type RefineryStatus = "active" | "planned" | "shutdown";
+export type FacilityType = "refinery" | "lng_terminal" | "chemical_plant";
 
 export interface DatacenterProperties {
   name: string;
@@ -16,6 +17,13 @@ export interface RefineryProperties {
   capacity_bpd: number;
   country: string;
   status: RefineryStatus;
+  facility_type?: FacilityType;
+  capacity_text?: string;
+  latitude?: number;
+  longitude?: number;
+  image_url?: string;
+  source_url?: string;
+  specs?: string[];
 }
 
 export interface InfraFeature<T> {

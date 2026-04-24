@@ -61,4 +61,41 @@ describe("InspectorPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /close Inspector/i }));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("shows refinery infrastructure photos, specs, coordinates, and source links", () => {
+    render(
+      <InspectorPanel
+        selected={{
+          type: "refinery",
+          data: {
+            name: "Sabine Pass LNG Terminal",
+            operator: "Cheniere Energy",
+            capacity_bpd: 0,
+            country: "US",
+            status: "active",
+            facility_type: "lng_terminal",
+            latitude: 29.7540967,
+            longitude: -93.8740512,
+            image_url: "https://example.test/sabine-pass.jpg",
+            source_url: "https://www.gem.wiki/Sabine_Pass_LNG_Terminal",
+            specs: ["Coordinates exact per GEM", "Import/export LNG terminal"],
+          },
+        }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: /Sabine Pass LNG Terminal/i })).toHaveAttribute(
+      "src",
+      "https://example.test/sabine-pass.jpg",
+    );
+    expect(screen.getByText("lng terminal")).toBeInTheDocument();
+    expect(screen.getByText(/29.754 N, 93.874 W/)).toBeInTheDocument();
+    expect(screen.getByText("Coordinates exact per GEM")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /source/i })).toHaveAttribute(
+      "href",
+      "https://www.gem.wiki/Sabine_Pass_LNG_Terminal",
+    );
+  });
 });

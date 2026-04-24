@@ -157,7 +157,11 @@ export function RefineryLayer({ viewer, refineries, visible, onSelect }: Refiner
         scale: 0.8,
         eyeOffset: new Cesium.Cartesian3(0, 0, -20),
       });
-      idMapRef.current.set(bb as unknown as object, feature.properties);
+      idMapRef.current.set(bb as unknown as object, {
+        ...feature.properties,
+        longitude: lon,
+        latitude: lat,
+      });
 
       lc.add({
         position,

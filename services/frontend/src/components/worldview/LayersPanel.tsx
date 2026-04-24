@@ -44,7 +44,7 @@ const GROUPS: GroupDef[] = [
       { key: "cables", label: "Submarine Cables" },
       { key: "pipelines", label: "Pipelines" },
       { key: "datacenters", label: "Datacenters" },
-      { key: "refineries", label: "Refineries" },
+      { key: "refineries", label: "Energy/Chem Sites" },
       { key: "countryBorders", label: "Country Borders" },
       { key: "cityBuildings", label: "3D Buildings" },
       { key: "cctv", label: "CCTV" },

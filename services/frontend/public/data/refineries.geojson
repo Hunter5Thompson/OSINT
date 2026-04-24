@@ -3,8 +3,8 @@
   "features": [
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [72.0, 22.3] },
-      "properties": { "name": "Jamnagar Refinery", "operator": "Reliance Industries", "capacity_bpd": 1240000, "country": "IN", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [69.868889, 22.348056] },
+      "properties": { "name": "Jamnagar Refinery", "operator": "Reliance Industries", "capacity_bpd": 1240000, "country": "IN", "status": "active", "facility_type": "refinery", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Jamnagar_Refinery.jpg", "source_url": "https://www.wikidata.org/wiki/Q3417395", "specs": ["WGS84 position: 22°20'53\"N, 69°52'8\"E", "Large integrated refinery complex at Motikhavdi, Jamnagar"] }
     },
     {
       "type": "Feature",
@@ -13,8 +13,8 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [50.0769, 26.6396] },
-      "properties": { "name": "Ras Tanura Refinery", "operator": "Saudi Aramco", "capacity_bpd": 550000, "country": "SA", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [50.09207, 26.70243] },
+      "properties": { "name": "Ras Tanura Refinery", "operator": "Saudi Aramco", "capacity_bpd": 550000, "country": "SA", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/39104", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Ras_Tanura_refinery.jpg", "specs": ["GEO WGS84 position: 26.70243, 50.09207", "Saudi Aramco crude oil refinery"] }
     },
     {
       "type": "Feature",
@@ -28,8 +28,8 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [49.5687, 25.3548] },
-      "properties": { "name": "Yanbu Refinery", "operator": "Saudi Aramco", "capacity_bpd": 400000, "country": "SA", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [38.29769, 23.944] },
+      "properties": { "name": "Yanbu Refinery", "operator": "Saudi Aramco", "capacity_bpd": 400000, "country": "SA", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/39106", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Yanbu_Industrial_City.jpg", "specs": ["GEO WGS84 position: 23.944, 38.29769", "Corrected from eastern Saudi Arabia to Yanbu on the Red Sea"] }
     },
     {
       "type": "Feature",
@@ -63,13 +63,13 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [126.7318, 37.4563] },
-      "properties": { "name": "S-Oil Onsan Refinery", "operator": "S-Oil", "capacity_bpd": 669000, "country": "KR", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [129.36163, 35.47791] },
+      "properties": { "name": "S-Oil Onsan Refinery", "operator": "S-Oil", "capacity_bpd": 669000, "country": "KR", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/39089", "image_url": "https://s-oil.com/en/images/company/company_present_img_02.png", "specs": ["GEO WGS84 position: 35.47791, 129.36163", "Onsan Industrial Complex, Ulsan"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [128.5673, 35.8714] },
-      "properties": { "name": "Hyundai Oilbank Daesan", "operator": "Hyundai Oilbank", "capacity_bpd": 520000, "country": "KR", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [126.414958, 37.004491] },
+      "properties": { "name": "Hyundai Oilbank Daesan", "operator": "Hyundai Oilbank", "capacity_bpd": 520000, "country": "KR", "status": "active", "facility_type": "refinery", "source_url": "https://www.gem.wiki/Daesan_Refinery_power_station", "image_url": "https://www.hd-hyundaioilbank.co.kr/pc_eng/common/images/obk/mainv_tab1_bg1.jpg", "specs": ["GEM WGS84 position: 37.004491, 126.414958", "Daesan refinery complex"] }
     },
     {
       "type": "Feature",
@@ -88,8 +88,8 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [136.9066, 34.9667] },
-      "properties": { "name": "JXTG Negishi Refinery", "operator": "ENEOS", "capacity_bpd": 270000, "country": "JP", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [139.639188, 35.41245] },
+      "properties": { "name": "JXTG Negishi Refinery", "operator": "ENEOS", "capacity_bpd": 153000, "country": "JP", "status": "active", "facility_type": "refinery", "source_url": "https://www.eneos.co.jp/english/company/branch/negishi/", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/JX_Nippon_Oil_Negishi_Refinery_-_panoramio.jpg", "specs": ["WGS84 position: 35.41245, 139.639188", "ENEOS reports crude oil processing capacity of 153,000 barrels a day"] }
     },
     {
       "type": "Feature",
@@ -168,8 +168,8 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [119.5, 39.9] },
-      "properties": { "name": "CNOOC Huizhou Refinery", "operator": "CNOOC", "capacity_bpd": 220000, "country": "CN", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [114.47072, 22.740397] },
+      "properties": { "name": "CNOOC Huizhou Refinery", "operator": "CNOOC", "capacity_bpd": 220000, "country": "CN", "status": "active", "facility_type": "refinery", "source_url": "https://www.gem.wiki/CNOOC_Huizhou_Branch_Refinery", "image_url": "https://fidic.org/sites/default/files/styles/medium/public/4.Bird%20Views%20of%20CNOOC%20Huizhou%20Refinery%20Project.jpg", "specs": ["GEM WGS84 position: 22.740397, 114.470720", "Huizhou refinery branch, Guangdong"] }
     },
     {
       "type": "Feature",
@@ -318,13 +318,13 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [6.95, 51.05] },
-      "properties": { "name": "Shell Rhineland Refinery (Wesseling)", "operator": "Shell", "capacity_bpd": 340000, "country": "DE", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [7.004722, 50.817855] },
+      "properties": { "name": "Shell Rhineland Refinery (Wesseling)", "operator": "Shell", "capacity_bpd": 340000, "country": "DE", "status": "active", "facility_type": "refinery", "source_url": "https://www.gem.wiki/Shell_Rheinland_Wesseling_Refinery", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Wesseling_Refinery_at_Dusk%2C_March_2018.jpg", "specs": ["GEM WGS84 position: 50.817855, 7.004722", "Energy and Chemicals Park Rheinland, Wesseling"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [0.42, 51.47] },
-      "properties": { "name": "Shell Stanlow Refinery", "operator": "Essar Oil UK", "capacity_bpd": 205000, "country": "GB", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [-2.84492, 53.27379] },
+      "properties": { "name": "Shell Stanlow Refinery", "operator": "Essar Oil UK", "capacity_bpd": 205000, "country": "GB", "status": "active", "facility_type": "refinery", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/View_of_oil_refinery%2C_Stanlow_%282%29_-_geograph.org.uk_-_6730068.jpg", "source_url": "https://www.gem.wiki/Stanlow_Refinery", "specs": ["WGS84 position: 53.27379, -2.84492", "Stanlow refinery near Ellesmere Port"] }
     },
     {
       "type": "Feature",
@@ -343,13 +343,13 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [-0.7, 51.1] },
-      "properties": { "name": "Phillips 66 Humber Refinery", "operator": "Phillips 66", "capacity_bpd": 221000, "country": "GB", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [-0.24234, 53.63254] },
+      "properties": { "name": "Phillips 66 Humber Refinery", "operator": "Phillips 66", "capacity_bpd": 221000, "country": "GB", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/6419", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/HumberRefinery.jpg", "specs": ["GEO WGS84 position: 53.63254, -0.24234", "North Lincolnshire refinery", "GEO design capacity: 221,000 bpd"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [0.95, 43.45] },
-      "properties": { "name": "TotalEnergies Donges Refinery", "operator": "TotalEnergies", "capacity_bpd": 219000, "country": "FR", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [-2.07209, 47.31425] },
+      "properties": { "name": "TotalEnergies Donges Refinery", "operator": "TotalEnergies", "capacity_bpd": 219000, "country": "FR", "status": "active", "facility_type": "refinery", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Donges_raffinerie.jpg", "source_url": "https://www.gem.wiki/TotalEnergies_Donges_Refinery", "specs": ["WGS84 position: 47.31425, -2.07209", "Donges refinery on the Loire estuary"] }
     },
     {
       "type": "Feature",
@@ -363,8 +363,8 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [6.85, 49.35] },
-      "properties": { "name": "TotalEnergies Gonfreville Refinery", "operator": "TotalEnergies", "capacity_bpd": 247000, "country": "FR", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [0.24086, 49.4868] },
+      "properties": { "name": "TotalEnergies Gonfreville Refinery", "operator": "TotalEnergies", "capacity_bpd": 343000, "country": "FR", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/39256", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Vue_sur_la_zone_industrielle_du_Havre_depuis_Gonfreville_l%27Orcher.jpg", "specs": ["GEO WGS84 position: 49.4868, 0.24086", "Gonfreville-l'Orcher refinery", "GEO design capacity: 343,000 bpd"] }
     },
     {
       "type": "Feature",
@@ -373,33 +373,33 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [12.25, 51.35] },
-      "properties": { "name": "TotalEnergies Leuna Refinery", "operator": "TotalEnergies", "capacity_bpd": 240000, "country": "DE", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [11.99325, 51.28805] },
+      "properties": { "name": "TotalEnergies Leuna Refinery", "operator": "TotalEnergies", "capacity_bpd": 227000, "country": "DE", "status": "active", "facility_type": "refinery", "source_url": "https://www.globalenergyobservatory.org/geoid/39261", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Panorama%20Chemie-%20u%20Industriepark%20Infraleuna%201300ha%20Leuna-Werke%20-%20Total%20Raffinerie%20320ha%20Sachsen-Anhalt%20Foto%20Wolfgang%20Pehlemann%20DSCN2966.jpg", "specs": ["GEO WGS84 position: 51.28805, 11.99325", "Spergau/Leuna refinery complex", "GEO design capacity: 227,000 bpd"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [9.88, 53.5] },
-      "properties": { "name": "Shell Hamburg Refinery", "operator": "Shell", "capacity_bpd": 100000, "country": "DE", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [9.97071, 53.4866] },
+      "properties": { "name": "Shell Hamburg Refinery", "operator": "Shell", "capacity_bpd": 110000, "country": "DE", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/39130", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Phb_dt_8084_Shell_Kattwyk.jpg", "specs": ["GEO WGS84 position: 53.4866, 9.97071", "Hamburg-Harburg refinery", "GEO design capacity: 110,000 bpd"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [10.0, 48.7] },
-      "properties": { "name": "BP Lingen Refinery", "operator": "BP", "capacity_bpd": 115000, "country": "DE", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [7.30787, 52.5612] },
+      "properties": { "name": "BP Lingen Refinery", "operator": "BP", "capacity_bpd": 115000, "country": "DE", "status": "active", "facility_type": "refinery", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/RaffinerieLingen_HafenKraftwerk.jpg", "source_url": "https://www.gem.wiki/BP_Lingen_Refinery", "specs": ["WGS84 position: 52.5612, 7.30787", "Emsland refinery at Lingen-Holthausen"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [6.5, 50.4] },
-      "properties": { "name": "BP Gelsenkirchen Refinery", "operator": "BP", "capacity_bpd": 260000, "country": "DE", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [7.023428, 51.606164] },
+      "properties": { "name": "BP Gelsenkirchen Refinery", "operator": "BP", "capacity_bpd": 260000, "country": "DE", "status": "active", "facility_type": "refinery", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Luftbild_Gelsenkirchen_Raffinerie_Werk_Scholven_1.jpg", "source_url": "https://www.gem.wiki/BP_Gelsenkirchen_Refinery", "specs": ["WGS84 position: 51.606164, 7.023428", "BP/Ruhr Oel refinery site in Gelsenkirchen-Scholven"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [12.0, 54.3] },
-      "properties": { "name": "PCK Schwedt Refinery", "operator": "PCK Raffinerie", "capacity_bpd": 233000, "country": "DE", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [14.231504, 53.093356] },
+      "properties": { "name": "PCK Schwedt Refinery", "operator": "PCK Raffinerie", "capacity_bpd": 233000, "country": "DE", "status": "active", "facility_type": "refinery", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/18-06-06-Fotoflug-Uckermark_RRK3849.jpg", "source_url": "https://www.gem.wiki/PCK_Schwedt_Refinery", "specs": ["WGS84 position: 53.093356, 14.231504", "PCK refinery in Schwedt/Oder"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [9.1, 45.4] },
-      "properties": { "name": "Saras Sarroch Refinery", "operator": "Saras", "capacity_bpd": 300000, "country": "IT", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [9.0184, 39.07734] },
+      "properties": { "name": "Saras Sarroch Refinery", "operator": "Saras", "capacity_bpd": 300000, "country": "IT", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/39101", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/SARAS_1.JPG", "specs": ["GEO WGS84 position: 39.07734, 9.0184", "Sarroch, Cagliari, Sardinia", "GEO design capacity: 300,000 bpd"] }
     },
     {
       "type": "Feature",
@@ -433,13 +433,13 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [-8.7, 42.4] },
-      "properties": { "name": "Repsol A Coruna Refinery", "operator": "Repsol", "capacity_bpd": 120000, "country": "ES", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [-8.4453, 43.35264] },
+      "properties": { "name": "Repsol A Coruna Refinery", "operator": "Repsol", "capacity_bpd": 120000, "country": "ES", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/39066", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Refiner%C3%ADa_de_Repsol_-_La_Coru%C3%B1a.jpg", "specs": ["GEO WGS84 position: 43.35264, -8.4453", "A Coruna refinery", "GEO design capacity: 120,000 bpd"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [-3.7, 40.35] },
-      "properties": { "name": "Repsol Puertollano Refinery", "operator": "Repsol", "capacity_bpd": 150000, "country": "ES", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [-4.04945, 38.6731] },
+      "properties": { "name": "Repsol Puertollano Refinery", "operator": "Repsol", "capacity_bpd": 140000, "country": "ES", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/form.php?pid=39073", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Complejo_petroqu%C3%ADmico_de_Puertollano_01.jpg", "specs": ["GEO WGS84 position: 38.6731, -4.04945", "Puertollano industrial complex", "GEO design capacity: 140,000 bpd"] }
     },
     {
       "type": "Feature",
@@ -458,18 +458,18 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [18.6, 59.3] },
-      "properties": { "name": "Preem Lysekil Refinery", "operator": "Preem", "capacity_bpd": 220000, "country": "SE", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [11.42427, 58.34458] },
+      "properties": { "name": "Preem Lysekil Refinery", "operator": "Preem", "capacity_bpd": 210000, "country": "SE", "status": "active", "facility_type": "refinery", "source_url": "https://www.globalenergyobservatory.org/geoid/39032", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Preemraff_Lysekil%27s_Processing_Plant.jpg", "specs": ["GEO WGS84 position: 58.34458, 11.42427", "Brofjorden/Lysekil refinery", "GEO design capacity: 210,000 bpd"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [12.0, 57.7] },
-      "properties": { "name": "Preem Gothenburg Refinery", "operator": "Preem", "capacity_bpd": 125000, "country": "SE", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [11.88376, 57.70412] },
+      "properties": { "name": "Preem Gothenburg Refinery", "operator": "Preem", "capacity_bpd": 90000, "country": "SE", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/39031", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Aerial_photo_of_Gothenburg_2013-10-27_047.jpg", "specs": ["GEO WGS84 position: 57.70412, 11.88376", "Gothenburg refinery", "GEO design capacity: 90,000 bpd"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [10.4, 63.4] },
-      "properties": { "name": "Equinor Mongstad Refinery", "operator": "Equinor", "capacity_bpd": 200000, "country": "NO", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [5.0314, 60.8102] },
+      "properties": { "name": "Equinor Mongstad Refinery", "operator": "Equinor", "capacity_bpd": 200000, "country": "NO", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/42781", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Mongstad_%28oil_port%29_-_panoramio.jpg", "specs": ["GEO WGS84 position: 60.8102, 5.0314", "Equinor describes Mongstad as Norway's only refinery", "GEO design capacity: 200,000 bpd"] }
     },
     {
       "type": "Feature",
@@ -528,13 +528,13 @@
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [36.2, 36.6] },
-      "properties": { "name": "TUPRAS Kirikkale Refinery", "operator": "TUPRAS", "capacity_bpd": 113000, "country": "TR", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [33.46447, 39.74329] },
+      "properties": { "name": "TUPRAS Kirikkale Refinery", "operator": "TUPRAS", "capacity_bpd": 100000, "country": "TR", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/39274", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Refinery.jpg", "specs": ["GEO WGS84 position: 39.74329, 33.46447", "Central Anatolian refinery", "GEO design capacity: 100,000 bpd"] }
     },
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [40.7, 37.1] },
-      "properties": { "name": "TUPRAS Batman Refinery", "operator": "TUPRAS", "capacity_bpd": 110000, "country": "TR", "status": "active" }
+      "geometry": { "type": "Point", "coordinates": [41.14123, 37.87263] },
+      "properties": { "name": "TUPRAS Batman Refinery", "operator": "TUPRAS", "capacity_bpd": 22000, "country": "TR", "status": "active", "facility_type": "refinery", "source_url": "https://globalenergyobservatory.org/geoid/39273", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Tupras_%C4%B0zmit_Refinery.jpg", "specs": ["GEO WGS84 position: 37.87263, 41.14123", "Batman refinery", "GEO design capacity: 22,000 bpd"] }
     },
     {
       "type": "Feature",
@@ -955,6 +955,46 @@
       "type": "Feature",
       "geometry": { "type": "Point", "coordinates": [55.5, 25.4] },
       "properties": { "name": "ENOC Jebel Ali Refinery", "operator": "ENOC", "capacity_bpd": 120000, "country": "AE", "status": "active" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.8740512, 29.7540967] },
+      "properties": { "name": "Sabine Pass LNG Terminal", "operator": "Cheniere Energy", "capacity_bpd": 0, "capacity_text": "Operating LNG import/export terminal", "country": "US", "status": "active", "facility_type": "lng_terminal", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Cheniere_Sabine_Pass_LNG_Terminal.jpg", "source_url": "https://www.gem.wiki/Sabine_Pass_LNG_Terminal", "specs": ["GEM WGS84 position: 29.7540967, -93.8740512 (exact)", "Import/export LNG terminal at Sabine Pass, Louisiana"] }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.919418, 29.761394] },
+      "properties": { "name": "Golden Pass LNG Terminal", "operator": "Golden Pass LNG", "capacity_bpd": 0, "capacity_text": "LNG import/export terminal", "country": "US", "status": "active", "facility_type": "lng_terminal", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Golden_Pass_LNG%2C_Sabine_Pass.jpg", "source_url": "https://www.gem.wiki/Golden_Pass_LNG_Terminal", "specs": ["GEM WGS84 position: 29.761394, -93.919418 (exact)", "Sabine Pass, Texas LNG terminal"] }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.317355, 28.932003] },
+      "properties": { "name": "Freeport LNG Terminal", "operator": "Freeport LNG Development", "capacity_bpd": 0, "capacity_text": "Operating LNG import/export terminal", "country": "US", "status": "active", "facility_type": "lng_terminal", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Freeport_Texas.JPG", "source_url": "https://www.gem.wiki/Freeport_LNG_Terminal", "specs": ["GEM WGS84 position: 28.932003, -95.317355 (exact)", "Import/export LNG terminal in Freeport, Texas"] }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [4.068889, 51.971111] },
+      "properties": { "name": "Gate LNG Terminal", "operator": "Gasunie / Vopak", "capacity_bpd": 0, "capacity_text": "12 bcm/year LNG throughput", "country": "NL", "status": "active", "facility_type": "lng_terminal", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/GATE_terminal_Rotterdam.jpg", "source_url": "https://www.gem.wiki/Gate_LNG_Terminal", "specs": ["GEM WGS84 position: 51.971111, 4.068889 (exact)", "Maasvlakte, Port of Rotterdam", "Gate reports three storage tanks and 12 bcm/year throughput"] }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [51.557708, 25.908412] },
+      "properties": { "name": "QatarEnergy LNG (N)", "operator": "QatarEnergy LNG", "capacity_bpd": 0, "capacity_text": "Major LNG export terminal", "country": "QA", "status": "active", "facility_type": "lng_terminal", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Ras_Laffan_Industrial_City.jpg", "source_url": "https://www.gem.wiki/QatarEnergy_LNG_%28N%29", "specs": ["GEM WGS84 position: 25.908412, 51.557708 (exact)", "Ras Laffan Industrial City LNG export complex"] }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [8.418789, 49.512361] },
+      "properties": { "name": "BASF Ludwigshafen Verbund Site", "operator": "BASF", "capacity_bpd": 0, "capacity_text": "10 km2 integrated chemical complex", "country": "DE", "status": "active", "facility_type": "chemical_plant", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/LudwigshafenBASFsteamcracker2-2020-09-22-17-07-33.jpg", "source_url": "https://www.wikidata.org/wiki/Q123397876", "specs": ["Wikidata WGS84 position: 49°30'44.50\"N, 8°25'7.64\"E", "BASF reports about 125 production facilities and about 200 plants", "Site area about 10 km2"] }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.343132, 28.953207] },
+      "properties": { "name": "Dow Texas Operations", "operator": "Dow", "capacity_bpd": 0, "capacity_text": "7,000 acre integrated chemical site", "country": "US", "status": "active", "facility_type": "chemical_plant", "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Dow_Chemical_plant_and_railcars_-_Freeport_TX.jpg", "source_url": "https://corporate.dow.com/en-us/locations/freeport.html", "specs": ["Image geotag WGS84 position: 28.953207, -95.343132", "Dow reports its largest integrated site spans 7,000 acres", "Produces 44% of Dow products sold in the United States"] }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [114.536439, 22.743637] },
+      "properties": { "name": "CNOOC Huizhou Petrochemical Plant", "operator": "CNOOC Huizhou Petrochemical", "capacity_bpd": 0, "capacity_text": "Operating petrochemical plant", "country": "CN", "status": "active", "facility_type": "chemical_plant", "image_url": "https://fidic.org/sites/default/files/styles/medium/public/8.%20CCR%20unit%20and%20FCC%20unit%20of%20CNOOC%20Huizhou%20Refinery%20Project.jpg", "source_url": "https://www.gem.wiki/CNOOC_Huizhou_Petrochemical_Plant", "specs": ["GEM WGS84 position: 22.743637, 114.536439 (exact)", "Primary product listed by GEM: aromatics", "Feedstock listed by GEM: crude oil"] }
     }
   ]
 }

@@ -47,6 +47,26 @@ const titleStyle: CSSProperties = {
   fontSize: "1.14rem",
 };
 
+const imageStyle: CSSProperties = {
+  width: "100%",
+  aspectRatio: "16 / 9",
+  objectFit: "cover",
+  border: "1px solid var(--granite)",
+  marginBottom: "0.75rem",
+  background: "rgba(255,255,255,0.04)",
+};
+
+const sourceLinkStyle: CSSProperties = {
+  display: "inline-block",
+  marginTop: "0.2rem",
+  color: "var(--signal)",
+  fontFamily: '"Martian Mono", ui-monospace, monospace',
+  fontSize: "0.65rem",
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  textDecoration: "none",
+};
+
 function formatCoord(lat: number, lon: number): string {
   const ns = lat >= 0 ? "N" : "S";
   const ew = lon >= 0 ? "E" : "W";
@@ -58,6 +78,32 @@ function Property({ label, value }: { label: string; value: string }) {
     <div>
       <div style={labelStyle}>{label}</div>
       <div style={valueStyle}>{value}</div>
+    </div>
+  );
+}
+
+function formatFacilityType(value: string | undefined): string {
+  return (value || "refinery").replaceAll("_", " ");
+}
+
+function Specs({ specs }: { specs: string[] | undefined }) {
+  if (!specs?.length) return null;
+  return (
+    <div>
+      <div style={labelStyle}>§ Specs</div>
+      <ul
+        style={{
+          margin: "0.2rem 0 0.65rem",
+          paddingLeft: "1rem",
+          color: "var(--bone)",
+          fontSize: "0.78rem",
+          lineHeight: 1.45,
+        }}
+      >
+        {specs.map((spec) => (
+          <li key={spec}>{spec}</li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -149,13 +195,28 @@ function InspectorBody({ selected, viewer }: { selected: Selected; viewer: Cesiu
     }
     case "refinery": {
       const r = selected.data;
+      const capacity =
+        r.capacity_bpd > 0
+          ? `${r.capacity_bpd.toLocaleString()} bpd`
+          : r.capacity_text || "-";
       return (
         <>
+          {r.image_url ? <img src={r.image_url} alt={r.name} style={imageStyle} /> : null}
           <div style={titleStyle}>{r.name}</div>
+          <Property label="§ Type" value={formatFacilityType(r.facility_type)} />
           <Property label="§ Operator" value={r.operator || "-"} />
-          <Property label="§ Capacity" value={`${r.capacity_bpd.toLocaleString()} bpd`} />
+          <Property label="§ Capacity" value={capacity} />
+          {r.latitude != null && r.longitude != null ? (
+            <Property label="§ Coordinates" value={formatCoord(r.latitude, r.longitude)} />
+          ) : null}
           <Property label="§ Country" value={r.country || "-"} />
           <Property label="§ Status" value={r.status || "-"} />
+          <Specs specs={r.specs} />
+          {r.source_url ? (
+            <a href={r.source_url} target="_blank" rel="noreferrer" style={sourceLinkStyle}>
+              Source
+            </a>
+          ) : null}
         </>
       );
     }
