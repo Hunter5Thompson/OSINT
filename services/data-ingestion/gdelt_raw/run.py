@@ -5,20 +5,22 @@ from __future__ import annotations
 import asyncio
 import tempfile
 import zipfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Iterator
 
 import polars as pl
 import structlog
 
 from gdelt_raw.config import get_settings
 from gdelt_raw.downloader import (
-    LastUpdateEntry, download_slice, fetch_lastupdate,
+    LastUpdateEntry,
+    download_slice,
+    fetch_lastupdate,
 )
-from gdelt_raw.filter import apply_filters, FilterResult
-from gdelt_raw.parser import parse_events, parse_mentions, parse_gkg
+from gdelt_raw.filter import FilterResult, apply_filters
+from gdelt_raw.parser import parse_events, parse_gkg, parse_mentions
 from gdelt_raw.recovery import replay_pending
 from gdelt_raw.state import GDELTState
 from gdelt_raw.writers.parquet_writer import write_stream_parquet
@@ -74,7 +76,9 @@ async def _filter_and_write_parquet(
     state: GDELTState, parquet_base: Path,
 ) -> FilterResult | None:
     from gdelt_raw.transform import (
-        canonicalize_events, canonicalize_gkg, canonicalize_mentions,
+        canonicalize_events,
+        canonicalize_gkg,
+        canonicalize_mentions,
     )
     settings = get_settings()
     fr = apply_filters(

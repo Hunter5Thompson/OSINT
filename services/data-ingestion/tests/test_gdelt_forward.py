@@ -1,12 +1,11 @@
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis.aioredis
 import pytest
 
+from gdelt_raw.downloader import LastUpdateEntry
 from gdelt_raw.run import run_forward_slice
 from gdelt_raw.state import GDELTState
-from gdelt_raw.downloader import LastUpdateEntry
 
 
 @pytest.mark.asyncio
@@ -56,9 +55,10 @@ async def test_store_state_not_advanced_on_failure(tmp_path, monkeypatch):
     """If Neo4j raises, neo4j state must stay 'failed:*' and NOT advance
     last_slice:neo4j. Parquet last_slice must still advance (truth-layer)."""
     import fakeredis.aioredis
+
+    from gdelt_raw.downloader import LastUpdateEntry
     from gdelt_raw.run import run_forward_slice
     from gdelt_raw.state import GDELTState
-    from gdelt_raw.downloader import LastUpdateEntry
 
     r = fakeredis.aioredis.FakeRedis(decode_responses=True)
     state = GDELTState(r)
@@ -70,8 +70,9 @@ async def test_store_state_not_advanced_on_failure(tmp_path, monkeypatch):
         return f
 
     async def fake_extract(entries, work, *, verify_md5=True):
-        from gdelt_raw.run import ParsedSlice
         import polars as pl
+
+        from gdelt_raw.run import ParsedSlice
         return ParsedSlice(
             events_df=pl.DataFrame({"global_event_id": []}),
             mentions_df=pl.DataFrame({"global_event_id": []}),
@@ -89,7 +90,7 @@ async def test_store_state_not_advanced_on_failure(tmp_path, monkeypatch):
     monkeypatch.setattr("gdelt_raw.run._filter_and_write_parquet", fake_filter_write)
 
     # Neo4j writer that raises, Qdrant writer that succeeds
-    from unittest.mock import MagicMock, AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
     neo4j = MagicMock()
     neo4j.write_from_parquet = AsyncMock(side_effect=RuntimeError("boom"))
     qdrant = MagicMock()

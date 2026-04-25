@@ -4,7 +4,9 @@ import polars as pl
 import pytest
 
 from gdelt_raw.writers.qdrant_writer import (
-    build_embed_text, build_payload, QdrantWriter,
+    QdrantWriter,
+    build_embed_text,
+    build_payload,
 )
 
 

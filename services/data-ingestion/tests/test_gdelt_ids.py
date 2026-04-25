@@ -1,7 +1,9 @@
 from uuid import UUID
 
 from gdelt_raw.ids import (
-    build_event_id, build_doc_id, build_location_id,
+    build_doc_id,
+    build_event_id,
+    build_location_id,
     qdrant_point_id_for_doc,
 )
 

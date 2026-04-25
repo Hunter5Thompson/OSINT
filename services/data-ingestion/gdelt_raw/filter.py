@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from gdelt_raw.cameo_mapping import map_cameo_root
-from gdelt_raw.ids import build_event_id, build_doc_id
+from gdelt_raw.ids import build_doc_id, build_event_id
 from gdelt_raw.theme_matching import ThemeMatcher, any_match_in_themes, compile_patterns
 
 

@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import click
@@ -103,8 +103,9 @@ def forward():
 @click.option("--parallel", default=4, type=int)
 def backfill(from_date: datetime, to_date: datetime | None, parallel: int):
     """Historical backfill."""
-    to_date = to_date or (datetime.utcnow() - timedelta(days=1))
-    job_id = f"backfill-{datetime.utcnow().strftime('%Y-%m-%d')}-{uuid.uuid4().hex[:4]}"
+    _now = datetime.now(UTC).replace(tzinfo=None)
+    to_date = to_date or (_now - timedelta(days=1))
+    job_id = f"backfill-{_now.strftime('%Y-%m-%d')}-{uuid.uuid4().hex[:4]}"
     click.echo(f"Job: {job_id}  {from_date:%Y-%m-%d} → {to_date:%Y-%m-%d}")
 
     async def _go():

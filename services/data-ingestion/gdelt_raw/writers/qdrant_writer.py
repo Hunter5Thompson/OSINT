@@ -6,9 +6,10 @@ Reads ONLY from GKG parquet. Independent of Neo4j state.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 import httpx
 import polars as pl
@@ -33,7 +34,7 @@ def build_payload(row: dict[str, Any]) -> dict[str, Any]:
     gdelt_date_int = row.get("v21_date")
     if gdelt_date_int:
         gdelt_date_iso = datetime.strptime(str(gdelt_date_int), "%Y%m%d%H%M%S") \
-                                  .replace(tzinfo=timezone.utc).isoformat()
+                                  .replace(tzinfo=UTC).isoformat()
     else:
         gdelt_date_iso = None
 
@@ -54,7 +55,7 @@ def build_payload(row: dict[str, Any]) -> dict[str, Any]:
         "codebook_types_linked": row.get("codebook_types_linked") or [],
         "gdelt_date": gdelt_date_iso,
         "published_at": row.get("published_at"),
-        "ingested_at": datetime.now(timezone.utc).isoformat(),
+        "ingested_at": datetime.now(UTC).isoformat(),
     }
 
 

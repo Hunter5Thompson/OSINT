@@ -1,11 +1,14 @@
 import pytest
 from pydantic import ValidationError
 
+from gdelt_raw.schemas import GDELTDocumentWrite, GDELTEventWrite
 from gdelt_raw.writers.neo4j_writer import (
-    render_event_params, render_doc_params,
-    MERGE_EVENT, MERGE_DOC, MERGE_SOURCE, MERGE_THEME,
+    MERGE_DOC,
+    MERGE_EVENT,
+    MERGE_THEME,
+    render_doc_params,
+    render_event_params,
 )
-from gdelt_raw.schemas import GDELTEventWrite, GDELTDocumentWrite
 
 
 def test_event_template_has_secondary_label():

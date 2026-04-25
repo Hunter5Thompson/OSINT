@@ -6,7 +6,6 @@ import pytest
 
 from gdelt_raw.downloader import fetch_lastupdate
 
-
 pytestmark = pytest.mark.live
 
 

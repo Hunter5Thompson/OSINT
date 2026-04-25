@@ -1,6 +1,6 @@
 import pytest
 
-from gdelt_raw.cameo_mapping import CAMEO_ROOT_TO_CODEBOOK, map_cameo_root
+from gdelt_raw.cameo_mapping import map_cameo_root
 
 
 @pytest.mark.parametrize("root,expected", [

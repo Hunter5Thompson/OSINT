@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from gdelt_raw.schemas import GDELTEventWrite, GDELTDocumentWrite
+from gdelt_raw.schemas import GDELTDocumentWrite, GDELTEventWrite
 
 
 def _valid_event() -> dict:

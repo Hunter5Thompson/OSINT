@@ -1,4 +1,4 @@
-from gdelt_raw.theme_matching import compile_patterns, matches_any, any_match_in_themes
+from gdelt_raw.theme_matching import any_match_in_themes, compile_patterns, matches_any
 
 
 def test_exact_match():

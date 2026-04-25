@@ -27,7 +27,6 @@ import httpx
 import polars as pl
 import pytest
 
-
 pytestmark = pytest.mark.integration
 
 FIXTURES = Path(__file__).parent / "fixtures" / "gdelt"
@@ -55,10 +54,10 @@ def _dev_services_up() -> bool:
 @pytest.mark.asyncio
 async def test_full_forward_tick_against_real_stores(tmp_path):
     """Run forward with fixture slice + real Neo4j/Qdrant/Redis."""
-    from qdrant_client import AsyncQdrantClient
     import redis.asyncio as aioredis
+    from qdrant_client import AsyncQdrantClient
 
-    from gdelt_raw.parser import parse_events, parse_mentions, parse_gkg
+    from gdelt_raw.parser import parse_events, parse_gkg, parse_mentions
     from gdelt_raw.run import ParsedSlice
     from gdelt_raw.state import GDELTState
     from gdelt_raw.writers.neo4j_writer import Neo4jWriter
@@ -112,6 +111,7 @@ async def test_full_forward_tick_against_real_stores(tmp_path):
     parquet_base = tmp_path / "gdelt"
     parquet_base.mkdir(parents=True)
 
+    from gdelt_raw.config import get_settings
     from gdelt_raw.filter import apply_filters
     from gdelt_raw.transform import (
         canonicalize_events,
@@ -119,7 +119,6 @@ async def test_full_forward_tick_against_real_stores(tmp_path):
         canonicalize_mentions,
     )
     from gdelt_raw.writers.parquet_writer import write_stream_parquet
-    from gdelt_raw.config import get_settings
 
     settings = get_settings()
     fr = apply_filters(
@@ -214,7 +213,7 @@ async def test_full_forward_tick_against_real_stores(tmp_path):
     await neo4j.close()
 
     # Qdrant cleanup — filter-by-prefix delete
-    from qdrant_client.http.models import Filter, FieldCondition, MatchText
+    from qdrant_client.http.models import FieldCondition, Filter, MatchText
 
     await qclient.delete(
         collection_name=os.getenv("QDRANT_COLLECTION", "odin_intel"),

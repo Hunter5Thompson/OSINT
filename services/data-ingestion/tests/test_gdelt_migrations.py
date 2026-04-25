@@ -1,5 +1,6 @@
 from gdelt_raw.migrations.apply import (
-    read_cypher_file, SOURCE_DUP_PREFLIGHT_QUERY,
+    SOURCE_DUP_PREFLIGHT_QUERY,
+    read_cypher_file,
 )
 
 

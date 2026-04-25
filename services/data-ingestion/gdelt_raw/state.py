@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Literal
 
-
 StreamName = Literal["events", "mentions", "gkg"]
 StoreName = Literal["parquet", "neo4j", "qdrant"]
 

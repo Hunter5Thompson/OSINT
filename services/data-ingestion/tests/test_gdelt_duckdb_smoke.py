@@ -1,8 +1,6 @@
-from pathlib import Path
 
 import duckdb
 import polars as pl
-import pytest
 
 
 def test_duckdb_can_read_partitioned_parquet(tmp_path):

@@ -13,7 +13,7 @@ import polars as pl
 import structlog
 from neo4j import AsyncGraphDatabase
 
-from gdelt_raw.schemas import GDELTEventWrite, GDELTDocumentWrite
+from gdelt_raw.schemas import GDELTDocumentWrite, GDELTEventWrite
 
 log = structlog.get_logger(__name__)
 

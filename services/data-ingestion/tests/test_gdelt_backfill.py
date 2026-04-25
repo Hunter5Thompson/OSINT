@@ -7,7 +7,6 @@ import fakeredis.aioredis
 import pytest
 
 from gdelt_raw.run import (
-    BackfillJob,
     enumerate_slices_for_range,
     initialize_backfill,
     mark_slice_done,

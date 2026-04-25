@@ -3,7 +3,9 @@ from datetime import datetime
 import polars as pl
 
 from gdelt_raw.transform import (
-    canonicalize_events, canonicalize_gkg, canonicalize_mentions,
+    canonicalize_events,
+    canonicalize_gkg,
+    canonicalize_mentions,
 )
 
 

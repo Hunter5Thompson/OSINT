@@ -1,6 +1,6 @@
 import polars as pl
 
-from gdelt_raw.filter import apply_filters, FilterResult
+from gdelt_raw.filter import apply_filters
 
 
 def _events_df() -> pl.DataFrame:
