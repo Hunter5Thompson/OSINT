@@ -6,6 +6,7 @@ No LLM-generated Cypher on the write-path (CLAUDE.md rule).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import polars as pl
@@ -79,6 +80,7 @@ MERGE (d)-[:ABOUT]->(t)
 # d.themes (list) and query with list functions.
 
 MERGE_MENTION = """
+// Intentional: :Document (unscoped) so GDELT mentions can bridge to docs from other ingestion paths.
 MATCH (d:Document {url: $doc_url})
 MATCH (e:GDELTEvent {event_id: $event_id})
 MERGE (d)-[r:MENTIONS]->(e)
@@ -139,14 +141,16 @@ class Neo4jWriter:
                     })
                 await tx.commit()
 
-    async def write_from_parquet(self, parquet_base, slice_id: str, date: str):
+    async def write_from_parquet(self, parquet_base: str | Path, slice_id: str, date: str):
         """Read the three canonical parquet streams and write in dependency order:
         Events → Documents (+ Sources, + Themes) → Mentions (Doc→Event edges).
 
         Phase 1 scope: Events, Documents, Sources, Themes, Mentions.
         Deferred to Phase 2 (separate spec): Entities (from V2Persons/V2Orgs),
-        Locations (from V2Locations), INVOLVES edges, OCCURRED_AT edges."""
-        from pathlib import Path
+        Locations (from V2Locations), INVOLVES edges, OCCURRED_AT edges.
+
+        Atomicity is per-stream, not per-slice — if a downstream stream
+        fails, idempotent MERGE on retry recovers the missing edges."""
         ev_path = Path(parquet_base) / "events" / f"date={date}" / f"{slice_id}.parquet"
         gkg_path = Path(parquet_base) / "gkg" / f"date={date}" / f"{slice_id}.parquet"
         mentions_path = Path(parquet_base) / "mentions" / f"date={date}" / f"{slice_id}.parquet"
