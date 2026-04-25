@@ -36,6 +36,10 @@ class ParsedSlice:
     stream_states: dict[str, str]   # "done" | "failed"
 
 
+class GDELTSliceIncompleteError(RuntimeError):
+    """Raised when one or more raw streams failed before all parquet files exist."""
+
+
 def _slice_date(slice_id: str) -> str:
     return f"{slice_id[0:4]}-{slice_id[4:6]}-{slice_id[6:8]}"
 
@@ -49,7 +53,7 @@ async def _extract_and_parse(
         download_slice(e, tmp_dir, verify_md5=verify_md5) for e in entries
     ])
     extracted: dict[str, Path] = {}
-    for entry, zpath in zip(entries, downloads):
+    for entry, zpath in zip(entries, downloads, strict=True):
         with zipfile.ZipFile(zpath) as z:
             z.extractall(tmp_dir)
             names = z.namelist()
@@ -137,6 +141,12 @@ async def run_forward_slice(
     ]
     if all(s == "done" for s in parquet_states):
         await state.set_last_slice("parquet", slice_id)
+    else:
+        stream_state = dict(zip(("events", "mentions", "gkg"), parquet_states, strict=True))
+        log.error("gdelt_slice_incomplete", slice=slice_id, streams=stream_state)
+        raise GDELTSliceIncompleteError(
+            f"incomplete GDELT slice {slice_id}: parquet stream states={stream_state}"
+        )
 
     # Neo4j
     try:

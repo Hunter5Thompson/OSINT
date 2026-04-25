@@ -31,10 +31,14 @@ def build_embed_text(row: dict[str, Any]) -> str:
 
 
 def build_payload(row: dict[str, Any]) -> dict[str, Any]:
-    gdelt_date_int = row.get("v21_date")
-    if gdelt_date_int:
-        gdelt_date_iso = datetime.strptime(str(gdelt_date_int), "%Y%m%d%H%M%S") \
-                                  .replace(tzinfo=UTC).isoformat()
+    gdelt_date = row.get("gdelt_date") or row.get("v21_date")
+    if isinstance(gdelt_date, datetime):
+        gdelt_date_iso = gdelt_date.isoformat()
+    elif isinstance(gdelt_date, str):
+        gdelt_date_iso = gdelt_date
+    elif gdelt_date:
+        gdelt_date_iso = datetime.strptime(str(gdelt_date), "%Y%m%d%H%M%S") \
+            .replace(tzinfo=UTC).isoformat()
     else:
         gdelt_date_iso = None
 
@@ -42,7 +46,7 @@ def build_payload(row: dict[str, Any]) -> dict[str, Any]:
         "source": "gdelt_gkg",
         "doc_id": row["doc_id"],
         "url": row.get("url"),
-        "source_name": row.get("v2_source_common_name"),
+        "source_name": row.get("source_name") or row.get("v2_source_common_name"),
         "title": row.get("title") or row["doc_id"],
         "themes": row.get("themes") or [],
         "persons": row.get("persons") or [],

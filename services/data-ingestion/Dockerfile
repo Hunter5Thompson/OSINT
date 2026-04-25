@@ -16,6 +16,7 @@ COPY config.py .
 COPY pipeline.py .
 COPY scheduler.py .
 COPY feeds/ feeds/
+COPY gdelt_raw/ gdelt_raw/
 
 # Run the scheduler
 CMD ["uv", "run", "python", "scheduler.py"]

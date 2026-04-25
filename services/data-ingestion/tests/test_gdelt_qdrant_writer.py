@@ -28,8 +28,8 @@ def test_payload_uses_canonical_doc_id():
     row = {
         "doc_id": "gdelt:gkg:r1",
         "url": "https://ex.com",
-        "v2_source_common_name": "ex.com",
-        "v1_themes": "ARMEDCONFLICT;KILL",
+        "source_name": "ex.com",
+        "gdelt_date": "2026-04-25T12:00:00",
         "themes": ["ARMEDCONFLICT", "KILL"],
         "persons": [],
         "organizations": [],
@@ -38,13 +38,14 @@ def test_payload_uses_canonical_doc_id():
         "goldstein_avg": -4.0,
         "cameo_roots_linked": [18, 19],
         "codebook_types_linked": ["conflict.assault", "conflict.armed"],
-        "v21_date": 20260425120000,
         "tone_polarity": 8.4,
         "word_count": 599,
     }
     p = build_payload(row)
     assert p["doc_id"] == "gdelt:gkg:r1"
     assert p["source"] == "gdelt_gkg"
+    assert p["source_name"] == "ex.com"
+    assert p["gdelt_date"] == "2026-04-25T12:00:00"
     assert isinstance(p["linked_event_ids"], list)
     assert isinstance(p["cameo_roots_linked"], list)
 
@@ -52,11 +53,11 @@ def test_payload_uses_canonical_doc_id():
 def test_payload_linked_fields_are_lists():
     row = {
         "doc_id": "gdelt:gkg:r2", "url": "https://ex.com",
-        "v2_source_common_name": "ex.com", "v1_themes": "",
+        "source_name": "ex.com", "gdelt_date": "2026-04-25T12:00:00",
         "themes": [], "persons": [], "organizations": [],
         "linked_event_ids": None, "goldstein_min": None, "goldstein_avg": None,
         "cameo_roots_linked": None, "codebook_types_linked": None,
-        "v21_date": 20260425120000, "tone_polarity": 0.0, "word_count": 0,
+        "tone_polarity": 0.0, "word_count": 0,
     }
     p = build_payload(row)
     assert p["linked_event_ids"] == []
@@ -69,8 +70,8 @@ async def test_qdrant_can_upsert_when_neo4j_failed_but_parquet_exists(tmp_path):
     df = pl.DataFrame({
         "doc_id": ["gdelt:gkg:r1"],
         "url": ["https://ex.com"],
-        "v2_source_common_name": ["ex.com"],
-        "v1_themes": ["ARMEDCONFLICT;KILL"],
+        "source_name": ["ex.com"],
+        "gdelt_date": ["2026-04-25T12:00:00"],
         "themes": [["ARMEDCONFLICT", "KILL"]],
         "persons": [["A"]],
         "organizations": [[]],
@@ -79,7 +80,6 @@ async def test_qdrant_can_upsert_when_neo4j_failed_but_parquet_exists(tmp_path):
         "goldstein_avg": [-6.0],
         "cameo_roots_linked": [[19]],
         "codebook_types_linked": [["conflict.armed"]],
-        "v21_date": [20260425120000],
         "tone_polarity": [8.4],
         "word_count": [599],
     })
