@@ -1,4 +1,4 @@
-"""Shared Neo4j async driver + read-only query helper."""
+"""Shared Neo4j async driver + read/write query helpers."""
 
 from typing import Any
 
@@ -25,5 +25,13 @@ async def read_query(cypher: str, params: dict[str, Any]) -> list[dict[str, Any]
     """Execute a read-only Cypher query."""
     driver = await get_graph_client()
     async with driver.session(default_access_mode=neo4j.READ_ACCESS) as session:
+        result = await session.run(cypher, params)
+        return [dict(record) async for record in result]
+
+
+async def write_query(cypher: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    """Execute a parametrised write Cypher query and return any RETURNed rows."""
+    driver = await get_graph_client()
+    async with driver.session(default_access_mode=neo4j.WRITE_ACCESS) as session:
         result = await session.run(cypher, params)
         return [dict(record) async for record in result]
