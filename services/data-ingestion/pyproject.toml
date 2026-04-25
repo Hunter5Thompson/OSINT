@@ -19,6 +19,7 @@ dependencies = [
     "polars>=1.0",
     "pyarrow>=17.0",
     "click>=8.0",
+    "neo4j>=6.1.0",
 ]
 
 [project.optional-dependencies]
