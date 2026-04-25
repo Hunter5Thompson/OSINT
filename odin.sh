@@ -35,6 +35,8 @@ Usage:
   ./odin.sh pull 9b-awq        # Download smaller interactive model
   ./odin.sh smoke              # Smoke-test running services (health + basic calls)
   ./odin.sh vision up|down     # Start/stop Vision Enrichment (Qwen3-VL-8B)
+  ./odin.sh gdelt status       # Run odin-ingest-gdelt CLI inside data-ingestion
+                               # (also: forward, backfill, resume, etc.)
 USAGE
 }
 
@@ -416,6 +418,10 @@ case "$COMMAND" in
         exit 1
         ;;
     esac
+    ;;
+  gdelt)
+    shift
+    "${COMPOSE[@]}" exec data-ingestion odin-ingest-gdelt "$@"
     ;;
   help|--help|-h|"")
     usage
