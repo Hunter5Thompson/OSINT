@@ -30,6 +30,7 @@ const BASE = "/api";
 
 import type { LandingSummary } from "../types/landing";
 import type { SignalEnvelope } from "../types/signals";
+import type { Incident, IncidentCreateRequest } from "../types/incident";
 
 export const SIGNAL_STREAM_URL = "/api/signals/stream";
 
@@ -192,4 +193,44 @@ export async function getEONETEvents(sinceHours = 168): Promise<EONETEvent[]> {
 
 export async function getGDACSEvents(sinceHours = 168): Promise<GDACSEvent[]> {
   return fetchJSON<GDACSEvent[]>(`/gdacs/events?since_hours=${sinceHours}`);
+}
+
+export const INCIDENT_STREAM_URL = `${BASE}/incidents/stream`;
+
+export async function getIncidents(limit = 50): Promise<Incident[]> {
+  const resp = await fetch(`${BASE}/incidents?limit=${limit}`);
+  if (!resp.ok) throw new Error(`incidents: ${resp.status}`);
+  return (await resp.json()) as Incident[];
+}
+
+export async function getIncident(id: string): Promise<Incident> {
+  const resp = await fetch(`${BASE}/incidents/${encodeURIComponent(id)}`);
+  if (!resp.ok) throw new Error(`incident ${id}: ${resp.status}`);
+  return (await resp.json()) as Incident;
+}
+
+export async function triggerIncident(payload: IncidentCreateRequest): Promise<Incident> {
+  const resp = await fetch(`${BASE}/incidents/_admin/trigger`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) throw new Error(`trigger incident: ${resp.status}`);
+  return (await resp.json()) as Incident;
+}
+
+export async function silenceIncident(id: string): Promise<Incident> {
+  const resp = await fetch(`${BASE}/incidents/${encodeURIComponent(id)}/silence`, {
+    method: "POST",
+  });
+  if (!resp.ok) throw new Error(`silence ${id}: ${resp.status}`);
+  return (await resp.json()) as Incident;
+}
+
+export async function promoteIncident(id: string): Promise<Incident> {
+  const resp = await fetch(`${BASE}/incidents/${encodeURIComponent(id)}/promote`, {
+    method: "POST",
+  });
+  if (!resp.ok) throw new Error(`promote ${id}: ${resp.status}`);
+  return (await resp.json()) as Incident;
 }
