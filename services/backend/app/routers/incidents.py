@@ -11,9 +11,10 @@ import json
 from collections.abc import AsyncGenerator
 
 import structlog
-from fastapi import APIRouter, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sse_starlette.sse import EventSourceResponse
 
+from app.config import settings
 from app.models.incident import (
     Incident,
     IncidentCreateRequest,
@@ -27,6 +28,17 @@ log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
 _HEARTBEAT_SECONDS = 15.0
+
+
+def _require_admin(
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> None:
+    expected = settings.incidents_admin_token
+    if not expected:
+        log.warning("incident_admin_unsecured", note="set INCIDENTS_ADMIN_TOKEN")
+        return
+    if x_admin_token != expected:
+        raise HTTPException(status_code=401, detail="invalid admin token")
 
 
 @router.get("", response_model=list[Incident])
@@ -55,6 +67,7 @@ async def stream_incidents(
     "/_admin/trigger",
     response_model=Incident,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(_require_admin)],
 )
 async def admin_trigger(payload: IncidentCreateRequest) -> Incident:
     """Admin-only stub for incident creation. Detection service deferred (spec §8)."""
@@ -79,7 +92,11 @@ async def get_incident(incident_id: str) -> Incident:
     return record
 
 
-@router.post("/{incident_id}/silence", response_model=Incident)
+@router.post(
+    "/{incident_id}/silence",
+    response_model=Incident,
+    dependencies=[Depends(_require_admin)],
+)
 async def silence(incident_id: str) -> Incident:
     record = await incident_store.close_incident(incident_id, IncidentStatus.SILENCED)
     if record is None:
@@ -88,7 +105,11 @@ async def silence(incident_id: str) -> Incident:
     return record
 
 
-@router.post("/{incident_id}/promote", response_model=Incident)
+@router.post(
+    "/{incident_id}/promote",
+    response_model=Incident,
+    dependencies=[Depends(_require_admin)],
+)
 async def promote(incident_id: str) -> Incident:
     record = await incident_store.close_incident(incident_id, IncidentStatus.PROMOTED)
     if record is None:

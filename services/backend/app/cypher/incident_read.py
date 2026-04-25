@@ -25,7 +25,3 @@ INCIDENT_BY_ID = (
     "  i.timeline_json AS timeline_json"
 )
 
-INCIDENT_NEXT_ORDINAL = (
-    "OPTIONAL MATCH (i:Incident) "
-    "RETURN coalesce(max(i.ordinal), 0) + 1 AS next_ordinal"
-)

@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     landing_point_geo_url: str = "https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json"
     cable_cache_ttl_s: int = 86400  # 24 hours
 
+    # Incident admin token (opt-in: set INCIDENTS_ADMIN_TOKEN in .env)
+    incidents_admin_token: str = ""
+
     # Signals stream (SSE Ring-Buffer over Redis Stream)
     redis_stream_events: str = "events:new"
     signals_replay_window_seconds: int = 900  # 15 min

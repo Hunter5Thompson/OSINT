@@ -37,13 +37,10 @@ def _row(**overrides):
 
 @pytest.mark.asyncio
 async def test_create_incident_assigns_id_and_persists() -> None:
-    with (
-        patch.object(
-            incident_store, "read_query", new=AsyncMock(return_value=[{"next_ordinal": 7}])
-        ),
-        patch.object(
-            incident_store, "write_query", new=AsyncMock(return_value=[_row(id="inc-007")])
-        ),
+    with patch.object(
+        incident_store,
+        "write_query",
+        new=AsyncMock(return_value=[_row(id="inc-007")]),
     ):
         req = IncidentCreateRequest(
             title="Sinjar ridge thermal cluster",
@@ -59,6 +56,29 @@ async def test_create_incident_assigns_id_and_persists() -> None:
         assert record.severity == "high"
         assert record.coords == (36.34, 41.87)
         assert record.timeline[0].kind == "trigger"
+
+
+@pytest.mark.asyncio
+async def test_create_incident_uses_uuid_shape_id() -> None:
+    captured: dict = {}
+
+    async def fake_write(query, params):
+        captured.update(params)
+        # echo back what we asked to write
+        return [_row(id=params["incident_id"])]
+
+    with patch.object(incident_store, "write_query", new=AsyncMock(side_effect=fake_write)):
+        req = IncidentCreateRequest(
+            title="x",
+            kind="firms.cluster",
+            severity="low",
+            coords=(0.0, 0.0),
+        )
+        record = await incident_store.create_incident(req)
+        assert record.id.startswith("inc-")
+        suffix = record.id.split("-", 1)[1]
+        assert len(suffix) == 8
+        assert all(ch in "0123456789abcdef" for ch in suffix)
 
 
 @pytest.mark.asyncio

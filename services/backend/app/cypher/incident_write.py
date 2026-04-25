@@ -29,3 +29,8 @@ INCIDENT_UPSERT = (
 )
 
 INCIDENT_DELETE = "MATCH (i:Incident {id: $incident_id}) DETACH DELETE i"
+
+INCIDENT_ID_UNIQUE_CONSTRAINT = (
+    "CREATE CONSTRAINT incident_id_unique IF NOT EXISTS "
+    "FOR (i:Incident) REQUIRE i.id IS UNIQUE"
+)

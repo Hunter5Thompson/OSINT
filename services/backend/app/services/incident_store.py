@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from app.cypher.incident_read import (
     INCIDENT_BY_ID,
     INCIDENT_LIST_OPEN,
-    INCIDENT_NEXT_ORDINAL,
 )
 from app.cypher.incident_write import INCIDENT_DELETE, INCIDENT_UPSERT
 from app.models.incident import (
@@ -105,10 +105,9 @@ async def get_incident(incident_id: str) -> Incident | None:
 
 
 async def create_incident(payload: IncidentCreateRequest) -> Incident:
-    ordinal_rows = await read_query(INCIDENT_NEXT_ORDINAL, {})
-    ordinal = int(ordinal_rows[0].get("next_ordinal") or 1) if ordinal_rows else 1
-    incident_id = f"inc-{ordinal:03d}"
+    incident_id = f"inc-{uuid4().hex[:8]}"
     now = datetime.now(UTC)
+    ordinal = int(now.timestamp() * 1000) % 2_000_000_000
     initial = IncidentTimelineEvent(
         t_offset_s=0.0,
         kind="trigger",
@@ -143,11 +142,7 @@ async def append_timeline_event(
         return None
     next_timeline = [*current.timeline, event]
     next_record = current.model_copy(update={"timeline": next_timeline})
-    # Re-derive ordinal from id (`inc-007` → 7); avoids an extra Cypher hop.
-    try:
-        ordinal = int(incident_id.split("-")[-1])
-    except (ValueError, IndexError):
-        ordinal = 1
+    ordinal = int(datetime.now(UTC).timestamp() * 1000) % 2_000_000_000
     rows = await write_query(INCIDENT_UPSERT, _upsert_params(next_record, ordinal))
     if not rows:
         return None
@@ -165,10 +160,7 @@ async def close_incident(
     next_record = current.model_copy(
         update={"status": status, "closed_ts": when or datetime.now(UTC)}
     )
-    try:
-        ordinal = int(incident_id.split("-")[-1])
-    except (ValueError, IndexError):
-        ordinal = 1
+    ordinal = int(datetime.now(UTC).timestamp() * 1000) % 2_000_000_000
     rows = await write_query(INCIDENT_UPSERT, _upsert_params(next_record, ordinal))
     if not rows:
         return None
