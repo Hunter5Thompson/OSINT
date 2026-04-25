@@ -7,6 +7,7 @@ import { EONETLayer } from "../layers/EONETLayer";
 import { GDACSLayer } from "../layers/GDACSLayer";
 import { LeaderCallout } from "../hlidskjalf/LeaderCallout";
 import { SectionHeading } from "../hlidskjalf/SectionHeading";
+import { formatCoords } from "../../lib/coords";
 import { useFIRMSHotspots } from "../../hooks/useFIRMSHotspots";
 import { useEONETEvents } from "../../hooks/useEONETEvents";
 import { useGDACSEvents } from "../../hooks/useGDACSEvents";
@@ -75,7 +76,7 @@ export function TheatreQuadrant({ incident, cesiumToken }: TheatreQuadrantProps)
         <LeaderCallout
           eyebrow={incident.kind.replace(".", " · ")}
           value={incident.severity.toUpperCase()}
-          sub={`${incident.coords[0].toFixed(2)}N · ${incident.coords[1].toFixed(2)}E`}
+          sub={formatCoords(incident.coords, 2)}
           leader={{ from: "left", deltaPx: 90 }}
           tone="sentinel"
         />

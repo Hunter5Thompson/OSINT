@@ -51,7 +51,7 @@ export function WarRoomPage() {
     };
   }, [params.incidentId]);
 
-  const incident = routedIncident ?? active;
+  const incident = params.incidentId ? routedIncident : active;
 
   // Cesium token (one-shot fetch; component-level cache is fine for v1).
   useEffect(() => {

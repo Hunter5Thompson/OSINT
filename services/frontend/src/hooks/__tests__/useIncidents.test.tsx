@@ -140,4 +140,13 @@ describe("IncidentProvider + useIncidents", () => {
     expect(result.current.status).toBe("idle");
     expect(result.current.active).toBeNull();
   });
+
+  it("hydrate selects the first OPEN incident even when newer items are promoted", async () => {
+    const promoted: Incident = { ...incidentFixture, id: "inc-200", status: "promoted" };
+    const open: Incident = { ...incidentFixture, id: "inc-100", status: "open" };
+    vi.spyOn(api, "getIncidents").mockResolvedValue([promoted, open]);
+
+    const { result } = renderHook(() => useIncidents(), { wrapper });
+    await waitFor(() => expect(result.current.active?.id).toBe("inc-100"));
+  });
 });

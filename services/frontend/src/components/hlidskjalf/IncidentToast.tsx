@@ -8,6 +8,7 @@ import { useEffect, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 
 import type { Incident } from "../../types/incident";
+import { formatCoords } from "../../lib/coords";
 
 export interface IncidentToastProps {
   incident: Incident | null;
@@ -75,7 +76,7 @@ export function IncidentToast({ incident, onDismiss, ttlMs = 12_000 }: IncidentT
       <div style={eyebrowStyle}>incident · live</div>
       <h2 style={titleStyle}>{incident.title}</h2>
       <div style={metaStyle}>
-        {incident.coords[0].toFixed(2)}N · {incident.coords[1].toFixed(2)}E
+        {formatCoords(incident.coords, 2)}
       </div>
       <Link
         to={`/warroom/${incident.id}`}

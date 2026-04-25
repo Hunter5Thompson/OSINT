@@ -136,8 +136,8 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
       try {
         const open = await getIncidents();
         if (cancelled) return;
-        const newest = open[0] ?? null;
-        if (newest && newest.status === "open") setActive(newest);
+        const openIncident = open.find((i) => i.status === "open") ?? null;
+        setActive(openIncident);
         setHistory(open.slice(0, HISTORY_CAP));
       } catch {
         // soft-fail: stream will populate

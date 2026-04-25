@@ -10,6 +10,7 @@ import type { CSSProperties } from "react";
 
 import type { Incident } from "../../types/incident";
 import { useTPlus } from "../../hooks/useTPlus";
+import { formatCoords } from "../../lib/coords";
 
 export interface IncidentBarProps {
   incident: Incident;
@@ -60,11 +61,6 @@ const clockStyle: CSSProperties = {
   marginLeft: "auto",
 };
 
-function fmtCoord(value: number, axis: "lat" | "lon"): string {
-  const hemi = axis === "lat" ? (value >= 0 ? "N" : "S") : value >= 0 ? "E" : "W";
-  return `${Math.abs(value).toFixed(3)}${hemi}`;
-}
-
 function severityToConf(s: Incident["severity"]): number {
   switch (s) {
     case "low":
@@ -91,8 +87,8 @@ export function IncidentBar({ incident, style }: IncidentBarProps) {
       <span style={tagStyle}>INCIDENT · LIVE</span>
       <h1 style={titleStyle}>{incident.title}</h1>
       <span style={metaStyle}>
-        {fmtCoord(incident.coords[0], "lat")} · {fmtCoord(incident.coords[1], "lon")}
-        {"  "}· conf {severityToConf(incident.severity).toFixed(2)}
+        {formatCoords(incident.coords)}
+        {"  "}· conf {(severityToConf(incident.severity)).toFixed(2)}
       </span>
       <span data-testid="incident-tplus" style={clockStyle}>
         {tplus}
