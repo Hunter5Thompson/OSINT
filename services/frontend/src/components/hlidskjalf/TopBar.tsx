@@ -144,7 +144,7 @@ const TABS: readonly TabDef[] = [
   { to: "/warroom", label: "WAR ROOM" },
 ] as const;
 
-export function TopBar() {
+export function TopBar({ warRoomActive = false }: { warRoomActive?: boolean }) {
   const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
@@ -181,7 +181,15 @@ export function TopBar() {
                   {isActive ? (
                     <span data-tab-dot="active" style={activeDotStyle} aria-hidden="true" />
                   ) : isWarRoom ? (
-                    <span data-tab-dot="sentinel" style={sentinelDotStyle} aria-hidden="true" />
+                    <span
+                      data-tab-dot={warRoomActive ? "pulsing" : "sentinel"}
+                      className={warRoomActive ? "hlid-pulse" : undefined}
+                      style={{
+                        ...sentinelDotStyle,
+                        opacity: warRoomActive ? 1 : 0.65,
+                      }}
+                      aria-hidden="true"
+                    />
                   ) : null}
                   <span>{tab.label}</span>
                 </>
