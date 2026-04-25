@@ -39,19 +39,22 @@ def test_event_valid():
 
 
 def test_event_rejects_missing_event_id():
-    d = _valid_event(); del d["event_id"]
+    d = _valid_event()
+    del d["event_id"]
     with pytest.raises(ValidationError):
         GDELTEventWrite(**d)
 
 
 def test_event_rejects_wrong_event_id_pattern():
-    d = _valid_event(); d["event_id"] = "not-canonical"
+    d = _valid_event()
+    d["event_id"] = "not-canonical"
     with pytest.raises(ValidationError):
         GDELTEventWrite(**d)
 
 
 def test_event_rejects_unknown_fields():
-    d = _valid_event(); d["rogue_field"] = "x"
+    d = _valid_event()
+    d["rogue_field"] = "x"
     with pytest.raises(ValidationError):
         GDELTEventWrite(**d)
 
@@ -61,17 +64,20 @@ def test_doc_valid():
 
 
 def test_doc_rejects_missing_doc_id():
-    d = _valid_doc(); del d["doc_id"]
+    d = _valid_doc()
+    del d["doc_id"]
     with pytest.raises(ValidationError):
         GDELTDocumentWrite(**d)
 
 
 def test_doc_rejects_wrong_doc_id_pattern():
-    d = _valid_doc(); d["doc_id"] = "gkg-20260425121500-42"
+    d = _valid_doc()
+    d["doc_id"] = "gkg-20260425121500-42"
     with pytest.raises(ValidationError):
         GDELTDocumentWrite(**d)
 
 
 def test_doc_published_at_is_optional():
-    d = _valid_doc(); d["published_at"] = None
+    d = _valid_doc()
+    d["published_at"] = None
     GDELTDocumentWrite(**d)

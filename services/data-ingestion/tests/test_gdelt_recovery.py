@@ -61,7 +61,8 @@ async def test_qdrant_recovery_independent_of_neo4j(tmp_path):
     await state.add_pending("qdrant", slice_id)
     # Leave neo4j unresolved on purpose
 
-    neo4j = MagicMock(); neo4j.write_from_parquet = AsyncMock()
+    neo4j = MagicMock()
+    neo4j.write_from_parquet = AsyncMock()
     qdrant = MagicMock()
     qdrant.upsert_from_parquet = AsyncMock(return_value=1)
 
