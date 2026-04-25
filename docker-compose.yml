@@ -280,8 +280,22 @@ services:
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
       - TELEGRAM_API_ID=${TELEGRAM_API_ID:-0}
       - TELEGRAM_API_HASH=${TELEGRAM_API_HASH:-}
+      # GDELT raw-files ingestion config.
+      # NOTE: We deliberately do NOT pass through GDELT_THEME_ALLOWLIST or
+      # GDELT_NUCLEAR_OVERRIDE_THEMES. If the outer shell doesn't have them
+      # set, Compose resolves `${VAR:-}` to an empty string and Pydantic
+      # would parse that as an empty list — silently filtering EVERYTHING
+      # out. The Pydantic defaults baked into the Settings class are richer
+      # and safer; let the container use those.
+      - GDELT_BASE_URL=${GDELT_BASE_URL:-http://data.gdeltproject.org/gdeltv2}
+      - GDELT_FORWARD_INTERVAL_SECONDS=${GDELT_FORWARD_INTERVAL_SECONDS:-900}
+      - GDELT_PARQUET_PATH=${GDELT_PARQUET_PATH:-/data/gdelt}
+      - GDELT_FILTER_MODE=${GDELT_FILTER_MODE:-alpha}
+      - GDELT_CAMEO_ROOT_ALLOWLIST=${GDELT_CAMEO_ROOT_ALLOWLIST:-15,18,19,20}
+      - GDELT_BACKFILL_PARALLEL_SLICES=${GDELT_BACKFILL_PARALLEL_SLICES:-4}
     volumes:
       - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram:/data/telegram
+      - gdelt_parquet:/data/gdelt
     depends_on:
       redis:
         condition: service_healthy
@@ -319,8 +333,22 @@ services:
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
       - TELEGRAM_API_ID=${TELEGRAM_API_ID:-0}
       - TELEGRAM_API_HASH=${TELEGRAM_API_HASH:-}
+      # GDELT raw-files ingestion config (mirrored from data-ingestion).
+      # NOTE: We deliberately do NOT pass through GDELT_THEME_ALLOWLIST or
+      # GDELT_NUCLEAR_OVERRIDE_THEMES. If the outer shell doesn't have them
+      # set, Compose resolves `${VAR:-}` to an empty string and Pydantic
+      # would parse that as an empty list — silently filtering EVERYTHING
+      # out. The Pydantic defaults baked into the Settings class are richer
+      # and safer; let the container use those.
+      - GDELT_BASE_URL=${GDELT_BASE_URL:-http://data.gdeltproject.org/gdeltv2}
+      - GDELT_FORWARD_INTERVAL_SECONDS=${GDELT_FORWARD_INTERVAL_SECONDS:-900}
+      - GDELT_PARQUET_PATH=${GDELT_PARQUET_PATH:-/data/gdelt}
+      - GDELT_FILTER_MODE=${GDELT_FILTER_MODE:-alpha}
+      - GDELT_CAMEO_ROOT_ALLOWLIST=${GDELT_CAMEO_ROOT_ALLOWLIST:-15,18,19,20}
+      - GDELT_BACKFILL_PARALLEL_SLICES=${GDELT_BACKFILL_PARALLEL_SLICES:-4}
     volumes:
       - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram:/data/telegram
+      - gdelt_parquet:/data/gdelt
     depends_on:
       redis:
         condition: service_healthy
@@ -437,3 +465,5 @@ volumes:
   neo4j-data:
   tei-embed-cache:
   tei-rerank-cache:
+  gdelt_parquet:
+    driver: local
