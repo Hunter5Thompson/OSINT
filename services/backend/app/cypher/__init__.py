@@ -1,1 +1,1 @@
-# app.cypher — Parametrised Cypher templates (READ-ONLY read templates, write templates parametrised).
+# app.cypher — Parametrised Cypher templates (READ-ONLY reads, parametrised writes).
