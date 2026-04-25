@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Annotated
 
 from pydantic import Field, field_validator
@@ -51,4 +52,6 @@ class GDELTSettings(BaseSettings):
         return v
 
 
-settings = GDELTSettings()
+@lru_cache(maxsize=1)
+def get_settings() -> GDELTSettings:
+    return GDELTSettings()

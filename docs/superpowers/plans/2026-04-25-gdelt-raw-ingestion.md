@@ -149,6 +149,8 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'gdelt_raw'`
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -194,7 +196,9 @@ class GDELTSettings(BaseSettings):
         return v
 
 
-settings = GDELTSettings()
+@lru_cache(maxsize=1)
+def get_settings() -> GDELTSettings:
+    return GDELTSettings()
 ```
 
 - [ ] **Step 4: Update pyproject.toml deps + entry point**
@@ -211,8 +215,7 @@ Modify `services/data-ingestion/pyproject.toml`:
 odin-ingest-gdelt = "gdelt_raw.cli:main"
 ```
 
-**Note on list-from-env parsing:** pydantic-settings v2 defaults to JSON-decoding list-typed env vars. Our CSV-style env (`GDELT_CAMEO_ROOT_ALLOWLIST=15,18,19,20`) is not JSON. The `@field_validator(mode="before")` from Step 3 intercepts the raw string **before** pydantic's JSON decoder runs — verified by the test `test_allowlist_parses_from_csv_env`.
-If that ever breaks (pydantic-settings version upgrade), switch to `Annotated[list[int], NoDecode]`:
+**Note on list-from-env parsing (implemented pattern):** pydantic-settings v2 defaults to JSON-decoding list-typed env vars. Our CSV-style env (`GDELT_CAMEO_ROOT_ALLOWLIST=15,18,19,20`) is not JSON. The implementation uses a belt-and-suspenders combination of `Annotated[list[..], NoDecode]` (disables the JSON decoder for that field) **plus** a `@field_validator(mode="before")` that splits the raw CSV string into a list — verified by the test `test_allowlist_parses_from_csv_env`. Either mechanism alone would work; we keep both so the code stays robust across pydantic-settings upgrades:
 ```python
 from pydantic_settings import NoDecode
 from typing import Annotated
@@ -1437,7 +1440,7 @@ from pathlib import Path
 import httpx
 import structlog
 
-from gdelt_raw.config import settings
+from gdelt_raw.config import get_settings
 
 log = structlog.get_logger(__name__)
 
@@ -1485,6 +1488,7 @@ def parse_lastupdate(text: str) -> list[LastUpdateEntry]:
 
 
 async def fetch_lastupdate() -> list[LastUpdateEntry]:
+    settings = get_settings()
     async with httpx.AsyncClient(timeout=settings.download_timeout) as client:
         resp = await client.get(f"{settings.base_url}/lastupdate.txt")
         resp.raise_for_status()
@@ -1497,6 +1501,7 @@ async def download_slice(
     """Download a single slice file. If verify_md5=True and entry.md5 is non-empty,
     validate and raise MD5MismatchError on drift. Backfill sets verify_md5=False
     because we don't have MD5s for historical slices (they're not in lastupdate.txt)."""
+    settings = get_settings()
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / entry.url.rsplit("/", 1)[-1]
     async with httpx.AsyncClient(timeout=settings.download_timeout) as client:
@@ -3245,7 +3250,7 @@ from pathlib import Path
 import polars as pl
 import structlog
 
-from gdelt_raw.config import settings
+from gdelt_raw.config import get_settings
 from gdelt_raw.downloader import (
     LastUpdateEntry, download_slice, fetch_lastupdate,
 )
@@ -3274,6 +3279,7 @@ async def _extract_and_parse(
     entries: list[LastUpdateEntry], tmp_dir: Path,
     *, verify_md5: bool = True,
 ) -> ParsedSlice:
+    settings = get_settings()
     downloads = await asyncio.gather(*[
         download_slice(e, tmp_dir, verify_md5=verify_md5) for e in entries
     ])
@@ -3307,6 +3313,7 @@ async def _filter_and_write_parquet(
     from gdelt_raw.transform import (
         canonicalize_events, canonicalize_gkg, canonicalize_mentions,
     )
+    settings = get_settings()
     fr = apply_filters(
         parsed.events_df, parsed.mentions_df, parsed.gkg_df,
         cameo_roots=settings.cameo_root_allowlist,
@@ -3640,6 +3647,7 @@ async def run_backfill(
     log.info("gdelt_backfill_start", job_id=job_id, total=job.total)
 
     sem = asyncio.Semaphore(parallel)
+    settings = get_settings()
 
     async def _worker():
         while True:
@@ -3935,7 +3943,7 @@ from pathlib import Path
 
 import click
 
-from gdelt_raw.config import settings
+from gdelt_raw.config import get_settings
 
 
 def _run(coro):
@@ -3950,6 +3958,7 @@ def main():
 @main.command()
 def status():
     """Show last processed slice per store, pending counts, today's totals."""
+    settings = get_settings()
     click.echo(f"Config mode: {settings.filter_mode}")
     click.echo(f"CAMEO allowlist: {settings.cameo_root_allowlist}")
     click.echo("(full implementation wires Redis client via get_redis)")
@@ -3992,6 +4001,7 @@ def doctor():
 @main.command()
 def config():
     """Dump current settings."""
+    settings = get_settings()
     click.echo(json.dumps(settings.model_dump(), indent=2, default=str))
 
 
@@ -4070,6 +4080,7 @@ Replace `forward` stub:
 def forward():
     """Run a single forward tick."""
     async def _go():
+        settings = get_settings()
         state, neo4j, qdrant = await _get_clients()
         try:
             await run_forward(state, neo4j, qdrant, Path(settings.parquet_path))
@@ -4094,6 +4105,7 @@ def backfill(from_date: datetime, to_date: datetime | None, parallel: int):
     click.echo(f"Job: {job_id}  {from_date:%Y-%m-%d} → {to_date:%Y-%m-%d}")
 
     async def _go():
+        settings = get_settings()
         state, neo4j, qdrant = await _get_clients()
         try:
             await run_backfill(
@@ -4113,6 +4125,7 @@ Replace `doctor`:
 def doctor():
     """Health-check all dependencies."""
     async def _check():
+        settings = get_settings()
         errors = []
         state = neo4j = qdrant = None
 
@@ -4244,7 +4257,7 @@ import structlog
 from neo4j import AsyncGraphDatabase
 from qdrant_client import AsyncQdrantClient
 
-from gdelt_raw.config import settings
+from gdelt_raw.config import get_settings
 from gdelt_raw.run import run_forward
 from gdelt_raw.state import GDELTState
 from gdelt_raw.writers.neo4j_writer import Neo4jWriter
@@ -4254,6 +4267,7 @@ log = structlog.get_logger(__name__)
 
 
 async def run_once() -> None:
+    settings = get_settings()
     r = aioredis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"),
                           decode_responses=True)
     state = GDELTState(r)
@@ -4481,8 +4495,9 @@ async def test_full_forward_tick_against_real_stores(tmp_path):
         canonicalize_events, canonicalize_gkg, canonicalize_mentions,
     )
     from gdelt_raw.writers.parquet_writer import write_stream_parquet
-    from gdelt_raw.config import settings
+    from gdelt_raw.config import get_settings
 
+    settings = get_settings()
     fr = apply_filters(
         parsed.events_df, parsed.mentions_df, parsed.gkg_df,
         cameo_roots=settings.cameo_root_allowlist,
