@@ -69,7 +69,7 @@ async def test_store_state_not_advanced_on_failure(tmp_path, monkeypatch):
         f.write_bytes(b"z")
         return f
 
-    async def fake_extract(entries, work):
+    async def fake_extract(entries, work, *, verify_md5=True):
         from gdelt_raw.run import ParsedSlice
         import polars as pl
         return ParsedSlice(

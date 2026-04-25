@@ -118,12 +118,7 @@ async def run_forward_slice(
     work = tmp_dir / slice_id
     work.mkdir(parents=True, exist_ok=True)
 
-    # Default forward path uses MD5 verify (default of _extract_and_parse);
-    # backfill callers explicitly opt out via verify_md5=False.
-    if verify_md5:
-        parsed = await _extract_and_parse(entries, work)
-    else:
-        parsed = await _extract_and_parse(entries, work, verify_md5=False)
+    parsed = await _extract_and_parse(entries, work, verify_md5=verify_md5)
     await _filter_and_write_parquet(parsed, slice_id, state=state,
                                     parquet_base=parquet_base)
 
