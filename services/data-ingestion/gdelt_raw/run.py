@@ -6,7 +6,9 @@ import asyncio
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Iterator
 
 import polars as pl
 import structlog
@@ -179,3 +181,129 @@ async def run_forward(state: GDELTState, neo4j_writer, qdrant_writer,
             neo4j_writer=neo4j_writer, qdrant_writer=qdrant_writer,
             tmp_dir=Path(tmp),
         )
+
+
+# ---------------------------------------------------------------------------
+# Backfill — resumable, parallel slice processing over a date range.
+# ---------------------------------------------------------------------------
+
+
+def enumerate_slices_for_range(start: datetime, end: datetime) -> Iterator[str]:
+    """Yield slice_ids at 15-min steps, inclusive of both endpoints (aligned to :00,:15,:30,:45)."""
+    start = start.replace(minute=(start.minute // 15) * 15, second=0, microsecond=0)
+    cur = start
+    while cur <= end:
+        yield cur.strftime("%Y%m%d%H%M%S")
+        cur = cur + timedelta(minutes=15)
+
+
+@dataclass
+class BackfillJob:
+    job_id: str
+    total: int
+
+
+def _bf_key(job_id: str, suffix: str) -> str:
+    return f"gdelt:backfill:{job_id}:{suffix}"
+
+
+async def initialize_backfill(
+    state: GDELTState, *, job_id: str, start: datetime, end: datetime,
+) -> BackfillJob:
+    """Idempotent: re-running only adds slices not already done/failed/pending."""
+    slice_ids = list(enumerate_slices_for_range(start, end))
+    done = await state.r.smembers(_bf_key(job_id, "done"))
+    failed = await state.r.smembers(_bf_key(job_id, "failed"))
+    # Pending = slice_ids - done - failed (failed stays until resume)
+    to_enqueue = [s for s in slice_ids if s not in done and s not in failed]
+    if to_enqueue:
+        await state.r.zadd(
+            _bf_key(job_id, "pending"),
+            {s: int(s) for s in to_enqueue},
+        )
+    await state.r.set(_bf_key(job_id, "state"), "running")
+    await state.r.set(_bf_key(job_id, "total"), str(len(slice_ids)))
+    return BackfillJob(job_id=job_id, total=len(slice_ids))
+
+
+async def pop_next_pending(state: GDELTState, job_id: str) -> str | None:
+    """ZPOPMIN (single-slice atomic pop) — returns slice_id or None if empty."""
+    res = await state.r.zpopmin(_bf_key(job_id, "pending"), 1)
+    if not res:
+        return None
+    slice_id, _ = res[0]
+    return slice_id
+
+
+async def mark_slice_done(state: GDELTState, job_id: str, slice_id: str) -> None:
+    await state.r.srem(_bf_key(job_id, "failed"), slice_id)
+    await state.r.zrem(_bf_key(job_id, "pending"), slice_id)
+    await state.r.sadd(_bf_key(job_id, "done"), slice_id)
+
+
+async def mark_slice_failed(
+    state: GDELTState, job_id: str, slice_id: str, reason: str,
+) -> None:
+    await state.r.zrem(_bf_key(job_id, "pending"), slice_id)
+    await state.r.sadd(_bf_key(job_id, "failed"), slice_id)
+    await state.r.set(_bf_key(job_id, f"failed:{slice_id}:reason"), reason)
+
+
+async def resume_backfill_pending(state: GDELTState, job_id: str) -> int:
+    """Move all failed slices back into pending; returns re-enqueued count."""
+    failed = await state.r.smembers(_bf_key(job_id, "failed"))
+    if failed:
+        await state.r.zadd(
+            _bf_key(job_id, "pending"),
+            {s: int(s) for s in failed},
+        )
+        await state.r.delete(_bf_key(job_id, "failed"))
+    return len(failed)
+
+
+async def run_backfill(
+    start: datetime, end: datetime, *,
+    state: GDELTState, neo4j_writer, qdrant_writer,
+    parquet_base: Path, job_id: str, parallel: int = 4,
+) -> None:
+    """Backfill a date range. Resumable: pending/done/failed sets in Redis."""
+    job = await initialize_backfill(state, job_id=job_id, start=start, end=end)
+    log.info("gdelt_backfill_start", job_id=job_id, total=job.total)
+
+    sem = asyncio.Semaphore(parallel)
+    settings = get_settings()
+
+    async def _worker():
+        while True:
+            sid = await pop_next_pending(state, job_id)
+            if sid is None:
+                return
+            # Skip if already complete (fully-done predicate covers re-runs)
+            if await state.is_slice_fully_done(sid):
+                await mark_slice_done(state, job_id, sid)
+                continue
+            async with sem:
+                entries = [
+                    LastUpdateEntry(0, "",
+                        f"{settings.base_url}/{sid}.export.CSV.zip", "events", sid),
+                    LastUpdateEntry(0, "",
+                        f"{settings.base_url}/{sid}.mentions.CSV.zip", "mentions", sid),
+                    LastUpdateEntry(0, "",
+                        f"{settings.base_url}/{sid}.gkg.csv.zip", "gkg", sid),
+                ]
+                with tempfile.TemporaryDirectory() as tmp:
+                    try:
+                        # Historical slices: no lastupdate -> no MD5 -> verify_md5=False
+                        await run_forward_slice(
+                            entries, state=state, parquet_base=parquet_base,
+                            neo4j_writer=neo4j_writer, qdrant_writer=qdrant_writer,
+                            tmp_dir=Path(tmp), verify_md5=False,
+                        )
+                        await mark_slice_done(state, job_id, sid)
+                    except Exception as e:
+                        log.error("backfill_slice_failed", slice=sid, error=str(e))
+                        await mark_slice_failed(state, job_id, sid, reason=str(e))
+
+    await asyncio.gather(*[_worker() for _ in range(parallel)])
+    await state.r.set(_bf_key(job_id, "state"), "done")
+    log.info("gdelt_backfill_done", job_id=job_id)
