@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     http_timeout: float = 30.0
     http_max_retries: int = 3
 
+    # Legacy GDELT DOC API collector.
+    # Disabled by default because the DOC API path currently produces empty
+    # or rate-limited responses while GDELT Raw files provide reliable slices.
+    enable_legacy_gdelt_doc: bool = False
+
     # Redis TTLs (seconds)
     tle_cache_ttl: int = 86400  # 24 hours
     hotspot_cache_ttl: int = 21600  # 6 hours

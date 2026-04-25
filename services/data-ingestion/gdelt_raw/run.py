@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import httpx
 import polars as pl
 import structlog
 
@@ -189,12 +190,23 @@ async def run_forward(state: GDELTState, neo4j_writer, qdrant_writer,
         return
 
     with tempfile.TemporaryDirectory() as tmp:
-        await run_forward_slice(
-            by_slice[latest_slice],
-            state=state, parquet_base=parquet_base,
-            neo4j_writer=neo4j_writer, qdrant_writer=qdrant_writer,
-            tmp_dir=Path(tmp),
-        )
+        try:
+            await run_forward_slice(
+                by_slice[latest_slice],
+                state=state, parquet_base=parquet_base,
+                neo4j_writer=neo4j_writer, qdrant_writer=qdrant_writer,
+                tmp_dir=Path(tmp),
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                log.warning(
+                    "gdelt_latest_slice_unavailable",
+                    slice=latest_slice,
+                    url=str(exc.request.url),
+                    status=exc.response.status_code,
+                )
+                return
+            raise
 
 
 # ---------------------------------------------------------------------------
