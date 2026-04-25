@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
-
-from feeds.rss_collector import RSSCollector, RSS_FEEDS, _content_hash, _point_id_from_hash
-from feeds.gdelt_collector import GDELTCollector, GDELT_QUERIES
-from feeds.tle_updater import TLEUpdater, TLE_GROUPS, parse_tle_text
-from feeds.hotspot_updater import HotspotUpdater, HOTSPOTS
+from feeds.gdelt_collector import GDELT_QUERIES, GDELTCollector
+from feeds.hotspot_updater import HOTSPOTS, HotspotUpdater
+from feeds.rss_collector import RSS_FEEDS, RSSCollector, _content_hash, _point_id_from_hash
+from feeds.tle_updater import TLE_GROUPS, TLEUpdater, parse_tle_text
 
 
 # ---------------------------------------------------------------------------

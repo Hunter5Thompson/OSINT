@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from feeds.portwatch_collector import PortWatchCollector, CHOKEPOINT_COORDS
+from feeds.portwatch_collector import CHOKEPOINT_COORDS, PortWatchCollector
 from pipeline import ExtractionConfigError, ExtractionTransientError
 
 SAMPLE_CHOKEPOINT_RESPONSE = {

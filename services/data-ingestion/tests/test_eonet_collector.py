@@ -182,7 +182,6 @@ async def test_eonet_transient_skips_upsert(collector):
     collector._embed = AsyncMock(return_value=[0.0] * 1024)
 
     # Force is_new branch
-    import asyncio as _asyncio  # for patching to_thread if needed
     collector.qdrant.retrieve.return_value = []
 
     with patch(

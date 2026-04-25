@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from pipeline import process_item
 from config import Settings
+from pipeline import process_item
 
 
 def _make_settings(**overrides) -> Settings:

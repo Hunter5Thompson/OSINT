@@ -1,6 +1,7 @@
 """Tests for Telegram channel config Pydantic models."""
 
 import pytest
+
 from feeds.telegram_models import ChannelConfig, ChannelsFile, TelegramPayload
 
 
@@ -147,6 +148,7 @@ class TestTelegramPayload:
 
 
 from pathlib import Path
+
 import yaml
 
 

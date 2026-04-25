@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-import httpx
 import redis.asyncio as aioredis
 import structlog
 from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchText
+from qdrant_client.models import FieldCondition, Filter, MatchText
 
 from config import settings
 
@@ -167,7 +166,7 @@ class HotspotUpdater:
                 adjusted_level = self._adjust_threat_level(
                     hotspot["threat_level"], mention_count
                 )
-                now_iso = datetime.now(timezone.utc).isoformat()
+                now_iso = datetime.now(UTC).isoformat()
 
                 record = {
                     **hotspot,

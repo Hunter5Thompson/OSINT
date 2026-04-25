@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -185,7 +185,7 @@ class GDELTCollector:
                         "source_country": source_country,
                         "seen_date": seendate,
                         "content_hash": chash,
-                        "ingested_at": datetime.now(timezone.utc).isoformat(),
+                        "ingested_at": datetime.now(UTC).isoformat(),
                         "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
                         "entities": enrichment["entities"] if enrichment else [],
                     },

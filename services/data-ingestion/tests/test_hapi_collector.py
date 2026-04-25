@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from feeds.hapi_collector import HAPICollector, FOCUS_COUNTRIES
+from feeds.hapi_collector import FOCUS_COUNTRIES, HAPICollector
 from pipeline import ExtractionConfigError, ExtractionTransientError
 
 SAMPLE_RESPONSE = {
