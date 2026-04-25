@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import signal
 import sys
 from datetime import UTC, datetime, timedelta
@@ -305,6 +306,20 @@ async def run_portwatch_collector() -> None:
         await collector.close()
 
 
+async def run_gdelt_raw_collector() -> None:
+    """Wrap the GDELT raw-files collector in async context for APScheduler.
+
+    Imports lazily inside the function so scheduler startup doesn't pay the
+    cost of pulling in heavy clients (AsyncQdrantClient, Neo4j driver,
+    Polars-based writers) until the first scheduled run.
+    """
+    try:
+        from feeds.gdelt_raw_collector import run_once
+        await run_once()
+    except Exception:
+        log.exception("gdelt_raw_job_failed")
+
+
 # ---------------------------------------------------------------------------
 # Scheduler setup
 # ---------------------------------------------------------------------------
@@ -458,6 +473,21 @@ def create_scheduler() -> AsyncIOScheduler:
         trigger=IntervalTrigger(hours=settings.portwatch_interval_hours),
         id="portwatch_collector",
         name="IMF PortWatch Maritime Trade Collector",
+        replace_existing=True,
+    )
+
+    # GDELT raw-files forward sweep — every GDELT_FORWARD_INTERVAL_SECONDS
+    # (default 900s = 15 min). 30s offset prevents cold-start thundering herd
+    # when the scheduler boots alongside Neo4j/Qdrant/TEI healthchecks.
+    scheduler.add_job(
+        run_gdelt_raw_collector,
+        "interval",
+        seconds=int(os.getenv("GDELT_FORWARD_INTERVAL_SECONDS", "900")),
+        id="gdelt_raw_forward",
+        name="GDELT Raw Files Forward Collector",
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(UTC) + timedelta(seconds=30),
         replace_existing=True,
     )
 
