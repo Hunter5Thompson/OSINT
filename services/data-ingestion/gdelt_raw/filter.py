@@ -19,7 +19,7 @@ import polars as pl
 
 from gdelt_raw.cameo_mapping import map_cameo_root
 from gdelt_raw.ids import build_event_id, build_doc_id
-from gdelt_raw.theme_matching import any_match_in_themes, compile_patterns
+from gdelt_raw.theme_matching import ThemeMatcher, any_match_in_themes, compile_patterns
 
 
 @dataclass
@@ -29,11 +29,10 @@ class FilterResult:
     gkg: pl.DataFrame
 
 
-def _themes_list(col: pl.Expr) -> pl.Expr:
-    return col.fill_null("").str.split(";")
-
-
-def _gkg_theme_match(df: pl.DataFrame, matcher) -> pl.Series:
+def _gkg_theme_match(df: pl.DataFrame, matcher: ThemeMatcher) -> pl.Series:
+    # Python loop is O(rows × themes) — acceptable for typical 15-min GDELT slices
+    # (~5-10K gkg rows × ~5-30 themes each). ThemeMatcher preserves exact-vs-prefix semantics
+    # that pure-Polars regex would lose.
     themes = df.get_column("v1_themes").fill_null("").str.split(";").to_list()
     return pl.Series([any_match_in_themes(t, matcher) for t in themes])
 
@@ -119,10 +118,16 @@ def apply_filters(
         pl.col("gkg_record_id")
           .map_elements(build_doc_id, return_dtype=pl.Utf8)
           .alias("doc_id"),
+        # Coalesce nulls from left-join misses so downstream sees [] / [] / [] instead of None.
+        # goldstein_min/avg may legitimately be None when no mentions reference the doc.
+        pl.col("linked_event_ids").fill_null(pl.lit([], dtype=pl.List(pl.Utf8))).alias("linked_event_ids"),
+        pl.col("cameo_roots_linked").fill_null(pl.lit([], dtype=pl.List(pl.Int32))).alias("cameo_roots_linked"),
+        pl.col("codebook_types_linked").fill_null(pl.lit([], dtype=pl.List(pl.Utf8))).alias("codebook_types_linked"),
     ])
 
-    # Invariant: doc_id unique
-    assert gkg_with_join.n_unique("gkg_record_id") == gkg_with_join.height
+    # Invariant: doc_id unique (real correctness check, not a debug assert)
+    if gkg_with_join.n_unique("gkg_record_id") != gkg_with_join.height:
+        raise RuntimeError("filter invariant: doc_id must be unique after materialized join")
 
     # 8. mentions
     mentions_filtered = mentions_scoped

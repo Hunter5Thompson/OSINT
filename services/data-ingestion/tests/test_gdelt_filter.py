@@ -83,3 +83,20 @@ def test_gkg_linked_fields_are_lists():
     assert isinstance(row["linked_event_ids"], list)
     assert isinstance(row["cameo_roots_linked"], list)
     assert set(row["linked_event_ids"]) == {"gdelt:event:3", "gdelt:event:4"}
+
+
+def test_gkg_alpha_doc_without_mentions_yields_empty_lists():
+    """A gkg_alpha doc whose v2_document_identifier does not appear in any mention
+    must still survive the left join, with empty list aggregates (not None)."""
+    # gkg doc r2 has v2_document_identifier="https://ex.com/2"; no mention references it.
+    res = apply_filters(_events_df(), _mentions_df(), _gkg_df(),
+                        cameo_roots=[15, 18, 19, 20],
+                        theme_alpha=["ARMEDCONFLICT", "KILL"],
+                        theme_nuclear_override=["NUCLEAR", "WMD"])
+    rows = res.gkg.filter(pl.col("gkg_record_id") == "r2").to_dicts()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["linked_event_ids"] == []
+    assert row["cameo_roots_linked"] == []
+    assert row["codebook_types_linked"] == []
+    # goldstein_min / goldstein_avg may legitimately be None
