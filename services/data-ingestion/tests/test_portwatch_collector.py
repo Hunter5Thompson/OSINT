@@ -95,7 +95,7 @@ class TestPortWatchParser:
 
 class TestChokepoints:
     def test_all_chokepoints_have_coords(self):
-        for name, coords in CHOKEPOINT_COORDS.items():
+        for _name, coords in CHOKEPOINT_COORDS.items():
             assert isinstance(coords, tuple)
             assert len(coords) == 2
             lat, lon = coords

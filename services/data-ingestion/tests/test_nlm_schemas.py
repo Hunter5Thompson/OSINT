@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from nlm_ingest.schemas import (
     Claim,
@@ -34,7 +35,7 @@ class TestTranscript:
         assert t.notebook_id == "abc123"
 
     def test_missing_notebook_id_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Transcript(
                 duration_seconds=600.0,
                 language="en",
@@ -49,7 +50,7 @@ class TestEntity:
         assert e.aliases == []
 
     def test_invalid_type_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Entity(name="NATO", type="INVALID_TYPE", confidence=0.9)
 
 
@@ -64,7 +65,7 @@ class TestRelation:
         assert r.type == "COMPETES_WITH"
 
     def test_invalid_relation_type_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Relation(
                 source="A", target="B",
                 type="LOVES",
@@ -86,7 +87,7 @@ class TestClaim:
         assert c.type == "prediction"
 
     def test_invalid_claim_type_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Claim(
                 statement="x", type="opinion", polarity="neutral",
                 entities_involved=[], confidence=0.5, temporal_scope="",
