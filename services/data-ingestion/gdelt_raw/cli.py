@@ -12,11 +12,10 @@ from pathlib import Path
 import click
 import httpx
 import redis.asyncio as aioredis
-from neo4j import AsyncGraphDatabase  # noqa: F401  (re-exported for callers/tests)
 from qdrant_client import AsyncQdrantClient
 
 from gdelt_raw.config import get_settings
-from gdelt_raw.recovery import replay_pending  # noqa: F401  (resume command will use this)
+from gdelt_raw.recovery import replay_pending
 from gdelt_raw.run import run_backfill, run_forward
 from gdelt_raw.state import GDELTState
 from gdelt_raw.writers.neo4j_writer import Neo4jWriter
@@ -126,8 +125,22 @@ def backfill(from_date: datetime, to_date: datetime | None, parallel: int):
 @main.command()
 @click.argument("job_id")
 def resume(job_id: str):
-    """Resume a backfill job."""
-    click.echo(f"Resume job: {job_id}")
+    """Resume a backfill job: re-enqueue failed slices, then replay neo4j/qdrant pending."""
+    async def _go():
+        from gdelt_raw.run import resume_backfill_pending
+        settings = get_settings()
+        state, neo4j, qdrant = await _get_clients()
+        try:
+            n = await resume_backfill_pending(state, job_id)
+            click.echo(f"Re-enqueued {n} failed slice(s) for job {job_id}")
+            await replay_pending(
+                state, parquet_base=Path(settings.parquet_path),
+                neo4j_writer=neo4j, qdrant_writer=qdrant,
+            )
+            click.echo("replay_pending complete")
+        finally:
+            await neo4j.close()
+    _run(_go())
 
 
 @main.command()
