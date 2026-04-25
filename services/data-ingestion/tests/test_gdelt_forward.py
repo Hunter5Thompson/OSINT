@@ -1,11 +1,12 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis.aioredis
+import httpx
 import polars as pl
 import pytest
 
 from gdelt_raw.downloader import LastUpdateEntry
-from gdelt_raw.run import run_forward_slice
+from gdelt_raw.run import run_forward, run_forward_slice
 from gdelt_raw.state import GDELTState
 
 
@@ -175,3 +176,39 @@ async def test_failed_parquet_stream_stops_external_store_writes(tmp_path, monke
     assert await state.get_last_slice("parquet") is None
     assert await state.get_store_state("20260425120000", "neo4j") is None
     assert await state.get_store_state("20260425120000", "qdrant") is None
+
+
+@pytest.mark.asyncio
+async def test_forward_skips_latest_slice_when_cdn_file_not_available(tmp_path, monkeypatch):
+    """Forward sweep should tolerate GDELT lastupdate/CDN eventual consistency.
+
+    Sometimes lastupdate.txt advertises a fresh slice before all zip files are
+    readable from the CDN. That should skip the tick without advancing state;
+    the scheduler will retry on the next interval.
+    """
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+    slice_id = "20260425210000"
+    entries = [
+        LastUpdateEntry(0, "m", f"http://x/{slice_id}.export.CSV.zip", "events", slice_id),
+        LastUpdateEntry(0, "m", f"http://x/{slice_id}.mentions.CSV.zip", "mentions", slice_id),
+        LastUpdateEntry(0, "m", f"http://x/{slice_id}.gkg.csv.zip", "gkg", slice_id),
+    ]
+    request = httpx.Request("GET", entries[0].url)
+    response = httpx.Response(404, request=request)
+
+    async def fake_run_forward_slice(*args, **kwargs):
+        raise httpx.HTTPStatusError("not ready", request=request, response=response)
+
+    monkeypatch.setattr("gdelt_raw.run.fetch_lastupdate", AsyncMock(return_value=entries))
+    monkeypatch.setattr("gdelt_raw.run.replay_pending", AsyncMock())
+    monkeypatch.setattr("gdelt_raw.run.run_forward_slice", fake_run_forward_slice)
+
+    neo4j = MagicMock()
+    qdrant = MagicMock()
+
+    await run_forward(state, neo4j, qdrant, tmp_path)
+
+    assert await state.get_last_slice("parquet") is None
+    assert await state.get_last_slice("neo4j") is None
+    assert await state.get_last_slice("qdrant") is None

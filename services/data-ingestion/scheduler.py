@@ -6,6 +6,7 @@ import asyncio
 import os
 import signal
 import sys
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -342,14 +343,16 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    # GDELT events — every 15 minutes
-    scheduler.add_job(
-        run_gdelt_collector,
-        trigger=IntervalTrigger(minutes=15),
-        id="gdelt_collector",
-        name="GDELT Event Collector",
-        replace_existing=True,
-    )
+    # Legacy GDELT DOC API collector. Disabled by default; the Raw files
+    # forward sweep below is the production GDELT ingestion path.
+    if settings.enable_legacy_gdelt_doc:
+        scheduler.add_job(
+            run_gdelt_collector,
+            trigger=IntervalTrigger(minutes=15),
+            id="gdelt_collector",
+            name="GDELT DOC API Collector",
+            replace_existing=True,
+        )
 
     # TLE satellite data — daily at 03:00 UTC
     scheduler.add_job(
@@ -497,6 +500,29 @@ def create_scheduler() -> AsyncIOScheduler:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+def initial_collection_jobs() -> list[Callable[[], Awaitable[None]]]:
+    """Jobs to run once on scheduler startup before interval triggers fire."""
+    jobs: list[Callable[[], Awaitable[None]]] = [
+        run_rss_collector,
+        run_tle_updater,
+        run_hotspot_updater,
+        run_telegram_collector,
+        run_ucdp_collector,
+        run_firms_collector,
+        run_usgs_collector,
+        run_military_collector,
+        run_eonet_collector,
+        run_gdacs_collector,
+        # HAPI runs daily via cron, not on initial startup.
+        run_noaa_nhc_collector,
+        run_portwatch_collector,
+        # OFAC runs daily via cron, not on initial startup.
+    ]
+    if settings.enable_legacy_gdelt_doc:
+        jobs.insert(1, run_gdelt_collector)
+    return jobs
+
+
 async def main() -> None:
     """Start the scheduler and run until interrupted."""
     log.info("scheduler_starting")
@@ -526,23 +552,7 @@ async def main() -> None:
 
     # Run initial collection on startup (don't wait for first interval)
     log.info("initial_collection_starting")
-    initial_tasks = [
-        run_rss_collector(),
-        run_gdelt_collector(),
-        run_tle_updater(),
-        run_hotspot_updater(),
-        run_telegram_collector(),
-        run_ucdp_collector(),
-        run_firms_collector(),
-        run_usgs_collector(),
-        run_military_collector(),
-        run_eonet_collector(),
-        run_gdacs_collector(),
-        # HAPI runs daily via cron, not on initial startup
-        run_noaa_nhc_collector(),
-        run_portwatch_collector(),
-        # OFAC runs daily via cron, not on initial startup
-    ]
+    initial_tasks = [job() for job in initial_collection_jobs()]
     await asyncio.gather(*initial_tasks, return_exceptions=True)
     log.info("initial_collection_complete")
 

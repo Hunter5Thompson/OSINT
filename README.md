@@ -186,7 +186,25 @@ npm run build                    # Production build
 | [CelesTrak](https://celestrak.org) | Satellite TLE data | Daily refresh |
 | [USGS](https://earthquake.usgs.gov) | Earthquakes M4.5+ | 5min |
 | [AISStream](https://aisstream.io) | Ship AIS data | API key required |
-| [GDELT](https://api.gdeltproject.org) | Global event data | 15min |
+| [GDELT Raw Files](https://data.gdeltproject.org/gdeltv2/) | Global event data, mentions, and GKG themes | 15min |
+
+### GDELT Ingestion Mode
+
+ODIN uses the GDELT v2 raw files pipeline by default. The scheduler runs `gdelt_raw_forward` every 15 minutes, writes raw-filtered slices to Parquet, creates `GDELTEvent` and `GDELTDocument` nodes in Neo4j, and embeds GKG documents into Qdrant with `source=gdelt_gkg`.
+
+The old GDELT DOC API collector is disabled by default because it is prone to empty responses and `429 Too Many Requests`. It can be re-enabled for debugging by setting `ENABLE_LEGACY_GDELT_DOC=true`, but it should not run alongside Raw ingestion in normal operation.
+
+Useful checks:
+
+```bash
+docker exec odin-data-ingestion-spark odin-ingest-gdelt doctor
+docker exec odin-data-ingestion-spark odin-ingest-gdelt status
+curl -sS -X POST -H 'Content-Type: application/json' \
+  -d '{"filter":{"must":[{"key":"source","match":{"value":"gdelt_gkg"}}]},"exact":true}' \
+  http://localhost:6333/collections/odin_intel/points/count
+docker exec osint-neo4j-1 sh -lc \
+  'PASS="${NEO4J_AUTH#*/}"; /var/lib/neo4j/bin/cypher-shell -u neo4j -p "$PASS" "MATCH (e:GDELTEvent) RETURN count(e) AS gdeltEvents; MATCH (d:GDELTDocument) RETURN count(d) AS gdeltDocuments;"'
+```
 
 ## Tech Stack
 

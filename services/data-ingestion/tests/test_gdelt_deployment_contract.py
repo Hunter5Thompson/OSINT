@@ -20,6 +20,12 @@ def test_data_ingestion_image_copies_gdelt_raw_package():
     assert "COPY gdelt_raw/ gdelt_raw/" in dockerfile
 
 
+def test_data_ingestion_image_exposes_venv_scripts_on_path():
+    dockerfile = (REPO_ROOT / "services" / "data-ingestion" / "Dockerfile").read_text()
+
+    assert 'ENV PATH="/app/.venv/bin:$PATH"' in dockerfile
+
+
 def test_wheel_includes_gdelt_raw_package():
     pyproject = (REPO_ROOT / "services" / "data-ingestion" / "pyproject.toml").read_text()
 
