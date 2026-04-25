@@ -16,22 +16,22 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from config import settings
+from feeds.correlation_job import CorrelationJob
+from feeds.eonet_collector import EONETCollector
 from feeds.firms_collector import FIRMSCollector
+from feeds.gdacs_collector import GDACSCollector
 from feeds.gdelt_collector import GDELTCollector
+from feeds.hapi_collector import HAPICollector
 from feeds.hotspot_updater import HotspotUpdater
 from feeds.military_aircraft_collector import MilitaryAircraftCollector
+from feeds.noaa_nhc_collector import NOAANHCCollector
 from feeds.ofac_collector import OFACCollector
+from feeds.portwatch_collector import PortWatchCollector
 from feeds.rss_collector import RSSCollector
 from feeds.telegram_collector import TelegramCollector
 from feeds.tle_updater import TLEUpdater
 from feeds.ucdp_collector import UCDPCollector
 from feeds.usgs_collector import USGSCollector
-from feeds.correlation_job import CorrelationJob
-from feeds.eonet_collector import EONETCollector
-from feeds.gdacs_collector import GDACSCollector
-from feeds.hapi_collector import HAPICollector
-from feeds.noaa_nhc_collector import NOAANHCCollector
-from feeds.portwatch_collector import PortWatchCollector
 
 # Shared async Redis client for stream publishing
 _redis_client: aioredis.Redis | None = None

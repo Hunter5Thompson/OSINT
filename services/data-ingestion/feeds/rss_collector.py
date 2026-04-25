@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import time
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 import feedparser
 import httpx
@@ -166,11 +165,11 @@ class RSSCollector:
             published_parsed = entry.get("published_parsed")
             if published_parsed:
                 try:
-                    published_dt = datetime(*published_parsed[:6], tzinfo=timezone.utc).isoformat()
+                    published_dt = datetime(*published_parsed[:6], tzinfo=UTC).isoformat()
                 except Exception:
                     published_dt = published
             else:
-                published_dt = published or datetime.now(timezone.utc).isoformat()
+                published_dt = published or datetime.now(UTC).isoformat()
 
             # Intelligence extraction. Transient/config errors skip Qdrant upsert
             # so the item is retried on the next source re-fetch (Hash-Dedup doesn't trip).
@@ -208,7 +207,7 @@ class RSSCollector:
                         "summary": (summary or content)[:1000],
                         "published": published_dt,
                         "content_hash": chash,
-                        "ingested_at": datetime.now(timezone.utc).isoformat(),
+                        "ingested_at": datetime.now(UTC).isoformat(),
                         "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
                         "entities": enrichment["entities"] if enrichment else [],
                     },

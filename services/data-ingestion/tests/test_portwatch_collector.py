@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from feeds.portwatch_collector import PortWatchCollector, CHOKEPOINT_COORDS
+from feeds.portwatch_collector import CHOKEPOINT_COORDS, PortWatchCollector
 from pipeline import ExtractionConfigError, ExtractionTransientError
 
 SAMPLE_CHOKEPOINT_RESPONSE = {
@@ -95,7 +95,7 @@ class TestPortWatchParser:
 
 class TestChokepoints:
     def test_all_chokepoints_have_coords(self):
-        for name, coords in CHOKEPOINT_COORDS.items():
+        for _name, coords in CHOKEPOINT_COORDS.items():
             assert isinstance(coords, tuple)
             assert len(coords) == 2
             lat, lon = coords

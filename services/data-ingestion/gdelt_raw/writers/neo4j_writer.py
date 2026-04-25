@@ -80,7 +80,8 @@ MERGE (d)-[:ABOUT]->(t)
 # d.themes (list) and query with list functions.
 
 MERGE_MENTION = """
-// Intentional: :Document (unscoped) so GDELT mentions can bridge to docs from other ingestion paths.
+// Intentional: :Document (unscoped) so GDELT mentions can bridge
+// to docs from other ingestion paths.
 MATCH (d:Document {url: $doc_url})
 MATCH (e:GDELTEvent {event_id: $event_id})
 MERGE (d)-[r:MENTIONS]->(e)
@@ -108,14 +109,17 @@ class Neo4jWriter:
         await self._driver.close()
 
     async def write_events(self, events: list[GDELTEventWrite]):
-        async with self._driver.session() as session:
+        # noqa rationale: outer `with` binds `session`, which is required by
+        # `await session.begin_transaction()` in the inner `with` — cannot be
+        # combined into a single `async with X, Y` form.
+        async with self._driver.session() as session:  # noqa: SIM117
             async with await session.begin_transaction() as tx:
                 for ev in events:
                     await tx.run(MERGE_EVENT, render_event_params(ev))
                 await tx.commit()
 
     async def write_docs(self, docs: list[GDELTDocumentWrite]):
-        async with self._driver.session() as session:
+        async with self._driver.session() as session:  # noqa: SIM117
             async with await session.begin_transaction() as tx:
                 for d in docs:
                     params = render_doc_params(d)
@@ -129,7 +133,7 @@ class Neo4jWriter:
         """mentions: list of canonical dicts with event_id, mention_url, tone,
         confidence, char_offset. Requires corresponding Documents + GDELTEvents
         to already exist in the graph."""
-        async with self._driver.session() as session:
+        async with self._driver.session() as session:  # noqa: SIM117
             async with await session.begin_transaction() as tx:
                 for m in mentions:
                     await tx.run(MERGE_MENTION, {

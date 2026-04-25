@@ -120,9 +120,15 @@ def apply_filters(
           .alias("doc_id"),
         # Coalesce nulls from left-join misses so downstream sees [] / [] / [] instead of None.
         # goldstein_min/avg may legitimately be None when no mentions reference the doc.
-        pl.col("linked_event_ids").fill_null(pl.lit([], dtype=pl.List(pl.Utf8))).alias("linked_event_ids"),
-        pl.col("cameo_roots_linked").fill_null(pl.lit([], dtype=pl.List(pl.Int32))).alias("cameo_roots_linked"),
-        pl.col("codebook_types_linked").fill_null(pl.lit([], dtype=pl.List(pl.Utf8))).alias("codebook_types_linked"),
+        pl.col("linked_event_ids")
+          .fill_null(pl.lit([], dtype=pl.List(pl.Utf8)))
+          .alias("linked_event_ids"),
+        pl.col("cameo_roots_linked")
+          .fill_null(pl.lit([], dtype=pl.List(pl.Int32)))
+          .alias("cameo_roots_linked"),
+        pl.col("codebook_types_linked")
+          .fill_null(pl.lit([], dtype=pl.List(pl.Utf8)))
+          .alias("codebook_types_linked"),
     ])
 
     # Invariant: doc_id unique (real correctness check, not a debug assert)
