@@ -21,6 +21,7 @@ from app.routers import (
     gdacs,
     graph,
     hotspots,
+    incidents,
     intel,
     landing,
     reports,
@@ -113,6 +114,7 @@ for r in (
 # S1 Hlidskjalf routers (already at /api, no alias needed)
 app.include_router(signals.router, prefix="/api")
 app.include_router(landing.router, prefix="/api")
+app.include_router(incidents.router, prefix="/api")
 
 # WebSocket Routers
 app.include_router(flight_ws.router)

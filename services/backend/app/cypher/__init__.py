@@ -1,1 +1,4 @@
-"""Cypher query templates for backend persistence."""
+"""Cypher query templates for backend persistence.
+
+READ-ONLY reads, parametrised writes — never LLM-generated Cypher.
+"""
