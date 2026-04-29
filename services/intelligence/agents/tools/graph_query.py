@@ -129,11 +129,43 @@ def _format_results(rows: list[dict], max_rows: int = 15) -> str:
 
 @tool
 async def query_knowledge_graph(question: str) -> str:
-    """Query the Neo4j knowledge graph. Use for entity relationships,
-    event timelines, connection networks, and co-occurrence analysis.
+    """Query the Neo4j knowledge graph (entities, events, locations, sources).
+
+    The graph is built from Qdrant's underlying documents — same content,
+    different shape. Where qdrant_search gives you semantic similarity over
+    free text, this gives you EXACT relationships and timelines.
+
+    The question is mapped to a Cypher template by keyword. To trigger a
+    specific template, phrase your question to match its keywords:
+
+    - **entity_lookup** — "who is \\"Wagner Group\\"" / "find entity \\"Murmansk\\""
+        Returns: profile of one entity (relations, mentions, sources).
+    - **events_by_entity** — "events involving \\"Murmansk\\"" / "events about \\"Houthi\\""
+        Returns: all (:Event) nodes connected to that entity.
+    - **event_timeline** — "timeline of Donezk" / "events in Black Sea"
+        Returns: chronological list of events at a location.
+    - **co_occurring** — "co-occurring entities of \\"shadow fleet\\""
+        Returns: entities that appear in the same documents — useful for
+        finding accomplices, partner organizations, related vessels.
+    - **source_backed** — "sources for \\"Wagner Group\\"" / "evidence for \\"Murmansk\\""
+        Returns: which feeds/articles mention this entity, with timestamps.
+    - **one_hop** — "connected to \\"Murmansk\\"" / "neighbors of \\"shadow fleet\\""
+        Returns: directly-connected entities/events (1 hop in graph).
+    - **two_hop_network** — "network around \\"Wagner Group\\"" / "2-hop connections"
+        Returns: extended network — entity-of-entity. Wider but noisier.
+    - **top_connected** — "top entities" / "most connected"
+        Returns: highest-degree nodes overall — useful for finding the
+        dominant actors in the graph.
+
+    For thematic research, run TWO OR MORE templates per topic — e.g.
+    `entity_lookup` then `events_by_entity` then `co_occurring`. Each
+    template surfaces different aspects of the same entity.
 
     Args:
-        question: Natural language question about entities or events.
+        question: Phrase to match a template keyword. Quote entity names.
+
+    Returns:
+        Formatted graph results (up to 15 rows per query).
     """
     template_id, params = _match_intent(question)
 

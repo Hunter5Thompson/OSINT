@@ -11,14 +11,33 @@ GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 @tool
 async def gdelt_query(query: str, max_records: int = 20) -> str:
-    """Query the GDELT Global Knowledge Graph for recent events.
+    """Query GDELT DOC-API for breaking news (last 24-72h coverage window).
+
+    GDELT covers global news in 65+ languages updated every 15 minutes —
+    use this when you need ACTUAL CURRENT events that may not yet have
+    been ingested into the local Qdrant knowledge base.
+
+    Query construction tips (GDELT is keyword-based, not semantic):
+    - Use 3-6 specific keywords, not full sentences
+    - English usually returns more articles than other languages
+    - Combine entity + action: "Russia tanker seized" beats "russian shadow fleet"
+    - Avoid stop-words and very short queries (≤2 keywords often rate-limited)
+    - Quote phrases for exact match: '"shadow fleet" sanctions'
+
+    Examples that work:
+    - 'Russia oil tanker sanctions Baltic'
+    - 'Houthi missile Red Sea strait'
+    - 'Taiwan strait military exercise'
+    - 'NATO Article 5 incursion'
 
     Args:
-        query: Search terms for GDELT events.
-        max_records: Maximum number of records to return (default 20).
+        query: 3-6 specific keywords describing recent events. Quoted phrases
+            allowed. Avoid generic 1-2 word queries.
+        max_records: Articles to return (default 20, max 50).
 
     Returns:
-        Formatted GDELT event results.
+        List of recent articles with title, source domain, publish date,
+        URL — sorted newest first.
     """
     try:
         params = {
@@ -46,6 +65,12 @@ async def gdelt_query(query: str, max_records: int = 20) -> str:
                 return f"GDELT query temporarily unavailable for: {query}"
 
         articles = data.get("articles", [])
+        logger.info(
+            "gdelt_query_executed",
+            query=query,
+            max_records=max_records,
+            result_count=len(articles),
+        )
         if not articles:
             return f"No GDELT results found for: {query}"
 

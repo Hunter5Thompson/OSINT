@@ -56,13 +56,32 @@ async def react_agent_node(state: AgentState) -> dict:
         response = await llm.ainvoke(messages)
 
         # Count tool calls in this response
-        new_tool_calls = len(response.tool_calls) if hasattr(response, "tool_calls") else 0
+        tool_calls = getattr(response, "tool_calls", None) or []
+        new_tool_calls = len(tool_calls)
+
+        # Populate tool_trace for transparency in the final analysis
+        new_trace_entries = [
+            {
+                "iteration": state.get("iteration", 0),
+                "tool": tc.get("name", "?"),
+                "args": tc.get("args", {}),
+            }
+            for tc in tool_calls
+        ]
+
+        logger.info(
+            "react_agent_invoked",
+            iteration=state.get("iteration", 0),
+            tool_calls_in_response=new_tool_calls,
+            tools=[tc.get("name") for tc in tool_calls],
+        )
 
         return {
             "messages": [response],
             "iteration": state.get("iteration", 0) + 1,
             "tool_calls_count": state.get("tool_calls_count", 0) + new_tool_calls,
             "agent_chain": state.get("agent_chain", []) + ["react_agent"],
+            "tool_trace": state.get("tool_trace", []) + new_trace_entries,
         }
 
     except Exception as e:
@@ -81,13 +100,22 @@ async def react_synthesis_node(state: AgentState) -> dict:
     try:
         llm = create_synthesis_llm()
 
-        # Collect all tool results from messages
+        # Collect all tool results from messages + derive sources_used from trace
         tool_results = []
         for msg in state.get("messages", []):
             if hasattr(msg, "content") and getattr(msg, "type", None) == "tool":
                 tool_results.append(msg.content if isinstance(msg.content, str) else str(msg.content))
 
         research_text = "\n\n---\n\n".join(tool_results) if tool_results else "No research results collected."
+
+        # Derive sources_used from tool_trace (de-duplicated tool names)
+        derived_sources = sorted({entry.get("tool", "?") for entry in state.get("tool_trace", [])})
+        logger.info(
+            "react_synthesis_grounding",
+            tool_call_count=len(state.get("tool_trace", [])),
+            unique_tools=derived_sources,
+            tool_message_count=len(tool_results),
+        )
 
         messages = [
             synthesis_sys(),
@@ -132,6 +160,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
             "synthesis": content,
             "threat_assessment": threat,
             "confidence": confidence,
+            "sources_used": derived_sources,
             "agent_chain": state.get("agent_chain", []) + ["synthesis"],
             "messages": [response],
         }
