@@ -120,7 +120,8 @@ def mock_settings():
     s = MagicMock()
     s.qdrant_url = "http://localhost:6333"
     s.qdrant_collection = "odin_intel"
-    s.neo4j_url = "http://localhost:7474"
+    s.neo4j_url = "bolt://localhost:7687"
+    s.neo4j_http_url = "http://localhost:7474"
     s.neo4j_user = "neo4j"
     s.neo4j_password = "test"
     s.redis_url = "redis://localhost:6379/0"

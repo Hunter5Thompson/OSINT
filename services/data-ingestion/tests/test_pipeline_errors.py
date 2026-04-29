@@ -42,6 +42,7 @@ def _settings(**overrides) -> Settings:
         "ingestion_vllm_model": "Qwen/Qwen3.6-35B-A3B",
         "ingestion_vllm_timeout": 120.0,
         "neo4j_url": "http://localhost:7474",
+        "neo4j_http_url": "http://localhost:7474",
         "neo4j_user": "neo4j",
         "neo4j_password": "test",
         "redis_stream_events": "events:new",

@@ -284,7 +284,7 @@ def ingest(notebook_id: str | None):
                         extraction=extraction,
                         source_name=source_name,
                         client=client,
-                        neo4j_url=settings.neo4j_url,
+                        neo4j_url=settings.neo4j_http_url,
                         neo4j_user=settings.neo4j_user,
                         neo4j_password=settings.neo4j_password,
                     )

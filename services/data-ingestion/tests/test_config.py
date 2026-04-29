@@ -36,3 +36,18 @@ class TestIngestionVllmSettings:
             s = Settings(_env_file=None)
             assert s.vllm_url == "http://localhost:8000"
             assert s.vllm_model == "qwen3.5"
+
+
+class TestNeo4jSettings:
+    def test_bolt_driver_uri_and_http_transaction_url_are_separate(self):
+        with patch.dict(
+            os.environ,
+            {
+                "NEO4J_URL": "bolt://neo4j:7687",
+                "NEO4J_HTTP_URL": "http://neo4j:7474",
+            },
+            clear=True,
+        ):
+            s = Settings(_env_file=None)
+            assert s.neo4j_url == "bolt://neo4j:7687"
+            assert s.neo4j_http_url == "http://neo4j:7474"

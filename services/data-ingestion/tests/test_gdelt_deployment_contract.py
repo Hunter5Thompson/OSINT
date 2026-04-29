@@ -32,10 +32,11 @@ def test_wheel_includes_gdelt_raw_package():
     assert "gdelt_raw/**/*.py" in pyproject
 
 
-def test_compose_data_ingestion_uses_bolt_for_neo4j_driver():
+def test_compose_data_ingestion_separates_bolt_driver_and_http_tx_url():
     compose = (REPO_ROOT / "docker-compose.yml").read_text()
 
     for service in ("data-ingestion", "data-ingestion-spark"):
         block = _compose_service_block(compose, service)
         assert "NEO4J_URL=bolt://neo4j:7687" in block
         assert "NEO4J_URL=http://neo4j:7474" not in block
+        assert "NEO4J_HTTP_URL=http://neo4j:7474" in block

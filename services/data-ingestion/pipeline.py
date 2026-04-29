@@ -321,7 +321,7 @@ async def _write_to_neo4j(
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
-            f"{settings.neo4j_url}/db/neo4j/tx/commit",
+            f"{settings.neo4j_http_url}/db/neo4j/tx/commit",
             json={"statements": statements},
             auth=(settings.neo4j_user, settings.neo4j_password),
         )

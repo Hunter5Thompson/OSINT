@@ -240,7 +240,7 @@ class MilitaryAircraftCollector(BaseCollector):
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
-                f"{self.settings.neo4j_url}/db/neo4j/tx/commit",
+                f"{self.settings.neo4j_http_url}/db/neo4j/tx/commit",
                 json={"statements": statements},
                 auth=(self.settings.neo4j_user, self.settings.neo4j_password),
             )

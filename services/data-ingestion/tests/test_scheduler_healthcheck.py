@@ -7,6 +7,20 @@ import pytest
 import structlog
 
 
+def test_scheduler_registers_only_gdelt_raw_forward_job():
+    """Legacy DOC-API GDELT collector must stay out of the production schedule."""
+    from scheduler import create_scheduler
+
+    scheduler = create_scheduler()
+    job_ids = {job.id for job in scheduler.get_jobs()}
+    job_names = {job.name for job in scheduler.get_jobs()}
+
+    assert "gdelt_raw_forward" in job_ids
+    assert "GDELT Raw Files Forward Collector" in job_names
+    assert "gdelt_collector" not in job_ids
+    assert "GDELT Event Collector" not in job_names
+
+
 @pytest.mark.asyncio
 async def test_ready_when_model_in_response():
     """200 + model in data[].id → log 'ingestion_llm_ready'."""

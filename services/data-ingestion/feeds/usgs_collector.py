@@ -190,7 +190,7 @@ ON CREATE SET r.distance_km   = $distance_km,
             "concern_level": event["concern_level"],
         }
 
-        neo4j_tx_url = f"{self.settings.neo4j_url}/db/neo4j/tx/commit"
+        neo4j_tx_url = f"{self.settings.neo4j_http_url}/db/neo4j/tx/commit"
         payload = {"statements": [{"statement": cypher, "parameters": params}]}
         auth = (self.settings.neo4j_user, self.settings.neo4j_password)
 

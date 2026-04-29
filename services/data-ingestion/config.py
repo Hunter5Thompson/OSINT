@@ -21,11 +21,6 @@ class Settings(BaseSettings):
     http_timeout: float = 30.0
     http_max_retries: int = 3
 
-    # Legacy GDELT DOC API collector.
-    # Disabled by default because the DOC API path currently produces empty
-    # or rate-limited responses while GDELT Raw files provide reliable slices.
-    enable_legacy_gdelt_doc: bool = False
-
     # Redis TTLs (seconds)
     tle_cache_ttl: int = 86400  # 24 hours
     hotspot_cache_ttl: int = 21600  # 6 hours
@@ -39,8 +34,11 @@ class Settings(BaseSettings):
     ingestion_vllm_model: str = "Qwen/Qwen3.6-35B-A3B"
     ingestion_vllm_timeout: float = 120.0
 
-    # Neo4j (graph writes via HTTP transactional API)
-    neo4j_url: str = "http://localhost:7474"
+    # Neo4j
+    # neo4j_url is the Bolt driver URI. neo4j_http_url is for the HTTP
+    # transactional API used by legacy feed writers.
+    neo4j_url: str = "bolt://localhost:7687"
+    neo4j_http_url: str = "http://localhost:7474"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
 

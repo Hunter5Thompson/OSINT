@@ -21,6 +21,7 @@ def _make_settings(**overrides) -> Settings:
         "ingestion_vllm_model": "Qwen/Qwen3.6-35B-A3B",
         "ingestion_vllm_timeout": 120.0,
         "neo4j_url": "http://localhost:7474",
+        "neo4j_http_url": "http://localhost:7474",
         "neo4j_user": "neo4j",
         "neo4j_password": "test",
         "redis_stream_events": "events:new",
@@ -125,6 +126,40 @@ class TestProcessItem:
         neo4j_call = mock_client.post.call_args_list[1]
         assert "/db/neo4j/tx/commit" in str(neo4j_call)
 
+    async def test_neo4j_write_uses_http_url_when_driver_url_is_bolt(self):
+        """The shared pipeline writes through Neo4j HTTP API, not the Bolt driver URI."""
+        vllm_resp = _mock_vllm_response(
+            events=[{
+                "title": "Test event",
+                "summary": "Test event summary",
+                "codebook_type": "military.airstrike",
+                "severity": "medium",
+                "confidence": 0.7,
+                "timestamp": "2026-01-01",
+            }],
+        )
+        neo4j_resp = _mock_neo4j_response()
+
+        with patch("pipeline.httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = [vllm_resp, neo4j_resp]
+            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await process_item(
+                title="Test",
+                text="Test text",
+                url="http://test.com",
+                source="rss",
+                settings=_make_settings(
+                    neo4j_url="bolt://neo4j:7687",
+                    neo4j_http_url="http://neo4j:7474",
+                ),
+            )
+
+        neo4j_call = mock_client.post.call_args_list[1]
+        assert neo4j_call.args[0] == "http://neo4j:7474/db/neo4j/tx/commit"
+
     async def test_publishes_to_redis_stream(self):
         """process_item publishes events to Redis Stream."""
         vllm_resp = _mock_vllm_response(
@@ -208,7 +243,10 @@ class TestPipelineCodebookBinding:
     def test_system_prompt_contains_codebook_types(self):
         from pipeline import _SYSTEM_PROMPT
         # These types are in event_codebook.yaml but would NOT be in a minimal hardcoded list
-        assert "military.ground_offensive" in _SYSTEM_PROMPT or "military.airstrike" in _SYSTEM_PROMPT
+        assert (
+            "military.ground_offensive" in _SYSTEM_PROMPT
+            or "military.airstrike" in _SYSTEM_PROMPT
+        )
         assert "space.satellite_launch" in _SYSTEM_PROMPT
         assert "other.unclassified" in _SYSTEM_PROMPT
 

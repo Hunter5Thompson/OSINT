@@ -192,7 +192,7 @@ npm run build                    # Production build
 
 ODIN uses the GDELT v2 raw files pipeline by default. The scheduler runs `gdelt_raw_forward` every 15 minutes, writes raw-filtered slices to Parquet, creates `GDELTEvent` and `GDELTDocument` nodes in Neo4j, and embeds GKG documents into Qdrant with `source=gdelt_gkg`.
 
-The old GDELT DOC API collector is disabled by default because it is prone to empty responses and `429 Too Many Requests`. It can be re-enabled for debugging by setting `ENABLE_LEGACY_GDELT_DOC=true`, but it should not run alongside Raw ingestion in normal operation.
+The old GDELT DOC API collector is not registered in the scheduler. Production ingestion uses the Raw files path only.
 
 Useful checks:
 

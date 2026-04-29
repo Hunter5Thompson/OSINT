@@ -26,7 +26,8 @@ def mock_settings():
     s.embedding_dimensions = 1024
     s.vllm_url = "http://localhost:8000"
     s.vllm_model = "qwen3.5"
-    s.neo4j_url = "http://localhost:7474"
+    s.neo4j_url = "bolt://localhost:7687"
+    s.neo4j_http_url = "http://localhost:7474"
     s.neo4j_user = "neo4j"
     s.neo4j_password = "test"
     s.redis_stream_events = "events:new"

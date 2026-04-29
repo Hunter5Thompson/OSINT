@@ -21,7 +21,6 @@ from feeds.correlation_job import CorrelationJob
 from feeds.eonet_collector import EONETCollector
 from feeds.firms_collector import FIRMSCollector
 from feeds.gdacs_collector import GDACSCollector
-from feeds.gdelt_collector import GDELTCollector
 from feeds.hapi_collector import HAPICollector
 from feeds.hotspot_updater import HotspotUpdater
 from feeds.military_aircraft_collector import MilitaryAircraftCollector
@@ -141,15 +140,6 @@ async def run_rss_collector() -> None:
         await collector.collect()
     except Exception:
         log.exception("rss_job_failed")
-
-
-async def run_gdelt_collector() -> None:
-    """Collect GDELT events."""
-    try:
-        collector = GDELTCollector(redis_client=_get_redis_client())
-        await collector.collect()
-    except Exception:
-        log.exception("gdelt_job_failed")
 
 
 async def run_tle_updater() -> None:
@@ -343,17 +333,6 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    # Legacy GDELT DOC API collector. Disabled by default; the Raw files
-    # forward sweep below is the production GDELT ingestion path.
-    if settings.enable_legacy_gdelt_doc:
-        scheduler.add_job(
-            run_gdelt_collector,
-            trigger=IntervalTrigger(minutes=15),
-            id="gdelt_collector",
-            name="GDELT DOC API Collector",
-            replace_existing=True,
-        )
-
     # TLE satellite data — daily at 03:00 UTC
     scheduler.add_job(
         run_tle_updater,
@@ -518,8 +497,6 @@ def initial_collection_jobs() -> list[Callable[[], Awaitable[None]]]:
         run_portwatch_collector,
         # OFAC runs daily via cron, not on initial startup.
     ]
-    if settings.enable_legacy_gdelt_doc:
-        jobs.insert(1, run_gdelt_collector)
     return jobs
 
 

@@ -90,7 +90,8 @@ def mock_settings():
     s.tei_embed_url = "http://localhost:8001"
     s.http_timeout = 30.0
     s.embedding_dimensions = 1024
-    s.neo4j_url = "http://localhost:7474"
+    s.neo4j_url = "bolt://localhost:7687"
+    s.neo4j_http_url = "http://localhost:7474"
     s.neo4j_user = "neo4j"
     s.neo4j_password = "test"
     s.redis_stream_events = "events:new"
