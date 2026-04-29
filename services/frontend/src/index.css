@@ -76,3 +76,14 @@ body,
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
 }
+
+@keyframes hlidIncidentPulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1.0; }
+}
+.hlid-pulse {
+  animation: hlidIncidentPulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hlid-pulse { animation: none; opacity: 1.0; }
+}

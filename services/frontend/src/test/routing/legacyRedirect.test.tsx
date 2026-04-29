@@ -71,6 +71,6 @@ describe("legacy query redirect + AppShell", () => {
   it("renders AppShell TopBar stub on War Room", async () => {
     renderAt("/warroom");
     expect(await screen.findByText("Hlíðskjalf")).toBeInTheDocument();
-    expect(screen.getByText(/§ War Room · pending sprint 4/)).toBeInTheDocument();
+    expect(screen.getByText(/no active incident/)).toBeInTheDocument();
   });
 });
