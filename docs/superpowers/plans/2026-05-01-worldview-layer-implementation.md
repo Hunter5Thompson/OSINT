@@ -1130,7 +1130,7 @@ function degreesToMeters(deg: number): number {
 
 - [ ] **Step 2: Manual run + visual verify (circle)**
 
-Run: `cd services/frontend && npm run dev`. Open `http://localhost:5173/worldview`. In the browser console, manually dispatch a circle target — but `SpotlightProvider` isn't mounted yet (Task 9). For now, verify the file compiles:
+Run: `cd services/frontend && npm run dev`. Open `http://localhost:5173/worldview`. In the browser console, manually dispatch a circle target — but `SpotlightProvider` isn't mounted yet (Task 7). For now, verify the file compiles:
 
 Run: `cd services/frontend && npm run type-check`
 Expected: PASS.
@@ -1154,7 +1154,7 @@ git commit -m "feat(frontend): SpotlightOverlay GroundPrimitive (circle + countr
 **Files:**
 - Modify: `services/frontend/src/components/worldview/InspectorPanel.tsx` (extend `Selected` union with `country`)
 - Modify: `services/frontend/src/components/globe/EntityClickHandler.tsx` (Spotlight dispatch + country hit-test + new prop)
-- Modify: `services/frontend/src/pages/WorldviewPage.tsx` (pass `onCountrySelect={setSelected}` to handler)
+- Modify: `services/frontend/src/pages/WorldviewPage.tsx` (mount `SpotlightProvider`, pass `onCountrySelect={setSelected}` to handler)
 
 **Architecture note:** The codebase has two selection paths today: per-layer `onSelect` props lift state to `WorldviewPage.selected` (typed `Selected` union, drives the right `InspectorPanel`); separately `EntityClickHandler` has its own `setSelected` state that drives a small bottom-popup for tag-picked primitives. We do **not** unify these in S2. Instead:
 
@@ -1162,6 +1162,8 @@ git commit -m "feat(frontend): SpotlightOverlay GroundPrimitive (circle + countr
 - Country hit-test result is a **new** code path: it dispatches Spotlight **and** calls a new `onCountrySelect` prop that lifts to `WorldviewPage.selected`, so the right `InspectorPanel` can render the `CountryHeader` from Task 12.
 
 This avoids unifying the two selection paths (which would be its own refactor) while still feeding the right Inspector for country-mode.
+
+**Ordering invariant:** This task also mounts `SpotlightProvider` in `WorldviewPage`. `EntityClickHandler` calls `useSpotlight()`, so it must not render outside the provider even temporarily between commits.
 
 - [ ] **Step 1: Extend `Selected` union with `country` variant**
 
@@ -1275,9 +1277,27 @@ onCountrySelect(null);
 dispatchSpotlight({ type: "reset" });
 ```
 
-- [ ] **Step 4: Wire `onCountrySelect` from `WorldviewPage`**
+- [ ] **Step 4: Mount `SpotlightProvider` and wire `onCountrySelect` from `WorldviewPage`**
 
-In `services/frontend/src/pages/WorldviewPage.tsx`, locate the existing `<EntityClickHandler viewer={viewer} />` mount (or add it inside `<SpotlightProvider>` if Task 9 hasn't placed it yet) and pass the new prop:
+In `services/frontend/src/pages/WorldviewPage.tsx`, import `SpotlightProvider`, wrap the page body so that `GlobeViewer`, all layer mounts, `EntityClickHandler`, and overlay panels are inside it, then pass the new prop:
+
+```tsx
+import { SpotlightProvider } from "../components/globe/spotlight/SpotlightContext";
+
+// inside return:
+<SpotlightProvider>
+  {/* existing worldview contents */}
+  <EntityClickHandler viewer={viewer} onCountrySelect={setSelected} />
+</SpotlightProvider>
+```
+
+The key requirement is that the existing handler mount changes from:
+
+```tsx
+<EntityClickHandler viewer={viewer} />
+```
+
+to:
 
 ```tsx
 <EntityClickHandler viewer={viewer} onCountrySelect={setSelected} />
@@ -1285,27 +1305,9 @@ In `services/frontend/src/pages/WorldviewPage.tsx`, locate the existing `<Entity
 
 `setSelected` is the existing `WorldviewPage`-level state setter (see `WorldviewPage.tsx:111`).
 
-- [ ] **Step 5: Render `CountryHeader` inside `InspectorPanel`**
+- [ ] **Step 5: Leave rendering of the country branch to Task 12**
 
-In `services/frontend/src/components/worldview/InspectorPanel.tsx`, where `InspectorBody` renders per `selected.type`, add a country branch:
-
-```tsx
-import { CountryHeader } from "../globe/spotlight/CountryHeader";
-
-if (selected.type === "country") {
-  const c = selected.data;
-  return (
-    <CountryHeader
-      name={c.name}
-      iso3={c.iso3}
-      m49={c.m49}
-      capital={c.capital}
-    />
-  );
-}
-```
-
-This replaces the `CountryHeader` mounting referenced in Task 12 — the country-mode flows through the right `InspectorPanel`, not the bottom popup.
+Do **not** import `CountryHeader` in this task. `CountryHeader.tsx` is created in Task 12; importing it here would break `type-check` before that component exists. The `Selected` union can already include `{ type: "country" }`; until Task 12 adds the branch, the current `default: return null` behavior is acceptable for the short intermediate commit.
 
 - [ ] **Step 6: Type-check + Lint**
 
@@ -1315,7 +1317,9 @@ Expected: both PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add services/frontend/src/components/globe/EntityClickHandler.tsx
+git add services/frontend/src/components/worldview/InspectorPanel.tsx \
+        services/frontend/src/components/globe/EntityClickHandler.tsx \
+        services/frontend/src/pages/WorldviewPage.tsx
 git commit -m "feat(frontend): EntityClickHandler dispatches Spotlight + country hit-test"
 ```
 
@@ -1326,7 +1330,7 @@ git commit -m "feat(frontend): EntityClickHandler dispatches Spotlight + country
 **Files:**
 - Create: `services/frontend/src/components/globe/hooks/useSpotlightTrigger.ts`
 
-The zoom trigger is a camera observer that dispatches `circle` Spotlight when altitude drops below 500 km. Search trigger is parked for now (the `§ Search` panel doesn't yet emit match events; we'll wire it when that contract exists).
+The zoom trigger is a camera observer that dispatches `circle` Spotlight when altitude drops below 500 km. Search trigger is wired separately in Task 8b, after the `§ Search` panel gets an `onAccept` contract.
 
 - [ ] **Step 1: Implement the camera observer**
 
@@ -1399,12 +1403,39 @@ git commit -m "feat(frontend): useSpotlightTrigger camera-zoom observer"
 ## Task 8b: Search Trigger — `SearchPanel onAccept` Wiring
 
 **Files:**
+- Modify: `services/backend/app/routers/graph.py` (include optional search-result coordinates in `GraphNode.properties`)
 - Modify: `services/frontend/src/components/worldview/SearchPanel.tsx` (add `onAccept` prop, fire on result-list click)
 - Modify: `services/frontend/src/pages/WorldviewPage.tsx` (consume `onAccept`, dispatch Spotlight + camera flyTo)
 
-The current `SearchPanel` renders a result list (`results.map((node) => …)`) but has no upward emit. We add a small `onAccept(node)` contract.
+The current `SearchPanel` renders a result list (`results.map((node) => …)`) but has no upward emit. We add a small `onAccept(node)` contract. The current backend `/graph/search` returns only `id/name/type`; this task also extends it to include optional `lat/lon` in `GraphNode.properties`, otherwise the search-trigger cannot fly to a coordinate.
 
-- [ ] **Step 1: Add `onAccept` prop to SearchPanel**
+- [ ] **Step 1: Extend backend graph search with optional coordinates**
+
+In `services/backend/app/routers/graph.py`, update `search_entities()` so the query returns `lat`/`lon` when the matched entity has direct coordinate properties or a linked `Location` node. Keep the read query deterministic and parameterized:
+
+```python
+rows = await _read_query(
+    "MATCH (e:Entity) WHERE toLower(e.name) CONTAINS toLower($q) "
+    "OPTIONAL MATCH (e)-[:LOCATED_AT|LOCATED_IN|BASED_IN|HEADQUARTERED_IN]->(l:Location) "
+    "RETURN elementId(e) AS id, e.name AS name, e.type AS type, "
+    "coalesce(e.lat, l.lat) AS lat, coalesce(e.lon, l.lon) AS lon "
+    "ORDER BY e.name LIMIT $limit",
+    {"q": q, "limit": limit},
+)
+nodes = [
+    GraphNode(
+        id=r.get("id") or r.get("name", ""),
+        name=r.get("name", ""),
+        type=r.get("type", "unknown"),
+        properties={k: v for k, v in r.items() if k not in ("id", "name", "type") and v is not None},
+    )
+    for r in rows
+]
+```
+
+If a matched node still has no coordinates, it remains selectable in the UI but cannot trigger Spotlight; the frontend handler no-ops for coordinate-less results.
+
+- [ ] **Step 2: Add `onAccept` prop to SearchPanel**
 
 In `services/frontend/src/components/worldview/SearchPanel.tsx`, extend the props:
 
@@ -1432,9 +1463,18 @@ In the result-list `<li>` rendering, attach a click that calls `onAccept`:
 </li>
 ```
 
-`GraphNode` shape already has `id`, `type`, `name` — verify it also exposes `lat`/`lon` (or equivalent). If not, append optional coords to the type and the backend response shape.
+Extend the local `GraphNode` type with optional properties so TypeScript can read the backend coordinates:
 
-- [ ] **Step 2: Wire from `WorldviewPage`**
+```ts
+export interface GraphNode {
+  id: string;
+  name: string;
+  type: string;
+  properties?: { lat?: number; lon?: number; [key: string]: unknown };
+}
+```
+
+- [ ] **Step 3: Wire from `WorldviewPage`**
 
 In `WorldviewPage.tsx`, where `<SearchPanel>` is mounted, pass `onAccept`:
 
@@ -1442,22 +1482,31 @@ In `WorldviewPage.tsx`, where `<SearchPanel>` is mounted, pass `onAccept`:
 import { useSpotlight } from "../components/globe/spotlight/SpotlightContext";
 // inside the page body, but inside <SpotlightProvider>:
 
-function SearchAcceptHook({ viewer }: { viewer: Cesium.Viewer | null }) {
+function SearchAcceptHook({
+  viewer,
+  initialQuery,
+}: {
+  viewer: Cesium.Viewer | null;
+  initialQuery: string;
+}) {
   const { dispatch } = useSpotlight();
   return (
     <SearchPanel
       viewer={viewer}
+      initialQuery={initialQuery}
       onAccept={(node) => {
-        if (typeof node.lat !== "number" || typeof node.lon !== "number") return;
+        const lat = node.properties?.lat;
+        const lon = node.properties?.lon;
+        if (typeof lat !== "number" || typeof lon !== "number") return;
         viewer?.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(node.lon, node.lat, 400_000),
+          destination: Cesium.Cartesian3.fromDegrees(lon, lat, 400_000),
           duration: 1.6,
         });
         dispatch({
           type: "set",
           target: {
             kind: "circle", trigger: "search",
-            center: { lon: node.lon, lat: node.lat },
+            center: { lon, lat },
             radius: 1, altitude: 400_000,
             label: node.name, ref: `§ ${node.type}`,
           },
@@ -1468,19 +1517,32 @@ function SearchAcceptHook({ viewer }: { viewer: Cesium.Viewer | null }) {
 }
 ```
 
-Replace the old `<SearchPanel>` mount with `<SearchAcceptHook viewer={viewer} />` (must live inside `<SpotlightProvider>`).
+Replace the old `<SearchPanel viewer={viewer} initialQuery={searchSeed} />` mount with:
 
-- [ ] **Step 3: Type-check**
+```tsx
+<SearchAcceptHook viewer={viewer} initialQuery={searchSeed} />
+```
 
-Run: `cd services/frontend && npm run type-check`
-Expected: PASS. If `GraphNode` lacks `lat`/`lon`, the type-check will surface that gap; mark those as `node.lat ?? undefined` and add fields to the type as needed (the backend `/api/graph/search` response is the source of truth — match it).
+It must live inside `<SpotlightProvider>`; Task 7 already mounted the provider.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Verify backend + frontend**
+
+Run:
 
 ```bash
-git add services/frontend/src/components/worldview/SearchPanel.tsx \
+cd services/backend && uv run pytest
+cd ../frontend && npm run type-check && npm run lint
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add services/backend/app/routers/graph.py \
+        services/frontend/src/components/worldview/SearchPanel.tsx \
         services/frontend/src/pages/WorldviewPage.tsx
-git commit -m "feat(frontend): SearchPanel onAccept wires to Spotlight search-trigger"
+git commit -m "feat(worldview): SearchPanel onAccept wires to Spotlight search-trigger"
 ```
 
 ---
@@ -1490,21 +1552,20 @@ git commit -m "feat(frontend): SearchPanel onAccept wires to Spotlight search-tr
 **Files:**
 - Modify: `services/frontend/src/pages/WorldviewPage.tsx`
 
-- [ ] **Step 1: Wrap mount points in `SpotlightProvider`**
+- [ ] **Step 1: Mount Spotlight overlay + zoom trigger inside the existing provider**
 
 In `services/frontend/src/pages/WorldviewPage.tsx`:
 
 1. Import:
 
 ```tsx
-import { SpotlightProvider } from "../components/globe/spotlight/SpotlightContext";
 import { SpotlightOverlay } from "../components/globe/spotlight/SpotlightOverlay";
 import { useSpotlightTrigger } from "../components/globe/hooks/useSpotlightTrigger";
 ```
 
-2. Wrap the page body's render tree with `<SpotlightProvider>` (it must enclose `EntityClickHandler` and the Cesium `<GlobeViewer>` mount).
+2. Confirm the page body is already wrapped with `<SpotlightProvider>` from Task 7. Do not add a nested provider.
 
-3. Inside the provider, alongside `<EntityClickHandler viewer={viewer} />`, add `<SpotlightOverlay viewer={viewer} />`.
+3. Inside the existing provider, alongside `<EntityClickHandler viewer={viewer} onCountrySelect={setSelected} />`, add `<SpotlightOverlay viewer={viewer} />`.
 
 4. Inside the provider (must be inside, since it uses the context), add a small inner component that calls the hook:
 
@@ -1808,13 +1869,14 @@ git commit -m "feat(frontend): SpotlightCartouche adaptive (idle/circle/country)
 
 ---
 
-## Task 12: CountryHeader Component (TDD)
+## Task 12: CountryHeader Component + Inspector Wiring (TDD)
 
 **Files:**
 - Create: `services/frontend/src/components/globe/spotlight/CountryHeader.tsx`
 - Test: `services/frontend/src/components/globe/spotlight/__tests__/CountryHeader.test.tsx`
+- Modify: `services/frontend/src/components/worldview/InspectorPanel.tsx`
 
-> **Mounting:** `InspectorPanel.tsx` already renders this in its `country` branch from Task 7 step 5. This task only ships the component + its test.
+> **Mounting:** Task 7 extended the `Selected` union but deliberately did not import `CountryHeader`, because this component did not exist yet. This task adds the country branch to `InspectorPanel`.
 
 - [ ] **Step 1: Write failing test**
 
@@ -1883,12 +1945,34 @@ Add corresponding CSS to `worldviewHudLoader.css`:
 .country-placeholder { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--granite); font-family: "Martian Mono", monospace; font-size: 9px; color: var(--ash); letter-spacing: .14em; text-transform: uppercase; }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Wire into `InspectorPanel`**
+
+In `services/frontend/src/components/worldview/InspectorPanel.tsx`, where `InspectorBody` renders per `selected.type`, add a country branch:
+
+```tsx
+import { CountryHeader } from "../globe/spotlight/CountryHeader";
+
+if (selected.type === "country") {
+  const c = selected.data;
+  return (
+    <CountryHeader
+      name={c.name}
+      iso3={c.iso3}
+      m49={c.m49}
+      capital={c.capital}
+    />
+  );
+}
+```
+
+Country-mode now flows through the right `InspectorPanel`, not the bottom popup.
+
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `cd services/frontend && npx vitest run src/components/globe/spotlight/__tests__/CountryHeader.test.tsx`
 Expected: 2/2 PASS.
 
-- [ ] **Step 5: Type-check + commit**
+- [ ] **Step 6: Type-check + commit**
 
 Run: `cd services/frontend && npm run type-check`
 Expected: PASS.
@@ -1896,6 +1980,7 @@ Expected: PASS.
 ```bash
 git add services/frontend/src/components/globe/spotlight/CountryHeader.tsx \
         services/frontend/src/components/globe/spotlight/__tests__/CountryHeader.test.tsx \
+        services/frontend/src/components/worldview/InspectorPanel.tsx \
         services/frontend/src/components/worldview/worldviewHudLoader.css
 git commit -m "feat(frontend): CountryHeader component for country-mode Inspector"
 ```
@@ -2141,7 +2226,7 @@ git commit -m "feat(frontend): CountryBorders PolylineCollection (Layer 04)"
 
 ## Task 15: Glyph-Layer Token Migration (Batched)
 
-This task touches 14 existing layer-component files to swap their hardcoded color hex values to the new tokens from §6. Done as a single batch commit because each individual change is one-line and trivially reversible.
+This task touches 13 existing layer-component files to swap their hardcoded color hex values to the new tokens from §6. Done as a single batch commit because each individual change is one-line and trivially reversible.
 
 **Files:**
 - Modify: `services/frontend/src/components/layers/FlightLayer.tsx`
