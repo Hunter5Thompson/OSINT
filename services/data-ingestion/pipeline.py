@@ -349,6 +349,9 @@ async def _write_to_neo4j(
                     "entity_type_unknown_passthrough",
                     value=entity["type"],
                     url=doc_url,
+                    source=doc_source,
+                    extraction_model=settings.ingestion_vllm_model,
+                    entity_name=entity.get("name"),
                 )
                 # Fail-soft: pass through unchanged so a single bad LLM emission
                 # does not block the whole document. The Patch C migration will

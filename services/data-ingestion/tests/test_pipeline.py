@@ -349,6 +349,9 @@ class TestEntityTypeNormalization:
         ]
         assert warnings, f"expected entity_type_unknown_passthrough warning, got: {cap_logs}"
         assert warnings[0].get("value") == "alien_species"
+        assert warnings[0].get("source") == "rss"
+        assert warnings[0].get("extraction_model") == "Qwen/Qwen3.6-35B-A3B"
+        assert warnings[0].get("entity_name") == "Wraith"
 
 
 class TestPipelineCodebookBinding:

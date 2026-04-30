@@ -82,6 +82,9 @@ _CANONICAL_TYPES = (
 )
 
 
+# Explicit table — duplicates LEGACY_ENTITY_TYPE_MAP intentionally so an
+# unintended map edit fails this test. Do not rewrite as
+# `LEGACY_ENTITY_TYPE_MAP.items()` — that would defeat the lock-in.
 _LEGACY_PAIRS = (
     ("person", "PERSON"),
     ("organization", "ORGANIZATION"),
