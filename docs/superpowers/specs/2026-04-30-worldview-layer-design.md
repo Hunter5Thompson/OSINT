@@ -764,7 +764,7 @@ scripts/
 - [ ] Vier Trigger funktionieren: zoom (camera ≤ 500 km), pin click (über erweiterten `EntityClickHandler` aus §10.4 — *kein* per-Layer `onSelect`-Adapter), search match, country click (Polygon + MultiPolygon hit-test gegen TopoJSON).
 - [ ] Country-Hit-Test funktioniert für alle 177 Country-Polygone, inklusive der 29 MultiPolygon-Länder (USA, Kanada, Russland, Indonesien, Phillipinen, Japan, Griechenland, Vereinigtes Königreich, Italien, Norwegen, …) — Click auf Alaska und Hawaii beide erkennen `USA`.
 - [ ] `focusTarget` Reducer ist last-writer-wins, ESC räumt auf, kein Layer-Component-Refactor nötig.
-- [ ] Country-mode rendert Polygon-Mask-Reveal, Capital-Pulse, Multilingual-Cartouche aus statischem `country-endonyms.json`. § Inspector zeigt Country-Header mit `S2.5 coming soon`-Hinweis für Almanac.
+- [ ] Country-mode rendert Polygon-Highlight (`Cesium.GroundPrimitive` mit Material-Overlay, MultiPolygon-aware), Capital-Pulse, Multilingual-Cartouche aus statischem `country-endonyms.json`. § Inspector zeigt Country-Header mit `S2.5 coming soon`-Hinweis für Almanac.
 - [ ] Token-Delta aus §6 in `hlidskjalf.css` integriert. Existing Layer-Komponenten verwenden die neuen Tokens statt eigener Hex-Werte.
 - [ ] ≥ 55 FPS Kamera-Rotation bei allen Layers on, 1080p (verifiziert per Cesium FPS counter).
 - [ ] Reduced-motion: alle Animationen schalten korrekt um (verifiziert via DevTools `prefers-reduced-motion`).
