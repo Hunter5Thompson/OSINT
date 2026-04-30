@@ -752,27 +752,43 @@ docker compose logs -f data-ingestion data-ingestion-spark backend intelligence 
 
 ### 9.3 Post-Resume Drift Check
 
-After at least one full ingestion cycle:
+After at least one full ingestion cycle. The check is intentionally broader
+than Phase 1's lowercase-only verification — it catches **any** non-canonical
+entity-type drift from any writer (lowercase legacy, TitleCase from a future
+wired-up `services/intelligence/extraction/entity_extractor.py`, or any
+unknown vocabulary):
 
 ```bash
 docker exec osint-neo4j-1 cypher-shell \
     -u "${NEO4J_USER:?NEO4J_USER must be exported (see section 2 first)}" \
     -p "${NEO4J_PASSWORD:?NEO4J_PASSWORD must be exported (see section 2 first)}" \
     "MATCH (e:Entity)
-     WHERE e.type =~ '[a-z].*'
-     RETURN count(*) AS regressed"
+     WHERE NOT e.type IN [
+       'AIRCRAFT', 'CONCEPT', 'COUNTRY', 'LOCATION', 'MILITARY_UNIT',
+       'ORGANIZATION', 'PERSON', 'POLICY', 'REGION', 'SATELLITE',
+       'TREATY', 'VESSEL', 'WEAPON_SYSTEM'
+     ]
+     RETURN count(*) AS non_canonical,
+            collect(DISTINCT e.type)[0..10] AS sample_types"
 ```
 
-Expected: `0`.
+Expected: `non_canonical = 0`, `sample_types = []`.
 
 If non-zero:
 
 1. Stop ingestion writers again.
-2. Verify the deployed Phase 5 image and feature flag.
-3. Re-run Phase 1 canonicalization only after the code path is fixed.
-4. Do not restore the Phase 0 dump for a post-resume lowercase regression.
+2. Inspect `sample_types` to identify the writer surface:
+   - lowercase legacy → Phase 5 flag is OFF or normalizer not deployed
+   - TitleCase (`Person`, `Organization`, …) → a dormant intelligence path
+     became wired up; check `services/intelligence/extraction/entity_extractor.py`
+     callers
+   - other → unknown writer; grep for raw `e.type`/`type:` Cypher in the codebase
+3. Verify the deployed Phase 5 image and feature flag.
+4. Re-run Phase 1 canonicalization only after the writer is patched or paused.
+5. Do **not** restore the Phase 0 dump for a post-resume drift event — that
+   would discard valid Phase 1+3 work.
 
-**STOP-GATE 9:** Ingestion stable for at least 1 hour, no lowercase regression,
+**STOP-GATE 9:** Ingestion stable for at least 1 hour, `non_canonical = 0`,
 operator confirms: `Patch C complete`.
 
 ---
@@ -878,7 +894,7 @@ At the end of the window, record:
 - pre/post duplicate counts
 - manual-review report path
 - Phase 5 commit or PR reference
-- final lowercase regression check result
+- final non-canonical entity-type drift check result
 - operator who approved Stop-Gate 9
 
 Do not add `/home/deadpool-ultra/odin-reports/*.csv` to git unless the operator

@@ -722,12 +722,28 @@ verified live in the deployed image. Operator confirms "go for resume".
 ### Task 6.2 — Post-resume drift check
 
 - [ ] Wait for at least one full feed-collection cycle (depends on
-  `scheduler.py`). Then re-run:
+  `scheduler.py`). Then re-run a non-canonical-set check (broader than the
+  Phase 1 verification's lowercase-only regex — this catches lowercase
+  legacy regressions, TitleCase or any other vocabulary that a future
+  ingestion path might accidentally introduce):
+
   ```cypher
-  MATCH (e:Entity) WHERE e.type =~ '[a-z].*' RETURN count(*) AS regressed;
+  MATCH (e:Entity)
+  WHERE NOT e.type IN [
+    'AIRCRAFT', 'CONCEPT', 'COUNTRY', 'LOCATION', 'MILITARY_UNIT',
+    'ORGANIZATION', 'PERSON', 'POLICY', 'REGION', 'SATELLITE',
+    'TREATY', 'VESSEL', 'WEAPON_SYSTEM'
+  ]
+  RETURN count(*) AS non_canonical,
+         collect(DISTINCT e.type)[0..10] AS sample_types;
   ```
-  Expected: `0`. If non-zero, the deployed code change is not yet active —
-  pause ingestion again, verify image deployment.
+
+  Expected: `non_canonical = 0`, `sample_types = []`. If non-zero, inspect
+  `sample_types` to identify the offending vocabulary (lowercase = the
+  data-ingestion flag is OFF or not deployed; TitleCase = a dormant code
+  path like `services/intelligence/extraction/entity_extractor.py` got
+  wired up; anything else = unknown writer surface). Pause ingestion,
+  identify the writer, do **not** restore the Phase 0 dump.
 
 ### Task 6.3 — Restore stable monitoring
 
@@ -737,7 +753,7 @@ verified live in the deployed image. Operator confirms "go for resume".
 - [ ] Update `/home/deadpool-ultra/.claude/projects/.../memory/project_active_plans.md`
   to reflect Patch C completion.
 
-**STOP-GATE 9:** Ingestion stable for ≥1 hour, no lowercase regression,
+**STOP-GATE 9:** Ingestion stable for ≥1 hour, `non_canonical = 0`,
 operator declares "Patch C complete".
 
 ---
