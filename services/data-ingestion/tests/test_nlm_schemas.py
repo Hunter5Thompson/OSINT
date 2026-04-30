@@ -1,7 +1,12 @@
+import re
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from nlm_ingest.schemas import (
+    CANONICAL_ENTITY_TYPES,
+    LEGACY_ENTITY_TYPE_MAP,
     Claim,
     Entity,
     Extraction,
@@ -9,6 +14,7 @@ from nlm_ingest.schemas import (
     Transcript,
     TranscriptSegment,
     claim_hash,
+    normalize_entity_type,
 )
 
 
@@ -52,6 +58,121 @@ class TestEntity:
     def test_invalid_type_raises(self):
         with pytest.raises(ValidationError):
             Entity(name="NATO", type="INVALID_TYPE", confidence=0.9)
+
+    def test_schema_accepts_LOCATION(self):
+        """LOCATION is a canonical EntityType and validates without error."""
+        e = Entity(name="Berlin", type="LOCATION", confidence=0.9)
+        assert e.type == "LOCATION"
+
+
+_CANONICAL_TYPES = (
+    "AIRCRAFT",
+    "CONCEPT",
+    "COUNTRY",
+    "LOCATION",
+    "MILITARY_UNIT",
+    "ORGANIZATION",
+    "PERSON",
+    "POLICY",
+    "REGION",
+    "SATELLITE",
+    "TREATY",
+    "VESSEL",
+    "WEAPON_SYSTEM",
+)
+
+
+# Explicit table — duplicates LEGACY_ENTITY_TYPE_MAP intentionally so an
+# unintended map edit fails this test. Do not rewrite as
+# `LEGACY_ENTITY_TYPE_MAP.items()` — that would defeat the lock-in.
+_LEGACY_PAIRS = (
+    ("person", "PERSON"),
+    ("organization", "ORGANIZATION"),
+    ("location", "LOCATION"),
+    ("military_unit", "MILITARY_UNIT"),
+    ("weapon_system", "WEAPON_SYSTEM"),
+    ("vessel", "VESSEL"),
+    ("aircraft", "AIRCRAFT"),
+    ("satellite", "SATELLITE"),
+)
+
+
+class TestEntityTypeNormalizer:
+    def test_canonical_set_has_13_entries(self):
+        assert len(CANONICAL_ENTITY_TYPES) == 13
+        assert set(CANONICAL_ENTITY_TYPES) == set(_CANONICAL_TYPES)
+
+    def test_legacy_map_has_exactly_8_entries(self):
+        assert len(LEGACY_ENTITY_TYPE_MAP) == 8
+        assert dict(LEGACY_ENTITY_TYPE_MAP) == dict(_LEGACY_PAIRS)
+
+    @pytest.mark.parametrize("canonical", _CANONICAL_TYPES)
+    def test_normalizer_idempotent_on_canonical(self, canonical):
+        assert normalize_entity_type(canonical) == canonical
+
+    @pytest.mark.parametrize("lower,upper", _LEGACY_PAIRS)
+    def test_normalizer_maps_legacy(self, lower, upper):
+        assert normalize_entity_type(lower) == upper
+
+    def test_normalizer_raises_on_unknown(self):
+        with pytest.raises(ValueError) as exc_info:
+            normalize_entity_type("garbage")
+        assert "garbage" in str(exc_info.value)
+
+    def test_legacy_map_covers_intelligence_extractor_literal(self):
+        """Drift guard: LEGACY_ENTITY_TYPE_MAP keys must equal the lowercase
+        Literal values on intelligence/codebook/extractor.py:ExtractedEntityRaw.type.
+
+        Cross-build-context Python import is impossible (data-ingestion and
+        intelligence have separate Docker contexts), so this test parses the
+        intelligence file as text. If the intelligence file is missing
+        (stripped container), skip rather than fail.
+        """
+        # tests/ → data-ingestion/ → services/ ; intelligence service lives next to data-ingestion.
+        extractor_path = (
+            Path(__file__).resolve().parents[2] / "intelligence" / "codebook" / "extractor.py"
+        )
+        if not extractor_path.exists():
+            pytest.skip(f"intelligence extractor not present at {extractor_path}")
+
+        source = extractor_path.read_text()
+
+        # Locate the ExtractedEntityRaw class and grab its `type: Literal[...]` block.
+        class_match = re.search(
+            r"class\s+ExtractedEntityRaw\b.*?(?=\nclass\s|\Z)",
+            source,
+            flags=re.DOTALL,
+        )
+        assert class_match, "ExtractedEntityRaw class not found in intelligence extractor.py"
+        class_body = class_match.group(0)
+
+        literal_match = re.search(
+            r"type\s*:\s*Literal\[(.*?)\]",
+            class_body,
+            flags=re.DOTALL,
+        )
+        assert literal_match, (
+            "Could not locate `type: Literal[...]` in ExtractedEntityRaw — "
+            "drift test cannot verify"
+        )
+
+        literal_block = literal_match.group(1)
+        # Extract every quoted string ("...") inside the Literal[...] block.
+        extracted_values = set(re.findall(r'"([^"]+)"', literal_block))
+        assert extracted_values, (
+            "No quoted entity-type values parsed from intelligence extractor.py — "
+            "regex needs review"
+        )
+
+        legacy_keys = set(LEGACY_ENTITY_TYPE_MAP.keys())
+        missing = extracted_values - legacy_keys
+        extra = legacy_keys - extracted_values
+        assert extracted_values == legacy_keys, (
+            "Drift between data-ingestion LEGACY_ENTITY_TYPE_MAP and "
+            "intelligence/codebook/extractor.py ExtractedEntityRaw.type Literal. "
+            f"In intelligence but not in legacy map: {sorted(missing)}. "
+            f"In legacy map but not in intelligence: {sorted(extra)}."
+        )
 
 
 class TestRelation:

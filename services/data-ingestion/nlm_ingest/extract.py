@@ -42,6 +42,12 @@ async def extract_with_qwen(
     client: httpx.AsyncClient,
     vllm_url: str,
     vllm_model: str,
+    # Phase 5 default: stays at "v1" until the operator explicitly opts in to v2.
+    # extraction_v2.txt adds LOCATION to the entity-type list and ships in this
+    # PR alongside the EntityType Literal expansion. The v2 prompt is loaded
+    # only when callers pass prompt_version="v2"; the default-OFF feature flag
+    # `entity_type_normalize` and the v1 prompt default together preserve the
+    # pre-Phase-5 NLM behavior. See docs/superpowers/plans/2026-04-30-patch-c-entity-canonicalization.md
     prompt_version: str = "v1",
 ) -> Extraction:
     prompt_template = load_prompt(prompt_version)
