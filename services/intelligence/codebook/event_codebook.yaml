@@ -222,6 +222,54 @@ categories:
         label: "Rail Accident"
         description: "Train derailment, collision, or significant rail network disruption"
 
+  civil:
+    label: "Civil"
+    types:
+      - type: "civil.protest"
+        label: "Civil Protest"
+        description: "Public demonstration or organized opposition by civilians (CAMEO root 14)"
+      - type: "civil.demonstration"
+        label: "Civil Demonstration"
+        description: "Public assembly to express collective opinion or position"
+      - type: "civil.unrest"
+        label: "Civil Unrest"
+        description: "Generalized civilian disorder, riots, or violent crowd activity"
+
+  posture:
+    label: "Posture"
+    types:
+      - type: "posture.military"
+        label: "Military Posture"
+        description: "Force movement, deployment, or mobilization without active combat (CAMEO root 15)"
+      - type: "posture.deployment"
+        label: "Force Deployment"
+        description: "Repositioning of military forces to a theater or staging area"
+      - type: "posture.mobilization"
+        label: "Mobilization"
+        description: "Activation of reserves or transition to wartime force structure"
+
+  conflict:
+    label: "Conflict"
+    types:
+      - type: "conflict.coercion"
+        label: "Coercion"
+        description: "Sanctions, threats, asset freezes, or coercive pressure short of force (CAMEO root 17)"
+      - type: "conflict.assault"
+        label: "Assault"
+        description: "Targeted assaults, assassinations, or violent incidents (CAMEO root 18)"
+      - type: "conflict.armed"
+        label: "Armed Conflict"
+        description: "Firefights, artillery exchanges, or armed engagements (CAMEO root 19)"
+      - type: "conflict.mass_violence"
+        label: "Mass Violence"
+        description: "Massacres, ethnic cleansing, or weapons of mass destruction events (CAMEO root 20)"
+      - type: "conflict.clash"
+        label: "Clash"
+        description: "Localized armed clash between forces or factions"
+      - type: "conflict.shelling"
+        label: "Shelling"
+        description: "Indirect-fire artillery or mortar bombardment"
+
   other:
     label: "Other"
     types:

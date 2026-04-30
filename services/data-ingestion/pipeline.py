@@ -37,6 +37,49 @@ class ExtractionConfigError(Exception):
 
 # Load event types from the canonical codebook YAML (single source of truth)
 _CODEBOOK_PATH = Path(__file__).parent.parent / "intelligence" / "codebook" / "event_codebook.yaml"
+_FALLBACK_CODEBOOK_TYPE = "other.unclassified"
+
+
+def _load_codebook_types() -> frozenset[str]:
+    """Load valid codebook types from YAML. Returns at minimum the fallback type."""
+    try:
+        with open(_CODEBOOK_PATH) as f:
+            codebook = yaml.safe_load(f)
+        types = {
+            entry["type"]
+            for cat_data in codebook.get("categories", {}).values()
+            for entry in cat_data.get("types", [])
+        }
+        if not types:
+            log.warning("codebook_load_empty_using_fallback_only")
+            return frozenset({_FALLBACK_CODEBOOK_TYPE})
+        return frozenset(types)
+    except (FileNotFoundError, yaml.YAMLError, KeyError) as e:
+        log.warning("codebook_load_failed_using_fallback_only", error=str(e))
+        return frozenset({_FALLBACK_CODEBOOK_TYPE})
+
+
+_VALID_CODEBOOK_TYPES: frozenset[str] = _load_codebook_types()
+
+
+def _validate_codebook_type(value: str | None, *, source: str | None = None, url: str | None = None) -> str:
+    """Return value if it's a known codebook_type, else log + fall back to other.unclassified.
+
+    LLMs occasionally hallucinate types that don't exist in event_codebook.yaml
+    (e.g. 'attack.drone' instead of 'military.drone_attack'). Without this guard
+    those bogus types reach Neo4j and Qdrant, where they corrupt facets and
+    silently break frontend filtering.
+    """
+    if value and value in _VALID_CODEBOOK_TYPES:
+        return value
+    log.warning(
+        "codebook_type_unknown_remapped",
+        value=value,
+        source=source,
+        url=url,
+        fallback=_FALLBACK_CODEBOOK_TYPE,
+    )
+    return _FALLBACK_CODEBOOK_TYPE
 
 
 def _build_system_prompt() -> str:
@@ -154,6 +197,17 @@ async def process_item(
     events = extraction.get("events", [])
     entities = extraction.get("entities", [])
     locations = extraction.get("locations", [])
+
+    # Runtime drift guard: an LLM that emits a codebook_type not in the canonical
+    # YAML would otherwise corrupt Neo4j (rogue Event labels), Qdrant payloads
+    # (broken facets), and the Redis stream the frontend listens on. Remap once,
+    # in place — every downstream step then sees the validated value.
+    for event in events:
+        event["codebook_type"] = _validate_codebook_type(
+            event.get("codebook_type"),
+            source=source,
+            url=url,
+        )
 
     # Step 2: Write to Neo4j
     if events or entities:

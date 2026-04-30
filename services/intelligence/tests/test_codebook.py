@@ -10,10 +10,11 @@ class TestCodebookLoader:
         assert "version" in codebook
         assert "categories" in codebook
 
-    def test_all_ten_categories_present(self):
+    def test_all_categories_present(self):
         codebook = load_codebook()
         expected = {"military", "political", "economic", "space", "cyber",
-                    "environmental", "social", "humanitarian", "infrastructure", "other"}
+                    "environmental", "social", "humanitarian", "infrastructure",
+                    "civil", "posture", "conflict", "other"}
         assert set(codebook["categories"].keys()) == expected
 
     def test_minimum_fifty_event_types(self):
@@ -25,6 +26,32 @@ class TestCodebookLoader:
         codebook = load_codebook()
         for t in get_all_event_types(codebook):
             assert "." in t, f"Type '{t}' missing dotted notation"
+
+    def test_type_prefix_matches_parent_category(self):
+        """Every dotted type's prefix MUST equal the parent category key.
+
+        Catches drift like a 'civil.protest' entry accidentally placed under
+        the 'social' category — that would silently break frontend color
+        routing and the runtime drift guard."""
+        codebook = load_codebook()
+        for category_key, category in codebook["categories"].items():
+            for entry in category["types"]:
+                t = entry["type"]
+                prefix = t.split(".", 1)[0]
+                assert prefix == category_key, (
+                    f"Type '{t}' lives under category '{category_key}' but its "
+                    f"prefix is '{prefix}' — prefix must match category key."
+                )
+
+    def test_all_event_types_unique(self):
+        """No duplicate dotted types across the whole codebook."""
+        codebook = load_codebook()
+        all_types = []
+        for category in codebook["categories"].values():
+            for entry in category["types"]:
+                all_types.append(entry["type"])
+        duplicates = [t for t in set(all_types) if all_types.count(t) > 1]
+        assert not duplicates, f"Duplicate event types found: {duplicates}"
 
     def test_other_unclassified_exists(self):
         codebook = load_codebook()
@@ -38,6 +65,29 @@ class TestCodebookLoader:
     def test_validate_codebook_rejects_empty(self):
         with pytest.raises(ValueError):
             validate_codebook({})
+
+    def test_validate_codebook_rejects_duplicates(self):
+        """validate_codebook must surface duplicate types as an explicit error."""
+        bad = {
+            "version": "1.0",
+            "categories": {
+                "military": {
+                    "label": "Military",
+                    "types": [
+                        {"type": "military.airstrike", "label": "A", "description": "x"},
+                        {"type": "military.airstrike", "label": "B", "description": "y"},
+                    ],
+                },
+                "other": {
+                    "label": "Other",
+                    "types": [
+                        {"type": "other.unclassified", "label": "U", "description": "z"},
+                    ],
+                },
+            },
+        }
+        with pytest.raises(ValueError, match="duplicate"):
+            validate_codebook(bad)
 
 
 from unittest.mock import AsyncMock, patch, MagicMock
