@@ -275,15 +275,24 @@ type FocusTarget =
   | {
       kind: 'country';
       trigger: 'country';
-      iso3: string;
+      // M49 ist die Source-of-Truth, weil countries-110m.json nur M49-IDs
+      // an den Features trägt. ISO-3 wird vom Hit-Test über den
+      // _topoIndex aus country-endonyms.json (siehe §5.3) aufgelöst —
+      // er muss daher optional sein, falls für ein M49-Code kein
+      // Endonym-Eintrag existiert (z.B. "W. Sahara" → 732).
+      m49: string;        // z.B. "840"
+      iso3: string | null; // z.B. "USA" oder null (graceful fallback)
       // 29 / 177 Länder in countries-110m.json sind MultiPolygon (USA, Kanada,
       // Russland, Indonesien, Phillipinen, Japan, Griechenland, …); beide
       // Geometry-Varianten müssen unterstützt werden.
       polygon: GeoJSON.Polygon | GeoJSON.MultiPolygon;
-      capital: { name: string; coords: { lon: number; lat: number } };
-      // S2: nur iso3 + polygon + capital + endonyms (aus statischem JSON gelesen
-      // by SpotlightCartouche, nicht im FocusTarget). Active intel + majorCities
-      // werden in S2.5 (Almanac-Spec) ergänzt.
+      // Display-Name aus dem TopoJSON (properties.name), Cartouche zeigt
+      // ihn als fallback wenn iso3 = null.
+      name: string;
+      capital: { name: string; coords: { lon: number; lat: number } } | null;
+      // S2: m49 + polygon + name + (iso3 + capital nur wenn im Endonym-JSON
+      // vorhanden). Active intel + majorCities werden in S2.5 (Almanac-Spec)
+      // ergänzt.
     };
 ```
 
@@ -296,7 +305,7 @@ type FocusTarget =
 | 1 | Zoom | Camera height ≤ 500 km | dispatch `{kind:'circle', trigger:'zoom', center: cameraCenter, radius: f(altitude)}` |
 | 2 | Pin click | `EntityClickHandler` picks ein primitive mit known data-tag (`_eventData`, `_cableData`, `_aircraftData`, …) | dispatch `{kind:'circle', trigger:'pin', center: glyph.position, sourcePin: {...}}` parallel zu existierendem `setSelected`-Update an den Inspector |
 | 3 | Search match | Match accepted in § Search | camera flyTo + dispatch `{kind:'circle', trigger:'search', center: matchCoord, label: matchName, ref: matchRef}` |
-| 4 | Country click | `EntityClickHandler` findet kein primitive · Spotlight-Hook läuft TopoJSON-Hit-Test | dispatch `{kind:'country', trigger:'country', iso3, polygon, capital}` |
+| 4 | Country click | `EntityClickHandler` findet kein primitive · Spotlight-Hook läuft TopoJSON-Hit-Test | dispatch `{kind:'country', trigger:'country', m49, iso3, polygon, name, capital}` (iso3 + capital aus dem M49→ISO3-Index in `country-endonyms.json`, beide null-fähig) |
 
 ### §4.3 Conflict Resolution
 
@@ -307,16 +316,16 @@ type FocusTarget =
 Click-Events laufen über den **bereits existierenden** `EntityClickHandler` (`services/frontend/src/components/globe/EntityClickHandler.tsx`). Dieser pickt via `viewer.scene.pick(position)` und prüft custom data-tags am Primitive (`_eventData`, `_cableData`, `_aircraftData`, `_satelliteData`, etc.). S2 erweitert ihn an *einer* Stelle, statt jeden Layer einzeln zu touchen:
 
 1. **Existing-Tag-Match** (`_eventData`, `_cableData`, …): bestehende Logik — `setSelected({type, data})` an den Inspector. **Neu in S2:** zusätzlich `spotlight.dispatch({kind:'circle', trigger:'pin', center: data.lat/lon, sourcePin: {layer, entityId}})`. Beide Updates parallel.
-2. **No-tag-pick** (Pick traf nichts oder ein Primitive ohne known data-tag): Spotlight-Hook führt Country-Hit-Test gegen den TopoJSON-Index. Bei Hit → `spotlight.dispatch({kind:'country', trigger:'country', iso3, polygon, capital})`. Inspector wird mit `setSelected({type:'country', data})` parallel gefüttert.
+2. **No-tag-pick** (Pick traf nichts oder ein Primitive ohne known data-tag): Spotlight-Hook führt Country-Hit-Test gegen den TopoJSON-Index. Bei Hit → ISO-3 + Capital aus `country-endonyms.json._topoIndex[m49]` auflösen, dann `spotlight.dispatch({kind:'country', trigger:'country', m49, iso3, polygon, name, capital})`. Inspector wird mit `setSelected({type:'country', data})` parallel gefüttert.
 3. **Kein Hit überhaupt:** ignore (no-op).
 
 **Konsequenz für die Architektur:** **kein** existing Layer-Component bekommt einen neuen `onSelect`-Prop. Die Spotlight-Integration sitzt komplett im erweiterten `EntityClickHandler`. Das hält das Akzeptanzkriterium aus §14 ("kein Layer-Component-Refactor") wörtlich ein.
 
 **Spatial Index für Country-Hit-Test:**
 
-- Beim Mount: TopoJSON aus `countries-110m.json` mit `topojson-client` zu GeoJSON-Features dekodieren, R-Tree (`rbush`) mit Bounding-Boxes bauen (177 Features, ~30 ms einmalig).
-- Pro Click: Pick `cartesian → Cartographic.toDegrees()`, R-Tree-Search mit Click-Point, dann **manueller Ray-Cast Point-in-Polygon-Test** auf den Kandidaten. Manuell statt `@turf/boolean-point-in-polygon`, weil turf nicht in `package.json` ist und der Test inline ~ 25 LOC braucht (siehe §10.3).
-- **MultiPolygon:** Iteriere über alle Subpolygone; ein Hit in irgendeinem reicht.
+- Beim Mount: TopoJSON aus `countries-110m.json` mit `topojson-client` zu GeoJSON-Features dekodieren, R-Tree (`rbush`) mit Bounding-Boxes bauen (177 Features, ~30 ms einmalig). Jede TopoFeature hat nur `id` (M49-Code als String, z.B. `"840"`) und `properties.name` — **kein** ISO-3 im Asset.
+- Pro Click: Pick `cartesian → Cartographic.toDegrees()`, R-Tree-Search mit Click-Point, dann **manueller Ray-Cast Point-in-Polygon-Test** auf den Kandidaten (siehe §10.3). MultiPolygon: Iteriere über alle Subpolygone; ein Hit in irgendeinem reicht.
+- **M49 → ISO3 Resolution** über den `_topoIndex` aus `country-endonyms.json` (siehe §5.3). Beispiel: TopoFeature mit `id: "840"` → `_topoIndex["840"] === "USA"` → Endonym-Eintrag `endonyms["USA"]`. Falls ein M49-Code keinen Index-Eintrag hat (z.B. „W. Sahara" 732, oder ein Land das im Endonym-Snapshot fehlt), läuft der Country-Spotlight im **Graceful-Fallback-Mode**: Polygon-Highlight + Display-Name aus `properties.name` werden gerendert, aber Capital-Pulse und Multilingual-Cartouche bleiben leer.
 - Erwartete Latenz: < 5 ms pro Click bei 177 Polygonen + ø 1.16 Subpolygone pro MultiPolygon-Country.
 
 ### §4.5 Exit
@@ -380,39 +389,63 @@ Dieser Inhalt rendert aus dem statischen Endonym-JSON allein. Kein Backend-Call,
 
 ```json
 {
-  "GRC": {
-    "iso3": "GRC",
-    "names": {
-      "en": "Greece",
-      "official": "Hellenic Republic",
-      "native": "Ελληνική Δημοκρατία",
-      "endonyms": {
-        "el": "Ελλάδα",
-        "ru": "Греция",
-        "de": "Griechenland",
-        "fr": "Grèce",
-        "es": "Grecia",
-        "it": "Grecia",
-        "tr": "Yunanistan",
-        "ar": "اليونان",
-        "zh": "希腊",
-        "ja": "ギリシャ"
+  "_topoIndex": {
+    "840": "USA",
+    "300": "GRC",
+    "276": "DEU",
+    "643": "RUS",
+    "732": null,         // "W. Sahara" — kein ISO-3, expliziter Null-Eintrag
+    "...": "..."
+  },
+  "countries": {
+    "GRC": {
+      "iso3": "GRC",
+      "m49": "300",
+      "names": {
+        "en": "Greece",
+        "official": "Hellenic Republic",
+        "native": "Ελληνική Δημοκρατία",
+        "endonyms": {
+          "el": "Ελλάδα",
+          "ru": "Греция",
+          "de": "Griechenland",
+          "fr": "Grèce",
+          "es": "Grecia",
+          "it": "Grecia",
+          "tr": "Yunanistan",
+          "ar": "اليونان",
+          "zh": "希腊",
+          "ja": "ギリシャ"
+        }
+      },
+      "capital": {
+        "name": "Athens",
+        "lat": 37.9838,
+        "lon": 23.7275
       }
-    },
-    "capital": {
-      "name": "Athens",
-      "lat": 37.9838,
-      "lon": 23.7275
     }
   }
 }
 ```
 
-**Generierung:** einmaliger Wikidata-Snapshot beim Repo-Build (offline, nicht per User-Click). Skript `scripts/build-country-endonyms.mjs` queryt Wikidata SPARQL für alle ~190 Länder, schreibt das JSON. Kommt ins Git-Repo, wird nicht zur Laufzeit aktualisiert.
+**Begründung der Doppel-Struktur:**
+
+- `countries-110m.json` trägt pro Feature *nur* M49 (`id: "840"`) und `properties.name`. Kein ISO-3, keine eindeutigen Aliase. Verifiziert am 2026-05-01: 177 Features, alle mit nur `name` als Property — Beispiele: M49 `"840"` = „United States of America", M49 `"732"` = „W. Sahara", M49 `"300"` = „Greece".
+- Namens-Match wäre wackelig (CIA-Factbook-vs-Natural-Earth-vs-Wikidata schreiben „Czechia" / „Czech Republic" / „Tschechien" inkonsistent) — daher M49 als Stable-ID.
+- `_topoIndex` ist der explizite M49 → ISO-3 Lookup. `null`-Werte für M49-Codes ohne ISO-3 (Westsahara, einige De-facto-Staaten) sind erlaubt und triggern Graceful-Fallback (siehe §4.4). Das verhindert silent KeyErrors während der Implementierung.
+- Pro Country-Eintrag gibt es zusätzlich `m49` als Reverse-Pointer (handy für Tests und Debug-Logs).
+
+**Generierung:** einmaliger Wikidata-Snapshot beim Repo-Build (offline, nicht per User-Click). Skript `scripts/build-country-endonyms.mjs`:
+
+1. Lädt `services/frontend/public/countries-110m.json`, extrahiert die Liste aller 177 M49-IDs + Display-Names.
+2. SPARQL-Query gegen Wikidata: pro M49-Code die Wikidata-Entity (`P2861` ↔ `wdt:P2861` ist ISO-3-Code), endonyms (`wdt:P1448` official + `wdt:P2019` native), Capital (`wdt:P36` + Coords).
+3. Schreibt `_topoIndex` und `countries`. M49-Codes ohne saubere Wikidata-Entity bekommen explizit `_topoIndex[m49] = null` und keinen `countries[iso3]`-Eintrag.
+4. JSON kommt ins Git-Repo, wird nicht zur Laufzeit aktualisiert.
 
 ### §5.4 Capital Pulse (Layer 08, country-mode · S2)
 
-- Position: `capital.lat / capital.lon` aus dem JSON oben.
+- Position: `capital.lat / capital.lon` aus `country-endonyms.json.countries[iso3].capital`.
+- **Bedingung:** Capital wird nur gerendert wenn `_topoIndex[m49]` einen ISO-3 zurückgibt UND der `countries`-Eintrag eine `capital`-Property hat. Sonst Graceful-Fallback (kein Pulse).
 - Visual: 6 px solid `--capital-red` (`#e63a26`) + Outer-Ring 14 px `rgba(230,58,38,.5)` 1 px stroke + Glow 14 px box-shadow.
 - City Label: `Hanken Grotesk 11 px · --city-label · text-shadow 0 0 4px black` rechts vom Pulse.
 - Größere Sichtbarkeit als reguläre Glyphs (Layer 07), damit das Capital sofort heraussticht.
@@ -532,7 +565,9 @@ Das Layer-Stack-System sitzt unter den bereits gespeccten Hlíðskjalf-Overlay-P
          czm_material czm_getMaterial(czm_materialInput m) {
            czm_material material = czm_getDefaultMaterial(m);
            float d = distance(m.st, vec2(0.5));
-           float w = smoothstep(0.5, falloff * 0.5, 0.5 - d);
+           // Center (d=0) → w=1 (warm), Rand (d≥0.5) → w=0 (transparent).
+           // smoothstep mit edge0 < edge1; 1.0-Inversion gibt center-warm.
+           float w = 1.0 - smoothstep(falloff * 0.5, 0.5, d);
            material.diffuse = color.rgb;
            material.alpha = color.a * w * alpha;
            return material;
