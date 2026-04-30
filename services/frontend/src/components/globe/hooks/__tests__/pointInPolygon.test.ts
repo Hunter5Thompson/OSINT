@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { polygonContains } from "../../components/globe/hooks/pointInPolygon";
+import { polygonContains } from "../pointInPolygon";
 
 const square: GeoJSON.Polygon = {
   type: "Polygon",
