@@ -16,7 +16,7 @@ Diese Spec definiert das **visuelle Layer-System des CesiumJS-Globe** in der Wor
 ### §1.2 Was diese Spec nicht ist
 
 - Keine Chrome-/Panel-Spec — die liegt in `2026-04-14-odin-4layer-hlidskjalf-design.md` §4.2.
-- **Keine Layer-Engine-Migration.** Die existierenden 16 `LayerVisibility`-Keys (siehe `services/frontend/src/types/index.ts:257`) bleiben strukturell separate React-Komponenten mit jeweils eigener `BillboardCollection` und eigenem `onSelect`-Handler. Diese Spec organisiert sie neu in der § Layers Panel UI nach den 4 Gruppen und vereinheitlicht ihre Glyph-Family-Tokens (siehe §3.8 Mapping-Tabelle). Eine Konsolidierung in eine einzige `EventGlyphs`-Komponente ist eigene Sprint-Arbeit (S2.5 oder später) und nicht Teil dieser Spec.
+- **Keine Layer-Engine-Migration.** Die existierenden 16 `LayerVisibility`-Keys (siehe `services/frontend/src/types/index.ts:257`) bleiben strukturell separate React-Komponenten mit ihrer jeweiligen Cesium-Primitive-Collection (siehe §3.8 Tabelle für die exakten Typen pro Layer — meist `BillboardCollection`, `SatelliteLayer` z.B. `PointPrimitiveCollection`). Auswahl/Click läuft zentral über den existierenden `EntityClickHandler` (siehe §10.4). Diese Spec organisiert die Layer in der § Layers Panel UI nach den 4 Gruppen und vereinheitlicht ihre Glyph-Family-Tokens. Eine Konsolidierung in eine einzige `EventGlyphs`-Komponente ist eigene Sprint-Arbeit (S2.5 oder später) und nicht Teil dieser Spec.
 - **Keine Almanac-Datasourcing-Spec.** Country-Mode (§5) beschränkt sich in S2 auf das visuelle MVP: Polygon-Highlight + Capital-Pulse + Multilingual-Cartouche aus statischem Endonym-JSON. REST Countries · Wikidata SPARQL · Munin-Briefs · Neo4j Country-Queries · Active-Intel-Pulses bekommen eine eigene Backend-Spec (`2026-05-XX-country-almanac-data.md`).
 - Keine Performance-Budget-Bestimmung — übernimmt das implementations-Plan.
 
@@ -470,7 +470,7 @@ Das Layer-Stack-System sitzt unter den bereits gespeccten Hlíðskjalf-Overlay-P
 |---|---|
 | § Layers | Inhalt wird *neu strukturiert* nach den 4 Gruppen (A · Sky / B · Earth / C · Signal / D · Lens & Chrome). Group A nicht-toggle-bar (deaktiviert), Group D zeigt Spotlight-Status statt Toggles. Die 16 existierenden `LayerVisibility`-Keys werden 1:1 in Group B und C eingegliedert (siehe §3.8 Tabelle); kein Contract-Change. |
 | § Search | Match-Acceptance triggert 3. Spotlight-Trigger (siehe §4.2). |
-| § Inspector | Im pin-mode unverändert (existing per-layer `onSelect`-Handlers wirken weiter). Im country-mode zeigt der § Inspector den minimalen Country-Header aus statischem Endonym-JSON (§5.2). ESC schließt beides. |
+| § Inspector | Im pin-mode unverändert (gespeist über `EntityClickHandler` → `setSelected`, kein per-Layer `onSelect`-Refactor). Im country-mode zeigt der § Inspector den minimalen Country-Header aus statischem Endonym-JSON (§5.2). ESC schließt beides. |
 | § Ticker | Unverändert. Click auf Ticker-Item triggert internen `focusTarget`-Dispatch (`circle` mit Item-Coords). |
 
 ---
@@ -515,22 +515,60 @@ Das Layer-Stack-System sitzt unter den bereits gespeccten Hlíðskjalf-Overlay-P
 1. **Spotlight-Geometrie als Cesium GroundPrimitive:**
    - `kind = 'circle'`: `Cesium.GeometryInstance` mit `Cesium.EllipseGeometry` um Center-Coord, Radius `f(altitude)`. Eine Geometry-Instance pro Spotlight.
    - `kind = 'country'`: für `Polygon` → eine `Cesium.PolygonGeometry`-Instance; für `MultiPolygon` → mehrere Instances, alle in einer `Cesium.GroundPrimitive` als ein Batch.
-2. **Material:** `Cesium.MaterialAppearance` mit Custom `Material` aus dem Cesium-Material-System (`Material.fabric` JSON). Die Material-Definition:
-   - `kind = 'circle'`: `Material.RadialGradient` (Cesium-Built-in) mit Center=spotlight-center, color=`color-mix(--amber 60%, transparent)`, falloff radial.
-   - `kind = 'country'`: einfaches `Material.Color` mit `color-mix(--amber 35%, transparent)` plus Multiplikator-Channel der zur Polygon-Mitte hin warmer wird (anchored an `capital.coords`).
-3. **Z-Order:** GroundPrimitive `classificationType: Cesium.ClassificationType.TERRAIN` — clamped auf die Erdoberfläche, sichtbar über Black Marble aber unter den Glyph-BillboardCollections.
-4. **Fade-In/Out:** Material-Color-Alpha über `Cesium.CallbackProperty` interpoliert (320 ms in, 200 ms out). Bei `alpha → 0` wird die GroundPrimitive aus `viewer.scene.primitives` entfernt.
-5. **Capital-Pulse + Cartouche:** unabhängig von der GroundPrimitive — als DOM-Overlays gerendert (`SpotlightCartouche.tsx`, `HudFrame.tsx`), weltkoordinaten-zu-screen via `Cesium.SceneTransforms.wgs84ToWindowCoordinates` pro Frame.
+
+2. **Material — Custom `Material.fabric.source` per Kind.** Cesium's eingebaute Material-Library hat keinen direkten „radial gradient"-Built-in (verifiziert gegen Cesium ≥ 1.132 Material-Docs); wir definieren das Material selbst über `Material.fabric.source` mit eigenem GLSL-Snippet (~ 15 LOC) und expliziten Uniforms:
+
+   ```ts
+   // pseudo, kind = 'circle'
+   new Cesium.Material({
+     fabric: {
+       type: 'OdinSpotlightCircle',
+       uniforms: {
+         color: new Cesium.Color(/* --amber */ 0.769, 0.506, 0.227, 0.6),
+         alpha: 0.0,           // wird per Frame im PreUpdate-Hook gesetzt
+         falloff: 0.85,        // 0..1, Härte des Übergangs
+       },
+       source: `
+         czm_material czm_getMaterial(czm_materialInput m) {
+           czm_material material = czm_getDefaultMaterial(m);
+           float d = distance(m.st, vec2(0.5));
+           float w = smoothstep(0.5, falloff * 0.5, 0.5 - d);
+           material.diffuse = color.rgb;
+           material.alpha = color.a * w * alpha;
+           return material;
+         }
+       `,
+     },
+     translucent: true,
+   })
+   ```
+
+   Für `kind = 'country'` ist das Snippet noch einfacher (ein Solid-Color mit `alpha = color.a * uniformAlpha`); die radial-warme Modulation um `capital.coords` rendert in S2 als zweite, kleinere `EllipseGeometry`-Instance über dem Polygon, anstatt im Country-Material kompliziert zu UV-mappen.
+
+3. **Z-Order:** GroundPrimitive `classificationType: Cesium.ClassificationType.TERRAIN` — clamped auf die Erdoberfläche, sichtbar über Black Marble aber unter den Glyph-Primitive-Collections.
+
+4. **Fade-In/Out via Uniform-Update.** `CallbackProperty` ist Entity-/Property-API und greift NICHT auf Primitive-Materialien. Stattdessen registrieren wir einen `viewer.scene.preUpdate`-Listener, der pro Frame die `material.uniforms.alpha` direkt schreibt:
+
+   ```ts
+   viewer.scene.preUpdate.addEventListener(() => {
+     if (!groundPrimitive) return;
+     const m = groundPrimitive.appearance.material;
+     m.uniforms.alpha = animateAlpha(/* easing, 320ms in / 200ms out */);
+   });
+   ```
+
+   Bei `alpha → 0` wird die GroundPrimitive aus `viewer.scene.primitives` entfernt und der Listener abgemeldet.
+
+5. **Capital-Pulse + Cartouche:** unabhängig von der GroundPrimitive — als DOM-Overlays gerendert (`SpotlightCartouche.tsx`, `HudFrame.tsx`), Weltkoordinaten-zu-Screen via `Cesium.SceneTransforms.wgs84ToWindowCoordinates` pro Frame im selben `preUpdate`-Listener.
 
 **Was diese Pipeline NICHT braucht:**
 - Kein Custom Shader auf `globe.material`.
 - Keine `PostProcessStage`.
 - Keine Off-Screen-Canvas Mask-Texture.
 - Keine zusätzliche `ImageryLayer`-Anbindung (Black Marble bleibt unverändert wo es jetzt ist).
+- Kein `CallbackProperty` auf Primitive-Materialien (falsche API-Schicht).
 
 **Was an `GlobeViewer.tsx` zu ändern ist:** **nichts** für die Spotlight-Pipeline. Der Mount-Code in `useEffect` ist unangetastet. Die Spotlight-Komponenten registrieren ihre GroundPrimitive auf `viewer.scene.primitives` und räumen wieder auf.
-
-> **Risiko:** Cesium's `Material.RadialGradient` verlangt evtl. einen Custom-`fabric.source` GLSL-Snippet je nach Cesium-Version. Falls die eingebaute Material-Library keinen passenden Built-in liefert, ist ein **kleiner** Custom-Material-GLSL-Snippet im `Material`-System der Fallback (~ 15 LOC). Das ist deutlich schmaler als ein voller globe.material-Refactor und im Implementation-Plan als Spike-Task budgetiert.
 
 ### §10.3 Manueller Point-in-Polygon-Test (kein turf-Dependency)
 
@@ -612,9 +650,9 @@ Bbox per Country (für rbush): aus den GeoJSON-Coordinates beim Mount ableiten �
 
 ### §11.2 Offene Fragen für Implementation-Plan
 
-1. **Mask-Texture-Resolution für country-mode:** 1024×1024 ist konservativ (ausreichend für ~177 Länder); ggf. 2048 für Russland/China. Empfehlung: dynamisch nach Polygon-Bbox-Diagonale.
-2. **Black Marble GIBS Tile-Caching:** GIBS-Endpunkt direkt anrufen oder Browser-Cache + ODIN-Backend-Proxy? Empfehlung für S2: direkter GIBS-Call (Standard-Cesium-Pattern), Proxy in S2.5 wenn Latency-Issues auftauchen.
-3. **Endonym-Sprachen-Pool:** `country-endonyms.json` enthält pro Land ~ 8–12 Endonyms (10 Beispielsprachen aus §5.3). Welche genau? Empfehlung: top-10 Wikipedia-Languages global + offizielle Endonym, also identischer Set für alle Länder. Reduziert Code-Komplexität.
+1. **GroundPrimitive Performance bei großen Polygonen:** `Cesium.PolygonGeometry` für Russland/Kanada (große Bbox-Diagonale, viele Vertices nach Triangulation) kann beim Initial-Mount spürbar sein. Empfehlung: `granularity` Property explizit setzen (z.B. `Cesium.Math.RADIANS_PER_DEGREE * 2`) statt Default. Im Implementation-Plan als Performance-Spike-Task budgetieren.
+2. **`Material.fabric` Hot-Reload während Vite-Dev:** Cesium kompiliert Material-Source einmal pro Material-Instance; Änderungen am `source`-String erfordern Material-Recreation. Empfehlung: für DX einen Dev-Hot-Reload-Hook im `useEffect`-Cleanup, der bei jeder Source-Änderung die GroundPrimitive austauscht. Optional, kann auch deferred werden.
+3. **Endonym-Sprachen-Pool:** `country-endonyms.json` enthält pro Land ~ 10 Endonyms (Beispielsprachen aus §5.3). Welche genau? Empfehlung: top-10 Wikipedia-Languages global + offizielle Endonym, also identischer Set für alle Länder. Reduziert Code-Komplexität.
 
 Diese drei werden im Implementation-Plan addressed (oder explizit deferred).
 
@@ -627,7 +665,7 @@ Diese drei werden im Implementation-Plan addressed (oder explizit deferred).
 - `SpotlightContext` reducer: alle Trigger-Übergänge (idle → kind-A → kind-B → idle) decken.
 - Country-click hit-test (`useCountryHitTest`): gegeben (lon, lat) → korrektes ISO-3 (Test-Daten: 10 known coordinates spanning continents).
 - Country-Inspector-Header: gegeben `iso3 = 'GRC'` → endonym + capital aus statischem JSON gerendert, missing-data fallback graceful.
-- Pin-Trigger-Adapter: jeder existierende Layer-Component dispatched korrekt zum Spotlight-Reducer und behält gleichzeitig sein `setSelected`-Update an den Inspector.
+- Pin-Trigger-Adapter: erweiterter `EntityClickHandler` dispatched für jeden bekannten Data-Tag (`_eventData`, `_cableData`, `_aircraftData`, …) parallel zum Spotlight-Reducer und zum Inspector. Tag-Konventions-Coverage: alle 14 Glyph-Sources liefern Coords beim Pick.
 
 ### §12.2 Visual Regression — out of scope für S2
 
