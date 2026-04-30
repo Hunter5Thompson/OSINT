@@ -9,22 +9,29 @@ interface EventLayerProps {
   visible: boolean;
 }
 
-const EVENT_COLORS: Record<string, string> = {
-  military: "#ef4444",
-  space: "#06b6d4",
-  cyber: "#a855f7",
-  political: "#f97316",
-  economic: "#eab308",
-  environmental: "#22c55e",
+export const EVENT_COLORS: Record<string, string> = {
+  military: "#ef4444",         // red — direct military action
+  conflict: "#dc2626",         // deeper red — kinetic violence (armed, mass_violence)
+  posture: "#f59e0b",          // amber — pre-combat positioning, mobilization
+  civil: "#a3e635",            // lime — civilian protest, demonstration, unrest
+  political: "#f97316",        // orange — elections, summits, treaties
+  economic: "#eab308",         // yellow — sanctions, trade, market events
+  space: "#06b6d4",            // cyan — launches, orbital activity
+  cyber: "#a855f7",            // purple — attacks, breaches, disinfo
+  environmental: "#22c55e",    // green — quakes, floods, wildfires
+  social: "#ec4899",           // pink — mass protest, labor, ethnic violence
+  humanitarian: "#fb7185",     // rose — refugees, famine, casualties
+  infrastructure: "#94a3b8",   // slate — built environment failures
+  other: "#6b7280",            // gray — unclassified fallback
 };
 
-const DEFAULT_COLOR = "#6b7280";
+export const DEFAULT_COLOR = "#6b7280";
 const LABEL_ALTITUDE_THRESHOLD = 2_500_000;
 const EVENT_ALTITUDE_M = 300;
 const POSITION_BUCKET_DEG = 0.12;
 const STACK_RADIUS_KM = 18;
 
-function getCategoryColor(codebook_type: string): string {
+export function getCategoryColor(codebook_type: string): string {
   const category = codebook_type.split(".")[0] ?? "";
   return EVENT_COLORS[category] ?? DEFAULT_COLOR;
 }

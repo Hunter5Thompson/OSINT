@@ -31,6 +31,14 @@ def validate_codebook(codebook: dict) -> None:
         raise ValueError("Codebook missing 'version' key")
     if "categories" not in codebook:
         raise ValueError("Codebook missing 'categories' key")
+    # Collect raw (possibly duplicated) types so we can flag drift.
+    raw_types: list[str] = []
+    for category in codebook.get("categories", {}).values():
+        for entry in category.get("types", []):
+            raw_types.append(entry["type"])
+    duplicates = sorted({t for t in raw_types if raw_types.count(t) > 1})
+    if duplicates:
+        raise ValueError(f"Codebook has duplicate event types: {duplicates}")
     all_types = get_all_event_types(codebook)
     if len(all_types) < 50:
         raise ValueError(f"Codebook has {len(all_types)} types, need >= 50")

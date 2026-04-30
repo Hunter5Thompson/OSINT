@@ -27,3 +27,32 @@ def test_all_allowlisted_roots_are_mapped():
     s = GDELTSettings(_env_file=None)
     for root in s.cameo_root_allowlist:
         assert map_cameo_root(root) is not None, f"root {root} is allowlisted but unmapped"
+
+
+def test_cameo_targets_subset_of_codebook_types():
+    """Every CAMEO root must map to a type that exists in event_codebook.yaml.
+
+    Without this guard, the GDELT collector silently writes codebook_types
+    that the LLM prompt and downstream filters reject."""
+    from pathlib import Path
+
+    import yaml
+
+    from gdelt_raw.cameo_mapping import CAMEO_ROOT_TO_CODEBOOK
+
+    codebook_path = (
+        Path(__file__).parents[2]
+        / "intelligence"
+        / "codebook"
+        / "event_codebook.yaml"
+    )
+    codebook = yaml.safe_load(codebook_path.read_text())
+    types = {
+        entry["type"]
+        for category in codebook["categories"].values()
+        for entry in category["types"]
+    }
+    missing = set(CAMEO_ROOT_TO_CODEBOOK.values()) - types
+    assert not missing, (
+        f"CAMEO mapping references codebook types that don't exist: {missing}"
+    )

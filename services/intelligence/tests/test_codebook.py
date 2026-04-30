@@ -1,5 +1,8 @@
 """Tests for event codebook loader and IntelligenceExtractor."""
 
+import re
+from pathlib import Path
+
 import pytest
 from codebook.loader import load_codebook, get_all_event_types, validate_codebook
 
@@ -10,10 +13,11 @@ class TestCodebookLoader:
         assert "version" in codebook
         assert "categories" in codebook
 
-    def test_all_ten_categories_present(self):
+    def test_all_categories_present(self):
         codebook = load_codebook()
         expected = {"military", "political", "economic", "space", "cyber",
-                    "environmental", "social", "humanitarian", "infrastructure", "other"}
+                    "environmental", "social", "humanitarian", "infrastructure",
+                    "civil", "posture", "conflict", "other"}
         assert set(codebook["categories"].keys()) == expected
 
     def test_minimum_fifty_event_types(self):
@@ -25,6 +29,32 @@ class TestCodebookLoader:
         codebook = load_codebook()
         for t in get_all_event_types(codebook):
             assert "." in t, f"Type '{t}' missing dotted notation"
+
+    def test_type_prefix_matches_parent_category(self):
+        """Every dotted type's prefix MUST equal the parent category key.
+
+        Catches drift like a 'civil.protest' entry accidentally placed under
+        the 'social' category — that would silently break frontend color
+        routing and the runtime drift guard."""
+        codebook = load_codebook()
+        for category_key, category in codebook["categories"].items():
+            for entry in category["types"]:
+                t = entry["type"]
+                prefix = t.split(".", 1)[0]
+                assert prefix == category_key, (
+                    f"Type '{t}' lives under category '{category_key}' but its "
+                    f"prefix is '{prefix}' — prefix must match category key."
+                )
+
+    def test_all_event_types_unique(self):
+        """No duplicate dotted types across the whole codebook."""
+        codebook = load_codebook()
+        all_types = []
+        for category in codebook["categories"].values():
+            for entry in category["types"]:
+                all_types.append(entry["type"])
+        duplicates = [t for t in set(all_types) if all_types.count(t) > 1]
+        assert not duplicates, f"Duplicate event types found: {duplicates}"
 
     def test_other_unclassified_exists(self):
         codebook = load_codebook()
@@ -38,6 +68,96 @@ class TestCodebookLoader:
     def test_validate_codebook_rejects_empty(self):
         with pytest.raises(ValueError):
             validate_codebook({})
+
+    def test_validate_codebook_rejects_duplicates(self):
+        """validate_codebook must surface duplicate types as an explicit error."""
+        bad = {
+            "version": "1.0",
+            "categories": {
+                "military": {
+                    "label": "Military",
+                    "types": [
+                        {"type": "military.airstrike", "label": "A", "description": "x"},
+                        {"type": "military.airstrike", "label": "B", "description": "y"},
+                    ],
+                },
+                "other": {
+                    "label": "Other",
+                    "types": [
+                        {"type": "other.unclassified", "label": "U", "description": "z"},
+                    ],
+                },
+            },
+        }
+        with pytest.raises(ValueError, match="duplicate"):
+            validate_codebook(bad)
+
+
+# Path: services/intelligence/tests/test_codebook.py
+#       parents[0]=tests, parents[1]=intelligence, parents[2]=services
+_EVENT_LAYER_TSX = (
+    Path(__file__).parents[2] / "frontend" / "src" / "components" / "layers" / "EventLayer.tsx"
+)
+
+# Codebook roots that intentionally rely on the documented DEFAULT_COLOR
+# fallback in EventLayer.tsx instead of having their own explicit color.
+# Today this is empty: every root must be explicit. To add a root here,
+# also add a comment in EventLayer.tsx noting the fallback is intentional.
+_DOCUMENTED_FALLBACK_ROOTS: set[str] = set()
+
+
+def _extract_event_colors_keys(tsx_source: str) -> set[str]:
+    """Extract the keys of the EVENT_COLORS Record literal from EventLayer.tsx.
+
+    Matches the slice between
+        `EVENT_COLORS: Record<string, string> = {`
+    and the matching `};`, then pulls every line of the form
+        `  <key>: "#...",`
+    """
+    block_match = re.search(
+        r"EVENT_COLORS\s*:\s*Record<string,\s*string>\s*=\s*\{(?P<body>.*?)\};",
+        tsx_source,
+        re.DOTALL,
+    )
+    if not block_match:
+        raise AssertionError(
+            f"Could not locate EVENT_COLORS Record literal in {_EVENT_LAYER_TSX}"
+        )
+    body = block_match.group("body")
+    return set(re.findall(r"^\s*([a-z_]+)\s*:\s*\"#", body, re.MULTILINE))
+
+
+class TestFrontendCategoryGuard:
+    """Cross-language guard: every codebook root has an explicit EventLayer color
+    (or is in an explicit allowlist of documented fallbacks).
+
+    Prevents the regression where a new codebook root is added on the Python
+    side but the frontend silently routes it through DEFAULT_COLOR, making
+    the new category visually indistinguishable from `other.unclassified`.
+    """
+
+    def test_every_codebook_root_has_explicit_color(self):
+        if not _EVENT_LAYER_TSX.exists():
+            pytest.skip(
+                f"EventLayer.tsx not found at {_EVENT_LAYER_TSX} "
+                "(expected in stripped-down or backend-only checkouts)"
+            )
+
+        codebook = load_codebook()
+        codebook_roots = set(codebook["categories"].keys())
+
+        tsx_source = _EVENT_LAYER_TSX.read_text(encoding="utf-8")
+        event_colors_keys = _extract_event_colors_keys(tsx_source)
+
+        missing = codebook_roots - event_colors_keys - _DOCUMENTED_FALLBACK_ROOTS
+
+        assert not missing, (
+            f"Codebook roots missing from EVENT_COLORS in {_EVENT_LAYER_TSX}: "
+            f"{sorted(missing)}.\n"
+            "Either add an explicit color entry for each missing root, OR add "
+            "the root to _DOCUMENTED_FALLBACK_ROOTS in this test AND leave a "
+            "comment in EventLayer.tsx noting that DEFAULT_COLOR is intentional."
+        )
 
 
 from unittest.mock import AsyncMock, patch, MagicMock
