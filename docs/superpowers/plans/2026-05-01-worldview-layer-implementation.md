@@ -163,11 +163,18 @@ async function main() {
   const countries = {};
 
   for (const m49 of m49s) {
+    // Wikidata properties:
+    //   P2082 = UN M.49 code (string, e.g. "300" for Greece)
+    //   P298  = ISO 3166-1 alpha-3 (string, e.g. "GRC")
+    //   P1448 = official name (multilingual string)
+    //   P1705 = native label (multilingual string)
+    //   P36   = capital (item)
+    //   P625  = coordinate location (geo:wktLiteral, "Point(lon lat)")
     const q = `
       SELECT ?iso3 ?label ?official ?capital ?capitalLabel ?capitalCoord
       ${LANGS.map((l) => `?label_${l} ?endo_${l}`).join(" ")}
       WHERE {
-        ?c wdt:P2861 "${m49}".
+        ?c wdt:P2082 "${m49}".
         OPTIONAL { ?c wdt:P298 ?iso3. }
         OPTIONAL { ?c wdt:P1448 ?official. FILTER(LANG(?official) = "en") }
         OPTIONAL { ?c wdt:P36 ?capital. ?capital wdt:P625 ?capitalCoord. }
@@ -231,9 +238,39 @@ main().catch((e) => {
 });
 ```
 
-- [ ] **Step 2: Hand-write seed `country-endonyms.json`**
+- [ ] **Step 2: Generate the `_topoIndex` skeleton from the actual TopoJSON**
 
-For S2 we don't run the SPARQL. Write the seed file directly so the implementation can proceed without network. Create `services/frontend/public/country-endonyms.json`:
+The seed must contain a `_topoIndex` entry for **every** M49-code present in `countries-110m.json` (177 entries) so the country-mode hit-test never observes an undefined key. We generate the skeleton once and merge in the hand-curated ISO3 mappings.
+
+Run this Node one-liner from the repo root:
+
+```bash
+node --input-type=module -e '
+import { readFile } from "node:fs/promises";
+const topo = JSON.parse(await readFile("services/frontend/public/countries-110m.json", "utf8"));
+const known = {
+  "840": "USA", "300": "GRC", "276": "DEU", "643": "RUS", "732": null,
+  "124": "CAN", "392": "JPN", "356": "IND", "203": "CZE",
+  // Extend this map as more countries are hand-curated; null = no ISO-3.
+};
+const out = {};
+for (const f of topo.objects.countries.geometries) {
+  out[String(f.id)] = known.hasOwnProperty(f.id) ? known[f.id] : null;
+}
+console.log(JSON.stringify(out, null, 2));
+' > /tmp/topoindex.json
+```
+
+Then `cat /tmp/topoindex.json` and paste the contents into the `_topoIndex` block of `country-endonyms.json` in step 3 below. Every M49-code from the asset is covered; un-curated codes are explicit `null`. As the Wikidata script (step 1) is run later to expand coverage, those `null` entries become real ISO3 codes.
+
+- [ ] **Step 3: Hand-write seed `country-endonyms.json`**
+
+For S2 we ship the seed without running SPARQL — implementation can proceed offline. Create `services/frontend/public/country-endonyms.json` using:
+
+- the **full 177-entry `_topoIndex`** from step 2's output, AND
+- the hand-curated `countries` block below.
+
+The 9-entry `_topoIndex` shown in the example below is illustrative only — replace it with the step-2 output.
 
 ```json
 {
@@ -366,19 +403,19 @@ For S2 we don't run the SPARQL. Write the seed file directly so the implementati
 }
 ```
 
-- [ ] **Step 3: Make the script executable**
+- [ ] **Step 4: Make the script executable**
 
 Run: `chmod +x scripts/build-country-endonyms.mjs`
 
-- [ ] **Step 4: Verify the JSON parses and has expected shape**
+- [ ] **Step 5: Verify the JSON parses and has expected shape**
 
 Run:
 ```bash
 node -e 'const j = require("./services/frontend/public/country-endonyms.json"); console.log(Object.keys(j._topoIndex).length, "indexed,", Object.keys(j.countries).length, "with-data");'
 ```
-Expected: `9 indexed, 8 with-data`
+Expected: `177 indexed, 8 with-data` (177 from full skeleton, 8 hand-curated countries).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add scripts/build-country-endonyms.mjs services/frontend/public/country-endonyms.json
@@ -946,7 +983,16 @@ const COUNTRY_FRAGMENT = `
   }
 `;
 
-const AMBER = new Cesium.Color(0.769, 0.506, 0.227, 0.6);
+// Tokens are read from CSS custom properties so the Spotlight palette stays
+// in sync with hlidskjalf.css (no hardcoded hex / RGB tuples).
+function tokenColor(name: string, fallback: string, alpha: number): Cesium.Color {
+  const css =
+    typeof window !== "undefined"
+      ? getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+      : fallback;
+  return Cesium.Color.fromCssColorString(css).withAlpha(alpha);
+}
+
 const FADE_IN_MS = 320;
 const FADE_OUT_MS = 200;
 
@@ -971,10 +1017,11 @@ export function SpotlightOverlay({ viewer }: Props) {
 function mountCircle(viewer: Cesium.Viewer, target: CircleTarget): () => void {
   const radiusMeters = degreesToMeters(target.radius);
   const center = Cesium.Cartesian3.fromDegrees(target.center.lon, target.center.lat);
+  const amber = tokenColor("--amber", "#c4813a", 0.6);
   const material = new Cesium.Material({
     fabric: {
       type: "OdinSpotlightCircle",
-      uniforms: { color: AMBER, alpha: 0.0, falloff: 0.85 },
+      uniforms: { color: amber, alpha: 0.0, falloff: 0.85 },
       source: CIRCLE_FRAGMENT,
     },
     translucent: true,
@@ -985,7 +1032,7 @@ function mountCircle(viewer: Cesium.Viewer, target: CircleTarget): () => void {
     }),
     appearance: new Cesium.MaterialAppearance({ material, flat: true }),
     classificationType: Cesium.ClassificationType.TERRAIN,
-    asynchronous: false,
+    asynchronous: true,  // default; synchronous mode needs Cesium.GroundPrimitive.initializeTerrainHeights() first or throws DeveloperError
   });
   viewer.scene.primitives.add(primitive);
 
@@ -1005,19 +1052,30 @@ function mountCircle(viewer: Cesium.Viewer, target: CircleTarget): () => void {
 function mountCountry(viewer: Cesium.Viewer, target: CountryTarget): () => void {
   const polygons = target.polygon.type === "Polygon" ? [target.polygon.coordinates] : target.polygon.coordinates;
   const instances = polygons.map((rings) => {
-    const positions = (rings[0] as number[][]).map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat));
+    const ringsArr = rings as number[][][];
+    const [outerRing, ...holeRings] = ringsArr;
+    const outerPositions = outerRing.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat));
+    const holes = holeRings.map(
+      (hole) =>
+        new Cesium.PolygonHierarchy(
+          hole.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat))
+        )
+    );
     return new Cesium.GeometryInstance({
       geometry: new Cesium.PolygonGeometry({
-        polygonHierarchy: new Cesium.PolygonHierarchy(positions),
+        // Cesium PolygonHierarchy(positions, holes[]) — interior rings are
+        // carved out (lakes, enclaves), matching pointInPolygon's hole-aware
+        // hit-test semantics from Task 4.
+        polygonHierarchy: new Cesium.PolygonHierarchy(outerPositions, holes),
         granularity: Cesium.Math.RADIANS_PER_DEGREE * 2,
       }),
     });
   });
-  const COUNTRY_COLOR = new Cesium.Color(0.769, 0.506, 0.227, 0.35);
+  const countryColor = tokenColor("--amber", "#c4813a", 0.35);
   const material = new Cesium.Material({
     fabric: {
       type: "OdinSpotlightCountry",
-      uniforms: { color: COUNTRY_COLOR, alpha: 0.0 },
+      uniforms: { color: countryColor, alpha: 0.0 },
       source: COUNTRY_FRAGMENT,
     },
     translucent: true,
@@ -1026,7 +1084,7 @@ function mountCountry(viewer: Cesium.Viewer, target: CountryTarget): () => void 
     geometryInstances: instances,
     appearance: new Cesium.MaterialAppearance({ material, flat: true }),
     classificationType: Cesium.ClassificationType.TERRAIN,
-    asynchronous: false,
+    asynchronous: true,  // default; synchronous mode needs Cesium.GroundPrimitive.initializeTerrainHeights() first or throws DeveloperError
   });
   viewer.scene.primitives.add(primitive);
 
@@ -1091,19 +1149,57 @@ git commit -m "feat(frontend): SpotlightOverlay GroundPrimitive (circle + countr
 
 ---
 
-## Task 7: Extend `EntityClickHandler` with Spotlight Dispatch
+## Task 7: Extend `EntityClickHandler` + Lift Country Selection to WorldviewPage
 
 **Files:**
-- Modify: `services/frontend/src/components/globe/EntityClickHandler.tsx`
+- Modify: `services/frontend/src/components/worldview/InspectorPanel.tsx` (extend `Selected` union with `country`)
+- Modify: `services/frontend/src/components/globe/EntityClickHandler.tsx` (Spotlight dispatch + country hit-test + new prop)
+- Modify: `services/frontend/src/pages/WorldviewPage.tsx` (pass `onCountrySelect={setSelected}` to handler)
 
-The existing handler picks primitives by data-tag. We add: (a) a Spotlight dispatch alongside `setSelected` for tag-matches, and (b) a country hit-test fallback for no-tag picks.
+**Architecture note:** The codebase has two selection paths today: per-layer `onSelect` props lift state to `WorldviewPage.selected` (typed `Selected` union, drives the right `InspectorPanel`); separately `EntityClickHandler` has its own `setSelected` state that drives a small bottom-popup for tag-picked primitives. We do **not** unify these in S2. Instead:
 
-- [ ] **Step 1: Read the current handler tail to find the no-pick branch**
+- Tag-matches in `EntityClickHandler` continue to drive its internal popup as before. **Additionally** they dispatch Spotlight (parallel update).
+- Country hit-test result is a **new** code path: it dispatches Spotlight **and** calls a new `onCountrySelect` prop that lifts to `WorldviewPage.selected`, so the right `InspectorPanel` can render the `CountryHeader` from Task 12.
 
-Run: `grep -n "viewer.scene.pick\|setSelected(null)\|return\b" services/frontend/src/components/globe/EntityClickHandler.tsx | head -20`
-Expected: shows the picked-undefined fall-through branch (`setSelected(null)` near end of `setInputAction`).
+This avoids unifying the two selection paths (which would be its own refactor) while still feeding the right Inspector for country-mode.
 
-- [ ] **Step 2: Modify the handler to dispatch Spotlight**
+- [ ] **Step 1: Extend `Selected` union with `country` variant**
+
+In `services/frontend/src/components/worldview/InspectorPanel.tsx`, near the existing union:
+
+```tsx
+import type { CountryHit } from "../globe/hooks/useCountryHitTest";
+
+export type Selected =
+  | { type: "firms"; data: FIRMSHotspot }
+  | { type: "aircraft"; data: AircraftTrack }
+  | { type: "datacenter"; data: DatacenterProperties }
+  | { type: "refinery"; data: RefineryProperties }
+  | { type: "eonet"; data: EONETEvent }
+  | { type: "gdacs"; data: GDACSEvent }
+  | { type: "country"; data: CountryHit };
+```
+
+(`CountryHit` is exported from Task 5's `useCountryHitTest.ts`.)
+
+- [ ] **Step 2: Modify `EntityClickHandler` interface**
+
+Add `onCountrySelect` prop:
+
+```tsx
+import type { Selected } from "../worldview/InspectorPanel";
+
+interface EntityClickHandlerProps {
+  viewer: Cesium.Viewer | null;
+  onCountrySelect: (sel: Selected | null) => void;
+}
+
+export function EntityClickHandler({ viewer, onCountrySelect }: EntityClickHandlerProps) {
+  // ...
+}
+```
+
+- [ ] **Step 3: Modify the handler body to dispatch Spotlight + lift country selection**
 
 In `services/frontend/src/components/globe/EntityClickHandler.tsx`:
 
@@ -1147,7 +1243,7 @@ Apply the same pattern for `cableData`, and for every other data-tag branch in t
 4. At the no-tag fall-through (where `setSelected(null)` currently runs when nothing was picked), insert before it:
 
 ```tsx
-// No primitive matched — try country hit-test
+// No primitive matched — try country hit-test (lifts to WorldviewPage)
 if (country.index) {
   const cartesian = viewer.scene.pickPosition(movement.position) ?? viewer.camera.pickEllipsoid(movement.position);
   if (cartesian) {
@@ -1156,13 +1252,8 @@ if (country.index) {
     const lat = Cesium.Math.toDegrees(carto.latitude);
     const hit = hitTestCountry(country.index, country.features, country.topoIndex, country.countries, lon, lat);
     if (hit) {
-      setSelected({
-        id: hit.iso3 ?? hit.m49,
-        name: hit.name,
-        type: "country",
-        position: { lat, lon },
-        properties: { iso3: hit.iso3 ?? "—", m49: hit.m49 },
-      });
+      setSelected(null);                            // clear the local bottom-popup
+      onCountrySelect({ type: "country", data: hit }); // lift to right InspectorPanel
       dispatchSpotlight({
         type: "set",
         target: {
@@ -1180,20 +1271,48 @@ if (country.index) {
   }
 }
 setSelected(null);
+onCountrySelect(null);
 dispatchSpotlight({ type: "reset" });
 ```
 
-- [ ] **Step 3: Type-check**
+- [ ] **Step 4: Wire `onCountrySelect` from `WorldviewPage`**
 
-Run: `cd services/frontend && npm run type-check`
-Expected: PASS.
+In `services/frontend/src/pages/WorldviewPage.tsx`, locate the existing `<EntityClickHandler viewer={viewer} />` mount (or add it inside `<SpotlightProvider>` if Task 9 hasn't placed it yet) and pass the new prop:
 
-- [ ] **Step 4: Lint**
+```tsx
+<EntityClickHandler viewer={viewer} onCountrySelect={setSelected} />
+```
 
-Run: `cd services/frontend && npm run lint`
-Expected: PASS.
+`setSelected` is the existing `WorldviewPage`-level state setter (see `WorldviewPage.tsx:111`).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Render `CountryHeader` inside `InspectorPanel`**
+
+In `services/frontend/src/components/worldview/InspectorPanel.tsx`, where `InspectorBody` renders per `selected.type`, add a country branch:
+
+```tsx
+import { CountryHeader } from "../globe/spotlight/CountryHeader";
+
+if (selected.type === "country") {
+  const c = selected.data;
+  return (
+    <CountryHeader
+      name={c.name}
+      iso3={c.iso3}
+      m49={c.m49}
+      capital={c.capital}
+    />
+  );
+}
+```
+
+This replaces the `CountryHeader` mounting referenced in Task 12 — the country-mode flows through the right `InspectorPanel`, not the bottom popup.
+
+- [ ] **Step 6: Type-check + Lint**
+
+Run: `cd services/frontend && npm run type-check && npm run lint`
+Expected: both PASS.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add services/frontend/src/components/globe/EntityClickHandler.tsx
@@ -1228,14 +1347,19 @@ export function useSpotlightTrigger(viewer: Cesium.Viewer | null): void {
     if (!viewer || viewer.isDestroyed()) return;
     const camera = viewer.camera;
 
-    const onChange = () => {
+    const onMoveEnd = () => {
       const carto = camera.positionCartographic;
       if (!carto) return;
       const altitude = carto.height;
       const lon = Cesium.Math.toDegrees(carto.longitude);
       const lat = Cesium.Math.toDegrees(carto.latitude);
 
-      if (altitude <= ZOOM_THRESHOLD_M && (!focusTarget || focusTarget.kind === "circle")) {
+      // Sticky-Pin/Search: do NOT overwrite when a non-zoom trigger is active.
+      const isSticky =
+        focusTarget != null &&
+        focusTarget.trigger !== "zoom";
+
+      if (altitude <= ZOOM_THRESHOLD_M && !isSticky) {
         dispatch({
           type: "set",
           target: {
@@ -1249,7 +1373,10 @@ export function useSpotlightTrigger(viewer: Cesium.Viewer | null): void {
       }
     };
 
-    const remove = camera.changed.addEventListener(onChange);
+    // moveEnd fires after the user stops moving the camera, which is the
+    // correct edge for "user finished zooming" — `changed` would fire dozens
+    // of times mid-gesture and cause primitive churn.
+    const remove = camera.moveEnd.addEventListener(onMoveEnd);
     return () => remove();
   }, [viewer, focusTarget, dispatch]);
 }
@@ -1265,6 +1392,95 @@ Expected: PASS.
 ```bash
 git add services/frontend/src/components/globe/hooks/useSpotlightTrigger.ts
 git commit -m "feat(frontend): useSpotlightTrigger camera-zoom observer"
+```
+
+---
+
+## Task 8b: Search Trigger — `SearchPanel onAccept` Wiring
+
+**Files:**
+- Modify: `services/frontend/src/components/worldview/SearchPanel.tsx` (add `onAccept` prop, fire on result-list click)
+- Modify: `services/frontend/src/pages/WorldviewPage.tsx` (consume `onAccept`, dispatch Spotlight + camera flyTo)
+
+The current `SearchPanel` renders a result list (`results.map((node) => …)`) but has no upward emit. We add a small `onAccept(node)` contract.
+
+- [ ] **Step 1: Add `onAccept` prop to SearchPanel**
+
+In `services/frontend/src/components/worldview/SearchPanel.tsx`, extend the props:
+
+```tsx
+export interface SearchPanelProps {
+  viewer: Cesium.Viewer | null;
+  initialQuery?: string;
+  onAccept?: (node: GraphNode) => void;
+}
+
+export function SearchPanel({ viewer: _viewer, initialQuery = "", onAccept }: SearchPanelProps) {
+  // ...
+}
+```
+
+In the result-list `<li>` rendering, attach a click that calls `onAccept`:
+
+```tsx
+<li
+  key={node.id}
+  onClick={() => onAccept?.(node)}
+  style={{ cursor: "pointer", padding: "0.42rem 0", borderBottom: "1px solid rgba(107,99,88,0.25)" }}
+>
+  {/* …existing children… */}
+</li>
+```
+
+`GraphNode` shape already has `id`, `type`, `name` — verify it also exposes `lat`/`lon` (or equivalent). If not, append optional coords to the type and the backend response shape.
+
+- [ ] **Step 2: Wire from `WorldviewPage`**
+
+In `WorldviewPage.tsx`, where `<SearchPanel>` is mounted, pass `onAccept`:
+
+```tsx
+import { useSpotlight } from "../components/globe/spotlight/SpotlightContext";
+// inside the page body, but inside <SpotlightProvider>:
+
+function SearchAcceptHook({ viewer }: { viewer: Cesium.Viewer | null }) {
+  const { dispatch } = useSpotlight();
+  return (
+    <SearchPanel
+      viewer={viewer}
+      onAccept={(node) => {
+        if (typeof node.lat !== "number" || typeof node.lon !== "number") return;
+        viewer?.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(node.lon, node.lat, 400_000),
+          duration: 1.6,
+        });
+        dispatch({
+          type: "set",
+          target: {
+            kind: "circle", trigger: "search",
+            center: { lon: node.lon, lat: node.lat },
+            radius: 1, altitude: 400_000,
+            label: node.name, ref: `§ ${node.type}`,
+          },
+        });
+      }}
+    />
+  );
+}
+```
+
+Replace the old `<SearchPanel>` mount with `<SearchAcceptHook viewer={viewer} />` (must live inside `<SpotlightProvider>`).
+
+- [ ] **Step 3: Type-check**
+
+Run: `cd services/frontend && npm run type-check`
+Expected: PASS. If `GraphNode` lacks `lat`/`lon`, the type-check will surface that gap; mark those as `node.lat ?? undefined` and add fields to the type as needed (the backend `/api/graph/search` response is the source of truth — match it).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add services/frontend/src/components/worldview/SearchPanel.tsx \
+        services/frontend/src/pages/WorldviewPage.tsx
+git commit -m "feat(frontend): SearchPanel onAccept wires to Spotlight search-trigger"
 ```
 
 ---
@@ -1450,17 +1666,7 @@ git commit -m "feat(frontend): HudFrame chrome (corners, crosshair, eyebrow, clo
 
 ```tsx
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { SpotlightCartouche } from "../SpotlightCartouche";
-import { SpotlightProvider, type FocusTarget } from "../SpotlightContext";
-
-function PreloadedProvider({ value, children }: { value: FocusTarget; children: React.ReactNode }) {
-  // Test-only: use the real Provider seeded by mounting an effect that dispatches.
-  // For these tests, render the Cartouche with a value injected by the wrapper:
-  return <SpotlightProvider>{children}</SpotlightProvider>;
-}
-
-// We test the pure render function instead of the connected component:
+import { render } from "@testing-library/react";
 import { renderCartouche } from "../SpotlightCartouche";
 
 describe("renderCartouche", () => {
@@ -1480,13 +1686,20 @@ describe("renderCartouche", () => {
   });
 
   it("country GRC with endonyms → renders Greece title + cartouche stack", () => {
-    const r = renderCartouche({
-      kind: "country", trigger: "country",
-      m49: "300", iso3: "GRC",
-      polygon: { type: "Polygon", coordinates: [[[0,0],[1,0],[1,1],[0,1],[0,0]]] },
-      name: "Greece",
-      capital: { name: "Athens", coords: { lon: 23.7275, lat: 37.9838 } },
-    });
+    const r = renderCartouche(
+      {
+        kind: "country", trigger: "country",
+        m49: "300", iso3: "GRC",
+        polygon: { type: "Polygon", coordinates: [[[0,0],[1,0],[1,1],[0,1],[0,0]]] },
+        name: "Greece",
+        capital: { name: "Athens", coords: { lon: 23.7275, lat: 37.9838 } },
+      },
+      {
+        countries: {
+          GRC: { iso3: "GRC", names: { en: "Greece", official: "Hellenic Republic", native: "Ελληνική Δημοκρατία", endonyms: { el: "Ελλάδα", de: "Griechenland", ru: "Греция" } } },
+        },
+      }
+    );
     const { container } = render(<>{r}</>);
     expect(container.textContent).toContain("Greece");
   });
@@ -1595,12 +1808,13 @@ git commit -m "feat(frontend): SpotlightCartouche adaptive (idle/circle/country)
 
 ---
 
-## Task 12: CountryHeader for InspectorPanel
+## Task 12: CountryHeader Component (TDD)
 
 **Files:**
 - Create: `services/frontend/src/components/globe/spotlight/CountryHeader.tsx`
 - Test: `services/frontend/src/components/globe/spotlight/__tests__/CountryHeader.test.tsx`
-- Modify: `services/frontend/src/components/worldview/InspectorPanel.tsx`
+
+> **Mounting:** `InspectorPanel.tsx` already renders this in its `country` branch from Task 7 step 5. This task only ships the component + its test.
 
 - [ ] **Step 1: Write failing test**
 
@@ -1669,31 +1883,12 @@ Add corresponding CSS to `worldviewHudLoader.css`:
 .country-placeholder { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--granite); font-family: "Martian Mono", monospace; font-size: 9px; color: var(--ash); letter-spacing: .14em; text-transform: uppercase; }
 ```
 
-- [ ] **Step 4: Wire into InspectorPanel**
-
-In `services/frontend/src/components/worldview/InspectorPanel.tsx`, when the selected entity has `type === "country"`, render `<CountryHeader />` instead of the default property list. Sample diff (adjust to actual file shape):
-
-```tsx
-import { CountryHeader } from "../globe/spotlight/CountryHeader";
-// ...
-if (selected?.type === "country") {
-  return (
-    <CountryHeader
-      name={selected.name}
-      iso3={selected.properties.iso3 === "—" ? null : selected.properties.iso3}
-      m49={selected.properties.m49}
-      capital={null /* InspectorPanel does not yet receive capital; deferred to S2.5 — header still renders */}
-    />
-  );
-}
-```
-
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd services/frontend && npx vitest run src/components/globe/spotlight/__tests__/CountryHeader.test.tsx`
 Expected: 2/2 PASS.
 
-- [ ] **Step 6: Type-check + commit**
+- [ ] **Step 5: Type-check + commit**
 
 Run: `cd services/frontend && npm run type-check`
 Expected: PASS.
@@ -1701,9 +1896,8 @@ Expected: PASS.
 ```bash
 git add services/frontend/src/components/globe/spotlight/CountryHeader.tsx \
         services/frontend/src/components/globe/spotlight/__tests__/CountryHeader.test.tsx \
-        services/frontend/src/components/worldview/InspectorPanel.tsx \
         services/frontend/src/components/worldview/worldviewHudLoader.css
-git commit -m "feat(frontend): CountryHeader for Inspector country-mode"
+git commit -m "feat(frontend): CountryHeader component for country-mode Inspector"
 ```
 
 ---
@@ -1804,7 +1998,13 @@ export function Graticule({ viewer }: Props) {
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
     const collection = new Cesium.PolylineCollection();
-    const color = Cesium.Color.fromCssColorString("#3a3530"); // approx --graticule
+    // Read the --graticule token at mount time. color-mix() resolves to a
+    // valid CSS color string in modern browsers; if not, fall back to a hex
+    // approximation of color-mix(--granite 80% --steel 20%).
+    const cssVar = getComputedStyle(document.documentElement)
+      .getPropertyValue("--graticule")
+      .trim();
+    const color = Cesium.Color.fromCssColorString(cssVar || "#28302e");
     const material = Cesium.Material.fromType("Color", { color: color.withAlpha(0.45) });
 
     // Latitudes every 10°
@@ -1949,7 +2149,6 @@ This task touches 14 existing layer-component files to swap their hardcoded colo
 - Modify: `services/frontend/src/components/layers/EarthquakeLayer.tsx`
 - Modify: `services/frontend/src/components/layers/ShipLayer.tsx`
 - Modify: `services/frontend/src/components/layers/CCTVLayer.tsx`
-- Modify: `services/frontend/src/components/layers/EventLayer.tsx`
 - Modify: `services/frontend/src/components/layers/CableLayer.tsx`
 - Modify: `services/frontend/src/components/layers/PipelineLayer.tsx`
 - Modify: `services/frontend/src/components/layers/FIRMSLayer.tsx`
@@ -1958,6 +2157,8 @@ This task touches 14 existing layer-component files to swap their hardcoded colo
 - Modify: `services/frontend/src/components/layers/RefineryLayer.tsx`
 - Modify: `services/frontend/src/components/layers/EONETLayer.tsx`
 - Modify: `services/frontend/src/components/layers/GDACSLayer.tsx`
+
+> **`EventLayer` is intentionally NOT in this list** — its glyph family is per-event-type via the codebook (see §3.8), and the codebook-driven mapping is S2.5 work.
 
 - [ ] **Step 1: Inspect existing color usage per layer**
 
@@ -2206,7 +2407,7 @@ All three must PASS.
 Open `/worldview`. Verify against spec §14:
 - Layer-stack 00, 01, 02, 03, 04, 06, 07, 08, 09a, 09b implemented.
 - § Layers Panel shows 4-group structure.
-- Four triggers: zoom (camera ≤ 500 km), pin click, country click; search trigger placeholder (deferred until § Search emits match events).
+- Four triggers all wired: zoom (Task 8 · camera moveEnd ≤ 500 km, sticky-protected), pin click (Task 7 · per data-tag in EntityClickHandler), search match (Task 8b · `SearchPanel onAccept` → Spotlight + camera flyTo), country click (Task 7 · TopoJSON hit-test on no-tag pick).
 - `focusTarget` last-writer-wins, ESC resets.
 - Country mode: amber polygon-highlight, capital pulse (only for indexed countries), multilingual cartouche from `country-endonyms.json`. Inspector shows country header with `S2.5 coming soon` placeholder.
 - Token-Delta in `hlidskjalf.css` is integrated.
@@ -2230,5 +2431,3 @@ The following are explicitly **not** part of this plan (per spec §11.1) and sho
 - Animated time-slider
 - Country-vs-country comparison
 - Visual regression CI gate
-
-Search trigger (camera flyTo on § Search match acceptance) is logically part of S2 but parked here because the existing `§ Search` panel does not yet emit match events. When that contract is added (separate small task), wire it as a fourth dispatch in `useSpotlightTrigger.ts`.
