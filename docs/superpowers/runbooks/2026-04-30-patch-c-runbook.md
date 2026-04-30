@@ -894,7 +894,7 @@ At the end of the window, record:
 - pre/post duplicate counts
 - manual-review report path
 - Phase 5 commit or PR reference
-- final lowercase regression check result
+- final non-canonical entity-type drift check result
 - operator who approved Stop-Gate 9
 
 Do not add `/home/deadpool-ultra/odin-reports/*.csv` to git unless the operator

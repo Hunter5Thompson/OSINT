@@ -753,7 +753,7 @@ verified live in the deployed image. Operator confirms "go for resume".
 - [ ] Update `/home/deadpool-ultra/.claude/projects/.../memory/project_active_plans.md`
   to reflect Patch C completion.
 
-**STOP-GATE 9:** Ingestion stable for ≥1 hour, no lowercase regression,
+**STOP-GATE 9:** Ingestion stable for ≥1 hour, `non_canonical = 0`,
 operator declares "Patch C complete".
 
 ---
