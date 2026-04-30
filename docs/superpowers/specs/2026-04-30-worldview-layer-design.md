@@ -16,7 +16,8 @@ Diese Spec definiert das **visuelle Layer-System des CesiumJS-Globe** in der Wor
 ### §1.2 Was diese Spec nicht ist
 
 - Keine Chrome-/Panel-Spec — die liegt in `2026-04-14-odin-4layer-hlidskjalf-design.md` §4.2.
-- Keine Daten-Layer-Auswahl — die existierenden 14 Cesium-Datensquellen (FlightLayer, SatelliteLayer, EarthquakeLayer, FIRMSLayer, …) bleiben strukturell unverändert; sie werden in dieser Spec lediglich der Schicht-Gruppe **C · Signal** zugeordnet.
+- **Keine Layer-Engine-Migration.** Die existierenden 16 `LayerVisibility`-Keys (siehe `services/frontend/src/types/index.ts:257`) bleiben strukturell separate React-Komponenten mit jeweils eigener `BillboardCollection` und eigenem `onSelect`-Handler. Diese Spec organisiert sie neu in der § Layers Panel UI nach den 4 Gruppen und vereinheitlicht ihre Glyph-Family-Tokens (siehe §3.8 Mapping-Tabelle). Eine Konsolidierung in eine einzige `EventGlyphs`-Komponente ist eigene Sprint-Arbeit (S2.5 oder später) und nicht Teil dieser Spec.
+- **Keine Almanac-Datasourcing-Spec.** Country-Mode (§5) beschränkt sich in S2 auf das visuelle MVP: Polygon-Highlight + Capital-Pulse + Multilingual-Cartouche aus statischem Endonym-JSON. REST Countries · Wikidata SPARQL · Munin-Briefs · Neo4j Country-Queries · Active-Intel-Pulses bekommen eine eigene Backend-Spec (`2026-05-XX-country-almanac-data.md`).
 - Keine Performance-Budget-Bestimmung — übernimmt das implementations-Plan.
 
 ### §1.3 Aesthetic Statement
@@ -45,13 +46,13 @@ Render-Reihenfolge **von unten nach oben**. Jede Schicht ist explizit benannt, h
 |---|---|---|---|---|
 | 00 | A · Sky | Void & Stars | always-on | `Cesium.SkyBox` + procedural starfield |
 | 01 | A · Sky | Atmosphere Halo | always-on | `Cesium.SkyAtmosphere` (rim 60–78% radius) |
-| 02 | B · Earth | Globe Surface | toggle | Custom `globe.material` shader · vector default · raster reveal in Spotlight |
+| 02 | B · Earth | Globe Surface | toggle | Custom `globe.material` shader · vector default · raster reveal in Spotlight (siehe §10.2) |
 | 03 | B · Earth | Graticule | toggle | `PolylineCollection` · 10° lat/long · clipped to globe |
-| 04 | B · Earth | Country Borders | toggle | `PolylineCollection` (single batch) · Natural Earth admin-0 |
-| 05 | B · Earth | Hydrography | toggle | `PolylineCollection` (single batch) · Natural Earth coastline + rivers L1 |
-| 06 | C · Signal | Network Mesh | per-source toggle | `PolylineCollection` per source (cables · routes · pipelines) |
-| 07 | C · Signal | Event Glyphs | per-source toggle | `BillboardCollection` (single batch) · all 14 data sources collapse here |
-| 08 | D · Lens | Spotlight | always-on (driven by `focusTarget`) | Polymorphic: `kind ∈ {circle, country}`. Cesium PostProcess Stage with radial-mask (circle) or polygon-clip (country) |
+| 04 | B · Earth | Country Borders | toggle | `PolylineCollection` · admin-0 polygons (`countries-110m.json` TopoJSON, bereits geladen via `MuninLoader`) |
+| 05 | B · Earth | Hydrography | toggle | `PolylineCollection` · DEFERRED auf S2.5: rivers-Asset noch nicht im Repo (siehe §9). Coastlines liefert Layer 04 implizit. |
+| 06 | C · Signal | Network Mesh | per-source toggle | bestehende `CableLayer` + `PipelineLayer` + `SatelliteLayer` (orbit lines) — getokenized auf `--mesh-line` |
+| 07 | C · Signal | Event Glyphs | per-source toggle | bestehende 13 Glyph-Layer-Komponenten (siehe §3.8 Mapping) — eigene `BillboardCollection` pro Source · S2 vereinheitlicht nur Tokens, keine Konsolidierung |
+| 08 | D · Lens | Spotlight | always-on (driven by `focusTarget`) | Polymorphic: `kind ∈ {circle, country}`. Custom GLSL in `globe.material` mit Mask-Texture (siehe §10.2 für Mask-Pipeline) |
 | 09a | D · Chrome | Cartouche | always-on, content adaptive | DOM overlay · adapts to `spotlight.kind` |
 | 09b | D · Chrome | HUD Frame | always-on | DOM overlay · 4 corners + crosshair + scale-bar + UTC clock |
 
@@ -76,27 +77,34 @@ B · earth
   · Globe Surface             [vec]
   · Graticule                 [10°]
   · Country Borders           [on]
-  · Hydrography               [off]
-C · signal
-  · Network Mesh              [3 src]
-  · Glyphs · UCDP             [38]
-  · Glyphs · FIRMS            [412]
-  · Glyphs · Mil-air          [12]
-  · Glyphs · Satellites       [off]
-  · Glyphs · Earthquakes      [4]
-  · Glyphs · Cables           [on]
-  · Glyphs · Vessels          [off]
-  · Glyphs · CCTV             [off]
-  · Glyphs · Pipelines        [on]
-  · Glyphs · Refineries       [off]
-  · Glyphs · Datacenters      [on]
-  · Glyphs · EONET            [on]
-  · Glyphs · GDACS            [off]
-  · Glyphs · Hotspots         [on]
+  · Hydrography               [s2.5]
+C · signal · network mesh
+  · Cables                    [on]
+  · Pipelines                 [on]
+  · Satellites (orbits)       [off]
+C · signal · glyphs           (16 keys aus LayerVisibility)
+  · flights                   [1247]
+  · satellites                [off]
+  · earthquakes               [4]
+  · vessels                   [off]
+  · cctv                      [off]
+  · events                    [38]
+  · cables                    [on]
+  · pipelines                 [on]
+  · countryBorders            [on]
+  · cityBuildings             [off]
+  · firmsHotspots             [412]
+  · milAircraft               [12]
+  · datacenters               [on]
+  · refineries                [off]
+  · eonet                     [on]
+  · gdacs                     [off]
 D · lens & chrome             (auto)
 ```
 
-Group A bleibt anzeigend, aber nicht klickbar. Group D zeigt aktuellen Spotlight-Status (z.B. „pin · sinjar" oder „country · grc" oder „idle"), nicht toggle-bar.
+Die Glyph-Keys oben sind 1:1 die `LayerVisibility`-Felder aus `services/frontend/src/types/index.ts:257`. Jede Zeile mappt nicht auf eine eigene neue Komponente, sondern auf die bereits existierende Layer-Komponente in `services/frontend/src/components/layers/`. Group A bleibt anzeigend, aber nicht klickbar. Group D zeigt aktuellen Spotlight-Status (z.B. „pin · sinjar" oder „country · grc" oder „idle"), nicht toggle-bar.
+
+> Hinweis zu `countryBorders` und `cityBuildings`: diese sind im aktuellen `LayerVisibility`-Contract als Glyph-Keys geführt, weil sie als Toggle-Items existieren. In dieser Spec gehört die Polyline-Border-Geometrie konzeptuell zu **Layer 04 · B · Earth**. Die `countryBorders`-Toggle-Logik bleibt unverändert; sie wird im § Layers Panel UI unter Group B angezeigt, nicht unter Group C.
 
 ---
 
@@ -132,73 +140,87 @@ Group A bleibt anzeigend, aber nicht klickbar. Group D zeigt aktuellen Spotlight
 
 ### §3.5 Layer 04 · Country Borders
 
-- **Geometry source:** Natural Earth admin-0 polygons, level 1:50m für Performance.
-- **Render:** `PolylineCollection` single batch.
-- **Tokens:** `--stone` 0.6 px. Disputed/de-facto Borders dashed 4-2.
-- **Hit-testing:** Polygon-Hit-Test für Layer 08 country-click trigger lebt in dieser Layer (siehe §4.4).
+- **Geometry source:** **S2 MVP:** `services/frontend/public/countries-110m.json` (Natural Earth 1:110m TopoJSON, bereits geladen via `MuninLoader.tsx:25`). **S2.5 Upgrade-Pfad:** Natural Earth admin-0 1:50m als optionaler GeoJSON-Asset-Drop, sobald visuelle Auflösung gewünscht.
+- **Render:** `PolylineCollection` single batch. TopoJSON wird via `topojson-client` zu GeoJSON dekodiert beim Mount, danach in eine Polyline-Geometrie umgewandelt.
+- **Tokens:** `--stone` 0.6 px. Disputed/de-facto Borders dashed 4-2 (nur wenn die Asset-Quelle das markiert; 1:110m hat das nicht).
+- **Hit-testing:** Polygon-Hit-Test für Layer 08 country-click trigger lebt in dieser Layer (siehe §4.4). Verwendet das gleiche TopoJSON, indexed via R-Tree (siehe §10.3).
+- **Toggle-Kontrolle:** `LayerVisibility.countryBorders` (existing key).
 
 ### §3.6 Layer 05 · Hydrography
 
-- **Geometry source:** Natural Earth coastline (subset) + rivers level 1 (Major rivers only — Nile, Amazon, Mississippi, etc. — nicht alle).
-- **Render:** `PolylineCollection` single batch.
-- **Tokens:** `--ash` 0.4 px · alpha 0.7. Bewusst sehr subtil.
+- **Status:** **DEFERRED auf S2.5.** Asset (Natural Earth rivers L1) ist nicht im Repo. Coastlines werden implizit von Layer 04 mitgerendert (TopoJSON-Country-Polygone enthalten die Küstenlinien).
+- **Wenn implementiert:** `PolylineCollection` single batch · `--ash` 0.4 px · alpha 0.7.
+- **Acceptance-Kriterium für S2:** Layer 05 darf fehlen, ohne dass das Worldview als „unfertig" gilt. Toggle wird im § Layers Panel als `[s2.5]` markiert (disabled mit Hover-Tooltip).
 
 ### §3.7 Layer 06 · Network Mesh
 
-- **Geometry sources** (multi):
-  - Submarine cables (already integrated · `CableLayer`)
-  - Pipeline network (already integrated · `PipelineLayer`)
-  - Aktive Routes — flight tracks ant-trail (max 1 hervorgehoben, Rest grau)
-  - Comm-Links (Satellites: `SatelliteLayer` orbits)
-- **Render:** `PolylineCollection` pro Source, sub-tinted. Nodes als kleine Billboard-Punkte (1.5 px radius).
-- **Tokens:** `--mesh-line` (color-mix --amber 60% transparent) · 0.5 px · 0.55 alpha.
-- **Single active route:** ant-trail via `stroke-dashoffset` Animation, 8 s linear.
+- **Geometry sources** (existing components, in S2 nicht konsolidiert):
+  - `CableLayer` — submarine cables
+  - `PipelineLayer` — pipeline network
+  - `SatelliteLayer` — orbit polylines
+  - Aktive Flight-Route — als Sub-Feature von `FlightLayer`, optional „pin a track" via Inspector
+- **Render:** weiterhin pro Source eine eigene `PolylineCollection`. **S2 ändert nur Tokens** — alle Polylines bekommen `--mesh-line` (color-mix --amber 60% transparent) · 0.5 px · 0.55 alpha als shared visual identity.
+- **Single active route:** ant-trail via `stroke-dashoffset` Animation, 8 s linear (nur für die eine vom User selektierte Track).
+- **Toggle-Kontrolle:** weiterhin pro existierendem Layer-Key (`cables`, `pipelines`, `satellites`).
 
-### §3.8 Layer 07 · Event Glyphs
+### §3.8 Layer 07 · Event Glyphs · Mapping-Tabelle
 
-- **Geometry sources** (alle 14 existierenden Data-Layers): UCDP · FIRMS · Mil-air · Satellites · Earthquakes · Cables (event-mode) · Vessels · CCTV · Pipelines (event-mode) · Refineries · Datacenters · EONET · GDACS · Hotspots.
-- **Render:** **Single** `BillboardCollection` für alle Glyphs gemeinsam. Jeder Glyph hat einen pre-rendered Sprite-Atlas mit den vier Familien-Marken:
-  - **Sentinel pulse** (`--sentinel`) — incidents, threats: roter Punkt + radiale Pulse-Welle
-  - **Amber triangle** (`--amber`) — armed conflict events, alerts
-  - **Stone square** (`--stone`) — infrastructure (refineries, datacenters)
-  - **Sage ring** (`--sage`) — atmospheric / earth observation (FIRMS, EONET, GDACS)
-- **Mapping** (existing data → glyph family):
-  - UCDP → amber triangle
-  - FIRMS → sage ring
-  - Mil-air → amber triangle
-  - Satellites → stone square (orbit endpoints)
-  - Earthquakes → sentinel pulse
-  - Cables incidents → sentinel pulse
-  - Vessels → stone square
-  - CCTV → stone square
-  - Pipelines incidents → sentinel pulse
-  - Refineries → stone square
-  - Datacenters → stone square
-  - EONET → sage ring
-  - GDACS → sentinel pulse
-  - Hotspots → sage ring
+**Architektur (S2):** weiterhin **eine eigene Layer-Komponente pro `LayerVisibility`-Key**. Jede behält ihre `BillboardCollection` und ihren `onSelect`-Handler. Diese Spec ändert nur die *Tokens* (Glyph-Family pro Source) und die *Panel-Gruppierung*.
+
+**Glyph-Familien:**
+- **Sentinel pulse** (`--sentinel`) — incidents, threats, sudden events
+- **Amber triangle** (`--amber`) — armed conflict / alert events
+- **Stone square** (`--stone`) — static infrastructure
+- **Sage ring** (`--sage`) — atmospheric / earth observation / hotspot signals
+
+**Kanonische Mapping-Tabelle** (`LayerVisibility` key → UI label → existing component → glyph family):
+
+| Key | UI Label | Existing Component | Glyph Family | Notes |
+|---|---|---|---|---|
+| `flights` | Flights | `FlightLayer.tsx` | stone square | civilian air traffic; pulse only on incident-tagged tracks |
+| `satellites` | Satellites | `SatelliteLayer.tsx` | stone square | orbit endpoints; orbit-line itself is Layer 06 |
+| `earthquakes` | Earthquakes | `EarthquakeLayer.tsx` | sentinel pulse | USGS feed; magnitude scales pulse radius |
+| `vessels` | Vessels | `ShipLayer.tsx` | stone square | AIS tracks; pulse on incident-tagged |
+| `cctv` | CCTV | `CCTVLayer.tsx` | stone square | static fixed assets |
+| `events` | Graph Events | `EventLayer.tsx` | **per event-type from codebook** | UCDP · GDELT · Telegram · custom feeds — glyph family lookup via `event_codebook.yaml` (NOT hardcoded; see Two-Loop guarantee) |
+| `cables` | Cables | `CableLayer.tsx` | sentinel pulse on incidents · static stone square otherwise | dual-mode |
+| `pipelines` | Pipelines | `PipelineLayer.tsx` | sentinel pulse on incidents · static stone square otherwise | dual-mode |
+| `countryBorders` | Country Borders | (Layer 04, see §3.5) | — (not a glyph) | toggle lives in panel under Group B |
+| `cityBuildings` | City Buildings | (3D tiles, separate) | — (not a glyph) | rendered as Cesium 3D tileset; out of glyph mapping |
+| `firmsHotspots` | FIRMS Hotspots | `FIRMSLayer.tsx` | sage ring | NASA fire detections |
+| `milAircraft` | Mil-air | `MilAircraftLayer.tsx` | amber triangle | military air tracks |
+| `datacenters` | Datacenters | `DatacenterLayer.tsx` | stone square | static infra |
+| `refineries` | Refineries | `RefineryLayer.tsx` | stone square | static infra |
+| `eonet` | EONET | `EONETLayer.tsx` | sage ring | NASA earth observation events |
+| `gdacs` | GDACS | `GDACSLayer.tsx` | sentinel pulse | global disaster alerts |
+
+> Der `events` key ist absichtlich generisch und delegiert die Glyph-Family-Wahl an das ODIN Event Codebook (`services/intelligence/codebook/event_codebook.yaml`). Damit bleibt die Codebook-Single-Source-of-Truth respektiert (Two-Loop-Architektur, siehe `CLAUDE.md`). Eine UCDP/GDELT/Telegram-Aufsplittung als separate `LayerVisibility`-Keys ist explizit nicht in S2.
+
+> Sub-Filter innerhalb `events` (z.B. „nur UCDP zeigen") sind eine UI-Feature für S2.5+, nicht für S2.
 
 ### §3.9 Layer 08 · Spotlight (polymorphic)
 
 Der zentrale Reveal-Mechanismus. Polymorph in `kind`.
 
+**Render-Pipeline:** beide Kinds verwenden den selben Mechanismus — `globe.material` mit Custom GLSL Shader, der eine pro Frame uploadbare Mask-Texture konsumiert. Details siehe §10.2.
+
 #### `kind = 'circle'`
 - Trigger sources: zoom, pin-click, search-match (siehe §4.1–4.3).
 - Shape: Kreis um eine Koordinate, default radius ~1° (≈ 100 km am Äquator), abhängig vom Zoom-Level.
-- Render: PostProcess Stage mit Radial-Mask. Photographic-Imagery (Black Marble) gemischt mit Vector-Untergrund über mask alpha.
+- Mask-Texture: Radial Gradient (CPU-gerendert nach R8, einmal pro Trigger).
+- Imagery: NASA Black Marble nightly als Cesium `ImageryLayer`, dessen Alpha vom Custom-Shader durch die Mask moduliert wird.
 - Chrome (Layer 09a · Cartouche): Coordinate-Cartouche `name · 36.34N · 41.87E · § <ref>`.
 
-#### `kind = 'country'`
-- Trigger source: country-click auf Globe-Surface (Point-in-Polygon-Test gegen Layer 04 admin-0).
-- Shape: admin-0 Polygon des angeklickten Landes.
-- Render: PostProcess Stage mit Polygon-Mask Texture (pre-baked nach R8 Texture, Feathering 1px).
-- Imagery layering im Polygon:
-  - Base: NASA Black Marble Nightly (city lights baked in)
-  - Mask-Modulation: Ember-Radial-Gradients an Major Cities (GeoNames cities1000, top N=12 nach population)
-  - Composite mode: screen
+#### `kind = 'country'` · S2 visuelles MVP
+- Trigger source: country-click auf Globe-Surface (Point-in-Polygon-Test gegen Layer 04 TopoJSON, siehe §4.4).
+- Shape: admin-0 Polygon des angeklickten Landes (aus dem bereits geladenen `countries-110m.json`).
+- Mask-Texture: gerasterisiertes Polygon (CPU-gerendert nach 4096×4096 R8 mit 1 px Feathering).
+- Imagery: gleiche Pipeline wie circle (Black Marble unter Mask), zusätzlich Ember-Radial-Gradients an Capital-Coordinate (statisch aus Endonym-JSON).
 - Chrome:
-  - **Capital pulse** (Sentinel-Rot, größer als reguläre Glyphs, mit zusätzlichem Outer-Ring) auf `capital.coords`.
-  - **City labels** (yellow `#ffd07a`, Hanken Grotesk 11 px) auf top 5 cities.
+  - **Capital pulse** (`--capital-red` `#e63a26`, größer als reguläre Glyphs, mit zusätzlichem Outer-Ring) auf `capital.coords` aus statischem Endonym-JSON.
+  - **Multilingual cartouche** (siehe §3.10 / §5).
+  - **§ Inspector** (existing) zeigt Country-Header mit ISO-3, Name, Capital. Almanac-Inhalt = `coming soon · S2.5` Hinweis (siehe §5).
+- **NOT in S2:** GeoNames cities1000, NASA Sentinel-2 daytime, Active-Intel-Pulses, Munin-Briefs, REST Countries detail fields, Neo4j Country-Queries. Alle in Almanac-Spec S2.5.
   - **Multilingual cartouche** (Layer 09a) mit Endonyms aus Wikidata.
   - **Almanac-Panel** (siehe §5).
 
@@ -251,7 +273,8 @@ type FocusTarget =
       iso3: string;
       polygon: GeoJSON.Polygon;
       capital: { name: string; coords: { lon: number; lat: number } };
-      majorCities: { name: string; coords: { lon: number; lat: number }; pop: number }[];
+      // S2: nur capital + endonyms aus statischem JSON;
+      // majorCities + active intel werden in S2.5 ergänzt
     };
 ```
 
@@ -273,11 +296,11 @@ type FocusTarget =
 ### §4.4 Hit-Testing Reihenfolge
 
 Bei einem Click-Event auf den Globe:
-1. Pick auf Layer 07 (Event Glyphs). Hit → `{trigger:'pin', ...}`.
-2. Sonst: Pick auf Layer 04 (Country Borders / admin-0 polygon containing click point). Hit → `{trigger:'country', ...}`.
+1. Pick auf einen der Event-Glyph-Layer (existing components, alle 13 Glyph-Sources). Hit → `{trigger:'pin', ...}`. Pin-Click verdrahtet sich an den existierenden `onSelect`-Handler des Layers, der zusätzlich zum Inspector-Update auch den `SpotlightContext` dispatched.
+2. Sonst: Pick auf Layer 04 (Country Borders / TopoJSON-Polygon containing click point). Hit → `{trigger:'country', ...}`.
 3. Sonst: ignore (no-op).
 
-Der Point-in-Polygon-Test braucht eine räumliche Index-Struktur (RBush oder ähnlich) auf den admin-0 Polygons; sonst wird der Click-Hit-Test bei 250+ Polygons pro Click zu langsam. Wird im Implementation-Plan budgetiert.
+Der Point-in-Polygon-Test braucht eine räumliche Index-Struktur (R-Tree via `rbush`) auf den 177 Country-Polygonen aus `countries-110m.json`; sonst wird der Click-Hit-Test pro Click zu langsam. Index-Build einmal beim App-Boot (~30 ms one-shot). Wird im Implementation-Plan budgetiert.
 
 ### §4.5 Exit
 
@@ -294,68 +317,92 @@ Der Point-in-Polygon-Test braucht eine räumliche Index-Struktur (RBush oder äh
 
 ---
 
-## §5 Country Mode · Almanac Panel
+## §5 Country Mode · S2 visuelles MVP (Almanac als S2.5)
 
-### §5.1 Layout
+### §5.1 Scope-Definition für S2
 
-Slide-in von rechts, 340 px breit, full-height, `background: rgba(8,7,5,.92)` + 1 px granite border-left + backdrop-blur 14px. Ersetzt im country-mode den § Inspector (gleicher Slot).
+S2 liefert das **visuelle** Country-Mode-Erlebnis. Die datengetriebenen Aspekte (REST Countries, Wikidata SPARQL, Munin-Briefs, Active-Intel-Queries, Neo4j Country-node-schema) werden in eine **separate Backend-Spec** ausgelagert: `2026-05-XX-country-almanac-data.md` (S2.5).
 
-### §5.2 Sektions-Struktur
+**S2 country-mode liefert:**
+- Polygon-Highlight (Mask-Reveal über `globe.material`, siehe §3.9 + §10.2)
+- Capital-Pulse (`--capital-red`, größer als reguläre Glyphs)
+- Multilingual-Cartouche (Endonyms aus statischem JSON, siehe §5.3)
+- § Inspector slide-in mit minimalem Country-Header und „§ Almanac · S2.5 coming soon"-Placeholder
+
+**S2 country-mode liefert NICHT:**
+- Static facts (population, GDP, government, military, etc.)
+- §Context Narrative (2-Satz-Brief)
+- §Active Intel Pulses
+- „read full dossier" / „ask Munin about" Actions
+
+### §5.2 § Inspector Layout im country-mode (S2-Version)
+
+`§ Inspector` (existing slide-in panel) zeigt im country-mode:
 
 ```
-§ ALMANAC · GRC · BRIEF
+§ INSPECTOR · COUNTRY · GRC
 ─────────────────────
 Hellenic Republic                       (Instrument Serif italic 22 px)
 Ελληνική Δημοκρατία · iso · grc        (eyebrow)
 
 CAPITAL    Athens · 37.98N 23.73E
-AREA       131 957 km² · ranked 96
-POP        10.34 M · density 78/km²
-GDP        $ 248 B · ppp $ 405 B
-GOVT       Parliamentary republic
-HEAD       K. Mitsotakis · since 2019
-MILITARY   NATO · 142 700 active
-BORDERS    ALB · MKD · BGR · TUR
-LANGS      Greek (official)
-CURRENCY   EUR · €
 
-§ CONTEXT · 2 SENTENCES
-[2-Satz editorial brief, Instrument Serif italic]
+§ ALMANAC · S2.5 COMING SOON
+[hairline · 220px · ash placeholder block]
 
-§ ACTIVE INTEL · ODIN GRAPH
-● UCDP · Aegean tension              § 042
-○ FIRMS · 0 hotspots                 24h
-● Submarine cable · EAGLE-1          live
-● Mil-air · NATO-SOU                 3 trk
-
-▸ read full dossier
-▸ ask Munin about <country>
-▸ filter ticker · <iso3> only
 ▸ esc · close spotlight
 ```
 
-### §5.3 Datenquellen
+Dieser Inhalt rendert aus dem statischen Endonym-JSON allein. Kein Backend-Call, keine Datenbank-Query.
 
-| Sektion | Quelle | Refresh |
-|---|---|---|
-| Static facts (capital, area, pop, GDP, govt, head, military, langs, currency, borders, ISO codes, endonyms) | REST Countries (`restcountries.com`) + Wikidata SPARQL fallback | täglich · cached lokal als `services/data-ingestion/feeds/country_almanac/` snapshot |
-| Endonyms / Multilingual cartouche | Wikidata `P1448` (official name) + `P2019` (spoken native name) per language code | täglich |
-| §Context narrative (2 sentences) | Pre-generated by Munin agent · stored in `country_brief.country_iso3` Neo4j node, regen weekly | weekly |
-| §Active intel pulses | Live Neo4j queries scoped to `country = iso3`: UCDP active conflicts, FIRMS hotspot count, Cable incidents, Mil-air recent tracks | per Spotlight-Open |
+### §5.3 Statisches Endonym-JSON (S2 Asset)
 
-### §5.4 Capital Pulse (Layer 08, country-mode)
+**Datei:** `services/frontend/public/geo/country-endonyms.json` (~ 60 KB).
 
-- Position: `capital.coords` aus REST Countries.
-- Visual: 6 px solid `#e63a26` (Sentinel-Rot) + Outer-Ring 14 px `rgba(230,58,38,.5)` 1 px stroke + Glow 14 px box-shadow.
-- City Label: `Hanken Grotesk 11 px · #ffd07a · text-shadow 0 0 4px black` rechts vom Pulse.
+**Schema:**
+
+```json
+{
+  "GRC": {
+    "iso3": "GRC",
+    "names": {
+      "en": "Greece",
+      "official": "Hellenic Republic",
+      "native": "Ελληνική Δημοκρατία",
+      "endonyms": {
+        "el": "Ελλάδα",
+        "ru": "Греция",
+        "de": "Griechenland",
+        "fr": "Grèce",
+        "es": "Grecia",
+        "it": "Grecia",
+        "tr": "Yunanistan",
+        "ar": "اليونان",
+        "zh": "希腊",
+        "ja": "ギリシャ"
+      }
+    },
+    "capital": {
+      "name": "Athens",
+      "lat": 37.9838,
+      "lon": 23.7275
+    }
+  }
+}
+```
+
+**Generierung:** einmaliger Wikidata-Snapshot beim Repo-Build (offline, nicht per User-Click). Skript `scripts/build-country-endonyms.mjs` queryt Wikidata SPARQL für alle ~190 Länder, schreibt das JSON. Kommt ins Git-Repo, wird nicht zur Laufzeit aktualisiert.
+
+### §5.4 Capital Pulse (Layer 08, country-mode · S2)
+
+- Position: `capital.lat / capital.lon` aus dem JSON oben.
+- Visual: 6 px solid `--capital-red` (`#e63a26`) + Outer-Ring 14 px `rgba(230,58,38,.5)` 1 px stroke + Glow 14 px box-shadow.
+- City Label: `Hanken Grotesk 11 px · --city-label · text-shadow 0 0 4px black` rechts vom Pulse.
 - Größere Sichtbarkeit als reguläre Glyphs (Layer 07), damit das Capital sofort heraussticht.
 
-### §5.5 City Labels
+### §5.5 City Labels · S2.5
 
-- Top 5 cities nach population (ohne Capital, der hat seinen eigenen Pulse).
-- `Hanken Grotesk 11 px · #ffd07a · text-shadow 0 0 4px black`.
-- Position: 4 px rechts vom City-Center, vertikal zentriert.
-- Render: DOM Overlay (nicht Cesium Label) für besseres Text-Rendering.
+Top-N Major Cities sind **out of scope für S2** (kein GeoNames cities1000 Asset im Repo). Im Implementation-Plan: Capital allein reicht für das visuelle MVP.
 
 ---
 
@@ -404,26 +451,27 @@ Das Layer-Stack-System sitzt unter den bereits gespeccten Hlíðskjalf-Overlay-P
 
 | Panel | Spec-Update durch dieses Dokument |
 |---|---|
-| § Layers | Inhalt wird *neu strukturiert* nach den 4 Gruppen (A · Sky / B · Earth / C · Signal / D · Lens & Chrome). Group A nicht-toggle-bar (deaktiviert), Group D zeigt Spotlight-Status statt Toggles. |
+| § Layers | Inhalt wird *neu strukturiert* nach den 4 Gruppen (A · Sky / B · Earth / C · Signal / D · Lens & Chrome). Group A nicht-toggle-bar (deaktiviert), Group D zeigt Spotlight-Status statt Toggles. Die 16 existierenden `LayerVisibility`-Keys werden 1:1 in Group B und C eingegliedert (siehe §3.8 Tabelle); kein Contract-Change. |
 | § Search | Match-Acceptance triggert 3. Spotlight-Trigger (siehe §4.2). |
-| § Inspector | Im pin-mode unverändert. Im country-mode **versteckt** — wird durch Almanac-Panel (§5) im selben Slot ersetzt. ESC schließt beides. |
+| § Inspector | Im pin-mode unverändert (existing per-layer `onSelect`-Handlers wirken weiter). Im country-mode zeigt der § Inspector den minimalen Country-Header aus statischem Endonym-JSON (§5.2). ESC schließt beides. |
 | § Ticker | Unverändert. Click auf Ticker-Item triggert internen `focusTarget`-Dispatch (`circle` mit Item-Coords). |
 
 ---
 
 ## §9 Data Dependencies
 
+**Verifiziert gegen aktuellen Repo-Stand am 2026-04-30.** Nur was hier mit *Existing in repo* markiert ist, ist tatsächlich vorhanden; alles andere ist neue Asset-Pipeline-Arbeit.
+
 | Source | Use | Existing? | Action für S2 |
 |---|---|---|---|
-| Natural Earth admin-0 1:50m | Layer 04 Borders + Layer 08 country polygon hit-test | Existing in repo | Verify, ggf. neu importieren als optimierten GeoJSON |
-| Natural Earth coastline + rivers L1 | Layer 05 Hydrography | Existing | Same |
-| NASA Black Marble nightly | Layer 02 Spotlight imagery (circle + country) | Not yet integrated | Add Cesium ImageryProvider, cached tiles |
-| Sentinel-2 daytime composite (optional) | Layer 02 day-mode (out-of-scope für S2) | Not yet integrated | Out of scope · S2.5 oder S3 |
-| GeoNames cities1000 | Layer 08 country-mode population centers | Not yet integrated | Static asset, ~5 MB JSON nach `services/frontend/public/geo/cities.json` |
-| REST Countries | Almanac static facts | Not yet integrated | Add ingestion job in `data-ingestion/feeds/country_almanac/` (täglich) → Neo4j `Country` nodes |
-| Wikidata SPARQL | Endonyms (multilingual cartouche) + Capital coordinates | Not yet integrated | Same ingestion job |
-| Munin agent | Almanac §Context 2-sentence brief | Existing | New scheduled job: weekly regenerate per country → Neo4j `Country.brief` |
-| Neo4j `Country` node + relationships | Almanac §Active intel pulses | Partially existing (some entities have `country` property) | New: ensure all event types tag `country` consistently · add `Country` label + index |
+| `countries-110m.json` (Natural Earth admin-0 1:110m TopoJSON) | Layer 04 Borders + Layer 08 country polygon hit-test | **Existing** in `services/frontend/public/`, geladen via `MuninLoader.tsx:25` | Wiederverwenden (kein neuer Asset-Drop) |
+| Natural Earth admin-0 1:50m (höhere Auflösung) | optional visuelles Upgrade Layer 04 | **Not in repo** | DEFERRED auf S2.5 wenn 1:110m-Auflösung visuell ausreicht |
+| Natural Earth rivers L1 | Layer 05 Hydrography | **Not in repo** | DEFERRED auf S2.5 |
+| NASA Black Marble nightly | Layer 02 Spotlight imagery (circle + country) | **Not yet integrated** | Add Cesium `UrlTemplateImageryProvider` (NASA GIBS WMTS endpoint) — kein Asset-Drop, nur Konfiguration |
+| `country-endonyms.json` (Wikidata-Snapshot) | Layer 08 country-mode multilingual cartouche + capital coords | **Not in repo** | NEU: build script `scripts/build-country-endonyms.mjs`, einmalig generiert, ~ 60 KB, im Repo committed (siehe §5.3) |
+| Sentinel-2 daytime composite | Layer 02 day-mode | **Not integrated** | Out of scope · S2.5+ |
+| GeoNames cities1000 | Layer 08 country-mode major cities | **Not integrated** | Out of scope · S2.5 (Country-Almanac-Spec) |
+| REST Countries · Wikidata SPARQL · Munin briefs · Neo4j Country-node-schema | Almanac dynamic content | **Not integrated** | Out of scope · S2.5 (separate Spec `2026-05-XX-country-almanac-data.md`) |
 
 ---
 
@@ -433,33 +481,51 @@ Das Layer-Stack-System sitzt unter den bereits gespeccten Hlíðskjalf-Overlay-P
 
 - **BillboardCollection**, nicht Entity-API für Bulk-Rendering.
 - **CallbackProperty** für smooth tracking ohne React re-renders.
-- **PostProcessStage** mit Custom GLSL für Spotlight-Mask.
+- **Custom `globe.material` GLSL Shader** mit Mask-Texture für Spotlight-Mask (siehe §10.2 — *eine* Pipeline, nicht PostProcessStage).
 - Async cleanup mit `if (viewer.isDestroyed()) return;` guard (siehe S2-Backlog `project_s2_worldview_backlog.md`).
 
-### §10.2 Spotlight Mask Texture-Pipeline
+### §10.2 Spotlight Mask Texture-Pipeline · authoritative
 
-Für `kind = 'country'`:
+**Eine** Pipeline für beide Spotlight-Kinds. **Keine** `PostProcessStage` — wir verwenden ausschließlich `Cesium.Globe.material` mit einem Custom GLSL Fragment-Shader.
 
-1. Auf Country-Click: hol GeoJSON Polygon aus admin-0 Spatial-Index (vorgefertigt beim App-Boot).
-2. Renderer rendert Polygon in eine Off-Screen-Canvas (4096×4096 R8) — schwarz=außerhalb, weiß=innerhalb, Feathering 1 px.
-3. Texture wird als WebGL-Sampler in `globe.material` gepustet.
-4. Custom GLSL Shader im `globe.material` mischt Vector-Background mit Black-Marble-Imagery via `mask alpha`.
-5. Auto-Cleanup beim Spotlight-Exit (Texture dispose, Mask-Alpha → 0).
+**Pipeline (S2):**
+
+1. **Setup beim Mount:** ersetze `globe.material` mit eigener `Material`, deren `fabric.source` einen Custom-GLSL-Snippet enthält. Snippet hat zwei Sampler-Uniforms:
+   - `u_baseImagery` — Cesium-default Globe-Imagery (oder vector fill wenn `kind=idle`)
+   - `u_maskTex` — die pro Spotlight-Trigger berechnete Mask-Texture
+   - `u_blackMarbleImagery` — NASA Black Marble Tiles (nur sichtbar unter Mask-Alpha > 0)
+2. **Mask-Berechnung pro Trigger** (CPU, einmalig):
+   - `kind = circle`: Radial Gradient nach Off-Screen-Canvas (512×512 R8, Feathering ~ 4 px). Center der Mask wird in Lon/Lat-Space gebracht und als Uniform an den Shader übergeben.
+   - `kind = country`: Polygon aus TopoJSON in Off-Screen-Canvas rendern (1024×1024 R8, Feathering 1 px). Polygon-Bbox wird als Uniform übergeben für UV-Mapping.
+3. **Shader-Logik:**
+   ```glsl
+   // pseudo-code
+   vec4 base = texture(u_baseImagery, materialInput.st);
+   float mask = sampleMask(u_maskTex, materialInput.st, u_maskBbox);
+   vec4 photo = texture(u_blackMarbleImagery, materialInput.st);
+   material.diffuse = mix(base.rgb, photo.rgb, mask).rgb;
+   material.alpha = base.a;
+   ```
+4. **Mask-Alpha Animation:** ein zusätzlicher Uniform `u_maskAlpha` (0..1) wird pro Frame interpoliert (320 ms ease-out für In, 200 ms ease-in für Out). Shader multipliziert `mask` mit `u_maskAlpha` für Fade.
+5. **Cleanup beim Spotlight-Exit:** `u_maskAlpha → 0`, dann disposed Off-Screen-Canvas wenn `u_maskAlpha === 0` (nicht jeden Frame).
+
+**Begründung der Wahl gegen `PostProcessStage`:** Eine PostProcess-Stage operiert im Screen-Space und müsste die World-Coordinates aus dem Depth-Buffer rekonstruieren — das funktioniert auf einer Sphäre mit verzerrter Imagery schwierig. `globe.material` operiert im Tile-Space mit Texture-Koordinaten, was die Polygon-zu-UV-Projektion deutlich einfacher macht.
 
 ### §10.3 Spatial Index für Country-Click
 
-- Beim App-Boot: lade `admin-0.geojson` einmal, baue R-Tree (rbush) mit Bounding-Boxes.
-- Click-Hit-Test: Pick `cartesian → cartographic`, check rbush für candidate polygons, dann Point-in-Polygon-Test (turf.js `booleanPointInPolygon`).
-- Erwartete Latenz: < 5 ms pro Click bei ~250 polygons.
+- Beim App-Boot: lade `countries-110m.json` (bereits geladen via `MuninLoader`), dekodiere zu GeoJSON Features, baue R-Tree (`rbush`) mit Bounding-Boxes.
+- Click-Hit-Test: Pick `cartesian → cartographic`, check rbush für candidate polygons, dann Point-in-Polygon-Test (`@turf/boolean-point-in-polygon`).
+- Erwartete Latenz: < 5 ms pro Click bei 177 Polygonen.
 
-### §10.4 Bestehende Layer-Migration
+### §10.4 Existing-Layer-Strategie · authoritative
 
-Existing Cesium-Layer-Dateien in `services/frontend/src/components/layers/*.tsx` werden zu Layer 07 Event Glyphs konsolidiert:
+**Diese Spec konsolidiert NICHT.** Die 16 existierenden `LayerVisibility`-Keys mit ihren jeweiligen Komponenten (`FlightLayer`, `SatelliteLayer`, etc.) bleiben unverändert. Was diese Spec ändert:
 
-- Vor S2: 14 separate `BillboardCollection` (eine pro Layer-Datei).
-- Nach S2: **eine** `BillboardCollection` mit allen Glyphs, gefüttert aus den existierenden Hooks (`useFlights`, `useSatellites`, `useEarthquakes`, …) über einen neuen `useGlyphMerger` Hook der aus allen Quellen einen flat-array-Stream merged.
+- Token-Vereinheitlichung — alle existierenden Glyph-Layer kriegen Tokens aus §6 statt eigener Hex-Werte.
+- `onSelect`-Erweiterung — jeder existierende Layer-Component dispatched zusätzlich zu seinem `setSelected({type, data})`-Aufruf einen `spotlight.dispatch({kind:'circle', trigger:'pin', ...})`-Call. Beide Kanäle laufen parallel (Inspector + Spotlight koppeln am gleichen Event).
+- Panel-Re-Gruppierung — `LayerPanel` UI ändert die Reihenfolge der Toggle-Items entsprechend §3.8 Mapping, ohne die Toggles selbst zu touchen.
 
-Bestehende Per-Layer-Toggle-Logik bleibt erhalten — sie wird zu Filter-Pred über den merged Stream.
+**Konsolidierung (`useGlyphMerger`, single `BillboardCollection`) ist eine separate Sprint-Spec für S2.5+** und wird hier nur als Future-Work erwähnt.
 
 ---
 
@@ -467,16 +533,21 @@ Bestehende Per-Layer-Toggle-Logik bleibt erhalten — sie wird zu Filter-Pred ü
 
 ### §11.1 Out of Scope für S2
 
-- **Sentinel-2 daytime imagery composite** — nice-to-have, aber Black Marble allein deckt den Forensic-Aesthetic. Verschoben auf S2.5 oder später.
-- **Disputed-territory rendering policy** — z.B. wie wird Western Sahara, Crimea, Taiwan dargestellt? Aktuell: Natural Earth admin-0 default. Editorial-Entscheidung später.
-- **Animated time-slider** — Globe als statischer Snapshot der „jetzt"-State; Zeitachse als Feature für War Room (S4).
+- **Layer-Engine-Migration** — die 16 existierenden Layer-Komponenten bleiben separat. Konsolidierung in `EventGlyphs` mit `useGlyphMerger` ist eigene Sprint-Arbeit (S2.5+).
+- **Country-Almanac-Datasourcing** — REST Countries · Wikidata SPARQL (zur Laufzeit) · Munin briefs · Active-Intel-Pulses · Neo4j Country-node-schema bekommen eigene Backend-Spec `2026-05-XX-country-almanac-data.md`.
+- **GeoNames cities1000** — Major-City-Labels (außer Capital) sind S2.5-Feature.
+- **Layer 05 Hydrography** — Rivers-Asset nicht im Repo. Coastlines kommen implizit von Layer 04 Country Borders.
+- **Natural Earth 1:50m Asset-Upgrade** — S2 verwendet das bereits geladene `countries-110m.json`. Höhere Auflösung in S2.5 nur wenn visuell nötig.
+- **Sentinel-2 daytime imagery composite** — Black Marble allein deckt den Forensic-Aesthetic. Verschoben auf S2.5+.
+- **Disputed-territory rendering policy** — z.B. Western Sahara, Crimea, Taiwan. Aktuell: Asset-default. Editorial-Entscheidung später.
+- **Animated time-slider** — Feature für War Room (S4).
 - **Country-zu-Country Comparison-Mode** — Multi-select Spotlight ist Future Work.
 
-### §11.2 Offene Fragen
+### §11.2 Offene Fragen für Implementation-Plan
 
-1. **Almanac §Context generation:** sollen die 2-Satz-Briefs durch Munin auf-Klick (on-demand) generiert werden oder weekly batch + cached? Empfehlung: weekly batch + cached, mit „regenerate" Button im Almanac für stale briefs (> 14 Tage).
-2. **Multilingual cartouche language pool:** statisch (immer dieselben 7 Sprachen pro Country) oder dynamisch (top 7 Sprecher-Sprachen aus dem CIA-World-Factbook „Languages")? Empfehlung: dynamisch, mit Fallback auf einen festen Set für Sprachen die wenig Sprecher haben (Esperanto, Lateinisch, Sanskrit für „klassische" Anker).
-3. **GeoNames cities1000 license:** 5 MB Asset im Frontend-Bundle akzeptabel oder lieber Backend-Endpunkt? Empfehlung: Backend-Endpunkt, wird beim Country-Click nachgeladen (~ 200 KB pro country).
+1. **Mask-Texture-Resolution für country-mode:** 1024×1024 ist konservativ (ausreichend für ~177 Länder); ggf. 2048 für Russland/China. Empfehlung: dynamisch nach Polygon-Bbox-Diagonale.
+2. **Black Marble GIBS Tile-Caching:** GIBS-Endpunkt direkt anrufen oder Browser-Cache + ODIN-Backend-Proxy? Empfehlung für S2: direkter GIBS-Call (Standard-Cesium-Pattern), Proxy in S2.5 wenn Latency-Issues auftauchen.
+3. **Endonym-Sprachen-Pool:** `country-endonyms.json` enthält pro Land ~ 8–12 Endonyms (10 Beispielsprachen aus §5.3). Welche genau? Empfehlung: top-10 Wikipedia-Languages global + offizielle Endonym, also identischer Set für alle Länder. Reduziert Code-Komplexität.
 
 Diese drei werden im Implementation-Plan addressed (oder explizit deferred).
 
@@ -487,18 +558,13 @@ Diese drei werden im Implementation-Plan addressed (oder explizit deferred).
 ### §12.1 Unit / Component Tests
 
 - `SpotlightContext` reducer: alle Trigger-Übergänge (idle → kind-A → kind-B → idle) decken.
-- `useGlyphMerger`: alle 14 Sources gemerged, nur enabled Sources sichtbar.
-- Country-click hit-test: gegeben (lon, lat) → korrektes ISO-3 (Test-Daten: 10 known coordinates spanning continents).
-- Almanac-Panel: gegeben `iso3 = 'GRC'` → all expected fields rendered, missing-data fallback graceful.
+- Country-click hit-test (`useCountryHitTest`): gegeben (lon, lat) → korrektes ISO-3 (Test-Daten: 10 known coordinates spanning continents).
+- Country-Inspector-Header: gegeben `iso3 = 'GRC'` → endonym + capital aus statischem JSON gerendert, missing-data fallback graceful.
+- Pin-Trigger-Adapter: jeder existierende Layer-Component dispatched korrekt zum Spotlight-Reducer und behält gleichzeitig sein `setSelected`-Update an den Inspector.
 
-### §12.2 Visual Regression
+### §12.2 Visual Regression — out of scope für S2
 
-Drei Pflicht-Snapshots:
-- Idle Worldview (no spotlight).
-- Pin-mode (Sinjar example).
-- Country-mode (Greece example, exakt gleich wie der Reference-Frame).
-
-Tooling: Playwright + percy.io oder lokale pixel-diff.
+Visual Regression ist konsistent mit der Parent-Spec (`2026-04-14-odin-4layer-hlidskjalf-design.md` §13.1) **nicht in S2 verpflichtend**. Dev-Snapshots als optionales Hilfsmittel sind erlaubt, aber kein Acceptance-Gate. Diese Sektion existiert nur als Future-Hook für eine eigene QA-Spec.
 
 ### §12.3 Performance
 
@@ -509,59 +575,58 @@ Tooling: Playwright + percy.io oder lokale pixel-diff.
 
 ## §13 Mapping zu existierender Codebase
 
-Nach S2-Port ergibt sich folgende File-Struktur:
+Nach S2-Port ergibt sich folgende File-Struktur. **Bestehende Layer-Komponenten unter `services/frontend/src/components/layers/` bleiben erhalten** — diese Spec fügt nur neue Files hinzu und edited bestehende Token-Stellen.
 
 ```
 services/frontend/src/
-├── theme/hlidskjalf.css                    # erweitert mit §6 Token-Delta
+├── theme/hlidskjalf.css                    # erweitert mit §6 Token-Delta (7 neue Tokens)
+├── pages/WorldviewPage.tsx                 # existing — wird in S2 zu Hlidskjalf-Chrome refactored, behält 16 Layer-Mounts
 ├── components/
-│   ├── pages/WorldviewPage.tsx             # ersetzt App.tsx (siehe project_s2_worldview_backlog.md)
-│   ├── globe/
+│   ├── globe/                              # NEU
 │   │   ├── GlobeViewer.tsx                 # Cesium Viewer + skyBox + skyAtmosphere setup
-│   │   ├── layers/
+│   │   ├── visual-layers/                  # NEU — die rein-visuellen Layer aus §3.1–3.6
 │   │   │   ├── Graticule.tsx               # Layer 03
-│   │   │   ├── CountryBorders.tsx          # Layer 04 (mit hit-test)
-│   │   │   ├── Hydrography.tsx             # Layer 05
-│   │   │   ├── NetworkMesh.tsx             # Layer 06 (konsolidiert Cables, Pipelines, Routes)
-│   │   │   └── EventGlyphs.tsx             # Layer 07 (konsolidiert alle 14 Sources)
-│   │   ├── spotlight/
+│   │   │   ├── CountryBorders.tsx          # Layer 04 (Polyline-Render aus countries-110m)
+│   │   │   └── Hydrography.tsx             # Layer 05 — DEFERRED auf S2.5, leerer Stub mit Toggle [s2.5]
+│   │   ├── spotlight/                      # NEU
 │   │   │   ├── SpotlightContext.tsx        # focusTarget Reducer
-│   │   │   ├── SpotlightShader.glsl        # Layer 08 PostProcess
-│   │   │   ├── SpotlightOverlay.tsx        # Layer 09a Cartouche
-│   │   │   ├── HudFrame.tsx                # Layer 09b
-│   │   │   └── AlmanacPanel.tsx            # §5 country-mode panel
+│   │   │   ├── SpotlightMaterial.glsl      # Layer 08 globe.material custom shader (siehe §10.2)
+│   │   │   ├── SpotlightCartouche.tsx      # Layer 09a — DOM overlay, adaptiv
+│   │   │   ├── HudFrame.tsx                # Layer 09b — DOM overlay statisch
+│   │   │   └── CountryHeader.tsx           # §5.2 minimal country-header für § Inspector
 │   │   └── hooks/
-│   │       ├── useGlyphMerger.ts
-│   │       ├── useCountryHitTest.ts
-│   │       └── useSpotlightTrigger.ts
-│   └── layers/                             # alte Per-Source-Komponenten — werden zu Hooks
-│       └── (entfernt nach Konsolidierung)
+│   │       ├── useCountryHitTest.ts        # rbush + turf.booleanPointInPolygon
+│   │       ├── useSpotlightTrigger.ts      # bündelt zoom/pin/search/country dispatches
+│   │       └── useGlobeMaterial.ts         # mountet/unmountet das custom material
+│   └── layers/                             # existing — bleibt unverändert in der Struktur
+│       ├── FlightLayer.tsx                 # nur Token-Updates (Glyph-Family aus §6)
+│       ├── SatelliteLayer.tsx              # nur Token-Updates
+│       ├── EarthquakeLayer.tsx             # nur Token-Updates
+│       ├── … (alle 13 weiteren existierenden Layer-Komponenten)
+│       └── (kein Eintrag wird hier entfernt in S2)
 └── public/geo/
-    ├── admin-0.geojson                     # Natural Earth 1:50m
-    ├── coastline.geojson                   # Natural Earth coastline
-    └── rivers-l1.geojson
+    ├── countries-110m.json                 # existing TopoJSON, wiederverwendet
+    └── country-endonyms.json               # NEU, generiert via scripts/build-country-endonyms.mjs
 
-services/data-ingestion/feeds/country_almanac/
-├── __init__.py
-├── rest_countries_collector.py             # täglich REST Countries → Neo4j Country nodes
-├── wikidata_endonyms.py                    # täglich Wikidata SPARQL → Country.endonyms
-└── munin_brief_generator.py                # weekly Munin → Country.brief
+scripts/
+└── build-country-endonyms.mjs              # NEU, einmalig generiert das Endonym-JSON
+
+# NICHT in dieser Spec: services/data-ingestion/feeds/country_almanac/ — siehe S2.5 Almanac-Spec.
 ```
 
 ---
 
 ## §14 Akzeptanzkriterien für S2-Worldview-Port (relevant für dieses Spec)
 
-- [ ] Layer-Stack 00–09b implementiert mit den oben dokumentierten Render-Strategies.
-- [ ] § Layers Panel zeigt die 4-Gruppen-Struktur, Group A nicht-toggle-bar, Group D zeigt Spotlight-Status.
-- [ ] Vier Trigger funktionieren: zoom (camera ≤ 500 km), pin click (Layer 07), search match, country click (Layer 04 hit-test).
-- [ ] `focusTarget` Reducer ist last-writer-wins, ESC räumt auf.
-- [ ] Country-mode lädt Almanac-Panel mit static (REST Countries) + dynamic (Neo4j) Daten.
-- [ ] Capital-Pulse + 5 City-Labels + Multilingual Cartouche im Country-mode.
-- [ ] ≥ 55 FPS Kamera-Rotation bei allen Layers on, 1080p.
+- [ ] Layer-Stack 00, 01, 02, 03, 04, 06, 07, 08, 09a, 09b implementiert mit den oben dokumentierten Render-Strategies (Layer 05 Hydrography ist S2.5).
+- [ ] § Layers Panel zeigt die 4-Gruppen-Struktur. Group A nicht-toggle-bar, Group D zeigt Spotlight-Status. 16 existierende `LayerVisibility`-Keys werden 1:1 unter Group B/C eingegliedert.
+- [ ] Vier Trigger funktionieren: zoom (camera ≤ 500 km), pin click (existing per-layer `onSelect`-Adapter), search match, country click (Layer 04 hit-test).
+- [ ] `focusTarget` Reducer ist last-writer-wins, ESC räumt auf, kein Layer-Component-Refactor nötig.
+- [ ] Country-mode rendert Polygon-Mask-Reveal, Capital-Pulse, Multilingual-Cartouche aus statischem `country-endonyms.json`. § Inspector zeigt Country-Header mit `S2.5 coming soon`-Hinweis für Almanac.
+- [ ] Token-Delta aus §6 in `hlidskjalf.css` integriert. Existing Layer-Komponenten verwenden die neuen Tokens statt eigener Hex-Werte.
+- [ ] ≥ 55 FPS Kamera-Rotation bei allen Layers on, 1080p (verifiziert per Cesium FPS counter).
 - [ ] Reduced-motion: alle Animationen schalten korrekt um (verifiziert via DevTools `prefers-reduced-motion`).
-- [ ] Visual-Regression-Snapshots für Idle, Pin-Mode (Sinjar), Country-Mode (Greece) bestanden.
-- [ ] Existing 14 Cesium-Layer-Komponenten in `services/frontend/src/components/layers/*.tsx` zu Layer 07 konsolidiert.
+- [ ] Existing 16 Layer-Komponenten in `services/frontend/src/components/layers/*.tsx` bleiben strukturell unverändert (kein Konsolidierungs-Refactor).
 
 ---
 
