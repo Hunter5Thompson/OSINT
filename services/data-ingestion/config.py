@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     # PortWatch (IMF Chokepoint Flows)
     portwatch_interval_hours: int = 6
 
+    # --- Patch C Phase 5: Entity-type normalizer ---
+    # Default OFF: pipeline produces bit-for-bit identical Cypher params to
+    # pre-Phase-5 main when this flag is False. Operators flip to True only
+    # after the canonical EntityType set has been validated end-to-end.
+    entity_type_normalize: bool = False
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

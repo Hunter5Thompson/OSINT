@@ -17,6 +17,7 @@ import structlog
 import yaml
 
 from config import Settings
+from nlm_ingest.schemas import normalize_entity_type
 
 log = structlog.get_logger(__name__)
 
@@ -335,6 +336,23 @@ async def _write_to_neo4j(
 
     # Upsert Entities with MENTIONS
     for entity in entities:
+        # Patch C Phase 5: optional canonicalisation of legacy lowercase
+        # entity-type emissions onto the uppercase EntityType set. Default
+        # OFF — when settings.entity_type_normalize is False this branch is
+        # a true no-op and entity["type"] reaches Cypher unchanged.
+        entity_type = entity["type"]
+        if settings.entity_type_normalize:
+            try:
+                entity_type = normalize_entity_type(entity_type)
+            except ValueError:
+                log.warning(
+                    "entity_type_unknown_passthrough",
+                    value=entity["type"],
+                    url=doc_url,
+                )
+                # Fail-soft: pass through unchanged so a single bad LLM emission
+                # does not block the whole document. The Patch C migration will
+                # surface stragglers via the post-resume drift check.
         statements.append({
             "statement": (
                 "MERGE (e:Entity {name: $name, type: $type}) "
@@ -345,7 +363,7 @@ async def _write_to_neo4j(
             ),
             "parameters": {
                 "name": entity["name"],
-                "type": entity["type"],
+                "type": entity_type,
                 "url": doc_url,
             },
         })

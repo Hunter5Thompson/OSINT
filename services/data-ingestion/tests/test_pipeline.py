@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+import structlog
 
 from config import Settings
 from pipeline import process_item
@@ -235,6 +236,119 @@ class TestProcessItem:
 
         assert result is not None
         assert len(result["entities"]) == 1
+
+
+class TestEntityTypeNormalization:
+    """Patch C Phase 5: default-OFF entity-type normalizer.
+
+    Operator guardrail: when ``entity_type_normalize=False`` (the default)
+    pipeline behaviour must be bit-for-bit identical to pre-Phase-5 main —
+    the entity ``type`` field flows through unchanged.
+    """
+
+    def _extract_entity_param(self, mock_client) -> dict:
+        """Pull the entity MERGE statement parameters out of the Neo4j call."""
+        neo4j_call = mock_client.post.call_args_list[1]
+        statements = neo4j_call.kwargs["json"]["statements"]
+        # Statements: [Document MERGE, Entity MERGE..., Event CREATE...]
+        # The entity statement is the one that contains "MERGE (e:Entity".
+        for stmt in statements:
+            if "MERGE (e:Entity" in stmt["statement"]:
+                return stmt["parameters"]
+        raise AssertionError("no Entity MERGE statement found")
+
+    async def test_pipeline_passes_through_when_flag_off(self):
+        """Flag OFF (default): vLLM 'organization' lands in Cypher unchanged.
+
+        This is the bit-for-bit-identical guarantee — the legacy lowercase
+        value must still reach Neo4j when the operator has not opted in.
+        """
+        vllm_resp = _mock_vllm_response(
+            entities=[{"name": "NATO", "type": "organization", "confidence": 0.8}],
+        )
+        neo4j_resp = _mock_neo4j_response()
+
+        with patch("pipeline.httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = [vllm_resp, neo4j_resp]
+            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await process_item(
+                title="t",
+                text="x",
+                url="http://example.com/a",
+                source="rss",
+                # Default flag value is False — pass nothing.
+                settings=_make_settings(),
+            )
+
+        params = self._extract_entity_param(mock_client)
+        assert params["type"] == "organization", (
+            "flag-OFF must preserve the legacy lowercase value bit-for-bit"
+        )
+        assert params["name"] == "NATO"
+        assert params["url"] == "http://example.com/a"
+
+    async def test_pipeline_normalizes_when_flag_on(self):
+        """Flag ON: legacy 'organization' is canonicalised to 'ORGANIZATION'."""
+        vllm_resp = _mock_vllm_response(
+            entities=[{"name": "NATO", "type": "organization", "confidence": 0.8}],
+        )
+        neo4j_resp = _mock_neo4j_response()
+
+        with patch("pipeline.httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = [vllm_resp, neo4j_resp]
+            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await process_item(
+                title="t",
+                text="x",
+                url="http://example.com/b",
+                source="rss",
+                settings=_make_settings(entity_type_normalize=True),
+            )
+
+        params = self._extract_entity_param(mock_client)
+        assert params["type"] == "ORGANIZATION"
+
+    async def test_pipeline_unknown_entity_type_passes_through_with_flag_on(self):
+        """Flag ON, unknown legacy value: pass-through + structlog warning.
+
+        Fail-soft so a single bad LLM emission doesn't block the whole document.
+        """
+        vllm_resp = _mock_vllm_response(
+            entities=[{"name": "Wraith", "type": "alien_species", "confidence": 0.4}],
+        )
+        neo4j_resp = _mock_neo4j_response()
+
+        with patch("pipeline.httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = [vllm_resp, neo4j_resp]
+            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with structlog.testing.capture_logs() as cap_logs:
+                await process_item(
+                    title="t",
+                    text="x",
+                    url="http://example.com/c",
+                    source="rss",
+                    settings=_make_settings(entity_type_normalize=True),
+                )
+
+        params = self._extract_entity_param(mock_client)
+        assert params["type"] == "alien_species", "unknown values must pass through unchanged"
+
+        warnings = [
+            entry for entry in cap_logs
+            if entry.get("log_level") == "warning"
+            and entry.get("event") == "entity_type_unknown_passthrough"
+        ]
+        assert warnings, f"expected entity_type_unknown_passthrough warning, got: {cap_logs}"
+        assert warnings[0].get("value") == "alien_species"
 
 
 class TestPipelineCodebookBinding:

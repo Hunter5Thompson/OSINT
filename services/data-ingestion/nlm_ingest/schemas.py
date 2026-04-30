@@ -3,15 +3,50 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel
 
 EntityType = Literal[
-    "ORGANIZATION", "COUNTRY", "PERSON", "REGION",
+    "ORGANIZATION", "COUNTRY", "LOCATION", "PERSON", "REGION",
     "WEAPON_SYSTEM", "MILITARY_UNIT", "POLICY",
     "TREATY", "CONCEPT", "VESSEL", "AIRCRAFT", "SATELLITE",
 ]
+
+# Canonical EntityType set, derived programmatically from the Literal so adding
+# a new EntityType value automatically updates this set without manual sync.
+CANONICAL_ENTITY_TYPES: frozenset[str] = frozenset(get_args(EntityType))
+
+# Map legacy lowercase entity-type emissions (the strings the current vLLM
+# extraction prompt produces, see pipeline.py _RESPONSE_SCHEMA and the
+# intelligence service's ExtractedEntityRaw.type Literal) onto the canonical
+# uppercase values used by the nlm_ingest pipeline.
+#
+# Drift guard: tests/test_nlm_schemas.py asserts the keys here equal the
+# Literal values in services/intelligence/codebook/extractor.py.
+LEGACY_ENTITY_TYPE_MAP: dict[str, str] = {
+    "person": "PERSON",
+    "organization": "ORGANIZATION",
+    "location": "LOCATION",
+    "military_unit": "MILITARY_UNIT",
+    "weapon_system": "WEAPON_SYSTEM",
+    "vessel": "VESSEL",
+    "aircraft": "AIRCRAFT",
+    "satellite": "SATELLITE",
+}
+
+
+def normalize_entity_type(value: str) -> str:
+    """Map legacy lowercase entity-type values to canonical uppercase.
+
+    Idempotent on already-canonical input. Raises ValueError on unknown values
+    so callers can decide on fail-closed vs documented-fallback handling.
+    """
+    if value in CANONICAL_ENTITY_TYPES:
+        return value
+    if value in LEGACY_ENTITY_TYPE_MAP:
+        return LEGACY_ENTITY_TYPE_MAP[value]
+    raise ValueError(f"unknown entity type: {value!r}")
 
 RelationType = Literal[
     "ALLIED_WITH", "COMPETES_WITH", "SANCTIONS",
