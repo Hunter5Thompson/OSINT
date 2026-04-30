@@ -10,6 +10,7 @@ from nlm_ingest.write_templates import (
     LINK_CLAIM_DOCUMENT,
     LINK_CLAIM_ENTITY,
     LINK_DOCUMENT_SOURCE,
+    RELATION_TEMPLATES,
     UPSERT_CLAIM,
     UPSERT_DOCUMENT,
     UPSERT_ENTITY,
@@ -61,6 +62,29 @@ def _build_statements(extraction: Extraction, source_name: str) -> list[dict]:
                 "type": entity.type,
                 "aliases": entity.aliases,
                 "confidence": entity.confidence,
+            },
+        })
+
+    # 4b. Upsert Relations between entities (deterministic templates only)
+    #     Endpoints are MATCH-ed, so step 4 must precede this block.
+    for relation in extraction.relations:
+        template = RELATION_TEMPLATES.get(relation.type)
+        if template is None:
+            log.warning(
+                "nlm_unknown_relation_type",
+                relation_type=relation.type,
+                source=relation.source,
+                target=relation.target,
+                notebook_id=extraction.notebook_id,
+            )
+            continue
+        statements.append({
+            "statement": template,
+            "parameters": {
+                "source": relation.source,
+                "target": relation.target,
+                "evidence": relation.evidence,
+                "confidence": relation.confidence,
             },
         })
 

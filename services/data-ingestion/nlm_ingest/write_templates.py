@@ -82,3 +82,159 @@ def get_source_tier(source_name: str) -> str:
         if key.lower() in source_name.lower():
             return tier
     return "tier_3"
+
+
+# --- Relation templates ---
+#
+# One deterministic Cypher template per RelationType.  Endpoints are MATCH-ed
+# (never MERGE-d) so phantom entities can never be created on the write path —
+# the entity upsert step must run first in the same batch / transaction.
+# Relationship labels are hardcoded; never construct labels dynamically from
+# untrusted input.
+
+RELATION_TEMPLATES: dict[str, str] = {
+    "ALLIED_WITH": """
+MATCH (source:Entity {name: $source})
+MATCH (target:Entity {name: $target})
+MERGE (source)-[r:ALLIED_WITH]->(target)
+ON CREATE SET r.first_seen = datetime(),
+              r.evidence = $evidence,
+              r.confidence = $confidence,
+              r.last_seen = datetime()
+ON MATCH SET r.evidence = $evidence,
+             r.confidence = CASE
+                 WHEN $confidence > coalesce(r.confidence, 0)
+                 THEN $confidence
+                 ELSE r.confidence
+             END,
+             r.last_seen = datetime()
+""",
+    "COMMANDS": """
+MATCH (source:Entity {name: $source})
+MATCH (target:Entity {name: $target})
+MERGE (source)-[r:COMMANDS]->(target)
+ON CREATE SET r.first_seen = datetime(),
+              r.evidence = $evidence,
+              r.confidence = $confidence,
+              r.last_seen = datetime()
+ON MATCH SET r.evidence = $evidence,
+             r.confidence = CASE
+                 WHEN $confidence > coalesce(r.confidence, 0)
+                 THEN $confidence
+                 ELSE r.confidence
+             END,
+             r.last_seen = datetime()
+""",
+    "COMPETES_WITH": """
+MATCH (source:Entity {name: $source})
+MATCH (target:Entity {name: $target})
+MERGE (source)-[r:COMPETES_WITH]->(target)
+ON CREATE SET r.first_seen = datetime(),
+              r.evidence = $evidence,
+              r.confidence = $confidence,
+              r.last_seen = datetime()
+ON MATCH SET r.evidence = $evidence,
+             r.confidence = CASE
+                 WHEN $confidence > coalesce(r.confidence, 0)
+                 THEN $confidence
+                 ELSE r.confidence
+             END,
+             r.last_seen = datetime()
+""",
+    "MEMBER_OF": """
+MATCH (source:Entity {name: $source})
+MATCH (target:Entity {name: $target})
+MERGE (source)-[r:MEMBER_OF]->(target)
+ON CREATE SET r.first_seen = datetime(),
+              r.evidence = $evidence,
+              r.confidence = $confidence,
+              r.last_seen = datetime()
+ON MATCH SET r.evidence = $evidence,
+             r.confidence = CASE
+                 WHEN $confidence > coalesce(r.confidence, 0)
+                 THEN $confidence
+                 ELSE r.confidence
+             END,
+             r.last_seen = datetime()
+""",
+    "NEGOTIATES_WITH": """
+MATCH (source:Entity {name: $source})
+MATCH (target:Entity {name: $target})
+MERGE (source)-[r:NEGOTIATES_WITH]->(target)
+ON CREATE SET r.first_seen = datetime(),
+              r.evidence = $evidence,
+              r.confidence = $confidence,
+              r.last_seen = datetime()
+ON MATCH SET r.evidence = $evidence,
+             r.confidence = CASE
+                 WHEN $confidence > coalesce(r.confidence, 0)
+                 THEN $confidence
+                 ELSE r.confidence
+             END,
+             r.last_seen = datetime()
+""",
+    "OPERATES_IN": """
+MATCH (source:Entity {name: $source})
+MATCH (target:Entity {name: $target})
+MERGE (source)-[r:OPERATES_IN]->(target)
+ON CREATE SET r.first_seen = datetime(),
+              r.evidence = $evidence,
+              r.confidence = $confidence,
+              r.last_seen = datetime()
+ON MATCH SET r.evidence = $evidence,
+             r.confidence = CASE
+                 WHEN $confidence > coalesce(r.confidence, 0)
+                 THEN $confidence
+                 ELSE r.confidence
+             END,
+             r.last_seen = datetime()
+""",
+    "SANCTIONS": """
+MATCH (source:Entity {name: $source})
+MATCH (target:Entity {name: $target})
+MERGE (source)-[r:SANCTIONS]->(target)
+ON CREATE SET r.first_seen = datetime(),
+              r.evidence = $evidence,
+              r.confidence = $confidence,
+              r.last_seen = datetime()
+ON MATCH SET r.evidence = $evidence,
+             r.confidence = CASE
+                 WHEN $confidence > coalesce(r.confidence, 0)
+                 THEN $confidence
+                 ELSE r.confidence
+             END,
+             r.last_seen = datetime()
+""",
+    "SUPPLIES_TO": """
+MATCH (source:Entity {name: $source})
+MATCH (target:Entity {name: $target})
+MERGE (source)-[r:SUPPLIES_TO]->(target)
+ON CREATE SET r.first_seen = datetime(),
+              r.evidence = $evidence,
+              r.confidence = $confidence,
+              r.last_seen = datetime()
+ON MATCH SET r.evidence = $evidence,
+             r.confidence = CASE
+                 WHEN $confidence > coalesce(r.confidence, 0)
+                 THEN $confidence
+                 ELSE r.confidence
+             END,
+             r.last_seen = datetime()
+""",
+    "TARGETS": """
+MATCH (source:Entity {name: $source})
+MATCH (target:Entity {name: $target})
+MERGE (source)-[r:TARGETS]->(target)
+ON CREATE SET r.first_seen = datetime(),
+              r.evidence = $evidence,
+              r.confidence = $confidence,
+              r.last_seen = datetime()
+ON MATCH SET r.evidence = $evidence,
+             r.confidence = CASE
+                 WHEN $confidence > coalesce(r.confidence, 0)
+                 THEN $confidence
+                 ELSE r.confidence
+             END,
+             r.last_seen = datetime()
+""",
+}

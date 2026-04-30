@@ -91,6 +91,33 @@ class TestIngestExtraction:
         assert source_stmt["parameters"]["quality_tier"] == "tier_1"
 
     @pytest.mark.asyncio
+    async def test_batch_contains_relation_statement(self):
+        """Patch A: relations from extraction are persisted via templates."""
+        mock_response = httpx.Response(200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST)
+        client = AsyncMock(spec=httpx.AsyncClient)
+        client.post.return_value = mock_response
+
+        await ingest_extraction(
+            extraction=_make_extraction(),
+            source_name="RAND",
+            client=client,
+            neo4j_url="http://localhost:7474",
+            neo4j_user="neo4j",
+            neo4j_password="odin_yggdrasil",
+        )
+        payload = client.post.call_args.kwargs.get("json") or client.post.call_args[1].get("json")
+        statements = payload["statements"]
+        cypher_texts = [s["statement"] for s in statements]
+        joined = " ".join(cypher_texts)
+        assert "[r:COMPETES_WITH]" in joined
+
+        rel_stmt = next(s for s in statements if "[r:COMPETES_WITH]" in s["statement"])
+        assert rel_stmt["parameters"]["source"] == "China"
+        assert rel_stmt["parameters"]["target"] == "NATO"
+        assert rel_stmt["parameters"]["evidence"] == "opposes expansion"
+        assert rel_stmt["parameters"]["confidence"] == 0.75
+
+    @pytest.mark.asyncio
     async def test_neo4j_error_raises_runtime_error(self):
         mock_response = httpx.Response(
             200,
