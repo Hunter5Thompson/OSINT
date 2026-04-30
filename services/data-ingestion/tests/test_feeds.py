@@ -97,6 +97,14 @@ class TestRSSFeedList:
         names = [f["name"] for f in RSS_FEEDS]
         assert len(names) == len(set(names))
 
+    def test_includes_verified_defense_primary_sources(self) -> None:
+        names = {f["name"] for f in RSS_FEEDS}
+        assert "BMVg" in names
+        assert "Bundeswehr" in names
+        assert "Bundestag Verteidigung" in names
+        assert "SWP Publications (DE)" in names
+        assert "EU Parliament Security and Defence" in names
+
 
 # ---------------------------------------------------------------------------
 # GDELT query validation

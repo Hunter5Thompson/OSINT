@@ -22,9 +22,11 @@ antworten — sondern aus realen Quellen zu belegen, was du behauptest.
 
 ## Verfügbare Daten-Layer (jedes Tool greift auf andere Daten zu)
 
-- **qdrant_search** — Vektor-Index über 27 RSS-Feeds, Telegram-Channels
-  (OSINTdefender, DeepStateEN, wartranslated, liveuamap, rybar),
-  UCDP-GED Konflikt-Events, FIRMS-Hotspots, NotebookLM-Extraktionen,
+- **qdrant_search** — Vektor-Index über 37 RSS-Feeds, darunter BMVg,
+  Bundeswehr, Bundestag Verteidigung/Auswärtiges, SWP, RUSI, EU Parliament
+  Security and Defence, NATO/UN/US Gov, Defense/OSINT-Medien; plus
+  Telegram-Channels (OSINTdefender, DeepStateEN, wartranslated, liveuamap,
+  rybar), UCDP-GED Konflikt-Events, FIRMS-Hotspots, NotebookLM-Extraktionen,
   GDACS-Disasters, EONET-Events. Best für **thematische** Suche und
   semantische Ähnlichkeit. Args: query, region (optional, z.B. "Middle East").
 - **query_knowledge_graph** — Neo4j mit (:Entity)-(:Event)-(:Location)-(:Source)

@@ -7,13 +7,26 @@ from rag.retriever import enhanced_search
 
 logger = structlog.get_logger()
 
+RESULT_CONTENT_MAX_CHARS = 300
+GRAPH_CONTEXT_MAX_CHARS = 1200
+TOOL_OUTPUT_MAX_CHARS = 3500
+
+
+def _clip_text(text: str, max_chars: int) -> str:
+    """Keep tool outputs bounded so ReAct history stays inside model context."""
+    if len(text) <= max_chars:
+        return text
+    omitted = len(text) - max_chars
+    return text[:max_chars].rstrip() + f"\n...[truncated {omitted} chars]"
+
 
 @tool
 async def qdrant_search(query: str, region: str = "") -> str:
     """Semantic vector search across the OSINT knowledge base.
 
     Index content (≈20k documents, 1024-dim cosine):
-    - 27 RSS feeds (Reuters, BBC, AP, Al Jazeera, Defence Blog, ISW, etc.)
+    - 37 RSS feeds (Reuters, BBC, AP, BMVg, Bundeswehr, Bundestag, SWP, RUSI,
+      EU Parliament Security and Defence, NATO/UN/US Gov, defense media, etc.)
     - Telegram channels: OSINTdefender, DeepStateEN, wartranslated, liveuamap, rybar
     - UCDP-GED conflict events with casualty counts and locations
     - FIRMS thermal-anomaly annotations
@@ -58,12 +71,14 @@ async def qdrant_search(query: str, region: str = "") -> str:
             return f"No relevant documents found for: {query}"
 
         formatted: list[str] = []
+        graph_contexts: list[str] = []
+        seen_graph_contexts: set[str] = set()
         for r in results:
             score = r.get("score", 0)
             title = r.get("title", "Untitled")
             source = r.get("source", "unknown")
             region_val = r.get("region", "N/A")
-            content = r.get("content", "")[:300]
+            content = _clip_text(str(r.get("content", "")), RESULT_CONTENT_MAX_CHARS)
 
             entry = (
                 f"[Score: {score:.3f}] {title}\n"
@@ -71,14 +86,20 @@ async def qdrant_search(query: str, region: str = "") -> str:
                 f"{content}\n"
             )
 
-            # Append graph context if available
+            # enhanced_search currently attaches the same graph context to each
+            # result. Keep it once, otherwise three qdrant_search calls can fill
+            # a 16k-token model window before synthesis even starts.
             graph_ctx = r.get("graph_context", "")
-            if graph_ctx:
-                entry += f"\n{graph_ctx}\n"
+            if graph_ctx and graph_ctx not in seen_graph_contexts:
+                seen_graph_contexts.add(graph_ctx)
+                graph_contexts.append(_clip_text(str(graph_ctx), GRAPH_CONTEXT_MAX_CHARS))
 
             formatted.append(entry)
 
-        return f"[Knowledge Base Results for: {query}]\n" + "\n---\n".join(formatted)
+        output = f"[Knowledge Base Results for: {query}]\n" + "\n---\n".join(formatted)
+        if graph_contexts:
+            output += "\n---\n[Graph Context]\n" + "\n\n".join(graph_contexts)
+        return _clip_text(output, TOOL_OUTPUT_MAX_CHARS)
     except Exception as e:
         logger.warning("qdrant_search_failed", error=str(e))
         return f"Knowledge base search failed: {e}"

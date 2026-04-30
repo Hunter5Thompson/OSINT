@@ -23,6 +23,53 @@ from graph.state import AgentState
 
 logger = structlog.get_logger()
 
+TOOL_MESSAGE_MAX_CHARS = 2500
+REACT_TOOL_HISTORY_MAX_CHARS = 12000
+SYNTHESIS_RESEARCH_MAX_CHARS = 18000
+
+
+def _clip_text(text: str, max_chars: int) -> str:
+    """Bound prompt material before it is sent to the 16k-context local model."""
+    if len(text) <= max_chars:
+        return text
+    omitted = len(text) - max_chars
+    return text[:max_chars].rstrip() + f"\n...[truncated {omitted} chars]"
+
+
+def _with_content(message, content: str):  # type: ignore[no-untyped-def]
+    """Return a copy of a LangChain message with replacement content."""
+    if hasattr(message, "model_copy"):
+        return message.model_copy(update={"content": content})
+    if hasattr(message, "copy"):
+        return message.copy(update={"content": content})
+    return message
+
+
+def _compact_tool_messages(messages: list) -> list:  # type: ignore[type-arg]
+    """Trim tool-result payloads while preserving message order and tool IDs.
+
+    ReAct loops resend the full conversation after each tool call. Keeping the
+    newest tool outputs first gives Munin the freshest evidence while preventing
+    older retrieval dumps from consuming the whole prompt window.
+    """
+    remaining = REACT_TOOL_HISTORY_MAX_CHARS
+    compacted_reversed = []
+
+    for message in reversed(messages):
+        if getattr(message, "type", None) != "tool":
+            compacted_reversed.append(message)
+            continue
+
+        content = message.content if isinstance(message.content, str) else str(message.content)
+        if remaining <= 0:
+            next_content = "[tool output omitted: context budget exhausted]"
+        else:
+            next_content = _clip_text(content, min(TOOL_MESSAGE_MAX_CHARS, remaining))
+            remaining -= len(next_content)
+        compacted_reversed.append(_with_content(message, next_content))
+
+    return list(reversed(compacted_reversed))
+
 
 # ── ReAct Node Functions ──────────────────────────────────────────────────────
 
@@ -46,7 +93,7 @@ async def react_agent_node(state: AgentState) -> dict:
             ]
             messages = list(state.get("messages", [])) + initial_messages
         else:
-            messages = list(state.get("messages", []))
+            messages = _compact_tool_messages(list(state.get("messages", [])))
             # Qwen3.5 chat template requires a user message after tool results.
             # Without this, the template raises "No user query found in messages".
             messages.append(
@@ -107,6 +154,8 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 tool_results.append(msg.content if isinstance(msg.content, str) else str(msg.content))
 
         research_text = "\n\n---\n\n".join(tool_results) if tool_results else "No research results collected."
+        raw_research_chars = len(research_text)
+        research_text = _clip_text(research_text, SYNTHESIS_RESEARCH_MAX_CHARS)
 
         # Derive sources_used from tool_trace (de-duplicated tool names)
         derived_sources = sorted({entry.get("tool", "?") for entry in state.get("tool_trace", [])})
@@ -115,6 +164,8 @@ async def react_synthesis_node(state: AgentState) -> dict:
             tool_call_count=len(state.get("tool_trace", [])),
             unique_tools=derived_sources,
             tool_message_count=len(tool_results),
+            raw_research_chars=raw_research_chars,
+            research_chars=len(research_text),
         )
 
         messages = [

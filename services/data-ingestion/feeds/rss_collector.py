@@ -21,6 +21,14 @@ log = structlog.get_logger(__name__)
 # Curated OSINT / Intelligence RSS Feeds
 # ---------------------------------------------------------------------------
 RSS_FEEDS: list[dict[str, str]] = [
+    # ── German Defense / Bundeswehr ──
+    {"name": "BMVg", "url": "https://www.bmvg.de/service/rss/de/17680/feed"},
+    {"name": "Bundeswehr", "url": "https://www.bundeswehr.de/service/rss/de/517054/feed"},
+    {"name": "Bundestag Verteidigung", "url": "https://www.bundestag.de/static/appdata/includes/rss/verteidigung.rss"},
+    {"name": "Bundestag Auswaertiges", "url": "https://www.bundestag.de/static/appdata/includes/rss/auswaertiges.rss"},
+    # Teaser-only (paywall), but keywords are extraction-rich.
+    # Full knowledge via YouTube → NotebookLM → NLM pipeline.
+    {"name": "SUV Sicherheit & Verteidigung", "url": "https://steady.page/de/suv/rss"},
     # ── Major News — World ──
     # Reuters/AP have no public RSS; Google News proxies provide equivalent coverage.
     {"name": "Reuters (Google)", "url": "https://news.google.com/rss/search?q=site:reuters.com+world&hl=en-US&gl=US&ceid=US:en"},
@@ -45,21 +53,25 @@ RSS_FEEDS: list[dict[str, str]] = [
     {"name": "CSIS", "url": "https://www.csis.org/rss.xml"},
     {"name": "Brookings", "url": "https://www.brookings.edu/feed/?post_type=article"},
     {"name": "Atlantic Council", "url": "https://www.atlanticcouncil.org/feed/"},
+    {"name": "SWP Publications (DE)", "url": "https://www.swp-berlin.org/SWPPublications.xml"},
+    {"name": "SWP Publications (EN)", "url": "https://www.swp-berlin.org/en/SWPPublications.xml"},
+    {"name": "RUSI Commentary", "url": "https://www.rusi.org/rss/latest-commentary.xml"},
+    {"name": "RUSI Publications", "url": "https://www.rusi.org/rss/latest-publications.xml"},
     # ── Government / IO ──
     {"name": "UN News", "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml"},
     {"name": "US State Dept (Google)", "url": "https://news.google.com/rss/search?q=site:state.gov+%22press+releases%22&hl=en-US&gl=US&ceid=US:en"},
     {"name": "NATO (Google)", "url": "https://news.google.com/rss/search?q=site:nato.int&hl=en-US&gl=US&ceid=US:en"},
+    {"name": "EU Parliament Security and Defence", "url": "https://www.europarl.europa.eu/rss/committee/sede/en.xml"},
+    {"name": "EU Parliament External Relations", "url": "https://www.europarl.europa.eu/rss/topic/903/en.xml"},
     # ── Arms Control / Nonproliferation ──
     {"name": "SIPRI", "url": "https://www.sipri.org/rss/combined.xml"},
     {"name": "Arms Control Association", "url": "https://www.armscontrol.org/rss.xml"},
-    # ── German Defense / Bundeswehr ──
-    # Teaser-only (paywall), but keywords are extraction-rich.
-    # Full knowledge via YouTube → NotebookLM → NLM pipeline.
-    {"name": "SUV Sicherheit & Verteidigung", "url": "https://steady.page/de/suv/rss"},
     # ── Conflict / Crisis ──
     {"name": "Crisis Group", "url": "https://www.crisisgroup.org/rss.xml"},
     {"name": "ReliefWeb", "url": "https://reliefweb.int/updates/rss.xml"},
 ]
+
+MAX_ENTRIES_PER_FEED = 15
 
 
 def _content_hash(title: str, url: str) -> str:
@@ -138,8 +150,11 @@ class RSSCollector:
             log.warning("rss_parse_failed", feed=name, error=str(parsed.bozo_exception))
             return 0
 
+        entries = parsed.entries[:MAX_ENTRIES_PER_FEED]
+        log.info("rss_feed_started", feed=name, entries=len(entries))
+
         points: list[PointStruct] = []
-        for entry in parsed.entries:
+        for entry in entries:
             title = entry.get("title", "").strip()
             link = entry.get("link", "").strip()
             if not title or not link:
