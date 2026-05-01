@@ -11,7 +11,7 @@ const allOff: LayerVisibility = {
 };
 
 describe("LayersPanel", () => {
-  it("groups toggles by dimension and marks active layer as pressed", () => {
+  it("renders groups and marks active layer as pressed", () => {
     render(
       <LayersPanel
         layers={{ ...allOff, flights: true }}
@@ -20,9 +20,9 @@ describe("LayersPanel", () => {
         onShaderChange={vi.fn()}
       />,
     );
-    expect(screen.getByText(/Transport/i)).toBeInTheDocument();
-    expect(screen.getByText(/Incidents/i)).toBeInTheDocument();
-    expect(screen.getByText(/Infrastructure/i)).toBeInTheDocument();
+    expect(screen.getByText(/C · signal · glyphs/i)).toBeInTheDocument();
+    expect(screen.getByText(/C · signal · network/i)).toBeInTheDocument();
+    expect(screen.getByText(/B · earth/i)).toBeInTheDocument();
     expect(screen.getByText(/Visual Filter/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /flights/i })).toHaveAttribute(
       "aria-pressed",
@@ -42,5 +42,21 @@ describe("LayersPanel", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /satellites/i }));
     expect(onToggle).toHaveBeenCalledWith("satellites");
+  });
+
+  it("renders 4 groups with §-eyebrow", () => {
+    render(<LayersPanel layers={allOff} onToggle={() => {}} activeShader="none" onShaderChange={() => {}} />);
+    expect(screen.getByText(/A · sky/i)).toBeInTheDocument();
+    expect(screen.getByText(/B · earth/i)).toBeInTheDocument();
+    expect(screen.getByText(/C · signal · glyphs/i)).toBeInTheDocument();
+    expect(screen.getByText(/D · lens & chrome/i)).toBeInTheDocument();
+  });
+
+  it("renders all 16 LayerVisibility keys under correct groups", () => {
+    render(<LayersPanel layers={allOff} onToggle={() => {}} activeShader="none" onShaderChange={() => {}} />);
+    const expectedKeys = ["flights","satellites","earthquakes","vessels","cctv","events","cables","pipelines","countryBorders","cityBuildings","firmsHotspots","milAircraft","datacenters","refineries","eonet","gdacs"];
+    for (const k of expectedKeys) {
+      expect(screen.getByTestId(`layer-toggle-${k}`)).toBeInTheDocument();
+    }
   });
 });
