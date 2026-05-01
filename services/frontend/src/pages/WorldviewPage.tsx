@@ -28,6 +28,7 @@ import { SpotlightProvider, useSpotlight } from "../components/globe/spotlight/S
 import { SpotlightOverlay } from "../components/globe/spotlight/SpotlightOverlay";
 import { HudFrame } from "../components/globe/spotlight/HudFrame";
 import { SpotlightCartouche } from "../components/globe/spotlight/SpotlightCartouche";
+import { CapitalPulse } from "../components/globe/spotlight/CapitalPulse";
 import { useSpotlightTrigger } from "../components/globe/hooks/useSpotlightTrigger";
 import { Graticule } from "../components/globe/visual-layers/Graticule";
 import { CountryBorders } from "../components/globe/visual-layers/CountryBorders";
@@ -479,6 +480,7 @@ export function WorldviewPage() {
         <SpotlightOverlay viewer={viewer} />
         <HudFrame />
         <SpotlightCartouche />
+        <CapitalPulse viewer={viewer} />
         <ZoomTriggerHook viewer={viewer} />
 
         {!hasViewer ? <WorldviewHudLoader /> : null}

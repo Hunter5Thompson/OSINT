@@ -238,3 +238,34 @@
 .country-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 11px; color: var(--bone); }
 .country-grid dt { font-family: "Martian Mono", monospace; font-size: 9px; color: var(--ash); letter-spacing: .14em; text-transform: uppercase; }
 .country-placeholder { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--granite); font-family: "Martian Mono", monospace; font-size: 9px; color: var(--ash); letter-spacing: .14em; text-transform: uppercase; }
+
+.capital-pulse {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 6;
+}
+.capital-pulse-dot {
+  position: absolute;
+  left: -3px; top: -3px;
+  width: 6px; height: 6px;
+  background: var(--capital-red);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(230, 58, 38, 0.3), 0 0 14px rgba(230, 58, 38, 0.85);
+}
+.capital-pulse-ring {
+  position: absolute;
+  left: -7px; top: -7px;
+  width: 14px; height: 14px;
+  border: 1px solid rgba(230, 58, 38, 0.5);
+  border-radius: 50%;
+}
+.capital-pulse-label {
+  position: absolute;
+  left: 14px; top: -7px;
+  font-family: "Hanken Grotesk", sans-serif;
+  font-size: 11px;
+  color: var(--city-label);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
