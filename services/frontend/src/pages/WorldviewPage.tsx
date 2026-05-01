@@ -26,6 +26,7 @@ import { TickerPanel } from "../components/worldview/TickerPanel";
 import { WorldviewHudLoader } from "../components/worldview/WorldviewHudLoader";
 import { SpotlightProvider, useSpotlight } from "../components/globe/spotlight/SpotlightContext";
 import { SpotlightOverlay } from "../components/globe/spotlight/SpotlightOverlay";
+import { HudFrame } from "../components/globe/spotlight/HudFrame";
 import { useSpotlightTrigger } from "../components/globe/hooks/useSpotlightTrigger";
 import { useFlights } from "../hooks/useFlights";
 import { useSatellites } from "../hooks/useSatellites";
@@ -471,6 +472,7 @@ export function WorldviewPage() {
           gdacsEvents={gdacsEvents}
         />
         <SpotlightOverlay viewer={viewer} />
+        <HudFrame />
         <ZoomTriggerHook viewer={viewer} />
 
         {!hasViewer ? <WorldviewHudLoader /> : null}

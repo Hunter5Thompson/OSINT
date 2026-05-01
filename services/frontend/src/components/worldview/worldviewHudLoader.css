@@ -202,3 +202,23 @@
     animation: none !important;
   }
 }
+
+.hud-frame {
+  position: absolute; inset: 0; pointer-events: none;
+  font-family: "Martian Mono", ui-monospace, monospace;
+  font-size: 9px; letter-spacing: .18em; color: var(--ash);
+}
+.hud-corners {
+  position: absolute; inset: 14px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none' viewBox='0 0 100 100' fill='none' stroke='%236b6358' stroke-width='0.4'%3E%3Cpath d='M0 4 L0 0 L4 0 M96 0 L100 0 L100 4 M100 96 L100 100 L96 100 M4 100 L0 100 L0 96'/%3E%3C/svg%3E");
+}
+.hud-crosshair {
+  position: absolute; left: 50%; top: 54%; width: 240px; height: 240px;
+  transform: translate(-50%, -50%);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240' fill='none' stroke='%236b6358' stroke-width='0.4' opacity='.5'%3E%3Cpath d='M115 0 L115 8 M115 232 L115 240 M0 120 L8 120 M232 120 L240 120'/%3E%3C/svg%3E");
+}
+.hud-eyebrow { position: absolute; top: 18px; left: 24px; }
+.hud-time { position: absolute; top: 18px; right: 24px; }
+.hud-scale { position: absolute; bottom: 18px; left: 24px; display: flex; gap: 10px; align-items: center; }
+.hud-scale-bar { width: 80px; height: 1px; background: var(--ash); }
+.hud-coord { position: absolute; bottom: 18px; right: 24px; }
