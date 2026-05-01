@@ -9,6 +9,8 @@ export interface DatacenterProperties {
   capacity_mw: number | null;
   country: string;
   city: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface RefineryProperties {
