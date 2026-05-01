@@ -268,6 +268,47 @@ function GlobeChildren({
   );
 }
 
+// ── SearchAcceptHook ───────────────────────────────────────────────────────────
+// Inner component that lives inside <SpotlightProvider> so it can call
+// useSpotlight(). Mounts SearchPanel and wires onAccept → camera flyTo + Spotlight.
+
+function SearchAcceptHook({
+  viewer,
+  initialQuery,
+}: {
+  viewer: Cesium.Viewer | null;
+  initialQuery: string;
+}) {
+  const { dispatch } = useSpotlight();
+  return (
+    <SearchPanel
+      viewer={viewer}
+      initialQuery={initialQuery}
+      onAccept={(node) => {
+        const lat = node.properties?.lat;
+        const lon = node.properties?.lon;
+        if (typeof lat !== "number" || typeof lon !== "number") return;
+        viewer?.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(lon, lat, 400_000),
+          duration: 1.6,
+        });
+        dispatch({
+          type: "set",
+          target: {
+            kind: "circle",
+            trigger: "search",
+            center: { lon, lat },
+            radius: 1,
+            altitude: 400_000,
+            label: node.name,
+            ref: `§ ${node.type}`,
+          },
+        });
+      }}
+    />
+  );
+}
+
 function decodeEntityQuery(value: string | null): string {
   if (!value) return "";
   const decoded = value.trim();
@@ -458,7 +499,7 @@ export function WorldviewPage() {
               onClose={() => setExpandedPanels((prev) => ({ ...prev, search: false }))}
               width={330}
             >
-              <SearchPanel viewer={viewer} initialQuery={searchSeed} />
+              <SearchAcceptHook viewer={viewer} initialQuery={searchSeed} />
             </OverlayPanel>
           ) : (
             <OverlayPanel

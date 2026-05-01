@@ -211,12 +211,19 @@ async def search_entities(
     limit = _cap_limit(limit)
     rows = await _read_query(
         "MATCH (e:Entity) WHERE toLower(e.name) CONTAINS toLower($q) "
-        "RETURN elementId(e) AS id, e.name AS name, e.type AS type "
+        "OPTIONAL MATCH (e)-[:LOCATED_AT|LOCATED_IN|BASED_IN|HEADQUARTERED_IN]->(l:Location) "
+        "RETURN elementId(e) AS id, e.name AS name, e.type AS type, "
+        "coalesce(e.lat, l.lat) AS lat, coalesce(e.lon, l.lon) AS lon "
         "ORDER BY e.name LIMIT $limit",
         {"q": q, "limit": limit},
     )
     nodes = [
-        GraphNode(id=r.get("id") or r.get("name", ""), name=r.get("name", ""), type=r.get("type", "unknown"))
+        GraphNode(
+            id=r.get("id") or r.get("name", ""),
+            name=r.get("name", ""),
+            type=r.get("type", "unknown"),
+            properties={k: v for k, v in r.items() if k not in ("id", "name", "type") and v is not None},
+        )
         for r in rows
     ]
     return GraphResponse(nodes=nodes, total_count=len(nodes))

@@ -5,6 +5,7 @@ export interface GraphNode {
   id: string;
   name: string;
   type: string;
+  properties?: { lat?: number; lon?: number; [key: string]: unknown };
 }
 
 interface GraphSearchResponse {
@@ -14,9 +15,10 @@ interface GraphSearchResponse {
 export interface SearchPanelProps {
   viewer: Cesium.Viewer | null;
   initialQuery?: string;
+  onAccept?: (node: GraphNode) => void;
 }
 
-export function SearchPanel({ viewer: _viewer, initialQuery = "" }: SearchPanelProps) {
+export function SearchPanel({ viewer: _viewer, initialQuery = "", onAccept }: SearchPanelProps) {
   const [query, setQuery] = useState(initialQuery);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<GraphNode[] | null>(null);
@@ -113,7 +115,11 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "" }: SearchPanelP
         {!loading && results && results.length > 0 ? (
           <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 220, overflowY: "auto" }}>
             {results.map((node) => (
-              <li key={node.id} style={{ padding: "0.42rem 0", borderBottom: "1px solid rgba(107,99,88,0.25)" }}>
+              <li
+                key={node.id}
+                onClick={() => onAccept?.(node)}
+                style={{ cursor: "pointer", padding: "0.42rem 0", borderBottom: "1px solid rgba(107,99,88,0.25)" }}
+              >
                 <button
                   type="button"
                   style={{
@@ -122,7 +128,7 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "" }: SearchPanelP
                     color: "inherit",
                     textAlign: "left",
                     width: "100%",
-                    cursor: "default",
+                    cursor: "pointer",
                     padding: 0,
                   }}
                 >
