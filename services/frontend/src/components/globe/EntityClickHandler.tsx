@@ -336,7 +336,16 @@ export function EntityClickHandler({ viewer, onCountrySelect }: EntityClickHandl
         return;
       }
 
-      // No primitive matched — try country hit-test (lifts to WorldviewPage)
+      // If pick returned a primitive but no known data-tag matched, the click
+      // landed on a primitive owned by one of the 6 onSelect-prop layers
+      // (FIRMS, MilAircraft, Datacenter, Refinery, EONET, GDACS) which feed
+      // Spotlight via WorldviewPage's GlobeChildren wiring. Do NOT override
+      // their dispatch with a country hit-test or a reset.
+      if (picked) {
+        return;
+      }
+
+      // Nothing under the cursor — true void or country territory.
       if (country.index) {
         const cartesian = viewer.scene.pickPosition(movement.position) ?? viewer.camera.pickEllipsoid(movement.position);
         if (cartesian) {
