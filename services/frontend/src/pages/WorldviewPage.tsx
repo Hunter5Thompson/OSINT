@@ -25,6 +25,8 @@ import { InspectorPanel, type Selected } from "../components/worldview/Inspector
 import { TickerPanel } from "../components/worldview/TickerPanel";
 import { WorldviewHudLoader } from "../components/worldview/WorldviewHudLoader";
 import { SpotlightProvider, useSpotlight } from "../components/globe/spotlight/SpotlightContext";
+import { SpotlightOverlay } from "../components/globe/spotlight/SpotlightOverlay";
+import { useSpotlightTrigger } from "../components/globe/hooks/useSpotlightTrigger";
 import { useFlights } from "../hooks/useFlights";
 import { useSatellites } from "../hooks/useSatellites";
 import { useEarthquakes } from "../hooks/useEarthquakes";
@@ -309,6 +311,15 @@ function SearchAcceptHook({
   );
 }
 
+// ── ZoomTriggerHook ────────────────────────────────────────────────────────────
+// Inner component that lives inside <SpotlightProvider> so it can call
+// useSpotlightTrigger(). Handles camera zoom events and updates Spotlight state.
+
+function ZoomTriggerHook({ viewer }: { viewer: Cesium.Viewer | null }) {
+  useSpotlightTrigger(viewer);
+  return null;
+}
+
 function decodeEntityQuery(value: string | null): string {
   if (!value) return "";
   const decoded = value.trim();
@@ -459,6 +470,8 @@ export function WorldviewPage() {
           eonetEvents={eonetEvents}
           gdacsEvents={gdacsEvents}
         />
+        <SpotlightOverlay viewer={viewer} />
+        <ZoomTriggerHook viewer={viewer} />
 
         {!hasViewer ? <WorldviewHudLoader /> : null}
 
