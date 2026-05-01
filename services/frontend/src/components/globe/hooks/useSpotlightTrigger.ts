@@ -1,12 +1,17 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
-import { useSpotlight } from "../spotlight/SpotlightContext";
+import { useSpotlight, type FocusTarget } from "../spotlight/SpotlightContext";
 
 const ZOOM_THRESHOLD_M = 500_000;
 const ZOOM_EXIT_M = 1_500_000;
 
 export function useSpotlightTrigger(viewer: Cesium.Viewer | null): void {
   const { focusTarget, dispatch } = useSpotlight();
+
+  // Mirror focusTarget into a ref so the listener (mounted once per viewer)
+  // can read fresh state without re-registering on every state change.
+  const focusRef = useRef<FocusTarget>(focusTarget);
+  focusRef.current = focusTarget;
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -20,9 +25,10 @@ export function useSpotlightTrigger(viewer: Cesium.Viewer | null): void {
       const lat = Cesium.Math.toDegrees(carto.latitude);
 
       // Sticky-Pin/Search: do NOT overwrite when a non-zoom trigger is active.
+      const ft = focusRef.current;
       const isSticky =
-        focusTarget != null &&
-        focusTarget.trigger !== "zoom";
+        ft != null &&
+        ft.trigger !== "zoom";
 
       if (altitude <= ZOOM_THRESHOLD_M && !isSticky) {
         dispatch({
@@ -33,7 +39,7 @@ export function useSpotlightTrigger(viewer: Cesium.Viewer | null): void {
             label: `${lat.toFixed(2)}N · ${lon.toFixed(2)}E`,
           },
         });
-      } else if (altitude >= ZOOM_EXIT_M && focusTarget?.trigger === "zoom") {
+      } else if (altitude >= ZOOM_EXIT_M && ft?.trigger === "zoom") {
         dispatch({ type: "reset" });
       }
     };
@@ -43,5 +49,5 @@ export function useSpotlightTrigger(viewer: Cesium.Viewer | null): void {
     // of times mid-gesture and cause primitive churn.
     const remove = camera.moveEnd.addEventListener(onMoveEnd);
     return () => remove();
-  }, [viewer, focusTarget, dispatch]);
+  }, [viewer, dispatch]);
 }
