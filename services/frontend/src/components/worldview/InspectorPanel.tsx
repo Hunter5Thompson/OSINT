@@ -10,6 +10,7 @@ import type {
 } from "../../types";
 import { OverlayPanel } from "../hlidskjalf/OverlayPanel";
 import type { CountryHit } from "../globe/hooks/useCountryHitTest";
+import { CountryHeader } from "../globe/spotlight/CountryHeader";
 
 export type Selected =
   | { type: "firms"; data: FIRMSHotspot }
@@ -165,6 +166,17 @@ function AircraftInspector({
 
 function InspectorBody({ selected, viewer }: { selected: Selected; viewer: Cesium.Viewer | null }) {
   switch (selected.type) {
+    case "country": {
+      const c = selected.data;
+      return (
+        <CountryHeader
+          name={c.name}
+          iso3={c.iso3}
+          m49={c.m49}
+          capital={c.capital}
+        />
+      );
+    }
     case "firms": {
       const h = selected.data;
       return (
