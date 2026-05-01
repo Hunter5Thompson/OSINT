@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, type ReactNode, type Dispatch } from "react";
+import { createContext, useContext, useReducer, useEffect, type ReactNode, type Dispatch } from "react";
 
 export type CircleTarget = {
   kind: "circle";
@@ -45,6 +45,15 @@ const SpotlightContext = createContext<SpotlightCtx | null>(null);
 
 export function SpotlightProvider({ children }: { children: ReactNode }) {
   const [focusTarget, dispatch] = useReducer(spotlightReducer, null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") dispatch({ type: "reset" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <SpotlightContext.Provider value={{ focusTarget, dispatch }}>
       {children}

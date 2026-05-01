@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { spotlightReducer, type FocusTarget, type SpotlightAction } from "../SpotlightContext";
+import { render, fireEvent } from "@testing-library/react";
+import { spotlightReducer, type FocusTarget, type SpotlightAction, SpotlightProvider, useSpotlight } from "../SpotlightContext";
 
 const idle: FocusTarget = null;
 
@@ -66,4 +67,22 @@ describe("spotlightReducer", () => {
     const next = spotlightReducer(afterPin, { type: "reset" });
     expect(next).toBeNull();
   });
+});
+
+function Probe() {
+  const { focusTarget, dispatch } = useSpotlight();
+  return (
+    <>
+      <button onClick={() => dispatch({ type: "set", target: { kind: "circle", trigger: "pin", center: { lon: 0, lat: 0 }, radius: 1, altitude: 0, label: "x" } })}>set</button>
+      <span data-testid="state">{focusTarget?.kind ?? "idle"}</span>
+    </>
+  );
+}
+
+it("ESC resets focusTarget to null", async () => {
+  const { getByText, getByTestId } = render(<SpotlightProvider><Probe /></SpotlightProvider>);
+  fireEvent.click(getByText("set"));
+  expect(getByTestId("state").textContent).toBe("circle");
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(getByTestId("state").textContent).toBe("idle");
 });
