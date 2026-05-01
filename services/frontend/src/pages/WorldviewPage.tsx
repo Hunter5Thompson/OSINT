@@ -27,6 +27,7 @@ import { WorldviewHudLoader } from "../components/worldview/WorldviewHudLoader";
 import { SpotlightProvider, useSpotlight } from "../components/globe/spotlight/SpotlightContext";
 import { SpotlightOverlay } from "../components/globe/spotlight/SpotlightOverlay";
 import { HudFrame } from "../components/globe/spotlight/HudFrame";
+import { SpotlightCartouche } from "../components/globe/spotlight/SpotlightCartouche";
 import { useSpotlightTrigger } from "../components/globe/hooks/useSpotlightTrigger";
 import { useFlights } from "../hooks/useFlights";
 import { useSatellites } from "../hooks/useSatellites";
@@ -473,6 +474,7 @@ export function WorldviewPage() {
         />
         <SpotlightOverlay viewer={viewer} />
         <HudFrame />
+        <SpotlightCartouche />
         <ZoomTriggerHook viewer={viewer} />
 
         {!hasViewer ? <WorldviewHudLoader /> : null}

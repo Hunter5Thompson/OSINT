@@ -222,3 +222,12 @@
 .hud-scale { position: absolute; bottom: 18px; left: 24px; display: flex; gap: 10px; align-items: center; }
 .hud-scale-bar { width: 80px; height: 1px; background: var(--ash); }
 .hud-coord { position: absolute; bottom: 18px; right: 24px; }
+
+.cartouche { position: absolute; pointer-events: none; }
+.cartouche-circle { right: 30%; top: 40%; text-align: right; color: var(--bone); font-family: "Hanken Grotesk", sans-serif; }
+.cartouche-headline { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: 20px; }
+.cartouche-sub { font-family: "Martian Mono", monospace; font-size: 9px; color: var(--ash); letter-spacing: .14em; }
+.cartouche-country { right: 36px; top: 46%; transform: translateY(-50%); text-align: right; color: var(--bone); font-family: "Hanken Grotesk", sans-serif; }
+.cartouche-endonyms { font-size: 11px; line-height: 1.35; color: rgba(212,205,192,0.8); margin-bottom: 6px; }
+.cartouche-title { margin: 0; font-weight: 300; font-size: 96px; line-height: .95; letter-spacing: -.02em; color: #fafafa; text-shadow: 0 0 24px rgba(0,0,0,.4); }
+.cartouche-cyrillic { font-weight: 300; font-size: 34px; color: var(--amber); margin-top: 4px; }
