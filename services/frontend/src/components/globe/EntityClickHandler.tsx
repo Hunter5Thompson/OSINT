@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import * as Cesium from "cesium";
+import type { Selected } from "../worldview/InspectorPanel";
+import { useSpotlight } from "./spotlight/SpotlightContext";
+import { useCountryHitTest, hitTestCountry } from "./hooks/useCountryHitTest";
 
 const SHIP_TYPES: Record<number, string> = {
   20: "Wing in ground", 30: "Fishing", 31: "Towing", 32: "Towing (large)",
@@ -16,6 +19,7 @@ function shipTypeLabel(code: number): string {
 
 interface EntityClickHandlerProps {
   viewer: Cesium.Viewer | null;
+  onCountrySelect: (sel: Selected | null) => void;
 }
 
 interface SelectedEntity {
@@ -26,8 +30,10 @@ interface SelectedEntity {
   properties: Record<string, string>;
 }
 
-export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
+export function EntityClickHandler({ viewer, onCountrySelect }: EntityClickHandlerProps) {
   const [selected, setSelected] = useState<SelectedEntity | null>(null);
+  const { dispatch: dispatchSpotlight } = useSpotlight();
+  const country = useCountryHitTest();
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -51,6 +57,18 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
           properties: {
             severity: eventData.severity,
             location: eventData.location_name ?? "",
+          },
+        });
+        dispatchSpotlight({
+          type: "set",
+          target: {
+            kind: "circle",
+            trigger: "pin",
+            center: { lon: eventData.lon, lat: eventData.lat },
+            radius: 1,
+            altitude: 0,
+            label: eventData.title,
+            sourcePin: { layer: "events", entityId: eventData.id },
           },
         });
         return;
@@ -90,6 +108,18 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
           position: { lat: cableData.lat, lon: cableData.lon },
           properties: props,
         });
+        dispatchSpotlight({
+          type: "set",
+          target: {
+            kind: "circle",
+            trigger: "pin",
+            center: { lon: cableData.lon, lat: cableData.lat },
+            radius: 1,
+            altitude: 0,
+            label: cableData.name,
+            sourcePin: { layer: "cables", entityId: cableData.id },
+          },
+        });
         return;
       }
 
@@ -124,6 +154,18 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
           position: { lat: pipelineData.lat, lon: pipelineData.lon },
           properties: props,
         });
+        dispatchSpotlight({
+          type: "set",
+          target: {
+            kind: "circle",
+            trigger: "pin",
+            center: { lon: pipelineData.lon, lat: pipelineData.lat },
+            radius: 1,
+            altitude: 0,
+            label: pipelineData.name,
+            sourcePin: { layer: "pipelines", entityId: pipelineData.name },
+          },
+        });
         return;
       }
 
@@ -156,6 +198,18 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
           type: "vessel",
           position: { lat: vesselData.lat, lon: vesselData.lon },
           properties: props,
+        });
+        dispatchSpotlight({
+          type: "set",
+          target: {
+            kind: "circle",
+            trigger: "pin",
+            center: { lon: vesselData.lon, lat: vesselData.lat },
+            radius: 1,
+            altitude: 0,
+            label: vesselData.name ?? `MMSI ${vesselData.mmsi}`,
+            sourcePin: { layer: "vessels", entityId: String(vesselData.mmsi) },
+          },
         });
         return;
       }
@@ -195,10 +249,22 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
           position: { lat: flightData.lat, lon: flightData.lon },
           properties: props,
         });
+        dispatchSpotlight({
+          type: "set",
+          target: {
+            kind: "circle",
+            trigger: "pin",
+            center: { lon: flightData.lon, lat: flightData.lat },
+            radius: 1,
+            altitude: flightData.altitude_m,
+            label: flightData.callsign ?? flightData.icao24,
+            sourcePin: { layer: "flights", entityId: flightData.icao24 },
+          },
+        });
         return;
       }
 
-      // Guard 4: Satellite point (custom _satelliteData property)
+      // Guard 5: Satellite point (custom _satelliteData property)
       const satData = (picked?.primitive as Record<string, unknown>)?._satelliteData as
         | {
             norad_id: number;
@@ -233,6 +299,18 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
           position: { lat: satData.lat, lon: satData.lon },
           properties: props,
         });
+        dispatchSpotlight({
+          type: "set",
+          target: {
+            kind: "circle",
+            trigger: "pin",
+            center: { lon: satData.lon, lat: satData.lat },
+            radius: 1,
+            altitude: satData.altitude_km * 1000,
+            label: satData.name,
+            sourcePin: { layer: "satellites", entityId: String(satData.norad_id) },
+          },
+        });
         return;
       }
 
@@ -255,15 +333,45 @@ export function EntityClickHandler({ viewer }: EntityClickHandlerProps) {
             properties: {},
           });
         }
-      } else {
-        setSelected(null);
+        return;
       }
+
+      // No primitive matched — try country hit-test (lifts to WorldviewPage)
+      if (country.index) {
+        const cartesian = viewer.scene.pickPosition(movement.position) ?? viewer.camera.pickEllipsoid(movement.position);
+        if (cartesian) {
+          const carto = Cesium.Cartographic.fromCartesian(cartesian);
+          const lon = Cesium.Math.toDegrees(carto.longitude);
+          const lat = Cesium.Math.toDegrees(carto.latitude);
+          const hit = hitTestCountry(country.index, country.features, country.topoIndex, country.countries, lon, lat);
+          if (hit) {
+            setSelected(null);                                // clear local bottom-popup
+            onCountrySelect({ type: "country", data: hit });  // lift to right InspectorPanel
+            dispatchSpotlight({
+              type: "set",
+              target: {
+                kind: "country",
+                trigger: "country",
+                m49: hit.m49,
+                iso3: hit.iso3,
+                polygon: hit.geometry,
+                name: hit.name,
+                capital: hit.capital,
+              },
+            });
+            return;
+          }
+        }
+      }
+      setSelected(null);
+      onCountrySelect(null);
+      dispatchSpotlight({ type: "reset" });
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
     return () => {
       handler.destroy();
     };
-  }, [viewer]);
+  }, [viewer, dispatchSpotlight, country, onCountrySelect]);
 
   if (!selected) return null;
 

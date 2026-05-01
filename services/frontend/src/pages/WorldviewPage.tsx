@@ -24,6 +24,7 @@ import { SearchPanel } from "../components/worldview/SearchPanel";
 import { InspectorPanel, type Selected } from "../components/worldview/InspectorPanel";
 import { TickerPanel } from "../components/worldview/TickerPanel";
 import { WorldviewHudLoader } from "../components/worldview/WorldviewHudLoader";
+import { SpotlightProvider } from "../components/globe/spotlight/SpotlightContext";
 import { useFlights } from "../hooks/useFlights";
 import { useSatellites } from "../hooks/useSatellites";
 import { useEarthquakes } from "../hooks/useEarthquakes";
@@ -211,6 +212,7 @@ export function WorldviewPage() {
   }
 
   return (
+    <SpotlightProvider>
     <PerformanceGuard>
       <div style={{ flex: 1, position: "relative", minHeight: 0 }} data-page="worldview">
         <div style={{ position: "absolute", inset: 0 }}>
@@ -268,7 +270,7 @@ export function WorldviewPage() {
           onSelect={(event) => setSelected({ type: "gdacs", data: event })}
         />
 
-        <EntityClickHandler viewer={viewer} />
+        <EntityClickHandler viewer={viewer} onCountrySelect={setSelected} />
 
         {!hasViewer ? <WorldviewHudLoader /> : null}
 
@@ -332,5 +334,6 @@ export function WorldviewPage() {
         </div>
       </div>
     </PerformanceGuard>
+    </SpotlightProvider>
   );
 }

@@ -9,6 +9,7 @@ import type {
   RefineryProperties,
 } from "../../types";
 import { OverlayPanel } from "../hlidskjalf/OverlayPanel";
+import type { CountryHit } from "../globe/hooks/useCountryHitTest";
 
 export type Selected =
   | { type: "firms"; data: FIRMSHotspot }
@@ -16,7 +17,8 @@ export type Selected =
   | { type: "datacenter"; data: DatacenterProperties }
   | { type: "refinery"; data: RefineryProperties }
   | { type: "eonet"; data: EONETEvent }
-  | { type: "gdacs"; data: GDACSEvent };
+  | { type: "gdacs"; data: GDACSEvent }
+  | { type: "country"; data: CountryHit };
 
 export interface InspectorPanelProps {
   selected: Selected | null;
