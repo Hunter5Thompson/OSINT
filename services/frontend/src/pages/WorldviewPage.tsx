@@ -29,6 +29,7 @@ import { SpotlightOverlay } from "../components/globe/spotlight/SpotlightOverlay
 import { HudFrame } from "../components/globe/spotlight/HudFrame";
 import { SpotlightCartouche } from "../components/globe/spotlight/SpotlightCartouche";
 import { useSpotlightTrigger } from "../components/globe/hooks/useSpotlightTrigger";
+import { Graticule } from "../components/globe/visual-layers/Graticule";
 import { useFlights } from "../hooks/useFlights";
 import { useSatellites } from "../hooks/useSatellites";
 import { useEarthquakes } from "../hooks/useEarthquakes";
@@ -140,6 +141,7 @@ function GlobeChildren({
 
   return (
     <>
+      <Graticule viewer={viewer} />
       <FIRMSLayer
         viewer={viewer}
         hotspots={firmsHotspots}
