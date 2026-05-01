@@ -15,13 +15,10 @@ export function CountryBorders({ viewer, visible }: Props) {
 
     (async () => {
       const res = await fetch("/countries-110m.json");
-      // The topojson-client library requires dynamic object access to the
-      // topology structure, which is not precisely typeable without `any`.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const topo = (await res.json()) as any;
+      const topo = (await res.json()) as unknown;
       if (cancelled || viewer.isDestroyed()) return;
 
-      const fc = topojsonFeature(topo, topo.objects.countries) as unknown;
+      const fc = topojsonFeature(topo as Parameters<typeof topojsonFeature>[0], (topo as { objects: { countries: unknown } }).objects.countries as Parameters<typeof topojsonFeature>[1]) as unknown as GeoJSON.FeatureCollection;
 
       const cssVar = getComputedStyle(document.documentElement).getPropertyValue("--stone").trim();
       const stoneColor = Cesium.Color.fromCssColorString(cssVar || "#958a7a").withAlpha(0.7);
