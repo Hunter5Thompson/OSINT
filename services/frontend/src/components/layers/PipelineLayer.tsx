@@ -3,6 +3,7 @@ import * as Cesium from "cesium";
 import type { PipelineGeoJSON, PipelineFeature } from "../../types";
 import { PIPELINE_COLORS, PIPELINE_LOD_THRESHOLDS } from "../../types/pipeline";
 import { densifyLonLatSegment } from "./geoPath";
+import { glyphColor } from "./glyphTokens";
 
 interface PipelineLayerProps {
   viewer: Cesium.Viewer | null;
@@ -112,10 +113,11 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
         if (!tiers.has(props.tier)) continue;
 
         const segments = getCoordinateSegments(feature);
-        const color = Cesium.Color.fromCssColorString(
-          PIPELINE_COLORS[props.type] ?? PIPELINE_COLORS.mixed,
-        );
         const isDashed = props.status !== "active";
+        const colorHex = PIPELINE_COLORS[props.type];
+        const color = colorHex
+          ? Cesium.Color.fromCssColorString(colorHex)
+          : (isDashed ? glyphColor.sentinel() : glyphColor.stone());
         const width = props.status === "active" ? 2.0 : 1.5;
 
         let renderedSegments = 0;

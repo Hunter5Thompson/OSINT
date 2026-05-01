@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { RefineryGeoJSON, RefineryProperties } from "../../types";
+import { glyphColor } from "./glyphTokens";
 
 const ICON_COLOR = "#ff8f00";
 const LABEL_ALTITUDE_THRESHOLD = 5_000_000;
@@ -167,7 +168,7 @@ export function RefineryLayer({ viewer, refineries, visible, onSelect }: Refiner
         position,
         text: feature.properties.name,
         font: "11px monospace",
-        fillColor: Cesium.Color.fromCssColorString(ICON_COLOR).withAlpha(0.9),
+        fillColor: glyphColor.stone().withAlpha(0.9),
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 2,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,

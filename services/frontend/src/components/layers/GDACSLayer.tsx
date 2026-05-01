@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { GDACSEvent } from "../../types";
+import { glyphColor } from "./glyphTokens";
 
 export const EVENT_TYPE_LABELS: Record<string, string> = {
   EQ: "Earthquake",
@@ -160,7 +161,7 @@ export function GDACSLayer({ viewer, events, visible, onSelect }: GDACSLayerProp
         position,
         text: labelText,
         font: "11px monospace",
-        fillColor: Cesium.Color.fromCssColorString("#ef4444").withAlpha(0.9),
+        fillColor: glyphColor.sentinel().withAlpha(0.9),
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 2,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,

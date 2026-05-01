@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { Aircraft } from "../../types";
+import { glyphColor } from "./glyphTokens";
 import { classifyAircraft, getAircraftTypeIcon } from "./icons/aircraftIcons";
 import { usePerformance, type DegradationLevel } from "../globe/PerformanceGuard";
 
@@ -250,7 +251,7 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
             material: Cesium.Material.fromType("Color", {
               color: isMil
                 ? Cesium.Color.RED.withAlpha(0.5)
-                : Cesium.Color.CYAN.withAlpha(0.4),
+                : glyphColor.stone().withAlpha(0.4),
             }),
           });
           trailCount++;

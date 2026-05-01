@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import type { SubmarineCable, LandingPoint } from "../../types";
 import { densifyLonLatSegment } from "./geoPath";
+import { glyphColor } from "./glyphTokens";
 
 interface CableLayerProps {
   viewer: Cesium.Viewer | null;
@@ -120,7 +121,7 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
     for (const cable of cables) {
       const alpha = cable.is_planned ? 0.3 : 0.8;
       const width = cable.is_planned ? 1.5 : 2.0;
-      const cableColor = hexToCesiumColor(cable.color, alpha);
+      const cableColor = hexToCesiumColor(cable.color, alpha, cable.is_planned);
 
       for (const segment of cable.coordinates) {
         if (segment.length < 2) continue;
@@ -210,12 +211,12 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
   return null;
 }
 
-function hexToCesiumColor(hex: string, alpha: number): Cesium.Color {
+function hexToCesiumColor(hex: string, alpha: number, isPlanned = false): Cesium.Color {
   try {
     const c = Cesium.Color.fromCssColorString(hex);
     return c.withAlpha(alpha);
   } catch {
-    return Cesium.Color.CYAN.withAlpha(alpha);
+    return (isPlanned ? glyphColor.sentinel() : glyphColor.stone()).withAlpha(alpha);
   }
 }
 

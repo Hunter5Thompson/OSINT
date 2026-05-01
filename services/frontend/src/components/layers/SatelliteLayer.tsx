@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import * as satellite from "satellite.js";
+import { glyphColor } from "./glyphTokens";
 import type { Satellite } from "../../types";
 import { usePerformance } from "../globe/PerformanceGuard";
 
@@ -33,7 +34,7 @@ const COUNTRY_TINT: Record<string, Cesium.Color> = {
   US: Cesium.Color.fromCssColorString("#3b82f6").withAlpha(0.6),
   RU: Cesium.Color.fromCssColorString("#ef4444").withAlpha(0.6),
   CN: Cesium.Color.fromCssColorString("#eab308").withAlpha(0.6),
-  EU: Cesium.Color.fromCssColorString("#d4cdc0").withAlpha(0.6),
+  EU: glyphColor.stone().withAlpha(0.6),
 };
 
 const ORBIT_ARC_POINTS = 50;

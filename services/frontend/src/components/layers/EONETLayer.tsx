@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { EONETEvent } from "../../types";
+import { glyphColor } from "./glyphTokens";
 
 const LABEL_ALTITUDE_THRESHOLD = 5_000_000;
 
@@ -160,7 +161,7 @@ export function EONETLayer({ viewer, events, visible, onSelect }: EONETLayerProp
         position,
         text: ev.title,
         font: "11px monospace",
-        fillColor: Cesium.Color.fromCssColorString("#f97316").withAlpha(0.9),
+        fillColor: glyphColor.sage().withAlpha(0.9),
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 2,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
