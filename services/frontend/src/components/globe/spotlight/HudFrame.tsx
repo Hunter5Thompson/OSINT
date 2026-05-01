@@ -5,11 +5,14 @@ function utcLabel(d: Date): string {
   return `${d.toISOString().slice(11, 19)} UTC`;
 }
 
+const REDUCED = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
 export function HudFrame() {
   const { focusTarget } = useSpotlight();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
+    const interval = REDUCED ? 5000 : 1000;
+    const id = setInterval(() => setNow(new Date()), interval);
     return () => clearInterval(id);
   }, []);
 

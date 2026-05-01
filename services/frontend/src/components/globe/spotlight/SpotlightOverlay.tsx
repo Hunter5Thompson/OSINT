@@ -42,8 +42,9 @@ function tokenColor(name: string, fallback: string, alpha: number): Cesium.Color
   return Cesium.Color.fromCssColorString(css).withAlpha(alpha);
 }
 
-const FADE_IN_MS = 320;
-const FADE_OUT_MS = 200;
+const REDUCED = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+const FADE_IN_MS = REDUCED ? 120 : 320;
+const FADE_OUT_MS = REDUCED ? 120 : 200;
 
 export function SpotlightOverlay({ viewer }: Props) {
   const { focusTarget } = useSpotlight();
