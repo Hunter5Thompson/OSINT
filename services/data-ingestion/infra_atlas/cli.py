@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from infra_atlas.build_datacenters import build_datacenters
 from infra_atlas.build_pipelines import build_pipelines_from_seed, load_seed
 from infra_atlas.build_refineries import build_refineries
 
@@ -52,3 +53,32 @@ def refineries(existing: Path, out: Path) -> None:
     """Enrich existing refineries.geojson with Wikidata image + provenance."""
     n = build_refineries(out, existing_path=existing)
     click.echo(f"Wrote {n} refineries → {out.relative_to(REPO_ROOT)}")
+
+
+@cli.command()
+@click.option(
+    "--existing",
+    type=click.Path(exists=True, path_type=Path),
+    default=FRONTEND_DATA / "datacenters.geojson",
+)
+@click.option(
+    "--seed",
+    type=click.Path(exists=True, path_type=Path),
+    default=SEEDS_DIR / "datacenters_hyperscaler.yaml",
+)
+@click.option(
+    "--centroids",
+    type=click.Path(exists=True, path_type=Path),
+    default=SEEDS_DIR / "known_city_centroids.json",
+)
+@click.option(
+    "--out",
+    type=click.Path(path_type=Path),
+    default=FRONTEND_DATA / "datacenters.geojson",
+)
+def datacenters(existing: Path, seed: Path, centroids: Path, out: Path) -> None:
+    """Enrich existing datacenters.geojson + apply hyperscaler seed."""
+    n = build_datacenters(
+        out, existing_path=existing, seed_path=seed, centroids_path=centroids
+    )
+    click.echo(f"Wrote {n} datacenters → {out.relative_to(REPO_ROOT)}")

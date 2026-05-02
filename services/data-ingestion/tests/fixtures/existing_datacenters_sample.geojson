@@ -1,0 +1,41 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-77.4875, 39.0438]},
+      "properties": {
+        "name": "AWS US-East-1 (Ashburn)",
+        "operator": "Amazon Web Services",
+        "tier": "hyperscaler",
+        "capacity_mw": 600,
+        "country": "US",
+        "city": "Ashburn"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-0.5, 51.5]},
+      "properties": {
+        "name": "Equinix LD8",
+        "operator": "Equinix",
+        "tier": "III",
+        "capacity_mw": null,
+        "country": "GB",
+        "city": "London"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [4.0, 50.0]},
+      "properties": {
+        "name": "Random Existing DC",
+        "operator": "RandomCo",
+        "tier": "III",
+        "capacity_mw": null,
+        "country": "BE",
+        "city": "Brussels"
+      }
+    }
+  ]
+}

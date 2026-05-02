@@ -1,0 +1,15 @@
+{
+  "centroids": [
+    {"name": "Frankfurt am Main", "lat": 50.1109, "lon": 8.6821},
+    {"name": "Dublin", "lat": 53.3498, "lon": -6.2603},
+    {"name": "Amsterdam", "lat": 52.3702, "lon": 4.8952},
+    {"name": "Council Bluffs", "lat": 41.2619, "lon": -95.8608},
+    {"name": "London", "lat": 51.5074, "lon": -0.1278},
+    {"name": "Singapore", "lat": 1.3521, "lon": 103.8198},
+    {"name": "Sydney", "lat": -33.8688, "lon": 151.2093},
+    {"name": "São Paulo", "lat": -23.5505, "lon": -46.6333},
+    {"name": "Tokyo", "lat": 35.6762, "lon": 139.6503},
+    {"name": "Seoul", "lat": 37.5665, "lon": 126.9780}
+  ],
+  "tolerance_km": 1.0
+}
