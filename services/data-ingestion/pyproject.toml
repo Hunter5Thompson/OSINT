@@ -38,13 +38,24 @@ notebooklm = [
 [project.scripts]
 odin-ingest-nlm = "nlm_ingest.cli:cli"
 odin-ingest-gdelt = "gdelt_raw.cli:main"
+odin-infra-atlas = "infra_atlas.cli:cli"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-include = ["*.py", "feeds/**/*.py", "feeds/**/*.yaml", "gdelt_raw/**/*.py", "nlm_ingest/**/*.py", "nlm_ingest/prompts/*.txt"]
+include = [
+  "*.py",
+  "feeds/**/*.py",
+  "feeds/**/*.yaml",
+  "gdelt_raw/**/*.py",
+  "nlm_ingest/**/*.py",
+  "nlm_ingest/prompts/*.txt",
+  "infra_atlas/**/*.py",
+  "infra_atlas/seeds/*.yaml",
+  "infra_atlas/seeds/*.json",
+]
 
 [tool.ruff]
 target-version = "py312"
