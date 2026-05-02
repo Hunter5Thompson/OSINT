@@ -204,6 +204,14 @@ function InspectorBody({ selected, viewer }: { selected: Selected; viewer: Cesiu
           <Property label="§ Tier" value={d.tier || "-"} />
           <Property label="§ Capacity" value={d.capacity_mw != null ? `${d.capacity_mw} MW` : "-"} />
           <Property label="§ Location" value={`${d.city}, ${d.country}`} />
+          {d.coord_quality ? (
+            <Property label="§ Coord quality" value={d.coord_quality} />
+          ) : null}
+          {d.source_url ? (
+            <a href={d.source_url} target="_blank" rel="noreferrer" style={sourceLinkStyle}>
+              Source
+            </a>
+          ) : null}
         </>
       );
     }

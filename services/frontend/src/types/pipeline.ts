@@ -3,11 +3,13 @@ export interface PipelineProperties {
   name: string;
   tier: "major" | "regional" | "local";
   type: "oil" | "gas" | "lng" | "mixed";
-  status: "active" | "planned" | "under_construction";
+  status: "active" | "planned" | "under_construction" | "shutdown";
   operator: string | null;
   capacity_bcm: number | null;
   length_km: number | null;
   countries: string[];
+  qid?: string;
+  source_url?: string;
 }
 
 /** A single GeoJSON Feature for a pipeline. */
