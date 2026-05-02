@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from infra_atlas.build_pipelines import build_pipelines_from_seed, load_seed
+from infra_atlas.build_refineries import build_refineries
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SEEDS_DIR = Path(__file__).resolve().parent / "seeds"
@@ -34,3 +35,20 @@ def pipelines(seed: Path, out: Path) -> None:
     seeds = load_seed(seed)
     build_pipelines_from_seed(seeds, out)
     click.echo(f"Wrote {len(seeds)} pipelines → {out.relative_to(REPO_ROOT)}")
+
+
+@cli.command()
+@click.option(
+    "--existing",
+    type=click.Path(exists=True, path_type=Path),
+    default=FRONTEND_DATA / "refineries.geojson",
+)
+@click.option(
+    "--out",
+    type=click.Path(path_type=Path),
+    default=FRONTEND_DATA / "refineries.geojson",
+)
+def refineries(existing: Path, out: Path) -> None:
+    """Enrich existing refineries.geojson with Wikidata image + provenance."""
+    n = build_refineries(out, existing_path=existing)
+    click.echo(f"Wrote {n} refineries → {out.relative_to(REPO_ROOT)}")

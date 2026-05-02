@@ -1,0 +1,35 @@
+{
+  "head": {"vars": ["item","itemLabel","coord","operatorLabel","countryCode","image","description","facility_type"]},
+  "results": {
+    "bindings": [
+      {
+        "item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q3417395"},
+        "itemLabel": {"type": "literal", "value": "Jamnagar Refinery"},
+        "coord": {"type": "literal", "value": "Point(69.868889 22.348056)"},
+        "operatorLabel": {"type": "literal", "value": "Reliance Industries"},
+        "countryCode": {"type": "literal", "value": "IN"},
+        "image": {"type": "uri", "value": "https://commons.wikimedia.org/wiki/Special:FilePath/Wikidata_Jamnagar.jpg"},
+        "description": {"type": "literal", "value": "Largest single-location refinery complex in the world."},
+        "facility_type": {"type": "literal", "value": "refinery"}
+      },
+      {
+        "item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q860840"},
+        "itemLabel": {"type": "literal", "value": "Ras Tanura Refinery"},
+        "coord": {"type": "literal", "value": "Point(50.158 26.643)"},
+        "operatorLabel": {"type": "literal", "value": "Saudi Aramco"},
+        "countryCode": {"type": "literal", "value": "SA"},
+        "image": {"type": "uri", "value": "https://commons.wikimedia.org/wiki/Special:FilePath/Ras_Tanura.jpg"},
+        "description": {"type": "literal", "value": "Major Saudi Aramco refinery on the Persian Gulf."},
+        "facility_type": {"type": "literal", "value": "refinery"}
+      },
+      {
+        "item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q9999999"},
+        "itemLabel": {"type": "literal", "value": "New Wikidata Refinery"},
+        "coord": {"type": "literal", "value": "Point(10.0 20.0)"},
+        "operatorLabel": {"type": "literal", "value": "Acme Oil"},
+        "countryCode": {"type": "literal", "value": "ZZ"},
+        "facility_type": {"type": "literal", "value": "refinery"}
+      }
+    ]
+  }
+}
