@@ -1,0 +1,31 @@
+# Trimmed seed for unit tests. Real seed lives in infra_atlas/seeds/pipelines.yaml.
+pipelines:
+  - name: Nord Stream 1
+    tier: major
+    type: gas
+    status: active
+    operator: Nord Stream AG
+    capacity_bcm: 55.0
+    length_km: 1224
+    countries: [Russia, Germany]
+    source_url: https://en.wikipedia.org/wiki/Nord_Stream
+    route:
+      - [28.7, 60.5]
+      - [25.0, 59.5]
+      - [19.0, 57.5]
+      - [13.5, 54.1]
+  - name: Druzhba pipeline
+    tier: major
+    type: oil
+    status: active
+    operator: Transneft
+    capacity_bcm: null
+    length_km: 4000
+    countries: [Russia, Belarus, Ukraine, Poland, Germany]
+    source_url: https://en.wikipedia.org/wiki/Druzhba_pipeline
+    route:
+      - [52.5, 54.9]
+      - [44.0, 53.5]
+      - [29.3, 52.0]
+      - [22.0, 52.4]
+      - [14.3, 53.0]
