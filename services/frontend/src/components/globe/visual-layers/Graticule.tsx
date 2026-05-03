@@ -11,13 +11,18 @@ export function Graticule({ viewer }: Props) {
 
     const collection = new Cesium.PolylineCollection();
 
-    // Read the --graticule token at mount time. color-mix() resolves to a
-    // valid CSS color string in modern browsers; if not, fall back to a hex
-    // approximation of color-mix(--granite 80% --steel 20%).
-    const cssVar = getComputedStyle(document.documentElement)
-      .getPropertyValue("--graticule")
-      .trim();
-    const color = Cesium.Color.fromCssColorString(cssVar || "#28302e");
+    // --graticule is defined via color-mix(); getComputedStyle returns custom
+    // properties verbatim, so we resolve it through a probe element to get a
+    // parseable rgb(...) string. Hex fallback covers parser failures.
+    const probe = document.createElement("span");
+    probe.style.color = "var(--graticule)";
+    probe.style.display = "none";
+    document.body.appendChild(probe);
+    const resolved = getComputedStyle(probe).color;
+    document.body.removeChild(probe);
+    const color =
+      Cesium.Color.fromCssColorString(resolved || "") ??
+      Cesium.Color.fromCssColorString("#28302e");
     const material = Cesium.Material.fromType("Color", {
       color: color.withAlpha(0.45),
     });
@@ -44,7 +49,14 @@ export function Graticule({ viewer }: Props) {
 
     return () => {
       if (viewer.isDestroyed()) return;
-      viewer.scene.primitives.remove(collection);
+      // The viewer can tear primitives down before this cleanup runs (React 19
+      // StrictMode double-fire + GlobeViewer viewer recreation). Swallow the
+      // resulting "already destroyed" throws so the unmount path stays clean.
+      try {
+        viewer.scene.primitives.remove(collection);
+      } catch {
+        /* primitive already destroyed by viewer teardown */
+      }
     };
   }, [viewer]);
 

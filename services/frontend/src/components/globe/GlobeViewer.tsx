@@ -165,7 +165,18 @@ export function GlobeViewer({
         buildingsTilesetRef.current = null;
       }
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {
-        viewerRef.current.destroy();
+        // Cesium walks scene.primitives on destroy and re-destroys each child.
+        // If any layer's PolylineCollection has a stale already-destroyed
+        // polyline in its internal _polylines array (a known Cesium quirk
+        // around removeAll/destroy ordering), this throws on the way out.
+        // The viewer is being torn down regardless — swallow so we don't
+        // leak a half-destroyed viewer into the React error boundary on
+        // route changes.
+        try {
+          viewerRef.current.destroy();
+        } catch {
+          /* viewer was tearing down primitives in a corrupt state */
+        }
         viewerRef.current = null;
       }
     };
