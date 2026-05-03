@@ -62,7 +62,7 @@ WorldView folgt einer klassischen 3-Tier-Architektur: React/CesiumJS Frontend, F
 | **Styling** | Tailwind CSS v4 | 4.x | Utility-First, schnelles taktisches UI-Prototyping |
 | **Backend** | FastAPI + Pydantic v2 | 0.128+ | Async-First, WebSocket-Support, auto-generierte OpenAPI Docs |
 | **Cache** | Redis | 7.x | In-Memory Cache für API-Responses, TTL-basiert |
-| **Vector DB** | Qdrant | 1.13+ | Lokale On-Premise VectorDB, REST + gRPC, Filtering, native BM25 |
+| **Vector DB** | Qdrant | 1.13+ | Lokale On-Premise VectorDB, REST + gRPC, Filtering, native BM25. Phase 1: `odin_intel` (dense-only). Phase 2 target: `odin_v2` (hybrid dense+sparse). Siehe ADR-007. |
 | **Graph DB** | Neo4j | 5-community | Knowledge Graph für Entities/Events/Relationships, Two-Loop Architecture |
 | **Embeddings** | Qwen3-Embedding-0.6B (TEI) | - | 1024-dim, TEI-kompatibles Interface auf Port 8001 |
 | **Reranking** | BAAI/bge-reranker-v2-m3 (TEI) | - | Cross-Encoder Reranker auf Port 8002 |
@@ -323,6 +323,53 @@ CORSMiddleware(
 - **Begründung**: CSS Filter (wie im Prototype) funktionieren, aber CesiumJS PostProcessStage operiert direkt auf dem WebGL Framebuffer — korrekte Scanlines, phosphor-glow, thermal palette mit Zugriff auf Depth Buffer und Scene-Daten. Professionelleres Ergebnis.
 - **Alternativen**: CSS filter (verworfen: kein Depth-Buffer-Zugriff), Three.js EffectComposer (verworfen: nicht in CesiumJS integrierbar)
 - **Konsequenzen**: (+) Pixel-perfekte Filter mit GPU-Zugriff. (-) GLSL-Kenntnisse nötig.
+
+## Qdrant Collection Lifecycle
+
+**Phase 1 (Current, Active):**
+
+- **Collection Name**: `odin_intel`
+- **Schema**: Dense vector only
+  - Vector size: 1024 dimensions
+  - Distance metric: Cosine
+  - Sparse vectors: None
+- **Source**: TEI Embedding Server (Qwen3-Embedding-0.6B) on Port 8001
+- **Status**: Production corpus, actively ingested from RSS/GDELT feeds
+- **Service Usage**: All backend RAG, intelligence agents, and vision enrichment read/write to `odin_intel`
+
+**Phase 2 (Planned Target):**
+
+- **Collection Name**: `odin_v2`
+- **Schema**: Hybrid dense + sparse
+  - Named dense vector: 1024 dimensions, Cosine distance
+  - Named sparse vector: BM25 with IDF modifier
+  - Query: RRF fusion of both branches
+- **Target**: Improved hybrid retrieval with better recall for sparse/keyword-based queries
+- **Prerequisites Before Cutover**:
+  1. Create `odin_v2` with named vector schema
+  2. Implement sparse vector payload generation
+  3. Backfill/reindex `odin_intel` corpus into `odin_v2`
+  4. Update retriever code for Qdrant Query API / Prefetch / RRF
+  5. Dual-write testing and validation
+  6. Coordinated cutover via deployment flag (`enable_hybrid`)
+
+**Migration Guardrails:**
+
+- Do NOT change default collection name before Phase 2 backfill is complete.
+  Doing so breaks all RAG queries pointing at an empty or missing collection.
+- Explicit `enable_hybrid: bool = False` flag in all services discriminates Phase 1 vs Phase 2 code paths.
+- Collection name is configuration; schema discriminator is the `enable_hybrid` flag.
+- Full migration plan: `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` §5–6.
+
+---
+
+### ADR-007: Qdrant Collection Lifecycle — Phase 1 vs Phase 2
+- **Status**: Akzeptiert (Design-Phase)
+- **Kontext**: RAG nutzt Qdrant VectorDB. Phase 1 hat nur dense vectors. Phase 2 plant hybrid search.
+- **Entscheidung**: `odin_intel` ist Phase 1 Runtime (dense 1024-dim). `odin_v2` ist Phase 2 Target (hybrid dense+sparse).
+- **Begründung**: Aktuelle Implementierung nutzt `odin_intel` erfolgreich. `odin_v2` ist noch nicht erstellt. Defaults zu `odin_v2` würde RAG auf eine leere Collection zeigen. Phased Migration mit expliziter `enable_hybrid` Flag und dokumentierter Backfill/Cutover-Prozedur ist erforderlich.
+- **Dokumentation**: Vollständige Migration Steps in `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md`
+- **Konsequenzen**: (+) Klare Semantik, keine überraschenden leeren RAG-Results. (-) Zwei Collections parallel bis Phase 2 cutover.
 
 ---
 
