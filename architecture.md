@@ -324,6 +324,16 @@ CORSMiddleware(
 - **Alternativen**: CSS filter (verworfen: kein Depth-Buffer-Zugriff), Three.js EffectComposer (verworfen: nicht in CesiumJS integrierbar)
 - **Konsequenzen**: (+) Pixel-perfekte Filter mit GPU-Zugriff. (-) GLSL-Kenntnisse nötig.
 
+### ADR-007: Qdrant Collection Lifecycle — Phase 1 vs Phase 2
+- **Status**: Akzeptiert (Design-Phase)
+- **Kontext**: RAG nutzt Qdrant VectorDB. Phase 1 hat nur dense vectors. Phase 2 plant hybrid search.
+- **Entscheidung**: `odin_intel` ist Phase 1 Runtime (dense 1024-dim). `odin_v2` ist Phase 2 Target (hybrid dense+sparse).
+- **Begründung**: Aktuelle Implementierung nutzt `odin_intel` erfolgreich. `odin_v2` ist noch nicht erstellt. Defaults zu `odin_v2` würde RAG auf eine leere Collection zeigen. Phased Migration mit expliziter `enable_hybrid` Flag und dokumentierter Backfill/Cutover-Prozedur ist erforderlich.
+- **Dokumentation**: Vollständige Migration Steps in `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md`
+- **Konsequenzen**: (+) Klare Semantik, keine überraschenden leeren RAG-Results. (-) Zwei Collections parallel bis Phase 2 cutover.
+
+---
+
 ## Qdrant Collection Lifecycle
 
 **Phase 1 (Current, Active):**
@@ -360,16 +370,6 @@ CORSMiddleware(
 - Explicit `enable_hybrid: bool = False` flag in all services discriminates Phase 1 vs Phase 2 code paths.
 - Collection name is configuration; schema discriminator is the `enable_hybrid` flag.
 - Full migration plan: `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` §5–6.
-
----
-
-### ADR-007: Qdrant Collection Lifecycle — Phase 1 vs Phase 2
-- **Status**: Akzeptiert (Design-Phase)
-- **Kontext**: RAG nutzt Qdrant VectorDB. Phase 1 hat nur dense vectors. Phase 2 plant hybrid search.
-- **Entscheidung**: `odin_intel` ist Phase 1 Runtime (dense 1024-dim). `odin_v2` ist Phase 2 Target (hybrid dense+sparse).
-- **Begründung**: Aktuelle Implementierung nutzt `odin_intel` erfolgreich. `odin_v2` ist noch nicht erstellt. Defaults zu `odin_v2` würde RAG auf eine leere Collection zeigen. Phased Migration mit expliziter `enable_hybrid` Flag und dokumentierter Backfill/Cutover-Prozedur ist erforderlich.
-- **Dokumentation**: Vollständige Migration Steps in `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md`
-- **Konsequenzen**: (+) Klare Semantik, keine überraschenden leeren RAG-Results. (-) Zwei Collections parallel bis Phase 2 cutover.
 
 ---
 

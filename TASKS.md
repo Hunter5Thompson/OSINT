@@ -571,6 +571,8 @@ async def process_item(
 ⚠️ **WARNING:** This code is for Phase 2 only. Do not activate in Phase 1.
 The current runtime collection is `odin_intel` (dense-only).
 Phase 2 will migrate to `odin_v2` with the schema below after backfill and retriever updates.
+Aktivierung läuft über `settings.enable_hybrid` (default `False`) — niemals stiller Default-Switch.
+This warning applies to BOTH the create_collection block below AND the Ingest block that follows.
 
 ```python
 from qdrant_client import models
@@ -625,7 +627,7 @@ point = PointStruct(
 ```
 test_process_item_writes_event_to_neo4j
 test_process_item_writes_entities_linked
-test_process_item_embeds_in_qdrant_with_both_vectors
+test_process_item_embeds_in_qdrant_with_dense_and_sparse_phase2
 test_process_item_publishes_redis_stream
 test_thinktank_feeds_integrated_in_scheduler
 test_deduplication_no_double_events
@@ -660,6 +662,7 @@ und Qwen3-Reranker.
 ### Hybrid Search — Qdrant-native (PHASE 2 TARGET)
 ⚠️ **WARNING:** This code is for Phase 2 only. Phase 1 uses dense-only search on `odin_intel`.
 Do not activate before backfill and retriever migration are complete.
+Aktivierung läuft über `settings.enable_hybrid` (default `False`) — niemals stiller Default-Switch.
 See `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` for migration timeline.
 
 ```python
