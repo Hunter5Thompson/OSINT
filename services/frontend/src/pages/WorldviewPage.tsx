@@ -58,7 +58,7 @@ import type {
   GDACSEvent,
 } from "../types";
 
-type PanelId = "layers" | "search";
+type PanelId = "layers" | "search" | "ticker";
 
 type LandingFilter = "hotspots" | "conflict" | "nuntii" | "libri";
 
@@ -347,6 +347,7 @@ export function WorldviewPage() {
   const [expandedPanels, setExpandedPanels] = useState<Record<PanelId, boolean>>({
     layers: false,
     search: false,
+    ticker: true,
   });
 
   const { flights } = useFlights(layers.flights);
@@ -493,6 +494,7 @@ export function WorldviewPage() {
               variant="expanded"
               onClose={() => setExpandedPanels((prev) => ({ ...prev, layers: false }))}
               width={322}
+              style={{ maxHeight: "calc(100vh - 320px)" }}
             >
               <LayersPanel
                 layers={layers}
@@ -541,7 +543,11 @@ export function WorldviewPage() {
         </div>
 
         <div style={{ position: "absolute", left: 16, bottom: 16, zIndex: 10 }}>
-          <TickerPanel />
+          <TickerPanel
+            variant={expandedPanels.ticker ? "expanded" : "collapsed"}
+            onClose={() => setExpandedPanels((prev) => ({ ...prev, ticker: false }))}
+            onExpand={() => setExpandedPanels((prev) => ({ ...prev, ticker: true }))}
+          />
         </div>
       </div>
     </PerformanceGuard>

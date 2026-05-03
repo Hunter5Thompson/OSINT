@@ -99,7 +99,14 @@ export function OverlayPanel({
     <section
       role="region"
       aria-label={label}
-      style={{ ...panelBase, ...style, width: `min(calc(100vw - 2rem), ${width}px)` }}
+      style={{
+        ...panelBase,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        ...style,
+        width: `min(calc(100vw - 2rem), ${width}px)`,
+      }}
     >
       <header style={panelHeader}>
         <span style={panelTag}>{`§ ${paragraph} · ${label}`}</span>
@@ -114,7 +121,9 @@ export function OverlayPanel({
           </button>
         ) : null}
       </header>
-      <div style={{ padding: "0.75rem" }}>{children}</div>
+      <div style={{ padding: "0.75rem", overflowY: "auto", flex: "1 1 auto", minHeight: 0 }}>
+        {children}
+      </div>
     </section>
   );
 }
