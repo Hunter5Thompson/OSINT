@@ -1,0 +1,79 @@
+# Codex Local Notes — WorldView / ODIN OSINT
+
+## Canonical Docs
+
+Use these as source of truth, in this order:
+
+1. AGENTS.md — agent operating rules, commands, hardware constraints
+2. TASKS.md — task registry and canonical tech stack
+3. architecture.md — system architecture
+4. decisions.md — architecture decisions
+5. CLAUDE.md — broader project context and historical notes
+
+Do not duplicate large sections from those files here.
+
+## Current Engineering Posture
+
+WorldView is moving from "many map layers" toward a fusion system:
+
+Raw source -> SourceRef -> Observation -> WorldObject / IncidentCandidate -> FusionLink -> ReviewItem -> approved graph/timeline/globe surface.
+
+The next strategic milestone is TASK-108 Fusion Core:
+- canonical observations
+- stable world_object_id / entity identity
+- spatiotemporal fusion
+- source lineage
+- analyst review queue
+- later: vision as another Observation producer
+
+Vision / YOLO is not the foundation. It should plug into Fusion Core later.
+
+## Repo Hygiene
+
+Before changing files:
+- check branch and dirty state
+- do not touch unrelated untracked files
+- use worktrees for large feature branches
+- keep commits scoped and intentional
+
+Do not auto-delete branches, worktrees, or untracked files unless explicitly asked.
+
+## Verification
+
+Run commands from service directories:
+
+Backend:
+cd services/backend && uv run pytest && uv run ruff check app/ && uv run mypy app/
+
+Frontend:
+cd services/frontend && npm run lint && npm run type-check && npm test
+
+Intelligence:
+cd services/intelligence && uv run pytest
+
+Data ingestion:
+cd services/data-ingestion && uv run pytest
+
+## Architecture Guardrails
+
+- Neo4j writes use deterministic Cypher templates only.
+- Neo4j reads may use LLM-generated Cypher if read-only guarded.
+- All Neo4j queries use parameter binding.
+- Backend code is async-first.
+- Frontend TypeScript uses no `any`.
+- Cesium bulk rendering uses primitives / collections, not Entity API.
+- No API keys in code.
+- GDELT ingestion uses raw files pipeline, not old DOC API collector.
+
+## Hardware Constraint
+
+Single RTX 5090, 32 GB VRAM.
+Only one LLM runtime at a time.
+Use `odin.sh swap` for mode changes.
+Do not run multiple vLLM / llama.cpp containers concurrently.
+
+## Style Preference
+
+Prefer decisive, small, reviewable steps.
+For specs and plans, be explicit enough that another agent can implement without guessing.
+For code, follow existing local patterns before introducing abstractions.
