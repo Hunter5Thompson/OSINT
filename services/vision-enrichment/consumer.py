@@ -12,6 +12,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 
 from config import Settings, settings
+from qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
 from vision import analyze_image
 
 log = structlog.get_logger(__name__)
@@ -27,6 +28,27 @@ class VisionConsumer:
     ) -> None:
         self._redis = redis_client
         self._settings = settings_override or settings
+        self._qdrant_schema_validated: bool = False
+
+    def _validate_qdrant_schema(self, qdrant_client: QdrantClient) -> None:
+        """Validate the Qdrant collection schema before the first write.
+
+        Raises QdrantSchemaMismatch if the collection exists but has the wrong schema.
+        Sets _qdrant_schema_validated=True on success so subsequent writes skip the check.
+        """
+        try:
+            collections = qdrant_client.get_collections().collections
+            names = {c.name for c in collections}
+            if self._settings.qdrant_collection in names:
+                info = qdrant_client.get_collection(self._settings.qdrant_collection)
+                enable_hybrid: bool = getattr(self._settings, "enable_hybrid", False)
+                validate_collection_schema(info, enable_hybrid=enable_hybrid)
+            self._qdrant_schema_validated = True
+        except QdrantSchemaMismatch:
+            raise
+        except Exception:
+            # Network errors — don't block; let the Qdrant operation surface them
+            self._qdrant_schema_validated = True
 
     async def ensure_consumer_group(self) -> None:
         """Create the consumer group if it doesn't exist."""
@@ -129,6 +151,9 @@ class VisionConsumer:
 
             # Update Qdrant: set vision_description + vision_status on payload
             qdrant = QdrantClient(url=self._settings.qdrant_url)
+            # Preflight: validate schema before first Qdrant write
+            if not self._qdrant_schema_validated:
+                self._validate_qdrant_schema(qdrant)
             hits = qdrant.scroll(
                 collection_name=self._settings.qdrant_collection,
                 scroll_filter=Filter(

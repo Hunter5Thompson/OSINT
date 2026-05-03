@@ -79,7 +79,15 @@ class TestEnhancedSearch:
         mock_graph_ctx.assert_called_once()
 
     async def test_enable_hybrid_degrades_to_dense(self):
-        """enable_hybrid=True should log warning and fall back to dense search."""
+        """enable_hybrid=True should log warning and fall back to dense search.
+
+        Phase 1 contract: sparse vectors are absent from the odin_intel collection.
+        When enable_hybrid=True is passed (or read from Settings), the retriever
+        must degrade gracefully to dense-only rather than raising or returning
+        empty results.  This test simulates the sparse-absent scenario by not
+        setting up any sparse-vector mock — if hybrid were attempted, it would
+        fail; instead we assert dense search is called once and results come back.
+        """
         from rag.retriever import enhanced_search
 
         mock_search = AsyncMock(return_value=[

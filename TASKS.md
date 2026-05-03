@@ -43,7 +43,8 @@ Reranker:
 
 Vector DB:
   Qdrant:     Port 6333/6334
-  Collection: odin_v2 (dense 1024 + sparse BM25)
+  Collection (Phase 1): odin_intel (dense 1024 cosine)
+  Collection (Phase 2 target): odin_v2 (dense 1024 + sparse BM25)
 
 Graph DB:
   Neo4j:      5-community
@@ -178,9 +179,12 @@ class Settings(BaseSettings):
     EMBEDDING_DIM: int = 1024                              # TEI: Qwen3-Embedding-0.6B (1024 dim)
 ```
 
-**Qdrant Collection Migration:**
-Neue Collection `odin_v2` mit Qwen3-Embedding Dimensionen anlegen.
-Alte Collection `odin` behalten bis validiert.
+**Qdrant Collection (Phase 1):**
+Aktuelle Runtime-Collection ist `odin_intel` mit 1024-dim dense vectors (Cosine distance).
+Diese wird weiterhin für RAG verwendet.
+Neue Collection `odin_v2` mit Hybrid Vectors ist eine **Phase 2 Target** (nicht Phase 1).
+Siehe `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` für die
+Qdrant Collection Lifecycle und Migration Path.
 
 ## Tests
 - Bestehender `POST /api/v1/intel/query` funktioniert mit vLLM
@@ -563,12 +567,18 @@ async def process_item(
     """
 ```
 
-### Qdrant Hybrid Collection Setup
+### Qdrant Hybrid Collection Setup (PHASE 2 TARGET)
+⚠️ **WARNING:** This code is for Phase 2 only. Do not activate in Phase 1.
+The current runtime collection is `odin_intel` (dense-only).
+Phase 2 will migrate to `odin_v2` with the schema below after backfill and retriever updates.
+Aktivierung läuft über `settings.enable_hybrid` (default `False`) — niemals stiller Default-Switch.
+This warning applies to BOTH the create_collection block below AND the Ingest block that follows.
+
 ```python
 from qdrant_client import models
 
 qdrant.create_collection(
-    collection_name="odin_v2",
+    collection_name="odin_v2",  # PHASE 2 ONLY
     vectors_config={
         "dense": models.VectorParams(size=1024, distance=models.Distance.COSINE),
     },
@@ -577,6 +587,9 @@ qdrant.create_collection(
     },
 )
 ```
+
+See `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` §6 for the
+Phase 2 migration requirements before enabling this in production.
 
 ### Ingest: Dense-Vektor vorberechnen, BM25 serverseitig
 ```python
@@ -614,7 +627,7 @@ point = PointStruct(
 ```
 test_process_item_writes_event_to_neo4j
 test_process_item_writes_entities_linked
-test_process_item_embeds_in_qdrant_with_both_vectors
+test_process_item_embeds_in_qdrant_with_dense_and_sparse_phase2
 test_process_item_publishes_redis_stream
 test_thinktank_feeds_integrated_in_scheduler
 test_deduplication_no_double_events
@@ -646,15 +659,21 @@ und Qwen3-Reranker.
 
 ## Spezifikation
 
-### Hybrid Search — Qdrant-native (KEIN rank_bm25 nötig!)
+### Hybrid Search — Qdrant-native (PHASE 2 TARGET)
+⚠️ **WARNING:** This code is for Phase 2 only. Phase 1 uses dense-only search on `odin_intel`.
+Do not activate before backfill and retriever migration are complete.
+Aktivierung läuft über `settings.enable_hybrid` (default `False`) — niemals stiller Default-Switch.
+See `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` for migration timeline.
+
 ```python
 async def hybrid_search(query: str, k: int = 10) -> list[SearchResult]:
     """
-    Qdrant Query API macht Dense + Sparse + RRF serverseitig.
+    PHASE 2: Qdrant Query API macht Dense + Sparse + RRF serverseitig.
     Wir müssen nur die Prefetch-Config definieren.
+    PHASE 1: Falls enable_hybrid=False, fällt auf dense-only zurück.
     """
     results = await qdrant.query_points(
-        collection_name="odin_v2",
+        collection_name="odin_v2",  # PHASE 2 ONLY
         prefetch=[
             models.Prefetch(
                 query=models.Document(text=query, model="Qwen/Qwen3-Embedding-0.6B"),

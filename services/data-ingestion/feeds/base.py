@@ -14,6 +14,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import Settings
+from qdrant_doctor.schema import validate_collection_schema
 
 log = structlog.get_logger(__name__)
 
@@ -32,11 +33,20 @@ class BaseCollector(ABC):
         self._collection_ready = False
 
     async def _ensure_collection(self) -> None:
+        """Ensure the Qdrant collection exists and has the correct schema.
+
+        If the collection already exists, its vector schema is validated against
+        the active runtime mode (dense-only or hybrid) BEFORE any write occurs.
+        Raises QdrantSchemaMismatch if the schema does not match.
+        """
         if self._collection_ready:
             return
+
+        enable_hybrid: bool = getattr(self.settings, "enable_hybrid", False)
         collections = await asyncio.to_thread(
             lambda: self.qdrant.get_collections().collections
         )
+
         if not any(c.name == self.settings.qdrant_collection for c in collections):
             await asyncio.to_thread(
                 lambda: self.qdrant.create_collection(
@@ -48,6 +58,18 @@ class BaseCollector(ABC):
                 )
             )
             log.info("qdrant_collection_created", collection=self.settings.qdrant_collection)
+        else:
+            # Collection exists — validate schema before any write
+            info = await asyncio.to_thread(
+                lambda: self.qdrant.get_collection(self.settings.qdrant_collection)
+            )
+            validate_collection_schema(info, enable_hybrid=enable_hybrid)
+            log.debug(
+                "qdrant_schema_validated",
+                collection=self.settings.qdrant_collection,
+                enable_hybrid=enable_hybrid,
+            )
+
         self._collection_ready = True
 
     async def _embed(self, text: str) -> list[float]:

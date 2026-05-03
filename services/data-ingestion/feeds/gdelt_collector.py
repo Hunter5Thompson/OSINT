@@ -14,6 +14,7 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
 from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
+from qdrant_doctor.schema import validate_collection_schema
 
 log = structlog.get_logger(__name__)
 
@@ -72,6 +73,13 @@ class GDELTCollector:
         self._ensure_collection()
 
     def _ensure_collection(self) -> None:
+        """Create the Qdrant collection if it does not exist.
+
+        If the collection already exists, its vector schema is validated against
+        the active runtime mode (dense-only or hybrid) BEFORE any write occurs.
+        Raises QdrantSchemaMismatch if the schema does not match.
+        """
+        enable_hybrid: bool = getattr(settings, "enable_hybrid", False)
         collections = [c.name for c in self.qdrant.get_collections().collections]
         if settings.qdrant_collection not in collections:
             self.qdrant.create_collection(
@@ -82,6 +90,15 @@ class GDELTCollector:
                 ),
             )
             log.info("qdrant_collection_created", collection=settings.qdrant_collection)
+        else:
+            # Collection exists — validate schema before any write
+            info = self.qdrant.get_collection(settings.qdrant_collection)
+            validate_collection_schema(info, enable_hybrid=enable_hybrid)
+            log.debug(
+                "qdrant_schema_validated",
+                collection=settings.qdrant_collection,
+                enable_hybrid=enable_hybrid,
+            )
 
     async def _embed(self, text: str) -> list[float]:
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:

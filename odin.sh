@@ -115,6 +115,17 @@ doctor() {
   else
     echo "  WARN: Spark unreachable — interactive-spark mode will retry but extraction blocks"
   fi
+
+  echo ""
+  echo "=== Qdrant Collection Health ==="
+  (
+    cd "$(dirname "$0")/services/data-ingestion"
+    if command -v uv > /dev/null 2>&1; then
+      uv run odin-qdrant-doctor || true
+    else
+      echo "  SKIP: uv not found — cannot run odin-qdrant-doctor"
+    fi
+  )
 }
 
 pull_model() {

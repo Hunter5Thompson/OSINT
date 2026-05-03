@@ -2,15 +2,20 @@
 
 import httpx
 import structlog
+from qdrant_client import AsyncQdrantClient
 
 from config import settings
 from graph.client import GraphClient
 from rag.embedder import embed_text
-from rag.reranker import rerank as _rerank_fn
 from rag.graph_context import get_graph_context as _graph_context_fn
+from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+from rag.reranker import rerank as _rerank_fn
 
 # Lazy singleton GraphClient for graph context injection
 _graph_client: GraphClient | None = None
+
+# One-time preflight flag — schema validated before first search
+_schema_validated: bool = False
 
 
 def _get_graph_client() -> GraphClient | None:
@@ -26,6 +31,30 @@ def _get_graph_client() -> GraphClient | None:
     return _graph_client
 
 logger = structlog.get_logger()
+
+
+async def _ensure_schema_validated() -> None:
+    """Validate the Qdrant collection schema once before the first search.
+
+    Raises QdrantSchemaMismatch if the collection exists but has the wrong schema.
+    Network errors are swallowed — let the search call surface them naturally.
+    """
+    global _schema_validated
+    if _schema_validated:
+        return
+    try:
+        client = AsyncQdrantClient(url=settings.qdrant_url)
+        collections = await client.get_collections()
+        names = {c.name for c in collections.collections}
+        if settings.qdrant_collection in names:
+            info = await client.get_collection(settings.qdrant_collection)
+            validate_collection_schema(info, enable_hybrid=settings.enable_hybrid)
+        _schema_validated = True
+    except QdrantSchemaMismatch:
+        raise
+    except Exception:
+        # Network / connection errors — don't block startup
+        pass
 
 
 async def search(
@@ -47,6 +76,9 @@ async def search(
     Returns:
         List of matching documents with scores.
     """
+    # Preflight: validate schema before the first Qdrant search call
+    await _ensure_schema_validated()
+
     embedding = await embed_text(query)
     if not embedding:
         return []

@@ -6,6 +6,13 @@ import pytest
 
 from feeds.gdelt_collector import GDELTCollector
 from pipeline import ExtractionConfigError, ExtractionTransientError
+from qdrant_client.models import (
+    CollectionConfig,
+    CollectionInfo,
+    CollectionParams,
+    Distance,
+    VectorParams,
+)
 
 
 def _gdelt_response(articles: list[dict] | None = None) -> MagicMock:
@@ -76,3 +83,65 @@ async def test_gdelt_config_skips_upsert():
 
     qdrant.upsert.assert_not_called()
     assert any(c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list)
+
+
+# ---------------------------------------------------------------------------
+# Schema preflight tests — mirror test_qdrant_preflight_ingestion.py pattern
+# ---------------------------------------------------------------------------
+
+
+def _make_phase1_info() -> CollectionInfo:
+    """Dense-only Phase 1 collection info (unnamed vector, 1024 cosine)."""
+    params = CollectionParams.model_construct(
+        vectors=VectorParams(size=1024, distance=Distance.COSINE),
+        sparse_vectors=None,
+    )
+    config = CollectionConfig.model_construct(params=params)
+    return CollectionInfo.model_construct(
+        config=config,
+        payload_schema={},
+        points_count=10,
+    )
+
+
+def test_gdelt_validates_schema_when_collection_exists():
+    """GDELTCollector._ensure_collection calls validate_collection_schema when collection exists."""
+    coll = MagicMock()
+    coll.name = "odin_intel"
+
+    mock_qdrant = MagicMock()
+    mock_qdrant.get_collections.return_value.collections = [coll]
+    mock_qdrant.get_collection.return_value = _make_phase1_info()
+
+    with patch("feeds.gdelt_collector.QdrantClient", return_value=mock_qdrant), \
+         patch("feeds.gdelt_collector.validate_collection_schema") as mock_validate:
+        collector = GDELTCollector.__new__(GDELTCollector)
+        collector.qdrant = mock_qdrant
+        collector._redis = None
+        collector._ensure_collection()
+
+    mock_validate.assert_called_once()
+    mock_qdrant.upsert.assert_not_called()
+
+
+def test_gdelt_phase2_refuses_phase1_collection():
+    """GDELTCollector._ensure_collection raises QdrantSchemaMismatch on schema mismatch, no write."""
+    from qdrant_doctor.schema import QdrantSchemaMismatch
+
+    coll = MagicMock()
+    coll.name = "odin_intel"
+
+    mock_qdrant = MagicMock()
+    mock_qdrant.get_collections.return_value.collections = [coll]
+    mock_qdrant.get_collection.return_value = _make_phase1_info()
+
+    with patch("feeds.gdelt_collector.QdrantClient", return_value=mock_qdrant), \
+         patch("feeds.gdelt_collector.validate_collection_schema",
+               side_effect=QdrantSchemaMismatch("named dense vector required")):
+        collector = GDELTCollector.__new__(GDELTCollector)
+        collector.qdrant = mock_qdrant
+        collector._redis = None
+        with pytest.raises(QdrantSchemaMismatch):
+            collector._ensure_collection()
+
+    mock_qdrant.upsert.assert_not_called()
