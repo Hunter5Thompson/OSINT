@@ -14,7 +14,7 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
 from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
-from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+from qdrant_doctor.schema import validate_collection_schema
 
 log = structlog.get_logger(__name__)
 
