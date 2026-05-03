@@ -77,6 +77,31 @@ class TestIntelligenceValidator:
         with pytest.raises(QdrantSchemaMismatch, match="(?i)sparse"):
             validate_collection_schema(_hybrid(include_sparse=False), enable_hybrid=True)
 
+    def test_hybrid_missing_named_dense_raises(self) -> None:
+        """Hybrid collection without named 'dense' vector must raise."""
+        from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+
+        # Named vectors, but NOT named 'dense'
+        info = _make_info(
+            vectors={"text": VectorParams(size=1024, distance=Distance.COSINE)},
+            sparse_vectors={"bm25": SparseVectorParams(index=SparseIndexParams(on_disk=False))},
+        )
+        with pytest.raises(QdrantSchemaMismatch, match="(?i)dense"):
+            validate_collection_schema(info, enable_hybrid=True)
+
+    def test_hybrid_dense_wrong_distance_raises(self) -> None:
+        """Hybrid collection with named 'dense' vector and wrong distance must raise."""
+        from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+
+        info = _hybrid()
+        # Override the dense vector with wrong distance
+        wrong_info = _make_info(
+            vectors={"dense": VectorParams(size=1024, distance=Distance.EUCLID)},
+            sparse_vectors={"bm25": SparseVectorParams(index=SparseIndexParams(on_disk=False))},
+        )
+        with pytest.raises(QdrantSchemaMismatch, match="(?i)euclid|distance"):
+            validate_collection_schema(wrong_info, enable_hybrid=True)
+
     def test_exception_is_value_error(self) -> None:
         from rag.qdrant_schema import QdrantSchemaMismatch
 

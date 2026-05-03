@@ -82,6 +82,24 @@ class TestVisionValidator:
         with pytest.raises(QdrantSchemaMismatch, match="(?i)named|hybrid|dense"):
             validate_collection_schema(_dense_only(), enable_hybrid=True)
 
+    def test_hybrid_missing_sparse_raises(self) -> None:
+        """Hybrid mode but no sparse vector config must raise."""
+        from qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+
+        with pytest.raises(QdrantSchemaMismatch, match="(?i)sparse|bm25"):
+            validate_collection_schema(_hybrid(include_sparse=False), enable_hybrid=True)
+
+    def test_hybrid_dense_wrong_distance_raises(self) -> None:
+        """Hybrid collection with named 'dense' vector and wrong distance must raise."""
+        from qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+
+        wrong_info = _make_info(
+            vectors={"dense": VectorParams(size=1024, distance=Distance.EUCLID)},
+            sparse_vectors={"bm25": SparseVectorParams(index=SparseIndexParams(on_disk=False))},
+        )
+        with pytest.raises(QdrantSchemaMismatch, match="(?i)euclid|distance"):
+            validate_collection_schema(wrong_info, enable_hybrid=True)
+
     def test_exception_is_value_error(self) -> None:
         from qdrant_schema import QdrantSchemaMismatch
 
