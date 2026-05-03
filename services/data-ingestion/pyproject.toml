@@ -39,6 +39,7 @@ notebooklm = [
 odin-ingest-nlm = "nlm_ingest.cli:cli"
 odin-ingest-gdelt = "gdelt_raw.cli:main"
 odin-infra-atlas = "infra_atlas.cli:cli"
+odin-qdrant-doctor = "qdrant_doctor.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -55,6 +56,7 @@ include = [
   "infra_atlas/**/*.py",
   "infra_atlas/seeds/*.yaml",
   "infra_atlas/seeds/*.json",
+  "qdrant_doctor/*.py",
 ]
 
 [tool.ruff]
