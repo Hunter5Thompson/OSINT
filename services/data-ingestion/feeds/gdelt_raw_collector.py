@@ -21,7 +21,7 @@ log = structlog.get_logger(__name__)
 
 
 async def run_once() -> None:
-    settings = get_settings()
+    gdelt_cfg = get_settings()
     r = aioredis.from_url(
         os.getenv("REDIS_URL", "redis://localhost:6379/0"),
         decode_responses=True,
@@ -46,7 +46,7 @@ async def run_once() -> None:
         collection=settings.qdrant_collection,
     )
     try:
-        await run_forward(state, neo4j, qdrant, Path(settings.parquet_path))
+        await run_forward(state, neo4j, qdrant, Path(gdelt_cfg.parquet_path))
     finally:
         await neo4j.close()
 
