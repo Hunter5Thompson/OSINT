@@ -1,6 +1,21 @@
 """Unit tests for Settings — verifies vLLM/TEI/Neo4j fields, no Ollama."""
 
+import os
+from unittest.mock import patch
+
 from app.config import Settings
+
+# Phase 1 contract: canonical collection name
+_CANONICAL_COLLECTION = "odin_intel"
+
+
+class TestQdrantCollectionDefault:
+    """Phase 1 contract: qdrant_collection default must be odin_intel."""
+
+    def test_qdrant_collection_default(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            s = Settings(_env_file=None, neo4j_password="test-secret")
+            assert s.qdrant_collection == _CANONICAL_COLLECTION
 
 
 class TestSettings:
