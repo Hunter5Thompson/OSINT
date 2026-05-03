@@ -202,3 +202,70 @@
     animation: none !important;
   }
 }
+
+.hud-frame {
+  position: absolute; inset: 0; pointer-events: none;
+  font-family: "Martian Mono", ui-monospace, monospace;
+  font-size: 9px; letter-spacing: .18em; color: var(--ash);
+}
+.hud-corners {
+  position: absolute; inset: 14px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none' viewBox='0 0 100 100' fill='none' stroke='%236b6358' stroke-width='0.4'%3E%3Cpath d='M0 4 L0 0 L4 0 M96 0 L100 0 L100 4 M100 96 L100 100 L96 100 M4 100 L0 100 L0 96'/%3E%3C/svg%3E");
+}
+.hud-crosshair {
+  position: absolute; left: 50%; top: 54%; width: 240px; height: 240px;
+  transform: translate(-50%, -50%);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240' fill='none' stroke='%236b6358' stroke-width='0.4' opacity='.5'%3E%3Cpath d='M115 0 L115 8 M115 232 L115 240 M0 120 L8 120 M232 120 L240 120'/%3E%3C/svg%3E");
+}
+.hud-eyebrow { position: absolute; top: 18px; left: 24px; }
+.hud-time { position: absolute; top: 18px; right: 24px; }
+.hud-scale { position: absolute; bottom: 18px; left: 24px; display: flex; gap: 10px; align-items: center; }
+.hud-scale-bar { width: 80px; height: 1px; background: var(--ash); }
+.hud-coord { position: absolute; bottom: 18px; right: 24px; }
+
+.cartouche { position: absolute; pointer-events: none; }
+.cartouche-circle { right: 30%; top: 40%; text-align: right; color: var(--bone); font-family: "Hanken Grotesk", sans-serif; }
+.cartouche-headline { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: 20px; }
+.cartouche-sub { font-family: "Martian Mono", monospace; font-size: 9px; color: var(--ash); letter-spacing: .14em; }
+.cartouche-country { right: 36px; top: 46%; transform: translateY(-50%); text-align: right; color: var(--bone); font-family: "Hanken Grotesk", sans-serif; }
+.cartouche-endonyms { font-size: 11px; line-height: 1.35; color: rgba(212,205,192,0.8); margin-bottom: 6px; }
+.cartouche-title { margin: 0; font-weight: 300; font-size: 96px; line-height: .95; letter-spacing: -.02em; color: #fafafa; text-shadow: 0 0 24px rgba(0,0,0,.4); }
+.cartouche-cyrillic { font-weight: 300; font-size: 34px; color: var(--amber); margin-top: 4px; }
+.cartouche-endo { font-family: "Hanken Grotesk", sans-serif; font-weight: 300; font-size: 11px; opacity: 0.7; line-height: 1.3; }
+
+.country-header { padding: 14px 18px; font-family: "Hanken Grotesk", sans-serif; }
+.country-title { margin: 4px 0 12px; font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: 22px; color: var(--bone); }
+.country-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 11px; color: var(--bone); }
+.country-grid dt { font-family: "Martian Mono", monospace; font-size: 9px; color: var(--ash); letter-spacing: .14em; text-transform: uppercase; }
+.country-placeholder { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--granite); font-family: "Martian Mono", monospace; font-size: 9px; color: var(--ash); letter-spacing: .14em; text-transform: uppercase; }
+
+.capital-pulse {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 6;
+}
+.capital-pulse-dot {
+  position: absolute;
+  left: -3px; top: -3px;
+  width: 6px; height: 6px;
+  background: var(--capital-red);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(230, 58, 38, 0.3), 0 0 14px rgba(230, 58, 38, 0.85);
+}
+.capital-pulse-ring {
+  position: absolute;
+  left: -7px; top: -7px;
+  width: 14px; height: 14px;
+  border: 1px solid rgba(230, 58, 38, 0.5);
+  border-radius: 50%;
+}
+.capital-pulse-label {
+  position: absolute;
+  left: 14px; top: -7px;
+  font-family: "Hanken Grotesk", sans-serif;
+  font-size: 11px;
+  color: var(--city-label);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}

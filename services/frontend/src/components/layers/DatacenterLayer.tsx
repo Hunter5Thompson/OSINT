@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { DatacenterGeoJSON, DatacenterProperties } from "../../types";
+import { glyphColor } from "./glyphTokens";
 
 const ICON_COLOR = "#00e5ff";
 const LABEL_ALTITUDE_THRESHOLD = 5_000_000;
@@ -138,13 +139,17 @@ export function DatacenterLayer({ viewer, datacenters, visible, onSelect }: Data
         scale: 0.8,
         eyeOffset: new Cesium.Cartesian3(0, 0, -20),
       });
-      idMapRef.current.set(bb as unknown as object, feature.properties);
+      idMapRef.current.set(bb as unknown as object, {
+        ...feature.properties,
+        longitude: lon,
+        latitude: lat,
+      });
 
       lc.add({
         position,
         text: feature.properties.name,
         font: "11px monospace",
-        fillColor: Cesium.Color.fromCssColorString(ICON_COLOR).withAlpha(0.9),
+        fillColor: glyphColor.stone().withAlpha(0.9),
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 2,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,

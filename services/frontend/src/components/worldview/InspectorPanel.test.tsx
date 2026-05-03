@@ -98,4 +98,51 @@ describe("InspectorPanel", () => {
       "https://www.gem.wiki/Sabine_Pass_LNG_Terminal",
     );
   });
+
+  it("renders a Source link for a datacenter with source_url", () => {
+    render(
+      <InspectorPanel
+        selected={{
+          type: "datacenter",
+          data: {
+            name: "AWS US-East-1 (Ashburn)",
+            operator: "Amazon Web Services",
+            tier: "hyperscaler",
+            capacity_mw: 600,
+            country: "US",
+            city: "Ashburn",
+            source_url: "https://baxtel.com/data-center/aws-us-east-1",
+            coord_quality: "campus_verified",
+            coord_source: "https://baxtel.com/data-center/aws-us-east-1",
+          },
+        }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+    const link = screen.getByRole("link", { name: /Source/i });
+    expect(link).toHaveAttribute("href", "https://baxtel.com/data-center/aws-us-east-1");
+    expect(screen.getByText(/campus_verified/)).toBeInTheDocument();
+  });
+
+  it("hides the Source link when datacenter source_url is absent", () => {
+    render(
+      <InspectorPanel
+        selected={{
+          type: "datacenter",
+          data: {
+            name: "Legacy DC",
+            operator: "Acme",
+            tier: "III",
+            capacity_mw: null,
+            country: "DE",
+            city: "Berlin",
+          },
+        }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+    expect(screen.queryByRole("link", { name: /Source/i })).toBeNull();
+  });
 });

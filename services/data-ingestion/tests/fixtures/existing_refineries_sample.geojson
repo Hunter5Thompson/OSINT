@@ -1,0 +1,43 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [69.868889, 22.348056]},
+      "properties": {
+        "name": "Jamnagar Refinery",
+        "operator": "Reliance Industries",
+        "capacity_bpd": 1240000,
+        "country": "IN",
+        "status": "active",
+        "facility_type": "refinery",
+        "image_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Existing_Jamnagar.jpg",
+        "specs": ["Existing curated note about Jamnagar."]
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [50.158, 26.643]},
+      "properties": {
+        "name": "Ras Tanura Refinery",
+        "operator": "Saudi Aramco",
+        "capacity_bpd": 550000,
+        "country": "SA",
+        "status": "active",
+        "facility_type": "refinery"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-95.255, 29.736]},
+      "properties": {
+        "name": "Baytown Refinery",
+        "operator": "ExxonMobil",
+        "capacity_bpd": 584000,
+        "country": "US",
+        "status": "active",
+        "facility_type": "refinery"
+      }
+    }
+  ]
+}

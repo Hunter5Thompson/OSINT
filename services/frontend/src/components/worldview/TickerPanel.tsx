@@ -1,8 +1,14 @@
 import { useSignalFeed } from "../../hooks/useSignalFeed";
-import { OverlayPanel } from "../hlidskjalf/OverlayPanel";
+import { OverlayPanel, type OverlayPanelVariant } from "../hlidskjalf/OverlayPanel";
 import { SignalFeedItem } from "../hlidskjalf/SignalFeedItem";
 
 type Severity = "sent" | "amb" | "sage" | "dim";
+
+interface TickerPanelProps {
+  variant?: OverlayPanelVariant;
+  onClose?: () => void;
+  onExpand?: () => void;
+}
 
 function mapSeverity(severity: string | undefined): Severity {
   switch (severity) {
@@ -25,11 +31,25 @@ function formatTime(iso: string): string {
   return `${hh}:${mm}Z`;
 }
 
-export function TickerPanel() {
+export function TickerPanel({ variant = "expanded", onClose, onExpand }: TickerPanelProps = {}) {
   const { items, status } = useSignalFeed();
 
+  if (variant === "collapsed") {
+    return (
+      <OverlayPanel paragraph="IV" label="Ticker" variant="collapsed" onExpand={onExpand}>
+        {null}
+      </OverlayPanel>
+    );
+  }
+
   return (
-    <OverlayPanel paragraph="IV" label="Ticker" variant="expanded" width={340}>
+    <OverlayPanel
+      paragraph="IV"
+      label="Ticker"
+      variant="expanded"
+      width={340}
+      onClose={onClose}
+    >
       <div style={{ display: "grid", gap: "0.15rem", maxHeight: 228, overflowY: "auto" }}>
         {status === "reconnecting" ? (
           <span className="mono" style={{ color: "var(--ash)", fontSize: "0.65rem" }}>

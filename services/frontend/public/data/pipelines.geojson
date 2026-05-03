@@ -11,17 +11,125 @@
         "operator": "Nord Stream AG",
         "capacity_bcm": 55.0,
         "length_km": 1224,
-        "countries": ["Russia", "Germany"]
+        "countries": [
+          "Russia",
+          "Germany"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Nord_Stream"
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [28.8, 59.4],
-          [25.0, 59.2],
-          [20.0, 58.5],
-          [17.5, 56.5],
-          [13.6, 54.6],
-          [12.1, 54.1]
+          [
+            28.7,
+            60.5
+          ],
+          [
+            25.0,
+            59.5
+          ],
+          [
+            19.0,
+            57.5
+          ],
+          [
+            15.0,
+            55.5
+          ],
+          [
+            13.5,
+            54.1
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Nord Stream 2",
+        "tier": "major",
+        "type": "gas",
+        "status": "planned",
+        "operator": "Nord Stream 2 AG",
+        "capacity_bcm": 55.0,
+        "length_km": 1230,
+        "countries": [
+          "Russia",
+          "Germany"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Nord_Stream_2"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            28.6,
+            60.3
+          ],
+          [
+            25.0,
+            59.3
+          ],
+          [
+            19.0,
+            57.3
+          ],
+          [
+            15.0,
+            55.3
+          ],
+          [
+            13.4,
+            53.9
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Yamal\u2013Europe pipeline",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Gazprom",
+        "capacity_bcm": 33.0,
+        "length_km": 4196,
+        "countries": [
+          "Russia",
+          "Belarus",
+          "Poland",
+          "Germany"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Yamal%E2%80%93Europe_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            68.9,
+            67.5
+          ],
+          [
+            55.0,
+            58.5
+          ],
+          [
+            40.0,
+            55.0
+          ],
+          [
+            28.0,
+            53.5
+          ],
+          [
+            19.0,
+            52.2
+          ],
+          [
+            14.5,
+            52.4
+          ]
         ]
       }
     },
@@ -32,154 +140,261 @@
         "tier": "major",
         "type": "gas",
         "status": "active",
-        "operator": "South Stream Transport B.V.",
+        "operator": "Gazprom",
         "capacity_bcm": 31.5,
-        "length_km": 930,
-        "countries": ["Russia", "Turkey"]
+        "length_km": 1100,
+        "countries": [
+          "Russia",
+          "Turkey"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/TurkStream"
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [38.5, 44.6],
-          [37.0, 43.0],
-          [34.0, 42.5],
-          [31.0, 42.0],
-          [29.5, 41.5],
-          [28.7, 41.2]
+          [
+            37.5,
+            45.0
+          ],
+          [
+            35.0,
+            43.5
+          ],
+          [
+            33.0,
+            42.0
+          ],
+          [
+            30.5,
+            41.6
+          ],
+          [
+            28.6,
+            41.7
+          ]
         ]
       }
     },
     {
       "type": "Feature",
       "properties": {
-        "name": "BTC Pipeline",
-        "tier": "major",
-        "type": "oil",
-        "status": "active",
-        "operator": "BP",
-        "capacity_bcm": null,
-        "length_km": 1768,
-        "countries": ["Azerbaijan", "Georgia", "Turkey"]
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [49.9, 40.4],
-          [47.5, 41.0],
-          [45.0, 41.7],
-          [43.5, 41.8],
-          [41.0, 41.2],
-          [39.5, 40.5],
-          [37.0, 39.0],
-          [36.0, 36.8]
-        ]
-      }
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "name": "TANAP",
+        "name": "Blue Stream",
         "tier": "major",
         "type": "gas",
         "status": "active",
-        "operator": "BOTAŞ",
+        "operator": "Gazprom",
         "capacity_bcm": 16.0,
-        "length_km": 1850,
-        "countries": ["Azerbaijan", "Turkey", "Greece"]
+        "length_km": 1213,
+        "countries": [
+          "Russia",
+          "Turkey"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Blue_Stream"
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [49.9, 40.4],
-          [47.5, 41.0],
-          [43.5, 41.8],
-          [41.0, 40.5],
-          [39.0, 39.5],
-          [36.0, 38.5],
-          [33.0, 39.5],
-          [30.0, 40.0],
-          [27.0, 40.5],
-          [26.0, 40.8]
+          [
+            37.9,
+            43.4
+          ],
+          [
+            37.0,
+            42.5
+          ],
+          [
+            36.0,
+            41.8
+          ],
+          [
+            36.3,
+            41.3
+          ],
+          [
+            35.0,
+            40.0
+          ]
         ]
       }
     },
     {
       "type": "Feature",
       "properties": {
-        "name": "Druzhba Pipeline",
+        "name": "Brotherhood pipeline",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Gazprom",
+        "capacity_bcm": 100.0,
+        "length_km": 4451,
+        "countries": [
+          "Russia",
+          "Ukraine",
+          "Slovakia",
+          "Czechia",
+          "Austria"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Brotherhood_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            55.0,
+            57.5
+          ],
+          [
+            40.0,
+            54.0
+          ],
+          [
+            30.0,
+            50.5
+          ],
+          [
+            24.0,
+            49.0
+          ],
+          [
+            19.0,
+            48.5
+          ],
+          [
+            16.4,
+            48.2
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Soyuz pipeline",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Gazprom",
+        "capacity_bcm": 32.0,
+        "length_km": 2750,
+        "countries": [
+          "Russia",
+          "Ukraine"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Soyuz_gas_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            55.0,
+            52.0
+          ],
+          [
+            45.0,
+            50.0
+          ],
+          [
+            38.0,
+            49.5
+          ],
+          [
+            32.0,
+            49.0
+          ],
+          [
+            24.0,
+            48.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Druzhba pipeline",
         "tier": "major",
         "type": "oil",
         "status": "active",
         "operator": "Transneft",
         "capacity_bcm": null,
         "length_km": 4000,
-        "countries": ["Russia", "Belarus", "Ukraine", "Poland", "Germany", "Hungary", "Slovakia", "Czech Republic"]
+        "countries": [
+          "Russia",
+          "Belarus",
+          "Ukraine",
+          "Poland",
+          "Germany"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Druzhba_pipeline"
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [52.0, 56.0],
-          [48.0, 55.5],
-          [43.0, 54.0],
-          [38.0, 53.5],
-          [33.0, 53.0],
-          [28.0, 52.8],
-          [24.0, 52.5],
-          [21.0, 52.5],
-          [18.0, 52.0],
-          [14.5, 51.5]
+          [
+            52.5,
+            54.9
+          ],
+          [
+            44.0,
+            53.5
+          ],
+          [
+            29.3,
+            52.0
+          ],
+          [
+            22.0,
+            52.4
+          ],
+          [
+            18.0,
+            52.5
+          ],
+          [
+            14.3,
+            53.0
+          ]
         ]
       }
     },
     {
       "type": "Feature",
       "properties": {
-        "name": "East-West Pipeline",
+        "name": "Baltic Pipeline System",
         "tier": "major",
         "type": "oil",
         "status": "active",
-        "operator": "Saudi Aramco",
+        "operator": "Transneft",
         "capacity_bcm": null,
-        "length_km": 1200,
-        "countries": ["Saudi Arabia"]
+        "length_km": 1190,
+        "countries": [
+          "Russia"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Baltic_Pipeline_System"
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [50.1, 26.4],
-          [48.5, 26.0],
-          [46.0, 25.0],
-          [44.0, 24.5],
-          [42.0, 24.0],
-          [39.5, 23.5],
-          [38.0, 22.5]
-        ]
-      }
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "name": "Keystone Pipeline",
-        "tier": "major",
-        "type": "oil",
-        "status": "active",
-        "operator": "TC Energy",
-        "capacity_bcm": null,
-        "length_km": 4324,
-        "countries": ["Canada", "United States"]
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [-110.0, 52.0],
-          [-108.0, 50.0],
-          [-105.0, 49.0],
-          [-100.0, 46.0],
-          [-97.0, 42.0],
-          [-97.0, 38.0],
-          [-96.0, 35.0],
-          [-95.0, 32.0],
-          [-94.5, 29.5]
+          [
+            55.0,
+            57.0
+          ],
+          [
+            42.0,
+            59.5
+          ],
+          [
+            36.0,
+            59.7
+          ],
+          [
+            30.5,
+            59.9
+          ],
+          [
+            28.5,
+            59.4
+          ]
         ]
       }
     },
@@ -193,68 +408,1819 @@
         "operator": "Gazprom",
         "capacity_bcm": 38.0,
         "length_km": 3000,
-        "countries": ["Russia", "China"]
+        "countries": [
+          "Russia",
+          "China"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Power_of_Siberia"
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [130.0, 53.0],
-          [128.0, 51.0],
-          [127.5, 49.5],
-          [127.0, 48.0],
-          [126.5, 46.5],
-          [126.0, 45.0]
+          [
+            114.0,
+            60.0
+          ],
+          [
+            122.0,
+            55.0
+          ],
+          [
+            127.0,
+            52.0
+          ],
+          [
+            127.5,
+            50.5
+          ],
+          [
+            127.0,
+            47.5
+          ],
+          [
+            125.0,
+            42.0
+          ],
+          [
+            116.4,
+            39.9
+          ]
         ]
       }
     },
     {
       "type": "Feature",
       "properties": {
-        "name": "TAP",
+        "name": "Eastern Siberia \u2013 Pacific Ocean oil pipeline",
         "tier": "major",
-        "type": "gas",
+        "type": "oil",
         "status": "active",
-        "operator": "Trans Adriatic Pipeline AG",
-        "capacity_bcm": 10.0,
-        "length_km": 878,
-        "countries": ["Greece", "Albania", "Italy"]
+        "operator": "Transneft",
+        "capacity_bcm": null,
+        "length_km": 4857,
+        "countries": [
+          "Russia"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Eastern_Siberia%E2%80%93Pacific_Ocean_oil_pipeline"
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [26.0, 40.8],
-          [24.0, 40.5],
-          [21.0, 40.2],
-          [19.8, 40.5],
-          [18.5, 40.8],
-          [17.0, 41.0]
+          [
+            98.0,
+            56.0
+          ],
+          [
+            110.0,
+            55.5
+          ],
+          [
+            122.0,
+            54.5
+          ],
+          [
+            127.5,
+            54.0
+          ],
+          [
+            133.5,
+            48.5
+          ],
+          [
+            133.1,
+            42.7
+          ]
         ]
       }
     },
     {
       "type": "Feature",
       "properties": {
-        "name": "Yamal-Europe Pipeline",
-        "tier": "major",
+        "name": "Sakhalin\u2013Khabarovsk\u2013Vladivostok pipeline",
+        "tier": "regional",
         "type": "gas",
         "status": "active",
         "operator": "Gazprom",
-        "capacity_bcm": 33.0,
-        "length_km": 4196,
-        "countries": ["Russia", "Belarus", "Poland", "Germany"]
+        "capacity_bcm": 6.0,
+        "length_km": 1830,
+        "countries": [
+          "Russia"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Sakhalin%E2%80%93Khabarovsk%E2%80%93Vladivostok_pipeline"
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
-          [73.0, 68.0],
-          [65.0, 62.0],
-          [55.0, 58.0],
-          [45.0, 55.0],
-          [35.0, 53.5],
-          [28.0, 52.5],
-          [22.0, 52.0],
-          [18.0, 52.5],
-          [14.5, 52.5]
+          [
+            143.0,
+            53.5
+          ],
+          [
+            140.5,
+            50.5
+          ],
+          [
+            135.0,
+            48.5
+          ],
+          [
+            132.0,
+            45.0
+          ],
+          [
+            131.9,
+            43.1
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Baku\u2013Tbilisi\u2013Ceyhan pipeline",
+        "tier": "major",
+        "type": "oil",
+        "status": "active",
+        "operator": "BP",
+        "capacity_bcm": null,
+        "length_km": 1768,
+        "countries": [
+          "Azerbaijan",
+          "Georgia",
+          "Turkey"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Baku%E2%80%93Tbilisi%E2%80%93Ceyhan_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            49.7,
+            40.4
+          ],
+          [
+            46.0,
+            41.5
+          ],
+          [
+            44.8,
+            41.7
+          ],
+          [
+            41.0,
+            40.5
+          ],
+          [
+            37.0,
+            38.5
+          ],
+          [
+            35.8,
+            36.6
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "South Caucasus Pipeline",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "BP",
+        "capacity_bcm": 24.0,
+        "length_km": 692,
+        "countries": [
+          "Azerbaijan",
+          "Georgia",
+          "Turkey"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/South_Caucasus_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            49.8,
+            40.3
+          ],
+          [
+            46.0,
+            41.4
+          ],
+          [
+            43.5,
+            41.6
+          ],
+          [
+            41.0,
+            40.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Trans-Anatolian gas pipeline (TANAP)",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "SOCAR",
+        "capacity_bcm": 16.0,
+        "length_km": 1841,
+        "countries": [
+          "Turkey",
+          "Greece"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Trans-Anatolian_gas_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            44.0,
+            40.0
+          ],
+          [
+            40.0,
+            39.5
+          ],
+          [
+            36.0,
+            39.0
+          ],
+          [
+            32.0,
+            40.0
+          ],
+          [
+            28.0,
+            40.7
+          ],
+          [
+            26.0,
+            40.9
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Trans-Adriatic Pipeline (TAP)",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "TAP AG",
+        "capacity_bcm": 10.0,
+        "length_km": 878,
+        "countries": [
+          "Greece",
+          "Albania",
+          "Italy"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Trans_Adriatic_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            26.0,
+            40.9
+          ],
+          [
+            22.0,
+            40.7
+          ],
+          [
+            20.0,
+            40.5
+          ],
+          [
+            19.5,
+            40.5
+          ],
+          [
+            18.0,
+            40.3
+          ],
+          [
+            17.5,
+            40.4
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Iran\u2013Turkey gas pipeline (Tabriz\u2013Ankara)",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "National Iranian Gas",
+        "capacity_bcm": 14.0,
+        "length_km": 2577,
+        "countries": [
+          "Iran",
+          "Turkey"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Iran%E2%80%93Turkey_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            51.4,
+            35.7
+          ],
+          [
+            49.0,
+            37.5
+          ],
+          [
+            46.3,
+            38.1
+          ],
+          [
+            42.0,
+            39.5
+          ],
+          [
+            36.0,
+            39.5
+          ],
+          [
+            32.85,
+            39.93
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Dolphin gas pipeline",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Dolphin Energy",
+        "capacity_bcm": 33.0,
+        "length_km": 364,
+        "countries": [
+          "Qatar",
+          "United Arab Emirates",
+          "Oman"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Dolphin_Gas_Project"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            51.5,
+            25.5
+          ],
+          [
+            52.5,
+            24.7
+          ],
+          [
+            53.5,
+            24.5
+          ],
+          [
+            54.4,
+            24.5
+          ],
+          [
+            56.5,
+            24.0
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Arab Gas Pipeline",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "Egyptian Natural Gas Holding",
+        "capacity_bcm": 10.0,
+        "length_km": 1200,
+        "countries": [
+          "Egypt",
+          "Jordan",
+          "Syria",
+          "Lebanon"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Arab_Gas_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            33.6,
+            30.6
+          ],
+          [
+            35.0,
+            29.8
+          ],
+          [
+            35.9,
+            31.9
+          ],
+          [
+            36.5,
+            33.5
+          ],
+          [
+            35.5,
+            33.9
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "SUMED pipeline",
+        "tier": "major",
+        "type": "oil",
+        "status": "active",
+        "operator": "Arab Petroleum Pipelines Company",
+        "capacity_bcm": null,
+        "length_km": 320,
+        "countries": [
+          "Egypt"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/SUMED_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            32.5,
+            29.9
+          ],
+          [
+            31.5,
+            30.4
+          ],
+          [
+            30.5,
+            30.7
+          ],
+          [
+            29.9,
+            31.0
+          ],
+          [
+            29.5,
+            31.2
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Trans-Arabian Pipeline (Tapline)",
+        "tier": "regional",
+        "type": "oil",
+        "status": "shutdown",
+        "operator": "Aramco",
+        "capacity_bcm": null,
+        "length_km": 1213,
+        "countries": [
+          "Saudi Arabia",
+          "Jordan",
+          "Lebanon"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Trans-Arabian_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            50.2,
+            26.4
+          ],
+          [
+            44.0,
+            28.5
+          ],
+          [
+            39.0,
+            30.0
+          ],
+          [
+            36.0,
+            32.5
+          ],
+          [
+            35.5,
+            33.4
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "East\u2013West (Petroline)",
+        "tier": "major",
+        "type": "oil",
+        "status": "active",
+        "operator": "Saudi Aramco",
+        "capacity_bcm": null,
+        "length_km": 1200,
+        "countries": [
+          "Saudi Arabia"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/East-West_Crude_Oil_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            50.2,
+            26.4
+          ],
+          [
+            47.0,
+            25.5
+          ],
+          [
+            44.0,
+            24.5
+          ],
+          [
+            41.0,
+            22.5
+          ],
+          [
+            39.5,
+            21.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Central Asia \u2013 China gas pipeline",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "PetroChina",
+        "capacity_bcm": 55.0,
+        "length_km": 3666,
+        "countries": [
+          "Turkmenistan",
+          "Uzbekistan",
+          "Kazakhstan",
+          "China"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Central_Asia%E2%80%93China_gas_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            57.0,
+            38.5
+          ],
+          [
+            64.0,
+            40.0
+          ],
+          [
+            69.5,
+            41.5
+          ],
+          [
+            75.0,
+            43.0
+          ],
+          [
+            80.5,
+            44.5
+          ],
+          [
+            88.0,
+            42.0
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "West\u2013East Gas Pipeline (China)",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "PetroChina",
+        "capacity_bcm": 30.0,
+        "length_km": 4843,
+        "countries": [
+          "China"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/West%E2%80%93East_Gas_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            80.5,
+            44.0
+          ],
+          [
+            88.0,
+            42.5
+          ],
+          [
+            100.0,
+            38.0
+          ],
+          [
+            110.0,
+            36.0
+          ],
+          [
+            118.0,
+            33.5
+          ],
+          [
+            121.5,
+            31.2
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Kazakhstan\u2013China oil pipeline",
+        "tier": "regional",
+        "type": "oil",
+        "status": "active",
+        "operator": "KazTransOil / CNPC",
+        "capacity_bcm": null,
+        "length_km": 2228,
+        "countries": [
+          "Kazakhstan",
+          "China"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Kazakhstan%E2%80%93China_oil_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            51.2,
+            46.3
+          ],
+          [
+            60.0,
+            47.0
+          ],
+          [
+            71.5,
+            46.5
+          ],
+          [
+            79.0,
+            44.5
+          ],
+          [
+            87.5,
+            43.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Turkmenistan\u2013Afghanistan\u2013Pakistan\u2013India pipeline (TAPI)",
+        "tier": "major",
+        "type": "gas",
+        "status": "under_construction",
+        "operator": "TAPI Pipeline Company",
+        "capacity_bcm": 33.0,
+        "length_km": 1814,
+        "countries": [
+          "Turkmenistan",
+          "Afghanistan",
+          "Pakistan",
+          "India"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Turkmenistan%E2%80%93Afghanistan%E2%80%93Pakistan%E2%80%93India_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            62.0,
+            38.5
+          ],
+          [
+            64.5,
+            34.5
+          ],
+          [
+            68.0,
+            31.5
+          ],
+          [
+            71.5,
+            30.0
+          ],
+          [
+            74.5,
+            29.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Trans-Mediterranean Pipeline (Transmed)",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Eni / Sonatrach",
+        "capacity_bcm": 33.5,
+        "length_km": 2475,
+        "countries": [
+          "Algeria",
+          "Tunisia",
+          "Italy"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Trans-Mediterranean_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            3.3,
+            32.9
+          ],
+          [
+            8.0,
+            34.0
+          ],
+          [
+            10.5,
+            36.5
+          ],
+          [
+            12.5,
+            37.5
+          ],
+          [
+            14.0,
+            40.0
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Maghreb\u2013Europe Gas Pipeline",
+        "tier": "major",
+        "type": "gas",
+        "status": "shutdown",
+        "operator": "Sonatrach",
+        "capacity_bcm": 12.0,
+        "length_km": 1620,
+        "countries": [
+          "Algeria",
+          "Morocco",
+          "Spain"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Maghreb%E2%80%93Europe_Gas_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            3.3,
+            32.9
+          ],
+          [
+            -1.5,
+            34.5
+          ],
+          [
+            -5.5,
+            35.7
+          ],
+          [
+            -5.4,
+            36.3
+          ],
+          [
+            -4.5,
+            37.0
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Medgaz",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Medgaz",
+        "capacity_bcm": 10.0,
+        "length_km": 757,
+        "countries": [
+          "Algeria",
+          "Spain"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Medgaz"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -1.4,
+            35.3
+          ],
+          [
+            -1.6,
+            35.8
+          ],
+          [
+            -2.0,
+            36.3
+          ],
+          [
+            -2.5,
+            36.8
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Greenstream pipeline",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "Eni / Mellitah Oil & Gas",
+        "capacity_bcm": 8.0,
+        "length_km": 540,
+        "countries": [
+          "Libya",
+          "Italy"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Greenstream_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            14.5,
+            32.7
+          ],
+          [
+            14.0,
+            34.5
+          ],
+          [
+            14.3,
+            36.5
+          ],
+          [
+            14.5,
+            37.4
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Chad\u2013Cameroon Petroleum Pipeline",
+        "tier": "regional",
+        "type": "oil",
+        "status": "active",
+        "operator": "COTCO",
+        "capacity_bcm": null,
+        "length_km": 1070,
+        "countries": [
+          "Chad",
+          "Cameroon"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Chad%E2%80%93Cameroon_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            16.0,
+            8.5
+          ],
+          [
+            14.5,
+            7.5
+          ],
+          [
+            12.5,
+            5.5
+          ],
+          [
+            10.5,
+            4.5
+          ],
+          [
+            9.7,
+            4.0
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "West African Gas Pipeline",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "WAPCo",
+        "capacity_bcm": 5.0,
+        "length_km": 678,
+        "countries": [
+          "Nigeria",
+          "Benin",
+          "Togo",
+          "Ghana"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/West_African_Gas_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            3.4,
+            6.5
+          ],
+          [
+            2.5,
+            6.4
+          ],
+          [
+            1.5,
+            6.3
+          ],
+          [
+            0.5,
+            5.7
+          ],
+          [
+            -0.2,
+            5.6
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "East African Crude Oil Pipeline (EACOP)",
+        "tier": "major",
+        "type": "oil",
+        "status": "under_construction",
+        "operator": "TotalEnergies",
+        "capacity_bcm": null,
+        "length_km": 1443,
+        "countries": [
+          "Uganda",
+          "Tanzania"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/East_African_Crude_Oil_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            31.5,
+            1.5
+          ],
+          [
+            32.5,
+            0.5
+          ],
+          [
+            34.0,
+            -2.5
+          ],
+          [
+            36.0,
+            -4.5
+          ],
+          [
+            38.5,
+            -6.0
+          ],
+          [
+            39.0,
+            -7.0
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Keystone Pipeline",
+        "tier": "major",
+        "type": "oil",
+        "status": "active",
+        "operator": "TC Energy",
+        "capacity_bcm": null,
+        "length_km": 3461,
+        "countries": [
+          "Canada",
+          "United States"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Keystone_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -110.0,
+            53.0
+          ],
+          [
+            -104.0,
+            49.0
+          ],
+          [
+            -99.0,
+            45.0
+          ],
+          [
+            -96.0,
+            40.0
+          ],
+          [
+            -94.0,
+            35.0
+          ],
+          [
+            -93.5,
+            29.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Trans Mountain Pipeline",
+        "tier": "regional",
+        "type": "oil",
+        "status": "active",
+        "operator": "Trans Mountain Corporation",
+        "capacity_bcm": null,
+        "length_km": 1150,
+        "countries": [
+          "Canada"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Trans_Mountain_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -113.5,
+            53.5
+          ],
+          [
+            -117.0,
+            52.5
+          ],
+          [
+            -120.0,
+            51.0
+          ],
+          [
+            -122.5,
+            49.5
+          ],
+          [
+            -122.9,
+            49.3
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Enbridge Mainline",
+        "tier": "major",
+        "type": "oil",
+        "status": "active",
+        "operator": "Enbridge",
+        "capacity_bcm": null,
+        "length_km": 5000,
+        "countries": [
+          "Canada",
+          "United States"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Enbridge_Mainline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -113.5,
+            53.5
+          ],
+          [
+            -105.0,
+            50.5
+          ],
+          [
+            -97.0,
+            49.0
+          ],
+          [
+            -92.0,
+            46.5
+          ],
+          [
+            -85.0,
+            42.5
+          ],
+          [
+            -79.5,
+            42.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Colonial Pipeline",
+        "tier": "major",
+        "type": "oil",
+        "status": "active",
+        "operator": "Colonial Pipeline Company",
+        "capacity_bcm": null,
+        "length_km": 8850,
+        "countries": [
+          "United States"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Colonial_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -95.0,
+            29.7
+          ],
+          [
+            -88.0,
+            32.5
+          ],
+          [
+            -84.5,
+            33.7
+          ],
+          [
+            -78.5,
+            36.0
+          ],
+          [
+            -77.0,
+            38.9
+          ],
+          [
+            -74.0,
+            40.7
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Dakota Access Pipeline",
+        "tier": "regional",
+        "type": "oil",
+        "status": "active",
+        "operator": "Energy Transfer Partners",
+        "capacity_bcm": null,
+        "length_km": 1886,
+        "countries": [
+          "United States"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Dakota_Access_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -103.5,
+            47.5
+          ],
+          [
+            -100.0,
+            45.0
+          ],
+          [
+            -96.5,
+            42.5
+          ],
+          [
+            -93.5,
+            40.5
+          ],
+          [
+            -91.0,
+            38.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Permian Highway Pipeline",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "Kinder Morgan",
+        "capacity_bcm": 21.0,
+        "length_km": 692,
+        "countries": [
+          "United States"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Permian_Highway_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -104.0,
+            32.0
+          ],
+          [
+            -101.5,
+            31.0
+          ],
+          [
+            -99.0,
+            30.5
+          ],
+          [
+            -97.0,
+            29.5
+          ],
+          [
+            -96.0,
+            29.0
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Rockies Express Pipeline",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "Tallgrass Energy",
+        "capacity_bcm": 18.0,
+        "length_km": 2702,
+        "countries": [
+          "United States"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Rockies_Express_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -108.0,
+            41.0
+          ],
+          [
+            -103.0,
+            40.0
+          ],
+          [
+            -95.0,
+            39.5
+          ],
+          [
+            -87.0,
+            39.5
+          ],
+          [
+            -81.5,
+            40.0
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Mountain Valley Pipeline",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "Equitrans Midstream",
+        "capacity_bcm": 20.0,
+        "length_km": 487,
+        "countries": [
+          "United States"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Mountain_Valley_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -80.5,
+            39.5
+          ],
+          [
+            -80.0,
+            38.5
+          ],
+          [
+            -79.5,
+            37.5
+          ],
+          [
+            -79.0,
+            37.0
+          ],
+          [
+            -80.0,
+            36.7
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Atlantic Sunrise Pipeline",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "Williams Companies",
+        "capacity_bcm": 18.0,
+        "length_km": 320,
+        "countries": [
+          "United States"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Atlantic_Sunrise_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -77.0,
+            41.7
+          ],
+          [
+            -76.5,
+            41.0
+          ],
+          [
+            -76.5,
+            40.0
+          ],
+          [
+            -76.5,
+            39.0
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Coastal GasLink Pipeline",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "TC Energy",
+        "capacity_bcm": 14.0,
+        "length_km": 670,
+        "countries": [
+          "Canada"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Coastal_GasLink_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -121.0,
+            55.5
+          ],
+          [
+            -124.0,
+            54.5
+          ],
+          [
+            -126.5,
+            54.0
+          ],
+          [
+            -128.5,
+            54.0
+          ],
+          [
+            -128.6,
+            54.05
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "GASBOL (Bolivia\u2013Brazil pipeline)",
+        "tier": "major",
+        "type": "gas",
+        "status": "active",
+        "operator": "TBG / GTB",
+        "capacity_bcm": 11.0,
+        "length_km": 3150,
+        "countries": [
+          "Bolivia",
+          "Brazil"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Bolivia%E2%80%93Brazil_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -63.2,
+            -17.8
+          ],
+          [
+            -58.0,
+            -19.0
+          ],
+          [
+            -54.0,
+            -22.0
+          ],
+          [
+            -49.0,
+            -23.5
+          ],
+          [
+            -46.6,
+            -23.5
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "OCENSA pipeline",
+        "tier": "regional",
+        "type": "oil",
+        "status": "active",
+        "operator": "Cenit / Ecopetrol",
+        "capacity_bcm": null,
+        "length_km": 829,
+        "countries": [
+          "Colombia"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/OCENSA_pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -72.5,
+            4.5
+          ],
+          [
+            -73.5,
+            5.5
+          ],
+          [
+            -74.5,
+            7.5
+          ],
+          [
+            -75.5,
+            8.5
+          ],
+          [
+            -75.5,
+            9.4
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "TGN gas pipeline",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "TGN",
+        "capacity_bcm": 23.0,
+        "length_km": 9000,
+        "countries": [
+          "Argentina"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Transportadora_de_Gas_del_Norte"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -67.5,
+            -32.5
+          ],
+          [
+            -65.5,
+            -30.5
+          ],
+          [
+            -64.0,
+            -29.0
+          ],
+          [
+            -62.0,
+            -29.5
+          ],
+          [
+            -58.5,
+            -34.6
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Trans Austria Gas Pipeline",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "Gas Connect Austria",
+        "capacity_bcm": 47.0,
+        "length_km": 380,
+        "countries": [
+          "Austria"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Trans_Austria_Gas_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            16.9,
+            48.5
+          ],
+          [
+            15.5,
+            48.0
+          ],
+          [
+            14.0,
+            47.5
+          ],
+          [
+            12.5,
+            47.5
+          ],
+          [
+            11.5,
+            47.4
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "BBL Pipeline (Balgzand\u2013Bacton Line)",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "BBL Company",
+        "capacity_bcm": 19.2,
+        "length_km": 235,
+        "countries": [
+          "Netherlands",
+          "United Kingdom"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/BBL_Pipeline"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            4.7,
+            52.9
+          ],
+          [
+            3.5,
+            53.0
+          ],
+          [
+            2.0,
+            52.9
+          ],
+          [
+            1.4,
+            52.7
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Interconnector (UK\u2013Belgium)",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "Interconnector (UK)",
+        "capacity_bcm": 25.5,
+        "length_km": 235,
+        "countries": [
+          "United Kingdom",
+          "Belgium"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Interconnector_(North_Sea)"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.3,
+            52.5
+          ],
+          [
+            2.0,
+            52.0
+          ],
+          [
+            2.5,
+            51.5
+          ],
+          [
+            3.2,
+            51.3
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Baltic Pipe",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "Energinet / Gaz-System",
+        "capacity_bcm": 10.0,
+        "length_km": 900,
+        "countries": [
+          "Norway",
+          "Denmark",
+          "Poland"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Baltic_Pipe"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            5.7,
+            57.5
+          ],
+          [
+            8.0,
+            56.0
+          ],
+          [
+            10.5,
+            55.5
+          ],
+          [
+            14.5,
+            54.5
+          ],
+          [
+            16.4,
+            54.2
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "GIPL (Poland\u2013Lithuania interconnection)",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "Gaz-System / Amber Grid",
+        "capacity_bcm": 2.4,
+        "length_km": 508,
+        "countries": [
+          "Poland",
+          "Lithuania"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Gas_Interconnection_Poland%E2%80%93Lithuania"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            22.0,
+            53.5
+          ],
+          [
+            22.5,
+            54.0
+          ],
+          [
+            23.0,
+            54.5
+          ],
+          [
+            23.7,
+            54.9
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "IGB (Greece\u2013Bulgaria interconnector)",
+        "tier": "regional",
+        "type": "gas",
+        "status": "active",
+        "operator": "ICGB",
+        "capacity_bcm": 3.0,
+        "length_km": 182,
+        "countries": [
+          "Greece",
+          "Bulgaria"
+        ],
+        "source_url": "https://en.wikipedia.org/wiki/Interconnector_Greece%E2%80%93Bulgaria"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            24.4,
+            40.9
+          ],
+          [
+            24.7,
+            41.6
+          ],
+          [
+            25.0,
+            42.1
+          ],
+          [
+            25.6,
+            42.4
+          ]
         ]
       }
     }

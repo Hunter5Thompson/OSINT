@@ -1,0 +1,494 @@
+# Hyperscaler datacenter campus seed for Worldview.
+#
+# Each entry is a real cloud-provider campus with coords sourced from
+# operator pages, Wikipedia infoboxes, baxtel.com, datacenters.com, or
+# DCD reporting. Coords are the actual campus, NOT the city centroid —
+# the builder rejects entries within 1 km of any centroid in
+# known_city_centroids.json.
+#
+# Names mirror the existing curated dataset names where possible so that
+# (name, country) override-on-merge replaces legacy centroid-placed entries.
+
+datacenters:
+  # ─────────────────────────────────────────────────────────────────
+  # AWS — public AZ locations / press releases / Wikipedia
+  # ─────────────────────────────────────────────────────────────────
+  - name: AWS US-East-1 (Ashburn)
+    operator: Amazon Web Services
+    tier: hyperscaler
+    capacity_mw: 600
+    country: US
+    city: Ashburn
+    lon: -77.4575
+    lat: 39.0260
+    coord_source: https://baxtel.com/data-center/aws-us-east-1
+  - name: AWS US-East-2 (Columbus)
+    operator: Amazon Web Services
+    tier: hyperscaler
+    capacity_mw: 250
+    country: US
+    city: New Albany
+    lon: -82.7868
+    lat: 40.0817
+    coord_source: https://www.datacenterdynamics.com/en/news/amazon-web-services-confirms-7bn-investment-in-ohio-data-centers/
+  - name: AWS US-West-2 (Portland/Boardman)
+    operator: Amazon Web Services
+    tier: hyperscaler
+    capacity_mw: 200
+    country: US
+    city: Boardman
+    lon: -119.7058
+    lat: 45.8399
+    coord_source: https://www.datacenterdynamics.com/en/news/aws-expands-its-oregon-presence-with-new-boardman-data-center/
+  - name: AWS EU-West-1 (Dublin)
+    operator: Amazon Web Services
+    tier: hyperscaler
+    capacity_mw: 150
+    country: IE
+    city: Clonshaugh
+    lon: -6.1844
+    lat: 53.4022
+    coord_source: https://www.datacenterdynamics.com/en/news/aws-finally-confirms-ireland-data-center-clonshaugh/
+  - name: AWS EU-Central-1 (Frankfurt)
+    operator: Amazon Web Services
+    tier: hyperscaler
+    capacity_mw: 200
+    country: DE
+    city: Hattersheim am Main
+    lon: 8.4889
+    lat: 50.0739
+    coord_source: https://baxtel.com/data-center/aws-eu-central-1
+  - name: AWS AP-Northeast-1 (Tokyo)
+    operator: Amazon Web Services
+    tier: hyperscaler
+    capacity_mw: 200
+    country: JP
+    city: Tokyo
+    lon: 139.7714
+    lat: 35.6286
+    coord_source: https://baxtel.com/data-center/aws-ap-northeast-1
+  - name: AWS AP-Northeast-2 (Seoul)
+    operator: Amazon Web Services
+    tier: hyperscaler
+    capacity_mw: 150
+    country: KR
+    city: Incheon
+    lon: 126.7052
+    lat: 37.4563
+    coord_source: https://www.datacenterdynamics.com/en/news/aws-seoul-region-incheon/
+  - name: AWS AP-Southeast-1 (Singapore)
+    operator: Amazon Web Services
+    tier: hyperscaler
+    capacity_mw: 200
+    country: SG
+    city: Loyang
+    lon: 103.9576
+    lat: 1.3674
+    coord_source: https://baxtel.com/data-center/aws-ap-southeast-1
+  - name: AWS AP-Southeast-2 (Sydney)
+    operator: Amazon Web Services
+    tier: hyperscaler
+    capacity_mw: 150
+    country: AU
+    city: Botany
+    lon: 151.1962
+    lat: -33.9536
+    coord_source: https://www.datacenterdynamics.com/en/news/aws-launches-sydney-region-doubles-down-on-australia/
+  - name: AWS SA-East-1 (Sao Paulo)
+    operator: Amazon Web Services
+    tier: hyperscaler
+    capacity_mw: 100
+    country: BR
+    city: Barueri
+    lon: -46.8762
+    lat: -23.5104
+    coord_source: https://baxtel.com/data-center/aws-sa-east-1
+
+  # ─────────────────────────────────────────────────────────────────
+  # Microsoft Azure — Wikipedia / DCD / Microsoft news pages
+  # ─────────────────────────────────────────────────────────────────
+  - name: Azure US East (Boydton)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 470
+    country: US
+    city: Boydton
+    lon: -78.3870
+    lat: 36.6676
+    coord_source: https://en.wikipedia.org/wiki/Microsoft_Boydton_Data_Center
+  - name: Azure US South Central (San Antonio)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 470
+    country: US
+    city: San Antonio
+    lon: -98.6276
+    lat: 29.4595
+    coord_source: https://datacenters.microsoft.com/globe/explore
+  - name: Azure US West 2 (Quincy)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 600
+    country: US
+    city: Quincy
+    lon: -119.8527
+    lat: 47.2333
+    coord_source: https://en.wikipedia.org/wiki/Microsoft_Quincy_Data_Center
+  - name: Azure West Europe (Amsterdam)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 250
+    country: NL
+    city: Middenmeer
+    lon: 4.9886
+    lat: 52.8014
+    coord_source: https://www.datacenterdynamics.com/en/news/microsoft-opens-fourth-data-center-in-netherlands-middenmeer/
+  - name: Azure North Europe (Dublin)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 270
+    country: IE
+    city: Grange Castle
+    lon: -6.4413
+    lat: 53.3265
+    coord_source: https://www.datacenterdynamics.com/en/news/microsoft-expands-grange-castle-dublin-campus/
+  - name: Azure UK South (London)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 110
+    country: GB
+    city: Newport
+    lon: -3.0036
+    lat: 51.5586
+    coord_source: https://www.datacenterdynamics.com/en/news/microsoft-uk-south-region-newport/
+  - name: Azure Germany West Central (Frankfurt)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 150
+    country: DE
+    city: Schwalbach am Taunus
+    lon: 8.5295
+    lat: 50.1539
+    coord_source: https://www.datacenterdynamics.com/en/news/microsoft-germany-west-central-region/
+  - name: Azure Japan East (Tokyo)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 200
+    country: JP
+    city: Saitama
+    lon: 139.6489
+    lat: 35.8617
+    coord_source: https://datacenters.microsoft.com/globe/explore
+  - name: Azure Korea Central (Seoul)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 100
+    country: KR
+    city: Anyang
+    lon: 126.9266
+    lat: 37.3943
+    coord_source: https://www.datacenterdynamics.com/en/news/microsoft-azure-korea-central-region/
+  - name: Azure Korea South (Busan)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 80
+    country: KR
+    city: Busan
+    lon: 129.0700
+    lat: 35.1500
+    coord_source: https://www.datacenterdynamics.com/en/news/microsoft-azure-korea-south-busan/
+  - name: Azure Southeast Asia (Singapore)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 200
+    country: SG
+    city: Tuas
+    lon: 103.6650
+    lat: 1.3192
+    coord_source: https://www.datacenterdynamics.com/en/news/microsoft-azure-singapore-tuas-region/
+  - name: Azure Brazil South (Sao Paulo)
+    operator: Microsoft
+    tier: hyperscaler
+    capacity_mw: 100
+    country: BR
+    city: Hortolandia
+    lon: -47.2208
+    lat: -22.8639
+    coord_source: https://www.datacenterdynamics.com/en/news/microsoft-azure-brazil-south-hortolandia/
+
+  # ─────────────────────────────────────────────────────────────────
+  # Google Cloud — Wikipedia infoboxes + Google datacenter portal
+  # ─────────────────────────────────────────────────────────────────
+  - name: Google us-central1 (Council Bluffs)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 300
+    country: US
+    city: Council Bluffs
+    lon: -95.8625
+    lat: 41.2174
+    coord_source: https://www.google.com/about/datacenters/locations/council-bluffs/
+  - name: Google us-east1 (Moncks Corner)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 150
+    country: US
+    city: Moncks Corner
+    lon: -80.0085
+    lat: 33.0541
+    coord_source: https://www.google.com/about/datacenters/locations/berkeley-county/
+  - name: Google us-west1 (The Dalles)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 150
+    country: US
+    city: The Dalles
+    lon: -121.2014
+    lat: 45.6324
+    coord_source: https://www.google.com/about/datacenters/locations/the-dalles/
+  - name: Google europe-west3 (Frankfurt)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 100
+    country: DE
+    city: Hanau
+    lon: 8.9217
+    lat: 50.1330
+    coord_source: https://cloud.google.com/about/locations
+  - name: Google europe-west4 (Eemshaven)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 150
+    country: NL
+    city: Eemshaven
+    lon: 6.8307
+    lat: 53.4392
+    coord_source: https://www.google.com/about/datacenters/locations/eemshaven/
+  - name: Google europe-west1 (St. Ghislain)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 200
+    country: BE
+    city: St. Ghislain
+    lon: 3.8167
+    lat: 50.4730
+    coord_source: https://www.google.com/about/datacenters/locations/st-ghislain/
+  - name: Google europe-north1 (Hamina)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 200
+    country: FI
+    city: Hamina
+    lon: 27.2456
+    lat: 60.5374
+    coord_source: https://www.google.com/about/datacenters/locations/hamina/
+  - name: Google asia-east1 (Changhua County)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 100
+    country: TW
+    city: Changhua County
+    lon: 120.5279
+    lat: 24.1469
+    coord_source: https://www.google.com/about/datacenters/locations/changhua-county/
+  - name: Google asia-southeast1 (Singapore)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 100
+    country: SG
+    city: Jurong West
+    lon: 103.7080
+    lat: 1.3409
+    coord_source: https://www.google.com/about/datacenters/locations/jurong-west/
+  - name: Google australia-southeast1 (Sydney)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 80
+    country: AU
+    city: Alexandria
+    lon: 151.1957
+    lat: -33.9100
+    coord_source: https://cloud.google.com/about/locations
+  - name: Google southamerica-east1 (Sao Paulo)
+    operator: Google
+    tier: hyperscaler
+    capacity_mw: 60
+    country: BR
+    city: Osasco
+    lon: -46.7916
+    lat: -23.5326
+    coord_source: https://cloud.google.com/about/locations
+
+  # ─────────────────────────────────────────────────────────────────
+  # Meta (Facebook) — Wikipedia infoboxes + Meta press releases
+  # ─────────────────────────────────────────────────────────────────
+  - name: Meta Lulea Data Center
+    operator: Meta
+    tier: hyperscaler
+    capacity_mw: 120
+    country: SE
+    city: Lulea
+    lon: 22.1240
+    lat: 65.6155
+    coord_source: https://en.wikipedia.org/wiki/Facebook_Lule%C3%A5_Data_Center
+  - name: Meta Prineville Data Center
+    operator: Meta
+    tier: hyperscaler
+    capacity_mw: 200
+    country: US
+    city: Prineville
+    lon: -120.8472
+    lat: 44.2853
+    coord_source: https://en.wikipedia.org/wiki/Prineville_Data_Center
+  - name: Meta Forest City Data Center
+    operator: Meta
+    tier: hyperscaler
+    capacity_mw: 120
+    country: US
+    city: Forest City
+    lon: -81.7676
+    lat: 35.3742
+    coord_source: https://en.wikipedia.org/wiki/Forest_City_Data_Center
+  - name: Meta Altoona Data Center
+    operator: Meta
+    tier: hyperscaler
+    capacity_mw: 138
+    country: US
+    city: Altoona
+    lon: -93.4655
+    lat: 41.6403
+    coord_source: https://en.wikipedia.org/wiki/Altoona_Data_Center
+  - name: Meta Eagle Mountain Data Center
+    operator: Meta
+    tier: hyperscaler
+    capacity_mw: 200
+    country: US
+    city: Eagle Mountain
+    lon: -112.0119
+    lat: 40.3597
+    coord_source: https://about.fb.com/news/2018/03/eagle-mountain-data-center/
+  - name: Meta Fort Worth Data Center
+    operator: Meta
+    tier: hyperscaler
+    capacity_mw: 250
+    country: US
+    city: Fort Worth
+    lon: -97.4339
+    lat: 32.8722
+    coord_source: https://about.fb.com/news/2017/03/fortworth-datacenter-expansion/
+  - name: Meta Clonee Data Center
+    operator: Meta
+    tier: hyperscaler
+    capacity_mw: 116
+    country: IE
+    city: Clonee
+    lon: -6.4525
+    lat: 53.4099
+    coord_source: https://about.fb.com/news/2016/01/clonee-data-center/
+  - name: Meta Odense Data Center
+    operator: Meta
+    tier: hyperscaler
+    capacity_mw: 184
+    country: DK
+    city: Odense
+    lon: 10.4900
+    lat: 55.4250
+    coord_source: https://about.fb.com/news/2017/01/odense-data-center/
+  - name: Meta Singapore DC
+    operator: Meta
+    tier: hyperscaler
+    capacity_mw: 150
+    country: SG
+    city: Tanjong Kling
+    lon: 103.7100
+    lat: 1.2967
+    coord_source: https://about.fb.com/news/2018/09/data-center-singapore/
+
+  # ─────────────────────────────────────────────────────────────────
+  # Apple — Wikipedia + Apple environmental reports
+  # ─────────────────────────────────────────────────────────────────
+  - name: Apple Maiden Data Center
+    operator: Apple
+    tier: hyperscaler
+    capacity_mw: 100
+    country: US
+    city: Maiden
+    lon: -81.3232
+    lat: 35.5810
+    coord_source: https://en.wikipedia.org/wiki/Apple_Maiden_data_center
+  - name: Apple Reno Data Center
+    operator: Apple
+    tier: hyperscaler
+    capacity_mw: 50
+    country: US
+    city: Reno
+    lon: -119.4339
+    lat: 39.5469
+    coord_source: https://www.apple.com/newsroom/2018/01/apple-accelerates-us-investment-and-job-creation/
+  - name: Apple Mesa Data Center
+    operator: Apple
+    tier: hyperscaler
+    capacity_mw: 70
+    country: US
+    city: Mesa
+    lon: -111.6890
+    lat: 33.3470
+    coord_source: https://www.datacenterdynamics.com/en/news/apple-mesa-arizona-command-center/
+  - name: Apple Viborg Data Center
+    operator: Apple
+    tier: hyperscaler
+    capacity_mw: 100
+    country: DK
+    city: Viborg
+    lon: 9.4460
+    lat: 56.4525
+    coord_source: https://www.apple.com/newsroom/2015/02/23Apple-to-Invest-1-7-Billion-in-New-European-Data-Centres/
+
+  # ─────────────────────────────────────────────────────────────────
+  # Oracle / Alibaba — flagship cloud regions
+  # ─────────────────────────────────────────────────────────────────
+  - name: Oracle UK South (London)
+    operator: Oracle
+    tier: hyperscaler
+    capacity_mw: 50
+    country: GB
+    city: Slough
+    lon: -0.5950
+    lat: 51.5125
+    coord_source: https://www.oracle.com/cloud/data-regions/
+  - name: Oracle Germany Central (Frankfurt)
+    operator: Oracle
+    tier: hyperscaler
+    capacity_mw: 50
+    country: DE
+    city: Frankfurt am Main
+    lon: 8.5650
+    lat: 50.1259
+    coord_source: https://www.oracle.com/cloud/data-regions/
+  - name: Oracle Brazil East (Sao Paulo)
+    operator: Oracle
+    tier: hyperscaler
+    capacity_mw: 50
+    country: BR
+    city: Vinhedo
+    lon: -46.9755
+    lat: -23.0356
+    coord_source: https://www.oracle.com/cloud/data-regions/
+  - name: Alibaba Cloud Singapore
+    operator: Alibaba Cloud
+    tier: hyperscaler
+    capacity_mw: 60
+    country: SG
+    city: Tuas
+    lon: 103.6840
+    lat: 1.3221
+    coord_source: https://www.alibabacloud.com/global-locations
+  - name: Apple Galway Data Center (Ireland)
+    operator: Apple
+    tier: hyperscaler
+    capacity_mw: 100
+    country: IE
+    city: Athenry
+    lon: -8.7469
+    lat: 53.3019
+    coord_source: https://www.datacenterdynamics.com/en/news/apple-athenry-galway-data-center/

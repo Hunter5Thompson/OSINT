@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useLocation } from "react-router-dom";
 import * as Cesium from "cesium";
 import { PerformanceGuard } from "../components/globe/PerformanceGuard";
@@ -24,6 +24,14 @@ import { SearchPanel } from "../components/worldview/SearchPanel";
 import { InspectorPanel, type Selected } from "../components/worldview/InspectorPanel";
 import { TickerPanel } from "../components/worldview/TickerPanel";
 import { WorldviewHudLoader } from "../components/worldview/WorldviewHudLoader";
+import { SpotlightProvider, useSpotlight } from "../components/globe/spotlight/SpotlightContext";
+import { SpotlightOverlay } from "../components/globe/spotlight/SpotlightOverlay";
+import { HudFrame } from "../components/globe/spotlight/HudFrame";
+import { SpotlightCartouche } from "../components/globe/spotlight/SpotlightCartouche";
+import { CapitalPulse } from "../components/globe/spotlight/CapitalPulse";
+import { useSpotlightTrigger } from "../components/globe/hooks/useSpotlightTrigger";
+import { Graticule } from "../components/globe/visual-layers/Graticule";
+import { CountryBorders } from "../components/globe/visual-layers/CountryBorders";
 import { useFlights } from "../hooks/useFlights";
 import { useSatellites } from "../hooks/useSatellites";
 import { useEarthquakes } from "../hooks/useEarthquakes";
@@ -38,9 +46,19 @@ import { useRefineries } from "../hooks/useRefineries";
 import { useEONETEvents } from "../hooks/useEONETEvents";
 import { useGDACSEvents } from "../hooks/useGDACSEvents";
 import { getConfig } from "../services/api";
-import type { ClientConfig, LayerVisibility, ShaderType } from "../types";
+import type {
+  ClientConfig,
+  LayerVisibility,
+  ShaderType,
+  FIRMSHotspot,
+  AircraftTrack,
+  DatacenterGeoJSON,
+  RefineryGeoJSON,
+  EONETEvent,
+  GDACSEvent,
+} from "../types";
 
-type PanelId = "layers" | "search";
+type PanelId = "layers" | "search" | "ticker";
 
 type LandingFilter = "hotspots" | "conflict" | "nuntii" | "libri";
 
@@ -93,6 +111,222 @@ function isLayerKey(value: string): value is keyof LayerVisibility {
   return value in DEFAULT_LAYERS;
 }
 
+// ── GlobeChildren ─────────────────────────────────────────────────────────────
+// Inner component that lives inside <SpotlightProvider> so it can call
+// useSpotlight(). Mounts the 6 onSelect-prop layers and EntityClickHandler.
+// The other layers (tag-pick) dispatch Spotlight via EntityClickHandler already.
+
+interface GlobeChildrenProps {
+  viewer: Cesium.Viewer | null;
+  layers: LayerVisibility;
+  setSelected: Dispatch<SetStateAction<Selected | null>>;
+  firmsHotspots: FIRMSHotspot[];
+  milTracks: AircraftTrack[];
+  datacenterData: DatacenterGeoJSON | null;
+  refineryData: RefineryGeoJSON | null;
+  eonetEvents: EONETEvent[];
+  gdacsEvents: GDACSEvent[];
+}
+
+function GlobeChildren({
+  viewer,
+  layers,
+  setSelected,
+  firmsHotspots,
+  milTracks,
+  datacenterData,
+  refineryData,
+  eonetEvents,
+  gdacsEvents,
+}: GlobeChildrenProps) {
+  const { dispatch: dispatchSpotlight } = useSpotlight();
+
+  return (
+    <>
+      <Graticule viewer={viewer} />
+      <CountryBorders viewer={viewer} visible={layers.countryBorders} />
+      <FIRMSLayer
+        viewer={viewer}
+        hotspots={firmsHotspots}
+        visible={layers.firmsHotspots}
+        onSelect={(hotspot) => {
+          setSelected({ type: "firms", data: hotspot });
+          dispatchSpotlight({
+            type: "set",
+            target: {
+              kind: "circle",
+              trigger: "pin",
+              center: { lon: hotspot.longitude, lat: hotspot.latitude },
+              radius: 1,
+              altitude: 0,
+              label: `FIRMS hotspot ${hotspot.id}`.trim(),
+              sourcePin: { layer: "firmsHotspots", entityId: String(hotspot.id) },
+            },
+          });
+        }}
+      />
+      <MilAircraftLayer
+        viewer={viewer}
+        tracks={milTracks}
+        visible={layers.milAircraft}
+        onSelect={(track) => {
+          setSelected({ type: "aircraft", data: track });
+          const lastPoint = track.points[track.points.length - 1];
+          if (lastPoint) {
+            dispatchSpotlight({
+              type: "set",
+              target: {
+                kind: "circle",
+                trigger: "pin",
+                center: { lon: lastPoint.lon, lat: lastPoint.lat },
+                radius: 1,
+                altitude: 0,
+                label: track.callsign ?? track.icao24,
+                sourcePin: { layer: "milAircraft", entityId: track.icao24 },
+              },
+            });
+          }
+        }}
+      />
+      <DatacenterLayer
+        viewer={viewer}
+        datacenters={datacenterData}
+        visible={layers.datacenters}
+        onSelect={(datacenter) => {
+          setSelected({ type: "datacenter", data: datacenter });
+          if (datacenter.latitude != null && datacenter.longitude != null) {
+            dispatchSpotlight({
+              type: "set",
+              target: {
+                kind: "circle",
+                trigger: "pin",
+                center: { lon: datacenter.longitude, lat: datacenter.latitude },
+                radius: 1,
+                altitude: 0,
+                label: datacenter.name,
+                sourcePin: { layer: "datacenters", entityId: datacenter.name },
+              },
+            });
+          }
+        }}
+      />
+      <RefineryLayer
+        viewer={viewer}
+        refineries={refineryData}
+        visible={layers.refineries}
+        onSelect={(refinery) => {
+          setSelected({ type: "refinery", data: refinery });
+          if (refinery.latitude != null && refinery.longitude != null) {
+            dispatchSpotlight({
+              type: "set",
+              target: {
+                kind: "circle",
+                trigger: "pin",
+                center: { lon: refinery.longitude, lat: refinery.latitude },
+                radius: 1,
+                altitude: 0,
+                label: refinery.name,
+                sourcePin: { layer: "refineries", entityId: refinery.name },
+              },
+            });
+          }
+        }}
+      />
+      <EONETLayer
+        viewer={viewer}
+        events={eonetEvents}
+        visible={layers.eonet}
+        onSelect={(event) => {
+          setSelected({ type: "eonet", data: event });
+          dispatchSpotlight({
+            type: "set",
+            target: {
+              kind: "circle",
+              trigger: "pin",
+              center: { lon: event.longitude, lat: event.latitude },
+              radius: 1,
+              altitude: 0,
+              label: event.title ?? event.id,
+              sourcePin: { layer: "eonet", entityId: event.id },
+            },
+          });
+        }}
+      />
+      <GDACSLayer
+        viewer={viewer}
+        events={gdacsEvents}
+        visible={layers.gdacs}
+        onSelect={(event) => {
+          setSelected({ type: "gdacs", data: event });
+          dispatchSpotlight({
+            type: "set",
+            target: {
+              kind: "circle",
+              trigger: "pin",
+              center: { lon: event.longitude, lat: event.latitude },
+              radius: 1,
+              altitude: 0,
+              label: event.event_name ?? event.id,
+              sourcePin: { layer: "gdacs", entityId: event.id },
+            },
+          });
+        }}
+      />
+      <EntityClickHandler viewer={viewer} onCountrySelect={setSelected} />
+    </>
+  );
+}
+
+// ── SearchAcceptHook ───────────────────────────────────────────────────────────
+// Inner component that lives inside <SpotlightProvider> so it can call
+// useSpotlight(). Mounts SearchPanel and wires onAccept → camera flyTo + Spotlight.
+
+function SearchAcceptHook({
+  viewer,
+  initialQuery,
+}: {
+  viewer: Cesium.Viewer | null;
+  initialQuery: string;
+}) {
+  const { dispatch } = useSpotlight();
+  return (
+    <SearchPanel
+      viewer={viewer}
+      initialQuery={initialQuery}
+      onAccept={(node) => {
+        const lat = node.properties?.lat;
+        const lon = node.properties?.lon;
+        if (typeof lat !== "number" || typeof lon !== "number") return;
+        viewer?.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(lon, lat, 400_000),
+          duration: 1.6,
+        });
+        dispatch({
+          type: "set",
+          target: {
+            kind: "circle",
+            trigger: "search",
+            center: { lon, lat },
+            radius: 1,
+            altitude: 400_000,
+            label: node.name,
+            ref: `§ ${node.type}`,
+          },
+        });
+      }}
+    />
+  );
+}
+
+// ── ZoomTriggerHook ────────────────────────────────────────────────────────────
+// Inner component that lives inside <SpotlightProvider> so it can call
+// useSpotlightTrigger(). Handles camera zoom events and updates Spotlight state.
+
+function ZoomTriggerHook({ viewer }: { viewer: Cesium.Viewer | null }) {
+  useSpotlightTrigger(viewer);
+  return null;
+}
+
 function decodeEntityQuery(value: string | null): string {
   if (!value) return "";
   const decoded = value.trim();
@@ -113,6 +347,7 @@ export function WorldviewPage() {
   const [expandedPanels, setExpandedPanels] = useState<Record<PanelId, boolean>>({
     layers: false,
     search: false,
+    ticker: true,
   });
 
   const { flights } = useFlights(layers.flights);
@@ -211,6 +446,7 @@ export function WorldviewPage() {
   }
 
   return (
+    <SpotlightProvider>
     <PerformanceGuard>
       <div style={{ flex: 1, position: "relative", minHeight: 0 }} data-page="worldview">
         <div style={{ position: "absolute", inset: 0 }}>
@@ -231,44 +467,22 @@ export function WorldviewPage() {
         <EventLayer viewer={viewer} events={events} visible={layers.events} />
         <CableLayer viewer={viewer} cables={cables} landingPoints={landingPoints} visible={layers.cables} />
         <PipelineLayer viewer={viewer} pipelines={pipelineData} visible={layers.pipelines} />
-        <FIRMSLayer
+        <GlobeChildren
           viewer={viewer}
-          hotspots={firmsHotspots}
-          visible={layers.firmsHotspots}
-          onSelect={(hotspot) => setSelected({ type: "firms", data: hotspot })}
+          layers={layers}
+          setSelected={setSelected}
+          firmsHotspots={firmsHotspots}
+          milTracks={milTracks}
+          datacenterData={datacenterData}
+          refineryData={refineryData}
+          eonetEvents={eonetEvents}
+          gdacsEvents={gdacsEvents}
         />
-        <MilAircraftLayer
-          viewer={viewer}
-          tracks={milTracks}
-          visible={layers.milAircraft}
-          onSelect={(track) => setSelected({ type: "aircraft", data: track })}
-        />
-        <DatacenterLayer
-          viewer={viewer}
-          datacenters={datacenterData}
-          visible={layers.datacenters}
-          onSelect={(datacenter) => setSelected({ type: "datacenter", data: datacenter })}
-        />
-        <RefineryLayer
-          viewer={viewer}
-          refineries={refineryData}
-          visible={layers.refineries}
-          onSelect={(refinery) => setSelected({ type: "refinery", data: refinery })}
-        />
-        <EONETLayer
-          viewer={viewer}
-          events={eonetEvents}
-          visible={layers.eonet}
-          onSelect={(event) => setSelected({ type: "eonet", data: event })}
-        />
-        <GDACSLayer
-          viewer={viewer}
-          events={gdacsEvents}
-          visible={layers.gdacs}
-          onSelect={(event) => setSelected({ type: "gdacs", data: event })}
-        />
-
-        <EntityClickHandler viewer={viewer} />
+        <SpotlightOverlay viewer={viewer} />
+        <HudFrame />
+        <SpotlightCartouche />
+        <CapitalPulse viewer={viewer} />
+        <ZoomTriggerHook viewer={viewer} />
 
         {!hasViewer ? <WorldviewHudLoader /> : null}
 
@@ -280,6 +494,7 @@ export function WorldviewPage() {
               variant="expanded"
               onClose={() => setExpandedPanels((prev) => ({ ...prev, layers: false }))}
               width={322}
+              style={{ maxHeight: "calc(100vh - 320px)" }}
             >
               <LayersPanel
                 layers={layers}
@@ -309,7 +524,7 @@ export function WorldviewPage() {
               onClose={() => setExpandedPanels((prev) => ({ ...prev, search: false }))}
               width={330}
             >
-              <SearchPanel viewer={viewer} initialQuery={searchSeed} />
+              <SearchAcceptHook viewer={viewer} initialQuery={searchSeed} />
             </OverlayPanel>
           ) : (
             <OverlayPanel
@@ -328,9 +543,14 @@ export function WorldviewPage() {
         </div>
 
         <div style={{ position: "absolute", left: 16, bottom: 16, zIndex: 10 }}>
-          <TickerPanel />
+          <TickerPanel
+            variant={expandedPanels.ticker ? "expanded" : "collapsed"}
+            onClose={() => setExpandedPanels((prev) => ({ ...prev, ticker: false }))}
+            onExpand={() => setExpandedPanels((prev) => ({ ...prev, ticker: true }))}
+          />
         </div>
       </div>
     </PerformanceGuard>
+    </SpotlightProvider>
   );
 }

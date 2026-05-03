@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import type { Vessel } from "../../types";
 import { classifyShip, getShipTypeIcon, ICON_COLORS } from "./icons/shipIcons";
+import { glyphColor } from "./glyphTokens";
 import { usePerformance } from "../globe/PerformanceGuard";
 
 interface ShipLayerProps {
@@ -132,8 +133,9 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
           0,
         );
 
-        const vectorColor = Cesium.Color.fromCssColorString(
-          ICON_COLORS[shipType] ?? ICON_COLORS.civilian
+        const vectorColor = (ICON_COLORS[shipType]
+          ? Cesium.Color.fromCssColorString(ICON_COLORS[shipType])
+          : glyphColor.stone()
         ).withAlpha(0.4);
 
         vc.add({

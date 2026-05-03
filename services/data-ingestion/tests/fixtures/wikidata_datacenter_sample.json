@@ -1,0 +1,23 @@
+{
+  "head": {"vars": ["item","itemLabel","coord","operatorLabel","countryCode","city"]},
+  "results": {
+    "bindings": [
+      {
+        "item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q5234567"},
+        "itemLabel": {"type": "literal", "value": "Equinix LD8"},
+        "coord": {"type": "literal", "value": "Point(-0.0066 51.5142)"},
+        "operatorLabel": {"type": "literal", "value": "Equinix"},
+        "countryCode": {"type": "literal", "value": "GB"},
+        "city": {"type": "literal", "value": "London"}
+      },
+      {
+        "item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q5234568"},
+        "itemLabel": {"type": "literal", "value": "Brand New DC"},
+        "coord": {"type": "literal", "value": "Point(2.3522 48.8566)"},
+        "operatorLabel": {"type": "literal", "value": "OVH"},
+        "countryCode": {"type": "literal", "value": "FR"},
+        "city": {"type": "literal", "value": "Paris"}
+      }
+    ]
+  }
+}

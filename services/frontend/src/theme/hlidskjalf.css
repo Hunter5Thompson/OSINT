@@ -79,6 +79,15 @@
   --sentinel: #b85a2a;  /* Sentinel · Incident */
   --rust: #8a4a3a;      /* Critical */
 
+  /* Worldview layer-design tokens (Spec 2026-04-30 §6) */
+  --steel: #3a5a78;
+  --mesh-line: color-mix(in srgb, var(--amber) 60%, transparent);
+  --graticule: color-mix(in srgb, var(--granite) 80%, var(--steel) 20%);
+  --lens-bracket: var(--amber);
+  --star-dust: color-mix(in srgb, var(--bone) 70%, transparent);
+  --capital-red: #e63a26;
+  --city-label: #ffd07a;
+
   /* Worldview overlay panels */
   --hl-panel-bg: rgba(18, 17, 14, 0.84);
   --hl-panel-border: 1px solid var(--granite);

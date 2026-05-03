@@ -9,6 +9,8 @@ import type {
   RefineryProperties,
 } from "../../types";
 import { OverlayPanel } from "../hlidskjalf/OverlayPanel";
+import type { CountryHit } from "../globe/hooks/useCountryHitTest";
+import { CountryHeader } from "../globe/spotlight/CountryHeader";
 
 export type Selected =
   | { type: "firms"; data: FIRMSHotspot }
@@ -16,7 +18,8 @@ export type Selected =
   | { type: "datacenter"; data: DatacenterProperties }
   | { type: "refinery"; data: RefineryProperties }
   | { type: "eonet"; data: EONETEvent }
-  | { type: "gdacs"; data: GDACSEvent };
+  | { type: "gdacs"; data: GDACSEvent }
+  | { type: "country"; data: CountryHit };
 
 export interface InspectorPanelProps {
   selected: Selected | null;
@@ -163,6 +166,17 @@ function AircraftInspector({
 
 function InspectorBody({ selected, viewer }: { selected: Selected; viewer: Cesium.Viewer | null }) {
   switch (selected.type) {
+    case "country": {
+      const c = selected.data;
+      return (
+        <CountryHeader
+          name={c.name}
+          iso3={c.iso3}
+          m49={c.m49}
+          capital={c.capital}
+        />
+      );
+    }
     case "firms": {
       const h = selected.data;
       return (
@@ -190,6 +204,14 @@ function InspectorBody({ selected, viewer }: { selected: Selected; viewer: Cesiu
           <Property label="§ Tier" value={d.tier || "-"} />
           <Property label="§ Capacity" value={d.capacity_mw != null ? `${d.capacity_mw} MW` : "-"} />
           <Property label="§ Location" value={`${d.city}, ${d.country}`} />
+          {d.coord_quality ? (
+            <Property label="§ Coord quality" value={d.coord_quality} />
+          ) : null}
+          {d.source_url ? (
+            <a href={d.source_url} target="_blank" rel="noreferrer" style={sourceLinkStyle}>
+              Source
+            </a>
+          ) : null}
         </>
       );
     }

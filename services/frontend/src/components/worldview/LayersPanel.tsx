@@ -8,46 +8,66 @@ export interface LayersPanelProps {
   onShaderChange: (shader: ShaderType) => void;
 }
 
-interface LayerDef {
-  key: keyof LayerVisibility;
+type AlwaysOnKey = "void" | "atmosphere" | "spotlight";
+type ToggleKey = keyof LayerVisibility;
+type ItemKey = ToggleKey | AlwaysOnKey;
+
+interface PanelItem {
+  key: ItemKey;
   label: string;
 }
 
-interface GroupDef {
-  title: string;
-  layers: LayerDef[];
+interface PanelGroup {
+  group: "A · sky" | "B · earth" | "C · signal · network" | "C · signal · glyphs" | "D · lens & chrome";
+  always?: boolean;
+  items: PanelItem[];
 }
 
-const GROUPS: GroupDef[] = [
+const PANEL_GROUPS: PanelGroup[] = [
   {
-    title: "Incidents",
-    layers: [
+    group: "A · sky",
+    always: true,
+    items: [
+      { key: "void", label: "Void & Stars" },
+      { key: "atmosphere", label: "Atmosphere" },
+    ],
+  },
+  {
+    group: "B · earth",
+    items: [
+      { key: "countryBorders", label: "Country Borders" },
+      { key: "cityBuildings", label: "City Buildings" },
+    ],
+  },
+  {
+    group: "C · signal · network",
+    items: [
+      { key: "cables", label: "Cables" },
+      { key: "pipelines", label: "Pipelines" },
+      { key: "satellites", label: "Satellites" },
+    ],
+  },
+  {
+    group: "C · signal · glyphs",
+    items: [
+      { key: "flights", label: "Flights" },
       { key: "earthquakes", label: "Earthquakes" },
+      { key: "vessels", label: "Vessels" },
+      { key: "cctv", label: "CCTV" },
+      { key: "events", label: "Graph Events" },
       { key: "firmsHotspots", label: "FIRMS Hotspots" },
-      { key: "events", label: "Events" },
+      { key: "milAircraft", label: "Mil-air" },
+      { key: "datacenters", label: "Datacenters" },
+      { key: "refineries", label: "Refineries" },
       { key: "eonet", label: "EONET" },
       { key: "gdacs", label: "GDACS" },
     ],
   },
   {
-    title: "Transport",
-    layers: [
-      { key: "flights", label: "Flights" },
-      { key: "milAircraft", label: "Military Aircraft" },
-      { key: "vessels", label: "Vessels" },
-      { key: "satellites", label: "Satellites" },
-    ],
-  },
-  {
-    title: "Infrastructure",
-    layers: [
-      { key: "cables", label: "Submarine Cables" },
-      { key: "pipelines", label: "Pipelines" },
-      { key: "datacenters", label: "Datacenters" },
-      { key: "refineries", label: "Energy/Chem Sites" },
-      { key: "countryBorders", label: "Country Borders" },
-      { key: "cityBuildings", label: "3D Buildings" },
-      { key: "cctv", label: "CCTV" },
+    group: "D · lens & chrome",
+    always: true,
+    items: [
+      { key: "spotlight", label: "Spotlight" },
     ],
   },
 ];
@@ -66,6 +86,13 @@ const groupTitle: CSSProperties = {
   letterSpacing: "0.16em",
   textTransform: "uppercase",
   color: "var(--ash)",
+};
+
+const separator: CSSProperties = {
+  border: "none",
+  borderTop: "1px solid var(--granite)",
+  margin: "0.4rem 0 0.6rem",
+  opacity: 0.4,
 };
 
 const row: CSSProperties = {
@@ -88,6 +115,21 @@ const toggleBtn: CSSProperties = {
   lineHeight: 1,
 };
 
+const alwaysOnBadge: CSSProperties = {
+  width: 18,
+  height: 18,
+  border: "1px solid var(--granite)",
+  background: "transparent",
+  color: "var(--stone)",
+  fontFamily: '"Martian Mono", ui-monospace, monospace',
+  fontSize: "0.55rem",
+  lineHeight: 1,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  opacity: 0.5,
+};
+
 export function LayersPanel({
   layers,
   onToggle,
@@ -96,22 +138,37 @@ export function LayersPanel({
 }: LayersPanelProps) {
   return (
     <div style={{ display: "grid", gap: "0.8rem" }}>
-      {GROUPS.map((group) => (
-        <section key={group.title}>
-          <div style={groupTitle}>{`§ ${group.title}`}</div>
+      {PANEL_GROUPS.map((group, groupIndex) => (
+        <section key={group.group}>
+          {groupIndex > 0 && <hr style={separator} />}
+          <div style={groupTitle}>{`§ ${group.group}`}</div>
           <div style={{ display: "grid", gap: "0.15rem" }}>
-            {group.layers.map((layer) => {
-              const enabled = layers[layer.key];
+            {group.items.map((item) => {
+              if (group.always) {
+                // Always-on items: display-only, no interactive toggle
+                return (
+                  <div key={item.key} style={row} data-testid={`layer-toggle-${item.key}`}>
+                    <span style={{ color: "var(--stone)", fontSize: "0.78rem" }}>
+                      {item.label}
+                    </span>
+                    <div style={alwaysOnBadge} aria-hidden="true">∞</div>
+                  </div>
+                );
+              }
+
+              // Regular toggle item — key is guaranteed to be a LayerVisibility key
+              const toggleKey = item.key as ToggleKey;
+              const enabled = layers[toggleKey];
               return (
-                <div key={layer.key} style={row}>
+                <div key={item.key} style={row} data-testid={`layer-toggle-${item.key}`}>
                   <span style={{ color: enabled ? "var(--bone)" : "var(--stone)", fontSize: "0.78rem" }}>
-                    {layer.label}
+                    {item.label}
                   </span>
                   <button
                     type="button"
-                    aria-label={layer.key}
+                    aria-label={toggleKey}
                     aria-pressed={enabled}
-                    onClick={() => onToggle(layer.key)}
+                    onClick={() => onToggle(toggleKey)}
                     style={{
                       ...toggleBtn,
                       borderColor: enabled ? "var(--amber)" : "var(--granite)",
@@ -128,6 +185,7 @@ export function LayersPanel({
       ))}
 
       <section>
+        <hr style={separator} />
         <div style={groupTitle}>§ Visual Filter</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.4rem" }}>
           {SHADERS.map((shader) => {

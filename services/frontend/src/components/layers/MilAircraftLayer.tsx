@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { AircraftPoint, AircraftTrack } from "../../types";
+import { glyphColor } from "./glyphTokens";
 
 export function branchColor(branch: string | null): Cesium.Color {
   switch ((branch || "").toUpperCase()) {
@@ -13,7 +14,7 @@ export function branchColor(branch: string | null): Cesium.Color {
     case "VKS":
       return Cesium.Color.fromCssColorString("#ff5050");
     default:
-      return branch ? Cesium.Color.fromCssColorString("#ffaa33") : Cesium.Color.WHITE;
+      return branch ? glyphColor.amber() : Cesium.Color.WHITE;
   }
 }
 

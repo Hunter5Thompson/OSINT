@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { Earthquake } from "../../types";
+import { glyphColor } from "./glyphTokens";
 import { usePerformance } from "../globe/PerformanceGuard";
 
 interface EarthquakeLayerProps {
@@ -10,7 +11,7 @@ interface EarthquakeLayerProps {
 }
 
 function magnitudeToColor(mag: number): Cesium.Color {
-  if (mag >= 7.0) return Cesium.Color.RED;
+  if (mag >= 7.0) return glyphColor.sentinel();
   if (mag >= 6.0) return Cesium.Color.ORANGE;
   if (mag >= 5.0) return Cesium.Color.YELLOW;
   return Cesium.Color.LIME;

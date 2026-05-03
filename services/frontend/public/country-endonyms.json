@@ -1,0 +1,360 @@
+{
+  "_topoIndex": {
+    "100": null,
+    "104": null,
+    "108": null,
+    "112": null,
+    "116": null,
+    "120": null,
+    "124": "CAN",
+    "140": null,
+    "144": null,
+    "148": null,
+    "152": null,
+    "156": null,
+    "158": null,
+    "170": null,
+    "178": null,
+    "180": null,
+    "188": null,
+    "191": null,
+    "192": null,
+    "196": null,
+    "203": "CZE",
+    "204": null,
+    "208": null,
+    "214": null,
+    "218": null,
+    "222": null,
+    "226": null,
+    "231": null,
+    "232": null,
+    "233": null,
+    "238": null,
+    "242": null,
+    "246": null,
+    "250": null,
+    "260": null,
+    "262": null,
+    "266": null,
+    "268": null,
+    "270": null,
+    "275": null,
+    "276": "DEU",
+    "288": null,
+    "300": "GRC",
+    "304": null,
+    "320": null,
+    "324": null,
+    "328": null,
+    "332": null,
+    "340": null,
+    "348": null,
+    "352": null,
+    "356": "IND",
+    "360": null,
+    "364": null,
+    "368": null,
+    "372": null,
+    "376": null,
+    "380": null,
+    "384": null,
+    "388": null,
+    "392": "JPN",
+    "398": null,
+    "400": null,
+    "404": null,
+    "408": null,
+    "410": null,
+    "414": null,
+    "417": null,
+    "418": null,
+    "422": null,
+    "426": null,
+    "428": null,
+    "430": null,
+    "434": null,
+    "440": null,
+    "442": null,
+    "450": null,
+    "454": null,
+    "458": null,
+    "466": null,
+    "478": null,
+    "484": null,
+    "496": null,
+    "498": null,
+    "499": null,
+    "504": null,
+    "508": null,
+    "512": null,
+    "516": null,
+    "524": null,
+    "528": null,
+    "540": null,
+    "548": null,
+    "554": null,
+    "558": null,
+    "562": null,
+    "566": null,
+    "578": null,
+    "586": null,
+    "591": null,
+    "598": null,
+    "600": null,
+    "604": null,
+    "608": null,
+    "616": null,
+    "620": null,
+    "624": null,
+    "626": null,
+    "630": null,
+    "634": null,
+    "642": null,
+    "643": "RUS",
+    "646": null,
+    "682": null,
+    "686": null,
+    "688": null,
+    "694": null,
+    "703": null,
+    "704": null,
+    "705": null,
+    "706": null,
+    "710": null,
+    "716": null,
+    "724": null,
+    "728": null,
+    "729": null,
+    "732": null,
+    "740": null,
+    "748": null,
+    "752": null,
+    "756": null,
+    "760": null,
+    "762": null,
+    "764": null,
+    "768": null,
+    "780": null,
+    "784": null,
+    "788": null,
+    "792": null,
+    "795": null,
+    "800": null,
+    "804": null,
+    "807": null,
+    "818": null,
+    "826": null,
+    "834": null,
+    "840": "USA",
+    "854": null,
+    "858": null,
+    "860": null,
+    "862": null,
+    "887": null,
+    "894": null,
+    "032": null,
+    "044": null,
+    "076": null,
+    "068": null,
+    "084": null,
+    "072": null,
+    "024": null,
+    "012": null,
+    "050": null,
+    "064": null,
+    "004": null,
+    "051": null,
+    "040": null,
+    "008": null,
+    "056": null,
+    "090": null,
+    "036": null,
+    "031": null,
+    "096": null,
+    "010": null,
+    "N. Cyprus": null,
+    "Somaliland": null,
+    "070": null,
+    "Kosovo": null
+  },
+  "countries": {
+    "USA": {
+      "iso3": "USA",
+      "m49": "840",
+      "names": {
+        "en": "United States",
+        "official": "United States of America",
+        "native": "United States",
+        "endonyms": {
+          "en": "United States",
+          "de": "Vereinigte Staaten",
+          "fr": "États-Unis",
+          "es": "Estados Unidos",
+          "it": "Stati Uniti",
+          "ru": "Соединённые Штаты",
+          "zh": "美国",
+          "ja": "アメリカ合衆国",
+          "ar": "الولايات المتحدة",
+          "tr": "Amerika Birleşik Devletleri"
+        }
+      },
+      "capital": {
+        "name": "Washington, D.C.",
+        "lat": 38.8951,
+        "lon": -77.0364
+      }
+    },
+    "GRC": {
+      "iso3": "GRC",
+      "m49": "300",
+      "names": {
+        "en": "Greece",
+        "official": "Hellenic Republic",
+        "native": "Ελληνική Δημοκρατία",
+        "endonyms": {
+          "el": "Ελλάδα",
+          "en": "Greece",
+          "de": "Griechenland",
+          "fr": "Grèce",
+          "es": "Grecia",
+          "it": "Grecia",
+          "ru": "Греция",
+          "tr": "Yunanistan",
+          "ar": "اليونان",
+          "zh": "希腊",
+          "ja": "ギリシャ"
+        }
+      },
+      "capital": {
+        "name": "Athens",
+        "lat": 37.9838,
+        "lon": 23.7275
+      }
+    },
+    "DEU": {
+      "iso3": "DEU",
+      "m49": "276",
+      "names": {
+        "en": "Germany",
+        "official": "Federal Republic of Germany",
+        "native": "Bundesrepublik Deutschland",
+        "endonyms": {
+          "de": "Deutschland",
+          "en": "Germany",
+          "fr": "Allemagne",
+          "es": "Alemania",
+          "it": "Germania",
+          "ru": "Германия",
+          "tr": "Almanya",
+          "ar": "ألمانيا",
+          "zh": "德国",
+          "ja": "ドイツ"
+        }
+      },
+      "capital": {
+        "name": "Berlin",
+        "lat": 52.52,
+        "lon": 13.405
+      }
+    },
+    "RUS": {
+      "iso3": "RUS",
+      "m49": "643",
+      "names": {
+        "en": "Russia",
+        "official": "Russian Federation",
+        "native": "Российская Федерация",
+        "endonyms": {
+          "ru": "Россия",
+          "en": "Russia",
+          "de": "Russland",
+          "fr": "Russie",
+          "es": "Rusia",
+          "it": "Russia",
+          "tr": "Rusya",
+          "ar": "روسيا",
+          "zh": "俄罗斯",
+          "ja": "ロシア"
+        }
+      },
+      "capital": {
+        "name": "Moscow",
+        "lat": 55.7558,
+        "lon": 37.6173
+      }
+    },
+    "CAN": {
+      "iso3": "CAN",
+      "m49": "124",
+      "names": {
+        "en": "Canada",
+        "official": "Canada",
+        "native": "Canada",
+        "endonyms": {
+          "en": "Canada",
+          "fr": "Canada"
+        }
+      },
+      "capital": {
+        "name": "Ottawa",
+        "lat": 45.4215,
+        "lon": -75.6972
+      }
+    },
+    "JPN": {
+      "iso3": "JPN",
+      "m49": "392",
+      "names": {
+        "en": "Japan",
+        "official": "Japan",
+        "native": "日本",
+        "endonyms": {
+          "ja": "日本",
+          "en": "Japan"
+        }
+      },
+      "capital": {
+        "name": "Tokyo",
+        "lat": 35.6762,
+        "lon": 139.6503
+      }
+    },
+    "IND": {
+      "iso3": "IND",
+      "m49": "356",
+      "names": {
+        "en": "India",
+        "official": "Republic of India",
+        "native": "भारत गणराज्य",
+        "endonyms": {
+          "hi": "भारत",
+          "en": "India"
+        }
+      },
+      "capital": {
+        "name": "New Delhi",
+        "lat": 28.6139,
+        "lon": 77.209
+      }
+    },
+    "CZE": {
+      "iso3": "CZE",
+      "m49": "203",
+      "names": {
+        "en": "Czechia",
+        "official": "Czech Republic",
+        "native": "Česká republika",
+        "endonyms": {
+          "cs": "Česko",
+          "en": "Czechia"
+        }
+      },
+      "capital": {
+        "name": "Prague",
+        "lat": 50.0755,
+        "lon": 14.4378
+      }
+    }
+  }
+}
