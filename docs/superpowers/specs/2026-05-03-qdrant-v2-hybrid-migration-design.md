@@ -241,12 +241,15 @@ class Odin_V2_Point(BaseModel):
 
 ## 7. Retriever Changes (RRF Query Fusion)
 
+### Transport: SDK Adoption
+
+Phase 2 introduces the `qdrant_client` Python SDK on the read path. The current retriever (`services/intelligence/rag/retriever.py`) uses raw httpx POST to `/points/search`, which works for unnamed dense vectors but does not idiomatically support named-vector queries, prefetch, or RRF fusion. Phase 2 migrates to `qdrant_client.AsyncQdrantClient` for read paths. Pseudocode below assumes the SDK; the writer path (already using `qdrant_client` per `services/data-ingestion/feeds/base.py`) requires no transport change.
+
 ### Current State (Phase 1)
 
-`services/intelligence/rag/retriever.py` (lines 80-130 approximate):
-- `search_dense()` — executes dense vector search on `odin_intel`.
-- `search_hybrid()` — attempts to call a hybrid search method but falls back to dense-only (not implemented in Phase 1).
-- `query()` — dispatches based on `enable_hybrid` flag; returns dense results if hybrid is unavailable.
+`services/intelligence/rag/retriever.py` — functions `search` and `enhanced_search`:
+- `search()` — executes dense vector search on `odin_intel` via raw httpx POST to `/points/search`.
+- `enhanced_search()` — dispatches based on `enable_hybrid` flag; gracefully falls back to dense-only when hybrid is unavailable (Phase 2 raises `NotImplementedError` internally and logs a warning).
 
 ### Target State (Phase 2)
 
@@ -323,7 +326,7 @@ class Odin_V2_Point(BaseModel):
        for point_id, ranks in combined.items():
            dense_rrf = 1 / (rrf_k + ranks.get("dense_rank", len(dense_results)))
            sparse_rrf = 1 / (rrf_k + ranks.get("sparse_rank", len(sparse_results)))
-           final_score = 0.5 * dense_rrf + 0.5 * sparse_rrf
+           final_score = 0.5 * dense_rrf + 0.5 * sparse_rrf  # weights configurable, defaults shown
            fused_scores.append((point_id, final_score))
        
        # Return top_k by fused score
@@ -360,8 +363,8 @@ class Odin_V2_Point(BaseModel):
 
 ### Reference to Existing Code
 
-- Path: `services/intelligence/rag/retriever.py` (lines 80-130 approx).
-- Existing graceful-fallback path is present and will be hardened into a real hybrid query in Phase 2.
+- Retriever module: `services/intelligence/rag/retriever.py` — see `search` (dense httpx path) and `enhanced_search` (graceful hybrid fallback with warning log).
+- The graceful-fallback path is present and will be hardened into a real hybrid query in Phase 2 using `AsyncQdrantClient`.
 - Config flag: `services/intelligence/config.py` already exposes `enable_hybrid: bool = False`.
 
 ---
@@ -391,7 +394,7 @@ Before proceeding from dual-write (step 5) to atomic reader switch (step 6), all
 ### Recall@k Validation (Accuracy)
 
 - **Assertion:** Hybrid recall@10 >= dense recall@10 on a sample query set.
-- **Sample set:** 50 human-labeled relevance judgments (queries + known-relevant documents).
+- **Sample set:** 200 human-labeled relevance judgments (queries + known-relevant documents), stratified across the 65+ event types in the codebook. A 50-query set yields ±13pp 95% CI on recall@10 — wider than the 10pp threshold; 200 queries tightens this to ±7pp and makes the gate decision-ready.
 - **Metric:** recall@10 = (# relevant docs retrieved in top 10) / (# known relevant docs).
 - **Threshold:** Hybrid recall@10 >= 90% of dense recall@10 (allow up to 10% regression for now; expect improvement with tuning).
 - **Failure mode:** If recall@10 drops below threshold, tune RRF weights or prefetch factor. Do not switch until threshold is met.
@@ -416,13 +419,13 @@ Each cutover step has different reversibility:
 | 1 | Data-ingestion dual-writes to `odin_intel` and `odin_v2` | Yes (stop dual-write) | If stopped, new points go to `odin_intel` only; `odin_v2` becomes stale. |
 | 2 | Backfill `odin_v2` from `odin_intel` snapshot | Yes (drop `odin_v2`) | Loss of backfill effort, but `odin_intel` is untouched. |
 | 3 | Validate point counts, source distribution, payloads | Yes (fail validation, retry tuning) | No permanent changes if validation fails. |
-| 4 | **Atomically switch readers via `enable_hybrid=True`** | **Limited** (readers switch back by disabling flag) | Once readers switch, `odin_intel` is no longer the source of truth. Switching back requires manual reconciliation if writes diverged. |
+| 4 | **Atomically switch readers via `enable_hybrid=True`** | **Limited** | Reversible via `enable_hybrid=False` during Step 5 window; after Step 6 requires manual write replay and reconciliation. |
 | 5 | Continue dual-write through validation | Yes (stop dual-write if needed) | Can revert to single-write to `odin_intel` if hybrid queries show issues. |
 | 6 | Switch writes to `odin_v2` only | **Very limited** (restore dual-write) | Requires re-enabling writes to `odin_intel`; new points written to `odin_v2` are not backfilled to `odin_intel`. |
 | 7 | Keep `odin_intel` read-only as emergency snapshot | Yes (restore writes to `odin_intel`) | `odin_intel` remains available for ad-hoc queries and rollback. |
-| 8 | Drop `odin_intel` | **Not reversible** | Requires full backfill from `odin_v2` if recovery is needed. Only after explicit operator approval. |
+| 8 | Drop `odin_intel` | **Not reversible** | Requires full backfill from `odin_v2` if recovery is needed. Only after explicit joint approval from engineering lead + operations lead. |
 
-**Critical decision point:** Step 4 (atomic reader switch) is the point of no return. Before flipping `enable_hybrid=True`, ensure all validation gates pass AND operator approval is obtained.
+**Critical decision point:** Step 4 is the architectural commit point. Rollback by flipping `enable_hybrid=False` remains available throughout the Step 5 dual-write validation window. After Step 6 (writes-to-v2-only), rollback requires manual write replay from logs and is high-risk. Before flipping `enable_hybrid=True`, ensure all validation gates pass AND engineering lead approval is obtained.
 
 ---
 
@@ -430,11 +433,26 @@ Each cutover step has different reversibility:
 
 The 8-step cutover from Phase 1 (plan ref: `2026-04-30-qdrant-collection-sot.md` Task 4):
 
+### Sequence Mapping
+
+The Phase 1 design spec (`2026-04-30-qdrant-collection-sot-design.md` §6) uses "Phase 0..5" terminology. This spec uses "Step 0..8". The table below bridges the two numbering systems so readers holding both documents can navigate without confusion.
+
+| Phase 1 Spec §6 Phase | This Spec Step | Label |
+|---|---|---|
+| Phase 0: Phase 1 hardening | (Phase 1 plan, complete) | Phase 1 contract enforcement |
+| Phase 1: Build odin_v2 | Step 2 + Step 3 | Schema creation, backfill, and validation |
+| Phase 2: Dual-write transition | Step 1 (dual-write enable) + Step 5 (dual-write validation window) | Dual-write transition |
+| Phase 3: Atomic read switch | Step 4 | Reader cutover |
+| Phase 4: v2-only writes | Step 6 | Writer cutover |
+| Phase 5: Retirement | Step 7 + Step 8 | v1 read-only snapshot, then drop |
+
 ### Step 0: Preconditions (Before Starting)
 - [x] Phase 1 plan is complete (documentation updated, schema checks in place, `enable_hybrid=False` enforced).
 - [x] `enable_hybrid=True` code paths exist in all services (retriever, ingestion, vision).
 - [x] Data-ingestion can switch collection names (via config, not env var).
 - [x] Qdrant doctor command shows schema details for both collections.
+
+Preconditions marked [x] are completed by Phase 1 plan tasks on this branch (`feature/qdrant-sot-phase1`).
 
 ### Step 1: Data-Ingestion Dual-Writes to `odin_intel` and `odin_v2`
 - **Action:** Enable dual-write in feed collectors and ingestion pipeline.
@@ -460,9 +478,9 @@ The 8-step cutover from Phase 1 (plan ref: `2026-04-30-qdrant-collection-sot.md`
   - Payload presence: 100% of points have required fields
   - Latency: p50 <= 150ms, p95 <= 300ms
 - **Manual gate:**
-  - Recall@k: human review of 50-query sample set; hybrid recall@10 >= 90% of dense recall@10
-- **Decision:** Must pass all gates before proceeding to step 4.
-- **Owner:** QA + engineering. Decision: engineering lead + data-ingestion lead.
+  - Recall@k: human review of 200-query stratified sample set; hybrid recall@10 >= 90% of dense recall@10
+- **Decision:** Must pass all gates before proceeding to step 4. Engineering lead approves the recall@k and latency results at this boundary.
+- **Owner:** QA + engineering. Decision: engineering lead.
 
 ### Step 4: Atomically Switch All Readers via Feature/Deployment Flag
 - **Action:** Enable `enable_hybrid=True` in backend, intelligence, vision-enrichment services. Deploy simultaneously across all readers.
@@ -470,8 +488,8 @@ The 8-step cutover from Phase 1 (plan ref: `2026-04-30-qdrant-collection-sot.md`
 - **Behavior:** All queries now use hybrid RRF fusion; sparse search is live.
 - **Monitoring:** Real-time alerts for query latency, error rates, result quality (sample queries).
 - **Duration:** 1 deployment cycle (minutes to hours, depends on infrastructure).
-- **Rollback trigger:** If query error rate > 1% or latency spike > 2x baseline, disable hybrid immediately.
-- **Owner:** DevOps + backend team. Decision: operations lead.
+- **Rollback trigger:** If query error rate > 1% or latency spike > 2x baseline, disable hybrid immediately by flipping `enable_hybrid=False`. Rollback is bounded by the duration of Step 5 (default: 7 days). After Step 6, rollback requires manual write replay from logs and is high-risk.
+- **Owner:** DevOps executes the deployment / flag flip. Joint decision: engineering lead + operations lead.
 
 ### Step 5: Continue Dual-Write Through Validation Window
 - **Action:** Keep data-ingestion writing to BOTH `odin_intel` and `odin_v2` while readers are on `odin_v2`.
@@ -485,15 +503,15 @@ The 8-step cutover from Phase 1 (plan ref: `2026-04-30-qdrant-collection-sot.md`
 - **Action:** Disable writes to `odin_intel` in data-ingestion; enable writes to `odin_v2` only.
 - **Precondition:** Step 5 validation window complete; no anomalies detected in hybrid queries.
 - **Behavior:** New points go to `odin_v2` only; `odin_intel` becomes read-only snapshot.
-- **Rollback:** Restore dual-write or single-write to `odin_intel` (manual operation).
+- **Rollback:** Restore dual-write or single-write to `odin_intel` (manual operation); note that points written to `odin_v2` during this step are not automatically backfilled to `odin_intel`.
 - **Duration:** 1 deployment cycle.
-- **Owner:** Data-ingestion team. Decision: engineering lead.
+- **Owner:** Data-ingestion team executes. Joint decision: engineering lead + operations lead.
 
 ### Step 7: Keep `odin_intel` Read-Only as Emergency Snapshot
 - **Action:** Prevent any writes to `odin_intel`; maintain as fallback for emergency queries.
 - **Precondition:** Step 6 complete; writes are exclusively to `odin_v2`.
 - **Monitoring:** Periodically compare point counts (should remain static).
-- **Use case:** If `odin_v2` becomes corrupted or unavailable, operator can manually point readers back to `odin_intel` to restore service.
+- **Use case:** If `odin_v2` becomes corrupted or unavailable, operations lead can manually point readers back to `odin_intel` to restore service.
 - **Duration:** Indefinite (until step 8).
 - **Owner:** DevOps. Decision: operations lead.
 
@@ -501,11 +519,11 @@ The 8-step cutover from Phase 1 (plan ref: `2026-04-30-qdrant-collection-sot.md`
 - **Action:** Delete `odin_intel` collection from Qdrant.
 - **Precondition:**
   - Minimum 30 days post-switch (step 4) without major incidents.
-  - Explicit approval from operations lead and engineering lead.
+  - Explicit approval from both engineering lead and operations lead (joint decision).
   - Backup/archive of `odin_intel` taken and stored off-cluster (if required by policy).
 - **Behavior:** `odin_v2` becomes the sole production collection; no rollback possible without re-ingestion.
 - **Duration:** 1 admin operation (seconds).
-- **Owner:** DevOps + engineering lead (joint decision).
+- **Owner:** DevOps executes. Joint decision: engineering lead + operations lead.
 
 ---
 
@@ -604,16 +622,17 @@ This spec intentionally does NOT cover:
 
 ---
 
-### Risk 7: Operator Approvals Bottleneck
+### Risk 7: Approval Bottleneck at Joint Decision Points
 
-**Scenario:** Engineering lead or operations lead is unavailable at a critical cutover step (e.g., step 4 reader switch). Migration is blocked.
+**Scenario:** Engineering lead or operations lead is unavailable at a critical cutover step (step 4 reader switch, step 6 writer cutover, or step 8 retirement). Migration is blocked.
 
 **Consequence:** Schedule slips; team morale impact.
 
 **Mitigation:**
-- Pre-migration planning: identify decision owner for each step and ensure backup is named.
+- Pre-migration planning: identify named backups for both engineering lead and operations lead before the cutover window opens.
 - Use feature flags (not manual config) for steps that require atomic decisions (steps 4, 6, 8). Allow automated rollback if latency/error thresholds are breached.
-- Document approval criteria in this spec so that any authorized person can make an informed decision.
+- Document approval criteria in this spec so that any authorized named backup can make an informed decision.
+- Decision model summary: engineering lead approves validation gate results (Step 3 → Step 4 boundary); DevOps executes deployments; engineering lead + operations lead give joint approval at Step 4 commit, Step 6 writer cutover, and Step 8 retirement.
 
 ---
 
@@ -622,5 +641,5 @@ This spec intentionally does NOT cover:
 - **Phase 1 Plan:** `docs/superpowers/plans/2026-04-30-qdrant-collection-sot.md`
 - **Phase 1 Spec:** `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` (§6 Phase 2 Target Contract, §5 Hybrid Activation Flag)
 - **Config Defaults:** `services/backend/app/config.py`, `services/intelligence/config.py`, `services/data-ingestion/config.py`
-- **Retriever Implementation:** `services/intelligence/rag/retriever.py` (lines 80-130, graceful fallback path)
+- **Retriever Implementation:** `services/intelligence/rag/retriever.py` — see `search` (dense httpx path) and `enhanced_search` (graceful hybrid fallback)
 - **Qdrant Native BM25 Docs:** https://qdrant.tech/documentation/concepts/sparse-vectors/ (check latest)
