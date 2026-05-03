@@ -202,7 +202,7 @@ class Odin_V2_Point(BaseModel):
 
 - **During Export:** No writes have happened yet. Safe to abort.
 - **During Enrich:** Abort and discard. No changes to `odin_intel` or `odin_v2`.
-- **During Write:** If insertion fails, log the error and **do not retry automatically**. Operator must inspect and manually decide whether to drop `odin_v2` and restart.
+- **During Write:** If insertion fails, log the error and **do not retry automatically**. DevOps (in coordination with the data-ingestion team) must inspect and manually decide whether to drop `odin_v2` and restart.
 - **After Validation:** Point count and payload parity are the gates. If validation fails, do not proceed to dual-write. Keep `odin_intel` active as fallback.
 
 ---
