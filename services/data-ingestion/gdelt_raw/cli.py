@@ -14,6 +14,7 @@ import httpx
 import redis.asyncio as aioredis
 from qdrant_client import AsyncQdrantClient
 
+from config import Settings
 from gdelt_raw.config import get_settings
 from gdelt_raw.recovery import replay_pending
 from gdelt_raw.run import run_backfill, run_forward
@@ -52,7 +53,7 @@ async def _get_clients():
     qdrant = QdrantWriter(
         client=qdrant_client,
         embed=embed,
-        collection=os.getenv("QDRANT_COLLECTION", "odin_intel"),
+        collection=Settings(_env_file=None).qdrant_collection,
     )
     return state, neo4j, qdrant
 
