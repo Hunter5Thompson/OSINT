@@ -10,7 +10,7 @@ import redis.asyncio as aioredis
 import structlog
 from qdrant_client import AsyncQdrantClient
 
-from config import Settings
+from config import settings
 from gdelt_raw.config import get_settings
 from gdelt_raw.run import run_forward
 from gdelt_raw.state import GDELTState
@@ -43,7 +43,7 @@ async def run_once() -> None:
     qdrant = QdrantWriter(
         client=qdrant_client,
         embed=embed,
-        collection=Settings(_env_file=None).qdrant_collection,
+        collection=settings.qdrant_collection,
     )
     try:
         await run_forward(state, neo4j, qdrant, Path(settings.parquet_path))

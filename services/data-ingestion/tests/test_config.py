@@ -111,8 +111,8 @@ class TestDirectEnvBypassGuard:
             or name == "config.py"
             or name == ".env.example"
             or "/docs/" in path_str
-            or "/migration" in path_str
-            or "/backfill" in path_str
+            or "/migrations/" in path_str
+            or "/backfill/" in path_str
         )
 
     def test_no_direct_env_reads(self):
