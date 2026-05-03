@@ -26,7 +26,9 @@ If a service is reading/writing the wrong collection or hybrid is prematurely en
 | Backend | `odin_intel` | N/A — does not consume `enable_hybrid` | Dense 1024-dim, cosine distance |
 | Intelligence | `odin_intel` | `False` | Dense 1024-dim, cosine distance |
 | Data-ingestion | `odin_intel` | N/A — does not consume `enable_hybrid` | Dense 1024-dim, cosine distance |
-| Vision-enrichment | `odin_intel` | N/A — does not consume `enable_hybrid` | Dense 1024-dim, cosine distance |
+| Vision-enrichment | `odin_intel` | N/A¹ — does not consume `enable_hybrid` | Dense 1024-dim, cosine distance |
+
+¹ *Vision-enrichment passes a hardcoded `False` to schema validation via `getattr(self._settings, "enable_hybrid", False)`. The `ENABLE_HYBRID` env var is not bound to any field and has no effect on vision-enrichment.*
 
 The `qdrant_collection` default is defined in each service's Pydantic `Settings` class (e.g., `services/backend/app/config.py`). The `enable_hybrid` field exists only in `services/intelligence/config.py`.
 
@@ -74,7 +76,7 @@ QDRANT_COLLECTION=odin_intel
 Restart the affected service:
 
 ```bash
-docker-compose restart <service-name>
+docker compose restart <service-name>
 ```
 
 **Step 3: Verify**
@@ -96,7 +98,7 @@ Confirm exit code 0 and expected schema in doctor output.
 **Step 1: Identify where `enable_hybrid` is set**
 
 ```bash
-grep -r ENABLE_HYBRID .env* docker-compose.yml
+grep -r ENABLE_HYBRID .env* docker compose.yml
 ```
 
 **Step 2: Disable hybrid**
@@ -104,7 +106,7 @@ grep -r ENABLE_HYBRID .env* docker-compose.yml
 Set `ENABLE_HYBRID=false` in the **intelligence service** deployment env — this is the only service that consumes the flag. Restart `intelligence`:
 
 ```bash
-docker-compose restart intelligence
+docker compose restart intelligence
 ```
 
 **Step 3: Verify**
@@ -148,7 +150,21 @@ Verify exit code 0 and confirm the expected schema (dense 1024-dim cosine, no sp
 
 ### Check 2: Service Config Contract Tests
 
-Run `uv run pytest tests/unit/test_config.py -v` in each of `services/backend`, `services/intelligence`, `services/data-ingestion`, `services/vision-enrichment`. All tests must pass, confirming `qdrant_collection == "odin_intel"` and `enable_hybrid == False` (intelligence only).
+Backend uses `tests/unit/` subdirectory:
+
+```bash
+cd services/backend && uv run pytest tests/unit/test_config.py -v
+```
+
+Intelligence, data-ingestion, and vision-enrichment use flat `tests/` layout:
+
+```bash
+cd services/intelligence && uv run pytest tests/test_config.py -v
+cd services/data-ingestion && uv run pytest tests/test_config.py -v
+cd services/vision-enrichment && uv run pytest tests/test_config.py -v
+```
+
+All tests must pass, confirming `qdrant_collection == "odin_intel"` and `enable_hybrid == False` (intelligence only).
 
 ### Check 3: Static Guard Against Direct Env Reads
 
@@ -165,7 +181,7 @@ rg -n 'os\.getenv\("QDRANT_COLLECTION"' services -g '*.py'
 ```bash
 curl -X POST http://localhost:8003/query \
   -H "Content-Type: application/json" \
-  -d '{"query": "test geopolitical event", "top_k": 5}' \
+  -d '{"query": "test geopolitical event"}' \
   -w "\nStatus: %{http_code}\n"
 ```
 
