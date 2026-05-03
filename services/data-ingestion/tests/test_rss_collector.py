@@ -6,6 +6,15 @@ import pytest
 
 from feeds.rss_collector import MAX_ENTRIES_PER_FEED, RSSCollector
 from pipeline import ExtractionConfigError, ExtractionTransientError
+from qdrant_client.models import (
+    CollectionConfig,
+    CollectionInfo,
+    CollectionParams,
+    Distance,
+    SparseIndexParams,
+    SparseVectorParams,
+    VectorParams,
+)
 
 
 @pytest.fixture
@@ -123,3 +132,70 @@ async def test_process_feed_caps_entries_per_run(mock_qdrant):
     assert count == MAX_ENTRIES_PER_FEED
     points = mock_qdrant.upsert.call_args.kwargs["points"]
     assert len(points) == MAX_ENTRIES_PER_FEED
+
+
+# ---------------------------------------------------------------------------
+# Schema preflight tests — mirror test_qdrant_preflight_ingestion.py pattern
+# ---------------------------------------------------------------------------
+
+
+def _make_phase1_info() -> CollectionInfo:
+    """Dense-only Phase 1 collection info (unnamed vector, 1024 cosine)."""
+    params = CollectionParams.model_construct(
+        vectors=VectorParams(size=1024, distance=Distance.COSINE),
+        sparse_vectors=None,
+    )
+    config = CollectionConfig.model_construct(params=params)
+    return CollectionInfo.model_construct(
+        config=config,
+        payload_schema={},
+        points_count=10,
+    )
+
+
+def test_rss_validates_schema_when_collection_exists():
+    """RSSCollector._ensure_collection calls validate_collection_schema when collection exists."""
+    coll = MagicMock()
+    coll.name = "odin_intel"
+
+    mock_qdrant = MagicMock()
+    mock_qdrant.get_collections.return_value.collections = [coll]
+    mock_qdrant.get_collection.return_value = _make_phase1_info()
+
+    with patch("feeds.rss_collector.QdrantClient", return_value=mock_qdrant), \
+         patch("feeds.rss_collector.validate_collection_schema") as mock_validate:
+        collector = RSSCollector.__new__(RSSCollector)
+        collector.qdrant = mock_qdrant
+        collector._redis = None
+        # Call _ensure_collection directly — the __init__ already calls it but
+        # we use __new__ to bypass __init__ so we control the qdrant mock exactly.
+        collector._ensure_collection()
+
+    mock_validate.assert_called_once()
+    # No upsert should have happened
+    mock_qdrant.upsert.assert_not_called()
+
+
+def test_rss_phase2_refuses_phase1_collection():
+    """RSSCollector._ensure_collection raises QdrantSchemaMismatch on schema mismatch, no write."""
+    from qdrant_doctor.schema import QdrantSchemaMismatch
+
+    coll = MagicMock()
+    coll.name = "odin_intel"
+
+    mock_qdrant = MagicMock()
+    mock_qdrant.get_collections.return_value.collections = [coll]
+    mock_qdrant.get_collection.return_value = _make_phase1_info()
+
+    # Simulate validate_collection_schema raising QdrantSchemaMismatch (Phase 2 refusal)
+    with patch("feeds.rss_collector.QdrantClient", return_value=mock_qdrant), \
+         patch("feeds.rss_collector.validate_collection_schema",
+               side_effect=QdrantSchemaMismatch("named dense vector required")):
+        collector = RSSCollector.__new__(RSSCollector)
+        collector.qdrant = mock_qdrant
+        collector._redis = None
+        with pytest.raises(QdrantSchemaMismatch):
+            collector._ensure_collection()
+
+    # Absolutely no upsert must have been attempted
+    mock_qdrant.upsert.assert_not_called()
