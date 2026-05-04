@@ -1,8 +1,9 @@
 # Fusion Core - Design Spec
 
 **Date:** 2026-05-03
+**Review Update:** 2026-05-04
 **Status:** Review-ready
-**Scope:** TASK-108 candidate: canonical observations, stable world objects,
+**Scope:** TASK-112 candidate: canonical observations, stable world objects,
 spatiotemporal fusion, source lineage, and analyst triage
 
 ---
@@ -99,6 +100,10 @@ This spec does not require PostGIS or a new database. Phase 1 uses Neo4j plus Re
 and service-local logic. A later performance spec may introduce a spatial index or
 columnar event store if needed.
 
+This spec does not store full-rate AIS or ADS-B streams in Neo4j. Phase 1 stores
+sampled observations and accepted fusion state only; high-volume track retention is a
+follow-up Realtime Track Store concern.
+
 ---
 
 ## 5. Core Concepts
@@ -113,6 +118,7 @@ Required fields:
 source_id: stable hash or provider id
 source_type: gdelt | rss | notebooklm | ais | adsb | tle | firms | analyst | vision
 provider: human-readable provider name
+external_id: optional provider-native identifier
 url: optional source URL
 feed_id: optional feed/channel identifier
 fetched_at: ingestion timestamp
@@ -121,17 +127,23 @@ credibility_score: 0.0-1.0
 license: optional source/license note
 excerpt: optional short supporting excerpt
 payload_hash: hash of normalized raw payload
+classification: public | internal | sensitive
 ```
 
 Identity rule:
 
 ```text
-source_id = sha256(source_type + provider + url/feed_id + payload_hash)[:16]
+source_id = sha256(normalization_version + source_type + provider + external_id
+                   + url/feed_id + payload_hash)[:20]
 ```
 
 When a source has a canonical id, such as GDELT GKG id, AIS message id, or TLE NORAD
 catalog number plus epoch, the source-specific id is stored in `external_id` and also
 participates in the hash.
+
+`[:20]` gives 80 bits of hash material. Phase 1 uses this length for SourceRef,
+Observation, FusionLink, ReviewItem, and source-independent fingerprints so child ids
+do not carry more entropy than their parent evidence ids.
 
 ### 5.2 Observation
 
@@ -155,16 +167,65 @@ entity_hints: normalized identifiers and names
 confidence: 0.0-1.0
 extraction_method: deterministic | llm | sensor | analyst | vision
 payload: normalized source-specific details
+claim_fingerprint: source-independent normalized claim fingerprint
+normalization_version: schema/id normalization version
 ```
 
 Observation identity:
 
 ```text
-observation_id = sha256(source_id + observed_at + object_type_hint + geometry_hash + entity_hint_hash)[:20]
+observation_id = sha256(normalization_version + source_id + observed_at
+                        + object_type_hint + geometry_hash + entity_hint_hash)[:20]
 ```
 
 This makes ingestion idempotent. Replaying the same feed slice updates the same
 observation rather than creating a duplicate.
+
+Two independent providers that emit the same real-world claim produce separate
+Observations because `source_id` participates in `observation_id`. They share the same
+`claim_fingerprint` when their normalized source-independent fields match. Fusion uses
+that fingerprint for corroboration without losing per-source lineage.
+
+### 5.2.1 Normalization Rules
+
+All ids use `normalization_version = "fusion-v1"` in Phase 1.
+
+Hash inputs are built from canonical JSON:
+
+```text
+UTF-8
+sorted keys
+no null-valued optional fields
+trimmed strings
+Unicode NFKC
+case-folded identifier keys
+ISO-8601 UTC timestamps truncated to seconds
+```
+
+`entity_hint_hash` includes only stable keys:
+
+```text
+identifiers: mmsi, imo, icao24, callsign, norad_id, wikidata_id, iso3, m49
+names: canonical_name, aliases
+object_type_hint
+```
+
+Adding a new hint field must not affect idempotency until the implementation bumps
+`normalization_version`.
+
+`geometry_hash` is source-type aware:
+
+```text
+point: lat/lon rounded to 5 decimals
+bbox: min_lon,min_lat,max_lon,max_lat rounded to 5 decimals
+polygon: WGS84 ring coordinates rounded to 5 decimals after canonical ring ordering
+track_segment: start/end point rounded to 5 decimals plus start/end timestamps
+none: literal "none"
+```
+
+`claim_fingerprint` excludes `source_id`, URL, provider, and fetched timestamp. It
+includes `normalization_version`, observed time bucket, object type hint, stable entity
+hints, and geometry hash. This is a corroboration key, not an authoritative id.
 
 ### 5.3 WorldObject
 
@@ -259,8 +320,9 @@ target_kind: world_object | incident
 match_score: 0.0-1.0
 decision: auto_linked | needs_review | analyst_linked | rejected
 match_reasons: list of reason codes
+reason_detail: short human-readable explanation for audit review
 created_at: timestamp
-decided_by: system | analyst user label
+decided_by: system | server-bound analyst actor
 review_item_id: optional ReviewItem link
 ```
 
@@ -279,6 +341,78 @@ llm_suggested
 analyst_override
 conflict_detected
 ```
+
+`reason_detail` is required when `analyst_override`, `conflict_detected`, or
+`llm_suggested` appears in `match_reasons`.
+
+### 5.6 Confidence Semantics
+
+Confidence values are comparable only within their entity class unless explicitly
+derived by the formulas below.
+
+`SourceRef.credibility_score`:
+
+```text
+provider trust score from configuration or source registry
+0.90 official sensor/provider feed
+0.75 established public dataset or institutional source
+0.60 known media/feed source
+0.50 unknown source default
+0.30 low-quality or frequently duplicated source
+```
+
+`Observation.confidence`:
+
+```text
+clamp(source_credibility_score
+      * extraction_method_weight
+      * payload_quality_weight
+      * time_quality_weight,
+      0.0,
+      1.0)
+```
+
+Weights:
+
+```text
+sensor/deterministic extraction: 1.00
+analyst entry: 0.95
+LLM extraction with schema validation: 0.80
+vision detection: detector_confidence when implemented
+payload has exact identifier: 1.00
+payload has name+geo+time only: 0.85
+payload missing observed_at and falls back to fetched_at: 0.70
+payload missing geometry for spatial source: 0.60
+```
+
+`FusionLink.match_score` is the matcher score and is not a source confidence.
+
+`WorldObject.confidence`:
+
+```text
+max(confirmed_identifier_score,
+    weighted_mean(linked Observation.confidence by source uniqueness and recency))
+```
+
+Identifier-backed objects start at `0.90` when the identifier is valid and type
+compatible. Analyst-confirmed objects can reach `1.00`.
+
+`IncidentCandidate.confidence`:
+
+```text
+clamp(weighted_mean(observation.confidence)
+      + corroboration_bonus
+      - conflict_penalty,
+      0.0,
+      1.0)
+```
+
+Corroboration bonus is `+0.05` per independent source type after the first, capped at
+`+0.20`. Conflict penalty is `-0.20` for material contradiction and forces
+`needs_review`.
+
+`ReviewItem.confidence` is the system confidence in the recommended action, not the
+truth of the underlying claim.
 
 ---
 
@@ -307,23 +441,27 @@ compatible.
 Spatiotemporal matchers cluster observations by distance, time window, type
 compatibility, and source corroboration.
 
-Default thresholds for Phase 1:
+Phase 1 deliberately does not perform fuzzy cross-gap track stitching for moving
+objects. AIS/ADS-B/TLE moving-object observations auto-link only through exact
+identifiers. Any continuity-based link without an exact identifier becomes
+`needs_review` and belongs to the future Realtime Track Store if it needs automation.
+
+Default incident thresholds for Phase 1:
 
 ```text
-same moving object candidate:
-  max_distance_km = speed_feasible_distance(observation_delta) + 5 km buffer
-  max_time_gap = 6 hours for AIS/ADS-B, 24 hours for low-frequency sources
-
 same incident candidate:
   max_distance_km = 25 km for conflict/disaster/news observations
   max_time_gap = 24 hours for breaking events
   max_time_gap = 7 days for slow-burn political/economic events
 
 thermal/news corroboration:
-  FIRMS within 10 km and 12 hours of RSS/GDELT explosion/fire/conflict observation
+  FIRMS within 25 km and 12 hours of RSS/GDELT explosion/fire/conflict observation
+  FIRMS match reason must be "thermal_corroboration", not exact location proof
 ```
 
 Thresholds are constants in Phase 1 and configuration in Phase 2 after evaluation.
+FIRMS coordinates are satellite pixel centers; they corroborate regional thermal
+activity and do not prove exact facility-level location.
 
 ### 6.3 Fuzzy Entity Matching
 
@@ -379,7 +517,7 @@ dismissed
 
 ```text
 review_item_id
-kind: entity_match | incident_cluster | source_conflict | analyst_note | vision_detection
+kind: entity_match | incident_cluster | source_conflict | analyst_note
 status
 priority: low | medium | high | critical
 summary
@@ -395,11 +533,14 @@ assigned_to
 decision_log
 ```
 
+The enum is intentionally closed for Phase 1. TASK-107 or a later Vision Producer
+spec may add `vision_detection`.
+
 Decision log entries:
 
 ```text
 timestamp
-actor: system | analyst label
+actor: system | server-bound analyst actor
 action
 reason
 before
@@ -449,7 +590,10 @@ Relationships:
 (:IncidentCandidate)-[:INVOLVES]->(:WorldObject)
 (:ReviewItem)-[:REVIEWS]->(:FusionLink)
 (:ReviewItem)-[:HAS_EVIDENCE]->(:Observation)
-(:WorldObject)-[:SAME_AS | ALIAS_OF | LOCATED_AT]->(...)
+(:WorldObject)-[:PROJECTS_TO]->(:Entity)
+(:IncidentCandidate)-[:PROJECTS_TO]->(:Event)
+(:SourceRef)-[:PROJECTS_TO]->(:Source)
+(:WorldObject)-[:ALIAS_OF | LOCATED_AT]->(...)
 ```
 
 Existing `:Entity`, `:Event`, `:Location`, and `:Source` nodes remain supported.
@@ -465,6 +609,20 @@ Observation geometry -> :Location when applicable
 
 This protects current graph query tools and frontend Graph Explorer while the fusion
 model matures.
+
+Fusion nodes are canonical. `:Entity`, `:Event`, and `:Source` nodes are compatibility
+projections. Projection writes must happen in the same Neo4j transaction as the
+accepted fusion state change. Projection nodes carry back-reference properties:
+
+```text
+Entity.fusion_world_object_id
+Event.fusion_incident_id
+Source.fusion_source_id
+```
+
+The projection relationship makes disagreements diagnosable: if a projection is
+missing, readers can show the canonical fusion node and flag projection status instead
+of silently disagreeing.
 
 ---
 
@@ -498,11 +656,20 @@ valid_until
 lat
 lon
 confidence
-lineage_depth
 ```
 
 Agents retrieving Qdrant context must be able to surface the lineage ids in final
 answers. This directly closes the TASK-014 lineage gap.
+
+Payload policy:
+
+```text
+Qdrant payloads store public lineage ids and short public excerpts only.
+No PII, crew rosters, private contact fields, access tokens, or raw analyst-sensitive
+payloads are embedded for agent retrieval.
+Sensitive raw payloads remain in the source system or Neo4j properties marked
+classification="sensitive" and are excluded from RAG indexing.
+```
 
 ---
 
@@ -532,6 +699,35 @@ POST /internal/fusion/observations/batch
 
 The internal endpoints are service-to-service only and validate payloads with
 Pydantic. They do not accept arbitrary Cypher or raw LLM output.
+
+Internal endpoint enforcement:
+
+```text
+Every /internal/fusion request must include:
+  X-ODIN-Service: service name
+  X-ODIN-Timestamp: unix seconds
+  X-ODIN-Signature: hex HMAC-SHA256(timestamp + "." + raw_body)
+
+The backend verifies the signature with FUSION_INTERNAL_HMAC_SECRET, rejects requests
+older than 300 seconds, rejects missing service names, and logs the service actor.
+```
+
+These endpoints are still mounted on the backend service, but path prefix alone is
+not trusted. If `FUSION_INTERNAL_HMAC_SECRET` is unset, internal write endpoints refuse
+requests at startup or return 503 in local development.
+
+Review endpoint actor binding:
+
+```text
+POST /api/v1/fusion/review/{review_item_id}/decision requires:
+  Authorization: Bearer <FUSION_REVIEW_TOKEN>
+
+The request body may include action and reason but must not include actor.
+The backend derives actor from FUSION_REVIEW_ACTOR after token validation.
+```
+
+This matches the current single-user/no-auth posture without letting callers forge
+`decided_by`.
 
 ---
 
@@ -593,8 +789,38 @@ RSS/NotebookLM -> extracted event/entity observations with SourceRef lineage
 Analyst notes -> analyst observations attached to objects or incidents
 ```
 
-Each producer owns only normalization into `SourceRef` and `Observation`. The fusion
-service owns matching and review generation.
+Each producer owns only normalization into `SourceRef` and `Observation`. The backend
+fusion service owns matching, deterministic fusion writes, review generation, and
+review-decision writes.
+
+NotebookLM migration:
+
+```text
+Slice D makes nlm_ingest emit Observations in parallel with its existing graph writes.
+nlm_ingest/write_templates.py remains a compatibility shim during Phase 1.
+Phase 2 retires direct NLM graph writes after fusion projections cover the same
+Entity/Event/Source read surface.
+```
+
+Phase 1 volume caps:
+
+```text
+AIS observations: at most one observation per MMSI per 5 minutes
+ADS-B observations: at most one observation per icao24 per 5 minutes
+TLE observations: one observation per NORAD id per new TLE epoch
+FIRMS observations: one observation per hotspot record after existing dedupe
+GDELT/RSS/NLM observations: only records passing existing codebook/source filters
+Raw high-volume track points: not stored in Neo4j Phase 1
+```
+
+Retention:
+
+```text
+WorldObject, IncidentCandidate, FusionLink, ReviewItem, and SourceRef nodes persist.
+High-volume raw Observations from AIS/ADS-B keep 90 days in Neo4j Phase 1.
+Text-source, FIRMS, TLE, and analyst Observations persist until an explicit retention
+job is designed.
+```
 
 ---
 
@@ -603,11 +829,15 @@ service owns matching and review generation.
 Phase 1 follows the existing write/read separation:
 
 ```text
+packages/odin-fusion-models/
+  Owns shared Pydantic models, enums, id builders, normalization helpers,
+  confidence helpers, and match reason constants.
+  Is imported by backend, data-ingestion, intelligence, and tests via path dependency.
+
 services/data-ingestion/fusion/
-  Owns SourceRef and Observation production helpers.
-  Owns deterministic id generation shared by feed producers.
-  Owns write-side Cypher templates for SourceRef, Observation, FusionLink, and
-  ReviewItem creation when records are produced by scheduled ingestion.
+  Owns feed-specific Observation producer adapters.
+  Does not own Neo4j fusion write templates.
+  Sends signed internal requests to backend fusion endpoints.
 
 services/intelligence/fusion/
   Owns match scoring, incident clustering, review recommendation, and agent-facing
@@ -619,7 +849,13 @@ services/backend/app/routers/fusion.py
   Owns external REST endpoints for fused objects, incidents, review queue, and
   lineage.
   Reads Neo4j through parameterized query helpers.
-  Sends review decisions through deterministic write helpers only.
+  Verifies service HMACs for internal ingestion writes.
+  Sends review decisions through backend deterministic write helpers only.
+
+services/backend/app/services/fusion_write.py
+  Owns deterministic Cypher templates for SourceRef, Observation, FusionLink,
+  ReviewItem, WorldObject, IncidentCandidate, and projection writes.
+  Owns review-decision write transactions and audit-log persistence.
 
 services/frontend/src/components/fusion/
   Owns Review panel, lineage display, and timeline UI components.
@@ -627,9 +863,10 @@ services/frontend/src/components/fusion/
   fusion UI into WorldviewPage.
 ```
 
-Cross-service model drift is controlled with contract tests, following the existing
-NotebookLM schema drift pattern. The implementation plan must include text-based drift
-tests where Python imports are impossible across Docker build contexts.
+Cross-service model drift is controlled by the shared package. Contract tests still
+verify that each service depends on the same `odin-fusion-models` version or path.
+Text-based drift tests are fallback only where Docker build contexts temporarily make
+imports impossible during migration.
 
 ---
 
@@ -672,6 +909,8 @@ invalid Observation -> reject observation and keep collector state retryable
 duplicate Observation -> idempotent update
 missing geometry -> allowed only for non-spatial observations
 missing observed_at -> fallback to published_at, then fetched_at, with lower confidence
+internal request missing/invalid HMAC -> reject with 401 and do not parse body further
+review request missing/invalid operator token -> reject with 401 and no decision log write
 ```
 
 Fusion conflicts:
@@ -695,17 +934,22 @@ Backend and fusion service tests:
 ```text
 SourceRef id is stable for equivalent normalized payloads
 Observation id is stable across replay
+Observation id changes when source_id changes but claim_fingerprint stays stable for mirrored claims
 AIS MMSI creates or links the same vessel WorldObject
 ADS-B icao24 creates or links the same aircraft WorldObject
 TLE NORAD id creates or links the same satellite WorldObject
 FIRMS plus GDELT within threshold creates IncidentCandidate
+FIRMS corroboration does not claim exact facility-level location
 ambiguous fuzzy match creates ReviewItem
 conflicting identifiers create ReviewItem
 approved review decision updates FusionLink decision
 rejected review decision preserves Observation and writes decision log
 lineage endpoint returns SourceRef -> Observation -> FusionLink -> target chain
+internal fusion endpoints reject missing/invalid HMAC
+review decision endpoint derives actor server-side and ignores body actor
 Neo4j write templates use parameter binding only
 graph read endpoints reject write operations
+accepted fusion state and compatibility projection commit atomically
 ```
 
 Frontend tests:
@@ -753,6 +997,9 @@ The feature is accepted when:
    writes, and review-state transitions.
 10. Vision can be added later by writing observations; no fusion model changes are
     required for basic vision detections.
+11. Internal fusion writes require HMAC and review decisions derive actor server-side.
+12. Phase 1 sensor observations respect the 5-minute AIS/ADS-B cadence cap and do not
+    store full-rate track streams in Neo4j.
 
 ---
 
@@ -762,22 +1009,25 @@ Recommended implementation slices:
 
 ```text
 Slice A: Models and deterministic ids
-  SourceRef, Observation, WorldObject, IncidentCandidate, FusionLink, ReviewItem
+  packages/odin-fusion-models with SourceRef, Observation, WorldObject,
+  IncidentCandidate, FusionLink, ReviewItem, ids, normalization, confidence
 
 Slice B: Neo4j write templates and read queries
-  parameter-bound writes, timeline reads, lineage reads
+  backend-owned parameter-bound writes, projection transactions, timeline reads,
+  lineage reads, HMAC-protected internal endpoints
 
 Slice C: Deterministic matchers
   AIS MMSI, ADS-B icao24, TLE NORAD id
 
 Slice D: Observation producers
-  adapt selected existing collectors to emit observations in parallel with old writes
+  adapt selected existing collectors and nlm_ingest to emit observations in parallel
+  with old writes
 
 Slice E: Incident clustering
   FIRMS + GDELT/RSS spatiotemporal correlation
 
 Slice F: Review queue API
-  list, filter, decide, decision log
+  list, filter, decide, server-bound actor, decision log
 
 Slice G: Frontend review and lineage
   Review panel, Inspector branches, timeline/source lineage display

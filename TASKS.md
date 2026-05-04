@@ -1168,6 +1168,8 @@ TASK-107: Hybrid Vision (YOLOv8)             5-7 Tage   ┘ parallel          [O
 TASK-108: Submarine Cable Layer              1-2 Tage                       [OFFEN]
 TASK-109: Flights Performance (Caching)      1-2 Tage                       [PARTIAL ✅]
 TASK-110: Dual-Model (9B Interactive + 27B Ingestion) 3-4 Tage              [PARTIAL ✅]
+TASK-111: Voxtral TTS                        2-3 Tage                       [OFFEN ❌]
+TASK-112: Fusion Core                        8-12 Tage                      [SPEC ✅]
 ```
 
 ## Gesamte neue Dependencies (über MVP hinaus)
@@ -1396,3 +1398,47 @@ Option C — GGUF Quantisiert (Phase 2, experimentell):
 - Paper: https://arxiv.org/abs/2603.25551
 - vLLM-Omni Docker: https://github.com/vllm-project/vllm-omni
 - GGUF Quant: https://huggingface.co/TrevorJS/voxtral-tts-q4-gguf
+
+---
+
+# ══════════════════════════════════════════
+# TASK-112: Fusion Core — Observations, WorldObjects, Lineage, Review
+# ══════════════════════════════════════════
+# Aufwand: 8-12 Tage | Blocked by: TASK-014 lineage hardening | Blocks: TASK-107 production integration
+# Status: SPEC ✅ (Design: docs/superpowers/specs/2026-05-03-fusion-core-design.md)
+# Priorität: HOCH — Strategischer Sprung von Layer-Karte zu Fusion-System
+
+## Kontext
+WorldView hat Karte, Feed-Collector, Neo4j, Qdrant, LangGraph und mehrere
+OSINT-Layer. Der nächste Architektur-Sprung ist nicht ein weiterer Layer, sondern
+eine Fusion-Schicht:
+
+```
+Raw Source → SourceRef → Observation → WorldObject / IncidentCandidate
+→ FusionLink → ReviewItem → approved graph/timeline/globe surface
+```
+
+Vision/Yolo bleibt downstream: Detektionen werden später nur ein weiterer
+Observation-Producer.
+
+## Design-Spec
+- `docs/superpowers/specs/2026-05-03-fusion-core-design.md`
+
+## Kernentscheidungen
+1. `packages/odin-fusion-models/` wird gemeinsamer Modell-/ID-/Normalisierungs-Owner.
+2. Backend besitzt deterministische Fusion-Write-Templates und Review-Decision-Writes.
+3. Internal Fusion Writes benötigen HMAC (`FUSION_INTERNAL_HMAC_SECRET`).
+4. Review-Akteure werden serverseitig aus `FUSION_REVIEW_TOKEN` + `FUSION_REVIEW_ACTOR` gebunden.
+5. Phase 1 speichert keine Full-Rate AIS/ADS-B-Tracks in Neo4j; 5-Minuten-Cadence pro Objekt.
+6. Accepted Fusion Nodes werden atomar in bestehende `:Entity`/`:Event`/`:Source` Projektionen gespiegelt.
+
+## Deliverables
+1. Shared package: `SourceRef`, `Observation`, `WorldObject`, `IncidentCandidate`,
+   `FusionLink`, `ReviewItem`, ID Builder, Normalisierung, Confidence-Helfer.
+2. Backend: `/api/v1/fusion/*` und HMAC-geschützte `/internal/fusion/*` Endpoints.
+3. Backend: deterministische, parametergebundene Neo4j Fusion-Write-Templates.
+4. Data-Ingestion: AIS/ADS-B/TLE/FIRMS/GDELT/RSS/NLM Observation Producer in Phase-1-Cadence.
+5. Intelligence: Fusion Read Tools für Timeline, Lineage und Review-Evidence.
+6. Frontend: Review Panel, Inspector-Lineage, Fusion Object/Incident Details.
+7. Tests: Idempotenz, deterministic identity, HMAC, actor binding, projection transaction,
+   review-state transitions, cadence caps.
