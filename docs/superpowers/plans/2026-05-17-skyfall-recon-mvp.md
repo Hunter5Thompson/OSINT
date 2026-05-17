@@ -230,8 +230,8 @@ winner is chosen):
     "serve": "vite preview --port 8765 --host 127.0.0.1"
   },
   "dependencies": {
-    "@sparkjs/spark": "0.7.0",
-    "@mkkellogg/gaussian-splats-3d": "0.5.3",
+    "@sparkjsdev/spark": "0.1.10",
+    "@mkkellogg/gaussian-splats-3d": "0.4.7",
     "three": "0.165.0"
   },
   "devDependencies": {
@@ -306,7 +306,7 @@ import * as THREE from "three";
 // Pinned imports — concrete classes per each library's README on 2026-05-11.
 // If a class name changes in a later version, update both the import and
 // package.json pin; do not rely on "default" exports here.
-import { SplatMesh } from "@sparkjs/spark";
+import { SplatMesh } from "@sparkjsdev/spark";
 import * as GaussianSplats3D from "@mkkellogg/gaussian-splats-3d";
 
 const PLY_URL = "/JAX_068_final.ply";
@@ -323,7 +323,7 @@ interface Timing {
 const results: { spark: Timing; mkk: Timing; ua: string; pinned_versions: Record<string,string> } = {
   spark: empty(), mkk: empty(),
   ua: navigator.userAgent,
-  pinned_versions: { "@sparkjs/spark": "0.7.0", "@mkkellogg/gaussian-splats-3d": "0.5.3", three: "0.165.0" },
+  pinned_versions: { "@sparkjsdev/spark": "0.7.0", "@mkkellogg/gaussian-splats-3d": "0.5.3", three: "0.165.0" },
 };
 
 function empty(): Timing {
@@ -466,7 +466,7 @@ Create `docs/workflows/recon-phase-0-smoke.md`:
 **PLY tested:** JAX_068_final.ply (240,164,505 bytes)
 
 ## Pinned versions
-- @sparkjs/spark: 0.7.0
+- @sparkjsdev/spark: 0.7.0
 - @mkkellogg/gaussian-splats-3d: 0.5.3
 - three: 0.165.0
 
@@ -3435,7 +3435,7 @@ git commit -m "feat(frontend/recon): add SplatRenderer abstract interface"
 If Phase 0 chose Spark:
 ```bash
 cd services/frontend
-npm install @sparkjs/spark three
+npm install @sparkjsdev/spark three
 ```
 
 If Phase 0 chose `@mkkellogg/gaussian-splats-3d`:
