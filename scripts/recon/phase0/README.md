@@ -26,9 +26,20 @@ hf download jayinnn/Skyfall-GS-ply JAX_068_final.ply --local-dir public
 ls -lh public/JAX_068_final.ply   # expect ~229 MiB
 
 # Serve the harness.
-npx vite --port 8765
+npm run dev
 # Open http://127.0.0.1:8765/
 ```
+
+> Note on `first_progress_ms`: the harness streams the PLY itself via
+> `fetch()` + a `ReadableStream` reader to measure the first non-zero
+> byte chunk honestly. The bytes are then handed to Spark via
+> `SplatMesh({ fileBytes, fileType })`. mkk's `addSplatScene` re-fetches
+> from the URL (its own `onProgress` is wired up too) — the second fetch
+> is served from the browser HTTP cache, so it doesn't double the wire
+> time on the no-throttle run. On the 30 Mbps throttled run there *is*
+> a small re-download cost for mkk; that's acceptable for a smoke test,
+> and the timing run still measures both renderers fairly because each
+> path uses its own dedicated progress hook.
 
 ## Capture procedure
 
@@ -92,13 +103,17 @@ on the day of scaffold:
 - `@sparkjsdev/spark@0.7.0` -> `@sparkjsdev/spark@0.1.10`. The plan used an
   alias package name; the real package on npm is `@sparkjsdev/spark`
   (verified via `npm search spark gaussian`). The 0.x line maxes at
-  `0.1.10`; a `2.0.0` major rewrite exists but the plan's harness API
-  (`SplatMesh({ url, onProgress })` + `mesh.loadPromise`) targets the 0.x
-  series, so we pin the latest 0.x. The harness `import` was updated to
-  match the corrected scope.
+  `0.1.10`; a `2.0.0` major rewrite exists but we pin the latest 0.x
+  for stability. The harness uses the 0.1.10 API surface verified
+  against `node_modules/@sparkjsdev/spark/dist/types/SplatMesh.d.ts`:
+  the readiness promise is `mesh.initialized` (NOT `loadPromise`), and
+  `SplatMeshOptions` has no `onProgress` field — progress is measured
+  by the harness's own `fetch()` stream reader before bytes are handed
+  to `SplatMesh({ fileBytes, fileType })`.
 - `@mkkellogg/gaussian-splats-3d@0.5.3` -> `@mkkellogg/gaussian-splats-3d@0.4.7`.
   `0.5.x` does not exist; `0.4.7` is the latest published 0.x.
 
-If the harness errors at run time with "SplatMesh is not a constructor" or
+If the harness errors at run time with "SplatMesh is not a constructor",
+"Cannot read properties of undefined (reading 'initialized')", or
 "Viewer.addSplatScene is not a function", the API surface changed in the
 0.x line we landed on — STOP, file BLOCKED, do not paper over.

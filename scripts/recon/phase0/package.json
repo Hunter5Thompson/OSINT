@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite --port 8765 --host 127.0.0.1",
     "serve": "vite preview --port 8765 --host 127.0.0.1"
   },
   "dependencies": {
