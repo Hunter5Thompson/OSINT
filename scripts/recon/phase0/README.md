@@ -1,7 +1,7 @@
 # Skyfall Recon — Phase 0 Smoke Harness
 
 A two-pane renderer parity + load-time gate for the Skyfall Recon MVP. Runs
-`@sparkjs/spark` and `@mkkellogg/gaussian-splats-3d` side by side against the
+`@sparkjsdev/spark` and `@mkkellogg/gaussian-splats-3d` side by side against the
 same PLY so a human operator can pick a renderer based on real numbers and
 real screenshots.
 
@@ -89,7 +89,7 @@ The plan (`docs/superpowers/plans/2026-05-17-skyfall-recon-mvp.md`, Task 0
 Step 1) pinned versions that don't resolve on npm. Both pins were adjusted
 on the day of scaffold:
 
-- `@sparkjs/spark@0.7.0` -> `@sparkjsdev/spark@0.1.10`. The plan used an
+- `@sparkjsdev/spark@0.7.0` -> `@sparkjsdev/spark@0.1.10`. The plan used an
   alias package name; the real package on npm is `@sparkjsdev/spark`
   (verified via `npm search spark gaussian`). The 0.x line maxes at
   `0.1.10`; a `2.0.0` major rewrite exists but the plan's harness API
