@@ -440,7 +440,18 @@ case "$COMMAND" in
       bootstrap)
         echo "Bootstrapping Skyfall-GS recon PLYs..."
         cd "$ROOT_DIR"
-        python -m scripts.recon.bootstrap_skyfall_plys "${@:3}"
+        if [ -x "$ROOT_DIR/services/backend/.venv/bin/python" ]; then
+          PY="$ROOT_DIR/services/backend/.venv/bin/python"
+        elif command -v python3 >/dev/null 2>&1; then
+          PY=python3
+        elif command -v python >/dev/null 2>&1; then
+          PY=python
+        else
+          echo "ERROR: no python interpreter found on PATH" >&2
+          exit 127
+        fi
+        "$PY" -m scripts.recon.bootstrap_skyfall_plys "${@:3}"
+        exit $?
         ;;
       "")
         echo "Usage: ./odin.sh recon bootstrap [--no-strict-sizes] [--allow-partial]"
