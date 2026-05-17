@@ -37,6 +37,7 @@ Usage:
   ./odin.sh vision up|down     # Start/stop Vision Enrichment (Qwen3-VL-8B)
   ./odin.sh gdelt status       # Run odin-ingest-gdelt CLI inside data-ingestion
                                # (also: forward, backfill, resume, etc.)
+  ./odin.sh recon bootstrap    # Download Skyfall-GS PLYs and write recon_manifest.json
 USAGE
 }
 
@@ -433,6 +434,24 @@ case "$COMMAND" in
   gdelt)
     shift
     "${COMPOSE[@]}" exec data-ingestion odin-ingest-gdelt "$@"
+    ;;
+  recon)
+    case "$MODE" in
+      bootstrap)
+        echo "Bootstrapping Skyfall-GS recon PLYs..."
+        cd "$ROOT_DIR"
+        python -m scripts.recon.bootstrap_skyfall_plys "${@:3}"
+        ;;
+      "")
+        echo "Usage: ./odin.sh recon bootstrap [--no-strict-sizes] [--allow-partial]"
+        exit 1
+        ;;
+      *)
+        echo "Unknown recon subcommand: $MODE"
+        echo "Usage: ./odin.sh recon bootstrap"
+        exit 1
+        ;;
+    esac
     ;;
   help|--help|-h|"")
     usage
