@@ -1,0 +1,4 @@
+{
+  "_comment": "Per-source-imagery license records. Populated manually after pulling the upstream license text into licenses/<slug>.txt. Bootstrap reads this. Empty by default — the bootstrap will exclude SpaceNet 2 + SpaceNet 4 scenes from the manifest until each source has a fully populated record AND a non-empty <slug>.txt file alongside.",
+  "records": {}
+}
