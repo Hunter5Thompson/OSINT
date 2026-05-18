@@ -1,0 +1,37 @@
+.recon-viewer {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(11, 11, 9, 0.97);
+  display: flex; flex-direction: column;
+}
+.recon-viewer__canvas { flex: 1; display: block; width: 100%; height: 100%; }
+.recon-viewer__footer {
+  padding: 8px 16px; font: 11px/1.4 monospace; color: #c9b380;
+  background: rgba(18, 17, 14, 0.84); border-top: 1px solid #3a342a;
+}
+.recon-viewer__close {
+  position: absolute; top: 12px; right: 12px;
+  background: transparent; border: 1px solid #3a342a; color: #c9b380;
+  padding: 6px 12px; cursor: pointer; font: 11px monospace;
+}
+.recon-viewer__progress {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  color: #c9b380; font: 13px monospace; text-align: center;
+}
+.recon-viewer__progress--error { color: #d97a55; }
+.recon-viewer__progress--error button {
+  margin-top: 12px; background: transparent; border: 1px solid #d97a55;
+  color: #d97a55; padding: 6px 12px; cursor: pointer;
+}
+.recon-viewer__hud {
+  position: absolute; top: 12px; left: 12px;
+}
+.recon-viewer__hud button {
+  background: transparent; border: 1px solid #3a342a; color: #c9b380;
+  padding: 6px 12px; cursor: pointer; font: 11px monospace;
+}
+.recon-viewer__large-badge {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  padding: 4px 10px; font: 11px monospace; letter-spacing: 0.08em;
+  color: #d97a55; border: 1px solid #d97a55;
+  background: rgba(18, 17, 14, 0.84);
+}
