@@ -11,20 +11,15 @@ const MOVE_STEP = 0.5;
 const PITCH_LIMIT = (Math.PI / 2) - 0.01;
 
 /**
- * Compute the camera-local "right" unit vector for strafing.
- *
- * In a right-handed coordinate system (three.js default), the right vector
- * relative to the camera is `up × forward`. Using `forward × up` (the
- * reverse order) yields the **left** vector — a subtle sign bug that flips
- * strafe direction. Keep this helper pure so it can be unit-tested without
- * a WebGL context.
- *
- * Exposed for tests; not intended as part of the public renderer API.
+ * Camera-local right vector. For a camera with forward = -Z and up = +Y
+ * (the THREE default), `forward × up = +X` — the pilot's right hand.
+ * Reversing the order to `up × forward` would give -X (left) — a common
+ * footgun. See `__tests__/mkkRenderer.test.ts` for the regression guard.
  */
 export function _computeRightVector(camera: THREE.Camera): THREE.Vector3 {
   const forward = new THREE.Vector3();
   camera.getWorldDirection(forward);
-  return new THREE.Vector3().crossVectors(camera.up, forward).normalize();
+  return new THREE.Vector3().crossVectors(forward, camera.up).normalize();
 }
 
 interface MkkViewerLike {
@@ -155,8 +150,8 @@ function makeHandle(
     move(axis: CameraAxis, delta: number) {
       const step = delta * MOVE_STEP;
       if (axis === "x") {
-        // strafe along camera-local right (right = up × forward in a
-        // right-handed coordinate system; reverse order yields left).
+        // strafe along camera-local right (forward × up = +X for the
+        // canonical camera; see _computeRightVector docblock).
         const right = _computeRightVector(camera);
         camera.position.addScaledVector(right, step);
       } else if (axis === "y") {
