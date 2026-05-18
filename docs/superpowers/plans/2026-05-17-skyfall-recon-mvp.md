@@ -141,6 +141,27 @@ shape:
     short-circuit-allow-partial-rewrites, short-circuit-refreshes-
     attribution).
 
+## Review Round 5 (2026-05-18) — Phase 0 Field Findings
+
+26. **30 Mbps gate dropped to optional, physics-bound rationale documented.**
+    Operator measurement on 2026-05-18 showed mkk at no-throttle hits
+    `first_frame_ms = 7592 ms` (well under budget). The 30 Mbps run was
+    skipped because 240 MB / 30 Mbps = ~64 s pure transfer, exceeding the
+    60 s budget before any decode — physics-bound, not renderer-bound.
+    `verify_results.py` now treats `results-30mbps.json` and screenshots
+    as optional; absence of the 30 Mbps JSON requires a "30 Mbps SKIPPED"
+    section in the smoke doc instead. The no-throttle measurement is
+    authoritative for the MVP. Scenes >300 MB carry a UI "LARGE" badge
+    (Task 18) and the BandwidthGuard warns metered users; those
+    mitigations were already in spec §3 Goal 1.
+27. **Spark eliminated — Matrix2 incompat.** Spark 0.1.10 calls
+    `new THREE.Matrix2()`, which doesn't exist in `three@0.165.0`. Upgrading
+    three would require also upgrading Spark to 2.x (a major rewrite, with
+    different harness shape) — both out of scope for the MVP. mkk wins by
+    default and is the renderer choice for Task 16. Spark's failure is
+    recorded honestly in `recon-phase-0-results.json` as
+    `spark.error: "THREE.Matrix2 is not a constructor"`.
+
 ---
 
 ## File Structure
