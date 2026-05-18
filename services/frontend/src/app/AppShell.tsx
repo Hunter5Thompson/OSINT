@@ -3,6 +3,8 @@ import { Outlet } from "react-router-dom";
 import { TopBar } from "../components/hlidskjalf/TopBar";
 import { IncidentToast } from "../components/hlidskjalf/IncidentToast";
 import { IncidentProvider } from "../state/IncidentProvider";
+import { ReconProvider } from "../state/ReconContext";
+import { ReconViewer } from "../components/recon/ReconViewer";
 import { useIncidents } from "../hooks/useIncidents";
 
 /**
@@ -39,10 +41,13 @@ function IncidentLayer({ children }: { children: React.ReactNode }) {
 
 export function AppShell() {
   return (
-    <IncidentProvider>
-      <IncidentLayer>
-        <Outlet />
-      </IncidentLayer>
-    </IncidentProvider>
+    <ReconProvider>
+      <IncidentProvider>
+        <IncidentLayer>
+          <Outlet />
+        </IncidentLayer>
+      </IncidentProvider>
+      <ReconViewer />
+    </ReconProvider>
   );
 }
