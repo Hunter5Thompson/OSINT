@@ -1,31 +1,4562 @@
 {
   "countries": [
     {
+      "id": "004",
+      "iso3": null,
+      "m49": "004",
+      "name": "Afghanistan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Afghanistan"
+          },
+          {
+            "label": "M49 code",
+            "value": "004"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "008",
+      "iso3": null,
+      "m49": "008",
+      "name": "Albania",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Albania"
+          },
+          {
+            "label": "M49 code",
+            "value": "008"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "012",
+      "iso3": null,
+      "m49": "012",
+      "name": "Algeria",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Algeria"
+          },
+          {
+            "label": "M49 code",
+            "value": "012"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "024",
+      "iso3": null,
+      "m49": "024",
+      "name": "Angola",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Angola"
+          },
+          {
+            "label": "M49 code",
+            "value": "024"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "010",
+      "iso3": null,
+      "m49": "010",
+      "name": "Antarctica",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Antarctica"
+          },
+          {
+            "label": "M49 code",
+            "value": "010"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "032",
+      "iso3": null,
+      "m49": "032",
+      "name": "Argentina",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Argentina"
+          },
+          {
+            "label": "M49 code",
+            "value": "032"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "051",
+      "iso3": null,
+      "m49": "051",
+      "name": "Armenia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Armenia"
+          },
+          {
+            "label": "M49 code",
+            "value": "051"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "036",
+      "iso3": null,
+      "m49": "036",
+      "name": "Australia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Australia"
+          },
+          {
+            "label": "M49 code",
+            "value": "036"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "040",
+      "iso3": null,
+      "m49": "040",
+      "name": "Austria",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Austria"
+          },
+          {
+            "label": "M49 code",
+            "value": "040"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "031",
+      "iso3": null,
+      "m49": "031",
+      "name": "Azerbaijan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Azerbaijan"
+          },
+          {
+            "label": "M49 code",
+            "value": "031"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "044",
+      "iso3": null,
+      "m49": "044",
+      "name": "Bahamas",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Bahamas"
+          },
+          {
+            "label": "M49 code",
+            "value": "044"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "050",
+      "iso3": null,
+      "m49": "050",
+      "name": "Bangladesh",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Bangladesh"
+          },
+          {
+            "label": "M49 code",
+            "value": "050"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "112",
+      "iso3": null,
+      "m49": "112",
+      "name": "Belarus",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Belarus"
+          },
+          {
+            "label": "M49 code",
+            "value": "112"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "056",
+      "iso3": null,
+      "m49": "056",
+      "name": "Belgium",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Belgium"
+          },
+          {
+            "label": "M49 code",
+            "value": "056"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "084",
+      "iso3": null,
+      "m49": "084",
+      "name": "Belize",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Belize"
+          },
+          {
+            "label": "M49 code",
+            "value": "084"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "204",
+      "iso3": null,
+      "m49": "204",
+      "name": "Benin",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Benin"
+          },
+          {
+            "label": "M49 code",
+            "value": "204"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "064",
+      "iso3": null,
+      "m49": "064",
+      "name": "Bhutan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Bhutan"
+          },
+          {
+            "label": "M49 code",
+            "value": "064"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "068",
+      "iso3": null,
+      "m49": "068",
+      "name": "Bolivia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Bolivia"
+          },
+          {
+            "label": "M49 code",
+            "value": "068"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "070",
+      "iso3": null,
+      "m49": "070",
+      "name": "Bosnia and Herz.",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Bosnia and Herz."
+          },
+          {
+            "label": "M49 code",
+            "value": "070"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "072",
+      "iso3": null,
+      "m49": "072",
+      "name": "Botswana",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Botswana"
+          },
+          {
+            "label": "M49 code",
+            "value": "072"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "076",
+      "iso3": null,
+      "m49": "076",
+      "name": "Brazil",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Brazil"
+          },
+          {
+            "label": "M49 code",
+            "value": "076"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "096",
+      "iso3": null,
+      "m49": "096",
+      "name": "Brunei",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Brunei"
+          },
+          {
+            "label": "M49 code",
+            "value": "096"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "100",
+      "iso3": null,
+      "m49": "100",
+      "name": "Bulgaria",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Bulgaria"
+          },
+          {
+            "label": "M49 code",
+            "value": "100"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "854",
+      "iso3": null,
+      "m49": "854",
+      "name": "Burkina Faso",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Burkina Faso"
+          },
+          {
+            "label": "M49 code",
+            "value": "854"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "108",
+      "iso3": null,
+      "m49": "108",
+      "name": "Burundi",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Burundi"
+          },
+          {
+            "label": "M49 code",
+            "value": "108"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "116",
+      "iso3": null,
+      "m49": "116",
+      "name": "Cambodia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Cambodia"
+          },
+          {
+            "label": "M49 code",
+            "value": "116"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "120",
+      "iso3": null,
+      "m49": "120",
+      "name": "Cameroon",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Cameroon"
+          },
+          {
+            "label": "M49 code",
+            "value": "120"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "CAN",
+      "iso3": "CAN",
+      "m49": "124",
+      "name": "Canada",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Canada"
+          },
+          {
+            "label": "M49 code",
+            "value": "124"
+          },
+          {
+            "label": "ISO3 code",
+            "value": "CAN"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "140",
+      "iso3": null,
+      "m49": "140",
+      "name": "Central African Rep.",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Central African Rep."
+          },
+          {
+            "label": "M49 code",
+            "value": "140"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "148",
+      "iso3": null,
+      "m49": "148",
+      "name": "Chad",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Chad"
+          },
+          {
+            "label": "M49 code",
+            "value": "148"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "152",
+      "iso3": null,
+      "m49": "152",
+      "name": "Chile",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Chile"
+          },
+          {
+            "label": "M49 code",
+            "value": "152"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "156",
+      "iso3": null,
+      "m49": "156",
+      "name": "China",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "China"
+          },
+          {
+            "label": "M49 code",
+            "value": "156"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "170",
+      "iso3": null,
+      "m49": "170",
+      "name": "Colombia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Colombia"
+          },
+          {
+            "label": "M49 code",
+            "value": "170"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "178",
+      "iso3": null,
+      "m49": "178",
+      "name": "Congo",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Congo"
+          },
+          {
+            "label": "M49 code",
+            "value": "178"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "188",
+      "iso3": null,
+      "m49": "188",
+      "name": "Costa Rica",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Costa Rica"
+          },
+          {
+            "label": "M49 code",
+            "value": "188"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "384",
+      "iso3": null,
+      "m49": "384",
+      "name": "Côte d'Ivoire",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Côte d'Ivoire"
+          },
+          {
+            "label": "M49 code",
+            "value": "384"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "191",
+      "iso3": null,
+      "m49": "191",
+      "name": "Croatia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Croatia"
+          },
+          {
+            "label": "M49 code",
+            "value": "191"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "192",
+      "iso3": null,
+      "m49": "192",
+      "name": "Cuba",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Cuba"
+          },
+          {
+            "label": "M49 code",
+            "value": "192"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "196",
+      "iso3": null,
+      "m49": "196",
+      "name": "Cyprus",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Cyprus"
+          },
+          {
+            "label": "M49 code",
+            "value": "196"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "CZE",
+      "iso3": "CZE",
+      "m49": "203",
+      "name": "Czechia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Czechia"
+          },
+          {
+            "label": "M49 code",
+            "value": "203"
+          },
+          {
+            "label": "ISO3 code",
+            "value": "CZE"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "180",
+      "iso3": null,
+      "m49": "180",
+      "name": "Dem. Rep. Congo",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Dem. Rep. Congo"
+          },
+          {
+            "label": "M49 code",
+            "value": "180"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "208",
+      "iso3": null,
+      "m49": "208",
+      "name": "Denmark",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Denmark"
+          },
+          {
+            "label": "M49 code",
+            "value": "208"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "262",
+      "iso3": null,
+      "m49": "262",
+      "name": "Djibouti",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Djibouti"
+          },
+          {
+            "label": "M49 code",
+            "value": "262"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "214",
+      "iso3": null,
+      "m49": "214",
+      "name": "Dominican Rep.",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Dominican Rep."
+          },
+          {
+            "label": "M49 code",
+            "value": "214"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "218",
+      "iso3": null,
+      "m49": "218",
+      "name": "Ecuador",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Ecuador"
+          },
+          {
+            "label": "M49 code",
+            "value": "218"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "818",
+      "iso3": null,
+      "m49": "818",
+      "name": "Egypt",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Egypt"
+          },
+          {
+            "label": "M49 code",
+            "value": "818"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "222",
+      "iso3": null,
+      "m49": "222",
+      "name": "El Salvador",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "El Salvador"
+          },
+          {
+            "label": "M49 code",
+            "value": "222"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "226",
+      "iso3": null,
+      "m49": "226",
+      "name": "Eq. Guinea",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Eq. Guinea"
+          },
+          {
+            "label": "M49 code",
+            "value": "226"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "232",
+      "iso3": null,
+      "m49": "232",
+      "name": "Eritrea",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Eritrea"
+          },
+          {
+            "label": "M49 code",
+            "value": "232"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "233",
+      "iso3": null,
+      "m49": "233",
+      "name": "Estonia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Estonia"
+          },
+          {
+            "label": "M49 code",
+            "value": "233"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "748",
+      "iso3": null,
+      "m49": "748",
+      "name": "eSwatini",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "eSwatini"
+          },
+          {
+            "label": "M49 code",
+            "value": "748"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "231",
+      "iso3": null,
+      "m49": "231",
+      "name": "Ethiopia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Ethiopia"
+          },
+          {
+            "label": "M49 code",
+            "value": "231"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "238",
+      "iso3": null,
+      "m49": "238",
+      "name": "Falkland Is.",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Falkland Is."
+          },
+          {
+            "label": "M49 code",
+            "value": "238"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "242",
+      "iso3": null,
+      "m49": "242",
+      "name": "Fiji",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Fiji"
+          },
+          {
+            "label": "M49 code",
+            "value": "242"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "246",
+      "iso3": null,
+      "m49": "246",
+      "name": "Finland",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Finland"
+          },
+          {
+            "label": "M49 code",
+            "value": "246"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "260",
+      "iso3": null,
+      "m49": "260",
+      "name": "Fr. S. Antarctic Lands",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Fr. S. Antarctic Lands"
+          },
+          {
+            "label": "M49 code",
+            "value": "260"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "250",
+      "iso3": null,
+      "m49": "250",
+      "name": "France",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "France"
+          },
+          {
+            "label": "M49 code",
+            "value": "250"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "266",
+      "iso3": null,
+      "m49": "266",
+      "name": "Gabon",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Gabon"
+          },
+          {
+            "label": "M49 code",
+            "value": "266"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "270",
+      "iso3": null,
+      "m49": "270",
+      "name": "Gambia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Gambia"
+          },
+          {
+            "label": "M49 code",
+            "value": "270"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "268",
+      "iso3": null,
+      "m49": "268",
+      "name": "Georgia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Georgia"
+          },
+          {
+            "label": "M49 code",
+            "value": "268"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "DEU",
+      "iso3": "DEU",
+      "m49": "276",
+      "name": "Germany",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Germany"
+          },
+          {
+            "label": "M49 code",
+            "value": "276"
+          },
+          {
+            "label": "ISO3 code",
+            "value": "DEU"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "288",
+      "iso3": null,
+      "m49": "288",
+      "name": "Ghana",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Ghana"
+          },
+          {
+            "label": "M49 code",
+            "value": "288"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
       "id": "GRC",
       "iso3": "GRC",
       "m49": "300",
       "name": "Greece",
       "region": "Europe",
       "subregion": "Southern Europe",
-      "capital": { "name": "Athens", "lat": 37.98, "lon": 23.73 },
+      "capital": {
+        "name": "Athens",
+        "lat": 37.98,
+        "lon": 23.73
+      },
       "facts": {
         "profile": [
-          { "label": "Area", "value": "131,957 sq km" },
-          { "label": "Currency", "value": "Euro (EUR)" }
+          {
+            "label": "Area",
+            "value": "131,957 sq km"
+          },
+          {
+            "label": "Currency",
+            "value": "Euro (EUR)"
+          }
         ],
         "people": [
-          { "label": "Population", "value": "10.4M" },
-          { "label": "Languages", "value": "Greek" }
+          {
+            "label": "Population",
+            "value": "10.4M"
+          },
+          {
+            "label": "Languages",
+            "value": "Greek"
+          }
         ],
         "government": [
-          { "label": "Government type", "value": "Parliamentary republic" }
+          {
+            "label": "Government type",
+            "value": "Parliamentary republic"
+          }
         ],
         "economy": [
-          { "label": "Economic note", "value": "Service and shipping-heavy EU economy" }
+          {
+            "label": "Economic note",
+            "value": "Service and shipping-heavy EU economy"
+          }
         ],
         "security": [
-          { "label": "Security note", "value": "NATO member; Eastern Mediterranean posture" }
+          {
+            "label": "Security note",
+            "value": "NATO member; Eastern Mediterranean posture"
+          }
         ]
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "304",
+      "iso3": null,
+      "m49": "304",
+      "name": "Greenland",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Greenland"
+          },
+          {
+            "label": "M49 code",
+            "value": "304"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "320",
+      "iso3": null,
+      "m49": "320",
+      "name": "Guatemala",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Guatemala"
+          },
+          {
+            "label": "M49 code",
+            "value": "320"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "324",
+      "iso3": null,
+      "m49": "324",
+      "name": "Guinea",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Guinea"
+          },
+          {
+            "label": "M49 code",
+            "value": "324"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "624",
+      "iso3": null,
+      "m49": "624",
+      "name": "Guinea-Bissau",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Guinea-Bissau"
+          },
+          {
+            "label": "M49 code",
+            "value": "624"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "328",
+      "iso3": null,
+      "m49": "328",
+      "name": "Guyana",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Guyana"
+          },
+          {
+            "label": "M49 code",
+            "value": "328"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "332",
+      "iso3": null,
+      "m49": "332",
+      "name": "Haiti",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Haiti"
+          },
+          {
+            "label": "M49 code",
+            "value": "332"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "340",
+      "iso3": null,
+      "m49": "340",
+      "name": "Honduras",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Honduras"
+          },
+          {
+            "label": "M49 code",
+            "value": "340"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "348",
+      "iso3": null,
+      "m49": "348",
+      "name": "Hungary",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Hungary"
+          },
+          {
+            "label": "M49 code",
+            "value": "348"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "352",
+      "iso3": null,
+      "m49": "352",
+      "name": "Iceland",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Iceland"
+          },
+          {
+            "label": "M49 code",
+            "value": "352"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "IND",
+      "iso3": "IND",
+      "m49": "356",
+      "name": "India",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "India"
+          },
+          {
+            "label": "M49 code",
+            "value": "356"
+          },
+          {
+            "label": "ISO3 code",
+            "value": "IND"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "360",
+      "iso3": null,
+      "m49": "360",
+      "name": "Indonesia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Indonesia"
+          },
+          {
+            "label": "M49 code",
+            "value": "360"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "364",
+      "iso3": null,
+      "m49": "364",
+      "name": "Iran",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Iran"
+          },
+          {
+            "label": "M49 code",
+            "value": "364"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "368",
+      "iso3": null,
+      "m49": "368",
+      "name": "Iraq",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Iraq"
+          },
+          {
+            "label": "M49 code",
+            "value": "368"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "372",
+      "iso3": null,
+      "m49": "372",
+      "name": "Ireland",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Ireland"
+          },
+          {
+            "label": "M49 code",
+            "value": "372"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "376",
+      "iso3": null,
+      "m49": "376",
+      "name": "Israel",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Israel"
+          },
+          {
+            "label": "M49 code",
+            "value": "376"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "380",
+      "iso3": null,
+      "m49": "380",
+      "name": "Italy",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Italy"
+          },
+          {
+            "label": "M49 code",
+            "value": "380"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "388",
+      "iso3": null,
+      "m49": "388",
+      "name": "Jamaica",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Jamaica"
+          },
+          {
+            "label": "M49 code",
+            "value": "388"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "JPN",
+      "iso3": "JPN",
+      "m49": "392",
+      "name": "Japan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Japan"
+          },
+          {
+            "label": "M49 code",
+            "value": "392"
+          },
+          {
+            "label": "ISO3 code",
+            "value": "JPN"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "400",
+      "iso3": null,
+      "m49": "400",
+      "name": "Jordan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Jordan"
+          },
+          {
+            "label": "M49 code",
+            "value": "400"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "398",
+      "iso3": null,
+      "m49": "398",
+      "name": "Kazakhstan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Kazakhstan"
+          },
+          {
+            "label": "M49 code",
+            "value": "398"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "404",
+      "iso3": null,
+      "m49": "404",
+      "name": "Kenya",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Kenya"
+          },
+          {
+            "label": "M49 code",
+            "value": "404"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "undefined",
+      "iso3": null,
+      "m49": "undefined",
+      "name": "Kosovo",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Kosovo"
+          },
+          {
+            "label": "M49 code",
+            "value": "undefined"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "414",
+      "iso3": null,
+      "m49": "414",
+      "name": "Kuwait",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Kuwait"
+          },
+          {
+            "label": "M49 code",
+            "value": "414"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "417",
+      "iso3": null,
+      "m49": "417",
+      "name": "Kyrgyzstan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Kyrgyzstan"
+          },
+          {
+            "label": "M49 code",
+            "value": "417"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "418",
+      "iso3": null,
+      "m49": "418",
+      "name": "Laos",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Laos"
+          },
+          {
+            "label": "M49 code",
+            "value": "418"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "428",
+      "iso3": null,
+      "m49": "428",
+      "name": "Latvia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Latvia"
+          },
+          {
+            "label": "M49 code",
+            "value": "428"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "422",
+      "iso3": null,
+      "m49": "422",
+      "name": "Lebanon",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Lebanon"
+          },
+          {
+            "label": "M49 code",
+            "value": "422"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "426",
+      "iso3": null,
+      "m49": "426",
+      "name": "Lesotho",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Lesotho"
+          },
+          {
+            "label": "M49 code",
+            "value": "426"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "430",
+      "iso3": null,
+      "m49": "430",
+      "name": "Liberia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Liberia"
+          },
+          {
+            "label": "M49 code",
+            "value": "430"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "434",
+      "iso3": null,
+      "m49": "434",
+      "name": "Libya",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Libya"
+          },
+          {
+            "label": "M49 code",
+            "value": "434"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "440",
+      "iso3": null,
+      "m49": "440",
+      "name": "Lithuania",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Lithuania"
+          },
+          {
+            "label": "M49 code",
+            "value": "440"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "442",
+      "iso3": null,
+      "m49": "442",
+      "name": "Luxembourg",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Luxembourg"
+          },
+          {
+            "label": "M49 code",
+            "value": "442"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "807",
+      "iso3": null,
+      "m49": "807",
+      "name": "Macedonia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Macedonia"
+          },
+          {
+            "label": "M49 code",
+            "value": "807"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "450",
+      "iso3": null,
+      "m49": "450",
+      "name": "Madagascar",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Madagascar"
+          },
+          {
+            "label": "M49 code",
+            "value": "450"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "454",
+      "iso3": null,
+      "m49": "454",
+      "name": "Malawi",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Malawi"
+          },
+          {
+            "label": "M49 code",
+            "value": "454"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "458",
+      "iso3": null,
+      "m49": "458",
+      "name": "Malaysia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Malaysia"
+          },
+          {
+            "label": "M49 code",
+            "value": "458"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "466",
+      "iso3": null,
+      "m49": "466",
+      "name": "Mali",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Mali"
+          },
+          {
+            "label": "M49 code",
+            "value": "466"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "478",
+      "iso3": null,
+      "m49": "478",
+      "name": "Mauritania",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Mauritania"
+          },
+          {
+            "label": "M49 code",
+            "value": "478"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "484",
+      "iso3": null,
+      "m49": "484",
+      "name": "Mexico",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Mexico"
+          },
+          {
+            "label": "M49 code",
+            "value": "484"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "498",
+      "iso3": null,
+      "m49": "498",
+      "name": "Moldova",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Moldova"
+          },
+          {
+            "label": "M49 code",
+            "value": "498"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "496",
+      "iso3": null,
+      "m49": "496",
+      "name": "Mongolia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Mongolia"
+          },
+          {
+            "label": "M49 code",
+            "value": "496"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "499",
+      "iso3": null,
+      "m49": "499",
+      "name": "Montenegro",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Montenegro"
+          },
+          {
+            "label": "M49 code",
+            "value": "499"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "504",
+      "iso3": null,
+      "m49": "504",
+      "name": "Morocco",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Morocco"
+          },
+          {
+            "label": "M49 code",
+            "value": "504"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "508",
+      "iso3": null,
+      "m49": "508",
+      "name": "Mozambique",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Mozambique"
+          },
+          {
+            "label": "M49 code",
+            "value": "508"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "104",
+      "iso3": null,
+      "m49": "104",
+      "name": "Myanmar",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Myanmar"
+          },
+          {
+            "label": "M49 code",
+            "value": "104"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "undefined",
+      "iso3": null,
+      "m49": "undefined",
+      "name": "N. Cyprus",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "N. Cyprus"
+          },
+          {
+            "label": "M49 code",
+            "value": "undefined"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "516",
+      "iso3": null,
+      "m49": "516",
+      "name": "Namibia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Namibia"
+          },
+          {
+            "label": "M49 code",
+            "value": "516"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "524",
+      "iso3": null,
+      "m49": "524",
+      "name": "Nepal",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Nepal"
+          },
+          {
+            "label": "M49 code",
+            "value": "524"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "528",
+      "iso3": null,
+      "m49": "528",
+      "name": "Netherlands",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Netherlands"
+          },
+          {
+            "label": "M49 code",
+            "value": "528"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "540",
+      "iso3": null,
+      "m49": "540",
+      "name": "New Caledonia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "New Caledonia"
+          },
+          {
+            "label": "M49 code",
+            "value": "540"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "554",
+      "iso3": null,
+      "m49": "554",
+      "name": "New Zealand",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "New Zealand"
+          },
+          {
+            "label": "M49 code",
+            "value": "554"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "558",
+      "iso3": null,
+      "m49": "558",
+      "name": "Nicaragua",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Nicaragua"
+          },
+          {
+            "label": "M49 code",
+            "value": "558"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "562",
+      "iso3": null,
+      "m49": "562",
+      "name": "Niger",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Niger"
+          },
+          {
+            "label": "M49 code",
+            "value": "562"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "566",
+      "iso3": null,
+      "m49": "566",
+      "name": "Nigeria",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Nigeria"
+          },
+          {
+            "label": "M49 code",
+            "value": "566"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "408",
+      "iso3": null,
+      "m49": "408",
+      "name": "North Korea",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "North Korea"
+          },
+          {
+            "label": "M49 code",
+            "value": "408"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "578",
+      "iso3": null,
+      "m49": "578",
+      "name": "Norway",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Norway"
+          },
+          {
+            "label": "M49 code",
+            "value": "578"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "512",
+      "iso3": null,
+      "m49": "512",
+      "name": "Oman",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Oman"
+          },
+          {
+            "label": "M49 code",
+            "value": "512"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "586",
+      "iso3": null,
+      "m49": "586",
+      "name": "Pakistan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Pakistan"
+          },
+          {
+            "label": "M49 code",
+            "value": "586"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "275",
+      "iso3": null,
+      "m49": "275",
+      "name": "Palestine",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Palestine"
+          },
+          {
+            "label": "M49 code",
+            "value": "275"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "591",
+      "iso3": null,
+      "m49": "591",
+      "name": "Panama",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Panama"
+          },
+          {
+            "label": "M49 code",
+            "value": "591"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "598",
+      "iso3": null,
+      "m49": "598",
+      "name": "Papua New Guinea",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Papua New Guinea"
+          },
+          {
+            "label": "M49 code",
+            "value": "598"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "600",
+      "iso3": null,
+      "m49": "600",
+      "name": "Paraguay",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Paraguay"
+          },
+          {
+            "label": "M49 code",
+            "value": "600"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "604",
+      "iso3": null,
+      "m49": "604",
+      "name": "Peru",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Peru"
+          },
+          {
+            "label": "M49 code",
+            "value": "604"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "608",
+      "iso3": null,
+      "m49": "608",
+      "name": "Philippines",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Philippines"
+          },
+          {
+            "label": "M49 code",
+            "value": "608"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "616",
+      "iso3": null,
+      "m49": "616",
+      "name": "Poland",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Poland"
+          },
+          {
+            "label": "M49 code",
+            "value": "616"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "620",
+      "iso3": null,
+      "m49": "620",
+      "name": "Portugal",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Portugal"
+          },
+          {
+            "label": "M49 code",
+            "value": "620"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "630",
+      "iso3": null,
+      "m49": "630",
+      "name": "Puerto Rico",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Puerto Rico"
+          },
+          {
+            "label": "M49 code",
+            "value": "630"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "634",
+      "iso3": null,
+      "m49": "634",
+      "name": "Qatar",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Qatar"
+          },
+          {
+            "label": "M49 code",
+            "value": "634"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "642",
+      "iso3": null,
+      "m49": "642",
+      "name": "Romania",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Romania"
+          },
+          {
+            "label": "M49 code",
+            "value": "642"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "RUS",
+      "iso3": "RUS",
+      "m49": "643",
+      "name": "Russia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Russia"
+          },
+          {
+            "label": "M49 code",
+            "value": "643"
+          },
+          {
+            "label": "ISO3 code",
+            "value": "RUS"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "646",
+      "iso3": null,
+      "m49": "646",
+      "name": "Rwanda",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Rwanda"
+          },
+          {
+            "label": "M49 code",
+            "value": "646"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "728",
+      "iso3": null,
+      "m49": "728",
+      "name": "S. Sudan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "S. Sudan"
+          },
+          {
+            "label": "M49 code",
+            "value": "728"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "682",
+      "iso3": null,
+      "m49": "682",
+      "name": "Saudi Arabia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Saudi Arabia"
+          },
+          {
+            "label": "M49 code",
+            "value": "682"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "686",
+      "iso3": null,
+      "m49": "686",
+      "name": "Senegal",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Senegal"
+          },
+          {
+            "label": "M49 code",
+            "value": "686"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "688",
+      "iso3": null,
+      "m49": "688",
+      "name": "Serbia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Serbia"
+          },
+          {
+            "label": "M49 code",
+            "value": "688"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "694",
+      "iso3": null,
+      "m49": "694",
+      "name": "Sierra Leone",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Sierra Leone"
+          },
+          {
+            "label": "M49 code",
+            "value": "694"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "703",
+      "iso3": null,
+      "m49": "703",
+      "name": "Slovakia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Slovakia"
+          },
+          {
+            "label": "M49 code",
+            "value": "703"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "705",
+      "iso3": null,
+      "m49": "705",
+      "name": "Slovenia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Slovenia"
+          },
+          {
+            "label": "M49 code",
+            "value": "705"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "090",
+      "iso3": null,
+      "m49": "090",
+      "name": "Solomon Is.",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Solomon Is."
+          },
+          {
+            "label": "M49 code",
+            "value": "090"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "706",
+      "iso3": null,
+      "m49": "706",
+      "name": "Somalia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Somalia"
+          },
+          {
+            "label": "M49 code",
+            "value": "706"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "undefined",
+      "iso3": null,
+      "m49": "undefined",
+      "name": "Somaliland",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Somaliland"
+          },
+          {
+            "label": "M49 code",
+            "value": "undefined"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "710",
+      "iso3": null,
+      "m49": "710",
+      "name": "South Africa",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "South Africa"
+          },
+          {
+            "label": "M49 code",
+            "value": "710"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "410",
+      "iso3": null,
+      "m49": "410",
+      "name": "South Korea",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "South Korea"
+          },
+          {
+            "label": "M49 code",
+            "value": "410"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "724",
+      "iso3": null,
+      "m49": "724",
+      "name": "Spain",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Spain"
+          },
+          {
+            "label": "M49 code",
+            "value": "724"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "144",
+      "iso3": null,
+      "m49": "144",
+      "name": "Sri Lanka",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Sri Lanka"
+          },
+          {
+            "label": "M49 code",
+            "value": "144"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "729",
+      "iso3": null,
+      "m49": "729",
+      "name": "Sudan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Sudan"
+          },
+          {
+            "label": "M49 code",
+            "value": "729"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "740",
+      "iso3": null,
+      "m49": "740",
+      "name": "Suriname",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Suriname"
+          },
+          {
+            "label": "M49 code",
+            "value": "740"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "752",
+      "iso3": null,
+      "m49": "752",
+      "name": "Sweden",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Sweden"
+          },
+          {
+            "label": "M49 code",
+            "value": "752"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "756",
+      "iso3": null,
+      "m49": "756",
+      "name": "Switzerland",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Switzerland"
+          },
+          {
+            "label": "M49 code",
+            "value": "756"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "760",
+      "iso3": null,
+      "m49": "760",
+      "name": "Syria",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Syria"
+          },
+          {
+            "label": "M49 code",
+            "value": "760"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "158",
+      "iso3": null,
+      "m49": "158",
+      "name": "Taiwan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Taiwan"
+          },
+          {
+            "label": "M49 code",
+            "value": "158"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "762",
+      "iso3": null,
+      "m49": "762",
+      "name": "Tajikistan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Tajikistan"
+          },
+          {
+            "label": "M49 code",
+            "value": "762"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "834",
+      "iso3": null,
+      "m49": "834",
+      "name": "Tanzania",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Tanzania"
+          },
+          {
+            "label": "M49 code",
+            "value": "834"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "764",
+      "iso3": null,
+      "m49": "764",
+      "name": "Thailand",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Thailand"
+          },
+          {
+            "label": "M49 code",
+            "value": "764"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "626",
+      "iso3": null,
+      "m49": "626",
+      "name": "Timor-Leste",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Timor-Leste"
+          },
+          {
+            "label": "M49 code",
+            "value": "626"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "768",
+      "iso3": null,
+      "m49": "768",
+      "name": "Togo",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Togo"
+          },
+          {
+            "label": "M49 code",
+            "value": "768"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "780",
+      "iso3": null,
+      "m49": "780",
+      "name": "Trinidad and Tobago",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Trinidad and Tobago"
+          },
+          {
+            "label": "M49 code",
+            "value": "780"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "788",
+      "iso3": null,
+      "m49": "788",
+      "name": "Tunisia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Tunisia"
+          },
+          {
+            "label": "M49 code",
+            "value": "788"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "792",
+      "iso3": null,
+      "m49": "792",
+      "name": "Turkey",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Turkey"
+          },
+          {
+            "label": "M49 code",
+            "value": "792"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "795",
+      "iso3": null,
+      "m49": "795",
+      "name": "Turkmenistan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Turkmenistan"
+          },
+          {
+            "label": "M49 code",
+            "value": "795"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "800",
+      "iso3": null,
+      "m49": "800",
+      "name": "Uganda",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Uganda"
+          },
+          {
+            "label": "M49 code",
+            "value": "800"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "804",
+      "iso3": null,
+      "m49": "804",
+      "name": "Ukraine",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Ukraine"
+          },
+          {
+            "label": "M49 code",
+            "value": "804"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "784",
+      "iso3": null,
+      "m49": "784",
+      "name": "United Arab Emirates",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "United Arab Emirates"
+          },
+          {
+            "label": "M49 code",
+            "value": "784"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "826",
+      "iso3": null,
+      "m49": "826",
+      "name": "United Kingdom",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "United Kingdom"
+          },
+          {
+            "label": "M49 code",
+            "value": "826"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
       },
       "updated_at": "2026-05-19",
       "source_note": "ODIN static country almanac"
@@ -37,21 +4568,172 @@
       "name": "United States of America",
       "region": "Americas",
       "subregion": "Northern America",
-      "capital": { "name": "Washington, D.C.", "lat": 38.9, "lon": -77.04 },
+      "capital": {
+        "name": "Washington, D.C.",
+        "lat": 38.9,
+        "lon": -77.04
+      },
       "facts": {
         "profile": [
-          { "label": "Currency", "value": "US dollar (USD)" }
+          {
+            "label": "Currency",
+            "value": "US dollar (USD)"
+          }
         ],
         "people": [
-          { "label": "Languages", "value": "English, Spanish and others" }
+          {
+            "label": "Languages",
+            "value": "English, Spanish and others"
+          }
         ],
         "government": [
-          { "label": "Government type", "value": "Federal presidential constitutional republic" }
+          {
+            "label": "Government type",
+            "value": "Federal presidential constitutional republic"
+          }
         ],
         "economy": [],
         "security": [
-          { "label": "Security note", "value": "NATO member; global force projection" }
+          {
+            "label": "Security note",
+            "value": "NATO member; global force projection"
+          }
         ]
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "858",
+      "iso3": null,
+      "m49": "858",
+      "name": "Uruguay",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Uruguay"
+          },
+          {
+            "label": "M49 code",
+            "value": "858"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "860",
+      "iso3": null,
+      "m49": "860",
+      "name": "Uzbekistan",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Uzbekistan"
+          },
+          {
+            "label": "M49 code",
+            "value": "860"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "548",
+      "iso3": null,
+      "m49": "548",
+      "name": "Vanuatu",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Vanuatu"
+          },
+          {
+            "label": "M49 code",
+            "value": "548"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "862",
+      "iso3": null,
+      "m49": "862",
+      "name": "Venezuela",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Venezuela"
+          },
+          {
+            "label": "M49 code",
+            "value": "862"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "704",
+      "iso3": null,
+      "m49": "704",
+      "name": "Vietnam",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Vietnam"
+          },
+          {
+            "label": "M49 code",
+            "value": "704"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
       },
       "updated_at": "2026-05-19",
       "source_note": "ODIN static country almanac"
@@ -66,7 +4748,95 @@
       "capital": null,
       "facts": {
         "profile": [
-          { "label": "Status", "value": "Disputed territory in current map dataset" }
+          {
+            "label": "Status",
+            "value": "Disputed territory in current map dataset"
+          },
+          {
+            "label": "M49 code",
+            "value": "732"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "887",
+      "iso3": null,
+      "m49": "887",
+      "name": "Yemen",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Yemen"
+          },
+          {
+            "label": "M49 code",
+            "value": "887"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "894",
+      "iso3": null,
+      "m49": "894",
+      "name": "Zambia",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Zambia"
+          },
+          {
+            "label": "M49 code",
+            "value": "894"
+          }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "716",
+      "iso3": null,
+      "m49": "716",
+      "name": "Zimbabwe",
+      "region": "",
+      "subregion": "",
+      "capital": null,
+      "facts": {
+        "profile": [
+          {
+            "label": "Map entity",
+            "value": "Zimbabwe"
+          },
+          {
+            "label": "M49 code",
+            "value": "716"
+          }
         ],
         "people": [],
         "government": [],
