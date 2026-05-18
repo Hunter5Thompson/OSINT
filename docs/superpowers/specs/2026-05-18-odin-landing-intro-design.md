@@ -20,31 +20,34 @@ Use the existing React landing page as the canonical homepage and add a compact 
 
 This keeps the current routing, API calls, Signal Feed hydration, SSE updates, and Worldview deep links intact. The work is a focused frontend integration rather than a broad redesign.
 
+The intro must use the established Hlíðskjalf visual language: restrained line work, existing CSS variables such as `var(--granite)`, `var(--ash)`, `var(--parchment)`, mono eyebrow labels, and serif emphasis where the current landing page already uses it. On-page taxonomy should align with the current Latin/Hlíðskjalf vocabulary. Route names can remain the existing English product labels because they match the global TopBar: `Worldview`, `Briefing`, and `War Room`.
+
 ## Page Structure
 
 The landing page will render in this order:
 
 1. ODIN intro section.
-2. Existing 24h metric tiles.
-3. Existing Signal Feed and Orrery section.
+2. Existing `Index Rerum · last 24h` section heading with the current `live` / `loading` / `err` indicator.
+3. Existing 24h metric tiles.
+4. Existing Signal Feed and Orrery section.
 
 The intro section contains:
 
-- A concise platform kicker: `ODIN Tactical Intelligence Platform`.
+- A concise platform kicker: `ODIN · Hlíðskjalf`.
 - A short hero headline that explains the operational purpose.
 - Supporting copy that frames ODIN as a fused live-signals, infrastructure, incident, and briefing workspace.
 - Three clear entry actions:
   - `Enter Worldview` -> `/worldview`
   - `Open Briefing` -> `/briefing`
   - `War Room` -> `/warroom`
-- A compact system status panel using static labels for currently wired subsystems:
-  - Ingestion
-  - Signal Feed
-  - Vector Search
-  - Graph Memory
-  - Window
+- A compact capability panel, not a health/status dashboard, using static labels for currently wired subsystems:
+  - `Hugin` -> ingestion pipeline
+  - `Signalia` -> Signal Feed / SSE
+  - `Vectorium` -> Qdrant-backed vector search
+  - `Memoria` -> Neo4j-backed graph memory
+  - `Fenestra` -> 24h landing window
 
-The status panel is presentational only for this task. It must not introduce new backend dependencies.
+The capability panel is presentational only for this task. It must not introduce new backend dependencies, fixed `online` claims, green health dots, or anything that implies live health monitoring.
 
 ## Components
 
@@ -78,17 +81,21 @@ New intro actions use `useNavigate` or router links and navigate to existing rou
 
 Existing summary error behavior stays in place: the landing header shows the error string when the summary request fails.
 
-The new intro status panel must not report dynamic health unless that data already exists in the frontend state. Static status labels avoid misleading failed-health states and avoid adding a brittle dependency.
+The new intro capability panel must not report dynamic health unless that data already exists in the frontend state. Static capability labels avoid misleading failed-health states and avoid adding a brittle dependency.
 
 ## Responsive Behavior
 
 The intro section should use stable CSS grid/flex rules that collapse cleanly on narrow screens:
 
-- Desktop: intro copy and status panel side-by-side.
-- Mobile: intro copy followed by status panel.
+- Desktop: intro copy and capability panel side-by-side.
+- Mobile: intro copy followed by capability panel.
 - Existing metric tiles should remain a grid, but may collapse to two columns or one column if needed to avoid cramped text.
 
 Text must not overlap controls or overflow buttons.
+
+## Accessibility
+
+Intro actions should be real router links or buttons with native keyboard behavior. The tab order should remain natural: TopBar, intro actions, metric tiles, Signal Feed. Visible focus states must remain available; do not remove browser focus outlines unless replacing them with an equally clear custom focus style. Add `aria-label` only when visible button text is insufficient.
 
 ## Testing
 
@@ -103,6 +110,8 @@ Add or update frontend tests to verify:
   - Hotspots tile still navigates to `/worldview?filter=hotspots`.
   - Feed hydration from `/api/signals/latest` still renders items.
 
+Use the existing `services/frontend/src/test/landing/landingSummary.test.tsx` MemoryRouter pattern for navigation assertions.
+
 Run focused tests first, then frontend type/lint checks if available in the local dependency state.
 
 ## Out of Scope
@@ -112,3 +121,4 @@ Run focused tests first, then frontend type/lint checks if available in the loca
 - Adding new backend health endpoints.
 - Reworking the global `TopBar`.
 - Redesigning Worldview, Briefing, or War Room.
+- Deleting `test.html`. If it is confirmed obsolete, remove it in a separate cleanup task so this implementation remains scoped to the React landing route.
