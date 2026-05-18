@@ -190,6 +190,36 @@ describe("ReconViewer", () => {
     await waitFor(() => expect(renderSpy).toHaveBeenCalledTimes(1));
   });
 
+  it("on metered connection: re-opening the SAME scene after close re-prompts bandwidth gate", async () => {
+    Object.defineProperty(navigator, "connection",
+      { value: { effectiveType: "3g" }, configurable: true });
+    const renderer = (await import("../renderer")) as {
+      loadDefaultSplatRenderer: ReturnType<typeof vi.fn>;
+    };
+    const renderSpy = vi.fn(async (_canvas, opts) => {
+      opts.onFirstFrame?.();
+      return mocks.handle;
+    });
+    renderer.loadDefaultSplatRenderer.mockResolvedValue({ render: renderSpy });
+
+    render(<ReconProvider><Opener /><ReconViewer /></ReconProvider>);
+
+    // Open #1, confirm bandwidth, render
+    fireEvent.click(screen.getByText("open"));
+    fireEvent.click(screen.getByRole("button", { name: /load anyway/i }));
+    await waitFor(() => expect(renderSpy).toHaveBeenCalledTimes(1));
+
+    // Close
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // Re-open — bandwidth dialog must re-appear (loadAllowed reset)
+    fireEvent.click(screen.getByText("open"));
+    expect(screen.getByRole("button", { name: /load anyway/i })).toBeInTheDocument();
+    // And renderSpy should not have been called yet (no second invocation)
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("shows LARGE badge for scenes over 300 MB", () => {
     // Swap the manifest hook's data BEFORE rendering. The vi.mock factory
     // reads mocks.state.scenes by reference, so mutating it here makes the

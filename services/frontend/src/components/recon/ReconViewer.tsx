@@ -32,18 +32,20 @@ export function ReconViewer() {
   // no signal to re-run the effect because it changes no dependency.
   const [loadAllowed, setLoadAllowed] = useState(false);
 
-  // Reset loadAllowed when switching from one scene to a *different* scene —
-  // a different scene needs to re-pass the bandwidth gate. We skip the
-  // initial null→sceneId transition because BandwidthGuard's onConfirm
-  // (a child effect) fires BEFORE this parent effect; resetting here on
-  // the initial mount would stomp the confirm and leave loadAllowed stuck
-  // at false on a fast connection.
+  // Reset loadAllowed on close (activeSceneId becomes null) AND on
+  // scene-to-scene swap. Skip ONLY the initial null → first-id mount,
+  // where React 19's child-before-parent effect ordering would clobber
+  // BandwidthGuard's onConfirm.
   const prevSceneIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (prevSceneIdRef.current !== null && prevSceneIdRef.current !== activeSceneId) {
-      setLoadAllowed(false);
-    }
+    const prev = prevSceneIdRef.current;
     prevSceneIdRef.current = activeSceneId;
+    if (prev === null && activeSceneId !== null) {
+      // initial open — keep loadAllowed alone, BandwidthGuard will flip it
+      return;
+    }
+    // any other transition: close (id → null) OR swap (idA → idB)
+    setLoadAllowed(false);
   }, [activeSceneId]);
 
   // ESC closes the modal.

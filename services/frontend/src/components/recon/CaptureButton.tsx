@@ -15,8 +15,11 @@ export function CaptureButton({ handleRef, sceneId }: CaptureButtonProps) {
     const a = document.createElement("a");
     a.href = url;
     a.download = `recon-${sceneId}-${Date.now()}.png`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    // Defer revoke to next tick so the browser's download dispatch sees a live URL.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
   return <button onClick={onClick}>Capture PNG</button>;
 }
