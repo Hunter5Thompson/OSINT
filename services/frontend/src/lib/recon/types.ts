@@ -17,6 +17,7 @@ export interface ReconScene {
   hf_filename: string;
   display_name: string;
   ply_url: string;
+  ply_sha256: string;
   ply_size_bytes: number;
   bounds: GeoBounds;
   bounds_source: BoundsSource;

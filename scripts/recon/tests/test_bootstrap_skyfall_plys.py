@@ -7,7 +7,6 @@ import pytest
 
 from scripts.recon.bootstrap_skyfall_plys import (
     main,
-    BootstrapError,
     check_hf_cli,
     HFCLIMissingError,
     sha256_of,

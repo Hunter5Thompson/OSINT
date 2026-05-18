@@ -282,8 +282,14 @@ def main(
     # Atomic write - emit to a tmp file in the same dir, fsync, then rename.
     # Same-dir rename is atomic on POSIX, so readers never see a half-written file.
     tmp_path = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(payload, indent=2))
-    os.replace(tmp_path, manifest_path)
+    try:
+        tmp_path.write_text(json.dumps(payload, indent=2))
+        os.replace(tmp_path, manifest_path)
+    except Exception:
+        # Orphan-prevention: if write or replace fails mid-flight, drop the
+        # half-written tmp so the next run starts from a clean state.
+        tmp_path.unlink(missing_ok=True)
+        raise
     (static_dir / "LICENSES.md").write_text(render_licenses_md(licenses_dir))
 
     if excluded:

@@ -24,6 +24,7 @@ const sample = (id: string, lat: number, lon: number): ReconScene => ({
   hf_filename: `${id.toUpperCase()}_final.ply`,
   display_name: id,
   ply_url: `/static/recon/${id}.ply`,
+  ply_sha256: "0".repeat(64),
   ply_size_bytes: 1,
   bounds: { center_lat: lat, center_lon: lon, radius_m: 100 },
   bounds_source: "spacenet_metadata",
