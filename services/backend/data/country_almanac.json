@@ -1,0 +1,80 @@
+{
+  "countries": [
+    {
+      "id": "GRC",
+      "iso3": "GRC",
+      "m49": "300",
+      "name": "Greece",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": { "name": "Athens", "lat": 37.98, "lon": 23.73 },
+      "facts": {
+        "profile": [
+          { "label": "Area", "value": "131,957 sq km" },
+          { "label": "Currency", "value": "Euro (EUR)" }
+        ],
+        "people": [
+          { "label": "Population", "value": "10.4M" },
+          { "label": "Languages", "value": "Greek" }
+        ],
+        "government": [
+          { "label": "Government type", "value": "Parliamentary republic" }
+        ],
+        "economy": [
+          { "label": "Economic note", "value": "Service and shipping-heavy EU economy" }
+        ],
+        "security": [
+          { "label": "Security note", "value": "NATO member; Eastern Mediterranean posture" }
+        ]
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "USA",
+      "iso3": "USA",
+      "m49": "840",
+      "name": "United States of America",
+      "region": "Americas",
+      "subregion": "Northern America",
+      "capital": { "name": "Washington, D.C.", "lat": 38.9, "lon": -77.04 },
+      "facts": {
+        "profile": [
+          { "label": "Currency", "value": "US dollar (USD)" }
+        ],
+        "people": [
+          { "label": "Languages", "value": "English, Spanish and others" }
+        ],
+        "government": [
+          { "label": "Government type", "value": "Federal presidential constitutional republic" }
+        ],
+        "economy": [],
+        "security": [
+          { "label": "Security note", "value": "NATO member; global force projection" }
+        ]
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    },
+    {
+      "id": "732",
+      "iso3": null,
+      "m49": "732",
+      "name": "W. Sahara",
+      "region": "Africa",
+      "subregion": "Northern Africa",
+      "capital": null,
+      "facts": {
+        "profile": [
+          { "label": "Status", "value": "Disputed territory in current map dataset" }
+        ],
+        "people": [],
+        "government": [],
+        "economy": [],
+        "security": []
+      },
+      "updated_at": "2026-05-19",
+      "source_note": "ODIN static country almanac"
+    }
+  ]
+}
