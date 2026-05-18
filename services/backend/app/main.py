@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.routers import (
     aircraft,
+    almanac,
     cables,
     earthquakes,
     eonet,
@@ -154,6 +155,7 @@ app.mount(
 
 # S1 Hlidskjalf routers (already at /api, no alias needed)
 app.include_router(signals.router, prefix="/api")
+app.include_router(almanac.router, prefix="/api")
 app.include_router(landing.router, prefix="/api")
 app.include_router(incidents.router, prefix="/api")
 
