@@ -60,11 +60,19 @@ if (canvasProto && !("__odinCanvasStubbed" in canvasProto)) {
     strokeText: noop,
     roundRect: noop,
   };
+  // Minimal WebGL2 stub. jsdom returns null for "webgl2" by default, which
+  // would make <WebGLCheck> always render its fallback in tests. The recon
+  // viewer suite (and any future WebGL-gated component) expects this context
+  // to be available; provide a no-op object that satisfies a non-null check.
+  const stubWebgl2 = { isWebGL2Stub: true };
   (canvasProto as unknown as { getContext: (kind: string) => unknown }).getContext = function getContext(
     kind: string,
   ) {
     if (kind === "2d") {
       return { ...stub2d, canvas: this as unknown as HTMLCanvasElement };
+    }
+    if (kind === "webgl2") {
+      return stubWebgl2;
     }
     return null;
   };

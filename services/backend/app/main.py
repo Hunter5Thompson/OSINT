@@ -1,9 +1,11 @@
 """WorldView Backend — FastAPI Application."""
 
 import asyncio
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
@@ -24,16 +26,22 @@ from app.routers import (
     incidents,
     intel,
     landing,
-    reports,
     rag,
+    reports,
     satellites,
     signals,
     vessels,
 )
+from app.routers import recon as recon_router_module
 from app.services import vessel_service
 from app.services.cache_service import CacheService
 from app.services.proxy_service import ProxyService
+from app.services.recon_manifest import (
+    ReconManifestLoader,
+    ReconManifestMissingError,
+)
 from app.services.signal_stream import get_signal_stream, redis_consumer_loop
+from app.static.cached_static import CachedStaticFiles
 from app.ws import flight_ws, vessel_ws
 
 structlog.configure(
@@ -70,6 +78,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     app.state.signal_stop_event = signal_stop_event
     app.state.signal_task = signal_task
+
+    # Recon manifest — load into app.state for the recon router
+    recon_manifest_path = Path(os.environ.get(
+        "RECON_MANIFEST_PATH",
+        str(Path(__file__).resolve().parent.parent / "data" / "recon_manifest.json"),
+    ))
+    recon_loader = ReconManifestLoader(recon_manifest_path)
+    try:
+        recon_loader.load()
+        logger.info("recon_manifest_loaded",
+                    path=str(recon_manifest_path),
+                    scenes=len(recon_loader.list_scenes()))
+    except ReconManifestMissingError:
+        logger.warning("recon_manifest_missing",
+                       path=str(recon_manifest_path),
+                       hint="run ./odin.sh recon bootstrap")
+    app.state.recon_manifest = recon_loader
 
     logger.info("backend_started", vllm_url=settings.vllm_url, vllm_model=settings.vllm_model)
     yield
@@ -110,6 +135,22 @@ for r in (
 ):
     app.include_router(r, prefix="/api")
     app.include_router(r, prefix="/api/v1")
+
+# Recon router — dual /api + /api/v1 prefix (matches existing convention)
+app.include_router(recon_router_module.router, prefix="/api")
+app.include_router(recon_router_module.router, prefix="/api/v1")
+
+# Static PLY assets for recon (immutable Cache-Control, Range supported)
+_recon_static_dir = Path(os.environ.get(
+    "RECON_STATIC_DIR",
+    str(Path(__file__).resolve().parent.parent / "static" / "recon"),
+))
+_recon_static_dir.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/static/recon",
+    CachedStaticFiles(directory=str(_recon_static_dir)),
+    name="recon_static",
+)
 
 # S1 Hlidskjalf routers (already at /api, no alias needed)
 app.include_router(signals.router, prefix="/api")

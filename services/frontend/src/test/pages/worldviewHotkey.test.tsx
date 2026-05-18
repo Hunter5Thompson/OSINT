@@ -22,11 +22,14 @@ vi.mock("../../services/api", () => ({
 }));
 
 import { WorldviewPage } from "../../pages/WorldviewPage";
+import { ReconProvider } from "../../state/ReconContext";
 
 function renderWorldview() {
   return render(
     <MemoryRouter initialEntries={["/worldview"]}>
-      <WorldviewPage />
+      <ReconProvider>
+        <WorldviewPage />
+      </ReconProvider>
     </MemoryRouter>,
   );
 }

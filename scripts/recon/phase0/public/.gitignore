@@ -1,0 +1,7 @@
+# Large/generated assets in this folder are kept out of git.
+# The operator downloads the PLY via `hf download jayinnn/Skyfall-GS-ply
+# JAX_068_final.ply --local-dir public` per scripts/recon/phase0/README.md.
+# `__spark_bg.wasm` is rehydrated from node_modules/@sparkjsdev/spark at
+# vite-config load time (see vite.config.ts spark-extract-wasm plugin).
+JAX_068_final.ply
+__spark_bg.wasm

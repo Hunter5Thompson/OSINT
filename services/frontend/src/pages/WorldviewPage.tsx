@@ -18,6 +18,9 @@ import { DatacenterLayer } from "../components/layers/DatacenterLayer";
 import { RefineryLayer } from "../components/layers/RefineryLayer";
 import { EONETLayer } from "../components/layers/EONETLayer";
 import { GDACSLayer } from "../components/layers/GDACSLayer";
+import { ReconLayer } from "../components/layers/ReconLayer";
+import { useReconManifest } from "../lib/recon/manifest";
+import { useRecon } from "../state/ReconContext";
 import { OverlayPanel } from "../components/hlidskjalf/OverlayPanel";
 import { LayersPanel } from "../components/worldview/LayersPanel";
 import { SearchPanel } from "../components/worldview/SearchPanel";
@@ -363,6 +366,8 @@ export function WorldviewPage() {
   const { refineries: refineryData } = useRefineries(layers.refineries);
   const { events: eonetEvents } = useEONETEvents(layers.eonet);
   const { events: gdacsEvents } = useGDACSEvents(layers.gdacs);
+  const { scenes: reconScenes } = useReconManifest();
+  const { openScene } = useRecon();
 
   const hasViewer = useMemo(() => viewer != null && !viewer.isDestroyed(), [viewer]);
 
@@ -467,6 +472,12 @@ export function WorldviewPage() {
         <EventLayer viewer={viewer} events={events} visible={layers.events} />
         <CableLayer viewer={viewer} cables={cables} landingPoints={landingPoints} visible={layers.cables} />
         <PipelineLayer viewer={viewer} pipelines={pipelineData} visible={layers.pipelines} />
+        <ReconLayer
+          viewer={viewer}
+          scenes={reconScenes}
+          visible={true}
+          onSelect={(s) => openScene(s.scene_id)}
+        />
         <GlobeChildren
           viewer={viewer}
           layers={layers}

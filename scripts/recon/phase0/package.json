@@ -1,0 +1,18 @@
+{
+  "name": "skyfall-recon-phase0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 8765 --host 127.0.0.1",
+    "serve": "vite preview --port 8765 --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@sparkjsdev/spark": "0.1.10",
+    "@mkkellogg/gaussian-splats-3d": "0.4.7",
+    "three": "0.165.0"
+  },
+  "devDependencies": {
+    "vite": "5.4.10",
+    "typescript": "5.6.3"
+  }
+}

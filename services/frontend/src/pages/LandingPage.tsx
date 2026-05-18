@@ -10,7 +10,7 @@
  * animation) lands in Task 7.
  */
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { NumericHero } from "../components/hlidskjalf/NumericHero";
 import type { NumericAccent } from "../components/hlidskjalf/NumericHero";
 import { Orrery } from "../components/hlidskjalf/Orrery";
@@ -23,6 +23,20 @@ import type { LandingSummary } from "../types/landing";
 import type { SignalEnvelope, SignalSeverity } from "../types/signals";
 
 type FilterKey = "hotspots" | "conflict" | "nuntii" | "libri";
+
+const INTRO_ACTIONS = [
+  { to: "/worldview", label: "Enter Worldview" },
+  { to: "/briefing", label: "Open Briefing" },
+  { to: "/warroom", label: "War Room" },
+] as const;
+
+const CAPABILITIES = [
+  { label: "Hugin", detail: "ingestion pipeline" },
+  { label: "Signalia", detail: "Signal Feed / SSE" },
+  { label: "Vectorium", detail: "Qdrant vector search" },
+  { label: "Memoria", detail: "Neo4j graph memory" },
+  { label: "Fenestra", detail: "24h landing window" },
+] as const;
 
 const SEVERITY_MAP: Record<SignalSeverity, FeedSeverity> = {
   critical: "sent",
@@ -76,6 +90,116 @@ function tileValueDisplay(spec: TileSpec): {
     return { display: "—", subLabel: `source:${spec.source}` };
   }
   return { display: spec.value, subLabel: undefined };
+}
+
+function LandingIntro() {
+  return (
+    <section
+      data-part="landing-intro"
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))",
+        gap: "2rem",
+        alignItems: "stretch",
+        paddingBottom: "2rem",
+        borderBottom: "1px solid var(--granite)",
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <span className="eyebrow">ODIN · Hlíðskjalf</span>
+        <h1
+          className="serif"
+          style={{
+            margin: "0.65rem 0 1rem",
+            maxWidth: "46rem",
+            color: "var(--parchment)",
+            fontSize: "clamp(3rem, 6vw, 5.75rem)",
+            lineHeight: 0.95,
+            fontWeight: 400,
+          }}
+        >
+          See the operating picture before it becomes a report.
+        </h1>
+        <p
+          style={{
+            maxWidth: "42rem",
+            margin: 0,
+            color: "var(--bone)",
+            fontSize: "1rem",
+            lineHeight: 1.65,
+          }}
+        >
+          ODIN fuses live signals, infrastructure layers, incident context, and
+          briefing workflows into one tactical intelligence surface.
+        </p>
+        <nav
+          aria-label="Landing entry points"
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+            marginTop: "1.5rem",
+          }}
+        >
+          {INTRO_ACTIONS.map((action, index) => (
+            <Link
+              key={action.to}
+              to={action.to}
+              className="mono"
+              style={{
+                border: `1px solid ${index === 0 ? "var(--amber)" : "var(--granite)"}`,
+                color: index === 0 ? "var(--parchment)" : "var(--stone)",
+                textDecoration: "none",
+                textTransform: "uppercase",
+                letterSpacing: "0.12em",
+                fontSize: "0.72rem",
+                padding: "0.75rem 0.95rem",
+                background: index === 0 ? "rgba(196, 129, 58, 0.08)" : "transparent",
+              }}
+            >
+              {action.label}
+            </Link>
+          ))}
+        </nav>
+      </div>
+
+      <aside
+        aria-label="ODIN capabilities"
+        style={{
+          border: "1px solid var(--granite)",
+          padding: "1rem",
+          display: "grid",
+          gap: "0.75rem",
+          alignContent: "start",
+        }}
+      >
+        <SectionHeading label="Subsystemata" />
+        {CAPABILITIES.map((capability) => (
+          <div
+            key={capability.label}
+            style={{
+              borderTop: "1px solid var(--granite)",
+              paddingTop: "0.75rem",
+            }}
+          >
+            <span className="mono" style={{ color: "var(--parchment)", fontSize: "0.78rem" }}>
+              {capability.label}
+            </span>
+            <span
+              style={{
+                display: "block",
+                marginTop: "0.2rem",
+                color: "var(--stone)",
+                fontSize: "0.84rem",
+              }}
+            >
+              {capability.detail}
+            </span>
+          </div>
+        ))}
+      </aside>
+    </section>
+  );
 }
 
 export function LandingPage() {
@@ -151,8 +275,12 @@ export function LandingPage() {
         flexDirection: "column",
         padding: "2rem 2.5rem",
         gap: "2rem",
+        minHeight: 0,
+        overflow: "auto",
       }}
     >
+      <LandingIntro />
+
       <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <SectionHeading label="Index Rerum · last 24h" />
         <span className="mono" style={{ color: "var(--ash)", fontSize: "0.75rem" }}>
@@ -164,7 +292,7 @@ export function LandingPage() {
         data-part="numerals"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))",
           gap: "1.5rem",
         }}
       >
@@ -204,7 +332,7 @@ export function LandingPage() {
         data-part="feed-and-orrery"
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr auto",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))",
           gap: "2rem",
           alignItems: "start",
         }}

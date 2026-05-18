@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Skyfall Recon — Phase 0 Renderer Parity</title>
+  <style>
+    body { margin: 0; background: #0b0b09; color: #ddd; font: 13px monospace; }
+    .row { display: flex; height: 70vh; }
+    .col { flex: 1; border-left: 1px solid #333; position: relative; }
+    .col h2 { position: absolute; top: 8px; left: 8px; margin: 0; font-size: 12px; z-index: 2; }
+    canvas { width: 100%; height: 100%; display: block; }
+    #panel { padding: 12px; }
+    button { background: #333; color: #ddd; border: 1px solid #555; padding: 6px 12px; cursor: pointer; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <div class="col"><h2>@sparkjsdev/spark @0.1.10</h2><canvas id="spark"></canvas></div>
+    <div class="col"><h2>@mkkellogg/gaussian-splats-3d @0.4.7</h2><canvas id="mkk"></canvas></div>
+  </div>
+  <div id="panel">
+    <button id="start">Run benchmark</button>
+    <button id="screenshot-spark">Screenshot spark.png</button>
+    <button id="screenshot-mkk">Screenshot mkk.png</button>
+    <button id="export">Export phase0-results.json</button>
+    <pre id="results"></pre>
+  </div>
+  <script type="module" src="./harness.ts"></script>
+</body>
+</html>
