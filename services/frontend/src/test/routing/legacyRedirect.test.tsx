@@ -8,7 +8,7 @@
  *  4. AppShell (TopBar stub) is present across all four routes
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { routes } from "../../app/router";
 
@@ -49,10 +49,11 @@ describe("legacy query redirect + AppShell", () => {
   it("renders AppShell TopBar stub on Landing", async () => {
     renderAt("/");
     expect(await screen.findByText("Hlíðskjalf")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /home/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /worldview/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /briefing/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /war room/i })).toBeInTheDocument();
+    const primaryNav = screen.getByRole("navigation", { name: /primary/i });
+    expect(within(primaryNav).getByRole("link", { name: /home/i })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole("link", { name: /worldview/i })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole("link", { name: /briefing/i })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole("link", { name: /war room/i })).toBeInTheDocument();
   });
 
   it("renders AppShell TopBar stub on Worldview", async () => {

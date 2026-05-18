@@ -12,7 +12,7 @@
  * 12. Clicking the Hotspots numeral navigates to `/worldview?filter=hotspots`.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { routes } from "../../app/router";
 import {
@@ -80,6 +80,65 @@ afterEach(() => {
   uninstallMockEventSource();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("LandingPage · intro", () => {
+  it("renders the ODIN Hlíðskjalf intro before the existing Index Rerum header", async () => {
+    installFetch({ summary: fullSummary });
+    renderAt("/");
+
+    expect(await screen.findByText(/ODIN · Hlíðskjalf/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: /operating picture/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Index Rerum · last 24h/i)).toBeInTheDocument();
+  });
+
+  it("renders static capability labels without health status claims", async () => {
+    installFetch({ summary: fullSummary });
+    renderAt("/");
+
+    expect(await screen.findByText(/Hugin/i)).toBeInTheDocument();
+    expect(screen.getByText(/Signalia/i)).toBeInTheDocument();
+    expect(screen.getByText(/Vectorium/i)).toBeInTheDocument();
+    expect(screen.getByText(/Memoria/i)).toBeInTheDocument();
+    expect(screen.getByText(/Fenestra/i)).toBeInTheDocument();
+    expect(screen.queryByText(/online/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("LandingPage · intro navigation", () => {
+  it("navigates from the Worldview intro action to /worldview", async () => {
+    installFetch({ summary: fullSummary });
+    renderAt("/");
+
+    const entryNav = await screen.findByRole("navigation", { name: /landing entry points/i });
+    fireEvent.click(within(entryNav).getByRole("link", { name: /enter worldview/i }));
+
+    expect(await screen.findByTestId("worldview-page")).toBeInTheDocument();
+  });
+
+  it("renders Briefing from the intro action", async () => {
+    installFetch({ summary: fullSummary });
+    renderAt("/");
+
+    const entryNav = await screen.findByRole("navigation", { name: /landing entry points/i });
+    fireEvent.click(within(entryNav).getByRole("link", { name: /open briefing/i }));
+
+    expect((await screen.findAllByText(/Dossier Archive/i)).length).toBeGreaterThan(0);
+  });
+
+  it("renders War Room from the intro action", async () => {
+    installFetch({ summary: fullSummary });
+    renderAt("/");
+
+    const entryNav = await screen.findByRole("navigation", { name: /landing entry points/i });
+    fireEvent.click(within(entryNav).getByRole("link", { name: /^war room$/i }));
+
+    expect(await screen.findByText(/no active incident/i)).toBeInTheDocument();
+  });
 });
 
 describe("LandingPage · numerals", () => {
