@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mkkellogg/gaussian-splats-3d": "^0.4.7",
     "cesium": "^1.132.0",
     "d3-array": "^3.2.4",
     "d3-geo": "^3.1.1",
@@ -21,6 +22,7 @@
     "react-force-graph-2d": "^1.29.1",
     "react-router-dom": "^7.14.1",
     "satellite.js": "^5.0.0",
+    "three": "^0.165.0",
     "topojson-client": "^3.1.0"
   },
   "devDependencies": {
@@ -34,6 +36,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/testing-library__react": "^10.0.1",
+    "@types/three": "^0.165.0",
     "@types/topojson-client": "^3.1.5",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
