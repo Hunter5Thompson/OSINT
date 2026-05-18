@@ -37,6 +37,7 @@ const LEGACY_BASE = "/api/v1";
 import type { LandingSummary } from "../types/landing";
 import type { SignalEnvelope } from "../types/signals";
 import type { Incident, IncidentCreateRequest } from "../types/incident";
+import type { AlmanacSignalResponse, CountryAlmanac } from "../types/almanac";
 
 export const SIGNAL_STREAM_URL = "/api/signals/stream";
 
@@ -60,6 +61,30 @@ export async function getLatestSignals(limit = 6): Promise<SignalEnvelope[]> {
     throw new Error(`latest signals failed: ${res.status} ${res.statusText}`);
   }
   return (await res.json()) as SignalEnvelope[];
+}
+
+export async function getCountryAlmanac(countryId: string): Promise<CountryAlmanac> {
+  const res = await fetch(`/api/almanac/countries/${encodeURIComponent(countryId)}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error(`country almanac failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as CountryAlmanac;
+}
+
+export async function getCountryAlmanacSignals(
+  countryId: string,
+  limit = 5,
+): Promise<AlmanacSignalResponse> {
+  const res = await fetch(
+    `/api/almanac/countries/${encodeURIComponent(countryId)}/signals?limit=${limit}`,
+    { headers: { Accept: "application/json" } },
+  );
+  if (!res.ok) {
+    throw new Error(`country almanac signals failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as AlmanacSignalResponse;
 }
 
 async function fetchWithFallback(path: string, init?: RequestInit): Promise<Response> {
