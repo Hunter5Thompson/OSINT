@@ -116,6 +116,32 @@ async function runSpark(canvas: HTMLCanvasElement, t: Timing) {
 async function runMkk(canvas: HTMLCanvasElement, t: Timing) {
   const tStart = performance.now();
   try {
+    // Pre-flight HEAD so a missing PLY surfaces as a clean error instead of
+    // mkk's downstream "splatArray is undefined" crash. When the PLY 404s
+    // or returns HTML (Vite SPA fallback edge cases), mkk's PlyLoader silently
+    // resolves the load promise with an undefined UncompressedSplatArray
+    // because its header parser never sees an "end_header" token. The
+    // resulting `partitionUncompressedSplatArray(undefined)` crash buries
+    // the real cause. Header-check it up front and fail with the actual URL
+    // + status code; if the file is well-formed but mkk's INRIAV1 parser
+    // still chokes on Skyfall-GS Mip-Splatting columns, we'll still see the
+    // downstream error — but we'll have ruled out the trivial "file missing"
+    // case. See README "Known mkk limitation" section.
+    const head = await fetch(PLY_URL, { method: "HEAD" });
+    if (!head.ok) {
+      throw new Error(
+        `PLY pre-flight HEAD ${PLY_URL} -> ${head.status}. ` +
+          `Did you 'hf download jayinnn/Skyfall-GS-ply JAX_068_final.ply --local-dir public'?`,
+      );
+    }
+    const ct = head.headers.get("content-type") || "";
+    if (ct.includes("text/html")) {
+      throw new Error(
+        `PLY pre-flight returned content-type=${ct} (Vite SPA fallback). ` +
+          `${PLY_URL} is not actually on disk under ./public.`,
+      );
+    }
+
     // Hand mkk a pre-built renderer wrapping the existing <canvas id="mkk">.
     // Verified in node_modules/@mkkellogg/gaussian-splats-3d/build/gaussian-splats-3d.module.js
     // around line 12295 / 12491 — `options.renderer` flips usingExternalRenderer=true

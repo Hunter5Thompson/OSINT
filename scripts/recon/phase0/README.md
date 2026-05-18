@@ -21,6 +21,9 @@ cd scripts/recon/phase0
 npm install --no-audit --no-fund
 
 # Download the representative PLY (~230 MB, gitignored).
+# THIS STEP IS REQUIRED. If you skip it, mkk silently fails with
+# "splatArray is undefined" (its loader never finds end_header in an
+# empty/HTML response) and Spark errors on a non-existent file.
 mkdir -p public
 hf download jayinnn/Skyfall-GS-ply JAX_068_final.ply --local-dir public
 ls -lh public/JAX_068_final.ply   # expect ~229 MiB
@@ -29,6 +32,33 @@ ls -lh public/JAX_068_final.ply   # expect ~229 MiB
 npm run dev
 # Open http://127.0.0.1:8765/
 ```
+
+### Vite config
+
+`vite.config.ts` ships two fixes for failures the operator hit on first run
+(2026-05-18):
+
+- `optimizeDeps.exclude: ["@sparkjsdev/spark"]`. Spark inlines its WASM as a
+  `data:application/wasm;base64,...` URL inside `new URL(..., import.meta.url)`.
+  When Vite 5.4.x's dep-optimizer pre-bundles Spark via esbuild, that data-URL
+  fetch path produces:
+
+  ```
+  WebAssembly.instantiateStreaming failed because your server does not serve
+  Wasm with `application/wasm` MIME type.
+  TypeError: WebAssembly: Response has unsupported MIME type ''
+  expected 'application/wasm'
+  ```
+
+  Excluding Spark from dep optimization tells Vite to serve Spark's published
+  ESM module unmodified; the data URL then fetches with the correct
+  `application/wasm` Content-Type and `instantiateStreaming` succeeds.
+
+- A `wasm-mime` middleware that sets `Content-Type: application/wasm` for any
+  request ending in `.wasm`. Defensive; not strictly required today because
+  Spark uses a data URL and mkk has no native `.wasm` dep, but it costs
+  nothing and prevents future regressions if either library starts shipping a
+  side-loaded `.wasm` companion file.
 
 > Note on `first_progress_ms`: the harness streams the PLY itself via
 > `fetch()` + a `ReadableStream` reader to measure the first non-zero
@@ -117,3 +147,57 @@ If the harness errors at run time with "SplatMesh is not a constructor",
 "Cannot read properties of undefined (reading 'initialized')", or
 "Viewer.addSplatScene is not a function", the API surface changed in the
 0.x line we landed on — STOP, file BLOCKED, do not paper over.
+
+## Known mkk limitation (2026-05-18 diagnosis)
+
+Diagnosis outcome: **(b) PLY header incompatibility / loader-state edge.**
+
+The crash signature the operator reported —
+
+```
+TypeError: can't access property "splatCount", splatArray is undefined
+  partitionGenerator SplatPartitioner.js:55
+  partitionUncompressedSplatArray SplatPartitioner.js:19
+  generateFromUncompressedSplatArray SplatBufferGenerator.js:18
+  finalize$1 PlyLoader.js:38
+  loadFromURL PlyLoader.js:308
+```
+
+— traces in `node_modules/@mkkellogg/gaussian-splats-3d/build/gaussian-splats-3d.module.js`
+to `PlyLoader.loadFromURL` (line 3486) → `finalize$1` (line 3475) →
+`SplatPartitioner.partitionUncompressedSplatArray` (line 3322). The
+`splatArray` argument to `finalize$1` originates from
+`loadPromise.resolve(standardLoadUncompressedSplatArray)` inside `localOnProgress`.
+That variable is only assigned (line 3582) when `headerLoaded` flips true,
+which only happens when `PlyParserUtils.checkTextForEndHeader(headerText)`
+sees the literal `end_header` token. If the loader streams to `loadComplete=true`
+without ever seeing `end_header`, `standardLoadUncompressedSplatArray` stays
+`undefined`, the promise resolves with `undefined`, and `finalize$1` crashes
+exactly as reported.
+
+Two paths reach that state with a Skyfall-GS PLY:
+
+1. **The PLY is missing on disk.** Vite serves a 404 or (in some
+   configurations) HTML, mkk's `fetchWithProgress` finishes the stream, and
+   `headerLoaded` never goes true. This is by far the most common cause.
+   The harness now does a pre-flight `HEAD` for the PLY URL in `runMkk` and
+   throws with the actual status code and a hint about the `hf download`
+   step, so this case fails loudly.
+
+2. **mkk 0.4.7 cannot parse Skyfall-GS Mip-Splatting PLYs.** The INRIAV1
+   parser at `decodeHeaderLines` (line 2762) recognizes the standard 3DGS
+   columns (`x/y/z`, `f_dc_*`, `opacity`, `scale_*`, `rot_*`, optional
+   `f_rest_*`) which Skyfall-GS PLYs do ship. Mip-Splatting adds an
+   antialiasing kernel parameter at runtime but doesn't change the PLY
+   column layout, so header parsing *should* succeed. However: if the
+   pre-flight HEAD passes (i.e. the file is present and well-formed) and
+   `runMkk` still hits the same crash, we are in this state — mkk's loader
+   has an edge case with this PLY shape. That's a renderer-fitness signal,
+   not something to patch around: Phase 0's whole point is to score the two
+   renderers honestly. The harness will record `mkk.error` with the real
+   message and `verify_results.py` can gate on it.
+
+No `format` flag in mkk's `addSplatScene` options fixes this (a `.ply`
+extension already selects `SceneFormat.Ply` via `sceneFormatFromPath` at
+line 4718). The renderer choice ladder remains: if mkk fails honestly on
+the JAX_068 PLY, pick Spark.
