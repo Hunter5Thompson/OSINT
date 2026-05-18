@@ -1,3 +1,5 @@
+import { CountryAlmanacPanel } from "./CountryAlmanacPanel";
+
 interface Props {
   name: string;
   iso3: string | null;
@@ -16,7 +18,7 @@ export function CountryHeader({ name, iso3, m49, capital }: Props) {
           <dd>{capital.name} · {capital.coords.lat.toFixed(2)}N {capital.coords.lon.toFixed(2)}E</dd>
         </dl>
       )}
-      <div className="country-placeholder">§ Almanac · S2.5 coming soon</div>
+      <CountryAlmanacPanel iso3={iso3} m49={m49} />
     </div>
   );
 }
