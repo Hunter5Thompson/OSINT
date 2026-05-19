@@ -104,6 +104,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     from app.services.incident_promoter.config import PromoterConfig
     from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
     from app.services.incident_promoter.detectors.telegram import TelegramTopicDetector
+    from app.services.incident_promoter.detectors.severity import SeverityBurstDetector
     from app.services.incident_promoter.promoter import Promoter
     from app.services.incident_stream import get_incident_stream
     from app.services import incident_store as _incident_store_module
@@ -114,12 +115,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.cluster_store = _cluster_store
     app.state.promoter_config = _promoter_cfg
 
-    _detectors = []
+    _detectors: list = []
     if _promoter_cfg.firms_enabled:
         _detectors.append(FIRMSGeoClusterDetector(config=_promoter_cfg, clock=_promoter_clock))
     if _promoter_cfg.telegram_enabled:
         _detectors.append(TelegramTopicDetector(config=_promoter_cfg, clock=_promoter_clock))
-    # Phase 5+ will append severity, gdelt here
+    if _promoter_cfg.severity_enabled:
+        _detectors.append(SeverityBurstDetector(config=_promoter_cfg, clock=_promoter_clock))
 
     _promoter = Promoter(
         signal_stream=get_signal_stream(),

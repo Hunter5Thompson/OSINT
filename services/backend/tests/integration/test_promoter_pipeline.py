@@ -262,3 +262,38 @@ async def test_telegram_cluster_pipeline(
     assert types.count("incident.open") == 1
     assert types.count("incident.update") == 1
     # unrelated didn't ignite (only 1 hit in its own centroid)
+
+
+async def test_severity_burst_pipeline_with_map_no_pin(
+    monkeypatch, fake_clock, fake_incident_store, fake_incident_event_stream,
+    signal_envelope_factory,
+):
+    """Spec §9.2 #2 — severity burst on opt-in flag, coords=(0,0)+map:no_pin."""
+    monkeypatch.setenv("ODIN_PROMOTER_SEVERITY_ENABLED", "true")
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.severity import SeverityBurstDetector
+
+    cfg = PromoterConfig.from_env()
+    detector = SeverityBurstDetector(config=cfg, clock=fake_clock)
+    store = ClusterStore(clock=fake_clock)
+    store.add_termination_listener(detector.on_cluster_terminated)
+
+    signal_stream = _FakeSignalStream()
+    promoter = Promoter(
+        signal_stream=signal_stream, cluster_store=store,
+        incident_store=fake_incident_store,
+        incident_event_stream=fake_incident_event_stream,
+        config=cfg, clock=fake_clock, detectors=[detector],
+    )
+    await promoter._subscribe()  # noqa: SLF001
+    await promoter._rehydrate()  # noqa: SLF001
+
+    sources = ["rss", "telegram", "firms", "rss", "telegram"]
+    for s in sources:
+        await signal_stream.queue.put(signal_envelope_factory(source=s, severity="high"))
+    for _ in range(5):
+        await promoter._drain_one()  # noqa: SLF001
+    assert fake_incident_event_stream.types() == ["incident.open"]
+    incident = fake_incident_event_stream.published[0][1]
+    assert incident.coords == (0.0, 0.0)
+    assert "map:no_pin" in incident.layer_hints
