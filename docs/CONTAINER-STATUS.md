@@ -2,6 +2,23 @@
 
 > Last verified: 2026-04-03 (E2E Smoke Test)
 
+## Release Notes
+
+### 2026-05-20 — Auto-Promoter v1 landed
+
+- New backend lifespan task observes `/api/signals/stream` and promotes
+  qualifying signals to incidents.
+- Detectors enabled by default: FIRMS Geo-Cluster, Telegram Topic Cluster.
+- Detectors default-off in v1: Severity Burst (waits on frontend `map:no_pin`),
+  GDELT Tone Spike (waits on payload schema verification — see
+  `services/backend/app/services/incident_promoter/detectors/gdelt.py`).
+- Admin inspector: `GET /api/incidents/_admin/promoter` (behind `X-Admin-Token`).
+- E2E test (mocked Redis XREAD → SSE assertion) deferred to a follow-up plan;
+  integration coverage in `services/backend/tests/integration/test_promoter_pipeline.py`
+  is the highest-level test in v1.
+- Spec: `docs/superpowers/specs/2026-05-19-incident-auto-promoter-design.md`.
+- Plan: `docs/superpowers/plans/2026-05-19-incident-auto-promoter.md`.
+
 ## LLM Inference Containers
 
 ### llama.cpp + Qwen3.5-27B-GGUF (Q6_K) — RECOMMENDED
