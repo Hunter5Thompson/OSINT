@@ -260,3 +260,36 @@ async def test_apply_signal_update_missing_incident_returns_none() -> None:
 
     assert result is None
     mock_write.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_list_owned_for_rehydrate_filters_by_auto_promoter_marker() -> None:
+    """Only incidents with 'auto_promoter:v1' in layer_hints are returned; manual ones are excluded."""
+    row1 = _row(
+        id="inc-owned-open",
+        status="open",
+        layer_hints=["firms", "auto_promoter:v1", "cluster:firms:geo:1.0:1.0"],
+    )
+    row2 = _row(
+        id="inc-owned-promoted",
+        status="promoted",
+        layer_hints=["firms", "auto_promoter:v1", "cluster:firms:geo:2.0:2.0"],
+    )
+    row3 = _row(
+        id="inc-manual",
+        status="open",
+        layer_hints=["manual"],
+    )
+
+    with patch.object(
+        incident_store,
+        "read_query",
+        new=AsyncMock(return_value=[row1, row2, row3]),
+    ):
+        result = await incident_store.list_owned_for_rehydrate()
+
+    assert len(result) == 2
+    result_ids = {inc.id for inc in result}
+    assert "inc-owned-open" in result_ids
+    assert "inc-owned-promoted" in result_ids
+    assert "inc-manual" not in result_ids

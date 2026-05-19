@@ -210,3 +210,31 @@ async def delete_incident(incident_id: str) -> bool:
         return False
     await write_query(INCIDENT_DELETE, {"incident_id": incident_id})
     return True
+
+
+async def list_owned_for_rehydrate() -> list[Incident]:
+    """Return open/promoted incidents owned by the auto-promoter.
+
+    Uses the existing ``INCIDENT_LIST_OPEN`` Cypher then filters in Python by
+    the ``auto_promoter:v1`` marker in ``layer_hints``. Status filter also
+    admits ``PROMOTED`` so the Promoter can rehydrate clusters that the
+    analyst owned at restart time.
+    """
+    rows = await read_query(
+        "MATCH (i:Incident) "
+        "WHERE i.status IN ['open', 'promoted'] "
+        "RETURN i.id AS id, i.kind AS kind, i.title AS title, "
+        "       i.severity AS severity, i.lat AS lat, i.lon AS lon, "
+        "       i.location AS location, i.status AS status, "
+        "       toString(i.trigger_ts) AS trigger_ts, "
+        "       toString(i.closed_ts) AS closed_ts, "
+        "       i.sources AS sources, i.layer_hints AS layer_hints, "
+        "       i.timeline_json AS timeline_json "
+        "ORDER BY i.ordinal DESC LIMIT 500"
+    )
+    owned: list[Incident] = []
+    for row in rows:
+        if "auto_promoter:v1" not in (row.get("layer_hints") or []):
+            continue
+        owned.append(_row_to_incident(row))
+    return owned
