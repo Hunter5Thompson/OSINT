@@ -335,3 +335,53 @@ async def test_mark_silenced_drops_state_records_cooldown_fires_listeners(
     assert store.get_by_cluster_key("telegram:topic:abc") is None
     assert store.cooldowns()["telegram:topic:abc"] == until
     assert received == [("telegram:topic:abc", until)]
+
+
+def test_snapshot_for_sweep_classifies_stale_open_promoted_and_expired_cooldowns(
+    fake_clock,
+):
+    from datetime import timedelta
+    from app.services.incident_promoter.cluster_store import ClusterState, ClusterStore
+
+    store = ClusterStore(clock=fake_clock)
+    now = fake_clock()
+    quiet = 900  # 15 min
+
+    # stale open
+    store._by_key["k_open"] = ClusterState(  # noqa: SLF001
+        cluster_key="k_open", incident_id="inc-a", detector_id="firms",
+        severity="high", coords=(0.0, 0.0), hit_count=3,
+        last_signal_ts=now - timedelta(seconds=quiet + 60),
+        created_ts=now - timedelta(seconds=quiet + 200),
+        incident_status="open",
+    )
+    store._by_incident_id["inc-a"] = "k_open"  # noqa: SLF001
+
+    # stale promoted
+    store._by_key["k_prom"] = ClusterState(  # noqa: SLF001
+        cluster_key="k_prom", incident_id="inc-b", detector_id="firms",
+        severity="high", coords=(0.0, 0.0), hit_count=3,
+        last_signal_ts=now - timedelta(seconds=quiet + 30),
+        created_ts=now - timedelta(seconds=quiet + 200),
+        incident_status="promoted",
+    )
+    store._by_incident_id["inc-b"] = "k_prom"  # noqa: SLF001
+
+    # fresh
+    store._by_key["k_fresh"] = ClusterState(  # noqa: SLF001
+        cluster_key="k_fresh", incident_id="inc-c", detector_id="firms",
+        severity="high", coords=(0.0, 0.0), hit_count=1,
+        last_signal_ts=now - timedelta(seconds=10),
+        created_ts=now - timedelta(seconds=10),
+        incident_status="open",
+    )
+    store._by_incident_id["inc-c"] = "k_fresh"  # noqa: SLF001
+
+    # expired + live cooldowns
+    store._cooldowns["cool_expired"] = now - timedelta(seconds=1)  # noqa: SLF001
+    store._cooldowns["cool_live"] = now + timedelta(seconds=60)  # noqa: SLF001
+
+    snap = store.snapshot_for_sweep(quiet_window_sec=quiet, now=now)
+    assert {s.cluster_key for s in snap.stale_open} == {"k_open"}
+    assert {s.cluster_key for s in snap.stale_promoted} == {"k_prom"}
+    assert set(snap.expired_cooldown_keys) == {"cool_expired"}

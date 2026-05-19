@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 import structlog
@@ -33,6 +33,13 @@ class ClusterState:
     created_ts: datetime
     contributing_signal_ids: list[str] = field(default_factory=list)
     incident_status: ClusterIncidentStatus = "open"
+
+
+@dataclass
+class SweepSnapshot:
+    stale_open: list[ClusterState]
+    stale_promoted: list[ClusterState]
+    expired_cooldown_keys: list[str]
 
 
 class ClusterStore:
@@ -254,6 +261,41 @@ class ClusterStore:
             incident_id=incident_id,
             cooldown_seconds=int((until - self._clock()).total_seconds()),
         )
+
+    def snapshot_for_sweep(
+        self, *, quiet_window_sec: int, now: datetime
+    ) -> SweepSnapshot:
+        """Classify clusters and cooldowns for sweeping.
+
+        Returns clusters stale (last_signal_ts <= cutoff) separated by status,
+        and expired cooldowns (expiry_time <= now).
+        """
+        cutoff = now - timedelta(seconds=quiet_window_sec)
+        stale_open: list[ClusterState] = []
+        stale_promoted: list[ClusterState] = []
+        for state in self._by_key.values():
+            if state.last_signal_ts > cutoff:
+                continue
+            if state.incident_status == "promoted":
+                stale_promoted.append(state)
+            else:
+                stale_open.append(state)
+        expired = [k for k, t in self._cooldowns.items() if t <= now]
+        return SweepSnapshot(stale_open, stale_promoted, expired)
+
+    async def drop_cluster(self, cluster_key: str) -> None:
+        """Remove a cluster (state + mapping) and fire termination listeners."""
+        async with self._lock:
+            state = self._by_key.pop(cluster_key, None)
+            if state is not None:
+                self._by_incident_id.pop(state.incident_id, None)
+        if state is not None:
+            self._fire_terminated(cluster_key)
+
+    def pop_expired_cooldowns(self, expired: list[str]) -> None:
+        """Remove expired cooldown keys from the store."""
+        for k in expired:
+            self._cooldowns.pop(k, None)
 
     def _fire_terminated(
         self, cluster_key: str, *, suppress_until: datetime | None = None
