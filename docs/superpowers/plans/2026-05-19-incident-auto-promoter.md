@@ -181,7 +181,7 @@ cd services/backend && uv run pytest tests/incident_promoter/test_config.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'app.services.incident_promoter.config'`.
 
-- [ ] **Step 3: Implement `PromoterConfig`.**
+- [ ] **Step 3: Implement `PromoterConfig` (pydantic-settings, matches `app/config.py` style).**
 
 `services/backend/app/services/incident_promoter/config.py`:
 ```python
@@ -190,83 +190,45 @@ Expected: `ModuleNotFoundError: No module named 'app.services.incident_promoter.
 All values come from environment variables (prefix ``ODIN_PROMOTER_``). The
 config is read once at lifespan-start via :meth:`PromoterConfig.from_env`;
 the resulting instance is immutable for the lifetime of the Promoter task.
+Uses ``pydantic_settings.BaseSettings`` to match ``app.config.Settings``.
 """
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def _bool(key: str, default: bool) -> bool:
-    raw = os.getenv(key)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+class PromoterConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="ODIN_PROMOTER_",
+        extra="ignore",
+        frozen=True,
+    )
 
-
-def _int(key: str, default: int) -> int:
-    raw = os.getenv(key)
-    return int(raw) if raw is not None and raw.strip() else default
-
-
-def _float(key: str, default: float) -> float:
-    raw = os.getenv(key)
-    return float(raw) if raw is not None and raw.strip() else default
-
-
-@dataclass(frozen=True)
-class PromoterConfig:
-    enabled: bool
-    firms_enabled: bool
-    firms_min_hits: int
-    firms_window_sec: int
-    firms_bucket_deg: float
-    severity_enabled: bool
-    severity_min_hits: int
-    severity_window_sec: int
-    telegram_enabled: bool
-    telegram_min_hits: int
-    telegram_window_sec: int
-    telegram_jaccard_threshold: float
-    telegram_jaccard_threshold_with_domain: float
-    telegram_embeddings_enabled: bool
-    gdelt_enabled: bool
-    gdelt_min_hits: int
-    gdelt_window_sec: int
-    quiet_window_sec: int
-    sweeper_tick_sec: int
-    silence_cooldown_sec: int
+    enabled: bool = True
+    firms_enabled: bool = True
+    firms_min_hits: int = 3
+    firms_window_sec: int = 86_400
+    firms_bucket_deg: float = 0.1
+    severity_enabled: bool = False
+    severity_min_hits: int = 5
+    severity_window_sec: int = 900
+    telegram_enabled: bool = True
+    telegram_min_hits: int = 3
+    telegram_window_sec: int = 1800
+    telegram_jaccard_threshold: float = 0.55
+    telegram_jaccard_threshold_with_domain: float = 0.45
+    telegram_embeddings_enabled: bool = False
+    gdelt_enabled: bool = False
+    gdelt_min_hits: int = 3
+    gdelt_window_sec: int = 3600
+    quiet_window_sec: int = 900
+    sweeper_tick_sec: int = 60
+    silence_cooldown_sec: int = 3600
 
     @classmethod
     def from_env(cls) -> "PromoterConfig":
-        return cls(
-            enabled=_bool("ODIN_PROMOTER_ENABLED", True),
-            firms_enabled=_bool("ODIN_PROMOTER_FIRMS_ENABLED", True),
-            firms_min_hits=_int("ODIN_PROMOTER_FIRMS_MIN_HITS", 3),
-            firms_window_sec=_int("ODIN_PROMOTER_FIRMS_WINDOW_SEC", 86_400),
-            firms_bucket_deg=_float("ODIN_PROMOTER_FIRMS_BUCKET_DEG", 0.1),
-            severity_enabled=_bool("ODIN_PROMOTER_SEVERITY_ENABLED", False),
-            severity_min_hits=_int("ODIN_PROMOTER_SEVERITY_MIN_HITS", 5),
-            severity_window_sec=_int("ODIN_PROMOTER_SEVERITY_WINDOW_SEC", 900),
-            telegram_enabled=_bool("ODIN_PROMOTER_TELEGRAM_ENABLED", True),
-            telegram_min_hits=_int("ODIN_PROMOTER_TELEGRAM_MIN_HITS", 3),
-            telegram_window_sec=_int("ODIN_PROMOTER_TELEGRAM_WINDOW_SEC", 1800),
-            telegram_jaccard_threshold=_float(
-                "ODIN_PROMOTER_TELEGRAM_JACCARD_THRESHOLD", 0.55
-            ),
-            telegram_jaccard_threshold_with_domain=_float(
-                "ODIN_PROMOTER_TELEGRAM_JACCARD_THRESHOLD_DOMAIN", 0.45
-            ),
-            telegram_embeddings_enabled=_bool(
-                "ODIN_PROMOTER_TELEGRAM_EMBEDDINGS_ENABLED", False
-            ),
-            gdelt_enabled=_bool("ODIN_PROMOTER_GDELT_ENABLED", False),
-            gdelt_min_hits=_int("ODIN_PROMOTER_GDELT_MIN_HITS", 3),
-            gdelt_window_sec=_int("ODIN_PROMOTER_GDELT_WINDOW_SEC", 3600),
-            quiet_window_sec=_int("ODIN_PROMOTER_QUIET_WINDOW_SEC", 900),
-            sweeper_tick_sec=_int("ODIN_PROMOTER_SWEEPER_TICK_SEC", 60),
-            silence_cooldown_sec=_int("ODIN_PROMOTER_SILENCE_COOLDOWN_SEC", 3600),
-        )
+        """Convenience alias for call sites that want to read env explicitly."""
+        return cls()
 
     def enabled_detector_ids(self) -> list[str]:
         ids: list[str] = []
@@ -280,6 +242,8 @@ class PromoterConfig:
             ids.append("gdelt")
         return ids
 ```
+
+Note: `pydantic_settings` ships as a transitive of `pydantic-settings` (already in the backend deps — used by `app/config.py`). No new dependency required.
 
 - [ ] **Step 4: Run the tests and confirm they pass.**
 ```bash
@@ -951,10 +915,26 @@ class Promoter:
     def is_stop_requested(self) -> bool:
         return self._stop_event.is_set()
 
+    def _has_runtime_deps(self) -> bool:
+        """True only when both the signal stream and incident store are wired.
+
+        Lifespan calls this before scheduling ``run`` / ``sweeper_loop``;
+        ``run`` and ``sweeper_loop`` themselves re-check and bail with a
+        warning so a misconfigured caller can't trigger a busy spin.
+        """
+        return self._signal_stream is not None and self._incident_store is not None
+
     async def run(self) -> None:
         """Phase 1 placeholder — no-op when disabled, real logic in Phase 4."""
         if not self._config.enabled:
             logger.info("promoter_disabled_skipping_run")
+            return
+        if not self._has_runtime_deps():
+            logger.warning(
+                "promoter_run_missing_runtime_deps_skipping",
+                has_signal_stream=self._signal_stream is not None,
+                has_incident_store=self._incident_store is not None,
+            )
             return
         # Phase 4 implementation will:
         #   await self._subscribe()
@@ -965,6 +945,8 @@ class Promoter:
     async def sweeper_loop(self) -> None:
         """Phase 1 placeholder — real implementation in Phase 4."""
         if not self._config.enabled:
+            return
+        if not self._has_runtime_deps():
             return
         logger.warning("promoter_sweeper_not_implemented_phase1")
 ```
@@ -1036,11 +1018,12 @@ In `services/backend/app/main.py`, locate the `@asynccontextmanager async def li
         clock=_promoter_clock,
         detectors=[],  # Phase 3+ adds detectors
     )
+    # Phase 1 deliberately does NOT start the promoter/sweeper tasks. The
+    # Promoter shell would otherwise busy-loop because signal_stream is None
+    # and _drain_one() returns immediately. Real task creation lives in
+    # Task 4.7, after Phase 4 wires the SignalStream and detector(s).
     _promoter_task: asyncio.Task | None = None
     _sweeper_task: asyncio.Task | None = None
-    if _promoter_cfg.enabled:
-        _promoter_task = asyncio.create_task(_promoter.run(), name="promoter")
-        _sweeper_task = asyncio.create_task(_promoter.sweeper_loop(), name="promoter-sweeper")
 ```
 
 And in the `finally:` block of the same lifespan, before the existing teardown statements:
@@ -2046,7 +2029,8 @@ async def test_handle_create_path(fake_clock, fake_incident_store, fake_incident
     state = store.get_by_cluster_key("firms:geo:48.0:37.8")
     assert state is not None
     assert state.incident_status == "open"
-    assert state.hit_count == 1
+    # hit_count == len(contributing_signal_ids) at ignition (spec §5.1)
+    assert state.hit_count == 3
     assert "firms:geo:48.0:37.8" not in store._reserving  # noqa: SLF001
 ```
 
@@ -2106,10 +2090,17 @@ Append to `ClusterStore`:
         # Phase 2: I/O outside lock
         if action == "create":
             coords, extra_hints = self._resolve_create_coords(hit)
+            # `hit_count` is the count of *contributing signals* (per spec §5.1).
+            # Ignition packs all accumulated event_ids into contributing_signal_ids,
+            # so a 3-detection FIRMS ignition opens with hit_count=3.
+            initial_count = max(1, len(hit.contributing_signal_ids))
+            initial_severity = _max_severity(
+                hit.severity, _apply_escalation_rule(hit.detector_id, initial_count)
+            )
             request = IncidentCreateRequest(
                 title=hit.title,
                 kind=hit.incident_kind,
-                severity=hit.severity,  # type: ignore[arg-type]
+                severity=initial_severity,  # type: ignore[arg-type]
                 coords=coords,
                 location=hit.location,
                 sources=list(hit.sources_to_merge),
@@ -2132,9 +2123,9 @@ Append to `ClusterStore`:
                     cluster_key=hit.cluster_key,
                     incident_id=incident.id,
                     detector_id=hit.detector_id,
-                    severity=hit.severity,
+                    severity=initial_severity,
                     coords=coords,
-                    hit_count=1,
+                    hit_count=initial_count,
                     last_signal_ts=now,
                     created_ts=now,
                     contributing_signal_ids=list(hit.contributing_signal_ids[-50:]),
@@ -2148,7 +2139,7 @@ Append to `ClusterStore`:
                 cluster_key=hit.cluster_key,
                 detector_id=hit.detector_id,
                 incident_id=incident.id,
-                severity=hit.severity,
+                severity=initial_severity,
             )
 
     def _resolve_create_coords(
@@ -2228,6 +2219,62 @@ async def test_handle_update_path_appends_timeline_and_publishes_update(
     assert state.hit_count == 2
     incident = fake_incident_event_stream.published[-1][1]
     assert len(incident.timeline) == 2  # 1 trigger + 1 observation
+
+
+async def test_handle_escalation_curves_per_detector(
+    fake_clock, fake_incident_store, fake_incident_event_stream
+):
+    """Spec §4.3 escalation: telegram elevated→high@5, high→critical@10."""
+    from app.models.incident import IncidentTimelineEvent
+    from app.services.incident_promoter.cluster_store import ClusterStore
+    from app.services.incident_promoter.detectors.base import ClusterHit
+
+    store = ClusterStore(clock=fake_clock)
+    key = "telegram:topic:escalate"
+
+    def _hit(eid: str) -> ClusterHit:
+        return ClusterHit(
+            cluster_key=key, detector_id="telegram", incident_kind="telegram.burst",
+            title=f"Telegram hit {eid}", severity="elevated",
+            coords=None, location="",
+            sources_to_merge=["Telegram · test"],
+            layer_hints_to_merge=["telegram", "auto_promoter:v1", f"cluster:{key}"],
+            timeline_event=IncidentTimelineEvent(
+                t_offset_s=0.0, kind="observation", text=eid, severity="elevated"
+            ),
+            contributing_signal_ids=[eid],
+        )
+
+    # Ignition packing 3 signals → hit_count=3, severity floor "elevated"
+    igniter = ClusterHit(
+        cluster_key=key, detector_id="telegram", incident_kind="telegram.burst",
+        title="Telegram cluster · 3 matching posts", severity="elevated",
+        coords=None, location="",
+        sources_to_merge=["Telegram · test"],
+        layer_hints_to_merge=["telegram", "auto_promoter:v1", f"cluster:{key}"],
+        timeline_event=IncidentTimelineEvent(t_offset_s=0.0, kind="trigger"),
+        contributing_signal_ids=["a", "b", "c"],
+    )
+    await store.handle(igniter, incident_store=fake_incident_store,
+                       incident_event_stream=fake_incident_event_stream)
+    state = store.get_by_cluster_key(key)
+    assert state.hit_count == 3 and state.severity == "elevated"
+
+    # Drive hit_count to 5 → escalate to high
+    for i, eid in enumerate(["d", "e"]):
+        fake_clock.advance(60)
+        await store.handle(_hit(eid), incident_store=fake_incident_store,
+                           incident_event_stream=fake_incident_event_stream)
+    assert state.hit_count == 5
+    assert state.severity == "high"
+
+    # Drive hit_count to 10 → escalate to critical
+    for eid in ["f", "g", "h", "i", "j"]:
+        fake_clock.advance(60)
+        await store.handle(_hit(eid), incident_store=fake_incident_store,
+                           incident_event_stream=fake_incident_event_stream)
+    assert state.hit_count == 10
+    assert state.severity == "critical"
 
 
 async def test_handle_promoted_state_silently_absorbs(
@@ -2379,7 +2426,13 @@ Replace the `# Phase 2: I/O outside lock` section in `cluster_store.py` to also 
             text=hit.timeline_event.text,
             severity=hit.timeline_event.severity,
         )
-        new_severity = _max_severity(existing.severity, hit.severity)
+        # Count this hit's contributing signals (==1 for normal updates) and
+        # let the per-detector escalation curve speak. The detector itself
+        # may also already emit a higher hit.severity (e.g. GDELT tone>=9),
+        # so we take the max of all three (existing / hit / rule-based).
+        next_count = existing.hit_count + max(1, len(hit.contributing_signal_ids))
+        rule_based = _apply_escalation_rule(existing.detector_id, next_count)
+        new_severity = _max_severity(_max_severity(existing.severity, hit.severity), rule_based)
         try:
             incident = await incident_store.apply_signal_update(
                 existing.incident_id,
@@ -2399,7 +2452,7 @@ Replace the `# Phase 2: I/O outside lock` section in `cluster_store.py` to also 
         if incident is None:
             return
         async with self._lock:
-            existing.hit_count += 1
+            existing.hit_count = next_count
             existing.last_signal_ts = now
             existing.severity = new_severity
             existing.contributing_signal_ids = (
@@ -2427,6 +2480,25 @@ _SEVERITY_RANK: dict[str, int] = {
 
 def _max_severity(a: str, b: str) -> str:
     return a if _SEVERITY_RANK[a] >= _SEVERITY_RANK[b] else b
+
+
+# Per-detector escalation curves (spec §4.3). Entries are ordered
+# high-threshold-first; the first matching threshold wins.
+_ESCALATION_RULES: dict[str, list[tuple[int, str]]] = {
+    "firms":    [(10, "critical"), (0, "high")],
+    "severity": [(10, "critical"), (0, "high")],
+    "telegram": [(10, "critical"), (5, "high"), (0, "elevated")],
+    "gdelt":    [(15, "critical"), (10, "high"), (0, "elevated")],
+}
+
+
+def _apply_escalation_rule(detector_id: str, hit_count: int) -> str:
+    """Return the rule-based severity floor for a (detector_id, hit_count)."""
+    rules = _ESCALATION_RULES.get(detector_id, [(0, "low")])
+    for threshold, sev in rules:                          # already sorted high→low
+        if hit_count >= threshold:
+            return sev
+    return "low"
 ```
 
 - [ ] **Step 4: Run and confirm all four tests pass.**
@@ -2982,6 +3054,13 @@ Replace the contents of `promoter.py` after the class header with:
         if not self._config.enabled:
             logger.info("promoter_disabled_skipping_run")
             return
+        if not self._has_runtime_deps():
+            logger.warning(
+                "promoter_run_missing_runtime_deps_skipping",
+                has_signal_stream=self._signal_stream is not None,
+                has_incident_store=self._incident_store is not None,
+            )
+            return
         # Register detector termination listeners (must be before any signal arrives)
         for detector in self._detectors:
             self._cluster_store.add_termination_listener(detector.on_cluster_terminated)
@@ -3037,6 +3116,8 @@ Replace the contents of `promoter.py` after the class header with:
     async def sweeper_loop(self) -> None:
         if not self._config.enabled:
             return
+        if not self._has_runtime_deps():
+            return
         while not self._stop_event.is_set():
             try:
                 await asyncio.wait_for(
@@ -3077,107 +3158,112 @@ git commit -m "feat(promoter): Promoter run/rehydrate/drain + sweeper full imple
 
 `services/backend/tests/incident_promoter/test_router_wiring.py`:
 ```python
-"""Verify /promote and /silence call ClusterStore on app.state."""
+"""Verify /promote and /silence call ClusterStore on app.state.
+
+Auth pattern matches the existing tests in test_incidents_router.py:
+``monkeypatch.setattr(incidents_router.settings, "incidents_admin_token", ...)``
+plus the ``X-Admin-Token`` request header. The mock cluster_store is
+installed *inside* the TestClient context so the lifespan startup (which
+sets a real ClusterStore on app.state) doesn't overwrite it.
+"""
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models.incident import Incident, IncidentStatus
+
+
+def _fake_incident(id_: str) -> Incident:
+    return Incident(
+        id=id_, kind="manual", title="t", severity="high",
+        coords=(0.0, 0.0), status=IncidentStatus.OPEN,
+        trigger_ts=datetime.now(UTC),
+    )
 
 
 def test_promote_calls_cluster_store_mark_promoted(monkeypatch):
+    from app.routers import incidents as incidents_router
+    monkeypatch.setattr(
+        incidents_router.settings, "incidents_admin_token", "secret-xyz"
+    )
+
     cs = AsyncMock()
-    app.state.cluster_store = cs
-    # admin token bypass — mirror existing test pattern (look at test_incidents_router.py)
-    monkeypatch.setenv("ODIN_ADMIN_TOKEN", "secret")
-    # Use TestClient with auth header
-    from app.services import incident_store
+    with patch(
+        "app.routers.incidents.incident_store.create_incident",
+        new=AsyncMock(return_value=_fake_incident("inc-promote-1")),
+    ), patch(
+        "app.routers.incidents.incident_store.close_incident",
+        new=AsyncMock(return_value=_fake_incident("inc-promote-1").model_copy(
+            update={"status": IncidentStatus.PROMOTED}
+        )),
+    ):
+        with TestClient(app) as client:
+            # Lifespan has run; now install the mock — it sticks for this test.
+            app.state.cluster_store = cs
 
-    async def _fake_create(req):
-        from app.models.incident import Incident, IncidentStatus
-        return Incident(
-            id="inc-promote-1",
-            kind=req.kind,
-            title=req.title,
-            severity=req.severity,
-            coords=req.coords,
-            status=IncidentStatus.OPEN,
-            trigger_ts=datetime.now(UTC),
-        )
+            resp = client.post(
+                "/api/incidents/_admin/trigger",
+                headers={"X-Admin-Token": "secret-xyz"},
+                json={"title": "x", "kind": "manual", "severity": "high",
+                      "coords": [0.0, 0.0]},
+            )
+            assert resp.status_code == 201, resp.text
+            incident_id = resp.json()["id"]
 
-    async def _fake_close(incident_id, status, when=None):
-        from app.models.incident import Incident
-        from app.models.incident import IncidentStatus
-        return Incident(
-            id=incident_id, kind="manual", title="t", severity="high",
-            coords=(0.0, 0.0), status=status, trigger_ts=datetime.now(UTC),
-        )
-
-    monkeypatch.setattr(incident_store, "create_incident", _fake_create)
-    monkeypatch.setattr(incident_store, "close_incident", _fake_close)
-
-    with TestClient(app) as client:
-        resp = client.post(
-            "/api/incidents/_admin/trigger",
-            json={
-                "title": "x", "kind": "manual", "severity": "high",
-                "coords": [0.0, 0.0],
-            },
-            headers={"X-Admin-Token": "secret"},
-        )
-        assert resp.status_code == 200
-        incident_id = resp.json()["id"]
-
-        resp = client.post(f"/api/incidents/{incident_id}/promote",
-                           headers={"X-Admin-Token": "secret"})
-        assert resp.status_code == 200
+            resp = client.post(
+                f"/api/incidents/{incident_id}/promote",
+                headers={"X-Admin-Token": "secret-xyz"},
+            )
+            assert resp.status_code == 200, resp.text
 
     cs.mark_promoted.assert_awaited_once_with(incident_id)
 
 
 def test_silence_calls_cluster_store_mark_silenced(monkeypatch):
+    from app.routers import incidents as incidents_router
+    monkeypatch.setattr(
+        incidents_router.settings, "incidents_admin_token", "secret-xyz"
+    )
+
+    # PromoterConfig is read from app.state by the silence handler. Stub it.
+    class _StubCfg:
+        silence_cooldown_sec = 3600
+
     cs = AsyncMock()
-    app.state.cluster_store = cs
-    monkeypatch.setenv("ODIN_ADMIN_TOKEN", "secret")
-    from app.services import incident_store
+    with patch(
+        "app.routers.incidents.incident_store.create_incident",
+        new=AsyncMock(return_value=_fake_incident("inc-silence-1")),
+    ), patch(
+        "app.routers.incidents.incident_store.close_incident",
+        new=AsyncMock(return_value=_fake_incident("inc-silence-1").model_copy(
+            update={"status": IncidentStatus.SILENCED}
+        )),
+    ):
+        with TestClient(app) as client:
+            app.state.cluster_store = cs
+            app.state.promoter_config = _StubCfg()
 
-    async def _fake_create(req):
-        from app.models.incident import Incident, IncidentStatus
-        return Incident(
-            id="inc-silence-1", kind=req.kind, title=req.title,
-            severity=req.severity, coords=req.coords,
-            status=IncidentStatus.OPEN, trigger_ts=datetime.now(UTC),
-        )
+            resp = client.post(
+                "/api/incidents/_admin/trigger",
+                headers={"X-Admin-Token": "secret-xyz"},
+                json={"title": "x", "kind": "manual", "severity": "high",
+                      "coords": [0.0, 0.0]},
+            )
+            assert resp.status_code == 201
+            incident_id = resp.json()["id"]
 
-    async def _fake_close(incident_id, status, when=None):
-        from app.models.incident import Incident
-        return Incident(
-            id=incident_id, kind="manual", title="t", severity="high",
-            coords=(0.0, 0.0), status=status, trigger_ts=datetime.now(UTC),
-        )
-
-    monkeypatch.setattr(incident_store, "create_incident", _fake_create)
-    monkeypatch.setattr(incident_store, "close_incident", _fake_close)
-
-    with TestClient(app) as client:
-        resp = client.post(
-            "/api/incidents/_admin/trigger",
-            json={"title": "x", "kind": "manual", "severity": "high",
-                  "coords": [0.0, 0.0]},
-            headers={"X-Admin-Token": "secret"},
-        )
-        incident_id = resp.json()["id"]
-        resp = client.post(f"/api/incidents/{incident_id}/silence",
-                           headers={"X-Admin-Token": "secret"})
-        assert resp.status_code == 200
+            resp = client.post(
+                f"/api/incidents/{incident_id}/silence",
+                headers={"X-Admin-Token": "secret-xyz"},
+            )
+            assert resp.status_code == 200
 
     cs.mark_silenced.assert_awaited_once()
     kwargs = cs.mark_silenced.await_args.kwargs
     assert kwargs.get("until") is not None
 ```
-
-> If the existing admin auth uses a different scheme (e.g. shared-secret in cookie), adapt the headers; check `_require_admin` in `services/backend/app/routers/incidents.py`.
 
 - [ ] **Step 2: Run and confirm failure (router doesn't call cluster_store yet).**
 
@@ -3223,14 +3309,14 @@ git commit -m "feat(promoter): /promote and /silence wire to ClusterStore"
 
 ---
 
-### Task 4.7: Lifespan upgrade — real Promoter (FIRMS only) with detector list
+### Task 4.7: Lifespan upgrade — wire runtime deps, register detectors, **start tasks**
 
 **Files:**
 - Modify: `services/backend/app/main.py`
 
-- [ ] **Step 1: Replace the Phase-1 shell wiring with full wiring.**
+- [ ] **Step 1: Replace the Phase-1 shell wiring with full wiring and start the tasks.**
 
-Find the auto-promoter block added in Task 1.7. Replace the `Promoter(...)` construction with:
+Find the auto-promoter block added in Task 1.7. Replace the `Promoter(...)` construction and the (currently-disabled) task creation with:
 
 ```python
     from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
@@ -3252,6 +3338,9 @@ Find the auto-promoter block added in Task 1.7. Replace the `Promoter(...)` cons
         clock=_promoter_clock,
         detectors=_detectors,
     )
+    if _promoter_cfg.enabled:
+        _promoter_task = asyncio.create_task(_promoter.run(), name="promoter")
+        _sweeper_task = asyncio.create_task(_promoter.sweeper_loop(), name="promoter-sweeper")
 ```
 
 - [ ] **Step 2: Smoke test backend boots.**
@@ -4449,18 +4538,20 @@ git commit -m "feat(promoter): GDELT skeleton (default-off, payload schema unver
 
 ```python
 """Tests for GET /api/incidents/_admin/promoter."""
-from unittest.mock import MagicMock
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.incident_promoter.cluster_store import ClusterState, ClusterStore
+from app.services.incident_promoter.config import PromoterConfig
 
 
 def test_admin_inspector_returns_snapshot(monkeypatch):
-    monkeypatch.setenv("ODIN_ADMIN_TOKEN", "secret")
-    from datetime import UTC, datetime, timedelta
-    from app.services.incident_promoter.cluster_store import ClusterState, ClusterStore
-    from app.services.incident_promoter.config import PromoterConfig
+    from app.routers import incidents as incidents_router
+    monkeypatch.setattr(
+        incidents_router.settings, "incidents_admin_token", "secret-xyz"
+    )
 
     clock = lambda: datetime(2026, 5, 19, 12, 0, tzinfo=UTC)
     store = ClusterStore(clock=clock)
@@ -4470,15 +4561,19 @@ def test_admin_inspector_returns_snapshot(monkeypatch):
         hit_count=4, last_signal_ts=clock(), created_ts=clock(),
         incident_status="open",
     )
+    store._by_incident_id["inc-a"] = "firms:geo:1.0:1.0"  # noqa: SLF001
     store._cooldowns["telegram:topic:abc"] = clock() + timedelta(hours=1)  # noqa: SLF001
-    app.state.cluster_store = store
-    app.state.promoter_config = PromoterConfig.from_env()
 
     with TestClient(app) as client:
+        # Install the seeded store after lifespan has set its own.
+        app.state.cluster_store = store
+        app.state.promoter_config = PromoterConfig.from_env()
+
         resp = client.get(
-            "/api/incidents/_admin/promoter", headers={"X-Admin-Token": "secret"}
+            "/api/incidents/_admin/promoter",
+            headers={"X-Admin-Token": "secret-xyz"},
         )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     body = resp.json()
     assert "enabled_detectors" in body
     assert any(c["cluster_key"] == "firms:geo:1.0:1.0" for c in body["active_clusters"])
@@ -4486,12 +4581,18 @@ def test_admin_inspector_returns_snapshot(monkeypatch):
     assert "cooldown_until" in body["cooldowns"][0]
 
 
-def test_admin_inspector_returns_empty_when_no_promoter():
-    app.state.cluster_store = None
-    app.state.promoter_config = None
+def test_admin_inspector_returns_empty_when_no_promoter(monkeypatch):
+    from app.routers import incidents as incidents_router
+    monkeypatch.setattr(
+        incidents_router.settings, "incidents_admin_token", "secret-xyz"
+    )
+
     with TestClient(app) as client:
+        app.state.cluster_store = None
+        app.state.promoter_config = None
         resp = client.get(
-            "/api/incidents/_admin/promoter", headers={"X-Admin-Token": "secret"}
+            "/api/incidents/_admin/promoter",
+            headers={"X-Admin-Token": "secret-xyz"},
         )
     assert resp.status_code == 200
     body = resp.json()
@@ -4568,81 +4669,13 @@ git commit -m "feat(promoter): read-only admin inspector endpoint"
 
 ## Phase 9 — E2E, env, release notes
 
-### Task 9.1: E2E test (`tests/e2e/test_promoter_e2e.py`)
+### Task 9.1 (removed) — E2E test is **out of scope for this plan**
 
-**Files:**
-- Create: `services/backend/tests/e2e/test_promoter_e2e.py`
+Rationale: AGENTS.md requires `pytest.mark.skip` to carry a TODO comment **and** a ticket reference; this plan has no ticket system, and a skipped placeholder test would violate that rule. The integration scenarios in `tests/integration/test_promoter_pipeline.py` already exercise `Promoter.run` end-to-end against the real `ClusterStore`, real detectors, and the timeline/SSE side effects.
 
-- [ ] **Step 1: Write the test.**
+A future hardening pass may add a true E2E that mocks `redis.asyncio.from_url` and exercises the `SignalStream` consumer loop. Track that as separate planning work; this plan ships without it.
 
-```python
-"""E2E — mock Redis XREAD; verify SSE frame order for a 3-FIRMS scenario.
-
-Uses dependency overrides to swap the real incident_store with a Fake,
-and patches ``redis.asyncio.from_url`` so the consumer loop sees the
-sequence of mocked responses we feed it.
-"""
-import asyncio
-import json
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
-
-import pytest
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-
-@pytest.fixture
-def stream_responses():
-    base_ms = int(datetime.now(UTC).timestamp() * 1000)
-    url = "https://firms.example/#@7.0,7.0,10z"
-    def make(seq: int):
-        return [
-            (
-                "odin:events",
-                [
-                    (
-                        f"{base_ms + seq * 10}-{seq}",
-                        {
-                            "title": "Thermal anomaly detected",
-                            "severity": "low",
-                            "source": "firms",
-                            "url": url,
-                            "codebook_type": "other.unclassified",
-                        },
-                    )
-                ],
-            )
-        ]
-    return [make(i) for i in range(3)]
-
-
-def test_three_firms_signals_yield_open_then_two_updates(stream_responses, monkeypatch):
-    """Phase-9 E2E. Patches redis.asyncio so the Promoter sees real Redis
-    semantics without a live Redis."""
-    monkeypatch.setenv("ODIN_PROMOTER_ENABLED", "true")
-    monkeypatch.setenv("ODIN_PROMOTER_FIRMS_MIN_HITS", "3")
-    # TODO when running: swap real incident_store via app.dependency_overrides
-    # if the project has a per-route dependency for it; otherwise monkeypatch
-    # app.services.incident_store.create_incident / apply_signal_update /
-    # close_incident.
-    raise pytest.skip("E2E shell — implement against project's existing test seam")
-```
-
-Note: this task ends as a *deliberate skip* with a TODO. Wiring the e2e against the real Redis consumer requires test-seam decisions that exceed plan-time guarantees; the integration tests in `tests/integration/test_promoter_pipeline.py` already exercise the full Promoter composition. The e2e shell exists as a placeholder for a future hardening pass.
-
-- [ ] **Step 2: Run and confirm skip.**
-```bash
-cd services/backend && uv run pytest tests/e2e/test_promoter_e2e.py -v
-```
-Expected: 1 skipped.
-
-- [ ] **Step 3: Commit.**
-```bash
-git add services/backend/tests/e2e/test_promoter_e2e.py
-git commit -m "test(promoter): E2E test shell (skipped pending test-seam decisions)"
-```
+The `services/backend/tests/e2e/__init__.py` directory created in Task 1.1 stays (empty) so the future test has somewhere to live.
 
 ---
 
@@ -4718,6 +4751,9 @@ Append to `docs/CONTAINER-STATUS.md` (or wherever release notes live in this pro
 - Detectors default-off in v1: Severity Burst (waits on frontend `map:no_pin`),
   GDELT Tone Spike (waits on payload schema verification).
 - Admin inspector: `GET /api/incidents/_admin/promoter`.
+- E2E test (mocked Redis XREAD → SSE assertion) deferred to a follow-up plan;
+  integration coverage in `tests/integration/test_promoter_pipeline.py` is the
+  highest-level test in v1.
 - See `docs/superpowers/specs/2026-05-19-incident-auto-promoter-design.md`.
 ```
 
