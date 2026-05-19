@@ -172,6 +172,58 @@ class ClusterStore:
                 incident_id=incident.id,
                 severity=initial_severity,
             )
+            return
+
+        # action == "update"
+        # Recompute the timeline event with the correct t_offset_s relative to created_ts.
+        offset = (now - existing.created_ts).total_seconds()
+        from app.models.incident import IncidentTimelineEvent  # local import to avoid cycles
+        update_event = IncidentTimelineEvent(
+            t_offset_s=max(0.0, offset),
+            kind=hit.timeline_event.kind,
+            text=hit.timeline_event.text,
+            severity=hit.timeline_event.severity,
+        )
+        # Count this hit's contributing signals (==1 for normal updates) and
+        # let the per-detector escalation curve speak. The detector itself
+        # may also already emit a higher hit.severity (e.g. GDELT tone>=9),
+        # so we take the max of all three (existing / hit / rule-based).
+        next_count = existing.hit_count + max(1, len(hit.contributing_signal_ids))
+        rule_based = _apply_escalation_rule(existing.detector_id, next_count)
+        new_severity = _max_severity(_max_severity(existing.severity, hit.severity), rule_based)
+        try:
+            incident = await incident_store.apply_signal_update(
+                existing.incident_id,
+                timeline_event=update_event,
+                severity=new_severity,
+                sources_to_merge=hit.sources_to_merge,
+                layer_hints_to_merge=hit.layer_hints_to_merge,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "promoter_update_failed",
+                cluster_key=hit.cluster_key,
+                incident_id=existing.incident_id,
+                error=str(exc),
+            )
+            return
+        if incident is None:
+            return
+        async with self._lock:
+            existing.hit_count = next_count
+            existing.last_signal_ts = now
+            existing.severity = new_severity
+            existing.contributing_signal_ids = (
+                existing.contributing_signal_ids + list(hit.contributing_signal_ids)
+            )[-50:]
+        incident_event_stream.publish("incident.update", incident)
+        logger.info(
+            "promoter_cluster_updated",
+            cluster_key=hit.cluster_key,
+            incident_id=incident.id,
+            hit_count=existing.hit_count,
+            severity=new_severity,
+        )
 
     def _resolve_create_coords(
         self, hit
