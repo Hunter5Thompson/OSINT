@@ -149,6 +149,40 @@ async def append_timeline_event(
     return _row_to_incident(rows[0])
 
 
+async def apply_signal_update(
+    incident_id: str,
+    *,
+    timeline_event: IncidentTimelineEvent,
+    severity: str,
+    sources_to_merge: list[str],
+    layer_hints_to_merge: list[str],
+) -> Incident | None:
+    """Atomic write: append a timeline event, escalate severity, merge sources/hints.
+
+    No-op (returns ``None``) if the incident does not exist. Severity is
+    monotonic in the caller (ClusterStore only escalates); this function
+    simply writes the value provided.
+    """
+    current = await get_incident(incident_id)
+    if current is None:
+        return None
+    merged_sources = list(dict.fromkeys([*current.sources, *sources_to_merge]))
+    merged_hints = list(dict.fromkeys([*current.layer_hints, *layer_hints_to_merge]))
+    next_record = current.model_copy(
+        update={
+            "timeline": [*current.timeline, timeline_event],
+            "severity": severity,
+            "sources": merged_sources,
+            "layer_hints": merged_hints,
+        }
+    )
+    ordinal = int(datetime.now(UTC).timestamp() * 1000) % 2_000_000_000
+    rows = await write_query(INCIDENT_UPSERT, _upsert_params(next_record, ordinal))
+    if not rows:
+        return None
+    return _row_to_incident(rows[0])
+
+
 async def close_incident(
     incident_id: str,
     status: IncidentStatus,
@@ -157,6 +191,9 @@ async def close_incident(
     current = await get_incident(incident_id)
     if current is None:
         return None
+    # Idempotent: any non-open status is terminal and is returned unchanged.
+    if current.status != IncidentStatus.OPEN:
+        return current
     next_record = current.model_copy(
         update={"status": status, "closed_ts": when or datetime.now(UTC)}
     )
@@ -173,3 +210,31 @@ async def delete_incident(incident_id: str) -> bool:
         return False
     await write_query(INCIDENT_DELETE, {"incident_id": incident_id})
     return True
+
+
+async def list_owned_for_rehydrate() -> list[Incident]:
+    """Return open/promoted incidents owned by the auto-promoter.
+
+    Uses the existing ``INCIDENT_LIST_OPEN`` Cypher then filters in Python by
+    the ``auto_promoter:v1`` marker in ``layer_hints``. Status filter also
+    admits ``PROMOTED`` so the Promoter can rehydrate clusters that the
+    analyst owned at restart time.
+    """
+    rows = await read_query(
+        "MATCH (i:Incident) "
+        "WHERE i.status IN ['open', 'promoted'] "
+        "RETURN i.id AS id, i.kind AS kind, i.title AS title, "
+        "       i.severity AS severity, i.lat AS lat, i.lon AS lon, "
+        "       i.location AS location, i.status AS status, "
+        "       toString(i.trigger_ts) AS trigger_ts, "
+        "       toString(i.closed_ts) AS closed_ts, "
+        "       i.sources AS sources, i.layer_hints AS layer_hints, "
+        "       i.timeline_json AS timeline_json "
+        "ORDER BY i.ordinal DESC LIMIT 500"
+    )
+    owned: list[Incident] = []
+    for row in rows:
+        if "auto_promoter:v1" not in (row.get("layer_hints") or []):
+            continue
+        owned.append(_row_to_incident(row))
+    return owned

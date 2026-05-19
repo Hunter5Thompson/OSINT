@@ -1,6 +1,7 @@
 """WorldView Backend — FastAPI Application."""
 
 import asyncio
+import contextlib
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -97,10 +98,59 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                        hint="run ./odin.sh recon bootstrap")
     app.state.recon_manifest = recon_loader
 
+    # --- Auto-promoter (full wiring) ---
+    from app.services import incident_store as _incident_store_module
+    from app.services.incident_promoter.cluster_store import ClusterStore
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
+    from app.services.incident_promoter.detectors.severity import SeverityBurstDetector
+    from app.services.incident_promoter.detectors.telegram import TelegramTopicDetector
+    from app.services.incident_promoter.promoter import Promoter
+    from app.services.incident_stream import get_incident_stream
+
+    def _promoter_clock() -> datetime:
+        return datetime.now(UTC)
+    _promoter_cfg = PromoterConfig.from_env()
+    _cluster_store = ClusterStore(clock=_promoter_clock)
+    app.state.cluster_store = _cluster_store
+    app.state.promoter_config = _promoter_cfg
+
+    _detectors: list = []
+    if _promoter_cfg.firms_enabled:
+        _detectors.append(FIRMSGeoClusterDetector(config=_promoter_cfg, clock=_promoter_clock))
+    if _promoter_cfg.telegram_enabled:
+        _detectors.append(TelegramTopicDetector(config=_promoter_cfg, clock=_promoter_clock))
+    if _promoter_cfg.severity_enabled:
+        _detectors.append(SeverityBurstDetector(config=_promoter_cfg, clock=_promoter_clock))
+
+    _promoter = Promoter(
+        signal_stream=get_signal_stream(),
+        cluster_store=_cluster_store,
+        incident_store=_incident_store_module,
+        incident_event_stream=get_incident_stream(),
+        config=_promoter_cfg,
+        clock=_promoter_clock,
+        detectors=_detectors,
+    )
+    if _promoter_cfg.enabled:
+        _promoter_task = asyncio.create_task(_promoter.run(), name="promoter")
+        _sweeper_task = asyncio.create_task(_promoter.sweeper_loop(), name="promoter-sweeper")
+    else:
+        _promoter_task = None
+        _sweeper_task = None
+
     logger.info("backend_started", vllm_url=settings.vllm_url, vllm_model=settings.vllm_model)
     yield
 
     # Shutdown
+    _promoter.request_stop()
+    for _t in (_promoter_task, _sweeper_task):
+        if _t is None:
+            continue
+        _t.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await _t
+
     signal_stop_event.set()
     signal_task.cancel()
     try:

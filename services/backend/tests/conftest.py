@@ -12,3 +12,4 @@ def set_app_state() -> None:
     """Set dummy app state so routers that access request.app.state don't raise AttributeError."""
     app.state.proxy = MagicMock()
     app.state.cache = AsyncMock()
+    app.state.cluster_store = None  # router code uses getattr(..., None); explicit for clarity

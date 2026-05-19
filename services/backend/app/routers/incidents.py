@@ -80,6 +80,50 @@ async def admin_trigger(payload: IncidentCreateRequest) -> Incident:
     return record
 
 
+@router.get(
+    "/_admin/promoter",
+    dependencies=[Depends(_require_admin)],
+)
+async def admin_promoter_inspector(request: Request) -> dict:
+    """Read-only snapshot of the auto-promoter ClusterStore."""
+    cluster_store = getattr(request.app.state, "cluster_store", None)
+    cfg = getattr(request.app.state, "promoter_config", None)
+    if cluster_store is None or cfg is None:
+        return {
+            "enabled_detectors": [],
+            "config": {},
+            "active_clusters": [],
+            "cooldowns": [],
+        }
+    active = [
+        {
+            "cluster_key": s.cluster_key,
+            "incident_id": s.incident_id,
+            "detector_id": s.detector_id,
+            "incident_status": s.incident_status,
+            "severity": s.severity,
+            "hit_count": s.hit_count,
+            "last_signal_ts": s.last_signal_ts.isoformat(),
+            "created_ts": s.created_ts.isoformat(),
+        }
+        for s in cluster_store.active_clusters()
+    ]
+    cooldowns = [
+        {"cluster_key": k, "cooldown_until": t.isoformat()}
+        for k, t in cluster_store.cooldowns().items()
+    ]
+    return {
+        "enabled_detectors": cfg.enabled_detector_ids(),
+        "config": {
+            "quiet_window_sec": cfg.quiet_window_sec,
+            "sweeper_tick_sec": cfg.sweeper_tick_sec,
+            "silence_cooldown_sec": cfg.silence_cooldown_sec,
+        },
+        "active_clusters": active,
+        "cooldowns": cooldowns,
+    }
+
+
 @router.get("/{incident_id}", response_model=Incident)
 async def get_incident(incident_id: str) -> Incident:
     try:
@@ -97,11 +141,29 @@ async def get_incident(incident_id: str) -> Incident:
     response_model=Incident,
     dependencies=[Depends(_require_admin)],
 )
-async def silence(incident_id: str) -> Incident:
+async def silence(incident_id: str, request: Request) -> Incident:
     record = await incident_store.close_incident(incident_id, IncidentStatus.SILENCED)
     if record is None:
         raise HTTPException(status_code=404, detail="incident not found")
-    get_incident_stream().publish("incident.silence", record)
+    if record.status == IncidentStatus.SILENCED:
+        get_incident_stream().publish("incident.silence", record)
+    else:
+        log.info(
+            "incident_silence_skipped_terminal_status",
+            incident_id=incident_id,
+            actual_status=str(record.status),
+        )
+    cluster_store = getattr(request.app.state, "cluster_store", None)
+    cfg = getattr(request.app.state, "promoter_config", None)
+    if cluster_store is not None and cfg is not None:
+        from datetime import UTC
+        from datetime import datetime as _dt
+        from datetime import timedelta as _td
+        until = _dt.now(UTC) + _td(seconds=cfg.silence_cooldown_sec)
+        try:
+            await cluster_store.mark_silenced(incident_id, until=until)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("router_mark_silenced_failed", incident_id=incident_id, error=str(exc))
     return record
 
 
@@ -110,11 +172,17 @@ async def silence(incident_id: str) -> Incident:
     response_model=Incident,
     dependencies=[Depends(_require_admin)],
 )
-async def promote(incident_id: str) -> Incident:
+async def promote(incident_id: str, request: Request) -> Incident:
     record = await incident_store.close_incident(incident_id, IncidentStatus.PROMOTED)
     if record is None:
         raise HTTPException(status_code=404, detail="incident not found")
     get_incident_stream().publish("incident.promote", record)
+    cluster_store = getattr(request.app.state, "cluster_store", None)
+    if cluster_store is not None:
+        try:
+            await cluster_store.mark_promoted(incident_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("router_mark_promoted_failed", incident_id=incident_id, error=str(exc))
     return record
 
 
