@@ -149,7 +149,9 @@ async def silence(incident_id: str, request: Request) -> Incident:
     cluster_store = getattr(request.app.state, "cluster_store", None)
     cfg = getattr(request.app.state, "promoter_config", None)
     if cluster_store is not None and cfg is not None:
-        from datetime import UTC, datetime as _dt, timedelta as _td
+        from datetime import UTC
+        from datetime import datetime as _dt
+        from datetime import timedelta as _td
         until = _dt.now(UTC) + _td(seconds=cfg.silence_cooldown_sec)
         try:
             await cluster_store.mark_silenced(incident_id, until=until)

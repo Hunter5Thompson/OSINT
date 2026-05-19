@@ -20,7 +20,6 @@ from app.services.incident_promoter.detectors.base import (
     build_update_timeline_event,
 )
 
-
 _HIGH_SET = {"high", "critical"}
 
 

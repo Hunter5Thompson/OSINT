@@ -39,7 +39,7 @@ class PromoterConfig(BaseSettings):
     silence_cooldown_sec: int = 3600
 
     @classmethod
-    def from_env(cls) -> "PromoterConfig":
+    def from_env(cls) -> PromoterConfig:
         """Convenience alias for call sites that want to read env explicitly."""
         return cls()
 

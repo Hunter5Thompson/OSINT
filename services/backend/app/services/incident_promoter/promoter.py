@@ -234,7 +234,7 @@ class Promoter:
                     timeout=self._config.sweeper_tick_sec,
                 )
                 return  # stop set during the wait
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             try:
                 await self._sweep_once()
