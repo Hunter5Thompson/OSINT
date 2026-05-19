@@ -104,15 +104,3 @@ class FIRMSGeoClusterDetector:
         cutoff = self._clock() - timedelta(seconds=self._config.firms_window_sec)
         while bucket.signals and bucket.signals[0][0] < cutoff:
             bucket.signals.popleft()
-
-    def on_cluster_terminated(
-        self,
-        cluster_key: str,
-        suppress_until: datetime | None = None,
-    ) -> None:
-        """Handle cluster termination (Task 3.5)."""
-        # Remove from active buckets.
-        self._buckets.pop(cluster_key, None)
-        # Record suppression if provided (Task 3.5).
-        if suppress_until is not None:
-            self._suppressed_until[cluster_key] = suppress_until
