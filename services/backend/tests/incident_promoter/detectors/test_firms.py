@@ -124,3 +124,66 @@ def test_firms_detector_emits_update_after_ignition(signal_envelope_factory, fak
     assert hit.timeline_event.kind == "observation"
     assert hit.contributing_signal_ids == [env4.event_id]
     assert hit.severity == "high"  # detector itself never de-escalates
+
+
+def test_firms_on_cluster_terminated_natural_reset_restarts_accumulation(
+    signal_envelope_factory, fake_clock
+):
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
+
+    cfg = PromoterConfig.from_env()
+    det = FIRMSGeoClusterDetector(config=cfg, clock=fake_clock)
+    for _ in range(3):
+        det.detect(_firms_envelope(signal_envelope_factory))
+    # natural termination — no suppression
+    det.on_cluster_terminated("firms:geo:35.1:51.6")
+
+    # state cleared
+    assert "firms:geo:35.1:51.6" not in det._buckets  # noqa: SLF001
+    assert "firms:geo:35.1:51.6" not in det._suppressed_until  # noqa: SLF001
+
+    # next 2 signals are pre-trigger again
+    assert det.detect(_firms_envelope(signal_envelope_factory)) is None
+    assert det.detect(_firms_envelope(signal_envelope_factory)) is None
+    # 3rd ignites freshly
+    assert det.detect(_firms_envelope(signal_envelope_factory)) is not None
+
+
+def test_firms_on_cluster_terminated_with_suppress_until_blocks_accumulation(
+    signal_envelope_factory, fake_clock
+):
+    from datetime import timedelta
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
+
+    cfg = PromoterConfig.from_env()
+    det = FIRMSGeoClusterDetector(config=cfg, clock=fake_clock)
+    for _ in range(3):
+        det.detect(_firms_envelope(signal_envelope_factory))
+
+    suppress_until = fake_clock() + timedelta(seconds=cfg.silence_cooldown_sec)
+    det.on_cluster_terminated("firms:geo:35.1:51.6", suppress_until=suppress_until)
+    # state cleared + cooldown recorded
+    assert "firms:geo:35.1:51.6" not in det._buckets  # noqa: SLF001
+    assert det._suppressed_until["firms:geo:35.1:51.6"] == suppress_until  # noqa: SLF001
+
+    # during cooldown, signals are dropped and NOT accumulated
+    for _ in range(5):
+        assert det.detect(_firms_envelope(signal_envelope_factory)) is None
+    assert "firms:geo:35.1:51.6" not in det._buckets  # noqa: SLF001
+
+    # advance past cooldown — first signal accumulates, doesn't ignite alone
+    fake_clock.advance(cfg.silence_cooldown_sec + 1)
+    assert det.detect(_firms_envelope(signal_envelope_factory)) is None
+    assert det.detect(_firms_envelope(signal_envelope_factory)) is None
+    # 3rd ignites
+    assert det.detect(_firms_envelope(signal_envelope_factory)) is not None
+
+
+def test_firms_on_cluster_terminated_unknown_key_is_noop(fake_clock):
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
+
+    det = FIRMSGeoClusterDetector(config=PromoterConfig.from_env(), clock=fake_clock)
+    det.on_cluster_terminated("firms:geo:99.9:99.9")    # no exception

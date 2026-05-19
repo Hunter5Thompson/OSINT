@@ -220,3 +220,23 @@ class FIRMSGeoClusterDetector:
         cutoff = self._clock() - timedelta(seconds=self._config.firms_window_sec)
         while bucket.signals and bucket.signals[0][0] < cutoff:
             bucket.signals.popleft()
+
+    def on_cluster_terminated(
+        self,
+        cluster_key: str,
+        suppress_until: datetime | None = None,
+    ) -> None:
+        """Reset cluster state on termination; optionally suppress future signals.
+
+        Args:
+            cluster_key: The cluster key to reset.
+            suppress_until: If provided, suppress signals until this time.
+        """
+        # Only respond to keys we own.
+        if not cluster_key.startswith("firms:geo:"):
+            return
+        self._buckets.pop(cluster_key, None)
+        if suppress_until is None:
+            self._suppressed_until.pop(cluster_key, None)
+        else:
+            self._suppressed_until[cluster_key] = suppress_until
