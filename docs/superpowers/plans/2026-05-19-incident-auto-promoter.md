@@ -216,7 +216,7 @@ class PromoterConfig(BaseSettings):
     telegram_min_hits: int = 3
     telegram_window_sec: int = 1800
     telegram_jaccard_threshold: float = 0.55
-    telegram_jaccard_threshold_with_domain: float = 0.45
+    telegram_jaccard_threshold_domain: float = 0.45
     telegram_embeddings_enabled: bool = False
     gdelt_enabled: bool = False
     gdelt_min_hits: int = 3
@@ -3922,7 +3922,7 @@ class TelegramTopicDetector:
         for centroid in self._centroids.values():
             score = _jaccard_5gram(shingles, centroid.tokens)
             threshold = (
-                self._config.telegram_jaccard_threshold_with_domain
+                self._config.telegram_jaccard_threshold_domain
                 if domain and centroid.domain == domain
                 else self._config.telegram_jaccard_threshold
             )
@@ -4775,6 +4775,6 @@ cd services/backend && uv run ruff check app/services/incident_promoter app/rout
 # Boot smoke
 cd services/backend && uv run python -c "from app.main import app; print('ok')"
 # Real-world smoke (requires running stack)
-curl -s http://localhost:8080/api/incidents/_admin/promoter -H "X-Admin-Token: $ODIN_ADMIN_TOKEN" | jq
+curl -s http://localhost:8080/api/incidents/_admin/promoter -H "X-Admin-Token: $INCIDENTS_ADMIN_TOKEN" | jq
 ```
 
