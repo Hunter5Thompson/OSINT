@@ -157,6 +157,9 @@ async def close_incident(
     current = await get_incident(incident_id)
     if current is None:
         return None
+    # Idempotent: any non-open status is terminal and is returned unchanged.
+    if current.status != IncidentStatus.OPEN:
+        return current
     next_record = current.model_copy(
         update={"status": status, "closed_ts": when or datetime.now(UTC)}
     )

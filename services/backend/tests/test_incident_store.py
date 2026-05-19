@@ -134,3 +134,39 @@ async def test_append_timeline_event_grows_timeline() -> None:
         assert record is not None
         assert len(record.timeline) == 2
         assert record.timeline[-1].text == "GDELT 4 articles"
+
+
+@pytest.mark.asyncio
+async def test_close_incident_is_idempotent_on_terminal_status() -> None:
+    """Calling close_incident on an already-CLOSED incident must be a no-op."""
+    mock_write = AsyncMock()
+    with (
+        patch.object(
+            incident_store,
+            "get_incident",
+            new=AsyncMock(return_value=incident_store._row_to_incident(_row(status="closed"))),
+        ),
+        patch.object(incident_store, "write_query", new=mock_write),
+    ):
+        record = await incident_store.close_incident("inc-001", IncidentStatus.CLOSED)
+        assert record is not None
+        assert record.status == IncidentStatus.CLOSED
+        mock_write.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_close_incident_does_not_overwrite_promoted_status() -> None:
+    """Calling close_incident on a PROMOTED incident must leave status unchanged."""
+    mock_write = AsyncMock()
+    with (
+        patch.object(
+            incident_store,
+            "get_incident",
+            new=AsyncMock(return_value=incident_store._row_to_incident(_row(status="promoted"))),
+        ),
+        patch.object(incident_store, "write_query", new=mock_write),
+    ):
+        record = await incident_store.close_incident("inc-001", IncidentStatus.CLOSED)
+        assert record is not None
+        assert record.status == IncidentStatus.PROMOTED
+        mock_write.assert_not_called()
