@@ -215,3 +215,50 @@ async def test_rehydrate_then_subscribe_does_not_double_create(
         await promoter._drain_one()  # noqa: SLF001
     assert "incident.open" not in fake_incident_event_stream.types()
     assert "incident.update" in fake_incident_event_stream.types()
+
+
+async def test_telegram_cluster_pipeline(
+    cfg, fake_clock, fake_incident_store, fake_incident_event_stream,
+    signal_envelope_factory,
+):
+    """Spec §9.2 #3 — Telegram topic cluster + unrelated signal."""
+    from app.services.incident_promoter.detectors.telegram import TelegramTopicDetector
+
+    detector = TelegramTopicDetector(config=cfg, clock=fake_clock)
+    store = ClusterStore(clock=fake_clock)
+    store.add_termination_listener(detector.on_cluster_terminated)
+
+    signal_stream = _FakeSignalStream()
+    promoter = Promoter(
+        signal_stream=signal_stream,
+        cluster_store=store,
+        incident_store=fake_incident_store,
+        incident_event_stream=fake_incident_event_stream,
+        config=cfg,
+        clock=fake_clock,
+        detectors=[detector],
+    )
+    await promoter._subscribe()  # noqa: SLF001
+    await promoter._rehydrate()  # noqa: SLF001
+
+    matching = [
+        "Strike on Kharkiv overnight powerful explosions reported",
+        "Overnight strike on Kharkiv with powerful explosions",
+        "Powerful overnight strike on Kharkiv explosions reported",
+        "Kharkiv strike overnight powerful explosions",
+    ]
+    unrelated = "Argentina election results final tally posted"
+    for title in matching:
+        await signal_stream.queue.put(
+            signal_envelope_factory(source="telegram", title=title, url="https://t.me/a/1")
+        )
+    await signal_stream.queue.put(
+        signal_envelope_factory(source="telegram", title=unrelated, url="https://t.me/b/1")
+    )
+    for _ in range(5):
+        await promoter._drain_one()  # noqa: SLF001
+
+    types = fake_incident_event_stream.types()
+    assert types.count("incident.open") == 1
+    assert types.count("incident.update") == 1
+    # unrelated didn't ignite (only 1 hit in its own centroid)
