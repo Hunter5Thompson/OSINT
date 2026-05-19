@@ -170,3 +170,93 @@ async def test_close_incident_does_not_overwrite_promoted_status() -> None:
         assert record is not None
         assert record.status == IncidentStatus.PROMOTED
         mock_write.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_apply_signal_update_appends_timeline_and_merges_severity_and_sources() -> None:
+    """apply_signal_update merges sources/hints (dedupe), escalates severity, appends timeline."""
+    existing_timeline = json.dumps([
+        {"t_offset_s": 0.0, "kind": "trigger", "text": "initial trigger", "severity": "elevated"}
+    ])
+    existing_incident = incident_store._row_to_incident(
+        _row(
+            id="inc-042",
+            severity="elevated",
+            status="open",
+            lat=48.0,
+            lon=37.8,
+            sources=["FIRMS · VIIRS_SNPP_NRT"],
+            layer_hints=["firms", "events", "auto_promoter:v1", "cluster:firms:geo:48.0:37.8"],
+            timeline_json=existing_timeline,
+        )
+    )
+
+    new_timeline_event = IncidentTimelineEvent(
+        t_offset_s=120.0,
+        kind="signal",
+        text="Telegram corroboration",
+        severity="high",
+    )
+
+    updated_timeline = json.dumps([
+        {"t_offset_s": 0.0, "kind": "trigger", "text": "initial trigger", "severity": "elevated"},
+        {"t_offset_s": 120.0, "kind": "signal", "text": "Telegram corroboration", "severity": "high"},
+    ])
+    mock_write = AsyncMock(
+        return_value=[
+            _row(
+                id="inc-042",
+                severity="high",
+                lat=48.0,
+                lon=37.8,
+                sources=["FIRMS · VIIRS_SNPP_NRT", "Telegram · OSINTdefender"],
+                layer_hints=["firms", "events", "auto_promoter:v1", "cluster:firms:geo:48.0:37.8", "telegram"],
+                timeline_json=updated_timeline,
+            )
+        ]
+    )
+
+    with (
+        patch.object(incident_store, "get_incident", new=AsyncMock(return_value=existing_incident)),
+        patch.object(incident_store, "write_query", new=mock_write),
+    ):
+        result = await incident_store.apply_signal_update(
+            "inc-042",
+            timeline_event=new_timeline_event,
+            severity="high",
+            sources_to_merge=["FIRMS · VIIRS_SNPP_NRT", "Telegram · OSINTdefender"],
+            layer_hints_to_merge=["firms", "telegram"],
+        )
+
+    assert result is not None
+    assert result.severity == "high"
+    assert len(result.timeline) == 2
+    assert result.timeline[-1].text == "Telegram corroboration"
+    # Dedupe: "FIRMS · VIIRS_SNPP_NRT" must appear exactly once
+    assert result.sources.count("FIRMS · VIIRS_SNPP_NRT") == 1
+    assert "Telegram · OSINTdefender" in result.sources
+    assert "telegram" in result.layer_hints
+    mock_write.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_apply_signal_update_missing_incident_returns_none() -> None:
+    """apply_signal_update is a no-op when the incident does not exist."""
+    mock_write = AsyncMock()
+
+    with (
+        patch.object(incident_store, "get_incident", new=AsyncMock(return_value=None)),
+        patch.object(incident_store, "write_query", new=mock_write),
+    ):
+        result = await incident_store.apply_signal_update(
+            "inc-does-not-exist",
+            timeline_event=IncidentTimelineEvent(
+                t_offset_s=0.0, kind="signal", text="phantom signal"
+            ),
+            severity="high",
+            sources_to_merge=["some-source"],
+            layer_hints_to_merge=["some-hint"],
+        )
+
+    assert result is None
+    mock_write.assert_not_called()
