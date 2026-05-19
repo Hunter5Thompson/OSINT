@@ -74,3 +74,35 @@ def test_firms_detector_ignores_malformed_url(signal_envelope_factory, fake_cloc
     env = signal_envelope_factory(source="firms", url="no-coords-here")
     assert det.detect(env) is None
     assert not det._buckets  # noqa: SLF001
+
+
+def test_firms_detector_ignites_at_min_hits_with_summary_text(signal_envelope_factory, fake_clock):
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
+
+    cfg = PromoterConfig.from_env()  # firms_min_hits=3 by default
+    det = FIRMSGeoClusterDetector(config=cfg, clock=fake_clock)
+
+    env1 = _firms_envelope(signal_envelope_factory)
+    env2 = _firms_envelope(signal_envelope_factory)
+    env3 = _firms_envelope(signal_envelope_factory)
+
+    assert det.detect(env1) is None
+    assert det.detect(env2) is None
+    hit = det.detect(env3)
+    assert hit is not None
+    assert hit.detector_id == "firms"
+    assert hit.cluster_key == "firms:geo:35.1:51.6"
+    assert hit.severity == "high"
+    assert hit.coords == (35.09, 51.62)
+    assert hit.incident_kind == "firms.cluster"
+    assert "auto_promoter:v1" in hit.layer_hints_to_merge
+    assert any(h.startswith("cluster:") for h in hit.layer_hints_to_merge)
+    # Ignition summary text — single timeline entry referencing the count
+    assert "3 detection" in hit.title.lower()
+    assert hit.timeline_event.kind == "trigger"
+    assert hit.timeline_event.text == hit.title
+    assert len(hit.contributing_signal_ids) == 3
+    assert hit.contributing_signal_ids[-1] == env3.event_id
+    # Detector marks the bucket as ignited so the next signal is an update
+    assert det._buckets[hit.cluster_key].ignited is True  # noqa: SLF001

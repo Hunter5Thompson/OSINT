@@ -94,11 +94,127 @@ class FIRMSGeoClusterDetector:
         if coords is None:
             return None
         cluster_key = _bucket_key(*coords, deg=self._config.firms_bucket_deg)
-        # Phase 3.2: pure accumulation, no emit yet — emit logic in Task 3.3.
+
+        # Suppression first — Task 3.5 adds the body.
+        suppress_until = self._suppressed_until.get(cluster_key)
+        if suppress_until is not None:
+            if self._clock() < suppress_until:
+                return None
+            self._suppressed_until.pop(cluster_key, None)
+
         bucket = self._buckets.setdefault(cluster_key, _BucketWindow())
         self._prune(bucket)
         bucket.signals.append((self._clock(), envelope.event_id))
+
+        if bucket.ignited:
+            return self._build_update_hit(envelope, cluster_key, coords)
+
+        if len(bucket.signals) >= self._config.firms_min_hits:
+            bucket.ignited = True
+            return self._build_ignition_hit(envelope, cluster_key, coords, bucket)
+
         return None
+
+    # -- builders -------------------------------------------------------
+
+    def _build_ignition_hit(
+        self,
+        envelope: SignalEnvelope,
+        cluster_key: str,
+        coords: tuple[float, float],
+        bucket: _BucketWindow,
+    ) -> ClusterHit:
+        from app.services.incident_promoter.detectors.base import (
+            build_ignition_timeline_event,
+        )
+
+        count = len(bucket.signals)
+        title = f"FIRMS cluster ignited · {count} detections in {cluster_key}"
+        ids = [eid for _ts, eid in bucket.signals]
+        hit = ClusterHit(
+            cluster_key=cluster_key,
+            detector_id=self.id,
+            incident_kind="firms.cluster",
+            title=title,
+            severity=self._initial_severity(),
+            coords=coords,
+            location="",
+            sources_to_merge=["FIRMS · VIIRS_SNPP_NRT"],
+            layer_hints_to_merge=[
+                "firms",
+                "events",
+                "auto_promoter:v1",
+                f"cluster:{cluster_key}",
+            ],
+            timeline_event=build_ignition_timeline_event(
+                # Build event from a temporary surrogate; we need title+severity.
+                ClusterHit(
+                    cluster_key=cluster_key,
+                    detector_id=self.id,
+                    incident_kind="firms.cluster",
+                    title=title,
+                    severity=self._initial_severity(),
+                    coords=coords,
+                    location="",
+                    sources_to_merge=[],
+                    layer_hints_to_merge=[],
+                    timeline_event=None,  # type: ignore[arg-type]
+                    contributing_signal_ids=[],
+                )
+            ),
+            contributing_signal_ids=ids,
+        )
+        return hit
+
+    def _build_update_hit(
+        self,
+        envelope: SignalEnvelope,
+        cluster_key: str,
+        coords: tuple[float, float],
+    ) -> ClusterHit:
+        from app.services.incident_promoter.detectors.base import (
+            build_update_timeline_event,
+        )
+
+        title = f"FIRMS hit · {cluster_key}"
+        # t_offset is filled in by ClusterStore relative to the incident's trigger_ts;
+        # detector emits 0.0 as a sentinel that the store will overwrite.
+        surrogate = ClusterHit(
+            cluster_key=cluster_key,
+            detector_id=self.id,
+            incident_kind="firms.cluster",
+            title=title,
+            severity="high",  # never escalates downward
+            coords=coords,
+            location="",
+            sources_to_merge=[],
+            layer_hints_to_merge=[],
+            timeline_event=None,  # type: ignore[arg-type]
+            contributing_signal_ids=[],
+        )
+        return ClusterHit(
+            cluster_key=cluster_key,
+            detector_id=self.id,
+            incident_kind="firms.cluster",
+            title=title,
+            severity="high",
+            coords=coords,
+            location="",
+            sources_to_merge=["FIRMS · VIIRS_SNPP_NRT"],
+            layer_hints_to_merge=[
+                "firms",
+                "events",
+                "auto_promoter:v1",
+                f"cluster:{cluster_key}",
+            ],
+            timeline_event=build_update_timeline_event(surrogate, t_offset_s=0.0),
+            contributing_signal_ids=[envelope.event_id],
+        )
+
+    def _initial_severity(self) -> str:
+        # FIRMS: high on open, escalates to critical at hit_count >= 10 — escalation
+        # is applied in ClusterStore.apply_signal_update, not here.
+        return "high"
 
     def _prune(self, bucket: _BucketWindow) -> None:
         cutoff = self._clock() - timedelta(seconds=self._config.firms_window_sec)
