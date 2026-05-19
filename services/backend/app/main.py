@@ -99,17 +99,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.recon_manifest = recon_loader
 
     # --- Auto-promoter (full wiring) ---
-    from datetime import UTC, datetime as _dt
+    from app.services import incident_store as _incident_store_module
     from app.services.incident_promoter.cluster_store import ClusterStore
     from app.services.incident_promoter.config import PromoterConfig
     from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
-    from app.services.incident_promoter.detectors.telegram import TelegramTopicDetector
     from app.services.incident_promoter.detectors.severity import SeverityBurstDetector
+    from app.services.incident_promoter.detectors.telegram import TelegramTopicDetector
     from app.services.incident_promoter.promoter import Promoter
     from app.services.incident_stream import get_incident_stream
-    from app.services import incident_store as _incident_store_module
 
-    _promoter_clock = lambda: _dt.now(UTC)
+    def _promoter_clock() -> datetime:
+        return datetime.now(UTC)
     _promoter_cfg = PromoterConfig.from_env()
     _cluster_store = ClusterStore(clock=_promoter_clock)
     app.state.cluster_store = _cluster_store
