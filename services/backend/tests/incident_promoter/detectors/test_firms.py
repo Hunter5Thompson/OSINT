@@ -106,3 +106,21 @@ def test_firms_detector_ignites_at_min_hits_with_summary_text(signal_envelope_fa
     assert hit.contributing_signal_ids[-1] == env3.event_id
     # Detector marks the bucket as ignited so the next signal is an update
     assert det._buckets[hit.cluster_key].ignited is True  # noqa: SLF001
+
+
+def test_firms_detector_emits_update_after_ignition(signal_envelope_factory, fake_clock):
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
+
+    cfg = PromoterConfig.from_env()
+    det = FIRMSGeoClusterDetector(config=cfg, clock=fake_clock)
+    for _ in range(3):
+        det.detect(_firms_envelope(signal_envelope_factory))
+
+    env4 = _firms_envelope(signal_envelope_factory)
+    fake_clock.advance(60)
+    hit = det.detect(env4)
+    assert hit is not None
+    assert hit.timeline_event.kind == "observation"
+    assert hit.contributing_signal_ids == [env4.event_id]
+    assert hit.severity == "high"  # detector itself never de-escalates
