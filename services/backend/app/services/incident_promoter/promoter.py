@@ -218,15 +218,8 @@ class Promoter:
                     quiet_seconds=int(self._config.quiet_window_sec),
                     final_hit_count=state.hit_count,
                 )
-        # Drop stale promoted — finalize as PROMOTED in DB (idempotent if already promoted),
-        # then remove from active cluster tracking.
+        # Drop stale promoted — no DB write (analyst already wrote PROMOTED via /promote router)
         for state in snap.stale_promoted:
-            try:
-                await self._incident_store.close_incident(
-                    state.incident_id, status=IncidentStatus.PROMOTED
-                )
-            except Exception:  # noqa: BLE001
-                pass  # best-effort; drop the cluster regardless
             await self._cluster_store.drop_cluster(state.cluster_key)
 
     async def sweeper_loop(self) -> None:

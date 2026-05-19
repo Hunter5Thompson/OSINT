@@ -198,8 +198,12 @@ async def test_sweeper_closes_stale_open_and_drops_promoted(
                        incident_event_stream=fake_incident_event_stream)
     await store.handle(hit_prom, incident_store=fake_incident_store,
                        incident_event_stream=fake_incident_event_stream)
-    # Promote second
-    store.get_by_cluster_key("firms:geo:5.0:5.0").incident_status = "promoted"
+    # Promote second — mirror the real /promote router: write PROMOTED to DB
+    # AND flip the in-memory ClusterStore state.
+    promoted_state = store.get_by_cluster_key("firms:geo:5.0:5.0")
+    from app.models.incident import IncidentStatus
+    await fake_incident_store.close_incident(promoted_state.incident_id, IncidentStatus.PROMOTED)
+    promoted_state.incident_status = "promoted"
 
     # Both clusters are last_signal_ts == now; advance past quiet window
     fake_clock.advance(cfg.quiet_window_sec + 60)
