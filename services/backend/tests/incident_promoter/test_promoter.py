@@ -230,3 +230,49 @@ async def test_sweeper_closes_stale_open_and_drops_promoted(
     )
     from app.models.incident import IncidentStatus
     assert promoted_record.status == IncidentStatus.PROMOTED
+
+
+async def test_rehydrate_preserves_detector_id_for_escalation(
+    fake_clock, fake_incident_store, fake_incident_event_stream, signal_envelope_factory
+):
+    """C1 regression: rehydrated ClusterState.detector_id must be the leading segment
+    of cluster_key (e.g. 'telegram'), not the second segment (e.g. 'topic')."""
+    from app.models.incident import IncidentCreateRequest
+    from app.services.incident_promoter.cluster_store import ClusterStore
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.promoter import Promoter
+
+    cfg = PromoterConfig.from_env()
+    cluster_store = ClusterStore(clock=fake_clock)
+
+    # Pre-seed an owned open telegram incident
+    await fake_incident_store.create_incident(
+        IncidentCreateRequest(
+            title="Telegram cluster · 3 matching posts",
+            kind="telegram.burst",
+            severity="elevated",
+            coords=(0.0, 0.0),
+            layer_hints=["telegram", "auto_promoter:v1",
+                         "cluster:telegram:topic:abc123"],
+            initial_text="seed",
+        )
+    )
+
+    promoter = Promoter(
+        signal_stream=None,
+        cluster_store=cluster_store,
+        incident_store=fake_incident_store,
+        incident_event_stream=fake_incident_event_stream,
+        config=cfg,
+        clock=fake_clock,
+        detectors=[],
+    )
+    await promoter._rehydrate()  # noqa: SLF001
+
+    state = cluster_store.get_by_cluster_key("telegram:topic:abc123")
+    assert state is not None
+    # detector_id must be "telegram" — the leading segment — not "topic"
+    assert state.detector_id == "telegram", (
+        f"detector_id should be 'telegram' to drive escalation curves; "
+        f"got {state.detector_id!r}"
+    )

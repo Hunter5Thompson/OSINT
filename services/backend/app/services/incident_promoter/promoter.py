@@ -86,7 +86,7 @@ class Promoter:
                     reason="no_cluster_marker",
                 )
                 continue
-            detector_id = cluster_key.split(":", 2)[1] if ":" in cluster_key else "unknown"
+            detector_id = cluster_key.split(":", 1)[0] if ":" in cluster_key else "unknown"
             self._cluster_store._by_key[cluster_key] = self._build_rehydrated_state(  # noqa: SLF001
                 incident, cluster_key, detector_id
             )
@@ -209,7 +209,7 @@ class Promoter:
                 )
                 continue
             await self._cluster_store.drop_cluster(state.cluster_key)
-            if closed is not None:
+            if closed is not None and closed.status == IncidentStatus.CLOSED:
                 self._incident_event_stream.publish("incident.close", closed)
                 logger.info(
                     "promoter_cluster_closed",
@@ -217,6 +217,12 @@ class Promoter:
                     incident_id=state.incident_id,
                     quiet_seconds=int(self._config.quiet_window_sec),
                     final_hit_count=state.hit_count,
+                )
+            elif closed is not None:
+                logger.info(
+                    "promoter_close_skipped_terminal_status",
+                    incident_id=state.incident_id,
+                    actual_status=str(closed.status),
                 )
         # Drop stale promoted — no DB write (analyst already wrote PROMOTED via /promote router)
         for state in snap.stale_promoted:
