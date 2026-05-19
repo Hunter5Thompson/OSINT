@@ -145,7 +145,14 @@ async def silence(incident_id: str, request: Request) -> Incident:
     record = await incident_store.close_incident(incident_id, IncidentStatus.SILENCED)
     if record is None:
         raise HTTPException(status_code=404, detail="incident not found")
-    get_incident_stream().publish("incident.silence", record)
+    if record.status == IncidentStatus.SILENCED:
+        get_incident_stream().publish("incident.silence", record)
+    else:
+        log.info(
+            "incident_silence_skipped_terminal_status",
+            incident_id=incident_id,
+            actual_status=str(record.status),
+        )
     cluster_store = getattr(request.app.state, "cluster_store", None)
     cfg = getattr(request.app.state, "promoter_config", None)
     if cluster_store is not None and cfg is not None:
