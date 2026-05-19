@@ -98,11 +98,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                        hint="run ./odin.sh recon bootstrap")
     app.state.recon_manifest = recon_loader
 
-    # --- Auto-promoter (Phase 1 wiring — shell only) ---
+    # --- Auto-promoter (full wiring) ---
     from datetime import UTC, datetime as _dt
     from app.services.incident_promoter.cluster_store import ClusterStore
     from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
     from app.services.incident_promoter.promoter import Promoter
+    from app.services.incident_stream import get_incident_stream
+    from app.services import incident_store as _incident_store_module
 
     _promoter_clock = lambda: _dt.now(UTC)
     _promoter_cfg = PromoterConfig.from_env()
@@ -110,21 +113,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.cluster_store = _cluster_store
     app.state.promoter_config = _promoter_cfg
 
+    _detectors = []
+    if _promoter_cfg.firms_enabled:
+        _detectors.append(FIRMSGeoClusterDetector(config=_promoter_cfg, clock=_promoter_clock))
+    # Phase 5+ will append severity, telegram, gdelt here
+
     _promoter = Promoter(
-        signal_stream=None,  # Phase 4 wires the real SignalStream
+        signal_stream=get_signal_stream(),
         cluster_store=_cluster_store,
-        incident_store=None,  # Phase 4 wires incident_store module
-        incident_event_stream=None,  # Phase 4 wires get_incident_stream()
+        incident_store=_incident_store_module,
+        incident_event_stream=get_incident_stream(),
         config=_promoter_cfg,
         clock=_promoter_clock,
-        detectors=[],  # Phase 3+ adds detectors
+        detectors=_detectors,
     )
-    # Phase 1 deliberately does NOT start the promoter/sweeper tasks. The
-    # Promoter shell would otherwise busy-loop because signal_stream is None
-    # and _drain_one() returns immediately. Real task creation lives in
-    # Task 4.7, after Phase 4 wires the SignalStream and detector(s).
-    _promoter_task: asyncio.Task | None = None
-    _sweeper_task: asyncio.Task | None = None
+    if _promoter_cfg.enabled:
+        _promoter_task = asyncio.create_task(_promoter.run(), name="promoter")
+        _sweeper_task = asyncio.create_task(_promoter.sweeper_loop(), name="promoter-sweeper")
+    else:
+        _promoter_task = None
+        _sweeper_task = None
 
     logger.info("backend_started", vllm_url=settings.vllm_url, vllm_model=settings.vllm_model)
     yield
