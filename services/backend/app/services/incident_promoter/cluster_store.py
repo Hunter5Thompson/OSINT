@@ -70,3 +70,148 @@ class ClusterStore:
         if cluster_key is None:
             return None
         return self._by_key.get(cluster_key)
+
+    def get_by_cluster_key(self, cluster_key: str) -> ClusterState | None:
+        return self._by_key.get(cluster_key)
+
+    async def handle(
+        self,
+        hit,                                # ClusterHit — quoted to avoid circular import
+        *,
+        incident_store,
+        incident_event_stream,
+    ) -> None:
+        """Phased locking: decide and reserve, then I/O, then finalize."""
+        from app.models.incident import IncidentCreateRequest
+        from app.services.incident_promoter.detectors.base import ClusterHit  # noqa: F401
+
+        now = self._clock()
+
+        # Phase 1: decide + reserve under lock
+        async with self._lock:
+            cooldown_until = self._cooldowns.get(hit.cluster_key)
+            if cooldown_until is not None:
+                if now < cooldown_until:
+                    logger.info(
+                        "promoter_cluster_silenced",
+                        cluster_key=hit.cluster_key,
+                        cooldown_seconds=int((cooldown_until - now).total_seconds()),
+                    )
+                    return
+                self._cooldowns.pop(hit.cluster_key, None)
+
+            existing = self._by_key.get(hit.cluster_key)
+            if existing is None:
+                if hit.cluster_key in self._reserving:
+                    logger.info("promoter_race_dropped", cluster_key=hit.cluster_key)
+                    return
+                self._reserving.add(hit.cluster_key)
+                action = "create"
+            elif existing.incident_status == "promoted":
+                existing.last_signal_ts = now
+                logger.info(
+                    "promoter_promoted_absorb",
+                    cluster_key=hit.cluster_key,
+                    incident_id=existing.incident_id,
+                )
+                return
+            else:
+                action = "update"
+
+        # Phase 2: I/O outside lock
+        if action == "create":
+            coords, extra_hints = self._resolve_create_coords(hit)
+            # `hit_count` is the count of *contributing signals* (per spec §5.1).
+            # Ignition packs all accumulated event_ids into contributing_signal_ids,
+            # so a 3-detection FIRMS ignition opens with hit_count=3.
+            initial_count = max(1, len(hit.contributing_signal_ids))
+            initial_severity = _max_severity(
+                hit.severity, _apply_escalation_rule(hit.detector_id, initial_count)
+            )
+            request = IncidentCreateRequest(
+                title=hit.title,
+                kind=hit.incident_kind,
+                severity=initial_severity,  # type: ignore[arg-type]
+                coords=coords,
+                location=hit.location,
+                sources=list(hit.sources_to_merge),
+                layer_hints=list(dict.fromkeys([*hit.layer_hints_to_merge, *extra_hints])),
+                initial_text=hit.title,
+            )
+            try:
+                incident = await incident_store.create_incident(request)
+            except Exception as exc:  # noqa: BLE001 — resilience
+                async with self._lock:
+                    self._reserving.discard(hit.cluster_key)
+                logger.warning(
+                    "promoter_create_failed", cluster_key=hit.cluster_key, error=str(exc)
+                )
+                return
+
+            # Phase 3: finalize
+            async with self._lock:
+                self._by_key[hit.cluster_key] = ClusterState(
+                    cluster_key=hit.cluster_key,
+                    incident_id=incident.id,
+                    detector_id=hit.detector_id,
+                    severity=initial_severity,
+                    coords=coords,
+                    hit_count=initial_count,
+                    last_signal_ts=now,
+                    created_ts=now,
+                    contributing_signal_ids=list(hit.contributing_signal_ids[-50:]),
+                    incident_status="open",
+                )
+                self._by_incident_id[incident.id] = hit.cluster_key
+                self._reserving.discard(hit.cluster_key)
+            incident_event_stream.publish("incident.open", incident)
+            logger.info(
+                "promoter_cluster_opened",
+                cluster_key=hit.cluster_key,
+                detector_id=hit.detector_id,
+                incident_id=incident.id,
+                severity=initial_severity,
+            )
+
+    def _resolve_create_coords(
+        self, hit
+    ) -> tuple[tuple[float, float], list[str]]:
+        """Pick representative coords for the new incident.
+
+        - hit.coords is not None → use it; no extra layer hints.
+        - hit.coords is None → fall back to (0.0, 0.0) and append "map:no_pin".
+        """
+        if hit.coords is not None:
+            return hit.coords, []
+        return (0.0, 0.0), ["map:no_pin"]
+
+
+_SEVERITY_RANK: dict[str, int] = {
+    "low": 0,
+    "elevated": 1,
+    "high": 2,
+    "critical": 3,
+}
+
+
+def _max_severity(a: str, b: str) -> str:
+    return a if _SEVERITY_RANK[a] >= _SEVERITY_RANK[b] else b
+
+
+# Per-detector escalation curves (spec §4.3). Entries are ordered
+# high-threshold-first; the first matching threshold wins.
+_ESCALATION_RULES: dict[str, list[tuple[int, str]]] = {
+    "firms":    [(10, "critical"), (0, "high")],
+    "severity": [(10, "critical"), (0, "high")],
+    "telegram": [(10, "critical"), (5, "high"), (0, "elevated")],
+    "gdelt":    [(15, "critical"), (10, "high"), (0, "elevated")],
+}
+
+
+def _apply_escalation_rule(detector_id: str, hit_count: int) -> str:
+    """Return the rule-based severity floor for a (detector_id, hit_count)."""
+    rules = _ESCALATION_RULES.get(detector_id, [(0, "low")])
+    for threshold, sev in rules:                          # already sorted high→low
+        if hit_count >= threshold:
+            return sev
+    return "low"

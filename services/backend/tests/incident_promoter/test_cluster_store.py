@@ -43,3 +43,42 @@ def test_cluster_state_is_dataclass_with_required_fields():
     assert s.hit_count == 3
     # cooldown is tracked in ClusterStore._cooldowns, NOT here
     assert not hasattr(s, "silenced_until")
+
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_handle_create_path(fake_clock, fake_incident_store, fake_incident_event_stream):
+    from app.models.incident import IncidentTimelineEvent
+    from app.services.incident_promoter.cluster_store import ClusterStore
+    from app.services.incident_promoter.detectors.base import ClusterHit
+
+    store = ClusterStore(clock=fake_clock)
+    hit = ClusterHit(
+        cluster_key="firms:geo:48.0:37.8",
+        detector_id="firms",
+        incident_kind="firms.cluster",
+        title="FIRMS cluster ignited · 3 detections in firms:geo:48.0:37.8",
+        severity="high",
+        coords=(48.0, 37.8),
+        location="",
+        sources_to_merge=["FIRMS · VIIRS_SNPP_NRT"],
+        layer_hints_to_merge=["firms", "auto_promoter:v1", "cluster:firms:geo:48.0:37.8"],
+        timeline_event=IncidentTimelineEvent(
+            t_offset_s=0.0, kind="trigger", text="seed", severity="high"
+        ),
+        contributing_signal_ids=["a", "b", "c"],
+    )
+    await store.handle(
+        hit,
+        incident_store=fake_incident_store,
+        incident_event_stream=fake_incident_event_stream,
+    )
+    assert fake_incident_event_stream.types() == ["incident.open"]
+    state = store.get_by_cluster_key("firms:geo:48.0:37.8")
+    assert state is not None
+    assert state.incident_status == "open"
+    # hit_count == len(contributing_signal_ids) at ignition (spec §5.1)
+    assert state.hit_count == 3
+    assert "firms:geo:48.0:37.8" not in store._reserving  # noqa: SLF001
