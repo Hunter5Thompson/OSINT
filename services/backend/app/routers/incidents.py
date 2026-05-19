@@ -97,11 +97,20 @@ async def get_incident(incident_id: str) -> Incident:
     response_model=Incident,
     dependencies=[Depends(_require_admin)],
 )
-async def silence(incident_id: str) -> Incident:
+async def silence(incident_id: str, request: Request) -> Incident:
     record = await incident_store.close_incident(incident_id, IncidentStatus.SILENCED)
     if record is None:
         raise HTTPException(status_code=404, detail="incident not found")
     get_incident_stream().publish("incident.silence", record)
+    cluster_store = getattr(request.app.state, "cluster_store", None)
+    cfg = getattr(request.app.state, "promoter_config", None)
+    if cluster_store is not None and cfg is not None:
+        from datetime import UTC, datetime as _dt, timedelta as _td
+        until = _dt.now(UTC) + _td(seconds=cfg.silence_cooldown_sec)
+        try:
+            await cluster_store.mark_silenced(incident_id, until=until)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("router_mark_silenced_failed", incident_id=incident_id, error=str(exc))
     return record
 
 
@@ -110,11 +119,17 @@ async def silence(incident_id: str) -> Incident:
     response_model=Incident,
     dependencies=[Depends(_require_admin)],
 )
-async def promote(incident_id: str) -> Incident:
+async def promote(incident_id: str, request: Request) -> Incident:
     record = await incident_store.close_incident(incident_id, IncidentStatus.PROMOTED)
     if record is None:
         raise HTTPException(status_code=404, detail="incident not found")
     get_incident_stream().publish("incident.promote", record)
+    cluster_store = getattr(request.app.state, "cluster_store", None)
+    if cluster_store is not None:
+        try:
+            await cluster_store.mark_promoted(incident_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("router_mark_promoted_failed", incident_id=incident_id, error=str(exc))
     return record
 
 
