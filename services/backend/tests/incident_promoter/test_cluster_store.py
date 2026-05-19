@@ -274,3 +274,64 @@ async def test_handle_cooldown_expired_creates_normally(
                        incident_event_stream=fake_incident_event_stream)
     assert fake_incident_event_stream.types() == ["incident.open"]
     assert key not in store.cooldowns()
+
+
+@pytest.mark.asyncio
+async def test_mark_promoted_sets_status_and_is_noop_for_unknown(
+    fake_clock, fake_incident_store, fake_incident_event_stream
+):
+    from app.services.incident_promoter.cluster_store import ClusterStore
+    from app.services.incident_promoter.detectors.base import ClusterHit
+    from app.models.incident import IncidentTimelineEvent
+
+    store = ClusterStore(clock=fake_clock)
+    hit = ClusterHit(
+        cluster_key="firms:geo:3.0:3.0", detector_id="firms",
+        incident_kind="firms.cluster", title="seed", severity="high",
+        coords=(3.0, 3.0), location="", sources_to_merge=[],
+        layer_hints_to_merge=["auto_promoter:v1", "cluster:firms:geo:3.0:3.0"],
+        timeline_event=IncidentTimelineEvent(t_offset_s=0.0, kind="trigger"),
+        contributing_signal_ids=["x"],
+    )
+    await store.handle(hit, incident_store=fake_incident_store,
+                       incident_event_stream=fake_incident_event_stream)
+    state = store.get_by_cluster_key("firms:geo:3.0:3.0")
+    incident_id = state.incident_id
+
+    await store.mark_promoted(incident_id)
+    assert store.get_by_cluster_key("firms:geo:3.0:3.0").incident_status == "promoted"
+
+    await store.mark_promoted("inc-not-here")  # no exception
+
+
+@pytest.mark.asyncio
+async def test_mark_silenced_drops_state_records_cooldown_fires_listeners(
+    fake_clock, fake_incident_store, fake_incident_event_stream
+):
+    from datetime import timedelta
+    from app.services.incident_promoter.cluster_store import ClusterStore
+    from app.services.incident_promoter.detectors.base import ClusterHit
+    from app.models.incident import IncidentTimelineEvent
+
+    received: list[tuple[str, object]] = []
+    store = ClusterStore(clock=fake_clock)
+    store.add_termination_listener(lambda k, suppress_until=None: received.append((k, suppress_until)))
+
+    hit = ClusterHit(
+        cluster_key="telegram:topic:abc", detector_id="telegram",
+        incident_kind="telegram.burst", title="seed", severity="elevated",
+        coords=None, location="", sources_to_merge=[],
+        layer_hints_to_merge=["auto_promoter:v1", "cluster:telegram:topic:abc"],
+        timeline_event=IncidentTimelineEvent(t_offset_s=0.0, kind="trigger"),
+        contributing_signal_ids=["x"],
+    )
+    await store.handle(hit, incident_store=fake_incident_store,
+                       incident_event_stream=fake_incident_event_stream)
+    state = store.get_by_cluster_key("telegram:topic:abc")
+    until = fake_clock() + timedelta(hours=1)
+
+    await store.mark_silenced(state.incident_id, until=until)
+
+    assert store.get_by_cluster_key("telegram:topic:abc") is None
+    assert store.cooldowns()["telegram:topic:abc"] == until
+    assert received == [("telegram:topic:abc", until)]

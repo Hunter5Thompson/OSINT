@@ -225,6 +225,48 @@ class ClusterStore:
             severity=new_severity,
         )
 
+    async def mark_promoted(self, incident_id: str) -> None:
+        """Mark a cluster as promoted. No-op if incident_id is unknown."""
+        async with self._lock:
+            cluster_key = self._by_incident_id.get(incident_id)
+            if cluster_key is None:
+                return
+            state = self._by_key.get(cluster_key)
+            if state is None:
+                return
+            state.incident_status = "promoted"
+        logger.info("promoter_mark_promoted", cluster_key=cluster_key, incident_id=incident_id)
+
+    async def mark_silenced(self, incident_id: str, *, until: datetime) -> None:
+        """Mark a cluster as silenced: remove state, record cooldown, fire listeners."""
+        async with self._lock:
+            cluster_key = self._by_incident_id.get(incident_id)
+            if cluster_key is None:
+                return
+            self._by_key.pop(cluster_key, None)
+            self._by_incident_id.pop(incident_id, None)
+            self._cooldowns[cluster_key] = until
+        # Fan-out outside the lock — listeners are local + cheap.
+        self._fire_terminated(cluster_key, suppress_until=until)
+        logger.info(
+            "promoter_mark_silenced",
+            cluster_key=cluster_key,
+            incident_id=incident_id,
+            cooldown_seconds=int((until - self._clock()).total_seconds()),
+        )
+
+    def _fire_terminated(
+        self, cluster_key: str, *, suppress_until: datetime | None = None
+    ) -> None:
+        """Fire all termination listeners with a copy of the list."""
+        for listener in list(self._termination_listeners):
+            try:
+                listener(cluster_key, suppress_until=suppress_until)
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "promoter_terminate_callback_failed", cluster_key=cluster_key
+                )
+
     def _resolve_create_coords(
         self, hit
     ) -> tuple[tuple[float, float], list[str]]:
