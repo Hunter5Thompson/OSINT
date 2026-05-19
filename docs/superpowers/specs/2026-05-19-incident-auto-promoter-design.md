@@ -90,12 +90,14 @@ services/backend/app/services/incident_promoter/
 
 ### 3.2 Touched Existing Modules
 
-- `app/main.py` — lifespan starts/stops `Promoter` task and `Sweeper` task.
+- `app/main.py` — lifespan starts/stops `Promoter` task and `Sweeper` task; attaches `ClusterStore` to `app.state`.
 - `app/services/incident_store.py` — adds **two** methods and tightens **one**:
   - `apply_signal_update(incident_id, *, timeline_event, severity, sources_to_merge, layer_hints_to_merge) -> Incident` — atomic write covering all four mutations in a single Cypher transaction.
   - `list_owned_for_rehydrate() -> list[Incident]` — returns incidents whose `layer_hints` contain `auto_promoter:v1` (uses existing `INCIDENT_LIST_OPEN` + Python filter; no new Cypher).
-  - `close_incident(incident_id)` — must become **idempotent**: return current record if status ∈ {`closed`, `silenced`, `promoted`}, do not error. Signature stays `Incident | None`.
-- `app/routers/incidents.py` — adds `GET /api/incidents/_admin/promoter` behind `Depends(_require_admin)`. **Must be declared before** `/{incident_id}` per existing router comment.
+  - `close_incident(incident_id, status)` — must become **idempotent**: return current record (unchanged) if it is already in a terminal state ∈ {`closed`, `silenced`, `promoted`}. Signature stays `(incident_id, status: IncidentStatus, when: datetime | None = None) -> Incident | None` (matches existing code; Sweeper always passes `status=IncidentStatus.CLOSED` explicitly).
+- `app/routers/incidents.py`:
+  - Adds `GET /api/incidents/_admin/promoter` behind `Depends(_require_admin)`. **Must be declared before** `/{incident_id}` per existing router comment.
+  - **`promote_incident` and `silence_incident` are wired to the ClusterStore:** after a successful Neo4j write, the handler reads `cluster_store = getattr(request.app.state, "cluster_store", None)` and (if present) calls `cluster_store.mark_promoted(incident_id)` or `mark_silenced(incident_id, until=now+cooldown)`. No-op when the Promoter is disabled or the cluster is unknown to the store.
 
 ## 4. Detector Contract
 
@@ -107,9 +109,24 @@ class Detector(Protocol):
     enabled: bool
 
     def detect(self, envelope: SignalEnvelope) -> ClusterHit | None: ...
+
+    def on_cluster_terminated(self, cluster_key: str) -> None: ...
+        # Called by ClusterStore when a cluster closes (Sweeper),
+        # is dropped after promote-quiet, or is silenced. Lets the
+        # detector reset its per-bucket pre-trigger state so a
+        # future window starts clean.
 ```
 
-Detectors are **stateful but side-effect-free**: they may hold sliding-window deques or LRU centroids internally, but **never** mutate `ClusterStore` or Neo4j directly. Output is a `ClusterHit` or `None`.
+Detectors are **stateful but side-effect-free** w.r.t. ClusterStore / Neo4j: they may hold per-bucket sliding-window deques and an `ignited: set[cluster_key]` flag internally, but **never** mutate `ClusterStore` or Neo4j directly. Output is a `ClusterHit` or `None`.
+
+**Threshold semantics (Option A — detector-side accumulation):**
+
+- For each qualifying signal, the detector appends to its bucket deque and prunes by window.
+- If the bucket is **not ignited** and `len(deque) < min_hits` → return `None` (still accumulating, no incident yet).
+- If the bucket is **not ignited** and `len(deque) >= min_hits` → mark ignited, return a ClusterHit whose `contributing_signal_ids` contains **all** event_ids currently in the deque (this becomes the first incident with a populated timeline).
+- If the bucket **is ignited** → return a ClusterHit for the single new signal (this becomes an update).
+
+A `ClusterHit` therefore always represents an actionable event. ClusterStore decides "create vs. update" purely from whether `cluster_key` already exists in `_by_key`.
 
 ```python
 @dataclass(frozen=True)
@@ -124,8 +141,10 @@ class ClusterHit:
     sources_to_merge: list[str]
     layer_hints_to_merge: list[str]
     timeline_event: IncidentTimelineEvent
-    contributing_signal_ids: list[str]
+    contributing_signal_ids: list[str]       # ≥ min_hits at ignition, len==1 on update
 ```
+
+**Termination callback:** at startup, the Promoter registers each detector's `on_cluster_terminated` as a listener on `ClusterStore`. When ClusterStore drops a cluster (Sweeper close, promote-quiet, silence), it fans out the callback to all registered detectors. Each detector clears its bucket state for that `cluster_key` so the next signal starts a fresh accumulation window.
 
 ### 4.2 Cluster Keys
 
@@ -138,32 +157,37 @@ class ClusterHit:
 
 ### 4.3 Detector Specs
 
+All detectors apply the threshold semantics from §4.1: per-bucket deque, prune by window, emit `ClusterHit` only when ignited or updating.
+
 #### FIRMS Geo-Cluster
-- **Trigger:** ≥3 FIRMS signals in same `firms:geo:*` bucket within 24 h.
-- **Initial severity:** `high`. Escalate to `critical` at ≥10 hits.
-- **State:** none (each signal is checked against the ClusterStore directly via the bucket key).
+- **Trigger threshold:** `len(bucket.deque) >= 3` within 24 h window in same `firms:geo:*` bucket.
+- **Initial severity:** `high`. Escalate to `critical` at `hit_count >= 10`.
+- **State:** `_buckets: dict[cluster_key, _BucketWindow]` with `deque[(ts, event_id)]` + `ignited: bool`. Pruned on every `detect()` call.
 - **Coord parse:** Regex `@(?P<lat>-?\d+\.\d+),(?P<lon>-?\d+\.\d+),` on `payload.url`.
 - **Source merge:** `["FIRMS · VIIRS_SNPP_NRT"]` (canonicalized).
 - **Layer hints:** `["firms", "events", "auto_promoter:v1", "cluster:<key>"]`.
+- **Ignition hit:** `contributing_signal_ids` = all event_ids currently in deque (≥3).
+- **Update hit:** `contributing_signal_ids = [envelope.event_id]`, single timeline entry.
 
 #### Severity Burst
-- **Trigger:** ≥5 signals with `severity ∈ {high, critical}` within 15 min, any source.
-- **Initial severity:** `high`. Escalate to `critical` at ≥10.
-- **State:** internal deque `[(ts, severity, event_id)]`, pruned on every call.
-- **Coords:** `None` → ClusterStore resolves to `(0.0, 0.0)` + `map:no_pin` layer hint.
+- **Trigger threshold:** `len(bucket.deque) >= 5` within 15 min window. Only counts signals with `severity ∈ {high, critical}` (any source).
+- **Cluster key:** `severity:global` (single global lane in v1).
+- **Initial severity:** `high`. Escalate to `critical` at `hit_count >= 10`.
+- **State:** one `_BucketWindow` for the single global key.
+- **Coords:** `None` → ClusterStore resolves to `(0.0, 0.0)` + appends `map:no_pin` to `layer_hints`.
 - **DEFAULT: DISABLED** in v1 (`ODIN_PROMOTER_SEVERITY_ENABLED=false`). Enable only after Frontend supports `map:no_pin`. Documented in release notes.
 
 #### Telegram Topic Cluster (Shingles v1)
-- **Trigger:** ≥3 signals with `source == "telegram"` and matching topic within 30 min.
-- **Matching rule:** normalize title (lowercase, strip URLs, strip non-alnum), compute 5-gram token set, **Jaccard ≥ 0.55** against the nearest active centroid. Same URL domain → threshold lowered to **0.45** (domain-match boost).
-- **State:** LRU of up to 50 active centroids `{vector, cluster_key, last_seen_ts, hit_count}`.
-- **Initial severity:** `elevated`. Escalate: `high` at ≥5, `critical` at ≥10.
-- **Embeddings path:** if `ODIN_PROMOTER_TELEGRAM_EMBEDDINGS_ENABLED=true`, log warning and **disable detector** (skeleton only, no network in v1). Test covers this.
+- **Trigger threshold:** `≥3` signals matching same centroid within 30 min window, `source == "telegram"`.
+- **Matching rule:** normalize title (lowercase, strip URLs, strip non-alnum), compute 5-gram token set, **Jaccard ≥ 0.55** against the nearest active centroid. Same URL domain → threshold lowered to **0.45** (domain-match boost). No match → new centroid (pre-trigger).
+- **State:** LRU of up to 50 active centroids `{tokens, cluster_key, deque, ignited, last_seen_ts}`. LRU eviction by `last_seen_ts`.
+- **Initial severity:** `elevated`. Escalate: `high` at `hit_count >= 5`, `critical` at `hit_count >= 10`.
+- **Embeddings path:** if `ODIN_PROMOTER_TELEGRAM_EMBEDDINGS_ENABLED=true`, log warning on detector init and **disable detector entirely** (skeleton only, no network in v1). Test covers this.
 
 #### GDELT Tone Spike
-- **Trigger:** ≥3 GDELT signals in same `gdelt:geo:*:*` bucket within 60 min with `abs(tone) ≥ 7`.
-- **Initial severity:** `elevated`. Escalate: `high` at ≥10 mentions OR `abs(tone) ≥ 9`.
-- **State:** internal deque per bucket.
+- **Trigger threshold:** `≥3` GDELT signals in same `gdelt:geo:*:*` bucket within 60 min with `abs(tone) ≥ 7`.
+- **Initial severity:** `elevated`. Escalate: `high` at `hit_count >= 10` mentions OR seeing `abs(tone) >= 9` in any contributing signal.
+- **State:** `_BucketWindow` per cluster_key, plus tone tracking.
 - **DEFAULT: DISABLED** in v1 (`ODIN_PROMOTER_GDELT_ENABLED=false`). Planning task: verify real GDELT payload schema (`actor1_geo_lat/lon`, `tone`, `mention_count`). Enable only after schema confirmation.
 
 ## 5. ClusterStore Lifecycle
@@ -181,22 +205,41 @@ class ClusterState:
     created_ts: datetime
     contributing_signal_ids: list[str]    # bounded 50, in-memory
     incident_status: Literal["open", "promoted"]   # tracks external state
-    silenced_until: datetime | None       # cooldown after silence
 ```
 
 ```python
 class ClusterStore:
     _by_key: dict[str, ClusterState]
     _by_incident_id: dict[str, str]
-    _reserving: set[str]                  # in-flight create keys
+    _reserving: set[str]                          # in-flight create keys
+    _cooldowns: dict[str, datetime]               # cluster_key → expires_at (silence)
+    _termination_listeners: list[Callable[[str], None]]
     _lock: asyncio.Lock
     _clock: Callable[[], datetime]
 ```
 
+**Why `_cooldowns` is a separate dict:** silence drops the `ClusterState` immediately (the incident is closed for the Promoter), but the cooldown must survive that drop so subsequent hits within the cooldown window are still rejected. Mixing cooldown into `ClusterState` would force us to keep zombie states purely to remember "don't open a new one."
+
+**Termination listeners:** detectors register `on_cluster_terminated(cluster_key)` callbacks via `add_termination_listener()`. ClusterStore invokes them on Sweeper-close, promote-quiet-drop, and silence. All registration happens during Promoter init (before any signal is processed) so concurrency on the list is trivial.
+
 ### 5.1 handle(hit) — Phased Locking
+
+A `ClusterHit` arriving at `handle()` is already "actionable" by detector contract (threshold met or update for ignited cluster). `handle()` only decides create vs. update vs. drop based on store state.
 
 ```
 Phase 1 (under lock):
+    now = clock()
+
+    # Cooldown check first (survives state-drops from silence)
+    cooldown_until = _cooldowns.get(hit.cluster_key)
+    if cooldown_until is not None:
+        if now < cooldown_until:
+            log("promoter_cluster_silenced", cluster_key=hit.cluster_key,
+                cooldown_seconds=int((cooldown_until - now).total_seconds()))
+            return
+        else:
+            _cooldowns.pop(hit.cluster_key, None)      # expired — clean up
+
     existing = _by_key.get(hit.cluster_key)
 
     if existing is None:
@@ -205,16 +248,16 @@ Phase 1 (under lock):
         _reserving.add(hit.cluster_key)
         action = "create"
     elif existing.incident_status == "promoted":
-        existing.last_signal_ts = clock()              # internal only
+        existing.last_signal_ts = now                  # internal only
         log("promoter_promoted_absorb"); return
-    elif existing.silenced_until and clock() < existing.silenced_until:
-        log("promoter_cluster_silenced"); return
     else:
         action = "update"
 
 Phase 2 (outside lock — I/O):
     if action == "create":
         payload = build_create_request(hit)             # resolves coords + layer_hints
+        # Initial timeline is built from hit.contributing_signal_ids (≥ min_hits)
+        # by build_create_request; first entry is the trigger event.
         incident = await incident_store.create_incident(payload)
     else:  # update
         new_severity = apply_escalation_rule(...)
@@ -239,43 +282,91 @@ Phase 3 (under lock — finalize):
 ### 5.2 Promote semantics
 
 When the analyst calls `POST /incidents/{id}/promote`:
-- Neo4j status → `promoted`.
-- The next hit at the cluster sees `existing.incident_status == "promoted"` and is **silently absorbed** (only `last_signal_ts` updated, no Timeline, no SSE, no new incident).
-- **Note:** the Promoter does not actively watch the `incident.promote` SSE — it discovers the promotion lazily on the next hit. For v1 this is acceptable. If needed in v1.1, the Promoter can subscribe to the incident event stream.
-- After 15 min of quiet, the Sweeper drops the `ClusterState` from the store. The promoted incident **stays promoted in Neo4j**; the Sweeper does not auto-close it.
+1. Router performs the Neo4j status transition `open → promoted` (existing behavior).
+2. After the write succeeds, the handler calls:
+   ```python
+   cluster_store = getattr(request.app.state, "cluster_store", None)
+   if cluster_store is not None:
+       await cluster_store.mark_promoted(incident_id)
+   ```
+3. `mark_promoted(incident_id)`:
+   - Looks up `cluster_key` via `_by_incident_id`. No-op if absent (manual / non-Promoter incident).
+   - Under lock, sets `_by_key[cluster_key].incident_status = "promoted"`.
+   - Subsequent hits hit the `incident_status == "promoted"` branch in `handle()` and are silently absorbed (`last_signal_ts` updated, no Timeline, no SSE, no new incident).
+4. After 15 min of quiet (no new hits), the Sweeper drops the `ClusterState` from the store and fans out `on_cluster_terminated(cluster_key)` to detectors. The promoted incident **stays promoted in Neo4j**; the Sweeper does not auto-close it.
 
 ### 5.3 Silence semantics
 
 When the analyst calls `POST /incidents/{id}/silence`:
-- Neo4j status → `silenced`.
-- Next hit at the cluster: ClusterStore sets `silenced_until = clock() + 1h`, drops the existing ClusterState (silenced incident is closed for the Promoter).
-- Hits during cooldown are dropped with `promoter_cluster_silenced` log.
-- After cooldown expires, the next hit creates a fresh incident under the same cluster_key.
-- Cooldown is **in-memory only** — restart loses it. Accepted v1 trade-off.
+1. Router performs the Neo4j status transition `open → silenced` (existing behavior).
+2. After the write succeeds, the handler calls:
+   ```python
+   cluster_store = getattr(request.app.state, "cluster_store", None)
+   if cluster_store is not None:
+       await cluster_store.mark_silenced(
+           incident_id,
+           until=clock() + timedelta(seconds=config.silence_cooldown_sec),
+       )
+   ```
+3. `mark_silenced(incident_id, until)`:
+   - Looks up `cluster_key` via `_by_incident_id`. No-op if absent.
+   - Under lock, removes `_by_key[cluster_key]` and `_by_incident_id[incident_id]`.
+   - Writes `_cooldowns[cluster_key] = until`.
+   - Fans out `on_cluster_terminated(cluster_key)` to detectors.
+4. While a `_cooldowns` entry is live, every hit at that cluster_key is dropped with `promoter_cluster_silenced` log.
+5. When a hit arrives after `_cooldowns[cluster_key]` has expired, Phase 1 cleans up the entry and proceeds normally → a fresh incident may be created.
+6. Cooldowns are **in-memory only**; backend restart loses them. Documented v1 trade-off.
 
 ### 5.4 Sweeper (60 s tick)
+
+The Sweeper has two responsibilities: close stale clusters and expire stale cooldowns. Both run on every tick.
 
 ```
 async def sweeper_loop():
     while not stop_event.is_set():
-        await asyncio.sleep(60)
-        async with cluster_store._lock:
-            now = clock()
-            candidates = [s for s in _by_key.values()
-                          if (now - s.last_signal_ts) > QUIET_WINDOW]
-        for state in candidates:
-            if state.incident_status == "open":
-                try:
-                    closed = await incident_store.close_incident(state.incident_id)
+        await asyncio.sleep(config.sweeper_tick_sec)
+        await self._sweep_once()
+
+async def _sweep_once():
+    now = clock()
+    # 1) Identify stale clusters under lock
+    async with cluster_store._lock:
+        stale = [s for s in _by_key.values()
+                 if (now - s.last_signal_ts).total_seconds() > config.quiet_window_sec]
+        # 2) Expire cooldowns (no I/O needed)
+        expired_cooldowns = [k for k, t in _cooldowns.items() if t <= now]
+        for k in expired_cooldowns:
+            _cooldowns.pop(k, None)
+
+    # 3) Process stale clusters (DB I/O outside lock)
+    for state in stale:
+        if state.incident_status == "open":
+            try:
+                closed = await incident_store.close_incident(
+                    state.incident_id,
+                    status=IncidentStatus.CLOSED,
+                )
+                if closed is not None:
                     publish("incident.close", closed)
-                except Exception as exc:
-                    log.warning("promoter_close_failed", incident_id=state.incident_id, error=str(exc))
-                    continue                            # retry next tick
-            # promoted clusters are silently dropped, no DB write
-            async with cluster_store._lock:
-                _by_key.pop(state.cluster_key, None)
-                _by_incident_id.pop(state.incident_id, None)
+            except Exception as exc:
+                log.warning("promoter_close_failed",
+                            incident_id=state.incident_id, error=str(exc))
+                continue                                # retry next tick — state stays in store
+        # promoted clusters are dropped silently (no DB write)
+
+        async with cluster_store._lock:
+            _by_key.pop(state.cluster_key, None)
+            _by_incident_id.pop(state.incident_id, None)
+        # 4) Fan out termination callback (outside lock — listeners are local + cheap)
+        for listener in self._termination_listeners:
+            try:
+                listener(state.cluster_key)
+            except Exception:
+                log.warning("promoter_terminate_callback_failed",
+                            cluster_key=state.cluster_key)
 ```
+
+The Sweeper passes `status=IncidentStatus.CLOSED` explicitly to `incident_store.close_incident` — there is no implicit default. Note `close_incident` is idempotent (§3.2): a non-terminal incident is closed; a terminal one is returned unchanged. The Sweeper publishes `incident.close` only when `closed is not None`, so a missing incident does not leak an SSE frame.
 
 ### 5.5 Rehydrate — Subscribe First, Then Rehydrate
 
@@ -306,8 +397,8 @@ async def run():
                 created_ts=incident.trigger_ts,
                 contributing_signal_ids=[],
                 incident_status=incident.status if incident.status in {"open","promoted"} else "open",
-                silenced_until=None,
             )
+        cluster_store._by_incident_id = {s.incident_id: s.cluster_key for s in cluster_store._by_key.values()}
         # PHASE B: drain queue — every envelope now sees populated store
         await self._drain_loop()
     finally:
@@ -451,28 +542,54 @@ Structlog only — no Prometheus / OTel in v1.
 
 No `freezegun`. `Promoter` and `ClusterStore` accept `clock: Callable[[], datetime]`. Tests use `FakeClock` (mutable wrapper).
 
-### 9.1 Unit (~25 tests)
+### 9.1 Unit (~30 tests)
 
-**Per detector (4 modules × ~3 cases):**
-- FIRMS: URL coord parse (happy + malformed); bucket boundaries (negatives); ClusterHit fields correct.
-- Severity: deque pruning; threshold reached / not reached; `coords=None` set.
-- Telegram: title normalization; 5-gram Jaccard correctness; domain-match boost; LRU eviction; **embeddings flag = true → detector disables itself, no network call**.
-- GDELT: feature flag off → no hit; payload field mapping; geo+actor bucket.
+**Per detector (4 modules × ~4 cases):**
+- FIRMS:
+  - URL coord parse (happy + malformed → returns None).
+  - Pre-trigger: 2 signals in bucket → both return `None`, deque has 2 entries.
+  - Ignition: 3rd signal → returns `ClusterHit` with `contributing_signal_ids` of length 3.
+  - Post-ignition update: 4th signal → returns `ClusterHit` with single contributing id.
+  - `on_cluster_terminated(key)` resets the bucket → next signal restarts pre-trigger accumulation.
+- Severity:
+  - Deque prunes signals older than 15 min.
+  - 4 high signals → all None; 5th → ignition hit with `coords=None`.
+  - `on_cluster_terminated("severity:global")` clears global window.
+- Telegram:
+  - Title normalization (URLs, punctuation, casing).
+  - 5-gram Jaccard correctness (happy 0.6, edge 0.55, miss 0.3).
+  - Domain-match boost lowers threshold to 0.45.
+  - LRU eviction at 51st centroid (least-recently-seen evicted, terminates).
+  - Ignition vs. update emit pattern (analogous to FIRMS).
+  - **Embeddings flag = true → detector logs warning at init, all `detect()` calls return None, no network call.**
+- GDELT:
+  - Feature flag off → all `detect()` return None.
+  - Payload field mapping (`actor1_geo_lat/lon`, `tone`, `mention_count`).
+  - geo+actor bucket determinism.
+  - Ignition vs. update analog.
 
-**ClusterStore (~6 cases):** novel key → create+finalize; existing key → update; promoted state → silent absorb; silenced cooldown → silent drop; `_reserving` race → `promoter_race_dropped`; Sweeper: stale open → closed, stale promoted → dropped (no DB), non-stale → unchanged.
+**ClusterStore (~8 cases):**
+- Novel key → reserves, creates, finalizes, publishes `incident.open`.
+- Existing key → updates, publishes `incident.update`.
+- `_reserving` race: second concurrent novel hit → `promoter_race_dropped`.
+- `mark_promoted(incident_id)`: sets `incident_status="promoted"`; subsequent hit → silent absorb.
+- `mark_silenced(incident_id, until)`: drops state, sets `_cooldowns[key]=until`, fires `on_cluster_terminated`.
+- Cooldown survives state drop: after `mark_silenced`, next hit within cooldown → dropped with `promoter_cluster_silenced`.
+- Cooldown expires: next hit after `until` → cooldown popped, new incident created.
+- Sweeper: stale open → close DB + publish + drop + callback; stale promoted → drop + callback only; non-stale → unchanged; expired cooldowns popped on every tick.
 
-**Helpers:** `max_severity`, `apply_escalation_rule`, `_extract_cluster_key`, `_estimate_last_ts`.
+**Helpers:** `max_severity`, `apply_escalation_rule` (per-detector escalation curves), `_extract_cluster_key`, `_estimate_last_ts` (with empty timeline fallback), `build_create_request` (coord resolution + `map:no_pin` injection).
 
 ### 9.2 Integration (~6 tests, `tests/integration/test_promoter_pipeline.py`)
 
 Uses `FakeIncidentStore` (in-process dict) + `FakeIncidentEventStream` (collecting list) + real ClusterStore + real Detectors + `FakeClock`:
 
-1. **FIRMS cluster builds** — 3 FIRMS signals same bucket → 1 `incident.open` + 2 `incident.update`. Advance clock 16 min → Sweeper emits `incident.close`.
-2. **Severity burst** — 5 high signals from 3 sources in 14 min → 1 `incident.open` with `coords=(0,0)` and `layer_hints` containing `map:no_pin`. (Test forces `SEVERITY_ENABLED=true`.)
-3. **Telegram cluster** — 4 titles with token overlap + 1 unrelated → 1 incident with 3 updates + 1 unmatched signal.
-4. **Promote mid-cluster** — 2 FIRMS → open, simulate `incident.promote` (set state.incident_status), 2 more FIRMS same bucket → no updates, no new incident. Clock advance 16 min → cluster dropped from store, promoted incident remains promoted.
-5. **Silence mid-cluster** — 2 Telegram → open, simulate `incident.silence`, 1 more hit → dropped. Advance 61 min, new hit → fresh incident.
-6. **Rehydrate-then-subscribe** — Pre-seed FakeIncidentStore with 1 open auto-incident. Construct Promoter; call `_subscribe()`; enqueue a matching FIRMS envelope via the SignalStream subscribe queue; call `_rehydrate()`; call `_drain_one()`. Assert: 1 `incident.update`, **0** `incident.open`. (`Promoter.run` is structured as three composable async methods — `_subscribe`, `_rehydrate`, `_drain_loop` — so this test does not need mocked timing.)
+1. **FIRMS cluster builds** — Signals 1+2 into the same bucket → **0** events emitted (pre-trigger). Signal 3 → exactly **1 `incident.open`** whose timeline contains all 3 contributing entries. Signal 4 → **1 `incident.update`**. Advance clock 16 min, run sweeper → **1 `incident.close`** plus `on_cluster_terminated` fired on the FIRMS detector.
+2. **Severity burst** — Signals 1–4 high → 0 events. Signal 5 → 1 `incident.open` with `coords=(0,0)` and `layer_hints` containing `map:no_pin`. (Test forces `SEVERITY_ENABLED=true` via env override fixture.)
+3. **Telegram cluster** — 4 titles with token overlap + 1 unrelated → 1 `incident.open` (at the 3rd matching) + 1 `incident.update` (at the 4th) + 0 events for the unrelated.
+4. **Promote mid-cluster via router-style call** — 3 FIRMS → 1 open. Call `cluster_store.mark_promoted(incident_id)` directly (router behavior). 2 more FIRMS same bucket → 0 updates, 0 new incidents (silent absorb). Advance clock 16 min, run sweeper → cluster dropped from store, `on_cluster_terminated` fired, but **no `incident.close` published** (status remains `promoted`).
+5. **Silence mid-cluster via router-style call** — 3 Telegram → 1 open. Call `cluster_store.mark_silenced(incident_id, until=clock()+1h)`. Assert: state removed, `_cooldowns[key]` populated, `on_cluster_terminated` fired. 1 more hit during cooldown → dropped with `promoter_cluster_silenced` log; cooldown still in `_cooldowns`. Advance clock 61 min, send fresh signal sequence → 3 signals later, **fresh `incident.open`** under same cluster_key.
+6. **Rehydrate-then-subscribe** — Pre-seed FakeIncidentStore with 1 open auto-incident. Construct Promoter; call `_subscribe()`; enqueue a matching FIRMS envelope via the SignalStream subscribe queue; call `_rehydrate()`; call `_drain_one()`. Assert: 1 `incident.update`, **0** `incident.open`. (`Promoter.run` is structured as four composable async methods — `_subscribe`, `_rehydrate`, `_drain_loop`, `_drain_one` — so this test does not need mocked timing.)
 
 ### 9.3 E2E (1 test, `tests/e2e/test_promoter_e2e.py`)
 
@@ -494,7 +611,7 @@ Real FastAPI TestClient + real SignalStream singleton + `redis.asyncio` mocked v
 | Telegram Jaccard too sticky in noisy channels | Conservative defaults (0.55, 0.45 with domain boost). Operator can tune via env without code change. |
 | Phase-1/Phase-3 race drops occasional hits | At observed rates (~10/min total), drop probability is < 1%. Accepted; can be revisited if logs show `promoter_race_dropped` clustering. |
 | Cooldown lost on restart | Accepted v1 trade-off (in-memory only). |
-| Promoter discovers `promote` lazily (on next hit), not in real time | Hits between promote and Sweeper-drop merely update `last_signal_ts` in-memory. If real-time matters in v1.1, subscribe Promoter to the incident event stream. |
+| Promote/silence wiring lives in two places (router + ClusterStore) | Router calls `mark_promoted` / `mark_silenced` after a successful Neo4j write. If a future caller writes to Neo4j without going through the router (e.g., a background worker), Promoter state will diverge. Mitigation: only the existing router endpoints write the `promoted` / `silenced` states; this is enforced by code review. |
 | Restart-rehydrated incidents may auto-close quickly | Intentional — prevents zombie clusters. Documented. |
 | Backend gets a new responsibility (pattern detection) on top of API serving | Acceptable for v1 scale; if signals/sec exceeds ~50, consider extracting to a dedicated worker. |
 
@@ -512,12 +629,12 @@ Real FastAPI TestClient + real SignalStream singleton + `redis.asyncio` mocked v
 
 The implementation plan (`writing-plans` skill) will break this into:
 
-1. Skeleton & contract — `Detector` protocol, `ClusterHit`, `PromoterConfig`, `ClusterStore` shell, lifespan wiring (no detectors yet, no-op Promoter behind master flag).
-2. `apply_signal_update` + idempotent `close_incident` in `incident_store` (+ tests).
-3. FIRMS detector + integration test #1.
-4. ClusterStore full lifecycle: Promote, Silence, Sweeper, Rehydrate (+ tests #4, #5, #6).
-5. Telegram detector (shingles) + test #3 + embeddings-flag-disabled test.
-6. Severity detector (default-off) + test #2.
-7. GDELT detector skeleton (default-off, schema unverified) + smoke test.
-8. Admin inspector endpoint + smoke test.
-9. E2E test + `.env.example` + release notes.
+1. **Skeleton & contract** — `Detector` protocol (incl. `on_cluster_terminated`), `ClusterHit`, `PromoterConfig`, `ClusterStore` shell (with `_cooldowns`, `_termination_listeners`, `mark_promoted`, `mark_silenced`, `add_termination_listener`), lifespan wiring (no detectors yet, no-op Promoter behind master flag). Router wiring for `promote_incident` / `silence_incident` → `cluster_store.mark_promoted` / `mark_silenced` (with `cluster_store is None` graceful no-op).
+2. **`incident_store`** — add `apply_signal_update`, `list_owned_for_rehydrate`, tighten `close_incident` to idempotent (+ tests).
+3. **FIRMS detector** with per-bucket pre-trigger deque, ignition, `on_cluster_terminated` reset (+ unit tests + integration test #1).
+4. **ClusterStore full lifecycle** — Sweeper (clusters + cooldowns), Rehydrate (subscribe-first), termination-callback fan-out (+ unit ClusterStore tests + integration tests #4, #5, #6).
+5. **Telegram detector** (shingles + ignition) + test #3 + embeddings-flag-disabled test.
+6. **Severity detector** (default-off) + test #2.
+7. **GDELT detector skeleton** (default-off, schema unverified) + smoke test.
+8. **Admin inspector endpoint** + smoke test.
+9. **E2E test** + `.env.example` + release notes (incl. "enable Severity only after frontend `map:no_pin` lands").
