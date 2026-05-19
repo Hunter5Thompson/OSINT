@@ -80,6 +80,50 @@ async def admin_trigger(payload: IncidentCreateRequest) -> Incident:
     return record
 
 
+@router.get(
+    "/_admin/promoter",
+    dependencies=[Depends(_require_admin)],
+)
+async def admin_promoter_inspector(request: Request) -> dict:
+    """Read-only snapshot of the auto-promoter ClusterStore."""
+    cluster_store = getattr(request.app.state, "cluster_store", None)
+    cfg = getattr(request.app.state, "promoter_config", None)
+    if cluster_store is None or cfg is None:
+        return {
+            "enabled_detectors": [],
+            "config": {},
+            "active_clusters": [],
+            "cooldowns": [],
+        }
+    active = [
+        {
+            "cluster_key": s.cluster_key,
+            "incident_id": s.incident_id,
+            "detector_id": s.detector_id,
+            "incident_status": s.incident_status,
+            "severity": s.severity,
+            "hit_count": s.hit_count,
+            "last_signal_ts": s.last_signal_ts.isoformat(),
+            "created_ts": s.created_ts.isoformat(),
+        }
+        for s in cluster_store.active_clusters()
+    ]
+    cooldowns = [
+        {"cluster_key": k, "cooldown_until": t.isoformat()}
+        for k, t in cluster_store.cooldowns().items()
+    ]
+    return {
+        "enabled_detectors": cfg.enabled_detector_ids(),
+        "config": {
+            "quiet_window_sec": cfg.quiet_window_sec,
+            "sweeper_tick_sec": cfg.sweeper_tick_sec,
+            "silence_cooldown_sec": cfg.silence_cooldown_sec,
+        },
+        "active_clusters": active,
+        "cooldowns": cooldowns,
+    }
+
+
 @router.get("/{incident_id}", response_model=Incident)
 async def get_incident(incident_id: str) -> Incident:
     try:
