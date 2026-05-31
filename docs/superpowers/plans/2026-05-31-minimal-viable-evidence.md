@@ -952,9 +952,10 @@ Replace the block from `if not results:` through `return _clip_text(output, TOOL
         if graph_blocks:
             graph_text = "\n---\n[Graph Context]\n" + "\n\n".join(graph_blocks)
 
-        evidence_budget = TOOL_OUTPUT_MAX_CHARS - len(graph_text)
+        header = f"[Knowledge Base Evidence for: {query}]\n"
+        evidence_budget = TOOL_OUTPUT_MAX_CHARS - len(graph_text) - len(header)
         pack = format_evidence_pack(items, budget=max(evidence_budget, 0))
-        output = f"[Knowledge Base Evidence for: {query}]\n{pack}"
+        output = header + pack
         if graph_text and len(output) + len(graph_text) <= TOOL_OUTPUT_MAX_CHARS:
             output += graph_text
         return output
