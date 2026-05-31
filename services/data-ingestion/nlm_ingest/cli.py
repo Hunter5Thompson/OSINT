@@ -30,7 +30,12 @@ def _get_db():
     settings = _get_settings()
     db_path = Path(settings.nlm_data_dir) / "state.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    return init_db(db_path)
+    db = init_db(db_path)
+    from nlm_ingest.migrate import migrate_local
+    # Idempotent but O(extraction-files) per call (globs extractions/); acceptable at
+    # current scale — called once per command, not in a loop.
+    migrate_local(db, Path(settings.nlm_data_dir))
+    return db
 
 
 def _sources_needing_extract(data_dir, sources):
@@ -441,3 +446,35 @@ def retry(notebook_id: str, phase: str):
         "extract": extract, "ingest": ingest,
     }
     ctx.invoke(phase_commands[phase], notebook_id=notebook_id)
+
+
+@cli.command()
+@click.option("--local-only", is_flag=True, help="Only SQLite/files, no Neo4j backfill")
+@click.option("--neo4j-only", is_flag=True, help="Only Neo4j edge backfill, no local part")
+def migrate(local_only: bool, neo4j_only: bool):
+    """One-time migration to the multi-source schema.
+
+    Local part (SQLite/files) and Neo4j backfill are separately runnable (P2#10):
+    an unreachable Neo4j does not block the local part.
+    """
+    if local_only and neo4j_only:
+        raise click.UsageError("--local-only and --neo4j-only are mutually exclusive")
+    from nlm_ingest.migrate import migrate_neo4j_edges
+    settings = _get_settings()
+
+    if not neo4j_only:
+        # Auto-migration in _get_db() does the local part (Finding #3) — no second
+        # migrate_local call here.
+        _get_db().close()
+        click.echo("Local migration done.")
+    if local_only:
+        return
+
+    async def _backfill():
+        async with httpx.AsyncClient() as client:
+            await migrate_neo4j_edges(
+                client, settings.neo4j_http_url,
+                settings.neo4j_user, settings.neo4j_password)
+
+    asyncio.run(_backfill())
+    click.echo("Neo4j backfill done.")

@@ -1,6 +1,8 @@
 """Verify nlm_ingest.cli passes ingestion_vllm_* to extract_with_qwen."""
 
 import json
+import sqlite3
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -349,3 +351,76 @@ async def test_ingest_one_notebook_partial_failure_is_not_ok(tmp_path):
         qdrant_write=good_write,
     )
     assert ok_all is True and ok_partial is False
+
+
+def test_migrate_command_runs_local_via_get_db(tmp_path, monkeypatch):
+    # local-only runs via _get_db() (which executes migrate_local idempotently) — no
+    # duplicate migrate_local call (Finding #3). Fully isolated (P1#5).
+    fake_db = MagicMock()
+    monkeypatch.setattr(cli_mod, "_get_db", MagicMock(return_value=fake_db))
+    monkeypatch.setattr(
+        cli_mod, "_get_settings",
+        lambda: SimpleNamespace(nlm_data_dir=str(tmp_path)),
+    )
+    res = CliRunner().invoke(cli, ["migrate", "--local-only"])
+    assert res.exit_code == 0
+    cli_mod._get_db.assert_called_once()      # auto-migration is the mechanism
+    fake_db.close.assert_called_once()
+
+
+def test_migrate_command_rejects_both_flags():
+    # --local-only and --neo4j-only are mutually exclusive -> UsageError (exit != 0).
+    result = CliRunner().invoke(cli, ["migrate", "--local-only", "--neo4j-only"])
+    assert result.exit_code != 0
+    assert "mutually exclusive" in result.output.lower()
+
+
+def test_migrate_command_neo4j_only_skips_local(monkeypatch):
+    # --neo4j-only runs the Neo4j backfill and SKIPS the local part: _get_db must
+    # not be called, migrate_neo4j_edges (locally imported from nlm_ingest.migrate)
+    # must be awaited once.
+    import nlm_ingest.migrate as mig_mod
+
+    fake_get_db = MagicMock()
+    monkeypatch.setattr(cli_mod, "_get_db", fake_get_db)
+    monkeypatch.setattr(
+        cli_mod,
+        "_get_settings",
+        lambda: SimpleNamespace(
+            neo4j_http_url="http://neo", neo4j_user="u", neo4j_password="p"
+        ),
+    )
+    backfill = AsyncMock()
+    monkeypatch.setattr(mig_mod, "migrate_neo4j_edges", backfill)
+
+    result = CliRunner().invoke(cli, ["migrate", "--neo4j-only"], catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    backfill.assert_awaited_once()
+    fake_get_db.assert_not_called()
+
+
+def test_get_db_auto_migrates(tmp_path, monkeypatch):
+    # Old-schema DB under nlm_data_dir/state.db -> _get_db auto-migrates.
+    db_path = tmp_path / "state.db"
+    old = sqlite3.connect(str(db_path))
+    old.executescript(
+        "CREATE TABLE notebooks (id TEXT PRIMARY KEY, title TEXT, "
+        "source_name TEXT, created_at TEXT);"
+        "CREATE TABLE phase_status (notebook_id TEXT, phase TEXT, "
+        "status TEXT CHECK(status IN ('pending','running','completed','failed')), "
+        "error TEXT, started_at TEXT, finished_at TEXT, retry_count INTEGER DEFAULT 0, "
+        "updated_at TEXT, PRIMARY KEY (notebook_id, phase));"
+    )
+    old.close()
+    monkeypatch.setattr(
+        cli_mod, "_get_settings",
+        lambda: SimpleNamespace(nlm_data_dir=str(tmp_path)),
+    )
+    db = cli_mod._get_db()
+    db.execute("INSERT OR IGNORE INTO notebooks (id) VALUES ('nb1')")
+    db.execute(
+        "INSERT INTO phase_status (notebook_id, phase, status) "
+        "VALUES ('nb1','transcribe','skipped')"
+    )
+    db.commit()  # accepts 'skipped' -> migration ran
+    db.close()

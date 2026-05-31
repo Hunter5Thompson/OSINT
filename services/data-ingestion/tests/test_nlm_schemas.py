@@ -60,7 +60,7 @@ class TestEntity:
         with pytest.raises(ValidationError):
             Entity(name="NATO", type="INVALID_TYPE", confidence=0.9)
 
-    def test_schema_accepts_LOCATION(self):
+    def test_schema_accepts_location(self):
         """LOCATION is a canonical EntityType and validates without error."""
         e = Entity(name="Berlin", type="LOCATION", confidence=0.9)
         assert e.type == "LOCATION"

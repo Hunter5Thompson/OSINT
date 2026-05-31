@@ -47,7 +47,8 @@ async def extract_with_qwen(
     # PR alongside the EntityType Literal expansion. The v2 prompt is loaded
     # only when callers pass prompt_version="v2"; the default-OFF feature flag
     # `entity_type_normalize` and the v1 prompt default together preserve the
-    # pre-Phase-5 NLM behavior. See docs/superpowers/plans/2026-04-30-patch-c-entity-canonicalization.md
+    # pre-Phase-5 NLM behavior. See
+    # docs/superpowers/plans/2026-04-30-patch-c-entity-canonicalization.md
     prompt_version: str = "v1",
 ) -> Extraction:
     prompt_template = load_prompt(prompt_version)

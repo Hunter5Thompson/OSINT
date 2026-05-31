@@ -11,11 +11,17 @@ def _make_extraction() -> Extraction:
     return Extraction(
         notebook_id="nb1",
         entities=[
-            Entity(name="NATO", type="ORGANIZATION", aliases=["North Atlantic Treaty Organization"], confidence=0.95),
+            Entity(
+                name="NATO", type="ORGANIZATION",
+                aliases=["North Atlantic Treaty Organization"], confidence=0.95,
+            ),
             Entity(name="China", type="COUNTRY", aliases=["PRC"], confidence=0.9),
         ],
         relations=[
-            Relation(source="China", target="NATO", type="COMPETES_WITH", evidence="opposes expansion", confidence=0.75),
+            Relation(
+                source="China", target="NATO", type="COMPETES_WITH",
+                evidence="opposes expansion", confidence=0.75,
+            ),
         ],
         claims=[
             Claim(
@@ -34,7 +40,9 @@ _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:7474/db/neo4j/tx/commit
 class TestIngestExtraction:
     @pytest.mark.asyncio
     async def test_sends_cypher_statements(self):
-        mock_response = httpx.Response(200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST)
+        mock_response = httpx.Response(
+            200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST
+        )
         client = AsyncMock(spec=httpx.AsyncClient)
         client.post.return_value = mock_response
 
@@ -52,7 +60,9 @@ class TestIngestExtraction:
 
     @pytest.mark.asyncio
     async def test_batch_contains_source_entity_claim(self):
-        mock_response = httpx.Response(200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST)
+        mock_response = httpx.Response(
+            200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST
+        )
         client = AsyncMock(spec=httpx.AsyncClient)
         client.post.return_value = mock_response
 
@@ -75,7 +85,9 @@ class TestIngestExtraction:
 
     @pytest.mark.asyncio
     async def test_source_tier_applied(self):
-        mock_response = httpx.Response(200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST)
+        mock_response = httpx.Response(
+            200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST
+        )
         client = AsyncMock(spec=httpx.AsyncClient)
         client.post.return_value = mock_response
 
@@ -89,13 +101,18 @@ class TestIngestExtraction:
         )
         payload = client.post.call_args.kwargs.get("json") or client.post.call_args[1].get("json")
         statements = payload["statements"]
-        source_stmt = next(s for s in statements if "Source" in s["statement"] and "quality_tier" in s["statement"])
+        source_stmt = next(
+            s for s in statements
+            if "Source" in s["statement"] and "quality_tier" in s["statement"]
+        )
         assert source_stmt["parameters"]["quality_tier"] == "tier_1"
 
     @pytest.mark.asyncio
     async def test_batch_contains_relation_statement(self):
         """Patch A: relations from extraction are persisted via templates."""
-        mock_response = httpx.Response(200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST)
+        mock_response = httpx.Response(
+            200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST
+        )
         client = AsyncMock(spec=httpx.AsyncClient)
         client.post.return_value = mock_response
 
