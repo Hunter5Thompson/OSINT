@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # Qdrant collection
     qdrant_collection: str = "odin_intel"
+    enable_hybrid: bool = False
 
     # HTTP settings
     http_timeout: float = 30.0

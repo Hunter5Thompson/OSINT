@@ -178,3 +178,9 @@ class TestNeo4jSettings:
             s = Settings(_env_file=None)
             assert s.neo4j_url == "bolt://neo4j:7687"
             assert s.neo4j_http_url == "http://neo4j:7474"
+
+
+def test_settings_has_enable_hybrid_default_false():
+    # hermetic: no .env / no env vars
+    with patch.dict(os.environ, {}, clear=True):
+        assert Settings(_env_file=None).enable_hybrid is False

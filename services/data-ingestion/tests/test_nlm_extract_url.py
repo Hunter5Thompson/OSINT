@@ -7,18 +7,15 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from nlm_ingest.extract import extract_with_qwen
-from nlm_ingest.schemas import Transcript
+from nlm_ingest.schemas import ExtractionSource
 
 
-def _transcript():
-    # Transcript requires notebook_id, duration_seconds, language, segments, full_text
-    # (see nlm_ingest/schemas.py:33-38).
-    return Transcript(
+def _source():
+    return ExtractionSource(
         notebook_id="nb1",
-        duration_seconds=10.0,
-        language="en",
-        segments=[],
-        full_text="hello world",
+        source_id="transcript",
+        source_kind="transcript",
+        text="hello world",
     )
 
 
@@ -47,7 +44,7 @@ async def test_extract_appends_v1_chat_completions_to_base_url():
     client.post.side_effect = fake_post
 
     await extract_with_qwen(
-        transcript=_transcript(),
+        source=_source(),
         metadata={},
         client=client,
         vllm_url="http://192.168.178.39:8000",

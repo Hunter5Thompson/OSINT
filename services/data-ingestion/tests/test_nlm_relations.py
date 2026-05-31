@@ -44,6 +44,8 @@ def _make_extraction_with_relation() -> Extraction:
         ],
         extraction_model="qwen3.5",
         prompt_version="v1",
+        source_kind="transcript",
+        source_id="transcript",
     )
 
 

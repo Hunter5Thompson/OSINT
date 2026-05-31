@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS notebooks (
 CREATE TABLE IF NOT EXISTS phase_status (
     notebook_id TEXT REFERENCES notebooks(id),
     phase TEXT CHECK(phase IN ('export', 'transcribe', 'extract', 'ingest')),
-    status TEXT CHECK(status IN ('pending', 'running', 'completed', 'failed')),
+    status TEXT CHECK(status IN ('pending', 'running', 'completed', 'failed', 'skipped')),
     error TEXT,
     started_at TEXT,
     finished_at TEXT,
@@ -105,14 +105,75 @@ def get_all_status(db):
     return list(notebooks.values())
 
 
+# Explicit phase DAG instead of linear PHASE_ORDER.
+# transcribe is NOT a prereq of extract (reports are audio-independent).
+PHASE_PREREQS = {
+    "transcribe": ["export"],
+    "extract": ["export"],
+    "ingest": ["extract"],
+}
+
+_SATISFIED = {"completed", "skipped"}
+
+
 def validate_retry(db, notebook_id, phase):
-    idx = PHASE_ORDER.index(phase)
-    for prev_phase in PHASE_ORDER[:idx]:
+    for prev_phase in PHASE_PREREQS.get(phase, []):
         status = get_phase_status(db, notebook_id, prev_phase)
-        if status != "completed":
+        if status not in _SATISFIED:
             raise ValueError(
                 f"Cannot retry '{phase}': prerequisite '{prev_phase}' is '{status}'"
             )
+
+
+def valid_extraction_exists(data_dir, source) -> bool:
+    """Valid, provenance-consistent extraction file for `source` (Finding #5)."""
+    from nlm_ingest.schemas import Extraction  # deferred import: keep state.py import-light
+
+    p = data_dir / "extractions" / f"{source.notebook_id}.{source.source_id}.json"
+    if not p.exists():
+        return False
+    try:
+        e = Extraction.model_validate_json(p.read_text())
+    except Exception:
+        return False
+    return (
+        e.notebook_id == source.notebook_id
+        and e.source_id == source.source_id
+        and e.source_kind == source.source_kind
+    )
+
+
+def reconcile_phases(db, data_dir, notebook_id, *, audio_status, report_status):
+    """Keep extract/ingest/transcribe consistent with the source inventory (load_sources).
+
+    audio_status in {downloaded,absent,failed}; report_status in {complete,failed}.
+    """
+    from nlm_ingest.sources import load_sources  # deferred import: keep state.py import-light
+
+    # Audio appeared after skipped -> reactivate transcribe, extract, ingest.
+    if (
+        audio_status in ("downloaded", "failed")
+        and get_phase_status(db, notebook_id, "transcribe") == "skipped"
+    ):
+        for ph in ("transcribe", "extract", "ingest"):
+            set_phase_status(db, notebook_id, ph, "pending")
+
+    sources = load_sources(data_dir, notebook_id)
+
+    # Terminal skipped: no extractable source AND no audio AND reports complete.
+    if not sources and audio_status == "absent" and report_status == "complete":
+        for ph in ("transcribe", "extract", "ingest"):
+            set_phase_status(db, notebook_id, ph, "skipped")
+        return
+
+    # Source lacks a valid extraction file -> reactivate extract/ingest.
+    needs_extract = not all(
+        valid_extraction_exists(data_dir, s) for s in sources
+    )
+    if needs_extract:
+        for ph in ("extract", "ingest"):
+            if get_phase_status(db, notebook_id, ph) not in ("running",):
+                set_phase_status(db, notebook_id, ph, "pending")
 
 
 def attempt_retry(db, notebook_id, phase):

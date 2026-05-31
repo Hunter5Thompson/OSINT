@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from nlm_ingest.ingest_neo4j import ingest_extraction
+from nlm_ingest.ingest_neo4j import _build_statements, ingest_extraction
 from nlm_ingest.schemas import Claim, Entity, Extraction, Relation
 
 
@@ -11,11 +11,17 @@ def _make_extraction() -> Extraction:
     return Extraction(
         notebook_id="nb1",
         entities=[
-            Entity(name="NATO", type="ORGANIZATION", aliases=["North Atlantic Treaty Organization"], confidence=0.95),
+            Entity(
+                name="NATO", type="ORGANIZATION",
+                aliases=["North Atlantic Treaty Organization"], confidence=0.95,
+            ),
             Entity(name="China", type="COUNTRY", aliases=["PRC"], confidence=0.9),
         ],
         relations=[
-            Relation(source="China", target="NATO", type="COMPETES_WITH", evidence="opposes expansion", confidence=0.75),
+            Relation(
+                source="China", target="NATO", type="COMPETES_WITH",
+                evidence="opposes expansion", confidence=0.75,
+            ),
         ],
         claims=[
             Claim(
@@ -25,6 +31,8 @@ def _make_extraction() -> Extraction:
         ],
         extraction_model="qwen3.5",
         prompt_version="v1",
+        source_kind="transcript",
+        source_id="transcript",
     )
 
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:7474/db/neo4j/tx/commit")
@@ -32,7 +40,9 @@ _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:7474/db/neo4j/tx/commit
 class TestIngestExtraction:
     @pytest.mark.asyncio
     async def test_sends_cypher_statements(self):
-        mock_response = httpx.Response(200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST)
+        mock_response = httpx.Response(
+            200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST
+        )
         client = AsyncMock(spec=httpx.AsyncClient)
         client.post.return_value = mock_response
 
@@ -50,7 +60,9 @@ class TestIngestExtraction:
 
     @pytest.mark.asyncio
     async def test_batch_contains_source_entity_claim(self):
-        mock_response = httpx.Response(200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST)
+        mock_response = httpx.Response(
+            200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST
+        )
         client = AsyncMock(spec=httpx.AsyncClient)
         client.post.return_value = mock_response
 
@@ -73,7 +85,9 @@ class TestIngestExtraction:
 
     @pytest.mark.asyncio
     async def test_source_tier_applied(self):
-        mock_response = httpx.Response(200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST)
+        mock_response = httpx.Response(
+            200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST
+        )
         client = AsyncMock(spec=httpx.AsyncClient)
         client.post.return_value = mock_response
 
@@ -87,13 +101,18 @@ class TestIngestExtraction:
         )
         payload = client.post.call_args.kwargs.get("json") or client.post.call_args[1].get("json")
         statements = payload["statements"]
-        source_stmt = next(s for s in statements if "Source" in s["statement"] and "quality_tier" in s["statement"])
+        source_stmt = next(
+            s for s in statements
+            if "Source" in s["statement"] and "quality_tier" in s["statement"]
+        )
         assert source_stmt["parameters"]["quality_tier"] == "tier_1"
 
     @pytest.mark.asyncio
     async def test_batch_contains_relation_statement(self):
         """Patch A: relations from extraction are persisted via templates."""
-        mock_response = httpx.Response(200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST)
+        mock_response = httpx.Response(
+            200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST
+        )
         client = AsyncMock(spec=httpx.AsyncClient)
         client.post.return_value = mock_response
 
@@ -136,3 +155,36 @@ class TestIngestExtraction:
                 neo4j_user="neo4j",
                 neo4j_password="odin_yggdrasil",
             )
+
+
+def _extraction(**kw):
+    base = dict(
+        notebook_id="nb1",
+        entities=[],
+        relations=[],
+        claims=[
+            Claim(
+                statement="X happened",
+                type="factual",
+                polarity="positive",
+                entities_involved=[],
+                confidence=0.9,
+                temporal_scope="2026",
+            )
+        ],
+        extraction_model="qwen",
+        prompt_version="v1",
+        source_kind="report",
+        source_id="rep-a",
+    )
+    base.update(kw)
+    return Extraction(**base)
+
+
+def test_link_claim_document_carries_provenance():
+    stmts = _build_statements(_extraction(), "RAND")
+    link = [s for s in stmts if "EXTRACTED_FROM" in s["statement"]][0]
+    assert "$source_kind" in link["statement"] and "$source_id" in link["statement"]
+    assert "{source_kind: $source_kind, source_id: $source_id}" in link["statement"]
+    assert link["parameters"]["source_kind"] == "report"
+    assert link["parameters"]["source_id"] == "rep-a"
