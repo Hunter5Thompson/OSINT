@@ -63,6 +63,7 @@ async def _ingest_one_notebook(
     log a warning, mark the notebook not-ok, and SKIP writing that file (never
     ingest under a foreign id)."""
     from nlm_ingest.schemas import Extraction
+    from nlm_ingest.sources import source_kind_for
     ok = True
     prefix = f"{expected_notebook_id}."
     for f in files:
@@ -75,10 +76,9 @@ async def _ingest_one_notebook(
             if expected_source_id.endswith(".json"):
                 expected_source_id = expected_source_id[: -len(".json")]
             # Derive the expected source_kind from the filename's source_id, the same
-            # way sources.load_sources does: only "transcript" is a transcript.
-            expected_source_kind = (
-                "transcript" if expected_source_id == "transcript" else "report"
-            )
+            # way sources.load_sources does (shared helper: only "transcript" is a
+            # transcript).
+            expected_source_kind = source_kind_for(expected_source_id)
             if (
                 extraction.notebook_id != expected_notebook_id
                 or extraction.source_id != expected_source_id

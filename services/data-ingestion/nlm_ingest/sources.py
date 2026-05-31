@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from nlm_ingest.schemas import ExtractionSource, Transcript
+
+
+def source_kind_for(source_id: str) -> Literal["transcript", "report"]:
+    """The source_kind implied by a source_id: the literal "transcript" id maps to
+    the transcript kind; everything else is a report artifact."""
+    return "transcript" if source_id == "transcript" else "report"
 
 
 def load_sources(data_dir: Path, notebook_id: str) -> list[ExtractionSource]:
@@ -37,7 +44,7 @@ def load_sources(data_dir: Path, notebook_id: str) -> list[ExtractionSource]:
             sources.append(ExtractionSource(
                 notebook_id=notebook_id,
                 source_id=artifact_id,
-                source_kind="report",
+                source_kind=source_kind_for(artifact_id),
                 text=report.read_text(),
             ))
 
