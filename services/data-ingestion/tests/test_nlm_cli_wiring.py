@@ -3,10 +3,11 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from nlm_ingest import cli as cli_mod
-from nlm_ingest.cli import _sources_needing_extract, cli
+from nlm_ingest.cli import _extraction_files_for, _sources_needing_extract, cli
 from nlm_ingest.schemas import Extraction, ExtractionSource, Transcript
 
 
@@ -263,3 +264,88 @@ def test_export_command_continues_after_notebook_failure(tmp_path, monkeypatch):
     assert "FAIL nb1" in result.output
     # nb2 still got its export status set despite nb1 failing
     assert ("nb2", "export", "completed") in status_calls
+
+
+def test_extraction_files_globs_all_sources(tmp_path):
+    ext = tmp_path / "extractions"
+    ext.mkdir()
+    (ext / "nb1.transcript.json").write_text("{}")
+    (ext / "nb1.rep-a.json").write_text("{}")
+    (ext / "nb2.transcript.json").write_text("{}")
+    files = sorted(p.name for p in _extraction_files_for(tmp_path, "nb1"))
+    assert files == ["nb1.rep-a.json", "nb1.transcript.json"]
+
+
+def test_ingest_command_marks_completed(tmp_path, monkeypatch):
+    """End-to-end (hermetic) 'ingest' CLI run: a notebook with ingest=pending
+    and extract=completed, two extraction files on disk, all heavy collaborators
+    mocked (no Neo4j/Qdrant/TEI network) -> exits 0 and phase ends 'completed'."""
+
+    data_dir = tmp_path / "nlm"
+    ext = data_dir / "extractions"
+    ext.mkdir(parents=True)
+    valid = ('{"notebook_id":"nb1","entities":[],"relations":[],"claims":[],'
+             '"extraction_model":"q","prompt_version":"v1",'
+             '"source_kind":"%s","source_id":"%s"}')
+    (ext / "nb1.transcript.json").write_text(valid % ("transcript", "transcript"))
+    (ext / "nb1.rep-a.json").write_text(valid % ("report", "rep-a"))
+
+    monkeypatch.setenv("NLM_DATA_DIR", str(data_dir))
+
+    # One target: ready to ingest.
+    fake_rows = [{
+        "notebook_id": "nb1", "title": "T", "source": "RAND",
+        "ingest": "pending", "extract": "completed",
+    }]
+
+    status_calls: list[tuple] = []
+
+    def record_status(db, nid, phase, status, **kwargs):
+        status_calls.append((nid, phase, status))
+
+    # Local imports inside _run resolve at their definition modules -> patch there.
+    with patch.object(cli_mod, "get_all_status", return_value=fake_rows), \
+         patch.object(cli_mod, "_get_db", return_value=MagicMock()), \
+         patch.object(cli_mod, "set_phase_status", side_effect=record_status), \
+         patch("qdrant_client.QdrantClient", return_value=MagicMock()), \
+         patch("nlm_ingest.ingest_qdrant.ensure_collection", new=AsyncMock()), \
+         patch("nlm_ingest.ingest_qdrant.ingest_to_qdrant", new=AsyncMock()), \
+         patch("nlm_ingest.ingest_qdrant.build_claim_points", return_value=[]), \
+         patch("nlm_ingest.ingest_neo4j.ingest_extraction", new=AsyncMock()):
+        result = CliRunner().invoke(cli, ["ingest"], catch_exceptions=False)
+
+    assert result.exit_code == 0, result.output
+    assert ("nb1", "ingest", "completed") in status_calls
+    assert ("nb1", "ingest", "failed") not in status_calls
+
+
+@pytest.mark.asyncio
+async def test_ingest_one_notebook_partial_failure_is_not_ok(tmp_path):
+    # Aggregation (P1#4/P2#8): if ONE source fails, the notebook is NOT ok.
+    from nlm_ingest.cli import _ingest_one_notebook
+    ext = tmp_path / "extractions"
+    ext.mkdir()
+    valid = ('{"notebook_id":"nb1","entities":[],"relations":[],"claims":[],'
+             '"extraction_model":"q","prompt_version":"v1",'
+             '"source_kind":"%s","source_id":"%s"}')
+    (ext / "nb1.transcript.json").write_text(valid % ("transcript", "transcript"))
+    (ext / "nb1.rep-a.json").write_text(valid % ("report", "rep-a"))
+
+    async def good_write(extraction):
+        return None
+
+    async def bad_for_report(extraction):
+        if extraction.source_kind == "report":
+            raise RuntimeError("neo4j down")
+
+    ok_all = await _ingest_one_notebook(
+        _extraction_files_for(tmp_path, "nb1"),
+        neo4j_write=good_write,
+        qdrant_write=good_write,
+    )
+    ok_partial = await _ingest_one_notebook(
+        _extraction_files_for(tmp_path, "nb1"),
+        neo4j_write=bad_for_report,
+        qdrant_write=good_write,
+    )
+    assert ok_all is True and ok_partial is False

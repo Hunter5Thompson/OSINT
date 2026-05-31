@@ -39,6 +39,31 @@ def _sources_needing_extract(data_dir, sources):
     return [s for s in sources if not valid_extraction_exists(data_dir, s)]
 
 
+def _extraction_files_for(data_dir, notebook_id):
+    """All extractions/{nid}.*.json of a notebook (multi-source)."""
+    return sorted((data_dir / "extractions").glob(f"{notebook_id}.*.json"))
+
+
+async def _ingest_one_notebook(files, *, neo4j_write, qdrant_write) -> bool:
+    """Write each extraction file to Neo4j + Qdrant (injected writers).
+
+    Aggregation (P1#4/P2#8): return True only on full success; one source
+    failing -> False (phase stays 'failed', retryable)."""
+    from nlm_ingest.schemas import Extraction
+    ok = True
+    for f in files:
+        try:
+            extraction = Extraction.model_validate_json(f.read_text())
+            await neo4j_write(extraction)
+            await qdrant_write(extraction)
+        except Exception:
+            # Log diagnostics so a retrying operator can see why a source failed;
+            # keep returning bool (caller marks the phase 'failed'/retryable).
+            log.warning("nlm_ingest_source_failed", file=str(f), exc_info=True)
+            ok = False
+    return ok
+
+
 async def _check_voxtral(url: str) -> bool:
     """Healthcheck: try real audio transcription, fallback to /models."""
     try:
@@ -280,50 +305,102 @@ def extract(notebook_id: str | None):
 @cli.command()
 @click.option("--id", "notebook_id", default=None, help="Ingest single notebook by ID")
 def ingest(notebook_id: str | None):
-    """Phase 4: Write extraction results to Neo4j."""
+    """Phase 4: Write extraction results to Neo4j + Qdrant (all sources)."""
     settings = _get_settings()
     data_dir = Path(settings.nlm_data_dir)
 
     async def _run():
+        from qdrant_client import QdrantClient
+
         from nlm_ingest.ingest_neo4j import ingest_extraction
-        from nlm_ingest.schemas import Extraction
+        from nlm_ingest.ingest_qdrant import (
+            build_claim_points,
+            ensure_collection,
+            ingest_to_qdrant,
+        )
         db = _get_db()
-        matrix = get_all_status(db)
-        targets = [
-            r for r in matrix
-            if r.get("extract") == "completed"
-            and r.get("ingest") in ("pending", "failed", "running")
-            and (notebook_id is None or r["notebook_id"] == notebook_id)
-        ]
+        qdrant = QdrantClient(url=settings.qdrant_url)
+        try:
+            await ensure_collection(
+                qdrant,
+                settings.qdrant_collection,
+                settings.embedding_dimensions,
+                enable_hybrid=getattr(settings, "enable_hybrid", False),
+            )
+            # extract MUST be completed (P1#4): else a stale extraction file would be
+            # ingested and ingest finished prematurely when a new report was added.
+            targets = [
+                r for r in get_all_status(db)
+                if r.get("ingest") in ("pending", "failed", "running")
+                and r.get("extract") == "completed"
+                and (notebook_id is None or r["notebook_id"] == notebook_id)
+            ]
 
-        async with httpx.AsyncClient() as client:
-            for row in targets:
-                nid = row["notebook_id"]
-                extraction_path = data_dir / "extractions" / f"{nid}.json"
-                if not extraction_path.exists():
-                    click.echo(f"SKIP {nid}: no extraction")
-                    continue
-
-                set_phase_status(db, nid, "ingest", "running")
-                try:
-                    extraction = Extraction.model_validate_json(extraction_path.read_text())
-                    source_name = row.get("source", "unknown")
-
-                    await ingest_extraction(
-                        extraction=extraction,
-                        source_name=source_name,
-                        client=client,
-                        neo4j_url=settings.neo4j_http_url,
-                        neo4j_user=settings.neo4j_user,
-                        neo4j_password=settings.neo4j_password,
+            async with httpx.AsyncClient() as client:
+                async def _embed(text: str) -> list[float]:
+                    resp = await client.post(
+                        f"{settings.tei_embed_url}/embed",
+                        json={"inputs": text, "truncate": True},
                     )
-                    set_phase_status(db, nid, "ingest", "completed")
-                    click.echo(f"OK {nid}: ingested to Neo4j")
-                except Exception as e:
-                    set_phase_status(db, nid, "ingest", "failed", error=str(e))
-                    click.echo(f"FAIL {nid}: {e}")
+                    resp.raise_for_status()
+                    d = resp.json()
+                    return d[0] if isinstance(d[0], list) else d
 
-        db.close()
+                for row in targets:
+                    nid = row["notebook_id"]
+                    files = _extraction_files_for(data_dir, nid)
+                    if not files:
+                        click.echo(f"SKIP {nid}: no extraction")
+                        continue
+
+                    set_phase_status(db, nid, "ingest", "running")
+                    try:
+                        source_name = row.get("source") or "unknown"
+                        title = row.get("title") or "untitled"
+
+                        # Bind row-scoped names as defaults (no loop-var late binding).
+                        async def _neo4j_write(extraction, _source=source_name):
+                            await ingest_extraction(
+                                extraction=extraction,
+                                source_name=_source,
+                                client=client,
+                                neo4j_url=settings.neo4j_http_url,
+                                neo4j_user=settings.neo4j_user,
+                                neo4j_password=settings.neo4j_password,
+                            )
+
+                        async def _qdrant_write(extraction, _source=source_name, _title=title):
+                            points = []
+                            for c in extraction.claims:
+                                # skip embed for rejected claims; build_claim_points filters again
+                                if c.confidence <= 0.0:
+                                    continue
+                                vec = await _embed(c.statement)
+                                points += build_claim_points(
+                                    extraction.model_copy(update={"claims": [c]}),
+                                    notebook_title=_title,
+                                    embed=lambda _t, _v=vec: _v,
+                                    source_name=_source,
+                                )
+                            await ingest_to_qdrant(qdrant, settings.qdrant_collection, points)
+
+                        ok = await _ingest_one_notebook(
+                            files,
+                            neo4j_write=_neo4j_write,
+                            qdrant_write=_qdrant_write,
+                        )
+                        set_phase_status(db, nid, "ingest", "completed" if ok else "failed")
+                        click.echo(
+                            f"{'OK' if ok else 'FAIL'} {nid}: "
+                            f"{len(files)} source(s) -> Neo4j + Qdrant"
+                        )
+                    except Exception as e:
+                        set_phase_status(db, nid, "ingest", "failed", error=str(e))
+                        click.echo(f"FAIL {nid}: {e}")
+        finally:
+            # Always release both clients even if ensure_collection raises.
+            qdrant.close()
+            db.close()
 
     asyncio.run(_run())
 
