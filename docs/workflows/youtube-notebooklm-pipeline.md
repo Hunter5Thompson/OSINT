@@ -22,11 +22,22 @@ structured audio summaries that our NLM pipeline can ingest.
          |
 6. odin-ingest-nlm extract --id <notebook-id>       (Qwen + Claude)
          |
-7. odin-ingest-nlm ingest --id <notebook-id>        (Neo4j)
+7. odin-ingest-nlm ingest --id <notebook-id>        (Neo4j + Qdrant)
          |
 8. Entities, Claims, Relations in Knowledge Graph
    with full provenance (Source → Document → Claim)
 ```
+
+## Multi-Source Extraction (transcript + reports)
+
+`extract`/`ingest` process **every** source of a notebook, not just the podcast
+audio: the transcript **and** each NotebookLM-generated written report. Each source
+is extracted independently and carries `source_kind` (`transcript` | `report`) and
+`source_id` provenance — distinct `EXTRACTED_FROM` edges in Neo4j and one Qdrant
+point per claim in `odin_intel`. The extraction prompt is source-agnostic
+(`extraction_v3.txt`, the default): it injects a dynamic hint so the model knows
+whether it is reading a podcast transcript or a written report. `v1`/`v2` remain
+available for rollback.
 
 ## Parallel Signal: RSS Teaser
 

@@ -37,6 +37,7 @@ Palantir-like tactical intelligence platform running locally. CesiumJS 3D Globe 
 - **Intelligence RAG** — LangGraph 3-agent pipeline (OSINT → Analyst → Synthesis)
 - **Threat Register** — 50+ geopolitical hotspots with dynamic threat levels
 - **Data Ingestion** — Scheduled RSS (27 feeds), GDELT, TLE, hotspot collectors
+- **NotebookLM Ingestion** — Transcript *and* report sources extracted (source-agnostic `v3` prompt) with `source_kind`/`source_id` provenance into Neo4j + Qdrant
 
 ## Prerequisites
 
