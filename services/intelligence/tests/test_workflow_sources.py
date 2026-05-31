@@ -23,3 +23,7 @@ def test_derives_dedup_provider_ids_in_order():
 
 def test_no_evidence_yields_empty_no_tool_names():
     assert derive_sources_used(["No relevant documents found for: x"]) == []
+
+
+def test_empty_tool_outputs_yields_empty():
+    assert derive_sources_used([]) == []

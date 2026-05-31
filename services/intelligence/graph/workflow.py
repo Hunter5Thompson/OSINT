@@ -179,7 +179,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
         logger.info(
             "react_synthesis_grounding",
             tool_call_count=len(state.get("tool_trace", [])),
-            unique_tools=derived_sources,
+            providers=derived_sources,
             tool_message_count=len(tool_results),
             raw_research_chars=raw_research_chars,
             research_chars=len(research_text),
