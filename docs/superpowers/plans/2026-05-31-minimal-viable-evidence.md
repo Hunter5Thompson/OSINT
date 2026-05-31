@@ -61,19 +61,7 @@
 - Test: `services/intelligence/tests/test_provenance_contract.py`
 - Test: `services/data-ingestion/tests/test_provenance_contract.py`
 
-- [ ] **Step 1: Create the contract file**
-
-`contracts/qdrant-provenance-v1.json`:
-```json
-{
-  "contract_version": 1,
-  "required": ["source_type", "provider", "ingested_at"],
-  "optional": ["published_at"],
-  "source_types": ["rss", "telegram", "gdelt", "notebooklm", "dataset"]
-}
-```
-
-- [ ] **Step 2: Write the failing contract test (intelligence)**
+- [ ] **Step 1: Write the failing contract test (intelligence)**
 
 `services/intelligence/tests/test_provenance_contract.py`:
 ```python
@@ -111,19 +99,33 @@ def test_write_source_types_do_not_include_unknown():
     }
 ```
 
-- [ ] **Step 3: Run it — verify pass**
+- [ ] **Step 2: Run it — verify it FAILS**
 
 Run: `cd services/intelligence && uv run pytest tests/test_provenance_contract.py -v`
-Expected: PASS (contract file already exists from Step 1). If the path `parents[3]` is wrong, fix it so it resolves to repo-root `contracts/qdrant-provenance-v1.json`.
+Expected: FAIL with `FileNotFoundError` (contract file does not exist yet). If the path `parents[3]` does not resolve to the repo root, fix it so it points at repo-root `contracts/`.
 
-- [ ] **Step 4: Mirror the test in data-ingestion**
+- [ ] **Step 3: Create the contract file (green)**
 
-`services/data-ingestion/tests/test_provenance_contract.py`: identical content to Step 2 (the path resolves the same: `Path(__file__).resolve().parents[3] / "contracts" / ...`). Copy verbatim.
+`contracts/qdrant-provenance-v1.json`:
+```json
+{
+  "contract_version": 1,
+  "required": ["source_type", "provider", "ingested_at"],
+  "optional": ["published_at"],
+  "source_types": ["rss", "telegram", "gdelt", "notebooklm", "dataset"]
+}
+```
 
-- [ ] **Step 5: Run it — verify pass**
+- [ ] **Step 4: Run it — verify pass**
 
-Run: `cd services/data-ingestion && uv run pytest tests/test_provenance_contract.py -v`
+Run: `cd services/intelligence && uv run pytest tests/test_provenance_contract.py -v`
 Expected: PASS.
+
+- [ ] **Step 5: Mirror the test in data-ingestion + run**
+
+`services/data-ingestion/tests/test_provenance_contract.py`: identical content to Step 1 (the path resolves the same: `Path(__file__).resolve().parents[3] / "contracts" / ...`). Copy verbatim.
+Run: `cd services/data-ingestion && uv run pytest tests/test_provenance_contract.py -v`
+Expected: PASS (the contract file now exists).
 
 - [ ] **Step 6: Commit**
 ```bash
@@ -1608,74 +1610,101 @@ git commit -m "feat(data-ingestion): _build_point stamps canonical dataset prove
 - Modify: `services/data-ingestion/feeds/gdacs_collector.py`
 - Test: `services/data-ingestion/tests/test_eonet_collector.py` (extend), `tests/test_gdacs_collector.py` (extend or create)
 
-- [ ] **Step 1: Write failing assertions**
+These writers bypass `_build_point`, so extract a small **pure payload builder** per writer and test the BUILT payload (red first), then have `collect()` call it. Event dates (`event_date`, `from_date`/`to_date`) are event times — they must NOT become `published_at`.
+
+- [ ] **Step 1: Write the failing payload-builder tests**
 
 Add to `services/data-ingestion/tests/test_eonet_collector.py`:
 ```python
-def test_eonet_payload_carries_canonical_provenance():
-    from feeds.provenance import dataset_provenance
-    prov = dataset_provenance("eonet")
-    assert prov == {"source_type": "dataset", "provider": "eonet.gsfc.nasa.gov"}
+def test_build_eonet_payload_stamps_provenance_and_no_published():
+    from feeds.eonet_collector import build_eonet_payload
+    event = {"eonet_id": "E1", "title": "Wildfire", "category": "wildfires",
+             "status": "open", "latitude": 1.0, "longitude": 2.0,
+             "event_date": "2026-05-31T00:00:00Z"}
+    payload = build_eonet_payload(event, "desc text")
+    assert payload["source_type"] == "dataset"
+    assert payload["provider"] == "eonet.gsfc.nasa.gov"
+    assert payload["description"] == "desc text"
+    assert "published_at" not in payload      # event_date is NOT publication time
+    assert "credibility_score" not in payload
 ```
-Add to `services/data-ingestion/tests/test_gdacs_collector.py` (create if missing, with the same imports as the eonet test):
+Add to `services/data-ingestion/tests/test_gdacs_collector.py` (create if missing, mirroring the eonet test's imports):
 ```python
-def test_gdacs_payload_carries_canonical_provenance():
-    from feeds.provenance import dataset_provenance
-    prov = dataset_provenance("gdacs")
-    assert prov == {"source_type": "dataset", "provider": "gdacs.org"}
+def test_build_gdacs_payload_stamps_provenance_and_no_published():
+    from feeds.gdacs_collector import build_gdacs_payload
+    event = {"gdacs_id": "EQ_1", "event_type": "EQ", "event_name": "Quake",
+             "alert_level": "Orange", "severity": 5.0, "country": "X",
+             "latitude": 1.0, "longitude": 2.0,
+             "from_date": "2026-05-30", "to_date": "2026-05-31"}
+    payload = build_gdacs_payload(event, "desc text")
+    assert payload["source_type"] == "dataset"
+    assert payload["provider"] == "gdacs.org"
+    assert "published_at" not in payload
+    assert "credibility_score" not in payload
 ```
-(These guard the table; the real wiring is asserted by Step 5's collect-level regression.)
 
-- [ ] **Step 2: Run — verify pass for the table guards**
+- [ ] **Step 2: Run — verify it fails**
 
-Run: `cd services/data-ingestion && uv run pytest tests/test_eonet_collector.py::test_eonet_payload_carries_canonical_provenance tests/test_gdacs_collector.py::test_gdacs_payload_carries_canonical_provenance -v`
-Expected: PASS (table already exists from Task 13).
+Run: `cd services/data-ingestion && uv run pytest tests/test_eonet_collector.py -k build_eonet_payload tests/test_gdacs_collector.py -k build_gdacs_payload -v`
+Expected: FAIL with `ImportError: cannot import name 'build_eonet_payload'` (and `build_gdacs_payload`).
 
-- [ ] **Step 3: Implement — EONET**
+- [ ] **Step 3: Implement — EONET pure builder + wire it in**
 
-In `feeds/eonet_collector.py`, add import:
+In `feeds/eonet_collector.py`, ensure imports include `from datetime import UTC, datetime` and add:
 ```python
 from feeds.provenance import dataset_provenance
 ```
-Change the manual payload block (lines 146–152) to merge provenance and use `event_date` is NOT published_at (leave published_at absent):
+Add the pure builder (module-level):
 ```python
-            payload = {
-                "source": "eonet",
-                **event,
-                **dataset_provenance("eonet"),
-                "ingested_epoch": time.time(),
-                "ingested_at": datetime.now(UTC).isoformat(),
-                "description": description,
-            }
+def build_eonet_payload(event: dict, description: str) -> dict:
+    """Pure EONET Qdrant payload builder (no I/O). event_date stays an event
+    time; it is NOT published_at."""
+    return {
+        **dataset_provenance("eonet"),
+        "source": "eonet",
+        **event,
+        "ingested_epoch": time.time(),
+        "ingested_at": datetime.now(UTC).isoformat(),
+        "description": description,
+    }
+```
+Replace the inline manual payload block (lines 146–152) with:
+```python
+            payload = build_eonet_payload(event, description)
             points.append(PointStruct(id=point_id, vector=vector, payload=payload))
 ```
-Ensure `from datetime import UTC, datetime` is imported at the top of the file (add if missing).
 
-- [ ] **Step 4: Implement — GDACS**
+- [ ] **Step 4: Implement — GDACS pure builder + wire it in**
 
-In `feeds/gdacs_collector.py`, add import:
+In `feeds/gdacs_collector.py`, ensure imports include `from datetime import UTC, datetime` and add:
 ```python
 from feeds.provenance import dataset_provenance
 ```
-Change the manual payload block (lines 139–146):
+Add the pure builder (module-level):
 ```python
-            payload = {
-                "source": "gdacs",
-                **event,
-                **dataset_provenance("gdacs"),
-                "ingested_epoch": time.time(),
-                "ingested_at": datetime.now(UTC).isoformat(),
-                "description": description,
-            }
+def build_gdacs_payload(event: dict, description: str) -> dict:
+    """Pure GDACS Qdrant payload builder (no I/O). from_date/to_date stay event
+    times; they are NOT published_at."""
+    return {
+        **dataset_provenance("gdacs"),
+        "source": "gdacs",
+        **event,
+        "ingested_epoch": time.time(),
+        "ingested_at": datetime.now(UTC).isoformat(),
+        "description": description,
+    }
+```
+Replace the inline manual payload block (lines 139–146) with:
+```python
+            payload = build_gdacs_payload(event, description)
             point = PointStruct(id=point_id, vector=vector, payload=payload)
             points.append(point)
 ```
-Ensure `from datetime import UTC, datetime` is imported (add if missing).
 
-- [ ] **Step 5: Run the collector regression suites**
+- [ ] **Step 5: Run the builder tests + collector regression suites**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_eonet_collector.py tests/test_gdacs_collector.py -v`
-Expected: ALL PASS.
+Expected: ALL PASS (new builder tests green, existing collector tests still green).
 
 - [ ] **Step 6: Commit**
 ```bash
@@ -1686,139 +1715,191 @@ git commit -m "feat(data-ingestion): EONET/GDACS manual writers stamp canonical 
 
 ---
 
-### Task 16: RSS writer — per-feed canonical provider + published_at
+### Task 16: RSS writer — explicit per-feed provider + published_at=None semantics
 
 **Files:**
 - Modify: `services/data-ingestion/feeds/rss_collector.py`
 - Test: `services/data-ingestion/tests/test_rss_provider.py` (create)
 
-The RSS feed list is curated. Each feed resolves to a canonical publisher domain. Google-News proxy feeds (host `news.google.com`) must resolve to the real publisher domain, never `news.google.com`.
+Per spec §3.4: each curated feed gets a **fixed, explicit** canonical `provider` id (no URL heuristics). For Google-News proxy feeds (`news.google.com/...?q=site:reuters.com`) the curator sets the publisher domain (`reuters.com`). When a feed entry has no parsable publication date, `published_at` is **`None`** — never `datetime.now()`.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing curation-guard test**
 
 `services/data-ingestion/tests/test_rss_provider.py`:
 ```python
 from __future__ import annotations
 
-from feeds.rss_collector import RSS_FEEDS, feed_provider
+from feeds.rss_collector import RSS_FEEDS
 
 
-def test_direct_feed_uses_registrable_domain():
-    assert feed_provider({"name": "BBC World", "url": "https://feeds.bbci.co.uk/news/world/rss.xml"}) == "bbc.co.uk"
-
-
-def test_google_news_proxy_resolves_to_publisher_not_google():
-    feed = {"name": "Reuters (Google)",
-            "url": "https://news.google.com/rss/search?q=site:reuters.com+world&hl=en-US"}
-    assert feed_provider(feed) == "reuters.com"
-
-
-def test_every_curated_feed_resolves_to_non_google_provider():
+def test_every_feed_has_explicit_non_google_provider():
     for feed in RSS_FEEDS:
-        prov = feed_provider(feed)
-        assert prov, f"empty provider for {feed['name']}"
-        assert prov != "news.google.com", f"{feed['name']} leaks google proxy host"
+        prov = feed.get("provider")
+        assert prov, f"feed {feed['name']!r} is missing an explicit provider id"
+        assert prov != "news.google.com", f"{feed['name']!r} leaks the google proxy host"
+        assert "://" not in prov and "/" not in prov, f"{feed['name']!r} provider must be a bare domain"
+
+
+def test_known_feeds_have_expected_publisher_domains():
+    by_name = {f["name"]: f for f in RSS_FEEDS}
+    # Direct feeds use their own registrable domain.
+    if "BBC World" in by_name:
+        assert by_name["BBC World"]["provider"] == "bbc.co.uk"
+    # Google-News proxy feeds resolve to the curated publisher domain, not google.
+    if "Reuters (Google)" in by_name:
+        assert by_name["Reuters (Google)"]["provider"] == "reuters.com"
 ```
 
 - [ ] **Step 2: Run it — verify it fails**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_rss_provider.py -v`
-Expected: FAIL with `ImportError: cannot import name 'feed_provider'`.
+Expected: FAIL — feeds currently have only `name`/`url`, no `provider` key.
 
-- [ ] **Step 3: Implement `feed_provider` in `rss_collector.py`**
+- [ ] **Step 3: Add an explicit `provider` to every `RSS_FEEDS` entry**
 
-Add imports at the top:
+In `feeds/rss_collector.py`, add a `"provider"` key to each dict in `RSS_FEEDS`. The provider is the bare publisher domain (registrable domain, no scheme/path). Rules:
+- Direct feed → publisher domain of the outlet (e.g. `{"name": "BBC World", "url": "https://feeds.bbci.co.uk/...", "provider": "bbc.co.uk"}`).
+- Google-News proxy (`url` host is `news.google.com`) → the domain inside `site:<domain>` in the query (e.g. Reuters-via-Google → `"provider": "reuters.com"`, AP-via-Google → `"provider": "apnews.com"`).
+- German gov/defence feeds → their own domain (`bmvg.de`, `bundeswehr.de`, `bundestag.de`, …).
+
+Worked examples (apply the same pattern to ALL entries):
 ```python
-import re
-from urllib.parse import urlparse
+RSS_FEEDS: list[dict[str, str]] = [
+    {"name": "BMVg", "url": "https://www.bmvg.de/service/rss/de/17680/feed", "provider": "bmvg.de"},
+    {"name": "Bundeswehr", "url": "https://www.bundeswehr.de/service/rss/de/517054/feed", "provider": "bundeswehr.de"},
+    {"name": "BBC World", "url": "https://feeds.bbci.co.uk/news/world/rss.xml", "provider": "bbc.co.uk"},
+    {"name": "Al Jazeera", "url": "https://www.aljazeera.com/xml/rss/all.xml", "provider": "aljazeera.com"},
+    {"name": "Reuters (Google)", "url": "https://news.google.com/rss/search?q=site:reuters.com+world&hl=en-US&gl=US&ceid=US:en", "provider": "reuters.com"},
+    {"name": "AP News (Google)", "url": "https://news.google.com/rss/search?q=site:apnews.com+world+news&hl=en-US&gl=US&ceid=US:en", "provider": "apnews.com"},
+    # ... set "provider" for EVERY remaining feed the same way ...
+]
 ```
-Add the function (module-level, above the class):
-```python
-def _registrable_domain(host: str) -> str:
-    """Best-effort eTLD+1 for the common 2-label and known 3-label TLDs."""
-    host = (host or "").lower().lstrip("www.")
-    parts = host.split(".")
-    if len(parts) <= 2:
-        return host
-    # handle co.uk / com.au / gov.uk style
-    if parts[-2] in {"co", "com", "gov", "org", "net", "ac"} and len(parts[-1]) == 2:
-        return ".".join(parts[-3:])
-    return ".".join(parts[-2:])
-
-
-def feed_provider(feed: dict) -> str:
-    """Canonical publisher domain for a curated feed.
-
-    Direct feeds -> registrable domain of the feed URL host.
-    Google-News proxy feeds -> the `site:<domain>` from the query.
-    """
-    url = feed.get("url", "")
-    host = urlparse(url).netloc.lower()
-    if "news.google.com" in host:
-        m = re.search(r"site:([a-z0-9.\-]+)", url, flags=re.IGNORECASE)
-        if m:
-            return _registrable_domain(m.group(1))
-    return _registrable_domain(host)
-```
+The Step-1 guard test is the completeness gate: it fails until **every** feed has a valid bare-domain provider.
 
 - [ ] **Step 4: Run it — verify pass**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_rss_provider.py -v`
-Expected: PASS. If `test_every_curated_feed_resolves_to_non_google_provider` flags a Google-News feed whose URL has no `site:` token, add an explicit `"provider"` key to that feed dict in `RSS_FEEDS` and make `feed_provider` prefer `feed.get("provider")` when present (add as the first line of `feed_provider`: `if feed.get("provider"): return feed["provider"]`).
+Expected: PASS (every feed now has an explicit provider).
 
-- [ ] **Step 5: Write the upsert-provenance test**
+- [ ] **Step 5: Write the failing pure-payload-builder test (wiring + published_at=None)**
 
 Add to `services/data-ingestion/tests/test_rss_provider.py`:
 ```python
-def test_rss_payload_uses_canonical_provenance_helper():
-    from feeds.provenance import provenance_fields
-    out = provenance_fields(
-        source_type="rss", provider="bbc.com",
-        published_at="2026-05-30T10:00:00+00:00",
+from feeds.rss_collector import build_rss_payload
+
+
+def test_build_rss_payload_stamps_explicit_provenance():
+    feed = {"name": "BBC World", "url": "https://feeds.bbci.co.uk/x", "provider": "bbc.co.uk"}
+    payload = build_rss_payload(
+        feed, title="Strike", link="https://bbc.co.uk/a",
+        summary="body", published_at="2026-05-30T10:00:00+00:00",
+        content_hash="h1", enrichment=None,
     )
-    assert out == {
-        "source_type": "rss", "provider": "bbc.com",
-        "published_at": "2026-05-30T10:00:00+00:00",
-    }
+    assert payload["source_type"] == "rss"
+    assert payload["provider"] == "bbc.co.uk"
+    assert payload["published_at"] == "2026-05-30T10:00:00+00:00"
+    assert payload["feed_name"] == "BBC World"
+    assert "credibility_score" not in payload
+
+
+def test_build_rss_payload_published_none_when_missing():
+    feed = {"name": "BBC World", "url": "https://feeds.bbci.co.uk/x", "provider": "bbc.co.uk"}
+    payload = build_rss_payload(
+        feed, title="t", link="https://bbc.co.uk/a", summary="s",
+        published_at=None, content_hash="h2", enrichment=None,
+    )
+    # No publication date => no published_at key, and 'published' is None (never now()).
+    assert "published_at" not in payload
+    assert payload["published"] is None
 ```
 
-- [ ] **Step 6: Wire provenance into the RSS payload**
+- [ ] **Step 6: Run it — verify it fails**
 
-In `feeds/rss_collector.py::_process_feed`, add import:
+Run: `cd services/data-ingestion && uv run pytest tests/test_rss_provider.py -k build_rss_payload -v`
+Expected: FAIL with `ImportError: cannot import name 'build_rss_payload'`.
+
+- [ ] **Step 7: Implement the pure builder + fix the date fallback + wire it in**
+
+In `feeds/rss_collector.py`, add import:
 ```python
+from datetime import UTC, datetime
+
 from feeds.provenance import provenance_fields
 ```
-In the `PointStruct(... payload={...})` (lines 229–254), replace the leading `"source": "rss", "feed_name": name,` portion so the payload merges canonical provenance and keeps `feed_name` as display name. The payload dict becomes:
+Add the pure payload builder (module-level, above the class):
 ```python
-        payload={
-            **provenance_fields(
-                source_type="rss",
-                provider=feed_provider(feed_meta),
-                published_at=published_dt,
-            ),
-            "source": "rss",
-            "feed_name": name,
-            "title": title,
-            "url": link,
-            "summary": (summary or content)[:1000],
-            "published": published_dt,
-            "content_hash": chash,
-            "ingested_at": datetime.now(UTC).isoformat(),
-            "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
-            "entities": enrichment["entities"] if enrichment else [],
-        },
-```
-(`feed_meta` is the per-feed dict passed into `_process_feed`; `name`/`link`/`published_dt` are already in scope per the existing code.)
+def build_rss_payload(
+    feed: dict,
+    *,
+    title: str,
+    link: str,
+    summary: str,
+    published_at: str | None,
+    content_hash: str,
+    enrichment: dict | None,
+) -> dict:
+    """Pure RSS Qdrant payload builder (unit-testable, no I/O).
 
-- [ ] **Step 7: Run the RSS tests**
+    provider is the feed's explicit canonical domain. published_at is passed
+    through verbatim — None stays None (never ingestion time)."""
+    return {
+        **provenance_fields(
+            source_type="rss",
+            provider=feed["provider"],
+            published_at=published_at,
+        ),
+        "source": "rss",
+        "feed_name": feed["name"],
+        "title": title,
+        "url": link,
+        "summary": (summary or "")[:1000],
+        "published": published_at,
+        "content_hash": content_hash,
+        "ingested_at": datetime.now(UTC).isoformat(),
+        "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
+        "entities": enrichment["entities"] if enrichment else [],
+    }
+```
+Fix the date computation in `_process_feed` (currently lines 195–203) so a missing date is `None`, NOT `datetime.now()`:
+```python
+        published_parsed = entry.get("published_parsed")
+        if published_parsed:
+            try:
+                published_dt = datetime(*published_parsed[:6], tzinfo=UTC).isoformat()
+            except Exception:
+                published_dt = None
+        else:
+            published_dt = None
+```
+Replace the inline `PointStruct(id=point_id, vector=vector, payload={...})` construction (lines 229–254) with a call to the builder:
+```python
+        points.append(
+            PointStruct(
+                id=point_id,
+                vector=vector,
+                payload=build_rss_payload(
+                    feed_meta,
+                    title=title,
+                    link=link,
+                    summary=summary or content,
+                    published_at=published_dt,
+                    content_hash=chash,
+                    enrichment=enrichment,
+                ),
+            )
+        )
+```
+(`feed_meta` is the per-feed dict passed into `_process_feed`; `title`/`link`/`summary`/`content`/`chash`/`enrichment`/`point_id`/`vector` are already in scope per the existing code.)
+
+- [ ] **Step 8: Run the RSS tests**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_rss_provider.py -v && uv run pytest tests/ -k rss -v`
 Expected: ALL PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 ```bash
 git add services/data-ingestion/feeds/rss_collector.py services/data-ingestion/tests/test_rss_provider.py
-git commit -m "feat(data-ingestion): RSS writer stamps canonical per-feed provider + published_at"
+git commit -m "feat(data-ingestion): RSS explicit per-feed provider + published_at=None when unknown"
 ```
 
 ---
@@ -1829,66 +1910,95 @@ git commit -m "feat(data-ingestion): RSS writer stamps canonical per-feed provid
 - Modify: `services/data-ingestion/feeds/telegram_collector.py`
 - Test: `services/data-ingestion/tests/test_telegram_provenance.py` (create)
 
-- [ ] **Step 1: Write the failing test**
+Extract a **pure payload builder** so the constructed payload is unit-testable without Telethon/Qdrant I/O, then have `_embed_and_upsert` call it. `published` (the message date) IS publication time → it becomes `published_at`.
+
+- [ ] **Step 1: Write the failing builder test**
 
 `services/data-ingestion/tests/test_telegram_provenance.py`:
 ```python
 from __future__ import annotations
 
-from feeds.provenance import provenance_fields
+from types import SimpleNamespace
+
+from feeds.telegram_collector import build_telegram_payload
 
 
-def test_telegram_provider_is_namespaced_handle():
-    out = provenance_fields(
-        source_type="telegram", provider="telegram:rybar",
-        published_at="2026-05-31T08:00:00+00:00",
+def _channel(handle="@Rybar"):
+    return SimpleNamespace(handle=handle, source_bias="state", category="mil")
+
+
+def test_build_telegram_payload_namespaced_provider_and_published():
+    payload = build_telegram_payload(
+        channel=_channel(), message_id=42, title="msg",
+        url="https://t.me/Rybar/42", published="2026-05-31T08:00:00+00:00",
+        content_hash="h1", enrichment=None, forwarded_from=None,
+        has_media=False, media_paths=[], media_types=[], vision_status="none",
     )
-    assert out["provider"] == "telegram:rybar"
-    assert out["source_type"] == "telegram"
+    assert payload["source_type"] == "telegram"
+    assert payload["provider"] == "telegram:rybar"          # @ stripped, lowercased
+    assert payload["published_at"] == "2026-05-31T08:00:00+00:00"
+    assert payload["telegram_message_id"] == 42
+    assert "credibility_score" not in payload
 ```
 
-- [ ] **Step 2: Run — verify pass (guards the contract usage)**
+- [ ] **Step 2: Run — verify it fails**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_telegram_provenance.py -v`
-Expected: PASS.
+Expected: FAIL with `ImportError: cannot import name 'build_telegram_payload'`.
 
-- [ ] **Step 3: Wire provenance into the Telegram payload**
+- [ ] **Step 3: Implement the pure builder + wire it in**
 
-In `feeds/telegram_collector.py::_embed_and_upsert`, add import:
+In `feeds/telegram_collector.py`, add import:
 ```python
 from feeds.provenance import provenance_fields
 ```
-In the `payload = {...}` block (lines 596–614), prepend canonical provenance. The handle is `channel.handle` and `published` is already an ISO string in scope:
+Add the pure builder (module-level):
 ```python
-        payload = {
-            **provenance_fields(
-                source_type="telegram",
-                provider=f"telegram:{channel.handle.lstrip('@').lower()}",
-                published_at=published,
-            ),
-            "source": "telegram",
-            "title": title,
-            "url": url,
-            "published": published,
-            "content_hash": content_hash,
-            "ingested_at": datetime.datetime.now(datetime.UTC).isoformat(),
-            "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
-            "entities": enrichment["entities"] if enrichment else [],
-            "telegram_channel": channel.handle,
-            "telegram_message_id": message_id,
-            "source_bias": channel.source_bias,
-            "source_category": channel.category,
-            "forwarded_from": forwarded_from,
-            "has_media": has_media,
-            "media_paths": media_paths,
-            "media_types": media_types,
-            "vision_status": vision_status,
-        }
+def build_telegram_payload(
+    *, channel, message_id, title, url, published, content_hash, enrichment,
+    forwarded_from, has_media, media_paths, media_types, vision_status,
+) -> dict:
+    """Pure Telegram Qdrant payload builder (no I/O). The Telegram message date
+    (`published`) IS publication time."""
+    return {
+        **provenance_fields(
+            source_type="telegram",
+            provider=f"telegram:{channel.handle.lstrip('@').lower()}",
+            published_at=published,
+        ),
+        "source": "telegram",
+        "title": title,
+        "url": url,
+        "published": published,
+        "content_hash": content_hash,
+        "ingested_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
+        "entities": enrichment["entities"] if enrichment else [],
+        "telegram_channel": channel.handle,
+        "telegram_message_id": message_id,
+        "source_bias": channel.source_bias,
+        "source_category": channel.category,
+        "forwarded_from": forwarded_from,
+        "has_media": has_media,
+        "media_paths": media_paths,
+        "media_types": media_types,
+        "vision_status": vision_status,
+    }
 ```
+In `_embed_and_upsert`, replace the inline `payload = {...}` block (lines 596–614) with a call:
+```python
+        payload = build_telegram_payload(
+            channel=channel, message_id=message_id, title=title, url=url,
+            published=published, content_hash=content_hash, enrichment=enrichment,
+            forwarded_from=forwarded_from, has_media=has_media,
+            media_paths=media_paths, media_types=media_types, vision_status=vision_status,
+        )
+```
+(All of these names are already in scope inside `_embed_and_upsert`.)
 
 - [ ] **Step 4: Run the telegram suite**
 
-Run: `cd services/data-ingestion && uv run pytest tests/ -k telegram -v`
+Run: `cd services/data-ingestion && uv run pytest tests/test_telegram_provenance.py -v && uv run pytest tests/ -k telegram -v`
 Expected: ALL PASS.
 
 - [ ] **Step 5: Commit**
@@ -2093,9 +2203,18 @@ Run: `grep -n "sources_used\[:6\]\|\.sources_used\[:6\]" services/backend/app/ro
 Expected: the `[:6]` cap is still present and unchanged.
 
 - [ ] **Step 5: Commit any lint fixes**
+
+NEVER `git add -A` / `git add .` — the working tree contains unrelated foreign changes (see `git status`) that must not be swept in. Stage only the explicit files ruff modified, e.g.:
 ```bash
-git add -A && git commit -m "chore: lint + final verification for Slice 1 minimal viable evidence" || echo "nothing to commit"
+# list exactly what changed, then add only Slice-1 files by path:
+git status --short
+git add services/intelligence/rag/evidence.py services/intelligence/rag/credibility.py \
+        services/intelligence/agents/tools/qdrant_search.py services/intelligence/agents/tools/gdelt_query.py \
+        services/intelligence/agents/tools/rss_fetch.py services/intelligence/graph/workflow.py \
+        services/data-ingestion/feeds/provenance.py
+git commit -m "chore: lint fixes for Slice 1 minimal viable evidence" || echo "nothing to commit"
 ```
+Add/remove paths to match only the files this slice touched.
 
 ---
 
