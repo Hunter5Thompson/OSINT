@@ -245,7 +245,35 @@ def test_migrate_local_is_idempotent(tmp_path):
     migrate_local(db, data_dir)
     migrate_local(db, data_dir)  # zweiter Lauf darf nicht werfen
     db.close()
+
+def test_rebuild_is_atomic_on_failure(tmp_path):
+    # Atomarität: schlägt der Rebuild mitten drin fehl, bleibt phase_status intakt.
+    from nlm_ingest.migrate import _rebuild_status_table
+    db_path = tmp_path / "state.db"; db = _old_db(db_path); db.close()
+    db = sqlite3.connect(str(db_path))
+    # Konflikt provozieren: phase_status_new existiert schon -> CREATE wirft.
+    db.execute("CREATE TABLE phase_status_new (x INTEGER)"); db.commit()
+    with pytest.raises(Exception):
+        _rebuild_status_table(db)
+    # Original-Tabelle wurde NICHT gedroppt
+    rows = db.execute("SELECT count(*) FROM phase_status").fetchone()
+    assert rows[0] == 4
+    db.close()
+
+def test_extraction_rename_conflict_safe(tmp_path):
+    # Existierende Zieldatei wird nicht überschrieben; Altdatei wird entfernt.
+    from nlm_ingest.migrate import _migrate_extraction_files
+    ext = tmp_path / "extractions"; ext.mkdir(parents=True)
+    (ext / "nb1.json").write_text('{"notebook_id":"nb1"}')
+    (ext / "nb1.transcript.json").write_text('{"notebook_id":"nb1","keep":true}')
+    _migrate_extraction_files(tmp_path)
+    assert not (ext / "nb1.json").exists()
+    assert json.loads((ext / "nb1.transcript.json").read_text())["keep"] is True
 ```
+
+> **Pflicht nach jeder Task:** die **gesamte** NLM-Suite laufen lassen
+> (`uv run pytest tests/test_nlm_*.py -q`), nicht nur die Task-Tests — required
+> gewordene Schema-Felder (Task 5) brechen sonst Fixtures in anderen Dateien (P1#6).
 
 - [ ] **Step 2: Run — verify FAIL**
 
@@ -266,6 +294,8 @@ import structlog
 
 log = structlog.get_logger()
 
+
+# _NEW_PHASE_STATUS ist GENAU EIN CREATE-Statement (kein executescript!) — siehe unten.
 _NEW_PHASE_STATUS = """
 CREATE TABLE phase_status_new (
     notebook_id TEXT REFERENCES notebooks(id),
@@ -277,7 +307,7 @@ CREATE TABLE phase_status_new (
     retry_count INTEGER DEFAULT 0,
     updated_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (notebook_id, phase)
-);
+)
 """
 
 
@@ -288,51 +318,66 @@ def _needs_status_rebuild(db: sqlite3.Connection) -> bool:
     return bool(row) and "skipped" not in row[0]
 
 
-def migrate_local(db: sqlite3.Connection, data_dir: Path) -> None:
-    """Idempotente lokale Migration: SQLite-Rebuild + Extraktions-Datei-Rename/Backfill
-    + ingest-Reaktivierung. Neo4j wird NICHT berührt (siehe migrate_neo4j_edges)."""
-    # 1. SQLite phase_status rebuild (CHECK kann nicht per ALTER erweitert werden)
-    if _needs_status_rebuild(db):
+def _rebuild_status_table(db: sqlite3.Connection) -> None:
+    """Atomarer Rebuild (P1#1). isolation_level=None + manuelle BEGIN/COMMIT/ROLLBACK;
+    KEIN executescript (das committet implizit und bräche die Atomarität).
+    Die einmalige ingest-Reaktivierung läuft in DERSELBEN Transaktion (P1#2:
+    an den one-shot-Rebuild gekoppelt, nicht an die Existenz alter Dateien)."""
+    prev = db.isolation_level
+    db.isolation_level = None
+    try:
         db.execute("BEGIN")
-        db.executescript(_NEW_PHASE_STATUS)
+        db.execute(_NEW_PHASE_STATUS)
         db.execute(
             "INSERT INTO phase_status_new SELECT notebook_id, phase, status, error, "
             "started_at, finished_at, retry_count, updated_at FROM phase_status"
         )
+        # Migrierte (audio-only) Notebooks brauchen den neuen Qdrant-Write -> reaktivieren.
+        db.execute(
+            "UPDATE phase_status_new SET status='pending', updated_at=datetime('now') "
+            "WHERE phase='ingest' AND status='completed'"
+        )
         db.execute("DROP TABLE phase_status")
         db.execute("ALTER TABLE phase_status_new RENAME TO phase_status")
-        db.commit()
-        log.info("migrate_sqlite_rebuilt")
+        db.execute("COMMIT")
+    except Exception:
+        db.execute("ROLLBACK")
+        raise
+    finally:
+        db.isolation_level = prev
 
-    # 2. Alte Extraktionsdateien {nid}.json -> {nid}.transcript.json + Backfill
+
+def _migrate_extraction_files(data_dir: Path) -> None:
+    """Konfliktfest + crash-sicher idempotent (P1#2): {nid}.json -> {nid}.transcript.json.
+    Existiert das Ziel bereits, wird es NICHT überschrieben; die Altdatei wird nur
+    entfernt, nachdem das valide Ziel vorliegt. Schreiben über tmp + atomarem replace."""
     ext_dir = data_dir / "extractions"
-    reactivated: list[str] = []
-    if ext_dir.exists():
-        for old in sorted(ext_dir.glob("*.json")):
-            # neue Dateien tragen das Muster {nid}.{source_id}.json -> Punkte im Stamm.
-            # Alt-Dateien sind {nid}.json (genau ein Segment vor .json).
-            if old.stem.count(".") > 0:
-                continue
-            nid = old.stem
+    if not ext_dir.exists():
+        return
+    for old in sorted(ext_dir.glob("*.json")):
+        if old.stem.count(".") > 0:          # neue {nid}.{source_id}.json überspringen
+            continue
+        nid = old.stem
+        target = ext_dir / f"{nid}.transcript.json"
+        if not target.exists():
             data = json.loads(old.read_text())
             data.setdefault("source_kind", "transcript")
             data.setdefault("source_id", "transcript")
-            new = ext_dir / f"{nid}.transcript.json"
-            new.write_text(json.dumps(data, indent=2))
-            old.unlink()
-            reactivated.append(nid)
+            tmp = ext_dir / f"{nid}.transcript.json.tmp"
+            tmp.write_text(json.dumps(data, indent=2))
+            tmp.replace(target)              # atomarer Rename
             log.info("migrate_extraction_renamed", notebook_id=nid)
+        old.unlink()                          # Ziel liegt vor -> Altdatei sicher entfernbar
 
-    # 3. ingest reaktivieren (damit der neue Qdrant-Write nachgeholt wird)
-    for nid in reactivated:
-        db.execute(
-            "UPDATE phase_status SET status='pending', updated_at=datetime('now') "
-            "WHERE notebook_id=? AND phase='ingest' AND status='completed'",
-            (nid,),
-        )
-    db.commit()
-    if reactivated:
-        log.info("migrate_ingest_reactivated", count=len(reactivated))
+
+def migrate_local(db: sqlite3.Connection, data_dir: Path) -> None:
+    """Idempotente lokale Migration. Neo4j wird NICHT berührt (siehe migrate_neo4j_edges).
+    Reihenfolge: atomarer SQLite-Rebuild (inkl. einmaliger ingest-Reaktivierung),
+    dann konfliktfeste Datei-Migration."""
+    if _needs_status_rebuild(db):
+        _rebuild_status_table(db)
+        log.info("migrate_sqlite_rebuilt")
+    _migrate_extraction_files(data_dir)
 ```
 
 - [ ] **Step 4: Run — verify PASS**
@@ -406,6 +451,26 @@ def build_neo4j_backfill_statement() -> dict:
         "statement": BACKFILL_EXTRACTED_FROM,
         "parameters": {"source_kind": "transcript", "source_id": "transcript"},
     }
+
+
+async def migrate_neo4j_edges(client, neo4j_http_url, neo4j_user, neo4j_password) -> int:
+    """Separat ausführbarer Neo4j-Backfill (P2#10). Unabhängig vom lokalen Teil —
+    ein nicht erreichbares Neo4j blockiert migrate_local nicht. Gibt die Anzahl
+    betroffener Kanten zurück (Cypher-Counter, idempotent re-runbar)."""
+    import base64
+    stmt = build_neo4j_backfill_statement()
+    auth = base64.b64encode(f"{neo4j_user}:{neo4j_password}".encode()).decode()
+    resp = await client.post(
+        f"{neo4j_http_url}/db/neo4j/tx/commit",
+        json={"statements": [stmt]},
+        headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"},
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("errors"):
+        raise RuntimeError(f"Neo4j backfill error: {data['errors'][0].get('message','')}")
+    return 0  # optional: aus data["results"] den properties-set-Counter lesen
 ```
 
 - [ ] **Step 4: Run — verify PASS**
@@ -483,11 +548,32 @@ class Extraction(BaseModel):
 Run: `uv run pytest tests/test_nlm_schemas.py -q`
 Expected: PASS
 
+- [ ] **Step 4b: Bestehende `Extraction(...)`-Fixtures reparieren (P1#6)**
+
+`source_kind`/`source_id` sind jetzt **Pflicht** → jeder bestehende `Extraction(...)`-Konstruktor ohne diese Felder wirft `ValidationError`. Betroffene Dateien finden und alle Vorkommen ergänzen (`source_kind="transcript", source_id="transcript"` als Default für Alt-Fixtures):
+
+Run: `grep -rln "Extraction(" tests/ | grep -i nlm`
+Erwartete Treffer (mindestens): `tests/test_nlm_extract.py`, `tests/test_nlm_ingest.py`, `tests/test_nlm_relations.py`, `tests/test_nlm_cli_wiring.py`. In jedem Konstruktor ergänzen:
+
+```python
+Extraction(
+    notebook_id="nb1", entities=[...], relations=[...], claims=[...],
+    extraction_model="qwen", prompt_version="v1",
+    source_kind="transcript", source_id="transcript",   # NEU (Pflicht)
+)
+```
+
+Run (gesamte NLM-Suite, nicht nur schemas):
+```bash
+uv run pytest tests/test_nlm_*.py -q
+```
+Expected: PASS. Jeder verbleibende `ValidationError` zeigt einen noch nicht reparierten Konstruktor.
+
 - [ ] **Step 5: Commit**
 
 ```bash
-git add nlm_ingest/schemas.py tests/test_nlm_schemas.py
-git commit -m "feat(nlm-schemas): ExtractionSource + Extraction provenance fields"
+git add nlm_ingest/schemas.py tests/test_nlm_schemas.py tests/test_nlm_extract.py tests/test_nlm_ingest.py tests/test_nlm_relations.py tests/test_nlm_cli_wiring.py
+git commit -m "feat(nlm-schemas): ExtractionSource + Extraction provenance fields; update fixtures"
 ```
 
 ---
@@ -816,13 +902,14 @@ In `export_all` die Aufrufe + Dict anpassen:
             slide_deck_paths = await _export_slide_decks(client, nb.id, nb_dir)
             report_paths, report_status = await _export_reports(client, nb.id, nb_dir)
 
-            if not (audio_path or slide_deck_paths or report_paths
-                    or audio_status == "absent"):
-                # nichts geholt UND auch kein definitiv-leeres Audio -> nicht registrieren
-                # (audio_status 'absent' deutet auf ein evtl. slide-only Notebook,
-                #  das registriert werden soll, damit Reconciliation es als skipped führt)
-                if audio_status != "failed" and report_status != "failed":
-                    continue
+            # Nur registrieren, wenn ein Artefakt vorliegt ODER ein retrybarer
+            # Export-Fehler festgehalten werden muss (P2#9). Ein komplett
+            # artefaktloses Notebook (kein Audio, kein Report, kein Slide) wird
+            # NICHT registriert.
+            has_artifact = bool(audio_path or slide_deck_paths or report_paths)
+            retryable_failure = audio_status == "failed" or report_status == "failed"
+            if not (has_artifact or retryable_failure):
+                continue
 
             exported.append({
                 "notebook_id": nb.id,
@@ -895,11 +982,13 @@ def test_reconcile_no_skip_when_report_failed(tmp_path):
     assert get_phase_status(db, "nb1", "extract") != "skipped"
     db.close()
 
-def test_reconcile_audio_after_skip_resets_transcribe(tmp_path):
+def test_reconcile_audio_after_skip_resets_all_three(tmp_path):
     db = init_db(tmp_path / "s.db"); register_notebook(db, "nb1", "T", "RAND")
-    set_phase_status(db, "nb1", "transcribe", "skipped")
+    for ph in ("transcribe", "extract", "ingest"):
+        set_phase_status(db, "nb1", ph, "skipped")
     reconcile_phases(db, tmp_path, "nb1", audio_status="downloaded", report_status="complete")
-    assert get_phase_status(db, "nb1", "transcribe") == "pending"
+    for ph in ("transcribe", "extract", "ingest"):
+        assert get_phase_status(db, "nb1", ph) == "pending"
     db.close()
 ```
 
@@ -930,9 +1019,10 @@ def reconcile_phases(db, data_dir, notebook_id, *, audio_status, report_status):
     """
     from nlm_ingest.sources import load_sources  # lokaler Import, vermeidet Zyklen
 
-    # 1. Audio erschien nach skipped -> transcribe reaktivieren
+    # 1. Audio erschien nach skipped -> transcribe, extract, ingest reaktivieren (Spec: alle drei)
     if audio_status in ("downloaded", "failed") and get_phase_status(db, notebook_id, "transcribe") == "skipped":
-        set_phase_status(db, notebook_id, "transcribe", "pending")
+        for ph in ("transcribe", "extract", "ingest"):
+            set_phase_status(db, notebook_id, ph, "pending")
 
     sources = load_sources(data_dir, notebook_id)
 
@@ -984,7 +1074,7 @@ from nlm_ingest.schemas import Extraction, Claim
 
 def _extraction(**kw):
     base = dict(notebook_id="nb1", entities=[], relations=[],
-                claims=[Claim(statement="X happened", type="event_claim",
+                claims=[Claim(statement="X happened", type="factual",
                               polarity="positive", entities_involved=[],
                               confidence=0.9, temporal_scope="2026")],
                 extraction_model="qwen", prompt_version="v1",
@@ -1001,7 +1091,7 @@ def test_link_claim_document_carries_provenance():
     assert link["parameters"]["source_id"] == "rep-a"
 ```
 
-*(Claim-Enum-Werte wie `type="event_claim"` ggf. an die echten `ClaimType`/`ClaimPolarity`-Literale in `schemas.py` anpassen — vor dem Schreiben kurz dort nachsehen.)*
+*(Gültige `ClaimType`-Literale: `factual` | `assessment` | `prediction`; `ClaimPolarity`: `positive` | `negative` | `neutral` — siehe [schemas.py:57-58](../../../services/data-ingestion/nlm_ingest/schemas.py).)*
 
 - [ ] **Step 2: Run — verify FAIL**
 
@@ -1072,11 +1162,13 @@ git commit -m "feat(nlm-ingest): EXTRACTED_FROM carries source_kind/source_id pr
 
 ```python
 # tests/test_nlm_ingest_qdrant.py
+from types import SimpleNamespace
+import pytest
 from nlm_ingest.ingest_qdrant import build_claim_points, _point_id
 from nlm_ingest.schemas import Extraction, Claim
 
 def _claim(stmt, conf=0.9):
-    return Claim(statement=stmt, type="event_claim", polarity="positive",
+    return Claim(statement=stmt, type="factual", polarity="positive",
                  entities_involved=["NATO"], confidence=conf, temporal_scope="2026")
 
 def _extraction(**kw):
@@ -1108,6 +1200,45 @@ def test_rejected_claims_are_skipped():
     points = build_claim_points(_extraction(claims=[_claim("low", conf=0.0)]),
                                 notebook_title="T", embed=lambda t: [0.0]*1024)
     assert points == []
+
+
+@pytest.mark.asyncio
+async def test_ensure_collection_creates_when_missing():
+    import nlm_ingest.ingest_qdrant as iq
+    created = {}
+    class FakeQ:
+        def get_collections(self): return SimpleNamespace(collections=[])
+        def create_collection(self, collection_name, vectors_config):
+            created.update(name=collection_name, size=vectors_config.size)
+    await iq.ensure_collection(FakeQ(), "odin_intel", 1024)
+    assert created == {"name": "odin_intel", "size": 1024}
+
+
+@pytest.mark.asyncio
+async def test_ensure_collection_validates_when_exists(monkeypatch):
+    import nlm_ingest.ingest_qdrant as iq
+    seen = {}
+    class FakeQ:
+        def get_collections(self):
+            return SimpleNamespace(collections=[SimpleNamespace(name="odin_intel")])
+        def get_collection(self, name): return {"name": name}
+    monkeypatch.setattr(iq, "validate_collection_schema",
+                        lambda info, enable_hybrid: seen.setdefault("validated", True))
+    await iq.ensure_collection(FakeQ(), "odin_intel", 1024)
+    assert seen["validated"] is True
+
+
+@pytest.mark.asyncio
+async def test_ensure_collection_aborts_on_schema_mismatch(monkeypatch):
+    import nlm_ingest.ingest_qdrant as iq
+    class FakeQ:
+        def get_collections(self):
+            return SimpleNamespace(collections=[SimpleNamespace(name="odin_intel")])
+        def get_collection(self, name): return {}
+    def _boom(info, enable_hybrid): raise RuntimeError("schema mismatch")
+    monkeypatch.setattr(iq, "validate_collection_schema", _boom)
+    with pytest.raises(RuntimeError, match="mismatch"):
+        await iq.ensure_collection(FakeQ(), "odin_intel", 1024)
 ```
 
 - [ ] **Step 2: Run — verify FAIL**
@@ -1251,6 +1382,12 @@ def test_sources_needing_extract_skips_valid_files(tmp_path):
     sources = [_src("nb1","r1","report"), _src("nb1","r2","report")]
     todo = _sources_needing_extract(tmp_path, sources)
     assert [s.source_id for s in todo] == ["r2"]   # r1 hat valide Datei
+
+def test_sources_needing_extract_includes_corrupt_file(tmp_path):
+    ext = tmp_path / "extractions"; ext.mkdir()
+    (ext / "nb1.r1.json").write_text("{ not valid json")   # kaputt -> nicht valide
+    todo = _sources_needing_extract(tmp_path, [_src("nb1","r1","report")])
+    assert [s.source_id for s in todo] == ["r1"]
 ```
 
 - [ ] **Step 2: Run — verify FAIL**
@@ -1426,6 +1563,28 @@ def test_extraction_files_globs_all_sources(tmp_path):
     (ext / "nb2.transcript.json").write_text("{}")
     files = sorted(p.name for p in _extraction_files_for(tmp_path, "nb1"))
     assert files == ["nb1.rep-a.json", "nb1.transcript.json"]
+
+@pytest.mark.asyncio
+async def test_ingest_one_notebook_partial_failure_is_not_ok(tmp_path):
+    # Aggregation (P1#4/P2#8): scheitert EINE Quelle, ist das Notebook NICHT ok.
+    from nlm_ingest.cli import _ingest_one_notebook
+    ext = tmp_path / "extractions"; ext.mkdir()
+    valid = ('{"notebook_id":"nb1","entities":[],"relations":[],"claims":[],'
+             '"extraction_model":"q","prompt_version":"v1",'
+             '"source_kind":"%s","source_id":"%s"}')
+    (ext / "nb1.transcript.json").write_text(valid % ("transcript", "transcript"))
+    (ext / "nb1.rep-a.json").write_text(valid % ("report", "rep-a"))
+
+    async def good_write(extraction): return None
+    async def bad_for_report(extraction):
+        if extraction.source_kind == "report":
+            raise RuntimeError("neo4j down")
+
+    ok_all = await _ingest_one_notebook(_extraction_files_for(tmp_path, "nb1"),
+                                        neo4j_write=good_write, qdrant_write=good_write)
+    ok_partial = await _ingest_one_notebook(_extraction_files_for(tmp_path, "nb1"),
+                                            neo4j_write=bad_for_report, qdrant_write=good_write)
+    assert ok_all is True and ok_partial is False
 ```
 
 - [ ] **Step 2: Run — verify FAIL**
@@ -1439,9 +1598,25 @@ Expected: FAIL — `ImportError: _extraction_files_for`.
 def _extraction_files_for(data_dir, notebook_id):
     """Alle extractions/{nid}.*.json eines Notebooks (Multi-Source)."""
     return sorted((data_dir / "extractions").glob(f"{notebook_id}.*.json"))
+
+
+async def _ingest_one_notebook(files, *, neo4j_write, qdrant_write) -> bool:
+    """Schreibt jede Extraktionsdatei nach Neo4j + Qdrant (injizierte Writer).
+    Aggregation (P1#4/P2#8): Rückgabe True nur bei Vollerfolg; ein Fehler bei
+    einer Quelle -> False (Phase bleibt 'failed', retrybar)."""
+    from nlm_ingest.schemas import Extraction
+    ok = True
+    for f in files:
+        try:
+            extraction = Extraction.model_validate_json(f.read_text())
+            await neo4j_write(extraction)
+            await qdrant_write(extraction)
+        except Exception:
+            ok = False
+    return ok
 ```
 
-`ingest`-Command (Kern): pro Notebook über `_extraction_files_for` iterieren, je Datei `ingest_extraction(...)` (Neo4j) **und** `build_claim_points`+`ingest_to_qdrant` (Qdrant) aufrufen; `ingest=completed` nur bei Vollerfolg, sonst `failed`. Qdrant einmalig `ensure_collection` vor der Schleife.
+`ingest`-Command (Kern): pro Notebook über `_extraction_files_for` iterieren und `_ingest_one_notebook` mit zwei Writer-Closures aufrufen; `ingest=completed` nur bei Rückgabe `True`, sonst `failed`. Qdrant einmalig `ensure_collection` vor der Schleife.
 
 ```python
         from nlm_ingest.ingest_neo4j import ingest_extraction
@@ -1451,8 +1626,11 @@ def _extraction_files_for(data_dir, notebook_id):
         db = _get_db()
         qdrant = QdrantClient(url=settings.qdrant_url)
         await ensure_collection(qdrant, settings.qdrant_collection, settings.embedding_dimensions)
+        # extract MUSS completed sein (P1#4): sonst würde bei neuem Report eine alte
+        # Extraktionsdatei ingestiert und ingest zu früh abgeschlossen.
         targets = [r for r in get_all_status(db)
                    if r.get("ingest") in ("pending", "failed", "running")
+                   and r.get("extract") == "completed"
                    and (notebook_id is None or r["notebook_id"] == notebook_id)]
         async with httpx.AsyncClient() as client:
             async def _embed(text: str) -> list[float]:
@@ -1467,28 +1645,28 @@ def _extraction_files_for(data_dir, notebook_id):
                 if not files:
                     continue
                 set_phase_status(db, nid, "ingest", "running")
-                ok = True
-                for f in files:
-                    try:
-                        extraction = Extraction.model_validate_json(f.read_text())
-                        await ingest_extraction(extraction, row.get("source") or "unknown",
-                                                client, settings.neo4j_http_url,
-                                                settings.neo4j_user, settings.neo4j_password)
-                        # Qdrant: embed synchron via TEI (await je Claim)
-                        points = []
-                        for c in extraction.claims:
-                            if c.confidence <= 0.0:
-                                continue
-                            vec = await _embed(c.statement)
-                            points += build_claim_points(
-                                extraction.model_copy(update={"claims": [c]}),
-                                notebook_title=row.get("title") or "untitled",
-                                embed=lambda _t, _v=vec: _v,
-                                source_name=row.get("source") or "unknown")
-                        await ingest_to_qdrant(qdrant, settings.qdrant_collection, points)
-                    except Exception as e:
-                        ok = False
-                        click.echo(f"FAIL {nid}/{f.name}: {e}")
+                source_name = row.get("source") or "unknown"
+                title = row.get("title") or "untitled"
+
+                async def _neo4j_write(extraction):
+                    await ingest_extraction(extraction, source_name, client,
+                                            settings.neo4j_http_url, settings.neo4j_user,
+                                            settings.neo4j_password)
+
+                async def _qdrant_write(extraction):
+                    points = []
+                    for c in extraction.claims:
+                        if c.confidence <= 0.0:
+                            continue
+                        vec = await _embed(c.statement)
+                        points += build_claim_points(
+                            extraction.model_copy(update={"claims": [c]}),
+                            notebook_title=title, embed=lambda _t, _v=vec: _v,
+                            source_name=source_name)
+                    await ingest_to_qdrant(qdrant, settings.qdrant_collection, points)
+
+                ok = await _ingest_one_notebook(files, neo4j_write=_neo4j_write,
+                                                qdrant_write=_qdrant_write)
                 set_phase_status(db, nid, "ingest", "completed" if ok else "failed")
         db.close()
 ```
@@ -1524,7 +1702,14 @@ from unittest.mock import patch
 from click.testing import CliRunner
 from nlm_ingest.cli import cli
 
-def test_migrate_command_invokes_local(monkeypatch):
+def test_migrate_command_invokes_local(tmp_path, monkeypatch):
+    # Vollständige Isolation (P1#5): KEINE echte DB / kein echtes nlm_data_dir berühren.
+    import sqlite3
+    from types import SimpleNamespace
+    fake_db = sqlite3.connect(":memory:")
+    monkeypatch.setattr("nlm_ingest.cli._get_db", lambda: fake_db)
+    monkeypatch.setattr("nlm_ingest.cli._get_settings",
+                        lambda: SimpleNamespace(nlm_data_dir=str(tmp_path)))
     with patch("nlm_ingest.migrate.migrate_local") as ml:
         res = CliRunner().invoke(cli, ["migrate", "--local-only"])
     assert res.exit_code == 0
@@ -1543,34 +1728,32 @@ In `nlm_ingest/cli.py`:
 ```python
 @cli.command()
 @click.option("--local-only", is_flag=True, help="Nur SQLite/Dateien, kein Neo4j-Backfill")
-def migrate(local_only: bool):
-    """Einmalige Migration auf das Multi-Source-Schema."""
-    from nlm_ingest.migrate import migrate_local, build_neo4j_backfill_statement
+@click.option("--neo4j-only", is_flag=True, help="Nur Neo4j-Kanten-Backfill, kein lokaler Teil")
+def migrate(local_only: bool, neo4j_only: bool):
+    """Einmalige Migration auf das Multi-Source-Schema.
+
+    Lokaler Teil (SQLite/Dateien) und Neo4j-Backfill sind getrennt ausführbar (P2#10):
+    ein unerreichbares Neo4j blockiert den lokalen Teil nicht.
+    """
+    if local_only and neo4j_only:
+        raise click.UsageError("--local-only und --neo4j-only schließen sich aus")
+    from nlm_ingest.migrate import migrate_local, migrate_neo4j_edges
     settings = _get_settings()
     data_dir = Path(settings.nlm_data_dir)
-    db = _get_db()
-    migrate_local(db, data_dir)
-    db.close()
-    click.echo("Local migration done.")
+
+    if not neo4j_only:
+        db = _get_db()
+        migrate_local(db, data_dir)
+        db.close()
+        click.echo("Local migration done.")
     if local_only:
         return
-    # Neo4j-Backfill separat (unerreichbares Neo4j blockiert den lokalen Teil nicht)
-    import base64
+
     async def _backfill():
-        stmt = build_neo4j_backfill_statement()
-        auth = base64.b64encode(
-            f"{settings.neo4j_user}:{settings.neo4j_password}".encode()).decode()
         async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{settings.neo4j_http_url}/db/neo4j/tx/commit",
-                json={"statements": [stmt]},
-                headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"},
-                timeout=30.0,
-            )
-            resp.raise_for_status()
-            errors = resp.json().get("errors", [])
-            if errors:
-                raise RuntimeError(f"Neo4j backfill error: {errors[0].get('message','')}")
+            await migrate_neo4j_edges(
+                client, settings.neo4j_http_url,
+                settings.neo4j_user, settings.neo4j_password)
     asyncio.run(_backfill())
     click.echo("Neo4j backfill done.")
 ```
