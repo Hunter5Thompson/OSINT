@@ -25,7 +25,7 @@ class CacheService:
 
     async def close(self) -> None:
         if self._redis:
-            await self._redis.close()
+            await self._redis.aclose()
 
     async def get(self, key: str) -> Any | None:
         if not self._redis:
