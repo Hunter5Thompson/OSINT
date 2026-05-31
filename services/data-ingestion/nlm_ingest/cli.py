@@ -242,67 +242,69 @@ def extract(notebook_id: str | None):
         from nlm_ingest.extract import extract_with_qwen, review_with_claude
         from nlm_ingest.sources import load_sources
         db = _get_db()
-        matrix = get_all_status(db)
-        candidates = [
-            r for r in matrix
-            if r.get("extract") in ("pending", "failed", "running")
-            and (notebook_id is None or r["notebook_id"] == notebook_id)
-        ]
-
-        claude_client = None
         try:
-            import anthropic
-            claude_client = anthropic.AsyncAnthropic()
-        except Exception:
-            log.warning("anthropic_not_available", msg="Claude review disabled")
+            matrix = get_all_status(db)
+            candidates = [
+                r for r in matrix
+                if r.get("extract") in ("pending", "failed", "running")
+                and (notebook_id is None or r["notebook_id"] == notebook_id)
+            ]
 
-        async with httpx.AsyncClient() as client:
-            for row in candidates:
-                nid = row["notebook_id"]
-                sources = load_sources(data_dir, nid)
-                if not sources:
-                    click.echo(f"SKIP {nid}: no sources")
-                    continue
+            claude_client = None
+            try:
+                import anthropic
+                claude_client = anthropic.AsyncAnthropic()
+            except Exception:
+                log.warning("anthropic_not_available", msg="Claude review disabled")
 
-                set_phase_status(db, nid, "extract", "running")
-                meta_path = data_dir / "notebooks" / nid / "metadata.json"
-                try:
-                    metadata = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-                except Exception as e:
-                    click.echo(f"FAIL {nid}: bad metadata.json: {e}")
-                    set_phase_status(db, nid, "extract", "failed")
-                    continue
-                ok = True
-                for source in _sources_needing_extract(data_dir, sources):
+            async with httpx.AsyncClient() as client:
+                for row in candidates:
+                    nid = row["notebook_id"]
+                    sources = load_sources(data_dir, nid)
+                    if not sources:
+                        click.echo(f"SKIP {nid}: no sources")
+                        continue
+
+                    set_phase_status(db, nid, "extract", "running")
+                    meta_path = data_dir / "notebooks" / nid / "metadata.json"
                     try:
-                        extraction = await extract_with_qwen(
-                            source=source,
-                            metadata=metadata,
-                            client=client,
-                            vllm_url=settings.ingestion_vllm_url,
-                            vllm_model=settings.ingestion_vllm_model,
-                        )
-                        if claude_client:
-                            extraction = await review_with_claude(
-                                extraction=extraction,
-                                source=source,
-                                claude_client=claude_client,
-                                claude_model=settings.claude_model,
-                            )
-                        out = data_dir / "extractions" / f"{nid}.{source.source_id}.json"
-                        out.parent.mkdir(parents=True, exist_ok=True)
-                        out.write_text(extraction.model_dump_json(indent=2))
-                        click.echo(
-                            f"OK {nid}/{source.source_id}: {len(extraction.entities)} entities, "
-                            f"{len(extraction.claims)} claims, "
-                            f"{len(extraction.relations)} relations"
-                        )
+                        metadata = json.loads(meta_path.read_text()) if meta_path.exists() else {}
                     except Exception as e:
-                        ok = False
-                        click.echo(f"FAIL {nid}/{source.source_id}: {e}")
-                set_phase_status(db, nid, "extract", "completed" if ok else "failed")
-
-        db.close()
+                        click.echo(f"FAIL {nid}: bad metadata.json: {e}")
+                        set_phase_status(db, nid, "extract", "failed")
+                        continue
+                    ok = True
+                    for source in _sources_needing_extract(data_dir, sources):
+                        try:
+                            extraction = await extract_with_qwen(
+                                source=source,
+                                metadata=metadata,
+                                client=client,
+                                vllm_url=settings.ingestion_vllm_url,
+                                vllm_model=settings.ingestion_vllm_model,
+                            )
+                            if claude_client:
+                                extraction = await review_with_claude(
+                                    extraction=extraction,
+                                    source=source,
+                                    claude_client=claude_client,
+                                    claude_model=settings.claude_model,
+                                )
+                            out = data_dir / "extractions" / f"{nid}.{source.source_id}.json"
+                            out.parent.mkdir(parents=True, exist_ok=True)
+                            out.write_text(extraction.model_dump_json(indent=2))
+                            click.echo(
+                                f"OK {nid}/{source.source_id}: "
+                                f"{len(extraction.entities)} entities, "
+                                f"{len(extraction.claims)} claims, "
+                                f"{len(extraction.relations)} relations"
+                            )
+                        except Exception as e:
+                            ok = False
+                            click.echo(f"FAIL {nid}/{source.source_id}: {e}")
+                    set_phase_status(db, nid, "extract", "completed" if ok else "failed")
+        finally:
+            db.close()
 
     asyncio.run(_run())
 
@@ -330,7 +332,7 @@ def ingest(notebook_id: str | None):
                 qdrant,
                 settings.qdrant_collection,
                 settings.embedding_dimensions,
-                enable_hybrid=getattr(settings, "enable_hybrid", False),
+                enable_hybrid=settings.enable_hybrid,
             )
             # extract MUST be completed (P1#4): else a stale extraction file would be
             # ingested and ingest finished prematurely when a new report was added.
@@ -341,7 +343,7 @@ def ingest(notebook_id: str | None):
                 and (notebook_id is None or r["notebook_id"] == notebook_id)
             ]
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 async def _embed(text: str) -> list[float]:
                     resp = await client.post(
                         f"{settings.tei_embed_url}/embed",
