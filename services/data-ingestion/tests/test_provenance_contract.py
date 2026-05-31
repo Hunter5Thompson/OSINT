@@ -1,4 +1,4 @@
-"""The intelligence read-side must agree with the shared provenance contract."""
+"""The data-ingestion write-side must agree with the shared provenance contract."""
 from __future__ import annotations
 
 import json
