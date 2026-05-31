@@ -1645,7 +1645,7 @@ def test_build_gdacs_payload_stamps_provenance_and_no_published():
 
 - [ ] **Step 2: Run — verify it fails**
 
-Run: `cd services/data-ingestion && uv run pytest tests/test_eonet_collector.py -k build_eonet_payload tests/test_gdacs_collector.py -k build_gdacs_payload -v`
+Run: `cd services/data-ingestion && uv run pytest tests/test_eonet_collector.py tests/test_gdacs_collector.py -k "build_eonet_payload or build_gdacs_payload" -v`
 Expected: FAIL with `ImportError: cannot import name 'build_eonet_payload'` (and `build_gdacs_payload`).
 
 - [ ] **Step 3: Implement — EONET pure builder + wire it in**
