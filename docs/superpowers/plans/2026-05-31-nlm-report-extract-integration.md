@@ -313,6 +313,19 @@ def test_migrate_extraction_invalid_old_file_aborts(tmp_path):
         _migrate_extraction_files(db, tmp_path)
     assert (ext / "nb1.json").exists()                       # Altdatei bleibt
     assert not (ext / "nb1.transcript.json").exists()        # kein halbes Ziel
+
+def test_migrate_extraction_notebook_id_mismatch_aborts(tmp_path):
+    # Altdatei nb1.json trägt intern notebook_id="other" -> Abbruch (Finding #2).
+    from nlm_ingest.migrate import _migrate_extraction_files
+    ext = tmp_path / "extractions"; ext.mkdir(parents=True)
+    (ext / "nb1.json").write_text(
+        '{"notebook_id":"other","entities":[],"relations":[],"claims":[],'
+        '"extraction_model":"q","prompt_version":"v1"}')
+    db = sqlite3.connect(":memory:")
+    with pytest.raises(RuntimeError, match="notebook_id"):
+        _migrate_extraction_files(db, tmp_path)
+    assert (ext / "nb1.json").exists()
+    assert not (ext / "nb1.transcript.json").exists()
 ```
 
 > **Pflicht nach jeder Task:** die **gesamte** NLM-Suite laufen lassen
@@ -422,16 +435,22 @@ def _migrate_extraction_files(db: sqlite3.Connection, data_dir: Path) -> list[st
         else:
             from nlm_ingest.schemas import Extraction
             data = json.loads(old.read_text())
-            data.setdefault("source_kind", "transcript")
-            data.setdefault("source_id", "transcript")
-            # Transformierte Daten VOR Schreiben/Löschen validieren (Finding #2):
-            # eine kaputte/unvollständige Altdatei darf nicht migriert+gelöscht werden.
+            # Legacy ist immer eine Transkript-Quelle -> Provenance EXPLIZIT setzen
+            # (überschreiben, nicht setdefault), damit z.B. ein fälschlich vorhandenes
+            # source_kind="report" nicht als transcript.json zementiert wird (Finding #2).
+            data["source_kind"] = "transcript"
+            data["source_id"] = "transcript"
+            # Modell- UND Semantik-Validierung vor Schreiben/Löschen:
             try:
-                Extraction.model_validate(data)
-            except Exception as e:
+                e = Extraction.model_validate(data)
+            except Exception as exc:
                 raise RuntimeError(
                     f"Migration: {old.name} is not a valid Extraction after backfill "
-                    f"({e}); refusing to migrate/delete") from e
+                    f"({exc}); refusing to migrate/delete") from exc
+            if e.notebook_id != nid:
+                raise RuntimeError(
+                    f"Migration: {old.name} carries notebook_id={e.notebook_id!r} != "
+                    f"filename {nid!r}; refusing to migrate/delete")
             tmp = ext_dir / f"{nid}.transcript.json.tmp"
             tmp.write_text(json.dumps(data, indent=2))
             tmp.replace(target)              # atomarer Rename
@@ -663,6 +682,26 @@ Extraction(
 )
 ```
 
+- [ ] **Step 4c: Produzenten in `extract.py` temporär anpassen (Finding #1)**
+
+Der bestehende Produzent baut `Extraction(...)` ohne die neuen Pflichtfelder
+([extract.py:83](../../../services/data-ingestion/nlm_ingest/extract.py)). Damit die
+Gesamtsuite nach Task 5 grün bleibt (Task 7 refactort das endgültig), dort
+**vorübergehend** ergänzen:
+
+```python
+    return Extraction(
+        notebook_id=transcript.notebook_id,
+        entities=[Entity(**e) for e in data.get("entities", [])],
+        relations=[Relation(**r) for r in data.get("relations", [])],
+        claims=[Claim(**c) for c in data.get("claims", [])],
+        extraction_model=vllm_model,
+        prompt_version=prompt_version,
+        source_kind="transcript",   # TEMP (Task 7 -> source.source_kind)
+        source_id="transcript",     # TEMP (Task 7 -> source.source_id)
+    )
+```
+
 Run (gesamte NLM-Suite, nicht nur schemas):
 ```bash
 uv run pytest tests/test_nlm_*.py -q
@@ -672,8 +711,8 @@ Expected: PASS. Jeder verbleibende `ValidationError` zeigt einen noch nicht repa
 - [ ] **Step 5: Commit**
 
 ```bash
-git add nlm_ingest/schemas.py tests/test_nlm_schemas.py tests/test_nlm_extract.py tests/test_nlm_ingest.py tests/test_nlm_relations.py tests/test_nlm_cli_wiring.py
-git commit -m "feat(nlm-schemas): ExtractionSource + Extraction provenance fields; update fixtures"
+git add nlm_ingest/schemas.py nlm_ingest/extract.py tests/test_nlm_schemas.py tests/test_nlm_extract.py tests/test_nlm_ingest.py tests/test_nlm_relations.py tests/test_nlm_cli_wiring.py
+git commit -m "feat(nlm-schemas): ExtractionSource + Extraction provenance fields; update fixtures + temp producer"
 ```
 
 ---
@@ -1279,15 +1318,32 @@ git commit -m "feat(nlm-ingest): EXTRACTED_FROM carries source_kind/source_id pr
 - Create: `nlm_ingest/ingest_qdrant.py`
 - Test: `tests/test_nlm_ingest_qdrant.py`
 
-- [ ] **Step 0: `enable_hybrid` in `config.py` ergänzen (Finding #5)**
+- [ ] **Step 0a: Failing test für `config.enable_hybrid` (hermetisch, Finding #4/#5)**
 
-`Settings` besitzt heute kein `enable_hybrid`; ohne das Feld liefe der Hybrid-Schutz
-in `ensure_collection` über `getattr(..., False)` praktisch nie an. In der `Settings`-
-Klasse in `config.py` ergänzen (zu den übrigen Qdrant-Feldern):
+```python
+# tests/test_config.py  (ergänzen)
+import os
+from unittest.mock import patch
+from config import Settings
+
+def test_settings_has_enable_hybrid_default_false():
+    # hermetisch: keine .env / keine Umgebungsvariablen
+    with patch.dict(os.environ, {}, clear=True):
+        assert Settings(_env_file=None).enable_hybrid is False
+```
+
+Run: `uv run pytest tests/test_config.py::test_settings_has_enable_hybrid_default_false -q`
+Expected: FAIL — `AttributeError: ... has no attribute 'enable_hybrid'`.
+
+- [ ] **Step 0b: `enable_hybrid` in `config.py` ergänzen**
+
+In der `Settings`-Klasse in `config.py` ergänzen (zu den übrigen Qdrant-Feldern):
 
 ```python
     enable_hybrid: bool = False
 ```
+
+Run: `uv run pytest tests/test_config.py -q` → PASS.
 
 - [ ] **Step 1: Failing tests — Point-Bau (reine Funktion, ohne Netz)**
 
@@ -1379,11 +1435,6 @@ async def test_ensure_collection_aborts_in_hybrid_mode():
         def get_collections(self): return SimpleNamespace(collections=[])
     with pytest.raises(NotImplementedError, match="dense-only"):
         await iq.ensure_collection(FakeQ(), "odin_intel", 1024, enable_hybrid=True)
-
-
-def test_settings_has_enable_hybrid_default_false():
-    from config import Settings
-    assert Settings().enable_hybrid is False
 ```
 
 - [ ] **Step 2: Run — verify FAIL**
@@ -1498,8 +1549,8 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add nlm_ingest/ingest_qdrant.py tests/test_nlm_ingest_qdrant.py
-git commit -m "feat(nlm-qdrant): per-claim embedding with UUIDv5 ids + collection preflight"
+git add config.py nlm_ingest/ingest_qdrant.py tests/test_config.py tests/test_nlm_ingest_qdrant.py
+git commit -m "feat(nlm-qdrant): per-claim embedding with UUIDv5 ids + collection preflight + enable_hybrid setting"
 ```
 
 ---
@@ -1871,18 +1922,20 @@ from unittest.mock import patch
 from click.testing import CliRunner
 from nlm_ingest.cli import cli
 
-def test_migrate_command_invokes_local(tmp_path, monkeypatch):
-    # Vollständige Isolation (P1#5): KEINE echte DB / kein echtes nlm_data_dir berühren.
-    import sqlite3
+def test_migrate_command_runs_local_via_get_db(tmp_path, monkeypatch):
+    # local-only läuft über _get_db() (das migrate_local idempotent ausführt) — kein
+    # doppelter migrate_local-Aufruf (Finding #3). Vollständig isoliert (P1#5).
+    from unittest.mock import MagicMock
     from types import SimpleNamespace
-    fake_db = sqlite3.connect(":memory:")
-    monkeypatch.setattr("nlm_ingest.cli._get_db", lambda: fake_db)
-    monkeypatch.setattr("nlm_ingest.cli._get_settings",
+    import nlm_ingest.cli as cli_mod
+    fake_db = MagicMock()
+    monkeypatch.setattr(cli_mod, "_get_db", MagicMock(return_value=fake_db))
+    monkeypatch.setattr(cli_mod, "_get_settings",
                         lambda: SimpleNamespace(nlm_data_dir=str(tmp_path)))
-    with patch("nlm_ingest.migrate.migrate_local") as ml:
-        res = CliRunner().invoke(cli, ["migrate", "--local-only"])
+    res = CliRunner().invoke(cli, ["migrate", "--local-only"])
     assert res.exit_code == 0
-    ml.assert_called_once()
+    cli_mod._get_db.assert_called_once()      # Auto-Migration ist der Mechanismus
+    fake_db.close.assert_called_once()
 ```
 
 - [ ] **Step 2: Run — verify FAIL**
@@ -1906,14 +1959,13 @@ def migrate(local_only: bool, neo4j_only: bool):
     """
     if local_only and neo4j_only:
         raise click.UsageError("--local-only und --neo4j-only schließen sich aus")
-    from nlm_ingest.migrate import migrate_local, migrate_neo4j_edges
+    from nlm_ingest.migrate import migrate_neo4j_edges
     settings = _get_settings()
-    data_dir = Path(settings.nlm_data_dir)
 
     if not neo4j_only:
-        db = _get_db()
-        migrate_local(db, data_dir)
-        db.close()
+        # Auto-Migration in _get_db() erledigt den lokalen Teil (Finding #3) — kein
+        # zweiter migrate_local-Aufruf hier.
+        _get_db().close()
         click.echo("Local migration done.")
     if local_only:
         return
