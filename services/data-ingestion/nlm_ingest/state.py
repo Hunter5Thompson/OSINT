@@ -125,7 +125,7 @@ def validate_retry(db, notebook_id, phase):
             )
 
 
-def _valid_extraction_exists(data_dir, source) -> bool:
+def valid_extraction_exists(data_dir, source) -> bool:
     """Valid, provenance-consistent extraction file for `source` (Finding #5)."""
     from nlm_ingest.schemas import Extraction  # deferred import: keep state.py import-light
 
@@ -168,7 +168,7 @@ def reconcile_phases(db, data_dir, notebook_id, *, audio_status, report_status):
 
     # Source lacks a valid extraction file -> reactivate extract/ingest.
     needs_extract = not all(
-        _valid_extraction_exists(data_dir, s) for s in sources
+        valid_extraction_exists(data_dir, s) for s in sources
     )
     if needs_extract:
         for ph in ("extract", "ingest"):

@@ -9,7 +9,6 @@ import httpx
 import structlog
 
 from config import Settings
-from nlm_ingest.schemas import ExtractionSource, Transcript
 from nlm_ingest.state import (
     PHASE_ORDER,
     attempt_retry,
@@ -32,6 +31,12 @@ def _get_db():
     db_path = Path(settings.nlm_data_dir) / "state.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
     return init_db(db_path)
+
+
+def _sources_needing_extract(data_dir, sources):
+    """Sources without a valid, provenance-consistent extractions/{nid}.{source_id}.json."""
+    from nlm_ingest.state import valid_extraction_exists
+    return [s for s in sources if not valid_extraction_exists(data_dir, s)]
 
 
 async def _check_voxtral(url: str) -> bool:
@@ -184,12 +189,12 @@ def extract(notebook_id: str | None):
 
     async def _run():
         from nlm_ingest.extract import extract_with_qwen, review_with_claude
+        from nlm_ingest.sources import load_sources
         db = _get_db()
         matrix = get_all_status(db)
-        targets = [
+        candidates = [
             r for r in matrix
-            if r.get("transcribe") == "completed"
-            and r.get("extract") in ("pending", "failed", "running")
+            if r.get("extract") in ("pending", "failed", "running")
             and (notebook_id is None or r["notebook_id"] == notebook_id)
         ]
 
@@ -201,54 +206,50 @@ def extract(notebook_id: str | None):
             log.warning("anthropic_not_available", msg="Claude review disabled")
 
         async with httpx.AsyncClient() as client:
-            for row in targets:
+            for row in candidates:
                 nid = row["notebook_id"]
-                transcript_path = data_dir / "transcripts" / f"{nid}.json"
-                if not transcript_path.exists():
-                    click.echo(f"SKIP {nid}: no transcript")
+                sources = load_sources(data_dir, nid)
+                if not sources:
+                    click.echo(f"SKIP {nid}: no sources")
                     continue
 
                 set_phase_status(db, nid, "extract", "running")
+                meta_path = data_dir / "notebooks" / nid / "metadata.json"
                 try:
-                    transcript = Transcript.model_validate_json(transcript_path.read_text())
-                    meta_path = data_dir / "notebooks" / nid / "metadata.json"
                     metadata = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-
-                    source = ExtractionSource(
-                        notebook_id=transcript.notebook_id,
-                        source_id="transcript",
-                        source_kind="transcript",
-                        text=transcript.full_text,
-                    )
-
-                    extraction = await extract_with_qwen(
-                        source=source,
-                        metadata=metadata,
-                        client=client,
-                        vllm_url=settings.ingestion_vllm_url,
-                        vllm_model=settings.ingestion_vllm_model,
-                    )
-
-                    if claude_client:
-                        extraction = await review_with_claude(
-                            extraction=extraction,
-                            source=source,
-                            claude_client=claude_client,
-                            claude_model=settings.claude_model,
-                        )
-
-                    out_path = data_dir / "extractions" / f"{nid}.json"
-                    out_path.parent.mkdir(parents=True, exist_ok=True)
-                    out_path.write_text(extraction.model_dump_json(indent=2))
-                    set_phase_status(db, nid, "extract", "completed")
-                    click.echo(
-                        f"OK {nid}: {len(extraction.entities)} entities, "
-                        f"{len(extraction.claims)} claims, "
-                        f"{len(extraction.relations)} relations"
-                    )
                 except Exception as e:
-                    set_phase_status(db, nid, "extract", "failed", error=str(e))
-                    click.echo(f"FAIL {nid}: {e}")
+                    click.echo(f"FAIL {nid}: bad metadata.json: {e}")
+                    set_phase_status(db, nid, "extract", "failed")
+                    continue
+                ok = True
+                for source in _sources_needing_extract(data_dir, sources):
+                    try:
+                        extraction = await extract_with_qwen(
+                            source=source,
+                            metadata=metadata,
+                            client=client,
+                            vllm_url=settings.ingestion_vllm_url,
+                            vllm_model=settings.ingestion_vllm_model,
+                        )
+                        if claude_client:
+                            extraction = await review_with_claude(
+                                extraction=extraction,
+                                source=source,
+                                claude_client=claude_client,
+                                claude_model=settings.claude_model,
+                            )
+                        out = data_dir / "extractions" / f"{nid}.{source.source_id}.json"
+                        out.parent.mkdir(parents=True, exist_ok=True)
+                        out.write_text(extraction.model_dump_json(indent=2))
+                        click.echo(
+                            f"OK {nid}/{source.source_id}: {len(extraction.entities)} entities, "
+                            f"{len(extraction.claims)} claims, "
+                            f"{len(extraction.relations)} relations"
+                        )
+                    except Exception as e:
+                        ok = False
+                        click.echo(f"FAIL {nid}/{source.source_id}: {e}")
+                set_phase_status(db, nid, "extract", "completed" if ok else "failed")
 
         db.close()
 
