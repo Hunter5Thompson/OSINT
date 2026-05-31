@@ -15,3 +15,8 @@ try:
     import pydub  # noqa: F401
 except ModuleNotFoundError:
     collect_ignore_glob.append("test_nlm_transcribe.py")
+
+try:
+    import notebooklm  # noqa: F401
+except ModuleNotFoundError:
+    collect_ignore_glob.append("test_nlm_export.py")
