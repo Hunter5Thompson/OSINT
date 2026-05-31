@@ -662,17 +662,20 @@ class Extraction(BaseModel):
     source_id: str
 ```
 
-- [ ] **Step 4: Run — verify PASS**
+- [ ] **Step 4: Run — verify FAIL→PASS nur der NEUEN Tests (P3)**
 
-Run: `uv run pytest tests/test_nlm_schemas.py -q`
-Expected: PASS
+Run: `uv run pytest tests/test_nlm_schemas.py -q -k "source or provenance"`
+Expected: PASS (nur die neuen Tests). Der **volle** `tests/test_nlm_schemas.py`-Lauf
+**noch nicht** — die bestehende Fixture `TestExtraction.test_basic`
+([test_nlm_schemas.py:220](../../../services/data-ingestion/tests/test_nlm_schemas.py))
+baut `Extraction` ohne Provenance und wird erst durch Step 4b grün. Voller Lauf in 4b.
 
-- [ ] **Step 4b: Bestehende `Extraction(...)`-Fixtures reparieren (P1#6)**
+- [ ] **Step 4b: Bestehende `Extraction(...)`-Fixtures reparieren (P1#6 + P3)**
 
 `source_kind`/`source_id` sind jetzt **Pflicht** → jeder bestehende `Extraction(...)`-Konstruktor ohne diese Felder wirft `ValidationError`. Betroffene Dateien finden und alle Vorkommen ergänzen (`source_kind="transcript", source_id="transcript"` als Default für Alt-Fixtures):
 
 Run: `grep -rln "Extraction(" tests/ | grep -i nlm`
-Erwartete Treffer (mindestens): `tests/test_nlm_extract.py`, `tests/test_nlm_ingest.py`, `tests/test_nlm_relations.py`, `tests/test_nlm_cli_wiring.py`. In jedem Konstruktor ergänzen:
+Erwartete Treffer (mindestens): **`tests/test_nlm_schemas.py`** (`TestExtraction.test_basic:220`), `tests/test_nlm_extract.py`, `tests/test_nlm_ingest.py`, `tests/test_nlm_relations.py`, `tests/test_nlm_cli_wiring.py`. In jedem Konstruktor ergänzen:
 
 ```python
 Extraction(
