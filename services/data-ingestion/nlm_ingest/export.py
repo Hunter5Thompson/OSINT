@@ -24,10 +24,12 @@ async def _download_atomic(
     part_path = final_path.with_name(final_path.name + ".part")
     try:
         await do_download_to(str(part_path))
+        # replace() is INSIDE the try so a rename failure also cleans up the .part
+        # (no litter) and propagates — final_path never holds a partial file.
+        part_path.replace(final_path)
     except BaseException:
         part_path.unlink(missing_ok=True)
         raise
-    part_path.replace(final_path)
 
 
 async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dict]:

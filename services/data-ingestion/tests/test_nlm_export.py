@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from nlm_ingest.export import export_all
+from nlm_ingest.export import _download_atomic, export_all
 
 
 def _notebook(nb_id: str, title: str = "RAND Strategic Outlook"):
@@ -277,6 +277,32 @@ async def test_partial_audio_download_leaves_no_final_file(tmp_path, monkeypatch
     assert not (nb_dir / "podcast.mp4").exists()
     assert list(nb_dir.glob("*.part")) == []
     assert results[0]["audio_status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_download_atomic_cleans_part_when_rename_fails(tmp_path, monkeypatch):
+    # If the download succeeds (writes the .part) but the final replace() raises,
+    # the .part file must still be cleaned up and the exception must propagate.
+    final_path = tmp_path / "report_r1.md"
+
+    async def _do_download(part_path):
+        Path(part_path).write_text("FULL CONTENT")
+
+    real_replace = Path.replace
+
+    def _boom_replace(self, target):
+        if self.name.endswith(".part"):
+            raise OSError("rename failed")
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", _boom_replace)
+
+    with pytest.raises(OSError, match="rename failed"):
+        await _download_atomic(_do_download, final_path)
+
+    # No leftover .part, and no final file.
+    assert list(tmp_path.glob("*.part")) == []
+    assert not final_path.exists()
 
 
 @pytest.mark.asyncio
