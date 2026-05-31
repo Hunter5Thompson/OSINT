@@ -260,14 +260,33 @@ def test_rebuild_is_atomic_on_failure(tmp_path):
     assert rows[0] == 4
     db.close()
 
-def test_extraction_rename_conflict_safe(tmp_path):
-    # Existierende Zieldatei wird nicht überschrieben; Altdatei wird entfernt.
+_VALID_EXTRACTION = ('{"notebook_id":"nb1","entities":[],"relations":[],"claims":[],'
+                     '"extraction_model":"q","prompt_version":"v1",'
+                     '"source_kind":"transcript","source_id":"transcript"}')
+
+def test_extraction_rename_valid_target_removes_old(tmp_path):
+    # Ziel ist eine valide transcript-Extraction -> Altdatei sicher entfernen.
     from nlm_ingest.migrate import _migrate_extraction_files
     ext = tmp_path / "extractions"; ext.mkdir(parents=True)
     (ext / "nb1.json").write_text('{"notebook_id":"nb1"}')
-    (ext / "nb1.transcript.json").write_text('{"notebook_id":"nb1","keep":true}')
-    _migrate_extraction_files(tmp_path)
+    (ext / "nb1.transcript.json").write_text(_VALID_EXTRACTION)
+    db = sqlite3.connect(":memory:")
+    db.execute("CREATE TABLE phase_status (notebook_id TEXT, phase TEXT, status TEXT, updated_at TEXT)")
+    db.execute("INSERT INTO phase_status VALUES ('nb1','ingest','completed','x')"); db.commit()
+    migrated = _migrate_extraction_files(db, tmp_path)
+    assert migrated == ["nb1"]
     assert not (ext / "nb1.json").exists()
+
+def test_extraction_rename_invalid_target_aborts_without_loss(tmp_path):
+    # Konflikt mit INvalidem/fremdem Ziel -> Abbruch, BEIDE Dateien bleiben (P1#2).
+    from nlm_ingest.migrate import _migrate_extraction_files
+    ext = tmp_path / "extractions"; ext.mkdir(parents=True)
+    (ext / "nb1.json").write_text('{"notebook_id":"nb1"}')
+    (ext / "nb1.transcript.json").write_text('{"notebook_id":"nb1","keep":true}')  # keine valide Extraction
+    db = sqlite3.connect(":memory:")
+    with pytest.raises(RuntimeError, match="conflict"):
+        _migrate_extraction_files(db, tmp_path)
+    assert (ext / "nb1.json").exists()                                   # Altdatei erhalten
     assert json.loads((ext / "nb1.transcript.json").read_text())["keep"] is True
 ```
 
@@ -319,10 +338,9 @@ def _needs_status_rebuild(db: sqlite3.Connection) -> bool:
 
 
 def _rebuild_status_table(db: sqlite3.Connection) -> None:
-    """Atomarer Rebuild (P1#1). isolation_level=None + manuelle BEGIN/COMMIT/ROLLBACK;
-    KEIN executescript (das committet implizit und bräche die Atomarität).
-    Die einmalige ingest-Reaktivierung läuft in DERSELBEN Transaktion (P1#2:
-    an den one-shot-Rebuild gekoppelt, nicht an die Existenz alter Dateien)."""
+    """Atomarer Schema-Rebuild (P1#1) — NUR Schema, keine Reaktivierung.
+    isolation_level=None + manuelle BEGIN/COMMIT/ROLLBACK; KEIN executescript
+    (das committet implizit und bräche die Atomarität)."""
     prev = db.isolation_level
     db.isolation_level = None
     try:
@@ -331,11 +349,6 @@ def _rebuild_status_table(db: sqlite3.Connection) -> None:
         db.execute(
             "INSERT INTO phase_status_new SELECT notebook_id, phase, status, error, "
             "started_at, finished_at, retry_count, updated_at FROM phase_status"
-        )
-        # Migrierte (audio-only) Notebooks brauchen den neuen Qdrant-Write -> reaktivieren.
-        db.execute(
-            "UPDATE phase_status_new SET status='pending', updated_at=datetime('now') "
-            "WHERE phase='ingest' AND status='completed'"
         )
         db.execute("DROP TABLE phase_status")
         db.execute("ALTER TABLE phase_status_new RENAME TO phase_status")
@@ -347,37 +360,68 @@ def _rebuild_status_table(db: sqlite3.Connection) -> None:
         db.isolation_level = prev
 
 
-def _migrate_extraction_files(data_dir: Path) -> None:
-    """Konfliktfest + crash-sicher idempotent (P1#2): {nid}.json -> {nid}.transcript.json.
-    Existiert das Ziel bereits, wird es NICHT überschrieben; die Altdatei wird nur
-    entfernt, nachdem das valide Ziel vorliegt. Schreiben über tmp + atomarem replace."""
+def _is_valid_transcript_extraction(path: Path, notebook_id: str) -> bool:
+    """Ziel ist eine valide transcript-Extraction für genau dieses Notebook?"""
+    from nlm_ingest.schemas import Extraction
+    try:
+        e = Extraction.model_validate_json(path.read_text())
+    except Exception:
+        return False
+    return (e.notebook_id == notebook_id
+            and e.source_id == "transcript" and e.source_kind == "transcript")
+
+
+def _migrate_extraction_files(db: sqlite3.Connection, data_dir: Path) -> list[str]:
+    """Crash-sicher + konfliktfest (P1#1/P1#2). Pro altem {nid}.json:
+      1. {nid}.transcript.json schreiben (falls fehlt; via tmp + atomarem replace),
+      2. ingest NUR für dieses nid reaktivieren (committen),
+      3. erst DANN {nid}.json löschen.
+    Die Altdatei ist der durable Marker -> Crash an jeder Stelle ist re-runbar,
+    und nur tatsächlich migrierte IDs werden reaktiviert (P1#1).
+    Existiert das Ziel bereits, aber als INvalide/fremde Datei -> Abbruch
+    (RuntimeError), beide Dateien bleiben erhalten -> kein Datenverlust (P1#2)."""
     ext_dir = data_dir / "extractions"
     if not ext_dir.exists():
-        return
+        return []
+    migrated: list[str] = []
     for old in sorted(ext_dir.glob("*.json")):
         if old.stem.count(".") > 0:          # neue {nid}.{source_id}.json überspringen
             continue
         nid = old.stem
         target = ext_dir / f"{nid}.transcript.json"
-        if not target.exists():
+        if target.exists():
+            if not _is_valid_transcript_extraction(target, nid):
+                raise RuntimeError(
+                    f"Migration conflict for {nid}: {target.name} exists but is not a "
+                    f"valid transcript extraction; refusing to delete {old.name}")
+        else:
             data = json.loads(old.read_text())
             data.setdefault("source_kind", "transcript")
             data.setdefault("source_id", "transcript")
             tmp = ext_dir / f"{nid}.transcript.json.tmp"
             tmp.write_text(json.dumps(data, indent=2))
             tmp.replace(target)              # atomarer Rename
-            log.info("migrate_extraction_renamed", notebook_id=nid)
-        old.unlink()                          # Ziel liegt vor -> Altdatei sicher entfernbar
+        # nur dieses nid idempotent reaktivieren, committen, DANN Altdatei löschen
+        db.execute(
+            "UPDATE phase_status SET status='pending', updated_at=datetime('now') "
+            "WHERE notebook_id=? AND phase='ingest' AND status='completed'", (nid,))
+        db.commit()
+        old.unlink()
+        migrated.append(nid)
+        log.info("migrate_extraction_renamed", notebook_id=nid)
+    return migrated
 
 
 def migrate_local(db: sqlite3.Connection, data_dir: Path) -> None:
     """Idempotente lokale Migration. Neo4j wird NICHT berührt (siehe migrate_neo4j_edges).
-    Reihenfolge: atomarer SQLite-Rebuild (inkl. einmaliger ingest-Reaktivierung),
-    dann konfliktfeste Datei-Migration."""
+    Reihenfolge: atomarer SQLite-Schema-Rebuild, dann crash-sichere Datei-Migration
+    inkl. gezielter ingest-Reaktivierung nur der migrierten IDs."""
     if _needs_status_rebuild(db):
         _rebuild_status_table(db)
         log.info("migrate_sqlite_rebuilt")
-    _migrate_extraction_files(data_dir)
+    migrated = _migrate_extraction_files(db, data_dir)
+    if migrated:
+        log.info("migrate_ingest_reactivated", count=len(migrated))
 ```
 
 - [ ] **Step 4: Run — verify PASS**
@@ -417,6 +461,29 @@ def test_backfill_statement_is_scoped_and_parametrized():
     assert "$source_kind" in cypher and "$source_id" in cypher
     assert "'transcript'" not in cypher
     assert stmt["parameters"] == {"source_kind": "transcript", "source_id": "transcript"}
+
+
+import httpx
+import pytest
+from unittest.mock import AsyncMock
+from nlm_ingest.migrate import migrate_neo4j_edges
+
+_NEO_REQ = httpx.Request("POST", "http://neo/db/neo4j/tx/commit")
+
+@pytest.mark.asyncio
+async def test_migrate_neo4j_edges_raises_on_neo4j_errors():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.return_value = httpx.Response(
+        200, json={"errors": [{"message": "boom"}]}, request=_NEO_REQ)
+    with pytest.raises(RuntimeError, match="boom"):
+        await migrate_neo4j_edges(client, "http://neo", "neo4j", "pw")
+
+@pytest.mark.asyncio
+async def test_migrate_neo4j_edges_raises_on_http_error():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.return_value = httpx.Response(503, request=_NEO_REQ)
+    with pytest.raises(httpx.HTTPStatusError):
+        await migrate_neo4j_edges(client, "http://neo", "neo4j", "pw")
 ```
 
 - [ ] **Step 2: Run — verify FAIL**
@@ -453,10 +520,10 @@ def build_neo4j_backfill_statement() -> dict:
     }
 
 
-async def migrate_neo4j_edges(client, neo4j_http_url, neo4j_user, neo4j_password) -> int:
+async def migrate_neo4j_edges(client, neo4j_http_url, neo4j_user, neo4j_password) -> None:
     """Separat ausführbarer Neo4j-Backfill (P2#10). Unabhängig vom lokalen Teil —
-    ein nicht erreichbares Neo4j blockiert migrate_local nicht. Gibt die Anzahl
-    betroffener Kanten zurück (Cypher-Counter, idempotent re-runbar)."""
+    ein nicht erreichbares Neo4j blockiert migrate_local nicht. Idempotent re-runbar.
+    Wirft bei HTTP-Fehler (raise_for_status) oder Neo4j-Fehlern im Response-Body."""
     import base64
     stmt = build_neo4j_backfill_statement()
     auth = base64.b64encode(f"{neo4j_user}:{neo4j_password}".encode()).decode()
@@ -470,7 +537,6 @@ async def migrate_neo4j_edges(client, neo4j_http_url, neo4j_user, neo4j_password
     data = resp.json()
     if data.get("errors"):
         raise RuntimeError(f"Neo4j backfill error: {data['errors'][0].get('message','')}")
-    return 0  # optional: aus data["results"] den properties-set-Counter lesen
 ```
 
 - [ ] **Step 4: Run — verify PASS**
@@ -787,6 +853,24 @@ async def extract_with_qwen(
 Run: `uv run pytest tests/test_nlm_extract.py -q`
 Expected: PASS. Bestehende `test_nlm_extract`-Tests, die `transcript=`/`Transcript` übergeben, auf `ExtractionSource` umstellen (gleiche Felder, `source.text` = bisheriger `full_text`).
 
+**Konkreter Edit `tests/test_nlm_cli_wiring.py` (Finding #7):** Die `fake_extract`-Stub-Signatur greift heute `kwargs["transcript"]` ([test_nlm_cli_wiring.py:43-52](../../../services/data-ingestion/tests/test_nlm_cli_wiring.py)). Ersetzen durch:
+
+```python
+    async def fake_extract(**kwargs):
+        captured.update(kwargs)
+        src = kwargs["source"]                       # war: kwargs["transcript"]
+        return Extraction(
+            notebook_id=src.notebook_id,
+            entities=[], relations=[], claims=[],
+            extraction_model=kwargs["vllm_model"],
+            prompt_version="v0-test",
+            source_kind=src.source_kind,             # NEU (Pflicht)
+            source_id=src.source_id,                 # NEU (Pflicht)
+        )
+```
+
+`fake_rows` in diesem Test ergänzen, sodass die neue extract-Target-Logik greift (`load_sources` nicht-leer): das Transkript-Fixture liegt bereits unter `transcripts/nb1.json` ([test_nlm_cli_wiring.py:30](../../../services/data-ingestion/tests/test_nlm_cli_wiring.py)), daher liefert `load_sources` eine transcript-Quelle. Assertions auf `captured["source"].source_kind == "transcript"` umstellen (statt `captured["transcript"]`).
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -1000,16 +1084,18 @@ Expected: FAIL — `ImportError: reconcile_phases`.
 - [ ] **Step 3: `reconcile_phases` in `state.py`**
 
 ```python
-def _valid_extraction_exists(data_dir, notebook_id, source_id) -> bool:
+def _valid_extraction_exists(data_dir, source) -> bool:
+    """Valide, provenance-konsistente Extraktionsdatei für `source` (Finding #5)."""
     from nlm_ingest.schemas import Extraction  # lokaler Import, vermeidet Zyklen
-    p = data_dir / "extractions" / f"{notebook_id}.{source_id}.json"
+    p = data_dir / "extractions" / f"{source.notebook_id}.{source.source_id}.json"
     if not p.exists():
         return False
     try:
-        Extraction.model_validate_json(p.read_text())
-        return True
+        e = Extraction.model_validate_json(p.read_text())
     except Exception:
         return False
+    return (e.notebook_id == source.notebook_id and e.source_id == source.source_id
+            and e.source_kind == source.source_kind)
 
 
 def reconcile_phases(db, data_dir, notebook_id, *, audio_status, report_status):
@@ -1034,7 +1120,7 @@ def reconcile_phases(db, data_dir, notebook_id, *, audio_status, report_status):
 
     # 2. Fehlt für eine Quelle eine valide Extraktionsdatei -> extract/ingest reaktivieren
     needs_extract = any(
-        not _valid_extraction_exists(data_dir, notebook_id, s.source_id) for s in sources
+        not _valid_extraction_exists(data_dir, s) for s in sources
     )
     if needs_extract:
         for ph in ("extract", "ingest"):
@@ -1313,8 +1399,17 @@ def build_claim_points(
     return points
 
 
-async def ensure_collection(qdrant: QdrantClient, collection: str, dim: int) -> None:
-    """Collection anlegen falls fehlend, sonst Schema vor dem Write validieren."""
+async def ensure_collection(
+    qdrant: QdrantClient, collection: str, dim: int, *, enable_hybrid: bool = False
+) -> None:
+    """Collection anlegen falls fehlend, sonst Schema vor dem Write validieren.
+
+    NLM schreibt ausschließlich Dense-Vektoren. Läuft das System im Hybrid-Modus
+    (enable_hybrid=True), wird hier bewusst und klar abgebrochen — ein Hybrid-Write
+    (Sparse/BM25) liegt außerhalb dieser Story (P2#4)."""
+    if enable_hybrid:
+        raise NotImplementedError(
+            "NLM Qdrant write is dense-only; hybrid mode is out of scope for this story")
     collections = await asyncio.to_thread(lambda: qdrant.get_collections().collections)
     if not any(c.name == collection for c in collections):
         await asyncio.to_thread(lambda: qdrant.create_collection(
@@ -1324,7 +1419,7 @@ async def ensure_collection(qdrant: QdrantClient, collection: str, dim: int) -> 
         log.info("nlm_qdrant_collection_created", collection=collection)
     else:
         info = await asyncio.to_thread(lambda: qdrant.get_collection(collection))
-        validate_collection_schema(info, enable_hybrid=False)
+        validate_collection_schema(info, enable_hybrid=enable_hybrid)
 
 
 async def ingest_to_qdrant(qdrant: QdrantClient, collection: str, points: list[PointStruct]) -> None:
@@ -1388,6 +1483,16 @@ def test_sources_needing_extract_includes_corrupt_file(tmp_path):
     (ext / "nb1.r1.json").write_text("{ not valid json")   # kaputt -> nicht valide
     todo = _sources_needing_extract(tmp_path, [_src("nb1","r1","report")])
     assert [s.source_id for s in todo] == ["r1"]
+
+def test_sources_needing_extract_detects_provenance_mismatch(tmp_path):
+    # Datei nb1.r1.json trägt intern source_id="r2" -> NICHT als erledigt zählen.
+    ext = tmp_path / "extractions"; ext.mkdir()
+    (ext / "nb1.r1.json").write_text(
+        '{"notebook_id":"nb1","entities":[],"relations":[],"claims":[],'
+        '"extraction_model":"q","prompt_version":"v1",'
+        '"source_kind":"report","source_id":"r2"}')          # falsche source_id
+    todo = _sources_needing_extract(tmp_path, [_src("nb1","r1","report")])
+    assert [s.source_id for s in todo] == ["r1"]
 ```
 
 - [ ] **Step 2: Run — verify FAIL**
@@ -1401,15 +1506,19 @@ In `nlm_ingest/cli.py` Helper ergänzen und den `extract`-Command umbauen:
 
 ```python
 def _sources_needing_extract(data_dir, sources):
-    """Quellen ohne valide extractions/{nid}.{source_id}.json."""
+    """Quellen ohne valide, provenance-konsistente extractions/{nid}.{source_id}.json.
+    Eine Datei zählt nur als vorhanden, wenn sie als Extraction lädt UND ihre
+    notebook_id/source_id/source_kind zur erwarteten Quelle passen (Finding #5)."""
     from nlm_ingest.schemas import Extraction
     todo = []
     for s in sources:
         p = data_dir / "extractions" / f"{s.notebook_id}.{s.source_id}.json"
         if p.exists():
             try:
-                Extraction.model_validate_json(p.read_text())
-                continue
+                e = Extraction.model_validate_json(p.read_text())
+                if (e.notebook_id == s.notebook_id and e.source_id == s.source_id
+                        and e.source_kind == s.source_kind):
+                    continue
             except Exception:
                 pass
         todo.append(s)
@@ -1625,7 +1734,8 @@ async def _ingest_one_notebook(files, *, neo4j_write, qdrant_write) -> bool:
         from qdrant_client import QdrantClient
         db = _get_db()
         qdrant = QdrantClient(url=settings.qdrant_url)
-        await ensure_collection(qdrant, settings.qdrant_collection, settings.embedding_dimensions)
+        await ensure_collection(qdrant, settings.qdrant_collection, settings.embedding_dimensions,
+                                enable_hybrid=getattr(settings, "enable_hybrid", False))
         # extract MUSS completed sein (P1#4): sonst würde bei neuem Report eine alte
         # Extraktionsdatei ingestiert und ingest zu früh abgeschlossen.
         targets = [r for r in get_all_status(db)
@@ -1757,6 +1867,55 @@ def migrate(local_only: bool, neo4j_only: bool):
     asyncio.run(_backfill())
     click.echo("Neo4j backfill done.")
 ```
+
+**Auto-Migration in `_get_db()` (Finding #3):** Damit eine Alt-DB den `skipped`-Wert
+akzeptiert, *bevor* `export` ihn schreibt, ruft `_get_db()` einmal pro Prozess
+`migrate_local()` auf (idempotent; nach erster Migration nur ein billiger
+`_needs_status_rebuild`-Check + leerer Glob):
+
+```python
+_migrated = False
+
+def _get_db():
+    global _migrated
+    settings = _get_settings()
+    db = init_db(Path(settings.nlm_db_path))   # bestehenden DB-Pfad-Aufbau übernehmen
+    if not _migrated:
+        from nlm_ingest.migrate import migrate_local
+        migrate_local(db, Path(settings.nlm_data_dir))
+        _migrated = True
+    return db
+```
+
+Test (Auto-Migration triggert bei Alt-Schema):
+
+```python
+def test_get_db_auto_migrates(tmp_path, monkeypatch):
+    # Alt-Schema-DB -> _get_db migriert automatisch (akzeptiert danach 'skipped').
+    from types import SimpleNamespace
+    import nlm_ingest.cli as cli_mod
+    db_path = tmp_path / "state.db"
+    import sqlite3
+    old = sqlite3.connect(str(db_path))
+    old.executescript(
+        "CREATE TABLE notebooks (id TEXT PRIMARY KEY, title TEXT, source_name TEXT, created_at TEXT);"
+        "CREATE TABLE phase_status (notebook_id TEXT, phase TEXT, "
+        "status TEXT CHECK(status IN ('pending','running','completed','failed')), "
+        "error TEXT, started_at TEXT, finished_at TEXT, retry_count INTEGER DEFAULT 0, "
+        "updated_at TEXT, PRIMARY KEY (notebook_id, phase));")
+    old.close()
+    monkeypatch.setattr(cli_mod, "_migrated", False, raising=False)
+    monkeypatch.setattr(cli_mod, "_get_settings", lambda: SimpleNamespace(
+        nlm_db_path=str(db_path), nlm_data_dir=str(tmp_path)))
+    db = cli_mod._get_db()
+    db.execute("INSERT OR IGNORE INTO notebooks (id) VALUES ('nb1')")
+    db.execute("INSERT INTO phase_status (notebook_id, phase, status) VALUES ('nb1','transcribe','skipped')")
+    db.commit()  # akzeptiert 'skipped' -> Migration lief
+```
+
+**Abschluss-/Deploy-Hinweis:** Die Auto-Migration deckt den Normalfall ab; im
+manuellen E2E zusätzlich einmal `odin-ingest-nlm migrate` (lokal **und** Neo4j)
+ausführen, bevor `export/extract/ingest` gegen die produktive DB/Neo4j laufen.
 
 In `tests/conftest.py` Guards ergänzen (analog vorhandenem `notebooklm`-Guard), damit die neuen Tests bei fehlenden Optional-Deps nicht das Panel brechen:
 
