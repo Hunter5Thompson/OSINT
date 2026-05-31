@@ -38,6 +38,19 @@ zu erfinden. Wenn die Results dünn sind, sag das offen im Confidence-Level.
    Begründung auf Deutsch — wenn viele "(unverifiziert)" im Report stehen,
    ist `low confidence` ehrlicher als `moderate confidence`.
 5. **Recommended Actions** (falls sinnvoll)
+
+## Evidenz-Metadaten (aus [EVIDENCE]-Blöcken)
+
+Jeder Research-Block trägt eine `[EVIDENCE]`-Metadatenzeile. Beachte:
+
+- `credibility_score` ist **Quellenverlässlichkeit**, NICHT Aussagewahrheit.
+  Eine verlässliche Quelle kann sich irren; eine unverlässliche kann recht haben.
+  Gewichte widersprüchliche Angaben, aber behandle den Score nicht als Beweis.
+- `provenance_inferred=true` bedeutet `(Herkunft aus Legacy-Payload abgeleitet)` —
+  kennzeichne solche Aussagen entsprechend zurückhaltend.
+- `published_at=null` oder fehlend: **Aktualität ist nicht aus der Quelle
+  ableitbar** — behaupte keine Aktualität.
+- `ingested_at` ist KEIN Publikationszeitpunkt und darf nicht als solcher gelten.
 """
 
 
