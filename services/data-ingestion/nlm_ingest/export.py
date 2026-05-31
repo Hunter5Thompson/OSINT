@@ -2,12 +2,32 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Literal
 
 import structlog
 
 log = structlog.get_logger()
+
+
+async def _download_atomic(
+    do_download_to: Callable[[str], Awaitable], final_path: Path
+) -> None:
+    """Download to a temp ``*.part`` path, then atomically replace ``final_path``.
+
+    ``do_download_to`` is an async callable that downloads to the given path
+    string. On ANY failure the partial ``*.part`` file is removed and the
+    exception propagates, so ``final_path`` never holds a partial file (the
+    callers' ``exists()`` skip stays trustworthy).
+    """
+    part_path = final_path.with_name(final_path.name + ".part")
+    try:
+        await do_download_to(str(part_path))
+    except BaseException:
+        part_path.unlink(missing_ok=True)
+        raise
+    part_path.replace(final_path)
 
 
 async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dict]:
@@ -97,7 +117,9 @@ async def _export_audio(
     if not audio_arts:
         return None, "absent"
     try:
-        await client.artifacts.download_audio(notebook_id, str(audio_path))
+        await _download_atomic(
+            lambda p: client.artifacts.download_audio(notebook_id, p), audio_path
+        )
         size_mb = audio_path.stat().st_size / 1e6
         log.info("export_audio", notebook_id=notebook_id, size_mb=round(size_mb, 1))
         return audio_path, "downloaded"
@@ -122,8 +144,11 @@ async def _export_slide_decks(client, notebook_id: str, nb_dir: Path) -> list[st
             paths.append(str(out))
             continue
         try:
-            await client.artifacts.download_slide_deck(
-                notebook_id, str(out), artifact_id=deck.id, output_format="pdf"
+            await _download_atomic(
+                lambda p, _did=deck.id: client.artifacts.download_slide_deck(
+                    notebook_id, p, artifact_id=_did, output_format="pdf"
+                ),
+                out,
             )
             paths.append(str(out))
             log.info("export_slide_deck", notebook_id=notebook_id, artifact_id=deck.id)
@@ -158,8 +183,11 @@ async def _export_reports(
             paths.append(str(out))
             continue
         try:
-            await client.artifacts.download_report(
-                notebook_id, str(out), artifact_id=report.id
+            await _download_atomic(
+                lambda p, _rid=report.id: client.artifacts.download_report(
+                    notebook_id, p, artifact_id=_rid
+                ),
+                out,
             )
             paths.append(str(out))
             log.info("export_report", notebook_id=notebook_id, artifact_id=report.id)

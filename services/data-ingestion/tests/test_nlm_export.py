@@ -53,8 +53,18 @@ def _make_client(
 
     client.artifacts.list_slide_decks = AsyncMock(return_value=slide_decks or [])
     client.artifacts.list_reports = AsyncMock(return_value=reports or [])
-    client.artifacts.download_slide_deck = AsyncMock(return_value="ok")
-    client.artifacts.download_report = AsyncMock(return_value="ok")
+
+    # Mirror the real downloaders: write bytes to the path the impl passes
+    # (the atomic helper hands a *.part path, then replaces the final file).
+    async def _dl_slide(nb_id, path, artifact_id=None, output_format="pdf"):
+        Path(path).write_bytes(b"fake-pdf")
+        return path
+
+    async def _dl_report(nb_id, path, artifact_id=None):
+        Path(path).write_text("fake-report")
+        return path
+    client.artifacts.download_slide_deck = AsyncMock(side_effect=_dl_slide)
+    client.artifacts.download_report = AsyncMock(side_effect=_dl_report)
     return client
 
 
@@ -177,6 +187,7 @@ async def test_one_failed_download_keeps_sibling(tmp_path, monkeypatch):
     async def _dl(nb_id, path, artifact_id=None, output_format="pdf"):
         if artifact_id == "deck1":
             raise RuntimeError("download failed")
+        Path(path).write_bytes(b"fake-pdf")
         return path
     client.artifacts.download_slide_deck = AsyncMock(side_effect=_dl)
     _patch_client(monkeypatch, client)
@@ -225,3 +236,65 @@ async def test_report_status_failed_when_completed_report_download_fails(tmp_pat
     _patch_client(monkeypatch, client)
     results = await export_all(tmp_path)
     assert results[0]["report_status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_partial_download_leaves_no_final_file(tmp_path, monkeypatch):
+    # A partial download that writes bytes to the target then errors must NOT
+    # leave a file at the FINAL report path (only a cleaned-up .part). Otherwise
+    # the next run's exists()-skip would treat it as a permanent false success.
+    client = _make_client([_notebook("nb1")], reports=[_artifact("r1", completed=True)])
+    client.artifacts.list_audio = AsyncMock(return_value=[])
+
+    async def _partial_then_fail(nb_id, path, artifact_id=None):
+        Path(path).write_text("PARTIAL")
+        raise RuntimeError("network drop")
+    client.artifacts.download_report = AsyncMock(side_effect=_partial_then_fail)
+    _patch_client(monkeypatch, client)
+
+    results = await export_all(tmp_path)
+    nb_dir = tmp_path / "notebooks" / "nb1"
+    # The FINAL report path must NOT exist after a partial-then-fail.
+    assert not (nb_dir / "report_r1.md").exists()
+    # No leftover .part either.
+    assert list(nb_dir.glob("*.part")) == []
+    assert results[0]["report_status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_partial_audio_download_leaves_no_final_file(tmp_path, monkeypatch):
+    client = _make_client([_notebook("nb1")], reports=[_artifact("r1", completed=True)])
+    client.artifacts.list_audio = AsyncMock(return_value=[_artifact("a1", completed=True)])
+
+    async def _partial_then_fail(nb_id, path):
+        Path(path).write_text("PARTIAL")
+        raise RuntimeError("network drop")
+    client.artifacts.download_audio = AsyncMock(side_effect=_partial_then_fail)
+    _patch_client(monkeypatch, client)
+
+    results = await export_all(tmp_path)
+    nb_dir = tmp_path / "notebooks" / "nb1"
+    assert not (nb_dir / "podcast.mp4").exists()
+    assert list(nb_dir.glob("*.part")) == []
+    assert results[0]["audio_status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_partial_slide_download_leaves_no_final_file(tmp_path, monkeypatch):
+    client = _make_client(
+        [_notebook("nb1")],
+        slide_decks=[_artifact("deck1", completed=True)],
+        reports=[_artifact("r1", completed=True)],  # keeps the notebook
+    )
+
+    async def _partial_then_fail(nb_id, path, artifact_id=None, output_format="pdf"):
+        Path(path).write_text("PARTIAL")
+        raise RuntimeError("network drop")
+    client.artifacts.download_slide_deck = AsyncMock(side_effect=_partial_then_fail)
+    _patch_client(monkeypatch, client)
+
+    results = await export_all(tmp_path)
+    nb_dir = tmp_path / "notebooks" / "nb1"
+    assert not (nb_dir / "slides_deck1.pdf").exists()
+    assert list(nb_dir.glob("*.part")) == []
+    assert results[0]["slide_deck_paths"] == []
