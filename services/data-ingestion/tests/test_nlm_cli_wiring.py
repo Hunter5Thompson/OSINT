@@ -377,6 +377,39 @@ def test_export_command_reconcile_failure_forces_retryable_state(tmp_path, monke
         db.close()
 
 
+@pytest.mark.asyncio
+async def test_ingest_one_notebook_rejects_source_kind_mismatch(tmp_path):
+    # A file nb1.transcript.json whose internal source_kind="report" (but correct
+    # notebook_id/source_id) must be rejected: never passed to the writers.
+    from nlm_ingest.cli import _ingest_one_notebook
+    ext = tmp_path / "extractions"
+    ext.mkdir()
+    (ext / "nb1.transcript.json").write_text(
+        '{"notebook_id":"nb1","entities":[],"relations":[],"claims":[],'
+        '"extraction_model":"q","prompt_version":"v1",'
+        '"source_kind":"report","source_id":"transcript"}'
+    )
+
+    neo4j_calls: list = []
+    qdrant_calls: list = []
+
+    async def neo4j_write(extraction):
+        neo4j_calls.append(extraction)
+
+    async def qdrant_write(extraction):
+        qdrant_calls.append(extraction)
+
+    ok = await _ingest_one_notebook(
+        _extraction_files_for(tmp_path, "nb1"),
+        expected_notebook_id="nb1",
+        neo4j_write=neo4j_write,
+        qdrant_write=qdrant_write,
+    )
+    assert ok is False
+    assert neo4j_calls == []
+    assert qdrant_calls == []
+
+
 def test_extraction_files_globs_all_sources(tmp_path):
     ext = tmp_path / "extractions"
     ext.mkdir()

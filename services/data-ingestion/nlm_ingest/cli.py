@@ -74,17 +74,25 @@ async def _ingest_one_notebook(
             expected_source_id = name[len(prefix):] if name.startswith(prefix) else name
             if expected_source_id.endswith(".json"):
                 expected_source_id = expected_source_id[: -len(".json")]
+            # Derive the expected source_kind from the filename's source_id, the same
+            # way sources.load_sources does: only "transcript" is a transcript.
+            expected_source_kind = (
+                "transcript" if expected_source_id == "transcript" else "report"
+            )
             if (
                 extraction.notebook_id != expected_notebook_id
                 or extraction.source_id != expected_source_id
+                or extraction.source_kind != expected_source_kind
             ):
                 log.warning(
                     "nlm_ingest_provenance_mismatch",
                     file=str(f),
                     expected_notebook_id=expected_notebook_id,
                     expected_source_id=expected_source_id,
+                    expected_source_kind=expected_source_kind,
                     got_notebook_id=extraction.notebook_id,
                     got_source_id=extraction.source_id,
+                    got_source_kind=extraction.source_kind,
                 )
                 ok = False
                 continue
