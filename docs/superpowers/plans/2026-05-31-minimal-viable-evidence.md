@@ -760,9 +760,8 @@ def test_budget_never_emits_a_partial_block():
     refs = parse_evidence_refs(pack)
     assert len(refs) >= 1
     assert "[EVIDENCE]" in pack
-    # no trailing half block: pack does not end mid-json
-    assert pack.rstrip().endswith(("", "}")) or "Excerpt:" in pack.rstrip().splitlines()[-1] or True
-    # strict check: every EVIDENCE header parses
+    # strict no-partial-block check: every [EVIDENCE] header line parses to a ref,
+    # so the count of header lines equals the count of reconstructed refs.
     headers = [ln for ln in pack.splitlines() if ln.startswith("[EVIDENCE] ")]
     assert len(headers) == len(refs)
 
@@ -855,7 +854,7 @@ def parse_evidence_refs(text: str) -> list[SourceRef]:
                 credibility_score=meta.get("credibility_score", 0.5),
                 provenance_inferred=meta.get("provenance_inferred", False),
             ))
-        except (KeyError, Exception):
+        except (KeyError, ValueError, TypeError):
             continue
     return refs
 ```
