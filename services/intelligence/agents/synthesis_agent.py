@@ -47,10 +47,11 @@ Jeder Research-Block trägt eine `[EVIDENCE]`-Metadatenzeile. Beachte:
   Eine verlässliche Quelle kann sich irren; eine unverlässliche kann recht haben.
   Gewichte widersprüchliche Angaben, aber behandle den Score nicht als Beweis.
 - `provenance_inferred=true` bedeutet `(Herkunft aus Legacy-Payload abgeleitet)` —
-  kennzeichne solche Aussagen entsprechend zurückhaltend.
-- `published_at=null` oder fehlend: **Aktualität ist nicht aus der Quelle
-  ableitbar** — behaupte keine Aktualität.
-- `ingested_at` ist KEIN Publikationszeitpunkt und darf nicht als solcher gelten.
+  markiere solche Aussagen mit `(unverifiziert)` wie oben, oder begründe die
+  unklare Herkunft im Confidence-Level.
+- `published_at=null` oder fehlend: nur die System-Ingestionszeit (`ingested_at`,
+  NICHT im Evidence-Block enthalten) ist bekannt, nicht der Publikationszeitpunkt.
+  **Aktualität ist dann nicht aus der Quelle ableitbar** — behaupte keine Aktualität.
 """
 
 
