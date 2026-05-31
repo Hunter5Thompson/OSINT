@@ -6,7 +6,7 @@ serialized across the /query API boundary (Slice 1 keeps sources_used: list[str]
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel
@@ -37,7 +37,9 @@ class EvidenceItem(BaseModel):
 
 EXCERPT_MAX_CHARS = 700
 
-# Event/observation timestamps that must NEVER be reinterpreted as published_at.
+# Documentation guard (not runtime-enforced): event/observation timestamps that
+# must NEVER be reinterpreted as published_at. Enforcement is structural — these
+# keys simply have no code path into published_raw in _legacy_provenance.
 _EVENT_TIME_KEYS = (
     "event_time", "event_date", "date_start", "from_date", "acq_date",
     "seendate", "gdelt_date",
@@ -53,13 +55,17 @@ def _excerpt(payload: dict) -> str:
 
 
 def _parse_dt(value):
-    from datetime import datetime
     if not value:
         return None
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
         return None
+    # Naive timestamps in OSINT feeds mean UTC; make them explicit so downstream
+    # comparisons (recency, Slice 2) never mix naive and aware datetimes.
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def _canonical_provenance(payload: dict) -> tuple[str, str, str | None, bool] | None:

@@ -69,3 +69,34 @@ def test_event_time_is_not_published_at():
         "title": "quake", "content": "m6", "event_time": "2026-05-31T00:00:00+00:00",
     })
     assert item.source.published_at is None  # event_time != published_at
+
+
+def test_naive_published_is_coerced_to_utc():
+    item = to_evidence_item({
+        "score": 0.6, "source": "rss", "feed_name": "BBC World",
+        "title": "x", "summary": "s", "url": "https://bbc.com/x",
+        "published": "2026-05-30T00:00:00",  # naive, no tz
+    })
+    assert item.source.published_at is not None
+    assert item.source.published_at.tzinfo is not None  # coerced to aware (UTC)
+
+
+def test_legacy_telegram_shape_strips_at_and_namespaces():
+    item = to_evidence_item({
+        "score": 0.5, "source": "telegram", "telegram_channel": "@Rybar",
+        "telegram_message_id": 7, "title": "t", "content": "body",
+        "published": "2026-05-31T00:00:00+00:00",
+    })
+    assert item.source.source_type == "telegram"
+    assert item.source.provider == "telegram:rybar"
+    assert item.source.provenance_inferred is True
+    assert item.source.published_at is not None
+
+
+def test_legacy_gdelt_shape_is_inferred():
+    item = to_evidence_item({
+        "score": 0.5, "source": "gdelt_gkg", "source_name": "reuters.com",
+        "doc_id": "d1", "title": "t", "content": "body",
+    })
+    assert item.source.source_type == "gdelt"
+    assert item.source.provenance_inferred is True
