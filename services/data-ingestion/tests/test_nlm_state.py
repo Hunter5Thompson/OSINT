@@ -150,3 +150,32 @@ def test_skipped_status_is_accepted(tmp_path):
     set_phase_status(db, "nb1", "transcribe", "skipped")
     assert get_phase_status(db, "nb1", "transcribe") == "skipped"
     db.close()
+
+
+def test_extract_retry_allowed_when_transcribe_failed(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    set_phase_status(db, "nb1", "export", "completed")
+    set_phase_status(db, "nb1", "transcribe", "failed")
+    # transcribe is NOT a prereq of extract -> no raise
+    validate_retry(db, "nb1", "extract")
+    db.close()
+
+
+def test_skipped_prereq_is_non_blocking(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    set_phase_status(db, "nb1", "export", "completed")
+    set_phase_status(db, "nb1", "extract", "skipped")
+    validate_retry(db, "nb1", "ingest")  # extract=skipped satisfies prereq
+    db.close()
+
+
+def test_ingest_retry_blocked_when_extract_pending(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    set_phase_status(db, "nb1", "export", "completed")
+    # extract stays 'pending'
+    with pytest.raises(ValueError, match="extract"):
+        validate_retry(db, "nb1", "ingest")
+    db.close()

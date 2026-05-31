@@ -105,11 +105,21 @@ def get_all_status(db):
     return list(notebooks.values())
 
 
+# Explicit phase DAG instead of linear PHASE_ORDER.
+# transcribe is NOT a prereq of extract (reports are audio-independent).
+PHASE_PREREQS = {
+    "transcribe": ["export"],
+    "extract": ["export"],
+    "ingest": ["extract"],
+}
+
+_SATISFIED = {"completed", "skipped"}
+
+
 def validate_retry(db, notebook_id, phase):
-    idx = PHASE_ORDER.index(phase)
-    for prev_phase in PHASE_ORDER[:idx]:
+    for prev_phase in PHASE_PREREQS.get(phase, []):
         status = get_phase_status(db, notebook_id, prev_phase)
-        if status != "completed":
+        if status not in _SATISFIED:
             raise ValueError(
                 f"Cannot retry '{phase}': prerequisite '{prev_phase}' is '{status}'"
             )
