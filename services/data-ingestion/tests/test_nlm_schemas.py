@@ -10,6 +10,7 @@ from nlm_ingest.schemas import (
     Claim,
     Entity,
     Extraction,
+    ExtractionSource,
     Relation,
     Transcript,
     TranscriptSegment,
@@ -59,7 +60,7 @@ class TestEntity:
         with pytest.raises(ValidationError):
             Entity(name="NATO", type="INVALID_TYPE", confidence=0.9)
 
-    def test_schema_accepts_LOCATION(self):
+    def test_schema_accepts_location(self):
         """LOCATION is a canonical EntityType and validates without error."""
         e = Entity(name="Berlin", type="LOCATION", confidence=0.9)
         assert e.type == "LOCATION"
@@ -224,6 +225,8 @@ class TestExtraction:
             claims=[],
             extraction_model="qwen3.5",
             prompt_version="v1",
+            source_kind="transcript",
+            source_id="transcript",
         )
         assert ext.extraction_model == "qwen3.5"
 
@@ -263,3 +266,22 @@ class TestClaimHash:
         h1 = claim_hash("China invades Taiwan")
         h2 = claim_hash("Russia invades Ukraine")
         assert h1 != h2
+
+
+def test_extraction_source_fields():
+    s = ExtractionSource(notebook_id="nb1", source_id="r1", source_kind="report", text="x")
+    assert s.source_kind == "report"
+    assert s.source_id == "r1"
+
+
+def test_extraction_requires_provenance():
+    e = Extraction(notebook_id="nb1", entities=[], relations=[], claims=[],
+                   extraction_model="qwen", prompt_version="v1",
+                   source_kind="transcript", source_id="transcript")
+    assert e.source_kind == "transcript"
+
+
+def test_extraction_missing_provenance_raises():
+    with pytest.raises(ValidationError):
+        Extraction(notebook_id="nb1", entities=[], relations=[], claims=[],
+                   extraction_model="qwen", prompt_version="v1")  # no source_kind/source_id

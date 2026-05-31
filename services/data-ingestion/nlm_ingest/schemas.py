@@ -97,6 +97,13 @@ class Claim(BaseModel):
     temporal_scope: str
 
 
+class ExtractionSource(BaseModel):
+    notebook_id: str
+    source_id: str
+    source_kind: Literal["transcript", "report"]
+    text: str
+
+
 class Extraction(BaseModel):
     notebook_id: str
     entities: list[Entity]
@@ -104,6 +111,8 @@ class Extraction(BaseModel):
     claims: list[Claim]
     extraction_model: str
     prompt_version: str
+    source_kind: Literal["transcript", "report"]
+    source_id: str
 
 
 def claim_hash(statement: str) -> str:

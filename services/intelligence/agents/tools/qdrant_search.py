@@ -31,7 +31,7 @@ async def qdrant_search(query: str, region: str = "") -> str:
     - UCDP-GED conflict events with casualty counts and locations
     - FIRMS thermal-anomaly annotations
     - GDACS disaster bulletins, EONET natural events
-    - NotebookLM extractions from briefing audio
+    - NotebookLM extractions from briefing audio and research reports
 
     Each result includes a graph context block (entity → relation → entity)
     derived from Neo4j — useful for spotting actors and locations connected

@@ -20,3 +20,8 @@ try:
     import notebooklm  # noqa: F401
 except ModuleNotFoundError:
     collect_ignore_glob.append("test_nlm_export.py")
+
+try:
+    import qdrant_client  # noqa: F401
+except ModuleNotFoundError:
+    collect_ignore_glob.append("test_nlm_ingest_qdrant.py")

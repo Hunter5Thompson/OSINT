@@ -66,7 +66,10 @@ class TestTranscribe:
         ]
 
         with patch("nlm_ingest.transcribe.split_audio", return_value=[Path("/tmp/c0.wav")]), \
-             patch("nlm_ingest.transcribe.transcribe_chunk", new_callable=AsyncMock, return_value=mock_chunk_result), \
+             patch(
+                 "nlm_ingest.transcribe.transcribe_chunk",
+                 new_callable=AsyncMock, return_value=mock_chunk_result,
+             ), \
              patch("nlm_ingest.transcribe.get_original_duration", return_value=10.0), \
              patch("nlm_ingest.transcribe.majority_language", return_value="en"):
             result = await transcribe(
@@ -87,8 +90,14 @@ class TestTranscribe:
         chunk0 = MagicMock(segments=[seg0])
         chunk1 = MagicMock(segments=[seg1])
 
-        with patch("nlm_ingest.transcribe.split_audio", return_value=[Path("/tmp/c0.wav"), Path("/tmp/c1.wav")]), \
-             patch("nlm_ingest.transcribe.transcribe_chunk", new_callable=AsyncMock, side_effect=[chunk0, chunk1]), \
+        with patch(
+                 "nlm_ingest.transcribe.split_audio",
+                 return_value=[Path("/tmp/c0.wav"), Path("/tmp/c1.wav")],
+             ), \
+             patch(
+                 "nlm_ingest.transcribe.transcribe_chunk",
+                 new_callable=AsyncMock, side_effect=[chunk0, chunk1],
+             ), \
              patch("nlm_ingest.transcribe.get_original_duration", return_value=1200.0), \
              patch("nlm_ingest.transcribe.majority_language", return_value="en"):
             result = await transcribe(

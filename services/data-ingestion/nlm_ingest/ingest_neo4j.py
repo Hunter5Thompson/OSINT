@@ -40,7 +40,7 @@ def _build_statements(extraction: Extraction, source_name: str) -> list[dict]:
             "notebook_id": extraction.notebook_id,
             "title": f"NLM: {source_name}",
             "source": source_name,
-            "type": "notebooklm_podcast",
+            "type": "notebooklm",
         },
     })
 
@@ -113,6 +113,8 @@ def _build_statements(extraction: Extraction, source_name: str) -> list[dict]:
             "parameters": {
                 "statement_hash": stmt_hash,
                 "notebook_id": extraction.notebook_id,
+                "source_kind": extraction.source_kind,
+                "source_id": extraction.source_id,
             },
         })
 

@@ -2,11 +2,34 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Literal
 
 import structlog
 
 log = structlog.get_logger()
+
+
+async def _download_atomic(
+    do_download_to: Callable[[str], Awaitable], final_path: Path
+) -> None:
+    """Download to a temp ``*.part`` path, then atomically replace ``final_path``.
+
+    ``do_download_to`` is an async callable that downloads to the given path
+    string. On ANY failure the partial ``*.part`` file is removed and the
+    exception propagates, so ``final_path`` never holds a partial file (the
+    callers' ``exists()`` skip stays trustworthy).
+    """
+    part_path = final_path.with_name(final_path.name + ".part")
+    try:
+        await do_download_to(str(part_path))
+        # replace() is INSIDE the try so a rename failure also cleans up the .part
+        # (no litter) and propagates — final_path never holds a partial file.
+        part_path.replace(final_path)
+    except BaseException:
+        part_path.unlink(missing_ok=True)
+        raise
 
 
 async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dict]:
@@ -18,12 +41,14 @@ async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dic
 
     For each notebook the podcast audio, all *completed* slide decks and all
     *completed* reports are downloaded.  Failed/pending artifacts are skipped.
-    A notebook is included in the result only if at least one artifact was
-    captured.
+    A notebook is included in the result if at least one artifact was captured
+    OR a retryable export failure occurred (so reconciliation can retry); a
+    fully artifact-less notebook with no failure is NOT registered.
 
     Returns list of dicts with keys: notebook_id, title, source_name,
-    audio_path (str | None), slide_deck_paths (list[str]), report_paths
-    (list[str]).
+    audio_path (str | None), audio_status ("downloaded"|"absent"|"failed"),
+    report_status ("complete"|"failed"), slide_deck_paths (list[str]),
+    report_paths (list[str]).
     """
     try:
         from notebooklm import NotebookLMClient
@@ -53,11 +78,16 @@ async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dic
             }
             (nb_dir / "metadata.json").write_text(json.dumps(meta, indent=2))
 
-            audio_path = await _export_audio(client, nb.id, nb_dir)
+            audio_path, audio_status = await _export_audio(client, nb.id, nb_dir)
             slide_deck_paths = await _export_slide_decks(client, nb.id, nb_dir)
-            report_paths = await _export_reports(client, nb.id, nb_dir)
+            report_paths, report_status = await _export_reports(client, nb.id, nb_dir)
 
-            if not (audio_path or slide_deck_paths or report_paths):
+            # Register only if an artifact exists OR a retryable export failure must
+            # be recorded (P2#9). A fully artifact-less notebook (no audio, no report,
+            # no slide) is NOT registered.
+            has_artifact = bool(audio_path or slide_deck_paths or report_paths)
+            retryable_failure = audio_status == "failed" or report_status == "failed"
+            if not (has_artifact or retryable_failure):
                 continue
 
             exported.append({
@@ -65,6 +95,8 @@ async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dic
                 "title": meta["title"],
                 "source_name": meta["source_name"],
                 "audio_path": str(audio_path) if audio_path else None,
+                "audio_status": audio_status,
+                "report_status": report_status,
                 "slide_deck_paths": slide_deck_paths,
                 "report_paths": report_paths,
             })
@@ -72,19 +104,30 @@ async def export_all(data_dir: Path, notebook_id: str | None = None) -> list[dic
     return exported
 
 
-async def _export_audio(client, notebook_id: str, nb_dir: Path) -> Path | None:
-    """Download the podcast audio. Returns the path, or None on failure."""
+async def _export_audio(
+    client, notebook_id: str, nb_dir: Path
+) -> tuple[Path | None, Literal["downloaded", "absent", "failed"]]:
+    """Returns (Path|None, status) with status in {'downloaded','absent','failed'}."""
     audio_path = nb_dir / "podcast.mp4"
     if audio_path.exists():
-        return audio_path
+        return audio_path, "downloaded"
     try:
-        await client.artifacts.download_audio(notebook_id, str(audio_path))
+        audio_arts = await client.artifacts.list_audio(notebook_id)
+    except Exception:
+        log.warning("export_list_audio_failed", notebook_id=notebook_id, exc_info=True)
+        return None, "failed"
+    if not audio_arts:
+        return None, "absent"
+    try:
+        await _download_atomic(
+            lambda p: client.artifacts.download_audio(notebook_id, p), audio_path
+        )
         size_mb = audio_path.stat().st_size / 1e6
         log.info("export_audio", notebook_id=notebook_id, size_mb=round(size_mb, 1))
-        return audio_path
+        return audio_path, "downloaded"
     except Exception:
         log.warning("export_audio_failed", notebook_id=notebook_id, exc_info=True)
-        return None
+        return None, "failed"
 
 
 async def _export_slide_decks(client, notebook_id: str, nb_dir: Path) -> list[str]:
@@ -103,12 +146,17 @@ async def _export_slide_decks(client, notebook_id: str, nb_dir: Path) -> list[st
             paths.append(str(out))
             continue
         try:
-            await client.artifacts.download_slide_deck(
-                notebook_id, str(out), artifact_id=deck.id, output_format="pdf"
+            await _download_atomic(
+                lambda p, _did=deck.id: client.artifacts.download_slide_deck(
+                    notebook_id, p, artifact_id=_did, output_format="pdf"
+                ),
+                out,
             )
             paths.append(str(out))
             log.info("export_slide_deck", notebook_id=notebook_id, artifact_id=deck.id)
         except Exception:
+            # Intentional asymmetry: unlike reports/audio, a slide-deck failure is
+            # NOT surfaced as a retryable status (per the export retry contract).
             log.warning(
                 "export_slide_deck_failed",
                 notebook_id=notebook_id,
@@ -118,15 +166,18 @@ async def _export_slide_decks(client, notebook_id: str, nb_dir: Path) -> list[st
     return paths
 
 
-async def _export_reports(client, notebook_id: str, nb_dir: Path) -> list[str]:
-    """Download all completed reports as markdown. Returns saved paths."""
+async def _export_reports(
+    client, notebook_id: str, nb_dir: Path
+) -> tuple[list[str], Literal["complete", "failed"]]:
+    """Returns (list[str], status) with status in {'complete','failed'}."""
     try:
         reports = await client.artifacts.list_reports(notebook_id)
     except Exception:
         log.warning("export_reports_list_failed", notebook_id=notebook_id, exc_info=True)
-        return []
+        return [], "failed"
 
     paths: list[str] = []
+    status = "complete"
     completed = [r for r in reports if r.is_completed]
     for report in completed:
         out = nb_dir / f"report_{report.id}.md"
@@ -134,8 +185,11 @@ async def _export_reports(client, notebook_id: str, nb_dir: Path) -> list[str]:
             paths.append(str(out))
             continue
         try:
-            await client.artifacts.download_report(
-                notebook_id, str(out), artifact_id=report.id
+            await _download_atomic(
+                lambda p, _rid=report.id: client.artifacts.download_report(
+                    notebook_id, p, artifact_id=_rid
+                ),
+                out,
             )
             paths.append(str(out))
             log.info("export_report", notebook_id=notebook_id, artifact_id=report.id)
@@ -146,7 +200,8 @@ async def _export_reports(client, notebook_id: str, nb_dir: Path) -> list[str]:
                 artifact_id=report.id,
                 exc_info=True,
             )
-    return paths
+            status = "failed"
+    return paths, status
 
 
 def _infer_source(title: str) -> str:

@@ -5,6 +5,7 @@ from nlm_ingest.state import (
     get_all_status,
     get_phase_status,
     init_db,
+    reconcile_phases,
     register_notebook,
     set_phase_status,
     validate_retry,
@@ -142,3 +143,141 @@ class TestAtomicRetry:
         affected = attempt_retry(db, "nb1", "export")
         assert affected == 1
         assert get_phase_status(db, "nb1", "export") == "running"
+
+
+def test_skipped_status_is_accepted(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    set_phase_status(db, "nb1", "transcribe", "skipped")
+    assert get_phase_status(db, "nb1", "transcribe") == "skipped"
+    db.close()
+
+
+def test_extract_retry_allowed_when_transcribe_failed(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    set_phase_status(db, "nb1", "export", "completed")
+    set_phase_status(db, "nb1", "transcribe", "failed")
+    # transcribe is NOT a prereq of extract -> no raise
+    validate_retry(db, "nb1", "extract")
+    db.close()
+
+
+def test_skipped_prereq_is_non_blocking(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    set_phase_status(db, "nb1", "export", "completed")
+    set_phase_status(db, "nb1", "extract", "skipped")
+    validate_retry(db, "nb1", "ingest")  # extract=skipped satisfies prereq
+    db.close()
+
+
+def test_ingest_retry_blocked_when_extract_pending(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    set_phase_status(db, "nb1", "export", "completed")
+    # extract stays 'pending'
+    with pytest.raises(ValueError, match="extract"):
+        validate_retry(db, "nb1", "ingest")
+    db.close()
+
+
+def _seed(db, nid="nb1"):
+    register_notebook(db, nid, "T", "RAND")
+    for ph in ("export", "transcribe", "extract", "ingest"):
+        set_phase_status(db, nid, ph, "completed")
+
+
+def _report(data_dir, nid, aid, text="r"):
+    p = data_dir / "notebooks" / nid / f"report_{aid}.md"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text)
+
+
+def test_reconcile_new_report_resets_extract_ingest(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    _seed(db)
+    _report(tmp_path, "nb1", "rNEW")  # new source, no extraction file
+    reconcile_phases(
+        db, tmp_path, "nb1", audio_status="downloaded", report_status="complete"
+    )
+    assert get_phase_status(db, "nb1", "extract") == "pending"
+    assert get_phase_status(db, "nb1", "ingest") == "pending"
+    db.close()
+
+
+def test_reconcile_slide_only_skips_all(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    reconcile_phases(
+        db, tmp_path, "nb1", audio_status="absent", report_status="complete"
+    )
+    for ph in ("transcribe", "extract", "ingest"):
+        assert get_phase_status(db, "nb1", ph) == "skipped"
+    db.close()
+
+
+def test_reconcile_no_skip_when_report_failed(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    reconcile_phases(
+        db, tmp_path, "nb1", audio_status="absent", report_status="failed"
+    )
+    assert get_phase_status(db, "nb1", "extract") != "skipped"
+    db.close()
+
+
+def test_reconcile_audio_after_skip_resets_all_three(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    for ph in ("transcribe", "extract", "ingest"):
+        set_phase_status(db, "nb1", ph, "skipped")
+    reconcile_phases(
+        db, tmp_path, "nb1", audio_status="downloaded", report_status="complete"
+    )
+    for ph in ("transcribe", "extract", "ingest"):
+        assert get_phase_status(db, "nb1", ph) == "pending"
+    db.close()
+
+
+def test_reconcile_does_not_reset_running_extract(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    _report(tmp_path, "nb1", "rNEW")  # source with no extraction file
+    set_phase_status(db, "nb1", "extract", "running")
+    reconcile_phases(
+        db, tmp_path, "nb1", audio_status="downloaded", report_status="complete"
+    )
+    assert get_phase_status(db, "nb1", "extract") == "running"
+    db.close()
+
+
+def test_reconcile_no_terminal_skip_when_audio_present(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    set_phase_status(db, "nb1", "extract", "completed")
+    # no on-disk sources, but audio was downloaded -> not a terminal-skip case
+    reconcile_phases(
+        db, tmp_path, "nb1", audio_status="downloaded", report_status="complete"
+    )
+    assert get_phase_status(db, "nb1", "extract") != "skipped"
+    db.close()
+
+
+def test_reconcile_provenance_mismatch_triggers_reextract(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    _seed(db)  # all phases completed
+    _report(tmp_path, "nb1", "rep-a")
+    ext = tmp_path / "extractions"
+    ext.mkdir(parents=True, exist_ok=True)
+    # valid Extraction JSON but source_id mismatches (rep-b != rep-a) -> invalid for this source
+    (ext / "nb1.rep-a.json").write_text(
+        '{"notebook_id":"nb1","entities":[],"relations":[],"claims":[],'
+        '"extraction_model":"q","prompt_version":"v1",'
+        '"source_kind":"report","source_id":"rep-b"}'
+    )
+    reconcile_phases(
+        db, tmp_path, "nb1", audio_status="absent", report_status="complete"
+    )
+    assert get_phase_status(db, "nb1", "extract") == "pending"
+    db.close()

@@ -58,13 +58,25 @@ ON MATCH SET
 LINK_CLAIM_DOCUMENT = """
 MATCH (c:Claim {statement_hash: $statement_hash})
 MATCH (d:Document {notebook_id: $notebook_id})
-MERGE (c)-[:EXTRACTED_FROM]->(d)
+MERGE (c)-[r:EXTRACTED_FROM {source_kind: $source_kind, source_id: $source_id}]->(d)
 """
 
 LINK_CLAIM_ENTITY = """
 MATCH (c:Claim {statement_hash: $statement_hash})
 MATCH (e:Entity {name: $entity_name})
 MERGE (c)-[:INVOLVES]->(e)
+"""
+
+# Scoped, idempotent backfill of legacy NLM EXTRACTED_FROM edges that predate
+# source provenance. Scoped to Documents carrying a notebook_id (NLM-owned) and
+# to edges still missing both properties, so it can never touch foreign edges
+# and is safe to re-run. Parameter-bound; no literals on the write path.
+BACKFILL_EXTRACTED_FROM = """
+MATCH (:Claim)-[r:EXTRACTED_FROM]->(d:Document)
+WHERE d.notebook_id IS NOT NULL
+  AND r.source_kind IS NULL
+  AND r.source_id IS NULL
+SET r.source_kind = $source_kind, r.source_id = $source_id
 """
 
 SOURCE_TIERS: dict[str, str] = {
