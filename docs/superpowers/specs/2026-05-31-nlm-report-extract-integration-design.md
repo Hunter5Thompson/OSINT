@@ -133,13 +133,56 @@ je Notebook. Die `export`-CLI setzt **`transcribe="skipped"` ausschließlich bei
 `_export_audio` ruft dafür vor dem Download `client.artifacts.list_audio(nid)`,
 um Existenz von Download-Fehler zu trennen.
 
-## Änderung 6: `nlm_ingest/state.py` — Status `skipped`
+## Änderung 6: `nlm_ingest/state.py` — Status `skipped` + DAG-Gating
 
-- Status-Enum erweitern: `CHECK(status IN ('pending','running','completed','failed','skipped'))`
-  (Mini-Migration: `ALTER`/Recreate je nach SQLite-Setup; idempotent).
-- `skipped` ist **terminal** und in `validate_retry` **nicht-blockierend**: eine
-  `skipped` Vorphase zählt wie erledigt, blockiert spätere Phasen also nicht.
-- `get_all_status`/Target-Filter behandeln `skipped` nicht als ausstehend.
+**Status-Enum** erweitern um `skipped`:
+`CHECK(status IN ('pending','running','completed','failed','skipped'))`.
+`skipped` ist **terminal**. (SQLite-Migration siehe Abschnitt „Migration".)
+
+**`validate_retry` von linear auf explizites DAG umstellen (P1#1).** Heute fordert
+`validate_retry` *alle* `PHASE_ORDER[:idx]` als `completed`
+([state.py:108](../../../services/data-ingestion/nlm_ingest/state.py)). Das ist
+falsch: ein fehlgeschlagenes `transcribe` blockiert sonst `retry extract`/`retry
+ingest` valider Report-Quellen. Stattdessen pro Phase explizite Vorbedingungen:
+
+```python
+PHASE_PREREQS = {
+    "transcribe": ["export"],
+    "extract":    ["export"],          # NICHT transcribe — Reports sind audio-unabhängig
+    "ingest":     ["extract"],
+}
+# Vorbedingung erfüllt, wenn prereq-Status in {"completed", "skipped"}.
+```
+
+`transcribe` ist damit **keine** Vorbedingung für `extract`. Die Existenz einer
+extrahierbaren Quelle wird zur Laufzeit über `load_sources(...)` geprüft (nicht im
+DAG kodiert). `get_all_status`/Target-Filter behandeln `skipped` als terminal
+(nicht ausstehend).
+
+## Änderung 6b: Quell-Reconciliation im Export-Schritt (P1#2, P1#3)
+
+Phasen-Target-Filter (`status ∈ {pending,failed,running}`) verarbeiten **neue
+Quellen nach einem abgeschlossenen Lauf nicht** — kommt später ein Report dazu
+oder wird Audio nachträglich erzeugt, bleibt `extract=completed` und die neue
+Quelle versickert. Der Export-Schritt wird daher zum **Reconciler**.
+
+Nach `export_all` pro Notebook (`reconcile_phases(db, data_dir, nid, audio_status, current_sources)` in `state.py`):
+
+1. **Quell-Inventar bilden:** vorhandene Audio (`audio_status`) + Report-Artefakte
+   (`source_id`s aus `notebooks/{nid}/report_*.md`).
+2. **Neuer/zusätzlicher Report** (`source_id` ohne `extractions/{nid}.{source_id}.json`):
+   `extract` und `ingest` → `pending` zurücksetzen. Die Idempotenz (Skip
+   existierender Extraktionsdateien) verhindert Doppelarbeit an alten Quellen.
+3. **Audio erscheint nach vorherigem `transcribe=skipped`:** `transcribe`
+   (und nachgelagert `extract`, `ingest`) → `pending`.
+4. **Keinerlei extrahierbare Quelle** (kein Audio-Artefakt **und** kein Report —
+   z. B. Slide-only-Notebook, das per [export.py](../../../services/data-ingestion/nlm_ingest/export.py)
+   nur wegen eines Slide-Decks registriert wurde): **`transcribe`, `extract` und
+   `ingest` terminal auf `skipped`** (P1#3). Eine spätere Vision-Quelle setzt sie
+   via Reconciliation wieder auf `pending`.
+
+Reconciliation ist idempotent und setzt nur bei *tatsächlicher* Inventar-Änderung
+zurück (kein Reset bei unverändertem Stand).
 
 ## Änderung 7: Graph-Write — Provenance (`nlm_ingest/write_templates.py`, `ingest_neo4j.py`)
 
@@ -162,11 +205,21 @@ Notebook repräsentiert; die Quelle steht auf der Kante.
 > Parameter-Binding, keine LLM-generierten Cypher. Änderung vom
 > **graph-rag-auditor** gegenprüfen lassen.
 
-## Änderung 8: Qdrant-Write für NLM (neu) — `nlm_ingest/ingest_neo4j.py` bzw. neuer Writer
+## Änderung 8: Qdrant-Write für NLM (neu) — `nlm_ingest/ingest_qdrant.py` (neues Modul)
 
 Der NLM-Ingest schreibt heute **nur** Neo4j. Diese Änderung ergänzt einen
 Embed→`odin_intel`-Schritt für **beide** Quellen (Transkript + Report), damit
 NLM-Inhalte im RAG-Read-Pfad sichtbar werden.
+
+**Eigenes Modul `ingest_qdrant.py`** (P2#5) — saubere Trennung vom Neo4j-Writer
+(`ingest_neo4j.py` bleibt graph-fokussiert). Der Ingest-CLI ruft beide.
+
+**Collection-Preflight (Pflicht, P2#5):** vor dem ersten Write
+`validate_collection_schema(...)` aufrufen
+([qdrant_doctor/schema.py](../../../services/data-ingestion/qdrant_doctor/schema.py)),
+analog zu `_ensure_collection` in
+[feeds/base.py:35](../../../services/data-ingestion/feeds/base.py). Schema-Drift
+wird so beim Write erkannt, nicht erst zur Query-Zeit.
 
 **Einheit: pro Claim.** Je Claim ein Point:
 
@@ -175,20 +228,28 @@ NLM-Inhalte im RAG-Read-Pfad sichtbar werden.
   aus Report und Transkript bleibt als zwei Evidenz-Points sichtbar, keine
   Provenance-Überschreibung). `NAMESPACE` = projektfeste UUID-Konstante.
 - **Vektor:** bestehendes TEI-`/embed` (1024-dim) auf `claim.statement`.
-- **Payload** (schema-kompatibel zum bestehenden `odin_intel`, das der Read-Pfad
-  `qdrant_search` mit `title/source/region/content` liest):
+- **Payload** (schema-kompatibel zum bestehenden `odin_intel`; der Read-Pfad liest
+  `title/source/content` in
+  [qdrant_search.py](../../../services/intelligence/agents/tools/qdrant_search.py)
+  und `entities` für den Graph-Context in
+  [retriever.py:178](../../../services/intelligence/rag/retriever.py)):
 
 ```python
 {
-  "title":       <notebook-title>,
-  "source":      <source_name>,
-  "region":      None,                 # NLM hat keine Region; Read-Pfad defaultet "N/A"
-  "content":     claim.statement,
-  "notebook_id": extraction.notebook_id,
-  "source_kind": extraction.source_kind,
-  "source_id":   extraction.source_id,
-  "claim_type":  claim.type,
-  "claim_hash":  <claim_hash>,         # zusätzlich im Payload
+  "title":         <notebook-title>,
+  "source":        <source_name>,
+  "region":        "N/A",                       # P2#6: explizit "N/A", NICHT None
+                                                 # (r.get("region","N/A") defaultet nur bei fehlendem Key)
+  "content":       claim.statement,
+  "entities":      [{"name": n} for n in claim.entities_involved],  # P2#6: Graph-Context-Injection
+  "notebook_id":   extraction.notebook_id,
+  "source_kind":   extraction.source_kind,
+  "source_id":     extraction.source_id,
+  "claim_type":    claim.type,
+  "claim_hash":    <claim_hash>,                # zusätzlich im Payload
+  "content_hash":  <claim_hash>,                # P2#6: konsistent mit base._build_point
+  "ingested_at":   <iso>,                       # P2#6
+  "ingested_epoch": <ts>,                       # P2#6 (optional, wie RSS-Pfad)
 }
 ```
 
@@ -207,6 +268,31 @@ NLM-Inhalte im RAG-Read-Pfad sichtbar werden.
   Extraktionsdateien des Notebooks erfolgreich (Neo4j + Qdrant) geschrieben
   wurden; sonst `failed` (retrybar).
 
+## Migration (P1#4)
+
+Es existieren bereits lokale Daten aus dem alten audio-only Pfad. Eine
+deterministische, idempotente, einmalige Migration ist Teil dieser Story:
+
+1. **SQLite-Status-Enum.** SQLite kann einen `CHECK` **nicht** per `ALTER`
+   erweitern → **Tabellen-Rebuild in einer Transaktion**:
+   neue `phase_status`-Tabelle mit erweitertem `CHECK` anlegen, Daten kopieren,
+   alte droppen, umbenennen. In einer Transaktion, idempotent (nur wenn der alte
+   `CHECK` erkannt wird).
+2. **Alte Extraktionsdateien.** `extractions/{nid}.json` →
+   `extractions/{nid}.transcript.json` umbenennen und im JSON `source_kind="transcript"`,
+   `source_id="transcript"` backfillen (das `Extraction`-Modell bekommt die Felder
+   als Pflicht; Alt-Dateien ohne sie sonst nicht ladbar).
+3. **Alte Neo4j-Kanten.** Bestehende `EXTRACTED_FROM`-Kanten tragen keine
+   Properties ([write_templates.py:58](../../../services/data-ingestion/nlm_ingest/write_templates.py)).
+   Die neuen MERGEs mit `{source_kind, source_id}` würden sonst **parallele** Alt-
+   und Neu-Kanten erzeugen. Deterministisches Backfill (eigenes Template, kein
+   LLM-Cypher): vorhandene property-lose `EXTRACTED_FROM` auf
+   `source_kind="transcript", source_id="transcript"` setzen.
+4. **Migrationstest.** Test gegen ein **altes** DB-/Datei-Schema (Fixture mit
+   alter `phase_status`-Tabelle, alter `{nid}.json`, property-loser Kante) →
+   verifiziert Rebuild, Rename+Backfill, Kanten-Backfill und Idempotenz bei
+   erneutem Lauf.
+
 ## Test-Strategie (TDD-Pflicht)
 
 | Einheit | Test |
@@ -219,8 +305,13 @@ NLM-Inhalte im RAG-Read-Pfad sichtbar werden.
 | `export` audio_status | `absent` → `transcribe=skipped`; `failed` bleibt `failed`/`pending` |
 | `state` `skipped` | terminal + nicht-blockierend in `validate_retry` |
 | `EXTRACTED_FROM` | Rel-Props `source_kind`+`source_id` im MERGE-Pattern; zwei Quellen → zwei Kanten |
-| Qdrant-Point | `point_id` = UUIDv5 (quell-spezifisch), Payload-Felder, `claim_hash` im Payload, abgelehnte Claims raus |
+| Qdrant-Point | `point_id` = UUIDv5 (quell-spezifisch), Payload inkl. `entities`/`content_hash`/`ingested_at`, `region="N/A"`, `claim_hash`, abgelehnte Claims raus |
+| Qdrant-Preflight | `validate_collection_schema` wird vor dem Write aufgerufen (Mismatch → Abbruch) |
 | Ingest-Phase | globbt mehrere Extraktionsdateien; `completed` nur bei Vollerfolg |
+| **DAG** `validate_retry` | `retry extract` erlaubt bei `transcribe=failed`/`skipped` (export `completed`); `retry ingest` blockiert nur bei nicht-terminalem `extract` |
+| **Reconciliation** | neuer Report nach Vollerfolg → `extract/ingest`→`pending`; Audio nach `transcribe=skipped` → `transcribe`→`pending`; kein Reset bei unverändertem Inventar |
+| **Slide-only** | Notebook ohne Audio-Artefakt und ohne Report → `transcribe/extract/ingest` = `skipped` |
+| **Migration** | Fixture mit altem Schema → Rebuild + `{nid}.json`-Rename+Backfill + Kanten-Backfill, idempotent bei Re-Run |
 
 Tests verifizieren echtes Verhalten; externe Dienste (vLLM, TEI, Neo4j, Qdrant,
 NotebookLM-Client) werden gemockt, nicht die zu testende Logik.
@@ -239,15 +330,25 @@ NotebookLM-Client) werden gemockt, nicht die zu testende Logik.
    Graph); Teilfehler einer Quelle blockieren die erfolgreichen Quellen nicht.
 6. Write-Path bleibt rein deterministisch (Templates, Parameter-Binding); kein
    Write im Read-Path.
+7. **Retry-DAG** korrekt: ein Audio-Fehler blockiert weder `retry extract` noch
+   `retry ingest` valider Report-Quellen.
+8. **Reconciliation**: neue/nachträgliche Quellen (Report oder Audio) werden auch
+   nach einem Vollerfolg erkannt und verarbeitet; keine versickerten Quellen.
+9. **Quellenlose Notebooks** (Slide-only) hängen in keiner Phase — alle Phasen
+   terminal `skipped`, reaktivierbar durch spätere Vision-Quelle.
+10. **Migration** überführt Alt-Daten (SQLite-Schema, `{nid}.json`,
+    property-lose `EXTRACTED_FROM`) deterministisch und idempotent.
 
 ## Betroffene Dateien
 
 - `nlm_ingest/schemas.py` (ExtractionSource, Extraction-Felder)
 - `nlm_ingest/sources.py` (neu)
 - `nlm_ingest/extract.py` (Signatur-Refactor)
-- `nlm_ingest/export.py` (audio_status: absent/failed/downloaded)
-- `nlm_ingest/state.py` (Status `skipped` + Migration)
-- `nlm_ingest/write_templates.py` (`LINK_CLAIM_DOCUMENT` Rel-Props, Document-Type)
-- `nlm_ingest/ingest_neo4j.py` (Provenance durchreichen, Qdrant-Write)
-- `nlm_ingest/cli.py` (`export`/`extract`/`ingest`-Phasenlogik)
-- `tests/` (neue/erweiterte Tests je Einheit)
+- `nlm_ingest/export.py` (audio_status: absent/failed/downloaded via `list_audio`)
+- `nlm_ingest/state.py` (Status `skipped`, DAG-`validate_retry`, `reconcile_phases`)
+- `nlm_ingest/write_templates.py` (`LINK_CLAIM_DOCUMENT` Rel-Props, Document-Type, Kanten-Backfill-Template)
+- `nlm_ingest/ingest_neo4j.py` (Provenance durchreichen)
+- `nlm_ingest/ingest_qdrant.py` (neu — Embed→odin_intel, Preflight)
+- `nlm_ingest/migrate.py` (neu — SQLite-Rebuild, Datei-Rename+Backfill, Neo4j-Kanten-Backfill)
+- `nlm_ingest/cli.py` (`export`-Reconciliation, `extract`/`ingest`-Phasenlogik, Migrationsaufruf)
+- `tests/` (neue/erweiterte Tests je Einheit inkl. Migrationstest)
