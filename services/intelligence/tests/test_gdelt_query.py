@@ -65,5 +65,33 @@ class TestGdeltQueryTool:
         ):
             result = await gdelt_query.ainvoke({"query": "strait of hormuz", "max_records": 5})
 
-        assert "[GDELT Results for: strait of hormuz]" in result
-        assert "Shipping disruption reported" in result
+        assert "[GDELT Evidence for: strait of hormuz]" in result
+        from rag.evidence import parse_evidence_refs
+        refs = parse_evidence_refs(result)
+        assert len(refs) == 1
+        assert refs[0].provider == "example.test"
+
+    @pytest.mark.asyncio
+    async def test_emits_evidence_blocks_seendate_not_published(self):
+        from rag.evidence import parse_evidence_refs
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"articles": [{
+            "title": "Shipping disruption",
+            "url": "https://reuters.com/a",
+            "domain": "reuters.com",
+            "seendate": "20260423T120000Z",
+            "language": "English",
+        }]}
+        response.headers = {"content-type": "application/json"}
+        response.text = ""
+        with patch(
+            "agents.tools.gdelt_query.httpx.AsyncClient",
+            return_value=_DummyAsyncClient(response),
+        ):
+            out = await gdelt_query.ainvoke({"query": "hormuz", "max_records": 5})
+        refs = parse_evidence_refs(out)
+        assert len(refs) == 1
+        assert refs[0].source_type == "gdelt"
+        assert refs[0].provider == "reuters.com"
+        assert refs[0].published_at is None  # seendate is an observation, not publication
