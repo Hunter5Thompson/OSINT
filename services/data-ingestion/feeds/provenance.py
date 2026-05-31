@@ -1,7 +1,9 @@
 """Shared write-side provenance helper. Facts only — no credibility, no guessing.
 
-Mirrors contracts/qdrant-provenance-v1.json. Credibility is read-side policy and
-must NOT be written here.
+Provides the source-identification subset of contracts/qdrant-provenance-v1.json:
+`source_type` + `provider` (+ optional `published_at`). The third required field,
+`ingested_at`, is set by the caller at point-write time (e.g. base.py / each
+collector), not here. Credibility is read-side policy and must NOT be written here.
 """
 from __future__ import annotations
 
@@ -23,7 +25,7 @@ DATASET_PROVIDERS: dict[str, str] = {
 
 def provenance_fields(
     *, source_type: str, provider: str, published_at: str | None = None,
-) -> dict:
+) -> dict[str, str]:
     """Validated canonical provenance facts. Raises ValueError on bad input."""
     if source_type not in WRITE_SOURCE_TYPES:
         raise ValueError(f"invalid write source_type: {source_type!r}")
@@ -35,7 +37,7 @@ def provenance_fields(
     return fields
 
 
-def dataset_provenance(source: str, published_at: str | None = None) -> dict:
+def dataset_provenance(source: str, published_at: str | None = None) -> dict[str, str]:
     """Canonical provenance for a known dataset source key. Raises KeyError if unknown."""
     return provenance_fields(
         source_type="dataset",
