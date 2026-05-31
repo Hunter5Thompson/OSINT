@@ -10,8 +10,8 @@ from nlm_ingest.schemas import (
     Claim,
     Entity,
     Extraction,
+    ExtractionSource,
     Relation,
-    Transcript,
 )
 
 log = structlog.get_logger()
@@ -37,7 +37,7 @@ def extract_context(full_text: str, target: str, radius: int = 500) -> str:
 
 
 async def extract_with_qwen(
-    transcript: Transcript,
+    source: ExtractionSource,
     metadata: dict,
     client: httpx.AsyncClient,
     vllm_url: str,
@@ -57,7 +57,7 @@ async def extract_with_qwen(
         prompt_template
         .replace("{source_name}", metadata.get("source_name", "unknown"))
         .replace("{title}", metadata.get("title", "untitled"))
-        .replace("{transcript_text}", transcript.full_text[:16_000])
+        .replace("{transcript_text}", source.text[:16_000])
     )
 
     payload = {
@@ -81,20 +81,20 @@ async def extract_with_qwen(
     data = json.loads(content)
 
     return Extraction(
-        notebook_id=transcript.notebook_id,
+        notebook_id=source.notebook_id,
         entities=[Entity(**e) for e in data.get("entities", [])],
         relations=[Relation(**r) for r in data.get("relations", [])],
         claims=[Claim(**c) for c in data.get("claims", [])],
         extraction_model=vllm_model,
         prompt_version=prompt_version,
-        source_kind="transcript",   # TEMP (Task 7 -> source.source_kind)
-        source_id="transcript",     # TEMP (Task 7 -> source.source_id)
+        source_kind=source.source_kind,
+        source_id=source.source_id,
     )
 
 
 async def review_with_claude(
     extraction: Extraction,
-    transcript: Transcript,
+    source: ExtractionSource,
     claude_client,
     claude_model: str,
 ) -> Extraction:
@@ -108,7 +108,7 @@ async def review_with_claude(
 
     for claim in low_conf_claims:
         context_window = extract_context(
-            transcript.full_text, claim.statement[:80], radius=500
+            source.text, claim.statement[:80], radius=500
         )
         # Estimate input tokens (context // 4) plus the 200-token response budget.
         estimated_tokens = len(context_window) // 4 + 200
@@ -125,7 +125,7 @@ async def review_with_claude(
                     {
                         "role": "user",
                         "content": (
-                            f"Verify this claim extracted from a think-tank podcast transcript.\n\n"
+                            f"Verify this claim extracted from a think-tank source.\n\n"
                             f"Claim: \"{claim.statement}\"\n"
                             f"Type: {claim.type} | Polarity: {claim.polarity}\n\n"
                             f"Transcript context:\n{context_window}\n\n"

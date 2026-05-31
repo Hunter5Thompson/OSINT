@@ -9,7 +9,7 @@ import httpx
 import structlog
 
 from config import Settings
-from nlm_ingest.schemas import Transcript
+from nlm_ingest.schemas import ExtractionSource, Transcript
 from nlm_ingest.state import (
     PHASE_ORDER,
     attempt_retry,
@@ -214,8 +214,15 @@ def extract(notebook_id: str | None):
                     meta_path = data_dir / "notebooks" / nid / "metadata.json"
                     metadata = json.loads(meta_path.read_text()) if meta_path.exists() else {}
 
+                    source = ExtractionSource(
+                        notebook_id=transcript.notebook_id,
+                        source_id="transcript",
+                        source_kind="transcript",
+                        text=transcript.full_text,
+                    )
+
                     extraction = await extract_with_qwen(
-                        transcript=transcript,
+                        source=source,
                         metadata=metadata,
                         client=client,
                         vllm_url=settings.ingestion_vllm_url,
@@ -225,7 +232,7 @@ def extract(notebook_id: str | None):
                     if claude_client:
                         extraction = await review_with_claude(
                             extraction=extraction,
-                            transcript=transcript,
+                            source=source,
                             claude_client=claude_client,
                             claude_model=settings.claude_model,
                         )

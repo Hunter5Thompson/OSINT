@@ -42,15 +42,16 @@ def test_cli_extract_uses_ingestion_vllm_settings(tmp_path, monkeypatch):
 
     async def fake_extract(**kwargs):
         captured.update(kwargs)
+        src = kwargs["source"]
         return Extraction(
-            notebook_id=kwargs["transcript"].notebook_id,
+            notebook_id=src.notebook_id,
             entities=[],
             relations=[],
             claims=[],
             extraction_model=kwargs["vllm_model"],
             prompt_version="v0-test",
-            source_kind="transcript",
-            source_id="transcript",
+            source_kind=src.source_kind,
+            source_id=src.source_id,
         )
 
     # get_all_status returns rows describing per-notebook phase state.
@@ -67,3 +68,4 @@ def test_cli_extract_uses_ingestion_vllm_settings(tmp_path, monkeypatch):
     assert captured["vllm_url"] == "http://192.168.178.39:8000"
     assert "/v1" not in captured["vllm_url"]
     assert captured["vllm_model"] == "Qwen/Qwen3.6-35B-A3B"
+    assert captured["source"].source_kind == "transcript"

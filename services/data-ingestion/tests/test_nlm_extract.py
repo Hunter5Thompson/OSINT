@@ -10,16 +10,18 @@ from nlm_ingest.extract import (
     load_prompt,
     review_with_claude,
 )
-from nlm_ingest.schemas import Extraction, Transcript, TranscriptSegment
+from nlm_ingest.schemas import (
+    Extraction,
+    ExtractionSource,
+)
 
 
-def _make_transcript(text: str = "NATO expanded eastward. China opposes this.") -> Transcript:
-    return Transcript(
+def _make_source(text: str = "NATO expanded eastward. China opposes this.") -> ExtractionSource:
+    return ExtractionSource(
         notebook_id="nb1",
-        duration_seconds=60.0,
-        language="en",
-        segments=[TranscriptSegment(start=0.0, end=60.0, text=text)],
-        full_text=text,
+        source_id="transcript",
+        source_kind="transcript",
+        text=text,
     )
 
 
@@ -78,7 +80,7 @@ class TestExtractWithQwen:
         client.post.return_value = mock_response
 
         extraction = await extract_with_qwen(
-            transcript=_make_transcript(),
+            source=_make_source(),
             metadata={"source_name": "RAND", "title": "Test Report"},
             client=client,
             vllm_url="http://localhost:8000",
@@ -93,12 +95,13 @@ class TestExtractWithQwen:
     @pytest.mark.asyncio
     async def test_vllm_error_raises(self):
         client = AsyncMock(spec=httpx.AsyncClient)
+        err_req = httpx.Request("POST", "http://x")
         client.post.side_effect = httpx.HTTPStatusError(
-            "500", request=httpx.Request("POST", "http://x"), response=httpx.Response(500, request=httpx.Request("POST", "http://x"))
+            "500", request=err_req, response=httpx.Response(500, request=err_req)
         )
         with pytest.raises(httpx.HTTPStatusError):
             await extract_with_qwen(
-                transcript=_make_transcript(),
+                source=_make_source(),
                 metadata={"source_name": "X", "title": "Y"},
                 client=client,
                 vllm_url="http://localhost:8000",
@@ -139,7 +142,7 @@ class TestReviewWithClaude:
             source_kind="transcript",
             source_id="transcript",
         )
-        transcript = _make_transcript()
+        source = _make_source()
 
         mock_client = AsyncMock()
         mock_message = MagicMock()
@@ -148,7 +151,7 @@ class TestReviewWithClaude:
 
         reviewed = await review_with_claude(
             extraction=extraction,
-            transcript=transcript,
+            source=source,
             claude_client=mock_client,
             claude_model="claude-sonnet-4-20250514",
         )
@@ -170,7 +173,7 @@ class TestReviewWithClaude:
             claims=claims, extraction_model="qwen3.5", prompt_version="v1",
             source_kind="transcript", source_id="transcript",
         )
-        transcript = _make_transcript("word " * 40_000)
+        source = _make_source("word " * 40_000)
 
         mock_client = AsyncMock()
         mock_message = MagicMock()
@@ -179,9 +182,34 @@ class TestReviewWithClaude:
 
         await review_with_claude(
             extraction=extraction,
-            transcript=transcript,
+            source=source,
             claude_client=mock_client,
             claude_model="claude-sonnet-4-20250514",
         )
         call_count = mock_client.messages.create.call_count
         assert call_count < 200
+
+
+_REQ = httpx.Request("POST", "http://x/v1/chat/completions")
+
+
+@pytest.mark.asyncio
+async def test_extract_with_qwen_sets_provenance():
+    content = '{"entities": [], "relations": [], "claims": []}'
+    body = {"choices": [{"message": {"content": content}}]}
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.return_value = httpx.Response(200, json=body, request=_REQ)
+
+    source = ExtractionSource(
+        notebook_id="nb1", source_id="rep-a", source_kind="report", text="report text"
+    )
+    result = await extract_with_qwen(
+        source=source,
+        metadata={"source_name": "RAND", "title": "T"},
+        client=client,
+        vllm_url="http://x",
+        vllm_model="qwen",
+    )
+    assert result.source_kind == "report"
+    assert result.source_id == "rep-a"
+    assert result.notebook_id == "nb1"
