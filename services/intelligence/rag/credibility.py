@@ -18,9 +18,12 @@ TYPE_BASELINES: dict[str, float] = {
 }
 
 # Keep short. Every entry needs a one-line justification and a test.
+# Keys must match the canonical `provider` the WRITE side actually stamps
+# (e.g. the BBC RSS feed resolves to bbc.co.uk, not bbc.com).
 PROVIDER_OVERRIDES: dict[str, float] = {
     "reuters.com": 0.85,  # international wire, strong editorial standards
-    "bbc.com": 0.80,      # public broadcaster, strong editorial standards
+    "bbc.com": 0.80,      # public broadcaster (international domain)
+    "bbc.co.uk": 0.80,    # public broadcaster (UK domain — the RSS feed's provider)
 }
 
 
@@ -37,11 +40,18 @@ def normalize_provider(provider: str) -> str:
     if "://" in p:
         p = urlparse(p).hostname or p
     # drop any path that slipped through (e.g. "bbc.com/news")
-    return p.split("/", 1)[0]
+    p = p.split("/", 1)[0]
+    # strip a leading www. so www.reuters.com matches the reuters.com override
+    # (the GDELT discovery path can surface www-prefixed domains)
+    return p.removeprefix("www.")
 
 
 def credibility_score(source_type: str, provider: str) -> float:
     """Provider override if present, else the source_type baseline.
+
+    A provider override intentionally beats the source_type baseline — a
+    reuters.com article surfaced via the GDELT discovery path is still Reuters,
+    so it earns Reuters' reliability rather than the gdelt aggregator baseline.
 
     Raises KeyError if source_type is not a known baseline (fail-fast).
     """

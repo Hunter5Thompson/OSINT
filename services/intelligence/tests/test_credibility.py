@@ -20,6 +20,17 @@ def test_provider_override_beats_baseline():
     assert credibility_score("rss", "bbc.com") == 0.80
 
 
+def test_bbc_co_uk_matches_override_like_the_feed_writes_it():
+    # The BBC RSS feed's canonical provider is bbc.co.uk, not bbc.com.
+    assert credibility_score("rss", "bbc.co.uk") == 0.80
+
+
+def test_provider_override_beats_gdelt_aggregator_baseline():
+    # Reuters surfaced via GDELT discovery is still Reuters.
+    assert credibility_score("gdelt", "reuters.com") == 0.85
+    assert credibility_score("gdelt", "www.reuters.com") == 0.85  # www stripped
+
+
 def test_normalize_provider_is_case_and_scheme_insensitive():
     assert normalize_provider("Reuters.com") == "reuters.com"
     assert normalize_provider("https://reuters.com/world") == "reuters.com"
@@ -31,6 +42,11 @@ def test_normalize_provider_handles_ports_and_schemes():
     assert normalize_provider("http://bbc.com/sport") == "bbc.com"
     assert normalize_provider("https://reuters.com:443/news") == "reuters.com"
     assert normalize_provider("ftp://reuters.com/feed") == "reuters.com"
+
+
+def test_normalize_provider_strips_www():
+    assert normalize_provider("www.reuters.com") == "reuters.com"
+    assert normalize_provider("https://www.bbc.co.uk/news") == "bbc.co.uk"
 
 
 def test_credibility_unknown_fallback_score():
