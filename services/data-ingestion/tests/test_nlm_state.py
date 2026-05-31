@@ -142,3 +142,11 @@ class TestAtomicRetry:
         affected = attempt_retry(db, "nb1", "export")
         assert affected == 1
         assert get_phase_status(db, "nb1", "export") == "running"
+
+
+def test_skipped_status_is_accepted(tmp_path):
+    db = init_db(tmp_path / "s.db")
+    register_notebook(db, "nb1", "T", "RAND")
+    set_phase_status(db, "nb1", "transcribe", "skipped")
+    assert get_phase_status(db, "nb1", "transcribe") == "skipped"
+    db.close()

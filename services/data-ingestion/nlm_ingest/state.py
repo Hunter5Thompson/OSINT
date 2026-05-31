@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS notebooks (
 CREATE TABLE IF NOT EXISTS phase_status (
     notebook_id TEXT REFERENCES notebooks(id),
     phase TEXT CHECK(phase IN ('export', 'transcribe', 'extract', 'ingest')),
-    status TEXT CHECK(status IN ('pending', 'running', 'completed', 'failed')),
+    status TEXT CHECK(status IN ('pending', 'running', 'completed', 'failed', 'skipped')),
     error TEXT,
     started_at TEXT,
     finished_at TEXT,
