@@ -16,6 +16,11 @@
 - Tests: `uv run pytest tests/<file> -q`
 - Lint: `uvx ruff check <pfad>`
 
+> **AUSFÜHRUNGSREIHENFOLGE (WICHTIG):** **Task 5 (Schema-Felder) ZUERST**, dann
+> Stage 1 (Tasks 1–4), dann Stage 2 ff. in Nummern­reihenfolge. Grund: die
+> Migration (Task 3) nutzt `Extraction.source_kind/source_id`, die erst Task 5
+> einführt. Task 5 ist dependency-frei und bildet das Fundament der gesamten Story.
+
 ---
 
 ## File Structure
@@ -31,6 +36,7 @@
 | `nlm_ingest/write_templates.py` | `LINK_CLAIM_DOCUMENT` Rel-Props, `BACKFILL_EXTRACTED_FROM`, Document-Type | Modify |
 | `nlm_ingest/ingest_neo4j.py` | `source_kind`/`source_id` durchreichen | Modify |
 | `nlm_ingest/ingest_qdrant.py` | Embed→`odin_intel`, UUIDv5-Points, Collection-Preflight | Create |
+| `config.py` | `enable_hybrid: bool = False` (steuert Qdrant-Preflight) | Modify |
 | `nlm_ingest/cli.py` | `export`-Reconciliation, `extract`/`ingest` Multi-Source + Aggregation, Migrationsaufruf | Modify |
 | `tests/test_nlm_*.py` | Tests je Einheit inkl. Migrationstest | Create/Modify |
 
@@ -179,6 +185,9 @@ git commit -m "feat(nlm-state): DAG-based validate_retry (extract no longer gate
 - Create: `nlm_ingest/migrate.py`
 - Test: `tests/test_nlm_migrate.py`
 
+> **Voraussetzung: Task 5 (Schema-Felder) muss vorher gelaufen sein** —
+> `_is_valid_transcript_extraction` nutzt `Extraction.source_kind/source_id`.
+
 **Hintergrund:** Alt-DBs haben den `CHECK` ohne `skipped`; SQLite kann den `CHECK` nicht per `ALTER` erweitern → Tabellen-Rebuild. Alte `extractions/{nid}.json` müssen zu `{nid}.transcript.json` werden + `source_kind/source_id` backfillen; betroffene Notebooks `ingest→pending` (sonst nie nach Qdrant).
 
 - [ ] **Step 1: Failing test — lokale Migration**
@@ -246,18 +255,23 @@ def test_migrate_local_is_idempotent(tmp_path):
     migrate_local(db, data_dir)  # zweiter Lauf darf nicht werfen
     db.close()
 
-def test_rebuild_is_atomic_on_failure(tmp_path):
-    # Atomarität: schlägt der Rebuild mitten drin fehl, bleibt phase_status intakt.
+def test_rebuild_rolls_back_after_drop(tmp_path):
+    # Atomarität: Fehler NACH dem destruktiven DROP TABLE -> ROLLBACK stellt
+    # phase_status wieder her. Per SQLite-Authorizer das ALTER TABLE verweigern,
+    # damit die Exception erst nach CREATE+INSERT+DROP fällt (Test-Härtung).
     from nlm_ingest.migrate import _rebuild_status_table
     db_path = tmp_path / "state.db"; db = _old_db(db_path); db.close()
     db = sqlite3.connect(str(db_path))
-    # Konflikt provozieren: phase_status_new existiert schon -> CREATE wirft.
-    db.execute("CREATE TABLE phase_status_new (x INTEGER)"); db.commit()
-    with pytest.raises(Exception):
+
+    def _deny_alter(action, *args):
+        return sqlite3.SQLITE_DENY if action == sqlite3.SQLITE_ALTER_TABLE else sqlite3.SQLITE_OK
+    db.set_authorizer(_deny_alter)
+    with pytest.raises(sqlite3.DatabaseError):
         _rebuild_status_table(db)
-    # Original-Tabelle wurde NICHT gedroppt
-    rows = db.execute("SELECT count(*) FROM phase_status").fetchone()
-    assert rows[0] == 4
+    db.set_authorizer(None)
+
+    # ROLLBACK nach DROP -> Original-phase_status mit 4 Zeilen wiederhergestellt
+    assert db.execute("SELECT count(*) FROM phase_status").fetchone()[0] == 4
     db.close()
 
 _VALID_EXTRACTION = ('{"notebook_id":"nb1","entities":[],"relations":[],"claims":[],'
@@ -288,6 +302,17 @@ def test_extraction_rename_invalid_target_aborts_without_loss(tmp_path):
         _migrate_extraction_files(db, tmp_path)
     assert (ext / "nb1.json").exists()                                   # Altdatei erhalten
     assert json.loads((ext / "nb1.transcript.json").read_text())["keep"] is True
+
+def test_migrate_extraction_invalid_old_file_aborts(tmp_path):
+    # Kaputte Altdatei (Pflichtfelder fehlen), KEIN Ziel -> Abbruch vor Schreiben/Löschen.
+    from nlm_ingest.migrate import _migrate_extraction_files
+    ext = tmp_path / "extractions"; ext.mkdir(parents=True)
+    (ext / "nb1.json").write_text('{"notebook_id":"nb1"}')   # invalide Extraction
+    db = sqlite3.connect(":memory:")
+    with pytest.raises(RuntimeError, match="not a valid Extraction"):
+        _migrate_extraction_files(db, tmp_path)
+    assert (ext / "nb1.json").exists()                       # Altdatei bleibt
+    assert not (ext / "nb1.transcript.json").exists()        # kein halbes Ziel
 ```
 
 > **Pflicht nach jeder Task:** die **gesamte** NLM-Suite laufen lassen
@@ -395,9 +420,18 @@ def _migrate_extraction_files(db: sqlite3.Connection, data_dir: Path) -> list[st
                     f"Migration conflict for {nid}: {target.name} exists but is not a "
                     f"valid transcript extraction; refusing to delete {old.name}")
         else:
+            from nlm_ingest.schemas import Extraction
             data = json.loads(old.read_text())
             data.setdefault("source_kind", "transcript")
             data.setdefault("source_id", "transcript")
+            # Transformierte Daten VOR Schreiben/Löschen validieren (Finding #2):
+            # eine kaputte/unvollständige Altdatei darf nicht migriert+gelöscht werden.
+            try:
+                Extraction.model_validate(data)
+            except Exception as e:
+                raise RuntimeError(
+                    f"Migration: {old.name} is not a valid Extraction after backfill "
+                    f"({e}); refusing to migrate/delete") from e
             tmp = ext_dir / f"{nid}.transcript.json.tmp"
             tmp.write_text(json.dumps(data, indent=2))
             tmp.replace(target)              # atomarer Rename
@@ -1241,8 +1275,19 @@ git commit -m "feat(nlm-ingest): EXTRACTED_FROM carries source_kind/source_id pr
 ## Task 11: `ingest_qdrant.py` — Embed pro Claim + Preflight
 
 **Files:**
+- Modify: `config.py` (`enable_hybrid` Setting)
 - Create: `nlm_ingest/ingest_qdrant.py`
 - Test: `tests/test_nlm_ingest_qdrant.py`
+
+- [ ] **Step 0: `enable_hybrid` in `config.py` ergänzen (Finding #5)**
+
+`Settings` besitzt heute kein `enable_hybrid`; ohne das Feld liefe der Hybrid-Schutz
+in `ensure_collection` über `getattr(..., False)` praktisch nie an. In der `Settings`-
+Klasse in `config.py` ergänzen (zu den übrigen Qdrant-Feldern):
+
+```python
+    enable_hybrid: bool = False
+```
 
 - [ ] **Step 1: Failing tests — Point-Bau (reine Funktion, ohne Netz)**
 
@@ -1325,6 +1370,20 @@ async def test_ensure_collection_aborts_on_schema_mismatch(monkeypatch):
     monkeypatch.setattr(iq, "validate_collection_schema", _boom)
     with pytest.raises(RuntimeError, match="mismatch"):
         await iq.ensure_collection(FakeQ(), "odin_intel", 1024)
+
+
+@pytest.mark.asyncio
+async def test_ensure_collection_aborts_in_hybrid_mode():
+    import nlm_ingest.ingest_qdrant as iq
+    class FakeQ:
+        def get_collections(self): return SimpleNamespace(collections=[])
+    with pytest.raises(NotImplementedError, match="dense-only"):
+        await iq.ensure_collection(FakeQ(), "odin_intel", 1024, enable_hybrid=True)
+
+
+def test_settings_has_enable_hybrid_default_false():
+    from config import Settings
+    assert Settings().enable_hybrid is False
 ```
 
 - [ ] **Step 2: Run — verify FAIL**
@@ -1868,22 +1927,21 @@ def migrate(local_only: bool, neo4j_only: bool):
     click.echo("Neo4j backfill done.")
 ```
 
-**Auto-Migration in `_get_db()` (Finding #3):** Damit eine Alt-DB den `skipped`-Wert
-akzeptiert, *bevor* `export` ihn schreibt, ruft `_get_db()` einmal pro Prozess
-`migrate_local()` auf (idempotent; nach erster Migration nur ein billiger
-`_needs_status_rebuild`-Check + leerer Glob):
+**Auto-Migration in `_get_db()` (Finding #3/#4):** Damit eine Alt-DB den `skipped`-Wert
+akzeptiert, *bevor* `export` ihn schreibt, ruft `_get_db()` bei **jedem** Aufruf
+`migrate_local()` auf — kein globaler Cache (Idempotenz IST der Mechanismus; nach
+erfolgter Migration nur ein billiger `_needs_status_rebuild`-Check + leerer Glob).
+**Bestehenden Pfadaufbau unverändert übernehmen** (`nlm_data_dir/state.db`, es gibt
+kein `nlm_db_path`):
 
 ```python
-_migrated = False
-
 def _get_db():
-    global _migrated
     settings = _get_settings()
-    db = init_db(Path(settings.nlm_db_path))   # bestehenden DB-Pfad-Aufbau übernehmen
-    if not _migrated:
-        from nlm_ingest.migrate import migrate_local
-        migrate_local(db, Path(settings.nlm_data_dir))
-        _migrated = True
+    db_path = Path(settings.nlm_data_dir) / "state.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    db = init_db(db_path)
+    from nlm_ingest.migrate import migrate_local
+    migrate_local(db, Path(settings.nlm_data_dir))   # idempotent, bei jedem Aufruf
     return db
 ```
 
@@ -1891,11 +1949,11 @@ Test (Auto-Migration triggert bei Alt-Schema):
 
 ```python
 def test_get_db_auto_migrates(tmp_path, monkeypatch):
-    # Alt-Schema-DB -> _get_db migriert automatisch (akzeptiert danach 'skipped').
+    # Alt-Schema-DB unter nlm_data_dir/state.db -> _get_db migriert automatisch.
     from types import SimpleNamespace
+    import sqlite3
     import nlm_ingest.cli as cli_mod
     db_path = tmp_path / "state.db"
-    import sqlite3
     old = sqlite3.connect(str(db_path))
     old.executescript(
         "CREATE TABLE notebooks (id TEXT PRIMARY KEY, title TEXT, source_name TEXT, created_at TEXT);"
@@ -1904,9 +1962,8 @@ def test_get_db_auto_migrates(tmp_path, monkeypatch):
         "error TEXT, started_at TEXT, finished_at TEXT, retry_count INTEGER DEFAULT 0, "
         "updated_at TEXT, PRIMARY KEY (notebook_id, phase));")
     old.close()
-    monkeypatch.setattr(cli_mod, "_migrated", False, raising=False)
-    monkeypatch.setattr(cli_mod, "_get_settings", lambda: SimpleNamespace(
-        nlm_db_path=str(db_path), nlm_data_dir=str(tmp_path)))
+    monkeypatch.setattr(cli_mod, "_get_settings",
+                        lambda: SimpleNamespace(nlm_data_dir=str(tmp_path)))
     db = cli_mod._get_db()
     db.execute("INSERT OR IGNORE INTO notebooks (id) VALUES ('nb1')")
     db.execute("INSERT INTO phase_status (notebook_id, phase, status) VALUES ('nb1','transcribe','skipped')")
