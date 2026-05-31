@@ -57,7 +57,7 @@ async def test_transient_error_skips_qdrant_upsert(mock_qdrant, monkeypatch):
         mock_http.return_value.__aenter__ = AsyncMock(return_value=mc)
         mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        await collector._process_feed({"name": "test", "url": "http://feed/x"})
+        await collector._process_feed({"name": "test", "url": "http://feed/x", "provider": "test.example.com"})
 
     mock_qdrant.upsert.assert_not_called()
 
@@ -90,7 +90,7 @@ async def test_config_error_skips_qdrant_upsert(mock_qdrant):
         mock_http.return_value.__aenter__ = AsyncMock(return_value=mc)
         mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        await collector._process_feed({"name": "test", "url": "http://feed/x"})
+        await collector._process_feed({"name": "test", "url": "http://feed/x", "provider": "test.example.com"})
 
     mock_qdrant.upsert.assert_not_called()
     # Error log was emitted with the canonical key.
@@ -127,7 +127,7 @@ async def test_process_feed_caps_entries_per_run(mock_qdrant):
         mock_http.return_value.__aenter__ = AsyncMock(return_value=mc)
         mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        count = await collector._process_feed({"name": "test", "url": "http://feed/x"})
+        count = await collector._process_feed({"name": "test", "url": "http://feed/x", "provider": "test.example.com"})
 
     assert count == MAX_ENTRIES_PER_FEED
     points = mock_qdrant.upsert.call_args.kwargs["points"]

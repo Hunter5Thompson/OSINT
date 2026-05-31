@@ -13,6 +13,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
+from feeds.provenance import provenance_fields
 from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
 from qdrant_doctor.schema import validate_collection_schema
 
@@ -23,56 +24,89 @@ log = structlog.get_logger(__name__)
 # ---------------------------------------------------------------------------
 RSS_FEEDS: list[dict[str, str]] = [
     # ── German Defense / Bundeswehr ──
-    {"name": "BMVg", "url": "https://www.bmvg.de/service/rss/de/17680/feed"},
-    {"name": "Bundeswehr", "url": "https://www.bundeswehr.de/service/rss/de/517054/feed"},
-    {"name": "Bundestag Verteidigung", "url": "https://www.bundestag.de/static/appdata/includes/rss/verteidigung.rss"},
-    {"name": "Bundestag Auswaertiges", "url": "https://www.bundestag.de/static/appdata/includes/rss/auswaertiges.rss"},
+    {"name": "BMVg", "url": "https://www.bmvg.de/service/rss/de/17680/feed", "provider": "bmvg.de"},
+    {"name": "Bundeswehr", "url": "https://www.bundeswehr.de/service/rss/de/517054/feed", "provider": "bundeswehr.de"},
+    {"name": "Bundestag Verteidigung", "url": "https://www.bundestag.de/static/appdata/includes/rss/verteidigung.rss", "provider": "bundestag.de"},
+    {"name": "Bundestag Auswaertiges", "url": "https://www.bundestag.de/static/appdata/includes/rss/auswaertiges.rss", "provider": "bundestag.de"},
     # Teaser-only (paywall), but keywords are extraction-rich.
     # Full knowledge via YouTube → NotebookLM → NLM pipeline.
-    {"name": "SUV Sicherheit & Verteidigung", "url": "https://steady.page/de/suv/rss"},
+    {"name": "SUV Sicherheit & Verteidigung", "url": "https://steady.page/de/suv/rss", "provider": "steady.page"},
     # ── Major News — World ──
     # Reuters/AP have no public RSS; Google News proxies provide equivalent coverage.
-    {"name": "Reuters (Google)", "url": "https://news.google.com/rss/search?q=site:reuters.com+world&hl=en-US&gl=US&ceid=US:en"},
-    {"name": "BBC World", "url": "https://feeds.bbci.co.uk/news/world/rss.xml"},
-    {"name": "Al Jazeera", "url": "https://www.aljazeera.com/xml/rss/all.xml"},
-    {"name": "AP News (Google)", "url": "https://news.google.com/rss/search?q=site:apnews.com+world+news&hl=en-US&gl=US&ceid=US:en"},
-    {"name": "France24", "url": "https://www.france24.com/en/rss"},
+    {"name": "Reuters (Google)", "url": "https://news.google.com/rss/search?q=site:reuters.com+world&hl=en-US&gl=US&ceid=US:en", "provider": "reuters.com"},
+    {"name": "BBC World", "url": "https://feeds.bbci.co.uk/news/world/rss.xml", "provider": "bbc.co.uk"},
+    {"name": "Al Jazeera", "url": "https://www.aljazeera.com/xml/rss/all.xml", "provider": "aljazeera.com"},
+    {"name": "AP News (Google)", "url": "https://news.google.com/rss/search?q=site:apnews.com+world+news&hl=en-US&gl=US&ceid=US:en", "provider": "apnews.com"},
+    {"name": "France24", "url": "https://www.france24.com/en/rss", "provider": "france24.com"},
     # ── Defense / Military ──
-    {"name": "The War Zone", "url": "https://www.thedrive.com/the-war-zone/feed"},
-    {"name": "Defense One", "url": "https://www.defenseone.com/rss/all/"},
-    {"name": "Breaking Defense", "url": "https://breakingdefense.com/feed/"},
-    {"name": "Defense News", "url": "https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml"},
-    {"name": "War on the Rocks", "url": "https://warontherocks.com/feed/"},
-    {"name": "Aviation Week", "url": "https://aviationweek.com/rss.xml"},
-    {"name": "DoD News", "url": "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=1&Site=945"},
+    {"name": "The War Zone", "url": "https://www.thedrive.com/the-war-zone/feed", "provider": "thedrive.com"},
+    {"name": "Defense One", "url": "https://www.defenseone.com/rss/all/", "provider": "defenseone.com"},
+    {"name": "Breaking Defense", "url": "https://breakingdefense.com/feed/", "provider": "breakingdefense.com"},
+    {"name": "Defense News", "url": "https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml", "provider": "defensenews.com"},
+    {"name": "War on the Rocks", "url": "https://warontherocks.com/feed/", "provider": "warontherocks.com"},
+    {"name": "Aviation Week", "url": "https://aviationweek.com/rss.xml", "provider": "aviationweek.com"},
+    {"name": "DoD News", "url": "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=1&Site=945", "provider": "defense.gov"},
     # ── OSINT / Investigative ──
-    {"name": "Bellingcat", "url": "https://www.bellingcat.com/feed/"},
-    {"name": "The Intercept", "url": "https://theintercept.com/feed/?rss"},
-    {"name": "EUvsDisinfo", "url": "https://euvsdisinfo.eu/feed/"},
+    {"name": "Bellingcat", "url": "https://www.bellingcat.com/feed/", "provider": "bellingcat.com"},
+    {"name": "The Intercept", "url": "https://theintercept.com/feed/?rss", "provider": "theintercept.com"},
+    {"name": "EUvsDisinfo", "url": "https://euvsdisinfo.eu/feed/", "provider": "euvsdisinfo.eu"},
     # ── Think Tanks ──
-    {"name": "RAND Corporation", "url": "https://www.rand.org/pubs/research_reports.xml"},
-    {"name": "CSIS", "url": "https://www.csis.org/rss.xml"},
-    {"name": "Brookings", "url": "https://www.brookings.edu/feed/?post_type=article"},
-    {"name": "Atlantic Council", "url": "https://www.atlanticcouncil.org/feed/"},
-    {"name": "SWP Publications (DE)", "url": "https://www.swp-berlin.org/SWPPublications.xml"},
-    {"name": "SWP Publications (EN)", "url": "https://www.swp-berlin.org/en/SWPPublications.xml"},
-    {"name": "RUSI Commentary", "url": "https://www.rusi.org/rss/latest-commentary.xml"},
-    {"name": "RUSI Publications", "url": "https://www.rusi.org/rss/latest-publications.xml"},
+    {"name": "RAND Corporation", "url": "https://www.rand.org/pubs/research_reports.xml", "provider": "rand.org"},
+    {"name": "CSIS", "url": "https://www.csis.org/rss.xml", "provider": "csis.org"},
+    {"name": "Brookings", "url": "https://www.brookings.edu/feed/?post_type=article", "provider": "brookings.edu"},
+    {"name": "Atlantic Council", "url": "https://www.atlanticcouncil.org/feed/", "provider": "atlanticcouncil.org"},
+    {"name": "SWP Publications (DE)", "url": "https://www.swp-berlin.org/SWPPublications.xml", "provider": "swp-berlin.org"},
+    {"name": "SWP Publications (EN)", "url": "https://www.swp-berlin.org/en/SWPPublications.xml", "provider": "swp-berlin.org"},
+    {"name": "RUSI Commentary", "url": "https://www.rusi.org/rss/latest-commentary.xml", "provider": "rusi.org"},
+    {"name": "RUSI Publications", "url": "https://www.rusi.org/rss/latest-publications.xml", "provider": "rusi.org"},
     # ── Government / IO ──
-    {"name": "UN News", "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml"},
-    {"name": "US State Dept (Google)", "url": "https://news.google.com/rss/search?q=site:state.gov+%22press+releases%22&hl=en-US&gl=US&ceid=US:en"},
-    {"name": "NATO (Google)", "url": "https://news.google.com/rss/search?q=site:nato.int&hl=en-US&gl=US&ceid=US:en"},
-    {"name": "EU Parliament Security and Defence", "url": "https://www.europarl.europa.eu/rss/committee/sede/en.xml"},
-    {"name": "EU Parliament External Relations", "url": "https://www.europarl.europa.eu/rss/topic/903/en.xml"},
+    {"name": "UN News", "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml", "provider": "news.un.org"},
+    {"name": "US State Dept (Google)", "url": "https://news.google.com/rss/search?q=site:state.gov+%22press+releases%22&hl=en-US&gl=US&ceid=US:en", "provider": "state.gov"},
+    {"name": "NATO (Google)", "url": "https://news.google.com/rss/search?q=site:nato.int&hl=en-US&gl=US&ceid=US:en", "provider": "nato.int"},
+    {"name": "EU Parliament Security and Defence", "url": "https://www.europarl.europa.eu/rss/committee/sede/en.xml", "provider": "europarl.europa.eu"},
+    {"name": "EU Parliament External Relations", "url": "https://www.europarl.europa.eu/rss/topic/903/en.xml", "provider": "europarl.europa.eu"},
     # ── Arms Control / Nonproliferation ──
-    {"name": "SIPRI", "url": "https://www.sipri.org/rss/combined.xml"},
-    {"name": "Arms Control Association", "url": "https://www.armscontrol.org/rss.xml"},
+    {"name": "SIPRI", "url": "https://www.sipri.org/rss/combined.xml", "provider": "sipri.org"},
+    {"name": "Arms Control Association", "url": "https://www.armscontrol.org/rss.xml", "provider": "armscontrol.org"},
     # ── Conflict / Crisis ──
-    {"name": "Crisis Group", "url": "https://www.crisisgroup.org/rss.xml"},
-    {"name": "ReliefWeb", "url": "https://reliefweb.int/updates/rss.xml"},
+    {"name": "Crisis Group", "url": "https://www.crisisgroup.org/rss.xml", "provider": "crisisgroup.org"},
+    {"name": "ReliefWeb", "url": "https://reliefweb.int/updates/rss.xml", "provider": "reliefweb.int"},
 ]
 
 MAX_ENTRIES_PER_FEED = 15
+
+
+def build_rss_payload(
+    feed: dict,
+    *,
+    title: str,
+    link: str,
+    summary: str,
+    published_at: str | None,
+    content_hash: str,
+    enrichment: dict | None,
+) -> dict:
+    """Pure RSS Qdrant payload builder (unit-testable, no I/O).
+
+    provider is the feed's explicit canonical domain. published_at is passed
+    through verbatim — None stays None (never ingestion time)."""
+    return {
+        **provenance_fields(
+            source_type="rss",
+            provider=feed["provider"],
+            published_at=published_at,
+        ),
+        "source": "rss",
+        "feed_name": feed["name"],
+        "title": title,
+        "url": link,
+        "summary": (summary or "")[:1000],
+        "published": published_at,
+        "content_hash": content_hash,
+        "ingested_at": datetime.now(UTC).isoformat(),
+        "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
+        "entities": enrichment["entities"] if enrichment else [],
+    }
 
 
 def _content_hash(title: str, url: str) -> str:
@@ -192,15 +226,14 @@ class RSSCollector:
             content = entry.get("content", [{}])[0].get("value", "") if entry.get("content") else ""
             embed_text = f"{title}\n{summary or content}"[:2000]
 
-            published = entry.get("published", "")
             published_parsed = entry.get("published_parsed")
             if published_parsed:
                 try:
                     published_dt = datetime(*published_parsed[:6], tzinfo=UTC).isoformat()
                 except Exception:
-                    published_dt = published
+                    published_dt = None
             else:
-                published_dt = published or datetime.now(UTC).isoformat()
+                published_dt = None
 
             # Intelligence extraction. Transient/config errors skip Qdrant upsert
             # so the item is retried on the next source re-fetch (Hash-Dedup doesn't trip).
@@ -230,18 +263,15 @@ class RSSCollector:
                 PointStruct(
                     id=point_id,
                     vector=vector,
-                    payload={
-                        "source": "rss",
-                        "feed_name": name,
-                        "title": title,
-                        "url": link,
-                        "summary": (summary or content)[:1000],
-                        "published": published_dt,
-                        "content_hash": chash,
-                        "ingested_at": datetime.now(UTC).isoformat(),
-                        "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
-                        "entities": enrichment["entities"] if enrichment else [],
-                    },
+                    payload=build_rss_payload(
+                        feed_meta,
+                        title=title,
+                        link=link,
+                        summary=summary or content,
+                        published_at=published_dt,
+                        content_hash=chash,
+                        enrichment=enrichment,
+                    ),
                 )
             )
             ingested += 1
