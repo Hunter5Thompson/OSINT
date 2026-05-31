@@ -284,8 +284,9 @@ async def test_list_owned_for_rehydrate_filters_by_auto_promoter_marker() -> Non
     with patch.object(
         incident_store,
         "read_query",
-        new=AsyncMock(return_value=[row1, row2, row3]),
-    ):
+        autospec=True,
+        return_value=[row1, row2, row3],
+    ) as mock_read:
         result = await incident_store.list_owned_for_rehydrate()
 
     assert len(result) == 2
@@ -293,3 +294,7 @@ async def test_list_owned_for_rehydrate_filters_by_auto_promoter_marker() -> Non
     assert "inc-owned-open" in result_ids
     assert "inc-owned-promoted" in result_ids
     assert "inc-manual" not in result_ids
+    mock_read.assert_awaited_once()
+    query, params = mock_read.await_args.args
+    assert params == {"limit": 500}
+    assert "ORDER BY i.ordinal DESC" in query

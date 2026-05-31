@@ -8,6 +8,7 @@ from uuid import uuid4
 from app.cypher.incident_read import (
     INCIDENT_BY_ID,
     INCIDENT_LIST_OPEN,
+    INCIDENT_LIST_REHYDRATE_CANDIDATES,
 )
 from app.cypher.incident_write import INCIDENT_DELETE, INCIDENT_UPSERT
 from app.models.incident import (
@@ -17,6 +18,8 @@ from app.models.incident import (
     IncidentTimelineEvent,
 )
 from app.services.neo4j_client import read_query, write_query
+
+_REHYDRATE_LIMIT = 500
 
 
 def _decode_timeline(raw: str | list | None) -> list[IncidentTimelineEvent]:
@@ -215,22 +218,13 @@ async def delete_incident(incident_id: str) -> bool:
 async def list_owned_for_rehydrate() -> list[Incident]:
     """Return open/promoted incidents owned by the auto-promoter.
 
-    Uses the existing ``INCIDENT_LIST_OPEN`` Cypher then filters in Python by
-    the ``auto_promoter:v1`` marker in ``layer_hints``. Status filter also
-    admits ``PROMOTED`` so the Promoter can rehydrate clusters that the
-    analyst owned at restart time.
+    Filters in Python by the ``auto_promoter:v1`` marker in ``layer_hints``.
+    Status filter also admits ``PROMOTED`` so the Promoter can rehydrate
+    clusters that the analyst owned at restart time.
     """
     rows = await read_query(
-        "MATCH (i:Incident) "
-        "WHERE i.status IN ['open', 'promoted'] "
-        "RETURN i.id AS id, i.kind AS kind, i.title AS title, "
-        "       i.severity AS severity, i.lat AS lat, i.lon AS lon, "
-        "       i.location AS location, i.status AS status, "
-        "       toString(i.trigger_ts) AS trigger_ts, "
-        "       toString(i.closed_ts) AS closed_ts, "
-        "       i.sources AS sources, i.layer_hints AS layer_hints, "
-        "       i.timeline_json AS timeline_json "
-        "ORDER BY i.ordinal DESC LIMIT 500"
+        INCIDENT_LIST_REHYDRATE_CANDIDATES,
+        {"limit": _REHYDRATE_LIMIT},
     )
     owned: list[Incident] = []
     for row in rows:

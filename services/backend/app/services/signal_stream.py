@@ -261,7 +261,7 @@ async def redis_consumer_loop(
             )
             if client is not None:
                 try:
-                    await client.close()
+                    await client.aclose()
                 except Exception:
                     pass
                 client = None
@@ -272,6 +272,6 @@ async def redis_consumer_loop(
 
     if client is not None:
         try:
-            await client.close()
+            await client.aclose()
         except Exception:
             pass

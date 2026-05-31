@@ -7,8 +7,10 @@ records through `insert_record` rather than the Redis consumer loop.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,6 +21,7 @@ from app.services.signal_stream import (
     ReplayMode,
     SignalStream,
     get_signal_stream,
+    redis_consumer_loop,
 )
 
 
@@ -207,6 +210,58 @@ def test_replay_with_no_last_event_id_returns_empty_ok() -> None:
     mode, replay = s.get_replay(None)
     assert mode == "ok"
     assert replay == []
+
+
+# ---------------------------------------------------------------------------
+# Redis consumer lifecycle
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_redis_consumer_closes_client_on_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = AsyncMock()
+    stop_event = asyncio.Event()
+
+    async def stop_after_read(*args, **kwargs):
+        stop_event.set()
+        return []
+
+    client.xread.side_effect = stop_after_read
+    monkeypatch.setattr(
+        "app.services.signal_stream.redis.from_url",
+        lambda *args, **kwargs: client,
+    )
+
+    await redis_consumer_loop(SignalStream(), stop_event)
+
+    client.ping.assert_awaited_once_with()
+    client.xread.assert_awaited_once()
+    client.aclose.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_redis_consumer_closes_failed_client_before_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _StopAfterWaitEvent(asyncio.Event):
+        async def wait(self) -> bool:
+            self.set()
+            return True
+
+    client = AsyncMock()
+    client.ping.side_effect = ConnectionError("redis unavailable")
+    stop_event = _StopAfterWaitEvent()
+    monkeypatch.setattr(
+        "app.services.signal_stream.redis.from_url",
+        lambda *args, **kwargs: client,
+    )
+
+    await redis_consumer_loop(SignalStream(), stop_event)
+
+    assert stop_event.is_set()
+    client.ping.assert_awaited_once_with()
+    client.xread.assert_not_awaited()
+    client.aclose.assert_awaited_once_with()
 
 
 # ---------------------------------------------------------------------------
