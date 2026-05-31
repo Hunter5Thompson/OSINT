@@ -10,6 +10,7 @@ import structlog
 import yaml
 
 from config import Settings, settings
+from feeds.provenance import provenance_fields
 from feeds.telegram_models import ChannelConfig, ChannelsFile
 
 log = structlog.get_logger(__name__)
@@ -38,6 +39,40 @@ def _load_channels(config_path: str | None = None) -> list[ChannelConfig]:
         raw = yaml.safe_load(f)
     cf = ChannelsFile(**raw)
     return cf.channels
+
+
+def build_telegram_payload(
+    *, channel, message_id, title, url, published, content_hash, enrichment,
+    forwarded_from, has_media, media_paths, media_types, vision_status,
+) -> dict:
+    """Pure Telegram Qdrant payload builder (no I/O). The Telegram message date
+    (`published`) IS publication time."""
+    import datetime
+
+    return {
+        **provenance_fields(
+            source_type="telegram",
+            provider=f"telegram:{channel.handle.lstrip('@').lower()}",
+            published_at=published,
+        ),
+        "source": "telegram",
+        "title": title,
+        "url": url,
+        "published": published,
+        "content_hash": content_hash,
+        "ingested_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
+        "entities": enrichment["entities"] if enrichment else [],
+        "telegram_channel": channel.handle,
+        "telegram_message_id": message_id,
+        "source_bias": channel.source_bias,
+        "source_category": channel.category,
+        "forwarded_from": forwarded_from,
+        "has_media": has_media,
+        "media_paths": media_paths,
+        "media_types": media_types,
+        "vision_status": vision_status,
+    }
 
 
 class TelegramCollector:
@@ -570,8 +605,6 @@ class TelegramCollector:
         enrichment: dict | None,
     ) -> bool:
         """Embed text and upsert to Qdrant. Returns True on success, False on failure."""
-        import datetime
-
         import httpx
         from qdrant_client import QdrantClient
         from qdrant_client.models import PointStruct
@@ -593,25 +626,12 @@ class TelegramCollector:
 
         point_id = int(content_hash[:16], 16)
 
-        payload = {
-            "source": "telegram",
-            "title": title,
-            "url": url,
-            "published": published,
-            "content_hash": content_hash,
-            "ingested_at": datetime.datetime.now(datetime.UTC).isoformat(),
-            "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
-            "entities": enrichment["entities"] if enrichment else [],
-            "telegram_channel": channel.handle,
-            "telegram_message_id": message_id,
-            "source_bias": channel.source_bias,
-            "source_category": channel.category,
-            "forwarded_from": forwarded_from,
-            "has_media": has_media,
-            "media_paths": media_paths,
-            "media_types": media_types,
-            "vision_status": vision_status,
-        }
+        payload = build_telegram_payload(
+            channel=channel, message_id=message_id, title=title, url=url,
+            published=published, content_hash=content_hash, enrichment=enrichment,
+            forwarded_from=forwarded_from, has_media=has_media,
+            media_paths=media_paths, media_types=media_types, vision_status=vision_status,
+        )
 
         qdrant = QdrantClient(url=self._settings.qdrant_url)
         qdrant.upsert(
