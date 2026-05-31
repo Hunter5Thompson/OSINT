@@ -1,10 +1,14 @@
 """RSS feed fetching tool for OSINT agent."""
 
 import xml.etree.ElementTree as ET
+from email.utils import parsedate_to_datetime
+from urllib.parse import urlparse
 
 import httpx
 import structlog
 from langchain_core.tools import tool
+
+from rag.evidence import format_evidence_pack, to_evidence_item
 
 logger = structlog.get_logger()
 
@@ -25,20 +29,33 @@ async def rss_fetch(feed_url: str) -> str:
             resp.raise_for_status()
 
         root = ET.fromstring(resp.text)
-        items = root.findall(".//item")[:10]
 
-        results: list[str] = []
-        for item in items:
+        items = []
+        for idx, item in enumerate(root.findall(".//item")[:10]):
             title = item.findtext("title", "No title")
-            link = item.findtext("link", "")
-            pub_date = item.findtext("pubDate", "")
-            description = item.findtext("description", "")[:200]
-            results.append(f"- {title} ({pub_date})\n  {description}\n  {link}")
+            link = item.findtext("link", "") or ""
+            pub_date = item.findtext("pubDate", "") or ""
+            description = (item.findtext("description", "") or "")[:700]
+            try:
+                published_iso = parsedate_to_datetime(pub_date).isoformat() if pub_date else None
+            except (TypeError, ValueError):
+                published_iso = None
+            domain = urlparse(link).netloc or urlparse(feed_url).netloc or "rss"
+            items.append(to_evidence_item({
+                "score": 1.0 - idx * 0.001,
+                "source_type": "rss",
+                "provider": domain,
+                "title": title,
+                "content": description,
+                "url": link,
+                "published_at": published_iso,
+            }))
 
-        if not results:
+        if not items:
             return f"No articles found in feed: {feed_url}"
 
-        return f"[RSS Feed: {feed_url}]\n" + "\n".join(results)
+        pack = format_evidence_pack(items, budget=6500)
+        return f"[RSS Evidence: {feed_url}]\n{pack}"
     except Exception as e:
         logger.warning("rss_fetch_failed", url=feed_url, error=str(e))
         return f"Failed to fetch RSS feed: {feed_url} - {e}"
