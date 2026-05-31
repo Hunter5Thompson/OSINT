@@ -30,6 +30,7 @@ Thumbs.db
 .vscode/
 .superpowers/
 .worktrees/
+.claude/worktrees/
 
 # Skyfall Recon Phase 0 harness — large PLY + isolated workspace deps
 /scripts/recon/phase0/public/*.ply
