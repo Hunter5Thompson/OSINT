@@ -180,25 +180,48 @@ def export(notebook_id: str | None):
         db = _get_db()
         try:
             for r in results:
+                nid = r["notebook_id"]
+                # Guard 1: register + export-status writes. A failure here keeps the
+                # existing batch-isolation behavior (echo FAIL, skip this notebook).
                 try:
-                    register_notebook(db, r["notebook_id"], r["title"], r["source_name"])
+                    register_notebook(db, nid, r["title"], r["source_name"])
                     export_status = (
                         "failed"
                         if (r["audio_status"] == "failed" or r["report_status"] == "failed")
                         else "completed"
                     )
-                    set_phase_status(db, r["notebook_id"], "export", export_status)
+                    set_phase_status(db, nid, "export", export_status)
                     if r["audio_status"] == "absent":
-                        set_phase_status(db, r["notebook_id"], "transcribe", "skipped")
+                        set_phase_status(db, nid, "transcribe", "skipped")
+                except Exception as e:
+                    click.echo(f"FAIL {nid}: {e}")
+                    continue
+
+                # Guard 2: reconcile is its OWN try/except. reconcile_phases ->
+                # load_sources can RAISE on a corrupt/provenance-mismatched
+                # transcript. If it does, we must NOT leave a stale extract/ingest=
+                # completed (a NEW report would silently vanish). Force a retryable
+                # state instead. The recovery writes are best-effort local sqlite —
+                # a failure in them must not abort the whole batch.
+                try:
                     reconcile_phases(
                         db,
                         data_dir,
-                        r["notebook_id"],
+                        nid,
                         audio_status=r["audio_status"],
                         report_status=r["report_status"],
                     )
                 except Exception as e:
-                    click.echo(f"FAIL {r['notebook_id']}: {e}")
+                    click.echo(f"FAIL {nid} reconcile: {e}")
+                    try:
+                        set_phase_status(db, nid, "extract", "failed")
+                        set_phase_status(db, nid, "ingest", "pending")
+                        # Audio present -> the transcript is repairable by re-running
+                        # transcribe, so reopen that phase too.
+                        if r["audio_status"] in ("downloaded", "failed"):
+                            set_phase_status(db, nid, "transcribe", "pending")
+                    except Exception as e2:
+                        click.echo(f"FAIL {nid} reconcile-recovery: {e2}")
                     continue
         finally:
             db.close()

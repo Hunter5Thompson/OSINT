@@ -330,6 +330,53 @@ def test_export_command_continues_after_notebook_failure(tmp_path, monkeypatch):
     assert ("nb2", "export", "completed") in status_calls
 
 
+def test_export_command_reconcile_failure_forces_retryable_state(tmp_path, monkeypatch):
+    """A reconcile failure (corrupt transcript -> load_sources raises) for a notebook
+    that already has extract/ingest=completed must NOT leave the stale completed state.
+    Instead it must force a retryable state so a NEW report on disk is not stranded:
+    extract=failed, ingest=pending, and (audio present) transcribe=pending."""
+    from nlm_ingest.state import register_notebook, set_phase_status
+
+    monkeypatch.setenv("NLM_DATA_DIR", str(tmp_path))
+
+    # Seed a real DB: nb1 has every phase 'completed' (stale).
+    db = cli_mod._get_db()
+    register_notebook(db, "nb1", "T", "RAND")
+    for phase in ("export", "transcribe", "extract", "ingest"):
+        set_phase_status(db, "nb1", phase, "completed")
+    db.close()
+
+    # On disk: a CORRUPT transcript so load_sources (called by reconcile_phases) raises,
+    # and a NEW report so there IS pending work that must not silently vanish.
+    (tmp_path / "transcripts").mkdir(parents=True)
+    (tmp_path / "transcripts" / "nb1.json").write_text("{ not valid json")
+    (tmp_path / "notebooks" / "nb1").mkdir(parents=True)
+    (tmp_path / "notebooks" / "nb1" / "report_rNEW.md").write_text("new report body")
+
+    fake_results = [{
+        "notebook_id": "nb1", "title": "T", "source_name": "RAND",
+        "audio_path": str(tmp_path / "notebooks" / "nb1" / "podcast.mp4"),
+        "audio_status": "downloaded", "report_status": "complete",
+        "slide_deck_paths": [], "report_paths": [],
+    }]
+
+    # Do NOT patch reconcile_phases — let it run the real load_sources -> raise.
+    with patch("nlm_ingest.export.export_all", new=AsyncMock(return_value=fake_results)):
+        result = CliRunner().invoke(cli, ["export"], catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    assert "FAIL nb1 reconcile" in result.output
+
+    # Read back the REAL persisted phase state.
+    from nlm_ingest.state import get_phase_status
+    db = cli_mod._get_db()
+    try:
+        assert get_phase_status(db, "nb1", "extract") == "failed"
+        assert get_phase_status(db, "nb1", "ingest") == "pending"
+        assert get_phase_status(db, "nb1", "transcribe") == "pending"
+    finally:
+        db.close()
+
+
 def test_extraction_files_globs_all_sources(tmp_path):
     ext = tmp_path / "extractions"
     ext.mkdir()
