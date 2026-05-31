@@ -3,13 +3,13 @@
 import structlog
 from langchain_core.tools import tool
 
+from rag.evidence import format_evidence_pack, to_evidence_item
 from rag.retriever import enhanced_search
 
 logger = structlog.get_logger()
 
-RESULT_CONTENT_MAX_CHARS = 300
 GRAPH_CONTEXT_MAX_CHARS = 1200
-TOOL_OUTPUT_MAX_CHARS = 3500
+TOOL_OUTPUT_MAX_CHARS = 6500
 
 
 def _clip_text(text: str, max_chars: int) -> str:
@@ -70,36 +70,27 @@ async def qdrant_search(query: str, region: str = "") -> str:
         if not results:
             return f"No relevant documents found for: {query}"
 
-        formatted: list[str] = []
-        graph_contexts: list[str] = []
-        seen_graph_contexts: set[str] = set()
+        items = [to_evidence_item(r) for r in results]
+
+        # Graph context is deduped and appended AFTER evidence within remaining budget.
+        graph_blocks: list[str] = []
+        seen_graph: set[str] = set()
         for r in results:
-            score = r.get("score", 0)
-            title = r.get("title", "Untitled")
-            source = r.get("source", "unknown")
-            region_val = r.get("region", "N/A")
-            content = _clip_text(str(r.get("content", "")), RESULT_CONTENT_MAX_CHARS)
+            gctx = r.get("graph_context", "")
+            if gctx and gctx not in seen_graph:
+                seen_graph.add(gctx)
+                graph_blocks.append(_clip_text(str(gctx), GRAPH_CONTEXT_MAX_CHARS))
 
-            entry = (
-                f"[Score: {score:.3f}] {title}\n"
-                f"Source: {source} | Region: {region_val}\n"
-                f"{content}\n"
-            )
+        graph_text = ""
+        if graph_blocks:
+            graph_text = "\n---\n[Graph Context]\n" + "\n\n".join(graph_blocks)
 
-            # enhanced_search currently attaches the same graph context to each
-            # result. Keep it once, otherwise three qdrant_search calls can fill
-            # a 16k-token model window before synthesis even starts.
-            graph_ctx = r.get("graph_context", "")
-            if graph_ctx and graph_ctx not in seen_graph_contexts:
-                seen_graph_contexts.add(graph_ctx)
-                graph_contexts.append(_clip_text(str(graph_ctx), GRAPH_CONTEXT_MAX_CHARS))
-
-            formatted.append(entry)
-
-        output = f"[Knowledge Base Results for: {query}]\n" + "\n---\n".join(formatted)
-        if graph_contexts:
-            output += "\n---\n[Graph Context]\n" + "\n\n".join(graph_contexts)
-        return _clip_text(output, TOOL_OUTPUT_MAX_CHARS)
+        evidence_budget = TOOL_OUTPUT_MAX_CHARS - len(graph_text)
+        pack = format_evidence_pack(items, budget=max(evidence_budget, 0))
+        output = f"[Knowledge Base Evidence for: {query}]\n{pack}"
+        if graph_text and len(output) + len(graph_text) <= TOOL_OUTPUT_MAX_CHARS:
+            output += graph_text
+        return output
     except Exception as e:
         logger.warning("qdrant_search_failed", error=str(e))
         return f"Knowledge base search failed: {e}"
