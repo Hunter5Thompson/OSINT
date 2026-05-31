@@ -8,16 +8,31 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from qdrant_client.models import PointStruct
 
 from feeds.base import BaseCollector
+from feeds.provenance import dataset_provenance
 
 log = structlog.get_logger("gdacs_collector")
 
 _GDACS_URL = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP"
+
+
+def build_gdacs_payload(event: dict, description: str) -> dict:
+    """Pure GDACS Qdrant payload builder (no I/O). from_date/to_date stay event
+    times; they are NOT published_at."""
+    return {
+        **dataset_provenance("gdacs"),
+        "source": "gdacs",
+        **event,
+        "ingested_epoch": time.time(),
+        "ingested_at": datetime.now(UTC).isoformat(),
+        "description": description,
+    }
 
 
 class GDACSCollector(BaseCollector):
@@ -136,12 +151,7 @@ class GDACSCollector(BaseCollector):
                 log.warning("gdacs_embed_failed", event_id=event["gdacs_id"])
                 continue
 
-            payload = {
-                "source": "gdacs",
-                **event,
-                "ingested_epoch": time.time(),
-                "description": description,
-            }
+            payload = build_gdacs_payload(event, description)
             point = PointStruct(id=point_id, vector=vector, payload=payload)
             points.append(point)
 
