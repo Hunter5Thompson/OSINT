@@ -58,7 +58,7 @@ ON MATCH SET
 LINK_CLAIM_DOCUMENT = """
 MATCH (c:Claim {statement_hash: $statement_hash})
 MATCH (d:Document {notebook_id: $notebook_id})
-MERGE (c)-[:EXTRACTED_FROM]->(d)
+MERGE (c)-[r:EXTRACTED_FROM {source_kind: $source_kind, source_id: $source_id}]->(d)
 """
 
 LINK_CLAIM_ENTITY = """

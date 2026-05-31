@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from nlm_ingest.ingest_neo4j import ingest_extraction
+from nlm_ingest.ingest_neo4j import _build_statements, ingest_extraction
 from nlm_ingest.schemas import Claim, Entity, Extraction, Relation
 
 
@@ -138,3 +138,36 @@ class TestIngestExtraction:
                 neo4j_user="neo4j",
                 neo4j_password="odin_yggdrasil",
             )
+
+
+def _extraction(**kw):
+    base = dict(
+        notebook_id="nb1",
+        entities=[],
+        relations=[],
+        claims=[
+            Claim(
+                statement="X happened",
+                type="factual",
+                polarity="positive",
+                entities_involved=[],
+                confidence=0.9,
+                temporal_scope="2026",
+            )
+        ],
+        extraction_model="qwen",
+        prompt_version="v1",
+        source_kind="report",
+        source_id="rep-a",
+    )
+    base.update(kw)
+    return Extraction(**base)
+
+
+def test_link_claim_document_carries_provenance():
+    stmts = _build_statements(_extraction(), "RAND")
+    link = [s for s in stmts if "EXTRACTED_FROM" in s["statement"]][0]
+    assert "$source_kind" in link["statement"] and "$source_id" in link["statement"]
+    assert "{source_kind: $source_kind, source_id: $source_id}" in link["statement"]
+    assert link["parameters"]["source_kind"] == "report"
+    assert link["parameters"]["source_id"] == "rep-a"
