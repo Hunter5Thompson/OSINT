@@ -8,7 +8,6 @@ updates are Qdrant-only to avoid Neo4j duplicates.
 from __future__ import annotations
 
 import asyncio
-import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -24,14 +23,15 @@ _EONET_URL = "https://eonet.gsfc.nasa.gov/api/v3/events"
 
 
 def build_eonet_payload(event: dict, description: str) -> dict:
-    """Pure EONET Qdrant payload builder (no I/O). event_date stays an event
-    time; it is NOT published_at."""
+    """EONET Qdrant payload builder (no network/disk I/O). event_date stays an
+    event time; it is NOT published_at."""
+    now = datetime.now(UTC)
     return {
         **dataset_provenance("eonet"),
         "source": "eonet",
         **event,
-        "ingested_epoch": time.time(),
-        "ingested_at": datetime.now(UTC).isoformat(),
+        "ingested_epoch": now.timestamp(),
+        "ingested_at": now.isoformat(),
         "description": description,
     }
 

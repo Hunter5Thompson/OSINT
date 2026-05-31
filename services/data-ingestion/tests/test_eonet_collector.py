@@ -232,3 +232,5 @@ def test_build_eonet_payload_stamps_provenance_and_no_published():
     assert payload["description"] == "desc text"
     assert "published_at" not in payload      # event_date is NOT publication time
     assert "credibility_score" not in payload
+    assert "ingested_at" in payload
+    assert "ingested_epoch" in payload

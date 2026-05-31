@@ -220,3 +220,5 @@ def test_build_gdacs_payload_stamps_provenance_and_no_published():
     assert payload["provider"] == "gdacs.org"
     assert "published_at" not in payload
     assert "credibility_score" not in payload
+    assert "ingested_at" in payload
+    assert "ingested_epoch" in payload

@@ -7,7 +7,6 @@ Mutable events: first-seen through Pipeline, updates Qdrant-only.
 from __future__ import annotations
 
 import asyncio
-import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -23,14 +22,15 @@ _GDACS_URL = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP"
 
 
 def build_gdacs_payload(event: dict, description: str) -> dict:
-    """Pure GDACS Qdrant payload builder (no I/O). from_date/to_date stay event
-    times; they are NOT published_at."""
+    """GDACS Qdrant payload builder (no network/disk I/O). from_date/to_date stay
+    event times; they are NOT published_at."""
+    now = datetime.now(UTC)
     return {
         **dataset_provenance("gdacs"),
         "source": "gdacs",
         **event,
-        "ingested_epoch": time.time(),
-        "ingested_at": datetime.now(UTC).isoformat(),
+        "ingested_epoch": now.timestamp(),
+        "ingested_at": now.isoformat(),
         "description": description,
     }
 
