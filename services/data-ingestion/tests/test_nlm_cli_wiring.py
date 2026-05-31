@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from click.testing import CliRunner
 
 from nlm_ingest import cli as cli_mod
-from nlm_ingest.cli import _sources_needing_extract
+from nlm_ingest.cli import _sources_needing_extract, cli
 from nlm_ingest.schemas import Extraction, ExtractionSource, Transcript
 
 
@@ -172,3 +172,94 @@ def test_sources_needing_extract_detects_provenance_mismatch(tmp_path):
     )  # wrong source_id
     todo = _sources_needing_extract(tmp_path, [_src("nb1", "r1", "report")])
     assert [s.source_id for s in todo] == ["r1"]
+
+
+def test_export_command_reconciles(tmp_path, monkeypatch):
+    monkeypatch.setenv("NLM_DATA_DIR", str(tmp_path))
+    fake_results = [{
+        "notebook_id": "nb1", "title": "T", "source_name": "RAND",
+        "audio_path": None, "audio_status": "absent", "report_status": "complete",
+        "slide_deck_paths": [], "report_paths": [],
+    }]
+    with patch("nlm_ingest.export.export_all", new=AsyncMock(return_value=fake_results)), \
+         patch("nlm_ingest.state.reconcile_phases") as rec:
+        result = CliRunner().invoke(cli, ["export"], catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    rec.assert_called()  # called with audio_status/report_status
+
+
+def test_export_command_status_failed_on_report_failure(tmp_path, monkeypatch):
+    monkeypatch.setenv("NLM_DATA_DIR", str(tmp_path))
+    fake_results = [{
+        "notebook_id": "nb2", "title": "T2", "source_name": "RAND",
+        "audio_path": None, "audio_status": "downloaded", "report_status": "failed",
+        "slide_deck_paths": [], "report_paths": [],
+    }]
+    status_calls: list[tuple] = []
+
+    def record_status(db, nid, phase, status, **kwargs):
+        status_calls.append((nid, phase, status))
+
+    with patch("nlm_ingest.export.export_all", new=AsyncMock(return_value=fake_results)), \
+         patch("nlm_ingest.state.reconcile_phases"), \
+         patch.object(cli_mod, "set_phase_status", side_effect=record_status):
+        result = CliRunner().invoke(cli, ["export"], catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    assert ("nb2", "export", "failed") in status_calls
+    # audio present -> no transcribe=skipped
+    assert ("nb2", "transcribe", "skipped") not in status_calls
+
+
+def test_export_command_skips_transcribe_when_audio_absent(tmp_path, monkeypatch):
+    monkeypatch.setenv("NLM_DATA_DIR", str(tmp_path))
+    fake_results = [{
+        "notebook_id": "nb3", "title": "T3", "source_name": "RAND",
+        "audio_path": None, "audio_status": "absent", "report_status": "complete",
+        "slide_deck_paths": [], "report_paths": [],
+    }]
+    status_calls: list[tuple] = []
+
+    def record_status(db, nid, phase, status, **kwargs):
+        status_calls.append((nid, phase, status))
+
+    with patch("nlm_ingest.export.export_all", new=AsyncMock(return_value=fake_results)), \
+         patch("nlm_ingest.state.reconcile_phases"), \
+         patch.object(cli_mod, "set_phase_status", side_effect=record_status):
+        result = CliRunner().invoke(cli, ["export"], catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    assert ("nb3", "export", "completed") in status_calls
+    assert ("nb3", "transcribe", "skipped") in status_calls
+
+
+def test_export_command_continues_after_notebook_failure(tmp_path, monkeypatch):
+    monkeypatch.setenv("NLM_DATA_DIR", str(tmp_path))
+    fake_results = [
+        {
+            "notebook_id": "nb1", "title": "T1", "source_name": "RAND",
+            "audio_path": None, "audio_status": "absent", "report_status": "complete",
+            "slide_deck_paths": [], "report_paths": [],
+        },
+        {
+            "notebook_id": "nb2", "title": "T2", "source_name": "RAND",
+            "audio_path": None, "audio_status": "absent", "report_status": "complete",
+            "slide_deck_paths": [], "report_paths": [],
+        },
+    ]
+    status_calls: list[tuple] = []
+
+    def record_status(db, nid, phase, status, **kwargs):
+        status_calls.append((nid, phase, status))
+
+    def reconcile_side_effect(db, data_dir, nid, **kwargs):
+        if nid == "nb1":
+            raise RuntimeError("boom")
+
+    with patch("nlm_ingest.export.export_all", new=AsyncMock(return_value=fake_results)), \
+         patch("nlm_ingest.state.reconcile_phases", side_effect=reconcile_side_effect), \
+         patch.object(cli_mod, "set_phase_status", side_effect=record_status):
+        result = CliRunner().invoke(cli, ["export"], catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    # nb1 raised in reconcile -> reported as FAIL but did not abort the batch
+    assert "FAIL nb1" in result.output
+    # nb2 still got its export status set despite nb1 failing
+    assert ("nb2", "export", "completed") in status_calls

@@ -116,12 +116,33 @@ def export(notebook_id: str | None):
 
     async def _run():
         from nlm_ingest.export import export_all
+        from nlm_ingest.state import reconcile_phases
         results = await export_all(data_dir, notebook_id=notebook_id)
         db = _get_db()
-        for r in results:
-            register_notebook(db, r["notebook_id"], r["title"], r["source_name"])
-            set_phase_status(db, r["notebook_id"], "export", "completed")
-        db.close()
+        try:
+            for r in results:
+                try:
+                    register_notebook(db, r["notebook_id"], r["title"], r["source_name"])
+                    export_status = (
+                        "failed"
+                        if (r["audio_status"] == "failed" or r["report_status"] == "failed")
+                        else "completed"
+                    )
+                    set_phase_status(db, r["notebook_id"], "export", export_status)
+                    if r["audio_status"] == "absent":
+                        set_phase_status(db, r["notebook_id"], "transcribe", "skipped")
+                    reconcile_phases(
+                        db,
+                        data_dir,
+                        r["notebook_id"],
+                        audio_status=r["audio_status"],
+                        report_status=r["report_status"],
+                    )
+                except Exception as e:
+                    click.echo(f"FAIL {r['notebook_id']}: {e}")
+                    continue
+        finally:
+            db.close()
         click.echo(f"Exported {len(results)} notebooks.")
 
     asyncio.run(_run())
