@@ -1,7 +1,15 @@
 import json
 import sqlite3
+from unittest.mock import AsyncMock
 
-from nlm_ingest.migrate import migrate_local
+import httpx
+import pytest
+
+from nlm_ingest.migrate import (
+    build_neo4j_backfill_statement,
+    migrate_local,
+    migrate_neo4j_edges,
+)
 
 _OLD_SCHEMA = """
 CREATE TABLE notebooks (id TEXT PRIMARY KEY, title TEXT, source_name TEXT, created_at TEXT);
@@ -182,3 +190,36 @@ def test_migrate_extraction_notebook_id_mismatch_aborts(tmp_path):
         _migrate_extraction_files(db, tmp_path)
     assert (ext / "nb1.json").exists()
     assert not (ext / "nb1.transcript.json").exists()
+
+
+def test_backfill_statement_is_scoped_and_parametrized():
+    stmt = build_neo4j_backfill_statement()
+    cypher = stmt["statement"]
+    assert "r.source_kind IS NULL" in cypher
+    assert "r.source_id IS NULL" in cypher
+    assert "d.notebook_id IS NOT NULL" in cypher
+    # parameter-bound, no literals
+    assert "$source_kind" in cypher and "$source_id" in cypher
+    assert "'transcript'" not in cypher
+    assert stmt["parameters"] == {"source_kind": "transcript", "source_id": "transcript"}
+
+
+_NEO_REQ = httpx.Request("POST", "http://neo/db/neo4j/tx/commit")
+
+
+@pytest.mark.asyncio
+async def test_migrate_neo4j_edges_raises_on_neo4j_errors():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.return_value = httpx.Response(
+        200, json={"errors": [{"message": "boom"}]}, request=_NEO_REQ
+    )
+    with pytest.raises(RuntimeError, match="boom"):
+        await migrate_neo4j_edges(client, "http://neo", "neo4j", "pw")
+
+
+@pytest.mark.asyncio
+async def test_migrate_neo4j_edges_raises_on_http_error():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.return_value = httpx.Response(503, request=_NEO_REQ)
+    with pytest.raises(httpx.HTTPStatusError):
+        await migrate_neo4j_edges(client, "http://neo", "neo4j", "pw")

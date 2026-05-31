@@ -67,6 +67,18 @@ MATCH (e:Entity {name: $entity_name})
 MERGE (c)-[:INVOLVES]->(e)
 """
 
+# Scoped, idempotent backfill of legacy NLM EXTRACTED_FROM edges that predate
+# source provenance. Scoped to Documents carrying a notebook_id (NLM-owned) and
+# to edges still missing both properties, so it can never touch foreign edges
+# and is safe to re-run. Parameter-bound; no literals on the write path.
+BACKFILL_EXTRACTED_FROM = """
+MATCH (:Claim)-[r:EXTRACTED_FROM]->(d:Document)
+WHERE d.notebook_id IS NOT NULL
+  AND r.source_kind IS NULL
+  AND r.source_id IS NULL
+SET r.source_kind = $source_kind, r.source_id = $source_id
+"""
+
 SOURCE_TIERS: dict[str, str] = {
     "RAND": "tier_1",
     "CSIS": "tier_1",

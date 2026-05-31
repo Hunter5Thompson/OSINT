@@ -1,11 +1,15 @@
 # nlm_ingest/migrate.py
 from __future__ import annotations
 
+import base64
 import json
 import sqlite3
 from pathlib import Path
 
+import httpx
 import structlog
+
+from nlm_ingest.write_templates import BACKFILL_EXTRACTED_FROM
 
 log = structlog.get_logger()
 
@@ -136,3 +140,40 @@ def migrate_local(db: sqlite3.Connection, data_dir: Path) -> None:
     migrated = _migrate_extraction_files(db, data_dir)
     if migrated:
         log.info("migrate_ingest_reactivated", count=len(migrated))
+
+
+def build_neo4j_backfill_statement() -> dict:
+    """Deterministic, scoped backfill of old property-less NLM edges.
+    Leaves foreign EXTRACTED_FROM edges (without Document.notebook_id) untouched."""
+    return {
+        "statement": BACKFILL_EXTRACTED_FROM,
+        "parameters": {"source_kind": "transcript", "source_id": "transcript"},
+    }
+
+
+async def migrate_neo4j_edges(
+    client: httpx.AsyncClient,
+    neo4j_http_url: str,
+    neo4j_user: str,
+    neo4j_password: str,
+) -> None:
+    """Separately runnable Neo4j backfill (P2#10). Independent of the local part —
+    an unreachable Neo4j does not block migrate_local. Idempotent, re-runnable.
+    Raises on HTTP error (raise_for_status) or Neo4j errors in the response body."""
+    stmt = build_neo4j_backfill_statement()
+    auth = base64.b64encode(f"{neo4j_user}:{neo4j_password}".encode()).decode()
+    resp = await client.post(
+        f"{neo4j_http_url}/db/neo4j/tx/commit",
+        json={"statements": [stmt]},
+        headers={
+            "Authorization": f"Basic {auth}",
+            "Content-Type": "application/json",
+        },
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("errors"):
+        message = data["errors"][0].get("message", "")
+        log.warning("nlm_neo4j_backfill_failed", error=message)
+        raise RuntimeError(f"Neo4j backfill error: {message}")
