@@ -404,15 +404,51 @@ async def test_ingest_one_notebook_partial_failure_is_not_ok(tmp_path):
 
     ok_all = await _ingest_one_notebook(
         _extraction_files_for(tmp_path, "nb1"),
+        expected_notebook_id="nb1",
         neo4j_write=good_write,
         qdrant_write=good_write,
     )
     ok_partial = await _ingest_one_notebook(
         _extraction_files_for(tmp_path, "nb1"),
+        expected_notebook_id="nb1",
         neo4j_write=bad_for_report,
         qdrant_write=good_write,
     )
     assert ok_all is True and ok_partial is False
+
+
+@pytest.mark.asyncio
+async def test_ingest_one_notebook_skips_foreign_provenance(tmp_path):
+    # A file named nb1.rep-a.json whose internal notebook_id/source_id point at a
+    # foreign id must NOT be ingested: _ingest_one_notebook returns False and the
+    # writers are never called for that file.
+    from nlm_ingest.cli import _ingest_one_notebook
+    ext = tmp_path / "extractions"
+    ext.mkdir()
+    (ext / "nb1.rep-a.json").write_text(
+        '{"notebook_id":"nb-other","entities":[],"relations":[],"claims":[],'
+        '"extraction_model":"q","prompt_version":"v1",'
+        '"source_kind":"report","source_id":"rep-other"}'
+    )
+
+    neo4j_calls: list = []
+    qdrant_calls: list = []
+
+    async def neo4j_write(extraction):
+        neo4j_calls.append(extraction)
+
+    async def qdrant_write(extraction):
+        qdrant_calls.append(extraction)
+
+    ok = await _ingest_one_notebook(
+        _extraction_files_for(tmp_path, "nb1"),
+        expected_notebook_id="nb1",
+        neo4j_write=neo4j_write,
+        qdrant_write=qdrant_write,
+    )
+    assert ok is False
+    assert neo4j_calls == []  # no foreign-id ingest
+    assert qdrant_calls == []
 
 
 def test_migrate_command_runs_local_via_get_db(tmp_path, monkeypatch):

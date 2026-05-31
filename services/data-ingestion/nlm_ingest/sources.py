@@ -15,6 +15,14 @@ def load_sources(data_dir: Path, notebook_id: str) -> list[ExtractionSource]:
     transcript_path = data_dir / "transcripts" / f"{notebook_id}.json"
     if transcript_path.exists():
         transcript = Transcript.model_validate_json(transcript_path.read_text())
+        # Provenance check: never trust a transcript whose internal notebook_id
+        # disagrees with the filename-keyed id (surface loudly, don't silently
+        # ingest a foreign notebook's transcript as a source of this one).
+        if transcript.notebook_id != notebook_id:
+            raise ValueError(
+                f"transcript notebook_id mismatch: file keyed as {notebook_id!r} "
+                f"but internal notebook_id is {transcript.notebook_id!r}"
+            )
         sources.append(ExtractionSource(
             notebook_id=notebook_id,
             source_id="transcript",

@@ -49,16 +49,45 @@ def _extraction_files_for(data_dir, notebook_id):
     return sorted((data_dir / "extractions").glob(f"{notebook_id}.*.json"))
 
 
-async def _ingest_one_notebook(files, *, neo4j_write, qdrant_write) -> bool:
+async def _ingest_one_notebook(
+    files, *, expected_notebook_id, neo4j_write, qdrant_write
+) -> bool:
     """Write each extraction file to Neo4j + Qdrant (injected writers).
 
     Aggregation (P1#4/P2#8): return True only on full success; one source
-    failing -> False (phase stays 'failed', retryable)."""
+    failing -> False (phase stays 'failed', retryable).
+
+    Provenance (P1#3b): the filename is the trusted key. For each
+    ``{expected_notebook_id}.{source_id}.json`` we verify the validated
+    Extraction's notebook_id/source_id match the filename; on mismatch we
+    log a warning, mark the notebook not-ok, and SKIP writing that file (never
+    ingest under a foreign id)."""
     from nlm_ingest.schemas import Extraction
     ok = True
+    prefix = f"{expected_notebook_id}."
     for f in files:
         try:
             extraction = Extraction.model_validate_json(f.read_text())
+            # Derive expected source_id from the filename (nid is known, so the
+            # split is unambiguous): strip "{nid}." prefix and ".json" suffix.
+            name = f.name
+            expected_source_id = name[len(prefix):] if name.startswith(prefix) else name
+            if expected_source_id.endswith(".json"):
+                expected_source_id = expected_source_id[: -len(".json")]
+            if (
+                extraction.notebook_id != expected_notebook_id
+                or extraction.source_id != expected_source_id
+            ):
+                log.warning(
+                    "nlm_ingest_provenance_mismatch",
+                    file=str(f),
+                    expected_notebook_id=expected_notebook_id,
+                    expected_source_id=expected_source_id,
+                    got_notebook_id=extraction.notebook_id,
+                    got_source_id=extraction.source_id,
+                )
+                ok = False
+                continue
             await neo4j_write(extraction)
             await qdrant_write(extraction)
         except Exception:
@@ -401,6 +430,7 @@ def ingest(notebook_id: str | None):
 
                         ok = await _ingest_one_notebook(
                             files,
+                            expected_notebook_id=nid,
                             neo4j_write=_neo4j_write,
                             qdrant_write=_qdrant_write,
                         )
