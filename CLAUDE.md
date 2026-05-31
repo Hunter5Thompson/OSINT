@@ -62,10 +62,13 @@ Infra:          Docker Compose (Redis, Qdrant, Neo4j, TEI, vLLM)
 │   │   │   ├── cli.py              # odin-ingest-nlm CLI
 │   │   │   ├── export.py           # Phase 1: NotebookLM export
 │   │   │   ├── transcribe.py       # Phase 2: Voxtral transcription
-│   │   │   ├── extract.py          # Phase 3: Qwen + Claude extraction
-│   │   │   ├── ingest_neo4j.py     # Phase 4: Neo4j write
+│   │   │   ├── extract.py          # Phase 3: Qwen + Claude extraction (transcript + reports)
+│   │   │   ├── sources.py          # load_sources: transcript + report sources per notebook
+│   │   │   ├── ingest_neo4j.py     # Phase 4a: Neo4j write (EXTRACTED_FROM provenance)
+│   │   │   ├── ingest_qdrant.py    # Phase 4b: per-claim Qdrant write (odin_intel)
+│   │   │   ├── migrate.py          # one-time multi-source migration (sqlite + Neo4j backfill)
 │   │   │   ├── schemas.py, state.py, write_templates.py
-│   │   │   └── prompts/            # Versioned extraction prompts
+│   │   │   └── prompts/            # Versioned extraction prompts (v3 default, source-agnostic)
 │   │   ├── pipeline.py             # RSS → vLLM extract → Neo4j + Qdrant
 │   │   └── scheduler.py            # APScheduler entry point
 │   │

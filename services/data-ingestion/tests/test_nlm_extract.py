@@ -90,7 +90,7 @@ class TestExtractWithQwen:
         assert len(extraction.entities) == 2
         assert len(extraction.claims) == 2
         assert extraction.extraction_model == "qwen3.5"
-        assert extraction.prompt_version == "v1"
+        assert extraction.prompt_version == "v3"  # v3 is the default since the prompt PR
 
     @pytest.mark.asyncio
     async def test_vllm_error_raises(self):
@@ -213,3 +213,71 @@ async def test_extract_with_qwen_sets_provenance():
     assert result.source_kind == "report"
     assert result.source_id == "rep-a"
     assert result.notebook_id == "nb1"
+
+
+def _sent_prompt(client) -> str:
+    """The user-message content of the chat-completions payload the client received."""
+    return client.post.call_args.kwargs["json"]["messages"][0]["content"]
+
+
+def _ok_client():
+    empty = '{"entities": [], "relations": [], "claims": []}'
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.return_value = httpx.Response(
+        200, json={"choices": [{"message": {"content": empty}}]}, request=_REQ)
+    return client
+
+
+class TestPromptV3:
+    def test_v3_loads_and_is_source_agnostic(self):
+        prompt = load_prompt("v3")
+        assert "{source_name}" in prompt
+        assert "{source_text}" in prompt          # honest, source-agnostic placeholder
+        assert "{source_hint}" in prompt           # dynamic source-kind hint slot
+        assert "{transcript_text}" not in prompt   # old placeholder retired in v3
+        # v3 is derived from v1, NOT v2 — must not carry v2's opt-in LOCATION entity type
+        assert "LOCATION" not in prompt
+
+    @pytest.mark.asyncio
+    async def test_v3_is_default_version(self):
+        client = _ok_client()
+        result = await extract_with_qwen(
+            source=_make_source(), metadata={"source_name": "RAND", "title": "T"},
+            client=client, vllm_url="http://x", vllm_model="qwen")
+        assert result.prompt_version == "v3"
+
+    @pytest.mark.asyncio
+    async def test_v3_injects_report_hint_and_text(self):
+        client = _ok_client()
+        source = ExtractionSource(notebook_id="nb1", source_id="rep-a",
+                                  source_kind="report", text="REPORT BODY CONTENT")
+        await extract_with_qwen(source=source, metadata={"source_name": "RAND", "title": "T"},
+                                client=client, vllm_url="http://x", vllm_model="qwen")
+        prompt = _sent_prompt(client)
+        assert "The following source is a written research report." in prompt
+        assert "REPORT BODY CONTENT" in prompt
+        for ph in ("{source_text}", "{source_hint}", "{source_name}", "{title}"):
+            assert ph not in prompt                # every placeholder resolved
+
+    @pytest.mark.asyncio
+    async def test_v3_injects_transcript_hint(self):
+        client = _ok_client()
+        await extract_with_qwen(source=_make_source(text="PODCAST WORDS"),
+                                metadata={"source_name": "RAND", "title": "T"},
+                                client=client, vllm_url="http://x", vllm_model="qwen")
+        prompt = _sent_prompt(client)
+        assert "The following source is a podcast transcript." in prompt
+        assert "PODCAST WORDS" in prompt
+
+    @pytest.mark.asyncio
+    async def test_legacy_v1_still_injects_source_text(self):
+        # Backward compat: v1 uses {transcript_text}; source.text must still land in the prompt
+        # because extract.py replaces both {source_text} and {transcript_text}.
+        client = _ok_client()
+        await extract_with_qwen(source=_make_source(text="LEGACY V1 TEXT"),
+                                metadata={"source_name": "RAND", "title": "T"},
+                                client=client, vllm_url="http://x", vllm_model="qwen",
+                                prompt_version="v1")
+        prompt = _sent_prompt(client)
+        assert "LEGACY V1 TEXT" in prompt
+        assert "{transcript_text}" not in prompt

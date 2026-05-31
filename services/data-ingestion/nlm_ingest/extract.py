@@ -42,23 +42,33 @@ async def extract_with_qwen(
     client: httpx.AsyncClient,
     vllm_url: str,
     vllm_model: str,
-    # Phase 5 default: stays at "v1" until the operator explicitly opts in to v2.
-    # extraction_v2.txt adds LOCATION to the entity-type list and ships in this
-    # PR alongside the EntityType Literal expansion. The v2 prompt is loaded
-    # only when callers pass prompt_version="v2"; the default-OFF feature flag
-    # `entity_type_normalize` and the v1 prompt default together preserve the
-    # pre-Phase-5 NLM behavior. See
+    # Default is "v3": source-agnostic prompt with a dynamic source-kind hint, so
+    # report sources are no longer mislabeled as podcast transcripts. v3 is derived
+    # from v1 semantics (it does NOT include v2's opt-in LOCATION entity type).
+    # v1/v2 remain available for rollback / explicit opt-in (e.g. prompt_version="v2"
+    # still pairs with the default-OFF `entity_type_normalize` flag). See
     # docs/superpowers/plans/2026-04-30-patch-c-entity-canonicalization.md
-    prompt_version: str = "v1",
+    prompt_version: str = "v3",
 ) -> Extraction:
     prompt_template = load_prompt(prompt_version)
+    # Dynamic hint so the model knows what kind of source it is reading.
+    source_hint = (
+        "The following source is a podcast transcript."
+        if source.source_kind == "transcript"
+        else "The following source is a written research report."
+    )
+    body = source.text[:16_000]
     # Use explicit replacement instead of str.format() — the prompt contains
-    # JSON example blocks with bare braces that would cause KeyError.
+    # JSON example blocks with bare braces that would cause KeyError. Replace both
+    # the v3 placeholder ({source_text}) and the legacy v1/v2 one ({transcript_text})
+    # so old prompt versions stay backward-compatible.
     prompt = (
         prompt_template
         .replace("{source_name}", metadata.get("source_name", "unknown"))
         .replace("{title}", metadata.get("title", "untitled"))
-        .replace("{transcript_text}", source.text[:16_000])
+        .replace("{source_hint}", source_hint)
+        .replace("{source_text}", body)
+        .replace("{transcript_text}", body)
     )
 
     payload = {
