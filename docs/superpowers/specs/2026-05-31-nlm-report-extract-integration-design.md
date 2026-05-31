@@ -140,6 +140,21 @@ je Notebook. Die `export`-CLI setzt **`transcribe="skipped"` ausschließlich bei
 `_export_audio` ruft dafür vor dem Download `client.artifacts.list_audio(nid)`,
 um Existenz von Download-Fehler zu trennen.
 
+**Zusätzlich `report_status: Literal["complete","failed"]` (P1#1).** Ein leeres
+`load_sources()` allein darf **nicht** als „Slide-only" gelten — auch ein
+fehlgeschlagenes Report-Listing oder ein gescheiterter Download eines *completed*
+Reports liefert leere Quellen, obwohl eine Report-Quelle unbekannt/verloren ist.
+Daher meldet `export_all` je Notebook:
+
+| `report_status` | Bedingung |
+|---|---|
+| `complete` | `list_reports()` erfolgreich geladen **und** alle *completed* Reports erfolgreich heruntergeladen |
+| `failed` | `list_reports()` wirft Exception **oder** Download eines *completed* Reports schlägt fehl → `export = failed` (retrybar) |
+
+NotebookLM-seitig `pending`/`failed` Reports werden weiterhin bewusst übersprungen
+(zählen nicht als `failed`). Der Terminal-Skip (Änderung 6b §3) ist **nur** bei
+`report_status == complete` zulässig.
+
 ## Änderung 6: `nlm_ingest/state.py` — Status `skipped` + DAG-Gating
 
 **Status-Enum** erweitern um `skipped`:
@@ -192,9 +207,11 @@ in `state.py`):
    nachträglich erzeugtes Transkript, **und** erzwungene Neu-Extraktion durch
    Löschen der Ausgabedatei.
 3. **Terminal `skipped`:** `load_sources()` **leer** **und** kein transkribierbares
-   Audio (`audio_status == absent`) → **`transcribe`, `extract`, `ingest`** terminal
-   `skipped` (P1#3, Slide-only-Notebooks). Eine spätere Vision-Quelle macht
-   `load_sources()` nicht-leer → Bedingung 2 reaktiviert.
+   Audio (`audio_status == absent`) **und** `report_status == complete` →
+   **`transcribe`, `extract`, `ingest`** terminal `skipped` (P1#3,
+   Slide-only-Notebooks). Bei `report_status == failed` **kein** Skip — das
+   Notebook bleibt über `export=failed` retrybar (P1#1). Eine spätere Vision-Quelle
+   macht `load_sources()` nicht-leer → Bedingung 2 reaktiviert.
 
 Reconciliation ist idempotent: bei unverändertem Inventar + vollständigen validen
 Extraktionsdateien erfolgt **kein** Reset. Der Skip-Check in Änderung 4 nutzt
@@ -230,12 +247,16 @@ NLM-Inhalte im RAG-Read-Pfad sichtbar werden.
 **Eigenes Modul `ingest_qdrant.py`** (P2#5) — saubere Trennung vom Neo4j-Writer
 (`ingest_neo4j.py` bleibt graph-fokussiert). Der Ingest-CLI ruft beide.
 
-**Collection-Preflight (Pflicht, P2#5):** vor dem ersten Write
-`validate_collection_schema(...)` aufrufen
-([qdrant_doctor/schema.py](../../../services/data-ingestion/qdrant_doctor/schema.py)),
-analog zu `_ensure_collection` in
-[feeds/base.py:35](../../../services/data-ingestion/feeds/base.py). Schema-Drift
-wird so beim Write erkannt, nicht erst zur Query-Zeit.
+**Collection-Preflight (Pflicht, P2#5/P2#3):** vor dem ersten Write, analog zu
+`_ensure_collection` in
+[feeds/base.py:35-53](../../../services/data-ingestion/feeds/base.py):
+
+- **Fehlt `odin_intel`:** Collection anlegen mit `settings.embedding_dimensions`
+  (1024) und `Distance.COSINE` — wie der RSS-Pfad.
+- **Existiert `odin_intel`:** `validate_collection_schema(...)`
+  ([qdrant_doctor/schema.py](../../../services/data-ingestion/qdrant_doctor/schema.py))
+  **vor** dem ersten Write ausführen → Schema-Drift wird beim Write erkannt, nicht
+  erst zur Query-Zeit; Mismatch → klarer Abbruch (`QdrantSchemaMismatch`).
 
 **Einheit: pro Claim.** Je Claim ein Point:
 
@@ -316,13 +337,15 @@ eigener, optional/später ausführbarer Schritt.
    und Neu-Kanten erzeugen. Deterministisches Backfill (eigenes Template, kein
    LLM-Cypher), **nur** property-lose NLM-Kanten — fremde `EXTRACTED_FROM` bleiben
    unangetastet:
+   **Parametergebunden** (Repo-Regel: keine Neo4j-Queries ohne Parameter-Binding):
    ```cypher
    MATCH (:Claim)-[r:EXTRACTED_FROM]->(d:Document)
    WHERE d.notebook_id IS NOT NULL
      AND r.source_kind IS NULL
      AND r.source_id IS NULL
-   SET r.source_kind = 'transcript', r.source_id = 'transcript'
+   SET r.source_kind = $source_kind, r.source_id = $source_id
    ```
+   Parameter: `{"source_kind": "transcript", "source_id": "transcript"}`.
 5. **Migrationstests.** Gegen ein **altes** DB-/Datei-Schema (Fixture mit alter
    `phase_status`-Tabelle, altem `{nid}.json`, property-loser Kante):
    - Rebuild, Rename+Backfill, `ingest→pending`-Reaktivierung, Idempotenz bei Re-Run;
@@ -339,6 +362,7 @@ eigener, optional/später ausführbarer Schritt.
 | Extract-Phase | `completed` nur wenn alle Quellen ok; Teilfehler → `failed` (retrybar) |
 | Extract-Target | report-only Notebook (Audio `skipped`, kein Transkript) ist gültiges Target |
 | `export` audio_status | `absent` (leere Liste) → `transcribe=skipped`; Download-Fehler **und** `list_audio()`-Exception → `failed` (nie `skipped`) |
+| `export` report_status | `list_reports()`-Exception / fehlgeschlagener *completed*-Report-Download → `report_status=failed` → `export=failed`; NotebookLM-`pending`/`failed`-Reports → weiterhin übersprungen, `report_status=complete` |
 | `state` `skipped` | terminal + nicht-blockierend in `validate_retry` |
 | `EXTRACTED_FROM` | Rel-Props `source_kind`+`source_id` im MERGE-Pattern; zwei Quellen → zwei Kanten |
 | Qdrant-Point | `point_id` = UUIDv5 (quell-spezifisch), Payload inkl. `entities`/`content_hash`/`ingested_at`, `region="N/A"`, `claim_hash`, abgelehnte Claims raus |
@@ -346,7 +370,7 @@ eigener, optional/später ausführbarer Schritt.
 | Ingest-Phase | globbt mehrere Extraktionsdateien; `completed` nur bei Vollerfolg |
 | **DAG** `validate_retry` | `retry extract` erlaubt bei `transcribe=failed`/`skipped` (export `completed`); `retry ingest` blockiert nur bei nicht-terminalem `extract` |
 | **Reconciliation** | keyt auf `load_sources()`; fehlende/kaputte (Pydantic-invalide) Extraktionsdatei → `extract/ingest`→`pending` (auch gelöschtes Transkript-Output); Audio nach `transcribe=skipped` → `transcribe`→`pending`; kein Reset bei unverändertem, validem Stand |
-| **Slide-only** | `load_sources()` leer **und** `audio_status=absent` → `transcribe/extract/ingest` = `skipped` |
+| **Slide-only** | `load_sources()` leer **und** `audio_status=absent` **und** `report_status=complete` → `skipped`; bei `report_status=failed` **kein** Skip (export retrybar) |
 | **Migration** | altes Schema → Rebuild + Rename+Backfill + gescoptes Kanten-Backfill, idempotent; **migriertes `ingest=completed` reaktiviert → Qdrant** (P1#1); **fremde Nicht-NLM-Kante unverändert** (P2#4) |
 
 Tests verifizieren echtes Verhalten; externe Dienste (vLLM, TEI, Neo4j, Qdrant,
@@ -370,8 +394,10 @@ NotebookLM-Client) werden gemockt, nicht die zu testende Logik.
    `retry ingest` valider Report-Quellen.
 8. **Reconciliation**: neue/nachträgliche Quellen (Report oder Audio) werden auch
    nach einem Vollerfolg erkannt und verarbeitet; keine versickerten Quellen.
-9. **Quellenlose Notebooks** (Slide-only) hängen in keiner Phase — alle Phasen
-   terminal `skipped`, reaktivierbar durch spätere Vision-Quelle.
+9. **Quellenlose Notebooks** (Slide-only, `report_status=complete`) hängen in
+   keiner Phase — alle Phasen terminal `skipped`, reaktivierbar durch spätere
+   Vision-Quelle. Ein Report-Listing-/Downloadfehler führt **nie** zu fälschlichem
+   `skipped`, sondern zu retrybarem `export=failed`.
 10. **Migration** überführt Alt-Daten (SQLite-Schema, `{nid}.json`,
     property-lose `EXTRACTED_FROM`) deterministisch und idempotent; bereits
     migrierte Audio-Extraktionen werden nachträglich nach Qdrant geschrieben
