@@ -164,6 +164,68 @@ def test_cli_extract_partial_failure_marks_failed_but_attempts_all(tmp_path, mon
     assert ("nb1", "extract", "completed") not in status_calls
 
 
+def test_cli_extract_isolates_load_sources_failure(tmp_path, monkeypatch):
+    """A corrupt transcript that makes load_sources raise must mark THAT notebook
+    extract=failed and continue to the next candidate — not abort the whole batch."""
+
+    data_dir = tmp_path / "nlm"
+    (data_dir / "transcripts").mkdir(parents=True)
+    # nb1: corrupt transcript -> load_sources raises (invalid JSON).
+    (data_dir / "transcripts" / "nb1.json").write_text("{ not valid json")
+    # nb2: valid transcript -> processed normally.
+    (data_dir / "transcripts" / "nb2.json").write_text(
+        Transcript(
+            notebook_id="nb2", duration_seconds=10.0, language="en",
+            segments=[], full_text="hello",
+        ).model_dump_json()
+    )
+    for nid in ("nb1", "nb2"):
+        (data_dir / "notebooks" / nid).mkdir(parents=True)
+        (data_dir / "notebooks" / nid / "metadata.json").write_text(
+            json.dumps({"source_name": "x", "title": "t"})
+        )
+
+    monkeypatch.setenv("NLM_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("INGESTION_VLLM_URL", "http://192.168.178.39:8000")
+    monkeypatch.setenv("INGESTION_VLLM_MODEL", "Qwen/Qwen3.6-35B-A3B")
+
+    attempted: list[str] = []
+
+    async def fake_extract(**kwargs):
+        src = kwargs["source"]
+        attempted.append(src.notebook_id)
+        return Extraction(
+            notebook_id=src.notebook_id, entities=[], relations=[], claims=[],
+            extraction_model=kwargs["vllm_model"], prompt_version="v0-test",
+            source_kind=src.source_kind, source_id=src.source_id,
+        )
+
+    status_calls: list[tuple] = []
+
+    def record_status(db, nid, phase, status, **kwargs):
+        status_calls.append((nid, phase, status))
+
+    fake_rows = [
+        {"notebook_id": "nb1", "transcribe": "completed", "extract": "pending"},
+        {"notebook_id": "nb2", "transcribe": "completed", "extract": "pending"},
+    ]
+
+    with patch.object(cli_mod, "get_all_status", return_value=fake_rows), \
+         patch.object(cli_mod, "_get_db", return_value=MagicMock()), \
+         patch.object(cli_mod, "set_phase_status", side_effect=record_status), \
+         patch("nlm_ingest.extract.extract_with_qwen", new=AsyncMock(side_effect=fake_extract)):
+        runner = CliRunner()
+        result = runner.invoke(cli_mod.extract, [])
+
+    # The bad notebook does not abort the whole batch.
+    assert result.exit_code == 0, result.output
+    # nb1's load_sources raised -> marked failed.
+    assert ("nb1", "extract", "failed") in status_calls
+    # nb2 was still processed.
+    assert "nb2" in attempted
+    assert ("nb2", "extract", "completed") in status_calls
+
+
 def test_sources_needing_extract_detects_provenance_mismatch(tmp_path):
     # File nb1.r1.json internally carries source_id="r2" -> must NOT count as done.
     ext = tmp_path / "extractions"

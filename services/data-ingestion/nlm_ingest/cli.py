@@ -260,7 +260,15 @@ def extract(notebook_id: str | None):
             async with httpx.AsyncClient() as client:
                 for row in candidates:
                     nid = row["notebook_id"]
-                    sources = load_sources(data_dir, nid)
+                    # Per-notebook setup boundary: a corrupt transcript / bad
+                    # provenance makes load_sources raise — isolate it to THIS
+                    # notebook (extract=failed) instead of aborting the batch.
+                    try:
+                        sources = load_sources(data_dir, nid)
+                    except Exception as e:
+                        click.echo(f"FAIL {nid}: {e}")
+                        set_phase_status(db, nid, "extract", "failed", error=str(e))
+                        continue
                     if not sources:
                         click.echo(f"SKIP {nid}: no sources")
                         continue
