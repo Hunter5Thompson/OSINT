@@ -51,7 +51,9 @@ class GDACSCollector(BaseCollector):
             event_id = str(props.get("eventid", ""))
             severity_obj = props.get("severity", {})
             try:
-                severity = float(severity_obj.get("value", 0)) if isinstance(severity_obj, dict) else 0.0
+                severity = (
+                    float(severity_obj.get("value", 0)) if isinstance(severity_obj, dict) else 0.0
+                )
             except (TypeError, ValueError):
                 severity = 0.0
 
@@ -94,7 +96,9 @@ class GDACSCollector(BaseCollector):
             raw_event_id = event["gdacs_id"].split("_")[-1]
             chash = self._content_hash("gdacs", event["event_type"], raw_event_id)
             point_id = self._point_id(chash)
-            description = f"{event['event_name']} - {event['event_type']} alert ({event['alert_level']})"
+            description = (
+                f"{event['event_name']} - {event['event_type']} alert ({event['alert_level']})"
+            )
 
             existing = await asyncio.to_thread(
                 self.qdrant.retrieve,
@@ -158,4 +162,7 @@ class GDACSCollector(BaseCollector):
         if points:
             await self._batch_upsert(points)
 
-        log.info("gdacs_complete", total=len(events), new=new_count, updated=update_count, upserted=len(points))
+        log.info(
+            "gdacs_complete", total=len(events), new=new_count,
+            updated=update_count, upserted=len(points),
+        )
