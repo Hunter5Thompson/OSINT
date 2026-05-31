@@ -6,6 +6,7 @@ serialized across the /query API boundary (Slice 1 keeps sources_used: list[str]
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -148,6 +149,74 @@ def to_evidence_item(result: dict) -> "EvidenceItem":
         relevance_score=float(result.get("score", 0.0)),
         content_hash=str(content_hash) if content_hash else None,
     )
+
+
+_EVIDENCE_PREFIX = "[EVIDENCE] "
+
+
+def _block(item: EvidenceItem) -> str:
+    s = item.source
+    meta = {
+        "credibility_score": s.credibility_score,
+        "display_name": s.display_name,
+        "provenance_inferred": s.provenance_inferred,
+        "provider": s.provider,
+        "published_at": s.published_at.isoformat() if s.published_at else None,
+        "relevance_score": item.relevance_score,
+        "source_ref_id": s.source_ref_id,
+        "source_type": s.source_type,
+        "url": s.url,
+    }
+    header = _EVIDENCE_PREFIX + json.dumps(meta, sort_keys=True, separators=(",", ":"))
+    return f"{header}\nTitle: {item.title}\nExcerpt: {item.excerpt}"
+
+
+def format_evidence_pack(items: list[EvidenceItem], *, budget: int) -> str:
+    """Deterministic, budgeted pack. Sorted by relevance desc, deduped, and a
+    block is only appended if it fits whole — never a partial/truncated block."""
+    ordered = sorted(items, key=lambda it: it.relevance_score, reverse=True)
+    seen: set[str] = set()
+    blocks: list[str] = []
+    used = 0
+    for it in ordered:
+        key = it.content_hash or it.source.source_ref_id
+        if key in seen:
+            continue
+        block = _block(it)
+        add = len(block) + (2 if blocks else 0)  # "\n\n" separator
+        if used + add > budget:
+            continue  # try the next (smaller) block; never truncate
+        seen.add(key)
+        blocks.append(block)
+        used += add
+    return "\n\n".join(blocks)
+
+
+def parse_evidence_refs(text: str) -> list[SourceRef]:
+    """Reconstruct SourceRef from every complete [EVIDENCE] <json> line.
+    Lines that don't parse are ignored. Order preserved."""
+    refs: list[SourceRef] = []
+    for line in text.splitlines():
+        if not line.startswith(_EVIDENCE_PREFIX):
+            continue
+        try:
+            meta = json.loads(line[len(_EVIDENCE_PREFIX):])
+        except (ValueError, json.JSONDecodeError):
+            continue
+        try:
+            refs.append(SourceRef(
+                source_ref_id=meta["source_ref_id"],
+                source_type=meta["source_type"],
+                provider=meta["provider"],
+                display_name=meta.get("display_name"),
+                url=meta.get("url"),
+                published_at=_parse_dt(meta.get("published_at")),
+                credibility_score=meta.get("credibility_score", 0.5),
+                provenance_inferred=meta.get("provenance_inferred", False),
+            ))
+        except (KeyError, ValueError, TypeError):
+            continue
+    return refs
 
 
 def compute_source_ref_id(
