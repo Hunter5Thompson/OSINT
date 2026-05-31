@@ -1577,7 +1577,7 @@ Change `_build_point` (currently lines 109–118) to stamp provenance when not a
         # Canonical provenance facts. Dataset collectors carry `source`; derive
         # from the explicit table (fail-fast on unknown — never guess).
         if "source_type" not in payload:
-            payload.update(dataset_provenance(str(payload.get("source", ""))))
+            payload.update(dataset_provenance(str(payload["source"])))
         payload["content_hash"] = content_hash
         now = datetime.now(UTC)
         payload["ingested_at"] = now.isoformat()

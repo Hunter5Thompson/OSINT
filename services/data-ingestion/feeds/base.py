@@ -113,9 +113,10 @@ class BaseCollector(ABC):
         vector = await self._embed(text)
         point_id = self._point_id(content_hash)
         # Canonical provenance facts. Dataset collectors carry `source`; derive
-        # from the explicit table (fail-fast on unknown — never guess).
+        # from the explicit table (fail-fast on unknown — never guess). Indexing
+        # `payload["source"]` makes a missing key report as KeyError('source').
         if "source_type" not in payload:
-            payload.update(dataset_provenance(str(payload.get("source", ""))))
+            payload.update(dataset_provenance(str(payload["source"])))
         payload["content_hash"] = content_hash
         now = datetime.now(UTC)
         payload["ingested_at"] = now.isoformat()
