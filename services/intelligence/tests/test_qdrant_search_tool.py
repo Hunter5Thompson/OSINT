@@ -60,3 +60,21 @@ class TestQdrantSearchTool:
         refs = parse_evidence_refs(out)
         assert {r.provider for r in refs} == {"reuters.com", "usgs.gov"}
         assert refs[0].provider == "reuters.com"  # higher score first
+
+    @pytest.mark.asyncio
+    async def test_output_never_exceeds_cap_with_full_pack_no_graph(self):
+        """Full evidence pack + long query + no graph: output must stay within cap.
+
+        Uses title_len=130 / provider_len=10 / content 700 chars to force the pack
+        close to the budget limit, exposing the off-by-header bug without graph_text.
+        """
+        from unittest.mock import AsyncMock, patch
+        from agents.tools.qdrant_search import TOOL_OUTPUT_MAX_CHARS
+        results = [
+            {"score": 0.9 - i * 0.01, "source_type": "rss", "provider": "p" * 10,
+             "title": "T" * 130, "content": "x" * 700, "content_hash": f"h{i}"}
+            for i in range(20)
+        ]
+        with patch("agents.tools.qdrant_search.enhanced_search", AsyncMock(return_value=results)):
+            out = await qdrant_search.ainvoke({"query": "q" * 100})
+        assert len(out) <= TOOL_OUTPUT_MAX_CHARS

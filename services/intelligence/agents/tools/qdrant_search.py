@@ -51,8 +51,10 @@ async def qdrant_search(query: str, region: str = "") -> str:
             confirmed the index has region tags for your topic.
 
     Returns:
-        Top-5 documents with score, title, source, region, content excerpt
-        and a graph-context block of related entities/events.
+        A budgeted evidence pack: one `[EVIDENCE] {json}` metadata line per hit
+        (provider, source_type, credibility_score, published_at, url, ...) followed
+        by Title/Excerpt lines, optionally followed by a deduplicated [Graph Context]
+        block. Sorted by relevance; bounded by an internal character budget.
     """
     try:
         results = await enhanced_search(
@@ -85,9 +87,10 @@ async def qdrant_search(query: str, region: str = "") -> str:
         if graph_blocks:
             graph_text = "\n---\n[Graph Context]\n" + "\n\n".join(graph_blocks)
 
-        evidence_budget = TOOL_OUTPUT_MAX_CHARS - len(graph_text)
+        header = f"[Knowledge Base Evidence for: {query}]\n"
+        evidence_budget = TOOL_OUTPUT_MAX_CHARS - len(graph_text) - len(header)
         pack = format_evidence_pack(items, budget=max(evidence_budget, 0))
-        output = f"[Knowledge Base Evidence for: {query}]\n{pack}"
+        output = header + pack
         if graph_text and len(output) + len(graph_text) <= TOOL_OUTPUT_MAX_CHARS:
             output += graph_text
         return output
