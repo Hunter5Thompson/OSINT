@@ -1,0 +1,6 @@
+{
+  "contract_version": 1,
+  "required": ["source_type", "provider", "ingested_at"],
+  "optional": ["published_at"],
+  "source_types": ["rss", "telegram", "gdelt", "notebooklm", "dataset"]
+}
