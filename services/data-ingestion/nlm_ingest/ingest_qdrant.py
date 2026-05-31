@@ -9,6 +9,7 @@ import structlog
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
+from feeds.provenance import provenance_fields
 from nlm_ingest.schemas import Extraction, claim_hash
 from qdrant_doctor.schema import validate_collection_schema
 
@@ -39,6 +40,11 @@ def build_claim_points(
             continue
         chash = claim_hash(claim.statement)
         payload = {
+            **provenance_fields(
+                source_type="notebooklm",
+                provider=f"notebooklm:{extraction.notebook_id}",
+            ),
+            "display_name": source_name,
             "title": notebook_title,
             "source": source_name,
             "region": "N/A",

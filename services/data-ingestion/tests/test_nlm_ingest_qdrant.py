@@ -99,6 +99,23 @@ async def test_ensure_collection_aborts_on_schema_mismatch(monkeypatch):
         await iq.ensure_collection(FakeQ(), "odin_intel", 1024)
 
 
+def test_claim_points_carry_notebooklm_provenance():
+    from nlm_ingest.ingest_qdrant import build_claim_points
+    extraction = _extraction(
+        notebook_id="nb-7", source_kind="report", source_id="rpt-1",
+        claims=[_claim("a claim", conf=0.9)],
+    )
+    points = build_claim_points(
+        extraction, "Notebook Title", embed=lambda t: [0.0] * 1024,
+        source_name="RAND",
+    )
+    p = points[0].payload
+    assert p["source_type"] == "notebooklm"
+    assert p["provider"] == "notebooklm:nb-7"
+    assert p["display_name"] == "RAND"
+    assert "credibility_score" not in p
+
+
 @pytest.mark.asyncio
 async def test_ensure_collection_aborts_in_hybrid_mode():
     import nlm_ingest.ingest_qdrant as iq
