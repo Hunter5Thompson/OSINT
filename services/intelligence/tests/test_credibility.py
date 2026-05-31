@@ -27,6 +27,17 @@ def test_normalize_provider_is_case_and_scheme_insensitive():
     assert normalize_provider("telegram:Rybar") == "telegram:rybar"
 
 
+def test_normalize_provider_handles_ports_and_schemes():
+    assert normalize_provider("http://bbc.com/sport") == "bbc.com"
+    assert normalize_provider("https://reuters.com:443/news") == "reuters.com"
+    assert normalize_provider("ftp://reuters.com/feed") == "reuters.com"
+
+
+def test_credibility_unknown_fallback_score():
+    from rag.credibility import credibility_score
+    assert credibility_score("unknown", "anything") == 0.30
+
+
 def test_unknown_source_type_raises():
     with pytest.raises(KeyError):
         credibility_score("not-a-type", "x")

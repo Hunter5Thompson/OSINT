@@ -27,15 +27,15 @@ PROVIDER_OVERRIDES: dict[str, float] = {
 def normalize_provider(provider: str) -> str:
     """Canonicalize a provider id for registry lookup.
 
-    Lowercase; strip scheme/path; keep `telegram:<handle>` / `notebooklm:<id>`
-    namespaced ids intact (only lowercased).
+    Lowercase; strip scheme/port/path; keep `telegram:<handle>` /
+    `notebooklm:<id>` namespaced ids intact (only lowercased).
     """
     p = (provider or "").strip().lower()
-    if ":" in p and not p.startswith(("http://", "https://")):
+    if ":" in p and "://" not in p:
         # namespaced id like telegram:rybar — keep as-is
         return p
-    if p.startswith(("http://", "https://")):
-        p = urlparse(p).netloc or p
+    if "://" in p:
+        p = urlparse(p).hostname or p
     # drop any path that slipped through (e.g. "bbc.com/news")
     return p.split("/", 1)[0]
 
