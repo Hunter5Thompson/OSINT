@@ -100,9 +100,11 @@ async def review_with_claude(extraction, source: ExtractionSource, claude_client
 - Persistiert je Quelle **`extractions/{nid}.{source_id}.json`** (kollisionsfrei —
   mehrere Reports überschreiben sich nicht).
 - **Idempotenz:** eine Quelle wird übersprungen, wenn ihre
-  `extractions/{nid}.{source_id}.json` bereits existiert. So wird beim Retry kein
-  bereits erfolgreich extrahierter Quell-Text erneut durch das LLM geschickt
-  (Budget-schonend). Erzwungene Neu-Extraktion: Datei löschen.
+  `extractions/{nid}.{source_id}.json` existiert **und** als `Extraction` lädt
+  (`model_validate_json` — eine abgebrochene/kaputte Datei zählt nicht und wird
+  neu extrahiert). So wird beim Retry kein bereits erfolgreich extrahierter
+  Quell-Text erneut durch das LLM geschickt (Budget-schonend). Erzwungene
+  Neu-Extraktion: Datei löschen (Reconciliation setzt dann `extract→pending`).
 - **Phasen-Aggregation (b1):** `extract` wird für das Notebook nur `completed`,
   wenn für **alle** entdeckten Quellen eine gültige Extraktionsdatei vorliegt.
   Schlägt mindestens eine Quelle fehl → Phase `failed` (retrybar); bereits
@@ -116,8 +118,13 @@ async def review_with_claude(extraction, source: ExtractionSource, claude_client
 | Ausgang | Bedingung | Folge |
 |---|---|---|
 | `downloaded` | Audio-Artefakt da, Download ok | wie bisher |
-| `absent` | `list_audio()` liefert **keinen Eintrag** (kein Audio-Artefakt jeglichen Status) | `transcribe = skipped` |
-| `failed` | Audio-Artefakt vorhanden (auch `failed`-Status), aber Download/Stat schlägt fehl | `transcribe` bleibt `failed`/`pending` |
+| `absent` | `list_audio()` **erfolgreich geladen** und **leer** (kein Audio-Artefakt jeglichen Status) | `transcribe = skipped` |
+| `failed` | Audio-Artefakt vorhanden (auch `failed`-Status) + Download/Stat-Fehler, **oder** `list_audio()` wirft eine Exception (API-/Auth-Fehler) | `transcribe` bleibt `failed`/`pending` |
+
+> **`absent` nur bei erfolgreich geladener leerer Liste** (P1#2). Ein Fehler im
+> `list_audio()`-Call selbst (Netzwerk/Auth) darf **nie** zu `skipped` führen —
+> sonst maskiert ein API-Ausfall ein real existierendes Audio-Artefakt. Solche
+> Fälle sind `failed` und damit retrybar.
 
 > **Abgrenzung:** Ein vorhandenes, aber selbst `failed`-Status-Audio-Artefakt zählt
 > **nicht** als `absent` — es existiert ein Artefakt, also bleibt `transcribe` ein
@@ -166,23 +173,32 @@ Quellen nach einem abgeschlossenen Lauf nicht** — kommt später ein Report daz
 oder wird Audio nachträglich erzeugt, bleibt `extract=completed` und die neue
 Quelle versickert. Der Export-Schritt wird daher zum **Reconciler**.
 
-Nach `export_all` pro Notebook (`reconcile_phases(db, data_dir, nid, audio_status, current_sources)` in `state.py`):
+**Wahrheit für extrahierbare Quellen ist `load_sources()`** (P1#3), nicht ein
+separat gebildetes Audio+Report-Inventar — sonst greift die „Neu-Extraktion durch
+Löschen der Ausgabedatei" (Änderung 4) für ein bestehendes Transkript nicht.
 
-1. **Quell-Inventar bilden:** vorhandene Audio (`audio_status`) + Report-Artefakte
-   (`source_id`s aus `notebooks/{nid}/report_*.md`).
-2. **Neuer/zusätzlicher Report** (`source_id` ohne `extractions/{nid}.{source_id}.json`):
-   `extract` und `ingest` → `pending` zurücksetzen. Die Idempotenz (Skip
-   existierender Extraktionsdateien) verhindert Doppelarbeit an alten Quellen.
-3. **Audio erscheint nach vorherigem `transcribe=skipped`:** `transcribe`
-   (und nachgelagert `extract`, `ingest`) → `pending`.
-4. **Keinerlei extrahierbare Quelle** (kein Audio-Artefakt **und** kein Report —
-   z. B. Slide-only-Notebook, das per [export.py](../../../services/data-ingestion/nlm_ingest/export.py)
-   nur wegen eines Slide-Decks registriert wurde): **`transcribe`, `extract` und
-   `ingest` terminal auf `skipped`** (P1#3). Eine spätere Vision-Quelle setzt sie
-   via Reconciliation wieder auf `pending`.
+Nach `export_all` pro Notebook (`reconcile_phases(db, data_dir, nid, audio_status)`
+in `state.py`):
 
-Reconciliation ist idempotent und setzt nur bei *tatsächlicher* Inventar-Änderung
-zurück (kein Reset bei unverändertem Stand).
+1. **Transcribe-Reaktivierung:** Audio-Artefakt existiert
+   (`audio_status ∈ {downloaded, failed}`), aber `transcribe == skipped` →
+   `transcribe` (und nachgelagert `extract`, `ingest`) → `pending`.
+2. **Extract/Ingest-Reaktivierung:** für **jede** Quelle aus `load_sources()`
+   (Transkript **und** Reports) prüfen, ob eine **valide** Extraktionsdatei
+   `extractions/{nid}.{source_id}.json` existiert. Validierung per
+   `Extraction.model_validate_json(...)` (nicht nur Existenz — eine
+   abgebrochene/kaputte Datei zählt nicht). Fehlt sie für mindestens eine Quelle
+   → `extract` und `ingest` → `pending`. Deckt ab: neuer Report nach Vollerfolg,
+   nachträglich erzeugtes Transkript, **und** erzwungene Neu-Extraktion durch
+   Löschen der Ausgabedatei.
+3. **Terminal `skipped`:** `load_sources()` **leer** **und** kein transkribierbares
+   Audio (`audio_status == absent`) → **`transcribe`, `extract`, `ingest`** terminal
+   `skipped` (P1#3, Slide-only-Notebooks). Eine spätere Vision-Quelle macht
+   `load_sources()` nicht-leer → Bedingung 2 reaktiviert.
+
+Reconciliation ist idempotent: bei unverändertem Inventar + vollständigen validen
+Extraktionsdateien erfolgt **kein** Reset. Der Skip-Check in Änderung 4 nutzt
+dieselbe Pydantic-Validierung (Datei existiert **und** lädt als `Extraction`).
 
 ## Änderung 7: Graph-Write — Provenance (`nlm_ingest/write_templates.py`, `ingest_neo4j.py`)
 
@@ -271,7 +287,13 @@ wird so beim Write erkannt, nicht erst zur Query-Zeit.
 ## Migration (P1#4)
 
 Es existieren bereits lokale Daten aus dem alten audio-only Pfad. Eine
-deterministische, idempotente, einmalige Migration ist Teil dieser Story:
+deterministische, idempotente, einmalige Migration ist Teil dieser Story.
+
+**Getrennte Ausführbarkeit (Klarstellung):** Die **lokale** Migration (SQLite +
+Dateien, Schritte 1–3) und das **Neo4j-Backfill** (Schritt 4) sind **separat**
+ausführbar/aufrufbar. Ein nicht erreichbares Neo4j darf weder `status` noch
+`export` blockieren — der lokale Teil läuft unabhängig, das Neo4j-Backfill ist ein
+eigener, optional/später ausführbarer Schritt.
 
 1. **SQLite-Status-Enum.** SQLite kann einen `CHECK` **nicht** per `ALTER`
    erweitern → **Tabellen-Rebuild in einer Transaktion**:
@@ -282,16 +304,30 @@ deterministische, idempotente, einmalige Migration ist Teil dieser Story:
    `extractions/{nid}.transcript.json` umbenennen und im JSON `source_kind="transcript"`,
    `source_id="transcript"` backfillen (das `Extraction`-Modell bekommt die Felder
    als Pflicht; Alt-Dateien ohne sie sonst nicht ladbar).
-3. **Alte Neo4j-Kanten.** Bestehende `EXTRACTED_FROM`-Kanten tragen keine
-   Properties ([write_templates.py:58](../../../services/data-ingestion/nlm_ingest/write_templates.py)).
+3. **`ingest` reaktivieren (P1#1).** Migrierte (audio-only) Notebooks haben
+   `ingest == completed`, waren aber **nie** im Qdrant (den Writer gab es nicht).
+   Für jedes migrierte Notebook mit umbenannter Extraktionsdatei `ingest → pending`
+   setzen, damit der neue Embed→`odin_intel`-Schritt nachgeholt wird. Sicher dank
+   idempotentem UUIDv5-Upsert (Qdrant) + MERGE-Semantik (Neo4j) — kein Doppelschaden
+   bei Re-Ingest.
+4. **Alte Neo4j-Kanten (eng gescopt, P2#4).** Bestehende `EXTRACTED_FROM`-Kanten
+   tragen keine Properties ([write_templates.py:58](../../../services/data-ingestion/nlm_ingest/write_templates.py)).
    Die neuen MERGEs mit `{source_kind, source_id}` würden sonst **parallele** Alt-
    und Neu-Kanten erzeugen. Deterministisches Backfill (eigenes Template, kein
-   LLM-Cypher): vorhandene property-lose `EXTRACTED_FROM` auf
-   `source_kind="transcript", source_id="transcript"` setzen.
-4. **Migrationstest.** Test gegen ein **altes** DB-/Datei-Schema (Fixture mit
-   alter `phase_status`-Tabelle, alter `{nid}.json`, property-loser Kante) →
-   verifiziert Rebuild, Rename+Backfill, Kanten-Backfill und Idempotenz bei
-   erneutem Lauf.
+   LLM-Cypher), **nur** property-lose NLM-Kanten — fremde `EXTRACTED_FROM` bleiben
+   unangetastet:
+   ```cypher
+   MATCH (:Claim)-[r:EXTRACTED_FROM]->(d:Document)
+   WHERE d.notebook_id IS NOT NULL
+     AND r.source_kind IS NULL
+     AND r.source_id IS NULL
+   SET r.source_kind = 'transcript', r.source_id = 'transcript'
+   ```
+5. **Migrationstests.** Gegen ein **altes** DB-/Datei-Schema (Fixture mit alter
+   `phase_status`-Tabelle, altem `{nid}.json`, property-loser Kante):
+   - Rebuild, Rename+Backfill, `ingest→pending`-Reaktivierung, Idempotenz bei Re-Run;
+   - **migriertes `ingest=completed` wird reaktiviert und landet im Qdrant** (P1#1);
+   - **fremde (Nicht-NLM) `EXTRACTED_FROM`-Kante bleibt unverändert** (P2#4).
 
 ## Test-Strategie (TDD-Pflicht)
 
@@ -302,16 +338,16 @@ deterministische, idempotente, einmalige Migration ist Teil dieser Story:
 | Extract-CLI Persistenz | mehrere Quellen → kollisionsfreie `extractions/{nid}.{source_id}.json` |
 | Extract-Phase | `completed` nur wenn alle Quellen ok; Teilfehler → `failed` (retrybar) |
 | Extract-Target | report-only Notebook (Audio `skipped`, kein Transkript) ist gültiges Target |
-| `export` audio_status | `absent` → `transcribe=skipped`; `failed` bleibt `failed`/`pending` |
+| `export` audio_status | `absent` (leere Liste) → `transcribe=skipped`; Download-Fehler **und** `list_audio()`-Exception → `failed` (nie `skipped`) |
 | `state` `skipped` | terminal + nicht-blockierend in `validate_retry` |
 | `EXTRACTED_FROM` | Rel-Props `source_kind`+`source_id` im MERGE-Pattern; zwei Quellen → zwei Kanten |
 | Qdrant-Point | `point_id` = UUIDv5 (quell-spezifisch), Payload inkl. `entities`/`content_hash`/`ingested_at`, `region="N/A"`, `claim_hash`, abgelehnte Claims raus |
 | Qdrant-Preflight | `validate_collection_schema` wird vor dem Write aufgerufen (Mismatch → Abbruch) |
 | Ingest-Phase | globbt mehrere Extraktionsdateien; `completed` nur bei Vollerfolg |
 | **DAG** `validate_retry` | `retry extract` erlaubt bei `transcribe=failed`/`skipped` (export `completed`); `retry ingest` blockiert nur bei nicht-terminalem `extract` |
-| **Reconciliation** | neuer Report nach Vollerfolg → `extract/ingest`→`pending`; Audio nach `transcribe=skipped` → `transcribe`→`pending`; kein Reset bei unverändertem Inventar |
-| **Slide-only** | Notebook ohne Audio-Artefakt und ohne Report → `transcribe/extract/ingest` = `skipped` |
-| **Migration** | Fixture mit altem Schema → Rebuild + `{nid}.json`-Rename+Backfill + Kanten-Backfill, idempotent bei Re-Run |
+| **Reconciliation** | keyt auf `load_sources()`; fehlende/kaputte (Pydantic-invalide) Extraktionsdatei → `extract/ingest`→`pending` (auch gelöschtes Transkript-Output); Audio nach `transcribe=skipped` → `transcribe`→`pending`; kein Reset bei unverändertem, validem Stand |
+| **Slide-only** | `load_sources()` leer **und** `audio_status=absent` → `transcribe/extract/ingest` = `skipped` |
+| **Migration** | altes Schema → Rebuild + Rename+Backfill + gescoptes Kanten-Backfill, idempotent; **migriertes `ingest=completed` reaktiviert → Qdrant** (P1#1); **fremde Nicht-NLM-Kante unverändert** (P2#4) |
 
 Tests verifizieren echtes Verhalten; externe Dienste (vLLM, TEI, Neo4j, Qdrant,
 NotebookLM-Client) werden gemockt, nicht die zu testende Logik.
@@ -337,7 +373,11 @@ NotebookLM-Client) werden gemockt, nicht die zu testende Logik.
 9. **Quellenlose Notebooks** (Slide-only) hängen in keiner Phase — alle Phasen
    terminal `skipped`, reaktivierbar durch spätere Vision-Quelle.
 10. **Migration** überführt Alt-Daten (SQLite-Schema, `{nid}.json`,
-    property-lose `EXTRACTED_FROM`) deterministisch und idempotent.
+    property-lose `EXTRACTED_FROM`) deterministisch und idempotent; bereits
+    migrierte Audio-Extraktionen werden nachträglich nach Qdrant geschrieben
+    (`ingest→pending`), ohne fremde Graph-Kanten zu berühren. Lokaler Teil und
+    Neo4j-Backfill sind getrennt ausführbar (unerreichbares Neo4j blockiert
+    `status`/`export` nicht).
 
 ## Betroffene Dateien
 
