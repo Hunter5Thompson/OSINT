@@ -21,7 +21,9 @@ async def rss_fetch(feed_url: str) -> str:
         feed_url: URL of the RSS feed to fetch.
 
     Returns:
-        Formatted text with recent articles from the feed.
+        A budgeted evidence pack: one `[EVIDENCE] {json}` metadata line per
+        article (provider = article domain, source_type = rss, published_at from
+        pubDate, url, ...) followed by Title/Excerpt lines. Newest-first.
     """
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -40,7 +42,7 @@ async def rss_fetch(feed_url: str) -> str:
                 published_iso = parsedate_to_datetime(pub_date).isoformat() if pub_date else None
             except (TypeError, ValueError):
                 published_iso = None
-            domain = urlparse(link).netloc or urlparse(feed_url).netloc or "rss"
+            domain = (urlparse(link).netloc or urlparse(feed_url).netloc or "rss").removeprefix("www.")
             items.append(to_evidence_item({
                 "score": 1.0 - idx * 0.001,
                 "source_type": "rss",
