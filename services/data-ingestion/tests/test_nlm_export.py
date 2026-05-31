@@ -42,10 +42,14 @@ def _make_client(
             Path(path).write_bytes(b"fake-audio-bytes")
             return path
         client.artifacts.download_audio = AsyncMock(side_effect=_dl_audio)
+        client.artifacts.list_audio = AsyncMock(
+            return_value=[_artifact("a1", completed=True)]
+        )
     else:
         client.artifacts.download_audio = AsyncMock(
             side_effect=RuntimeError("no audio")
         )
+        client.artifacts.list_audio = AsyncMock(return_value=[])
 
     client.artifacts.list_slide_decks = AsyncMock(return_value=slide_decks or [])
     client.artifacts.list_reports = AsyncMock(return_value=reports or [])
@@ -141,6 +145,7 @@ async def test_preserves_core_keys_and_audio(tmp_path, monkeypatch):
     assert r["title"] == "RAND Strategic Outlook"
     assert r["source_name"] == "RAND"
     assert r["audio_path"] == str(tmp_path / "notebooks" / "nb1" / "podcast.mp4")
+    assert r["audio_status"] == "downloaded"
 
 
 @pytest.mark.asyncio
@@ -191,3 +196,32 @@ async def test_notebook_without_any_artifact_is_skipped(tmp_path, monkeypatch):
     results = await export_all(tmp_path)
 
     assert results == []
+
+
+@pytest.mark.asyncio
+async def test_audio_status_absent_when_no_audio_artifact(tmp_path, monkeypatch):
+    client = _make_client([_notebook("nb1")], reports=[_artifact("r1", completed=True)])
+    client.artifacts.list_audio = AsyncMock(return_value=[])          # empty
+    _patch_client(monkeypatch, client)
+    results = await export_all(tmp_path)
+    assert results[0]["audio_status"] == "absent"
+    assert results[0]["report_status"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_audio_status_failed_when_list_audio_raises(tmp_path, monkeypatch):
+    client = _make_client([_notebook("nb1")], reports=[_artifact("r1", completed=True)])
+    client.artifacts.list_audio = AsyncMock(side_effect=RuntimeError("api down"))
+    _patch_client(monkeypatch, client)
+    results = await export_all(tmp_path)
+    assert results[0]["audio_status"] == "failed"     # NOT absent
+
+
+@pytest.mark.asyncio
+async def test_report_status_failed_when_completed_report_download_fails(tmp_path, monkeypatch):
+    client = _make_client([_notebook("nb1")], slide_decks=None,
+                          reports=[_artifact("r1", completed=True)], write_audio=True)
+    client.artifacts.download_report = AsyncMock(side_effect=RuntimeError("dl fail"))
+    _patch_client(monkeypatch, client)
+    results = await export_all(tmp_path)
+    assert results[0]["report_status"] == "failed"
