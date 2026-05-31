@@ -2,7 +2,9 @@
 
 **Datum:** 2026-05-31
 **Branch:** `feature/TASK-014c-evidence-contract`
-**Ziel:** TASK-014 Teil C (Data Lineage) nach Implementierung erfüllen.
+**Ziel:** TASK-014 Teil C (Data Lineage) **teilweise** erfüllen — interne Lineage
+bis zur Synthese. Volle `SourceRef`-Propagation durch API + Frontend ist Slice 1b
+(siehe §2). TASK-014 Teil C gilt erst nach Slice 1b als vollständig erledigt.
 **Nordstern:** `docs/superpowers/specs/2026-05-03-fusion-core-design.md` §5.1
 (volles `SourceRef`-Modell). Dieser Slice baut den kleinsten vollständigen
 Provenienz- und Quellenkritik-Contract als vorwärtskompatible Teilmenge.
@@ -39,24 +41,39 @@ geänderter Dateien.
   JSON-Metadatenzeile pro vollständigem Trefferblock.
 - Verwendung desselben Evidence-Serializers durch `qdrant_search`, `gdelt_query`
   und `rss_fetch`.
-- `sources_used: list[str] -> list[SourceRef]` durch Intelligence-Service,
-  Backend-API und Frontend-Typen.
-- Kompatibilitätsprojektion von `SourceRef` auf bestehende
-  `ReportMessage.refs: list[str]`.
+- Interne `SourceRef`/`EvidenceItem`-Nutzung im Intelligence-Service.
 - Maximale Exzerptlänge 300 -> 700 Zeichen.
 - Tests nach TDD.
+
+**API-Kompatibilitätsgrenze (bewusst, nicht erweitert):**
+
+Der `/query`-Rand des Intelligence-Service bleibt `sources_used: list[str]`. Slice 1
+ändert nur den **Inhalt** dieser Strings: deduplizierte **Provider-IDs in
+Evidenzreihenfolge** statt Tool-Namen. `SourceRef`/`EvidenceItem` bleiben
+intern. Damit bleiben Backend (`services/backend/app/routers/intel.py:106`,
+inkl. `[:6]`-Cap) und Frontend **unverändert und funktionsfähig**.
 
 **Explizit Out of Scope:**
 
 - Bestandsmigration oder Backfill alter Qdrant-Punkte.
 - Automatische Korroboration und Widerspruchserkennung (Slice 2).
 - Spark-Synthese als separates Schreibmodell (Slice 3).
-- Neue Frontend-Lineage-Ansicht. Slice 1 ändert Typen und hält die bestehende
-  kompakte Quellenanzeige funktionsfähig.
+- `sources_used: list[str] -> list[SourceRef]` durch API + Frontend, plus
+  explizite Provider-ID-Projektion der Berichtschat-Anzeige und optionale
+  Lineage-Ansicht. **Das ist Slice 1b** (siehe unten) und schließt TASK-014
+  Teil C ab.
 - Volles fusion-core-14-Feld-Modell (`feed_id`, `license`, `payload_hash`,
   `classification`).
 - Lange Provider-Override-Liste.
 - Automatische Recency-Bewertung bei fehlendem `published_at`.
+
+**Slice 1b (Follow-up, separate Spec/Plan):**
+
+- `sources_used: list[str] -> list[SourceRef]` durch Intelligence-`/query`,
+  Backend-`IntelAnalysis` und Frontend-Typen propagieren.
+- Bestehende Berichtschat-Anzeige explizit auf Provider-IDs projizieren
+  (`ReportMessage.refs: list[str]`).
+- Optional: interaktive Lineage-Ansicht.
 
 ## 3. Write-Contract - nur Fakten
 
@@ -320,7 +337,7 @@ Damit erfassen `sources_used` auch Live-Evidenz, nicht nur Qdrant-Treffer.
 ### 6.4 `sources_used`
 
 Der Workflow parst ausschließlich vollständige `[EVIDENCE] <json>`-Zeilen aus
-Tool-Ergebnissen, rekonstruiert `SourceRef` und de-dupliziert nach
+Tool-Ergebnissen, rekonstruiert intern `SourceRef` und de-dupliziert nach
 `source_ref_id`.
 
 - Kein `contextvar`, kein run-scoped Collector.
@@ -328,24 +345,23 @@ Tool-Ergebnissen, rekonstruiert `SourceRef` und de-dupliziert nach
 - Die Legacy-Pipeline liefert `sources_used=[]`, solange sie keine echte
   Evidence-Lineage besitzt; `"llm_knowledge"` wird nicht als Quelle ausgegeben.
 
-Propagation:
+**Serialisierung an der API-Grenze (Slice 1):** Die intern gesammelten
+`SourceRef` werden am `/query`-Rand auf `sources_used: list[str]` projiziert —
+deduplizierte **Provider-IDs in Evidenzreihenfolge**:
 
 ```text
-intelligence AgentState
--> intelligence /query JSON
--> backend IntelAnalysis
--> frontend IntelAnalysis
+intelligence AgentState (interne SourceRef)
+-> intelligence /query JSON: sources_used: list[str]  (deduplizierte Provider-IDs)
 ```
 
-Die bestehende Berichtschat-Persistenz bleibt kompatibel:
+Backend und Frontend bleiben dadurch unverändert: `routers/intel.py:106`
+(`refs=analysis.sources_used[:6]`) bleibt funktionsfähig; der **`[:6]`-Cap wird
+bewusst beibehalten** und im Implementierungsplan festgehalten. Der einzige
+beobachtbare Unterschied für bestehende Consumer: die Strings sind jetzt echte
+Provider-IDs statt Tool-Namen.
 
-```text
-ReportMessage.refs: list[str] =
-  de-duplizierte provider-IDs aus sources_used in Ergebnisreihenfolge
-```
-
-Die bestehende Frontend-Anzeige rendert weiterhin kompakte String-Referenzen.
-Eine interaktive Lineage-Ansicht bleibt out of scope.
+Die volle `list[SourceRef]`-Propagation durch API + Frontend ist **Slice 1b**
+(§2).
 
 ### 6.5 Synthese-Prompt
 
@@ -394,14 +410,12 @@ Der Synthese-Prompt erklärt:
 - Qdrant-, GDELT-Live- und RSS-Live-Tools erzeugen parsebare Evidence-Blöcke.
 - Workflow sammelt echte `SourceRef` und keine Tool-Namen.
 
-### 7.3 Backend und Frontend
+### 7.3 API-Kompatibilitätsgrenze
 
-- Backend-`IntelAnalysis.sources_used` akzeptiert `list[SourceRef]`.
-- Berichtschat persistiert de-duplizierte Provider-IDs als bestehende
-  `ReportMessage.refs: list[str]`.
-- Frontend-`IntelAnalysis.sources_used` ist als `SourceRef[]` typisiert.
-- Frontend projiziert `SourceRef[]` für die bestehende Berichtschat-Anzeige auf
-  de-duplizierte Provider-IDs.
+- `/query` gibt `sources_used` als `list[str]` aus — deduplizierte Provider-IDs
+  in Evidenzreihenfolge, keine Tool-Namen, kein `"llm_knowledge"`.
+- Reihenfolge und Deduplizierung sind deterministisch.
+- Es treten **keine** Änderungen an Backend- oder Frontend-Dateien auf (Slice 1b).
 
 ## 8. Erfolgskriterium
 
@@ -447,15 +461,13 @@ Nach Slice 1:
 - `services/intelligence/agents/tools/gdelt_query.py`
 - `services/intelligence/agents/tools/rss_fetch.py`
 - `services/intelligence/graph/state.py`
-- `services/intelligence/graph/workflow.py`
+- `services/intelligence/graph/workflow.py` (Projektion interner `SourceRef` ->
+  `sources_used: list[str]` Provider-IDs an der `/query`-Grenze)
 - `services/intelligence/graph/nodes.py`
 - `services/intelligence/agents/synthesis_agent.py`
 
-**Backend and frontend - typed propagation without new UI:**
+**Bewusst NICHT angefasst in Slice 1 (Slice 1b):**
 
-- `services/backend/app/models/intel.py`
-- `services/backend/app/routers/intel.py`
-- `services/backend/tests/unit/test_intel_router_reports.py`
-- `services/frontend/src/types/index.ts`
-- `services/frontend/src/pages/BriefingPage.tsx`
-- `services/frontend/src/test/pages/briefingPage.test.tsx`
+- `services/backend/app/**` — `routers/intel.py:106` bleibt unverändert
+  funktionsfähig (`sources_used` bleibt `list[str]`, `[:6]`-Cap erhalten).
+- `services/frontend/src/**` — keine Typ- oder UI-Änderungen.
