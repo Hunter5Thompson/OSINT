@@ -9,6 +9,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from config import settings
+from rag.evidence import parse_evidence_refs
 from agents.react_agent import (
     REACT_SYSTEM_PROMPT,
     create_react_agent,
@@ -69,6 +70,22 @@ def _compact_tool_messages(messages: list) -> list:  # type: ignore[type-arg]
         compacted_reversed.append(_with_content(message, next_content))
 
     return list(reversed(compacted_reversed))
+
+
+def derive_sources_used(tool_outputs: list[str]) -> list[str]:
+    """Deduplicated provider IDs in first-seen (evidence) order.
+
+    Parses [EVIDENCE] <json> blocks. Never falls back to tool names or
+    "llm_knowledge". Empty list if there is no real evidence lineage.
+    """
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for out in tool_outputs:
+        for ref in parse_evidence_refs(out):
+            if ref.provider not in seen:
+                seen.add(ref.provider)
+                ordered.append(ref.provider)
+    return ordered
 
 
 # ── ReAct Node Functions ──────────────────────────────────────────────────────
@@ -157,8 +174,8 @@ async def react_synthesis_node(state: AgentState) -> dict:
         raw_research_chars = len(research_text)
         research_text = _clip_text(research_text, SYNTHESIS_RESEARCH_MAX_CHARS)
 
-        # Derive sources_used from tool_trace (de-duplicated tool names)
-        derived_sources = sorted({entry.get("tool", "?") for entry in state.get("tool_trace", [])})
+        # Derive sources_used from parsed [EVIDENCE] blocks (de-duplicated provider IDs)
+        derived_sources = derive_sources_used(tool_results)
         logger.info(
             "react_synthesis_grounding",
             tool_call_count=len(state.get("tool_trace", [])),
