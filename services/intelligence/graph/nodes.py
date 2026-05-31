@@ -30,7 +30,7 @@ async def osint_node(state: AgentState) -> dict:
 
         return {
             "osint_results": [{"source": "llm_analysis", "content": content}],
-            "sources_used": ["llm_knowledge"],
+            "sources_used": [],  # legacy path has no real evidence lineage (Slice 1)
             "agent_chain": state.get("agent_chain", []) + ["osint_agent"],
             "messages": [response],
             "iteration": state.get("iteration", 0) + 1,
