@@ -410,7 +410,7 @@ def test_falls_back_to_url_then_hash_then_title_excerpt():
         source_type="rss", provider="bbc.com",
         external_key=None, url=None, content_hash=None, title="t", excerpt="e",
     )
-    assert by_url != by_hash != by_text
+    assert len({by_url, by_hash, by_text}) == 3
     assert all(len(x) == 20 for x in (by_url, by_hash, by_text))
 
 
