@@ -100,3 +100,18 @@ def test_legacy_gdelt_shape_is_inferred():
     })
     assert item.source.source_type == "gdelt"
     assert item.source.provenance_inferred is True
+
+
+def test_display_name_prefers_explicit_then_source_name_then_feed_name():
+    # NLM-style payload writes display_name directly; it must reach SourceRef.
+    nlm = to_evidence_item({
+        "score": 0.5, "source_type": "notebooklm", "provider": "notebooklm:nb-7",
+        "display_name": "RAND", "source_name": "ignored", "title": "t", "content": "c",
+    })
+    assert nlm.source.display_name == "RAND"
+    # Fallback to source_name when display_name absent (e.g. GDELT).
+    gd = to_evidence_item({
+        "score": 0.5, "source_type": "gdelt", "provider": "reuters.com",
+        "source_name": "reuters.com", "title": "t", "content": "c",
+    })
+    assert gd.source.display_name == "reuters.com"

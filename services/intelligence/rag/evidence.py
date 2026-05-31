@@ -136,7 +136,9 @@ def to_evidence_item(result: dict) -> "EvidenceItem":
         source_ref_id=source_ref_id,
         source_type=source_type,
         provider=normalize_provider(provider),
-        display_name=result.get("source_name") or result.get("feed_name"),
+        display_name=(
+            result.get("display_name") or result.get("source_name") or result.get("feed_name")
+        ),
         url=url,
         published_at=published_at,
         credibility_score=credibility_score(source_type, provider),
