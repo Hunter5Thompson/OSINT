@@ -87,6 +87,8 @@ async def extract_with_qwen(
         claims=[Claim(**c) for c in data.get("claims", [])],
         extraction_model=vllm_model,
         prompt_version=prompt_version,
+        source_kind="transcript",   # TEMP (Task 7 -> source.source_kind)
+        source_id="transcript",     # TEMP (Task 7 -> source.source_id)
     )
 
 

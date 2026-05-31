@@ -49,6 +49,8 @@ def test_cli_extract_uses_ingestion_vllm_settings(tmp_path, monkeypatch):
             claims=[],
             extraction_model=kwargs["vllm_model"],
             prompt_version="v0-test",
+            source_kind="transcript",
+            source_id="transcript",
         )
 
     # get_all_status returns rows describing per-notebook phase state.

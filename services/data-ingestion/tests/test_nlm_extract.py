@@ -136,6 +136,8 @@ class TestReviewWithClaude:
             ],
             extraction_model="qwen3.5",
             prompt_version="v1",
+            source_kind="transcript",
+            source_id="transcript",
         )
         transcript = _make_transcript()
 
@@ -166,6 +168,7 @@ class TestReviewWithClaude:
         extraction = Extraction(
             notebook_id="nb1", entities=[], relations=[],
             claims=claims, extraction_model="qwen3.5", prompt_version="v1",
+            source_kind="transcript", source_id="transcript",
         )
         transcript = _make_transcript("word " * 40_000)
 

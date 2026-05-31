@@ -25,6 +25,8 @@ def _make_extraction() -> Extraction:
         ],
         extraction_model="qwen3.5",
         prompt_version="v1",
+        source_kind="transcript",
+        source_id="transcript",
     )
 
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:7474/db/neo4j/tx/commit")
