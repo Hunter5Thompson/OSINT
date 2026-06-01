@@ -44,6 +44,7 @@ Hauptstadt-Koordinaten + Fläche/Bevölkerung-Fallback. **Refresh** holt REST Co
   - **N. Cyprus:** `topo_id: "N. Cyprus"`, `iso3: null`, `gec: ""`, `m49: "N. Cyprus"`.
   - **Somaliland:** `topo_id: "Somaliland"`, `iso3: null`, `gec: ""`, `m49: "Somaliland"`.
 - `m49` ist im Seed/Store **stets ein String** (nie `null`); Einträge ohne echten M49 tragen ihren Namen als Platzhalter.
+- **Palestine (PSE) — kein einzelnes Factbook-Profil:** die Karte führt **ein** Feature (`topo_id: "275"`, `iso3: "PSE"`, `m49: "275"`), Factbook aber **getrennt** `middle-east/we.json` (West Bank) + `middle-east/gz.json` (Gaza Strip) — **kein unified PSE** (am gepinnten Snapshot verifiziert). Der Crosswalk setzt daher `gec: ""` für PSE → **REST-Fallback** (§9). **Nicht** stillschweigend nur West Bank wählen, **nicht** beide Profile in diesem Spec vermischen (Composite West-Bank/Gaza = bewusst ausgeklammerter, eigener Scope).
 
 ## 4. Builder
 
@@ -70,7 +71,7 @@ Sektionen (jedes Subfeld → ein `{label, value}`; ~40-50 Facts/Land):
 
 **Bereinigung (Korrektur 8):** Werte mit einem **HTML-Parser** säubern (nicht nur `<b>` strippen) — die Quelle enthält auch `<strong>`, `<br>`, `<em>` und HTML-Entities. Tags entfernen, `<br>` → Leerzeichen, Entities unescapen, Whitespace kollabieren, Jahres-Suffix („(2024 est.)") behalten. Mehrjahres-Felder → neuestes Jahr. Komposit (GDP by sector) → `"agriculture 0.8% · industry 25.8% · services 63.9%"`.
 
-**Koordinaten-Plausibilität (Korrektur 7):** REST liefert teils unplausible/vertauschte Coords (im aktuellen Seed: El Aaiún `lat=-13.28, lon=27.14` — vertauscht). **Plausibilitätsquelle:** `restcountries_snapshot.json` führt zusätzlich den **Länder-Centroid** (REST liefert `latlng` = Länderzentrum). Render prüft jede Hauptstadt-Coord auf (a) gültigen Wertebereich (lat ∈ [-90,90], lon ∈ [-180,180]) und (b) feste **Max-Distanz zum Centroid**; bei Verletzung → Override (§6) oder weglassen, nie blind übernehmen. **Kein TopoJSON als Render-Input.** ESH bekommt einen expliziten Coord-Override.
+**Koordinaten-Plausibilität (Korrektur 7):** REST liefert teils unplausible/vertauschte Coords (im aktuellen Seed: El Aaiún `lat=-13.28, lon=27.14` — vertauscht). **Plausibilitätsquelle:** `restcountries_snapshot.json` führt zusätzlich den **Länder-Centroid** (REST liefert `latlng` = Länderzentrum). Render prüft jede Hauptstadt-Coord auf (a) gültigen Wertebereich (lat ∈ [-90,90], lon ∈ [-180,180]) und (b) feste **Max-Distanz zum Centroid**; bei Verletzung → Override (§6) oder weglassen, nie blind übernehmen. **Kein TopoJSON als Render-Input.** Zwei erkannte REST-Coord-Ausreißer: **ESH** (El Aaiún, vertauscht) bekommt einen expliziten Coord-Override; **ATF** (French Southern Territories) bleibt **ohne** Override → Hauptstadt wird weggelassen (die `≥170`-Capital-Guardrail bleibt dennoch erfüllbar, §9).
 
 ## 6. Overrides (einzige Quelle manueller Fakten)
 
@@ -110,9 +111,10 @@ Der Loader liest nur `raw.get("countries", [])` → `_meta` wird ignoriert, kein
 - **Coverage nach expliziten Klassen** (statt „jedes ISO-Land"), pro Klasse begründet:
   - **Factbook-Profil (regulär, inkl. Kosovo `kv`):** hat economy- UND security-Facts.
   - **Partial Factbook — Antarctica (ATA):** Factbook führt bewusst keine Economy → security ok, economy darf leer sein.
-  - **REST-Fallback — Western Sahara (ESH):** seit 2020 nicht im Factbook → REST-Stub (Fläche/Bevölkerung/Coord-Override), kein economy/security erzwungen.
+  - **REST-Fallback — Western Sahara (ESH), Palestine (PSE):** kein (unified) Factbook-Profil (ESH seit 2020 raus; PSE als we+gz gesplittet) → REST-Stub, kein economy/security erzwungen.
   - **Karten-Stub — N. Cyprus, Somaliland:** keine ISO/Factbook-Daten → Minimal-Stub, nur auflösbar.
   Fehlende Profile erzeugen einen **REST-Fallback-Stub** (nicht übersprungen).
+- **Capital-Guardrail bleibt erfüllbar:** `≥170/177` mit Hauptstadt. Bekannt **ohne** Hauptstadt: **ATF** (French Southern Territories — zweiter REST-Coord-Ausreißer, Hauptstadt wird ohne Override weggelassen, §5) sowie die Karten-Stubs N. Cyprus/Somaliland. PSE/ESH erhalten via REST/Override eine plausible Hauptstadt. Damit fehlen nur eine Handvoll → `≥170` hält.
 - **kein rohes HTML** (`<`) in irgendeinem `value`.
 - **exakt 177 Einträge; generierte Seed-`id` eindeutig** (Artefakt-Ebene Seed; `topo_id` wird im Seed nicht als eigenes Feld serialisiert, sondern über `id` realisiert).
 - bestehende Guardrails (iso3-Coverage, Population+Capital, Dockerfile packt `data/`) bleiben; `_meta.factbook_revision` gesetzt.
