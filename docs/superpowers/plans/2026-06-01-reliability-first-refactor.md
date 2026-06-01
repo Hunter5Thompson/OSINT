@@ -385,6 +385,7 @@ with an in-flight sequence counter (ignore stale resolutions), `AbortController`
 ---
 
 ## Deferred (both reviews agree — NOT in this plan)
+- **`feeds/gdelt_collector.py` (legacy GDELT DOC-API collector) — dormant Phase-2 defect, found in the Phase 1–3 review (2026-06-01).** Sync `_ensure_collection` in `__init__` (`:73`), bare sync `retrieve` (`:153`) / `upsert` (`:215`) on the loop, no `close()`. **Not scheduled** (only `run_gdelt_raw_collector` is wired, `scheduler.py:524`) → not on a live loop, so correctly out of Phase 2's declared scope. But it is still exported (`feeds/__init__.py`) and instantiated in tests (`test_feeds.py`, `test_pipeline.py`), so re-wiring would re-introduce all three defects. Resolve by either (a) applying the RSS treatment (move `_ensure_collection` to async setup, `to_thread`-wrap `retrieve`/`upsert`, add `close()` + scheduler `finally`) or (b) deleting it if `gdelt_raw` supersedes the DOC-API path. Until then, Phase 2's "no unwrapped sync qdrant on loop" exit claim is honest only for the *wired* collectors.
 - `useLayerPrimitives` Cesium lifecycle hook (after Phase 9 if still wanted).
 - Config centralisation (keep 6 per-service `config.py`; at most a `settings-registry.md`).
 - Broad runtime DI / `IntelligenceRuntime` (tie to TASK-112).
