@@ -62,6 +62,6 @@ Die zentrale Dokumentation, die Beispiel-Umgebungsvariablen und die Compose-Defi
 3. `docker compose up -d`
 4. Erreichbarkeit prüfen:
    - Frontend: `http://localhost:5173`
-   - Backend Health: `http://localhost:8080/api/v1/health`
+   - Backend Health: `http://localhost:8080/api/health`
    - vLLM Health: `http://localhost:8000/health`
    - Neo4j Browser: `http://localhost:7474`
