@@ -4,7 +4,7 @@
 **Status:** Proposed
 **Scope:** Den Country Almanac mit kuratiert-tiefen Daten aus dem CIA World Factbook befüllen, erzeugt von einem **deterministischen, offline rendernden** Builder, der den committeten statischen Seed produziert.
 
-> **rev. 2** verarbeitet ein Review (8 Findings): 3er-Key-Kollision der Kartenentitäten, nicht erfüllbare Integrity-Assertions (Antarctica/Westsahara), Nicht-Determinismus (REST live + `generated_at`), GEC→Pfad-Auflösung, gepinnte Factbook-Revision, CLI-Konvention, Koordinaten-Plausibilität, HTML-Vielfalt.
+> **rev. 2** verarbeitet zwei Review-Runden: (a) 8 Findings — 3er-Key-Kollision, nicht erfüllbare Integrity-Assertions (Antarctica/Westsahara), Nicht-Determinismus (REST live + `generated_at`), GEC→Pfad-Auflösung, gepinnte Factbook-Revision, CLI-Konvention, Koordinaten-Plausibilität, HTML-Vielfalt; (b) 4 Nachschärfungen — `topo_id` = TopoJSON-Key (**UN-M49**, nicht ISO; Frontend fällt für 3 id-lose bereits auf den Namen zurück → **keine** Frontend-Anpassung), explizite Coverage-Klassen (Factbook-Profil inkl. Kosovo / Partial=ATA / REST-Fallback=ESH / Karten-Stub=N.Cyprus+Somaliland), Coord-Plausibilität via Centroid aus `restcountries_snapshot.json`, Tests nach Artefakt-Ebene (Crosswalk-`topo_id` vs. Seed-`id`).
 
 ## 1. Motivation
 
@@ -14,7 +14,7 @@ Der Almanac liefert pro Land nur ~4 dünne Felder (REST Countries). Economy und 
 
 - **Kein** Munin/Briefing-Generator (separater Folge-Spec).
 - **Keine** Schema-Änderung am `facts: {profile,people,government,economy,security: [{label,value}]}`-Modell (additives Top-Level-`_meta` ausgenommen, §8).
-- **Keine** Schema-/Store-Refactors. Die 3 Kartenstubs bekommen eindeutige Keys über das **bestehende** `id`-Feld (§3.3) — kein neues Modellfeld. Eine **minimale** Frontend-Anpassung kann nötig sein, falls die Country-Features dieser 3 einen anderen Key senden als der Seed führt; das wird beim Implementieren am echten Country-Layer verifiziert (kein Komponenten-Umbau).
+- **Keine** Schema-/Store-Refactors. Die 3 Kartenstubs bekommen eindeutige Keys über das **bestehende** `id`-Feld (§3.3) — kein neues Modellfeld. **Keine Frontend-Anpassung nötig:** das Frontend (`useCountryHitTest.ts:123`) keyt reguläre Features per UN-M49 und fällt für die 3 id-losen bereits auf `properties.name` zurück; der Crosswalk muss diesen Keys nur exakt entsprechen.
 - **Kein** Runtime-Netzzugriff.
 
 ## 3. Datenquellen — Refresh vs. Render getrennt (Determinismus)
@@ -36,9 +36,9 @@ Hauptstadt-Koordinaten + Fläche/Bevölkerung-Fallback. **Refresh** holt REST Co
 ### 3.3 Vendorter Crosswalk (einziger Join-Key, mit eindeutigen Map-Keys)
 `infra_atlas/data/crosswalk.json` — kanonische Länderliste, die für **jeden** der **genau 177** Einträge folgende Schlüssel explizit zusammenführt:
 ```json
-{ "name": "Germany", "topo_id": "DEU", "m49": "276", "iso3": "DEU", "gec": "gm" }
+{ "name": "Germany", "topo_id": "276", "m49": "276", "iso3": "DEU", "gec": "gm" }
 ```
-- `topo_id` = der stabile Identifier, mit dem das Frontend die Karten-Polygone auflöst (beim Implementieren aus den Country-Feature-Properties bestimmt). Er ist **kein neues Seed-/Modellfeld**: im generierten Seed wird er über das **bestehende** `id`-Feld realisiert (der Store keyt bereits nach `id`/`m49`/`iso3`). Falls die Features dieser 3 einen abweichenden Key senden, wird das am Country-Layer verifiziert (§2).
+- `topo_id` = exakt der TopoJSON-Feature-Key, den das Frontend für Karten-Klicks nutzt. Verifiziert: `useCountryHitTest.ts:123` nutzt `f.id != null ? String(f.id) : name` — d.h. **UN-M49 (String) für die 174 regulären Features** (Deutschland → `"276"`) und **`properties.name` für die 3 id-losen** (Kosovo/N. Cyprus/Somaliland). Das Frontend fällt also **bereits** auf den Namen zurück → **keine Frontend-Anpassung nötig**. `topo_id` ist **kein neues Seed-/Modellfeld**: im generierten Seed wird er über das **bestehende** `id`-Feld realisiert (der Store keyt bereits nach `id`/`m49`/`iso3`).
 - **Behebt die 3er-Kollision:** im aktuellen Seed haben **Kosovo, N. Cyprus, Somaliland** alle `id = "undefined"` → der Store löst nur einen auf (zuletzt geladenen). Der Crosswalk gibt jedem einen **eindeutigen** Key:
   - **Kosovo:** `topo_id: "Kosovo"`, `iso3: "XKX"`, `gec: "kv"`, `m49: "Kosovo"` (nicht-numerischer String-Platzhalter, nie `null` — sonst bricht `_norm_id(country.m49)`).
   - **N. Cyprus:** `topo_id: "N. Cyprus"`, `iso3: null`, `gec: ""`, `m49: "N. Cyprus"`.
@@ -70,7 +70,7 @@ Sektionen (jedes Subfeld → ein `{label, value}`; ~40-50 Facts/Land):
 
 **Bereinigung (Korrektur 8):** Werte mit einem **HTML-Parser** säubern (nicht nur `<b>` strippen) — die Quelle enthält auch `<strong>`, `<br>`, `<em>` und HTML-Entities. Tags entfernen, `<br>` → Leerzeichen, Entities unescapen, Whitespace kollabieren, Jahres-Suffix („(2024 est.)") behalten. Mehrjahres-Felder → neuestes Jahr. Komposit (GDP by sector) → `"agriculture 0.8% · industry 25.8% · services 63.9%"`.
 
-**Koordinaten-Plausibilität (Korrektur 7):** REST liefert teils unplausible/vertauschte Coords (im aktuellen Seed: El Aaiún `lat=-13.28, lon=27.14` — vertauscht). Render prüft jede Hauptstadt-Coord gegen das Länder-Bounding/Centroid; bei Implausibilität → Override (§6) oder weglassen, nicht blind übernehmen. ESH bekommt einen expliziten Coord-Override.
+**Koordinaten-Plausibilität (Korrektur 7):** REST liefert teils unplausible/vertauschte Coords (im aktuellen Seed: El Aaiún `lat=-13.28, lon=27.14` — vertauscht). **Plausibilitätsquelle:** `restcountries_snapshot.json` führt zusätzlich den **Länder-Centroid** (REST liefert `latlng` = Länderzentrum). Render prüft jede Hauptstadt-Coord auf (a) gültigen Wertebereich (lat ∈ [-90,90], lon ∈ [-180,180]) und (b) feste **Max-Distanz zum Centroid**; bei Verletzung → Override (§6) oder weglassen, nie blind übernehmen. **Kein TopoJSON als Render-Input.** ESH bekommt einen expliziten Coord-Override.
 
 ## 6. Overrides (einzige Quelle manueller Fakten)
 
@@ -79,7 +79,7 @@ Sektionen (jedes Subfeld → ein `{label, value}`; ~40-50 Facts/Land):
 { "ESH": { "capital": { "name": "El Aaiún", "lat": 27.15, "lon": -13.20 } },
   "USA": { "facts": { "security": [{ "label": "ODIN note", "value": "..." }] } } }
 ```
-Wird **nicht** aus dem alten Seed zurückgelesen. Da Factbook government/military für jedes Land liefert, hält das File initial nur ODIN-Editorials + Coord-Fixes (z.B. ESH).
+Wird **nicht** aus dem alten Seed zurückgelesen. Da Factbook government/military für nahezu alle abgedeckten Länder liefert, hält das File initial nur ODIN-Editorials + Coord-Fixes (z.B. ESH).
 
 ## 7. Baseline + Reihenfolge
 
@@ -101,15 +101,20 @@ Der Loader liest nur `raw.get("countries", [])` → `_meta` wird ignoriert, kein
 - HTML-Cleaner: `<b>`, `<strong>`, `<br>`, `<em>` + Entities → sauberer Text; Jahres-Suffix bleibt.
 - Mehrjahres-Selektor (neuestes Jahr); Komposit-Formatter.
 - gec→Pfad-Index am Snapshot eindeutig; Resolver für Majors + Kosovo.
-- Crosswalk: **exakt 177 Einträge, keine doppelten `topo_id`/`id`/Fallback-Keys**; alle 3 Karten-Topo-IDs (Kosovo/N. Cyprus/Somaliland) auflösbar.
-- Coord-Plausibilität: vertauschte/außerhalb-Bounding Coords werden erkannt; ESH-Override greift.
+- **Crosswalk (Artefakt-Ebene Crosswalk):** exakt 177 Einträge, **`topo_id` eindeutig**, und die topo_ids entsprechen **exakt den normalisierten 177 TopoJSON-Keys** aus `countries-110m.json` (`f.id` bzw. `name` für die 3 id-losen). Alle 3 Karten-Keys (Kosovo/N. Cyprus/Somaliland) auflösbar.
+- Coord-Plausibilität: vertauschte / zu weit vom Centroid entfernte / außerhalb des Wertebereichs liegende Coords werden erkannt; ESH-Override greift.
 - Overrides zuletzt + Label-Dedup; Render ignoriert vorhandenes `country_almanac.json`.
 - **Determinismus:** zweimaliges Render auf identischen Inputs → byte-identischer Output.
 
 **Seed-Integrity** (`services/backend/tests/test_almanac_seed_integrity.py`, erweitert — **erfüllbar** gemacht, Korrektur 2):
-- **Source-Coverage statt „jedes ISO-Land":** jedes Land **mit Factbook-Profil** hat economy- UND security-Facts. Begründete **Allowlist** für Einträge ohne (Teil-)Factbook-Daten: **Antarctica (ATA)** (Factbook führt bewusst keine Economy), **Western Sahara (ESH)** (seit 2020 nicht mehr im Factbook), Kosovo/N. Cyprus/Somaliland (Karten-Stubs). Fehlende Profile → **REST-Fallback-Stub** (nicht übersprungen).
+- **Coverage nach expliziten Klassen** (statt „jedes ISO-Land"), pro Klasse begründet:
+  - **Factbook-Profil (regulär, inkl. Kosovo `kv`):** hat economy- UND security-Facts.
+  - **Partial Factbook — Antarctica (ATA):** Factbook führt bewusst keine Economy → security ok, economy darf leer sein.
+  - **REST-Fallback — Western Sahara (ESH):** seit 2020 nicht im Factbook → REST-Stub (Fläche/Bevölkerung/Coord-Override), kein economy/security erzwungen.
+  - **Karten-Stub — N. Cyprus, Somaliland:** keine ISO/Factbook-Daten → Minimal-Stub, nur auflösbar.
+  Fehlende Profile erzeugen einen **REST-Fallback-Stub** (nicht übersprungen).
 - **kein rohes HTML** (`<`) in irgendeinem `value`.
-- **exakt 177 Einträge, keine Key-Kollisionen** (id/topo_id eindeutig).
+- **exakt 177 Einträge; generierte Seed-`id` eindeutig** (Artefakt-Ebene Seed; `topo_id` wird im Seed nicht als eigenes Feld serialisiert, sondern über `id` realisiert).
 - bestehende Guardrails (iso3-Coverage, Population+Capital, Dockerfile packt `data/`) bleiben; `_meta.factbook_revision` gesetzt.
 
 **Backend-Suite** grün (Baseline 269); ruff sauber.
