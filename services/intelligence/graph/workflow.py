@@ -374,35 +374,25 @@ async def run_intelligence_query(
             )
     except (TimeoutError, Exception) as e:
         if not use_legacy:
-            logger.warning("react_fallback_to_legacy", error=str(e))
-            try:
-                result = await legacy_graph.ainvoke(initial_state)
-                mode = "legacy_fallback"
-            except Exception as legacy_err:
-                logger.error("legacy_fallback_also_failed", error=str(legacy_err))
-                return {
-                    "query": query,
-                    "analysis": f"Both ReAct and legacy pipelines failed: {e} / {legacy_err}",
-                    "threat_assessment": "MODERATE",
-                    "confidence": 0.0,
-                    "sources_used": [],
-                    "agent_chain": ["error"],
-                    "tool_trace": [],
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "mode": "error",
-                }
-        else:
-            return {
-                "query": query,
-                "analysis": f"Legacy pipeline failed: {e}",
-                "threat_assessment": "MODERATE",
-                "confidence": 0.0,
-                "sources_used": [],
-                "agent_chain": ["error"],
-                "tool_trace": [],
-                "timestamp": datetime.now(UTC).isoformat(),
-                "mode": "error",
-            }
+            # Fail closed: a ReAct failure must surface to the backend as a
+            # non-2xx (FastAPI 500). Never silently fall back to the legacy
+            # (no-sources) pipeline or return a mode:"error" HTTP-200 dict —
+            # that would let an analyst receive a degraded report believing it
+            # was a real analysis (Phase 4 / C7).
+            logger.error("react_pipeline_failed", error=str(e))
+            raise
+        logger.error("legacy_pipeline_failed", error=str(e))
+        return {
+            "query": query,
+            "analysis": f"Legacy pipeline failed: {e}",
+            "threat_assessment": "MODERATE",
+            "confidence": 0.0,
+            "sources_used": [],
+            "agent_chain": ["error"],
+            "tool_trace": [],
+            "timestamp": datetime.now(UTC).isoformat(),
+            "mode": "error",
+        }
 
     return {
         "query": query,
