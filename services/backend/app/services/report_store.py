@@ -25,6 +25,7 @@ from app.cypher.report_write import (
     REPORT_SCOPE_UNIQUE_CONSTRAINT,
     REPORT_UPSERT,
 )
+from app.models.intel import IntelAnalysis
 from app.models.report import (
     DossierMetric,
     MarginEntry,
@@ -34,6 +35,7 @@ from app.models.report import (
     ReportRecord,
     ReportUpdateRequest,
 )
+from app.services.briefing import parse_munin_report
 from app.services.neo4j_client import read_query, write_query
 
 _DEFAULT_FINDINGS = [
@@ -262,6 +264,37 @@ async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRec
     if not rows:
         return None
     return _row_to_report(rows[0])
+
+
+# Munin threat label → DossierMetric accent tone (AccentTone Literal: sentinel|amber|sage).
+_THREAT_TONE = {"CRITICAL": "amber", "HIGH": "amber", "ELEVATED": "amber", "MODERATE": "sentinel"}
+
+
+def build_hydration_patch(analysis: IntelAnalysis, country_name: str) -> ReportUpdateRequest:
+    """Map a finished Munin IntelAnalysis into a dossier hydration patch."""
+    parsed = parse_munin_report(analysis.analysis)
+    threat = analysis.threat_assessment or "MODERATE"
+    metrics = [
+        DossierMetric(
+            label="Threat", value=threat, sub="assessment",
+            tone=_THREAT_TONE.get(threat, "sentinel"),
+        ),
+        DossierMetric(
+            label="Confidence", value=f"{analysis.confidence:.0%}", sub="munin", tone="sage",
+        ),
+        DossierMetric(
+            label="Sources", value=str(len(analysis.sources_used)), sub="evidence", tone="sentinel",
+        ),
+    ]
+    return ReportUpdateRequest(
+        confidence=analysis.confidence,
+        context=parsed.context,
+        findings=parsed.findings,
+        body_title=f"{country_name} — Munin Lagebriefing",
+        body_paragraphs=parsed.body_paragraphs,
+        sources=analysis.sources_used,
+        metrics=metrics,
+    )
 
 
 async def bootstrap_report_schema() -> None:
