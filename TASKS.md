@@ -187,7 +187,7 @@ Siehe `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` für d
 Qdrant Collection Lifecycle und Migration Path.
 
 ## Tests
-- Bestehender `POST /api/v1/intel/query` funktioniert mit vLLM
+- Bestehender `POST /api/intel/query` funktioniert mit vLLM
 - Embedding-Server returned Vektoren mit korrekter Dimension (1024)
 - Response-Qualität Spot-Check (3 Fragen manuell vergleichen)
 
