@@ -1,7 +1,6 @@
 """Tests for enhanced retriever pipeline: dense → rerank → graph context."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
-import pytest
+from unittest.mock import AsyncMock, patch
 
 
 class TestEnhancedSearch:
@@ -62,7 +61,10 @@ class TestEnhancedSearch:
         ])
 
         mock_graph_ctx = AsyncMock(
-            return_value="[Knowledge Graph Context]\n  NATO (organization) —[INVOLVES]→ Ukraine (Event)"
+            return_value=(
+                "[Knowledge Graph Context]\n"
+                "  NATO (organization) —[INVOLVES]→ Ukraine (Event)"
+            )
         )
 
         with patch("rag.retriever.search", mock_search), \
@@ -151,7 +153,7 @@ class TestEnhancedSearch:
         with patch("rag.retriever.search", mock_search), \
              patch("rag.retriever._rerank_fn", mock_rerank), \
              patch("rag.retriever._graph_context_fn", mock_graph_ctx):
-            results = await enhanced_search("test")
+            await enhanced_search("test")
 
         # Rerank should have been called (enable_rerank defaults True)
         mock_rerank.assert_called_once()
@@ -171,7 +173,7 @@ class TestEnhancedSearch:
         with patch("rag.retriever.search", mock_search), \
              patch("rag.retriever._get_graph_client", return_value=mock_gc), \
              patch("rag.retriever._graph_context_fn", mock_graph_ctx):
-            results = await enhanced_search(
+            await enhanced_search(
                 "NATO",
                 enable_hybrid=False,
                 enable_rerank=False,

@@ -1,7 +1,6 @@
 """Tests for TEI-based reranker."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
-import pytest
 
 from rag.reranker import rerank
 

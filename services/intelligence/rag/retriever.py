@@ -1,5 +1,7 @@
 """Qdrant retriever for hybrid search with payload filtering."""
 
+import contextlib
+
 import httpx
 import structlog
 from qdrant_client import AsyncQdrantClient
@@ -8,7 +10,7 @@ from config import settings
 from graph.client import GraphClient
 from rag.embedder import embed_text
 from rag.graph_context import get_graph_context as _graph_context_fn
-from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+from rag.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 from rag.reranker import rerank as _rerank_fn
 
 # Lazy singleton GraphClient for graph context injection
@@ -22,12 +24,10 @@ def _get_graph_client() -> GraphClient | None:
     """Get or create a shared GraphClient from config settings."""
     global _graph_client
     if _graph_client is None and settings.neo4j_uri:
-        try:
+        with contextlib.suppress(Exception):
             _graph_client = GraphClient(
                 settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password,
             )
-        except Exception:
-            pass
     return _graph_client
 
 logger = structlog.get_logger()
@@ -36,7 +36,7 @@ logger = structlog.get_logger()
 async def _ensure_schema_validated() -> None:
     """Validate the Qdrant collection schema once before the first search.
 
-    Raises QdrantSchemaMismatch if the collection exists but has the wrong schema.
+    Raises QdrantSchemaMismatchError if the collection exists but has the wrong schema.
     Network errors are swallowed — let the search call surface them naturally.
     """
     global _schema_validated
@@ -50,7 +50,7 @@ async def _ensure_schema_validated() -> None:
             info = await client.get_collection(settings.qdrant_collection)
             validate_collection_schema(info, enable_hybrid=settings.enable_hybrid)
         _schema_validated = True
-    except QdrantSchemaMismatch:
+    except QdrantSchemaMismatchError:
         raise
     except Exception:
         # Network / connection errors — don't block startup
@@ -154,7 +154,10 @@ async def enhanced_search(
     if enable_hybrid:
         logger.warning(
             "hybrid_search_not_available",
-            reason="Requires odin_v2 collection with sparse vectors (Phase 2). Falling back to dense-only.",
+            reason=(
+                "Requires odin_v2 collection with sparse vectors (Phase 2). "
+                "Falling back to dense-only."
+            ),
         )
         enable_hybrid = False  # graceful fallback to dense
 

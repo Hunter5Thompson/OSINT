@@ -1,7 +1,6 @@
 """Tests for Neo4j graph context injection via GraphClient."""
 
-from unittest.mock import AsyncMock, patch
-import pytest
+from unittest.mock import AsyncMock
 
 from rag.graph_context import get_graph_context
 

@@ -1,8 +1,10 @@
 """Tests for Neo4j graph Pydantic models."""
 
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
-from graph.models import Entity, Event, Source, Location
+
+from graph.models import Entity, Event, Location, Source
 
 
 class TestEntity:
@@ -43,7 +45,7 @@ class TestEvent:
     def test_defaults(self):
         ev = Event(
             title="Drone Strike",
-            timestamp=datetime(2026, 3, 30, tzinfo=timezone.utc),
+            timestamp=datetime(2026, 3, 30, tzinfo=UTC),
             codebook_type="military.drone_attack",
             severity="high",
         )
@@ -57,7 +59,7 @@ class TestEvent:
         with pytest.raises(ValueError):
             Event(
                 title="t",
-                timestamp=datetime.now(tz=timezone.utc),
+                timestamp=datetime.now(tz=UTC),
                 codebook_type="x",
                 severity="extreme",
             )

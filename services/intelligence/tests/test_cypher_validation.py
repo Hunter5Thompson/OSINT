@@ -4,10 +4,8 @@ Covers: keyword blocking, semicolon injection, CALL/LOAD CSV/FOREACH,
 and ensures legitimate read queries pass through.
 """
 
-import pytest
 
 from graph.read_queries import validate_cypher_readonly
-
 
 # ── LEGITIMATE READ QUERIES (must PASS) ──
 
@@ -34,7 +32,8 @@ class TestCypherReadonlyAllowsReads:
 
     def test_shortest_path(self):
         assert validate_cypher_readonly(
-            "MATCH path = shortestPath((a:Entity {name: 'X'})-[*..4]-(b:Entity {name: 'Y'})) RETURN path"
+            "MATCH path = shortestPath((a:Entity {name: 'X'})-[*..4]-"
+            "(b:Entity {name: 'Y'})) RETURN path"
         ) is True
 
     def test_aggregation_functions(self):
@@ -109,7 +108,10 @@ class TestCypherReadonlyBlocksInjections:
 
     def test_call_dbms(self):
         """CALL dbms.* can change system config."""
-        assert validate_cypher_readonly("CALL dbms.security.createUser('hacker', 'pw', false)") is False
+        assert (
+            validate_cypher_readonly("CALL dbms.security.createUser('hacker', 'pw', false)")
+            is False
+        )
 
     def test_call_without_braces(self):
         """CALL without { } should still be blocked."""

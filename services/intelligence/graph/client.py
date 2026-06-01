@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import neo4j
-from neo4j import AsyncGraphDatabase
 import structlog
+from neo4j import AsyncGraphDatabase
 
 log = structlog.get_logger(__name__)
 

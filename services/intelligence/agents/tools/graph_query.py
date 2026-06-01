@@ -14,7 +14,6 @@ import structlog
 from langchain_core.tools import tool
 
 from agents.tools.graph_templates import (
-    TEMPLATES,
     build_cypher_from_template,
     inject_limit,
     select_template,
@@ -106,7 +105,13 @@ async def execute_graph_query(
 
     except Exception as e:
         duration_ms = int((time.monotonic() - start) * 1000)
-        log.warning("graph_query_failed", mode=mode, template_id=tid, error=str(e), duration_ms=duration_ms)
+        log.warning(
+            "graph_query_failed",
+            mode=mode,
+            template_id=tid,
+            error=str(e),
+            duration_ms=duration_ms,
+        )
         return f"Graph query failed: {e}"
 
 
@@ -190,36 +195,36 @@ def _match_intent(question: str) -> tuple[str | None, dict]:
         proper_nouns = [w for w in words[1:] if w and w[0].isupper()] if len(words) > 1 else []
         entity = " ".join(proper_nouns) if proper_nouns else ""
 
-    if any(kw in q for kw in ("most connected", "top entities", "most important", "highest degree")):
+    if any(
+        kw in q for kw in ("most connected", "top entities", "most important", "highest degree")
+    ):
         return "top_connected", {}
 
     if any(kw in q for kw in ("timeline", "events in", "events at")):
         location = entity or question.split("in ")[-1].split("at ")[-1].strip(" ?.")
         return "event_timeline", {"location": location}
 
-    if any(kw in q for kw in ("co-occur", "appear together", "related entities", "co-occurring")):
-        if entity:
-            return "co_occurring", {"name": entity}
+    if entity and any(
+        kw in q for kw in ("co-occur", "appear together", "related entities", "co-occurring")
+    ):
+        return "co_occurring", {"name": entity}
 
-    if any(kw in q for kw in ("sources for", "evidence", "reported by", "source")):
-        if entity:
-            return "source_backed", {"name": entity}
+    if entity and any(kw in q for kw in ("sources for", "evidence", "reported by", "source")):
+        return "source_backed", {"name": entity}
 
-    if any(kw in q for kw in ("events involving", "events about", "events for")):
-        if entity:
-            return "events_by_entity", {"name": entity}
+    if entity and any(kw in q for kw in ("events involving", "events about", "events for")):
+        return "events_by_entity", {"name": entity}
 
-    if any(kw in q for kw in ("network", "2-hop", "connections around")):
-        if entity:
-            return "two_hop_network", {"name": entity}
+    if entity and any(kw in q for kw in ("network", "2-hop", "connections around")):
+        return "two_hop_network", {"name": entity}
 
-    if any(kw in q for kw in ("connected to", "related to", "neighbors of", "linked to")):
-        if entity:
-            return "one_hop", {"name": entity}
+    if entity and any(
+        kw in q for kw in ("connected to", "related to", "neighbors of", "linked to")
+    ):
+        return "one_hop", {"name": entity}
 
-    if any(kw in q for kw in ("who is", "what is", "find entity", "look up")):
-        if entity:
-            return "entity_lookup", {"name": entity}
+    if entity and any(kw in q for kw in ("who is", "what is", "find entity", "look up")):
+        return "entity_lookup", {"name": entity}
 
     # Generic entity query — if we have an entity name, try entity_lookup
     if entity:
@@ -237,6 +242,7 @@ async def _free_cypher_fallback(question: str) -> str:
 
     try:
         from openai import AsyncOpenAI
+
         from config import settings
 
         client = AsyncOpenAI(base_url=settings.llm_base_url, api_key="not-needed")

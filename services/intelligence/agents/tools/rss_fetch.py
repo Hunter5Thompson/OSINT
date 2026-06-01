@@ -42,7 +42,9 @@ async def rss_fetch(feed_url: str) -> str:
                 published_iso = parsedate_to_datetime(pub_date).isoformat() if pub_date else None
             except (TypeError, ValueError):
                 published_iso = None
-            domain = (urlparse(link).netloc or urlparse(feed_url).netloc or "rss").removeprefix("www.")
+            domain = (
+                urlparse(link).netloc or urlparse(feed_url).netloc or "rss"
+            ).removeprefix("www.")
             items.append(to_evidence_item({
                 "score": 1.0 - idx * 0.001,
                 "source_type": "rss",

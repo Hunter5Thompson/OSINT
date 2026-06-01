@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from qdrant_client.models import (
     CollectionConfig,
     CollectionInfo,
@@ -15,7 +14,6 @@ from qdrant_client.models import (
     SparseVectorParams,
     VectorParams,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,53 +57,52 @@ class TestIntelligenceValidator:
         validate_collection_schema(_hybrid(), enable_hybrid=True)
 
     def test_wrong_size_raises(self) -> None:
-        from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+        from rag.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 
-        with pytest.raises(QdrantSchemaMismatch, match="768"):
+        with pytest.raises(QdrantSchemaMismatchError, match="768"):
             validate_collection_schema(_dense_only(size=768), enable_hybrid=False)
 
     def test_phase1_in_hybrid_mode_raises(self) -> None:
         """Phase-2 refusal: Phase 1 collection + hybrid mode must raise."""
-        from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+        from rag.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)named|hybrid|dense"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)named|hybrid|dense"):
             validate_collection_schema(_dense_only(), enable_hybrid=True)
 
     def test_hybrid_missing_sparse_raises(self) -> None:
-        from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+        from rag.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)sparse"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)sparse"):
             validate_collection_schema(_hybrid(include_sparse=False), enable_hybrid=True)
 
     def test_hybrid_missing_named_dense_raises(self) -> None:
         """Hybrid collection without named 'dense' vector must raise."""
-        from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+        from rag.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 
         # Named vectors, but NOT named 'dense'
         info = _make_info(
             vectors={"text": VectorParams(size=1024, distance=Distance.COSINE)},
             sparse_vectors={"bm25": SparseVectorParams(index=SparseIndexParams(on_disk=False))},
         )
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)dense"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)dense"):
             validate_collection_schema(info, enable_hybrid=True)
 
     def test_hybrid_dense_wrong_distance_raises(self) -> None:
         """Hybrid collection with named 'dense' vector and wrong distance must raise."""
-        from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+        from rag.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 
-        info = _hybrid()
         # Override the dense vector with wrong distance
         wrong_info = _make_info(
             vectors={"dense": VectorParams(size=1024, distance=Distance.EUCLID)},
             sparse_vectors={"bm25": SparseVectorParams(index=SparseIndexParams(on_disk=False))},
         )
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)euclid|distance"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)euclid|distance"):
             validate_collection_schema(wrong_info, enable_hybrid=True)
 
     def test_exception_is_value_error(self) -> None:
-        from rag.qdrant_schema import QdrantSchemaMismatch
+        from rag.qdrant_schema import QdrantSchemaMismatchError
 
-        assert issubclass(QdrantSchemaMismatch, ValueError)
+        assert issubclass(QdrantSchemaMismatchError, ValueError)
 
 
 # ---------------------------------------------------------------------------
@@ -141,13 +138,13 @@ class TestRetrieverPreflight:
 
     @pytest.mark.asyncio
     async def test_phase2_code_refuses_phase1_collection(self) -> None:
-        """Phase 2 hybrid mode + Phase 1 collection schema → raises QdrantSchemaMismatch.
+        """Phase 2 hybrid mode + Phase 1 collection schema → raises QdrantSchemaMismatchError.
 
         This is the Phase-2 refusal test: search() must NOT reach Qdrant when
         the schema doesn't match the configured mode.
         """
         import rag.retriever as retriever
-        from rag.qdrant_schema import QdrantSchemaMismatch
+        from rag.qdrant_schema import QdrantSchemaMismatchError
 
         retriever._schema_validated = False
 
@@ -165,7 +162,7 @@ class TestRetrieverPreflight:
             mock_settings.qdrant_collection = "odin_intel"
             mock_settings.enable_hybrid = True  # hybrid enabled
 
-            with pytest.raises(QdrantSchemaMismatch):
+            with pytest.raises(QdrantSchemaMismatchError):
                 await retriever._ensure_schema_validated()
 
     @pytest.mark.asyncio

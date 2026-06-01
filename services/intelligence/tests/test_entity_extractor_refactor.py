@@ -1,9 +1,10 @@
 """Tests that entity_extractor uses GraphClient instead of raw HTTP."""
 
 from unittest.mock import AsyncMock
+
 import pytest
 
-from extraction.entity_extractor import EntityExtractor, ExtractionResult, ExtractedEntity
+from extraction.entity_extractor import EntityExtractor, ExtractedEntity, ExtractionResult
 
 # Valid entity types (must match the whitelist in ExtractedEntity)
 VALID_TYPES = {"Person", "Organization", "Country", "Location", "Facility", "Commodity", "Event"}

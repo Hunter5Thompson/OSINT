@@ -1,11 +1,11 @@
 """Tests for deterministic Cypher write templates."""
 
 from graph.write_templates import (
-    UPSERT_ENTITY,
     CREATE_EVENT,
     LINK_ENTITY_EVENT,
-    LINK_EVENT_SOURCE,
     LINK_EVENT_LOCATION,
+    LINK_EVENT_SOURCE,
+    UPSERT_ENTITY,
 )
 
 

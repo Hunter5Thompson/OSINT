@@ -14,14 +14,14 @@ from __future__ import annotations
 
 from qdrant_client.models import CollectionInfo, Distance, VectorParams
 
-__all__ = ["QdrantSchemaMismatch", "validate_collection_schema"]
+__all__ = ["QdrantSchemaMismatchError", "validate_collection_schema"]
 
 EXPECTED_DENSE_SIZE = 1024
 EXPECTED_DISTANCE = Distance.COSINE
 NAMED_DENSE_KEY = "dense"
 
 
-class QdrantSchemaMismatch(ValueError):
+class QdrantSchemaMismatchError(ValueError):
     """Raised when a Qdrant collection's vector schema does not match expectations."""
 
 
@@ -33,7 +33,7 @@ def validate_collection_schema(
     """Validate that *info* matches the expected schema for *enable_hybrid* mode.
 
     Raises:
-        QdrantSchemaMismatch: On ANY schema violation.
+        QdrantSchemaMismatchError: On ANY schema violation.
     """
     params = info.config.params
     vectors = params.vectors
@@ -47,7 +47,7 @@ def validate_collection_schema(
 
 def _validate_dense_only(vectors) -> None:  # type: ignore[type-arg]
     if isinstance(vectors, dict):
-        raise QdrantSchemaMismatch(
+        raise QdrantSchemaMismatchError(
             "dense-only mode expects an unnamed vector, but the collection uses named "
             f"vectors: {list(vectors.keys())}. "
             "This looks like a hybrid (Phase 2) collection."
@@ -57,18 +57,18 @@ def _validate_dense_only(vectors) -> None:  # type: ignore[type-arg]
 
 def _validate_hybrid(vectors, sparse_vectors) -> None:  # type: ignore[type-arg]
     if not isinstance(vectors, dict):
-        raise QdrantSchemaMismatch(
+        raise QdrantSchemaMismatchError(
             "hybrid mode expects a named 'dense' vector, but the collection has "
             "a single unnamed dense vector (Phase 1 schema)."
         )
     if NAMED_DENSE_KEY not in vectors:
-        raise QdrantSchemaMismatch(
+        raise QdrantSchemaMismatchError(
             f"hybrid mode requires a vector named '{NAMED_DENSE_KEY}', "
             f"but only found: {list(vectors.keys())}."
         )
     _check_dense_params(vectors[NAMED_DENSE_KEY], label=f"named '{NAMED_DENSE_KEY}'")
     if not sparse_vectors:
-        raise QdrantSchemaMismatch(
+        raise QdrantSchemaMismatchError(
             "hybrid mode requires at least one sparse vector config (BM25/SPLADE), "
             "but sparse_vectors is absent or empty."
         )
@@ -76,12 +76,13 @@ def _validate_hybrid(vectors, sparse_vectors) -> None:  # type: ignore[type-arg]
 
 def _check_dense_params(params: VectorParams, *, label: str) -> None:
     if params.size != EXPECTED_DENSE_SIZE:
-        raise QdrantSchemaMismatch(
+        raise QdrantSchemaMismatchError(
             f"Expected {label} vector size {EXPECTED_DENSE_SIZE}, got {params.size}."
         )
     actual_distance = params.distance
     if actual_distance != EXPECTED_DISTANCE:
-        raise QdrantSchemaMismatch(
+        shown = actual_distance.value if hasattr(actual_distance, "value") else actual_distance
+        raise QdrantSchemaMismatchError(
             f"Expected {label} vector distance {EXPECTED_DISTANCE.value} (Cosine), "
-            f"got {actual_distance.value if hasattr(actual_distance, 'value') else actual_distance}."
+            f"got {shown}."
         )

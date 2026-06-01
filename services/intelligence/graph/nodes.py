@@ -3,9 +3,12 @@
 import structlog
 from langchain_core.messages import HumanMessage
 
-from agents.analyst_agent import create_analyst_llm, get_system_message as analyst_sys
-from agents.osint_agent import create_osint_llm, get_system_message as osint_sys
-from agents.synthesis_agent import create_synthesis_llm, get_system_message as synthesis_sys
+from agents.analyst_agent import create_analyst_llm
+from agents.analyst_agent import get_system_message as analyst_sys
+from agents.osint_agent import create_osint_llm
+from agents.osint_agent import get_system_message as osint_sys
+from agents.synthesis_agent import create_synthesis_llm
+from agents.synthesis_agent import get_system_message as synthesis_sys
 from graph.state import AgentState
 
 logger = structlog.get_logger()

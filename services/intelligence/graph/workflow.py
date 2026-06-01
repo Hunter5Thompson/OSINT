@@ -1,26 +1,28 @@
 """LangGraph workflow — ReAct agent + deterministic synthesis with legacy fallback."""
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from config import settings
-from rag.evidence import parse_evidence_refs
 from agents.react_agent import (
     REACT_SYSTEM_PROMPT,
     create_react_agent,
     should_continue,
 )
+from agents.synthesis_agent import create_synthesis_llm
+from agents.synthesis_agent import get_system_message as synthesis_sys
 from agents.tools import ALL_TOOLS
 from agents.tools.graph_query import set_graph_client
-from agents.synthesis_agent import create_synthesis_llm, get_system_message as synthesis_sys
+from config import settings
 from graph.client import GraphClient
-from graph.nodes import analyst_node, osint_node, router_node, synthesis_node as legacy_synthesis_node
+from graph.nodes import analyst_node, osint_node, router_node
+from graph.nodes import synthesis_node as legacy_synthesis_node
 from graph.state import AgentState
+from rag.evidence import parse_evidence_refs
 
 logger = structlog.get_logger()
 
@@ -168,9 +170,15 @@ async def react_synthesis_node(state: AgentState) -> dict:
         tool_results = []
         for msg in state.get("messages", []):
             if hasattr(msg, "content") and getattr(msg, "type", None) == "tool":
-                tool_results.append(msg.content if isinstance(msg.content, str) else str(msg.content))
+                tool_results.append(
+                    msg.content if isinstance(msg.content, str) else str(msg.content)
+                )
 
-        research_text = "\n\n---\n\n".join(tool_results) if tool_results else "No research results collected."
+        research_text = (
+            "\n\n---\n\n".join(tool_results)
+            if tool_results
+            else "No research results collected."
+        )
         raw_research_chars = len(research_text)
         research_text = _clip_text(research_text, SYNTHESIS_RESEARCH_MAX_CHARS)
 
@@ -305,7 +313,9 @@ def _ensure_graph_client() -> None:
         return
     from config import settings
     try:
-        _graph_client = GraphClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
+        _graph_client = GraphClient(
+            settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password
+        )
         set_graph_client(_graph_client)
         logger.info("graph_client_initialized")
     except Exception as e:
@@ -362,7 +372,7 @@ async def run_intelligence_query(
                 react_graph.ainvoke(initial_state),
                 timeout=settings.react_total_timeout_s,
             )
-    except (asyncio.TimeoutError, Exception) as e:
+    except (TimeoutError, Exception) as e:
         if not use_legacy:
             logger.warning("react_fallback_to_legacy", error=str(e))
             try:
@@ -378,7 +388,7 @@ async def run_intelligence_query(
                     "sources_used": [],
                     "agent_chain": ["error"],
                     "tool_trace": [],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "mode": "error",
                 }
         else:
@@ -390,7 +400,7 @@ async def run_intelligence_query(
                 "sources_used": [],
                 "agent_chain": ["error"],
                 "tool_trace": [],
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "mode": "error",
             }
 
@@ -402,7 +412,7 @@ async def run_intelligence_query(
         "confidence": result.get("confidence", 0.0),
         "threat_assessment": result.get("threat_assessment", "MODERATE"),
         "tool_trace": result.get("tool_trace", []),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "mode": mode,
     }
 

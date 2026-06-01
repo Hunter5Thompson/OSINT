@@ -1,10 +1,11 @@
 """Tests for classify_event tool."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
-from agents.tools.classify import classify_event, _format_extraction_result
-from codebook.extractor import IntelligenceExtractionResult, ExtractedEventRaw, ExtractedEntityRaw
+import pytest
+
+from agents.tools.classify import _format_extraction_result, classify_event
+from codebook.extractor import ExtractedEntityRaw, ExtractedEventRaw, IntelligenceExtractionResult
 
 
 class TestFormatExtractionResult:
@@ -36,8 +37,18 @@ class TestFormatExtractionResult:
     def test_multiple_events_formatted(self):
         result = IntelligenceExtractionResult(
             events=[
-                ExtractedEventRaw(title="Event A", codebook_type="military.airstrike", severity="high", confidence=0.8),
-                ExtractedEventRaw(title="Event B", codebook_type="political.sanctions_imposed", severity="medium", confidence=0.7),
+                ExtractedEventRaw(
+                    title="Event A",
+                    codebook_type="military.airstrike",
+                    severity="high",
+                    confidence=0.8,
+                ),
+                ExtractedEventRaw(
+                    title="Event B",
+                    codebook_type="political.sanctions_imposed",
+                    severity="medium",
+                    confidence=0.7,
+                ),
             ],
         )
         text = _format_extraction_result(result)
@@ -49,7 +60,8 @@ class TestClassifyEventTool:
     @pytest.mark.asyncio
     async def test_empty_text_returns_message(self):
         result = await classify_event.ainvoke({"text": "", "context": ""})
-        assert "provide text" in result.lower() or "empty" in result.lower() or "provide" in result.lower()
+        lowered = result.lower()
+        assert "provide text" in lowered or "empty" in lowered or "provide" in lowered
 
     @pytest.mark.asyncio
     async def test_text_too_long_gets_truncated(self):
@@ -59,7 +71,7 @@ class TestClassifyEventTool:
             mock_extractor.extract.return_value = IntelligenceExtractionResult()
             mock_get.return_value = mock_extractor
 
-            result = await classify_event.ainvoke({"text": long_text, "context": ""})
+            await classify_event.ainvoke({"text": long_text, "context": ""})
             mock_extractor.extract.assert_called_once()
 
     @pytest.mark.asyncio

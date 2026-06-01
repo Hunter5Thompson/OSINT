@@ -1,12 +1,13 @@
 """Tests for graph_query tool — template routing + free Cypher fallback."""
 
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from agents.tools.graph_query import (
-    route_to_template,
-    execute_graph_query,
     _format_results,
+    execute_graph_query,
+    route_to_template,
 )
 
 
@@ -85,7 +86,9 @@ class TestExecuteGraphQuery:
         )
 
         call_args = mock_client.run_query.call_args
-        executed_cypher = call_args.args[0] if call_args.args else call_args.kwargs.get("cypher", "")
+        executed_cypher = (
+            call_args.args[0] if call_args.args else call_args.kwargs.get("cypher", "")
+        )
         assert "LIMIT" in executed_cypher
 
     @pytest.mark.asyncio

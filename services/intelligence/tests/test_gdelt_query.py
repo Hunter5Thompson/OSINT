@@ -13,7 +13,7 @@ class _DummyAsyncClient:
     def __init__(self, response: MagicMock):
         self._response = response
 
-    async def __aenter__(self) -> "_DummyAsyncClient":
+    async def __aenter__(self) -> _DummyAsyncClient:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> bool:

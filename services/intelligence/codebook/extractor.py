@@ -10,7 +10,7 @@ import httpx
 import structlog
 from pydantic import BaseModel, Field
 
-from codebook.loader import load_codebook, get_all_event_types, validate_codebook
+from codebook.loader import get_all_event_types, load_codebook, validate_codebook
 
 log = structlog.get_logger(__name__)
 
@@ -123,31 +123,35 @@ class IntelligenceExtractor:
     def _build_system_prompt(self, codebook: dict) -> str:
         """Build system prompt with all event types and entity types."""
         type_lines = []
-        for cat_key, cat_data in codebook["categories"].items():
+        for cat_data in codebook["categories"].values():
             for entry in cat_data["types"]:
                 type_lines.append(f"  - {entry['type']}: {entry['description']}")
 
         event_types_str = "\n".join(type_lines)
 
-        return f"""\
-You are an OSINT intelligence extraction specialist. Analyze the provided text and extract:
-
-1. EVENTS: Classify each event using the codebook types below.
-2. ENTITIES: Extract all named entities (persons, organizations, locations, weapons, satellites, vessels, aircraft, military units).
-3. LOCATIONS: Extract geographic locations with country.
-
-EVENT CODEBOOK TYPES:
-{event_types_str}
-
-ENTITY TYPES: person, organization, location, weapon_system, satellite, vessel, aircraft, military_unit
-
-RULES:
-- Use exact codebook_type values from the list above
-- If no event type matches, use "other.unclassified"
-- Confidence: 0.0 to 1.0 (how certain you are)
-- Severity: low, medium, high, critical
-- Maximum 5 events and 20 entities per document
-- Return valid JSON only"""
+        return (
+            "You are an OSINT intelligence extraction specialist. "
+            "Analyze the provided text and extract:\n"
+            "\n"
+            "1. EVENTS: Classify each event using the codebook types below.\n"
+            "2. ENTITIES: Extract all named entities (persons, organizations, "
+            "locations, weapons, satellites, vessels, aircraft, military units).\n"
+            "3. LOCATIONS: Extract geographic locations with country.\n"
+            "\n"
+            "EVENT CODEBOOK TYPES:\n"
+            f"{event_types_str}\n"
+            "\n"
+            "ENTITY TYPES: person, organization, location, weapon_system, "
+            "satellite, vessel, aircraft, military_unit\n"
+            "\n"
+            "RULES:\n"
+            "- Use exact codebook_type values from the list above\n"
+            '- If no event type matches, use "other.unclassified"\n'
+            "- Confidence: 0.0 to 1.0 (how certain you are)\n"
+            "- Severity: low, medium, high, critical\n"
+            "- Maximum 5 events and 20 entities per document\n"
+            "- Return valid JSON only"
+        )
 
     async def extract(
         self,

@@ -1,6 +1,7 @@
 """Tests for the async Neo4j client wrapper. Uses mock driver."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from graph.client import GraphClient
@@ -20,7 +21,7 @@ def _async_iter(items):
             try:
                 return next(self._it)
             except StopIteration:
-                raise StopAsyncIteration
+                raise StopAsyncIteration from None
 
     return _AsyncIter()
 
