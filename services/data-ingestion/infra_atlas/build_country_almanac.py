@@ -22,6 +22,7 @@ from infra_atlas.almanac_constants import (
     FACTBOOK_TARBALL_URL,
     FIELD_MAP,
     MAP_STUB_TOPO_IDS,
+    REST_FALLBACK_ISO3,
     RESTCOUNTRIES_URL,
 )
 
@@ -265,7 +266,7 @@ def refresh(refreshed_at: str) -> None:
                 "topo_id": topo_id,
                 "m49": topo_id,
                 "iso3": iso3,
-                "gec": iso3_gec.get(iso3, ""),
+                "gec": "" if iso3 in REST_FALLBACK_ISO3 else iso3_gec.get(iso3, ""),
             }
         countries.append(entry)
 
