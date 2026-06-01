@@ -42,7 +42,7 @@ POST /api/almanac/countries/{id}/briefing            (backend: routers/almanac.p
   │  2. country = store.get_country(id)               → 404 if unknown
   │  3. signals = match_country_signals(country, snapshot_signals(), limit=5)
   │       snapshot_signals() scans ALL retained ring-buffer entries (≤2000, 15-min window)
-  │  4. task, grounding_context, grounding_evidence = build_briefing_context(country, facts, signals, budget)
+  │  4. task, grounding_context, grounding_evidence = build_briefing_context(country, signals, factbook_revision=…, refreshed_at=…)
   │  5. async for event in stream_intel_query(query=task,
   │                                            grounding_context=grounding_context,
   │                                            grounding_evidence=grounding_evidence): yield event
@@ -87,7 +87,7 @@ RESEARCH_ALIASES = {
 ```
 Lookup in `build_briefing_context`: `RESEARCH_ALIASES.get(country.iso3) or RESEARCH_ALIASES.get(country.name) or []`. These are **research hints, not Almanac facts** — deliberately not in the seed; this list is closed for the MVP and grows only via the deferred general alias data-contract (§7).
 
-**`build_briefing_context(country, facts, signals, *, budget_chars=4000) -> BriefingContext`**
+**`build_briefing_context(country, signals, *, factbook_revision, refreshed_at, budget_chars=4000) -> BriefingContext`** (facts are read from `country.facts`; `factbook_revision`+`refreshed_at` come from the store's `_meta` and feed the almanac `doc_id`)
 Returns a small dataclass / NamedTuple `BriefingContext(task: str, grounding_context: str, grounding_evidence: list[dict])`:
 
 - **`task`** (≤ ~800 chars, well within the 2000-char `query` limit): the compact instruction, e.g.
@@ -180,9 +180,9 @@ Honestly documented as **status-SSE** (not token streaming). Both `routers/intel
 ### 3.6 Backend endpoints (`services/backend/app/routers/almanac.py`)
 
 - **`POST /almanac/countries/{country_id}/briefing`** → `EventSourceResponse`. Loads country (404 if unknown), snapshots+matches signals, calls `build_briefing_context`, delegates to `stream_intel_query(query=ctx.task, grounding_context=ctx.grounding_context, grounding_evidence=ctx.grounding_evidence)`.
-- **`POST /almanac/countries/{country_id}/briefing/save`** (stateless) — request body `BriefingSaveRequest { analysis: IntelAnalysis }`, re-validated by Pydantic with a validator that **`analysis.analysis.strip()` must be non-empty → 422** (`IntelAnalysis.analysis` permits `""`, `intel.py:32`, which would otherwise violate the non-empty chat message). Steps:
+- **`POST /almanac/countries/{country_id}/briefing/save`** (stateless) — request body `BriefingSaveRequest { analysis: IntelAnalysis }`, re-validated by Pydantic with a validator that **`analysis.analysis.strip()` must be non-empty → 422** (`IntelAnalysis.analysis` permits `""`, `intel.py:32`, which would otherwise violate the non-empty chat message). **Precondition:** returns **503** if `app.state.report_schema_ready` is false (the unique constraints aren't bootstrapped yet, so lookup-or-create wouldn't be race-safe). If `update_report` or `append_report_message` returns `None`, also **503** (never report false success). Steps:
   1. Resolve `scope_key = f"country:{country.iso3}"` or `f"country:m49:{country.m49}"` for id-less stubs.
-  2. `report = await get_or_create_report_by_scope(scope_key, country)`.
+  2. `report = await get_or_create_report_by_scope(scope_key, title=…, location=…, coords=…)` (router computes the fields from `country`).
   3. Parse `analysis.analysis` markdown (§3.7) → hydrate report fields.
   4. Append `ReportMessage(role="munin", text=<truncated to 8000>)`.
   5. Return the updated `ReportRecord` (so the frontend can navigate to it).
@@ -192,7 +192,8 @@ Honestly documented as **status-SSE** (not token streaming). Both `routers/intel
 - **`scope_key` threaded everywhere (else `update_report` nulls it):** `update_report` re-reads the record (`_row_to_report`), merges the patch, then re-upserts the **full** row via `_report_params` + `REPORT_UPSERT` (`report_store.py:224`). So `scope_key` must be added to: the `ReportRecord` + `ReportCreateRequest` models; the frontend `ReportRecord` type; **every** RETURN projection (`REPORT_BY_ID` `:32`, `REPORT_LIST` `:8`, the new `REPORT_BY_SCOPE`); `_row_to_report` (`:110`); `_report_params` (`:144`); and the `REPORT_UPSERT` `SET` block (`report_write.py:6`). (`ReportUpdateRequest` needs no `scope_key` field — the value survives because it round-trips read→merge→upsert.)
 - **Uniqueness via schema bootstrap (not DDL in the request):** in the existing idempotent schema-bootstrap path (same mechanism as `incident_id_unique`, `incident_write.py:34`), add `CREATE CONSTRAINT ... IF NOT EXISTS` for **both** `:Report(scope_key)` **and** `:Report(id)`. (Community edition supports node-property uniqueness; multiple `NULL`s are allowed, so existing scope-less reports are unaffected.) The constraint is created once at startup/migration, never inside the save request.
 - **Concurrency:** `_next_paragraph()` is read-then-create (`report_store.py:172`) — not atomic. With the new `:Report(id)` constraint, `create_report` **retries** (re-read `_next_paragraph`, regenerate `r-NNN`) on an `id` constraint violation. `get_or_create_report_by_scope` likewise **re-reads and returns the winner** on a `scope_key` constraint violation. "One dossier per country" becomes a guarantee, not a hope.
-- **`get_or_create_report_by_scope(scope_key, country) -> ReportRecord`:** read via the parameter-bound `REPORT_BY_SCOPE` = `MATCH (r:Report {scope_key:$scope_key}) RETURN ...` (template-only — CLAUDE.md compliant); if absent, `create_report(ReportCreateRequest(scope_key=scope_key, title=f"{country.name} — Lagebild", location=country.name, coords=<capital lat/lon or "--">))`, catching the constraint violation → re-read.
+- **`get_or_create_report_by_scope(scope_key, *, title, location, coords) -> ReportRecord`:** read via the parameter-bound `REPORT_BY_SCOPE` = `MATCH (r:Report {scope_key:$scope_key}) RETURN ...` (template-only — CLAUDE.md compliant); if absent, `create_report(ReportCreateRequest(scope_key=scope_key, title=title, location=location, coords=coords))`, catching the scope constraint violation → re-read the winner. The country→`title`/`location`/`coords` mapping (`f"{country.name} — Lagebild"`, `country.name`, capital lat/lon or `"--"`) is computed by the `/briefing/save` router before the call.
+- **`create_report` uses a dedicated `REPORT_CREATE` (CREATE, not MERGE).** `REPORT_UPSERT`'s `MERGE (r:Report {id})` silently upserts, so a duplicate id never raises and the documented id-retry could not fire; `REPORT_CREATE` makes `report_id_unique` actually trigger on a paragraph race. `update_report` keeps `REPORT_UPSERT` (upsert is correct for edits).
 - **Hydration mapping** (deterministic markdown parser `parse_munin_report(text) -> ParsedReport`): extract the synthesis sections (Executive Summary, Key Findings, Threat Assessment, Confidence, Recommended Actions). Map:
   - `context` ← Executive Summary
   - `findings` ← Key Findings bullets
@@ -204,7 +205,7 @@ Honestly documented as **status-SSE** (not token streaming). Both `routers/intel
   - `metrics` ← **deterministically rebuilt** from the briefing (overrides `_DEFAULT_METRICS`; on `update_report` the value is written directly, not `… or default`): `[{label:"Threat", value:threat_assessment, sub:"assessment", tone:<sentinel|amber by threat>}, {label:"Confidence", value:f"{confidence:.0%}", sub:"munin", tone:"sage"}, {label:"Sources", value:str(len(sources_used)), sub:"evidence", tone:"sentinel"}]` (`DossierMetric` = `{label, value, sub, tone}`).
   - **Fallback when headings are absent:** `context` = truncated full text, `body_paragraphs` = `[full report]`, `findings` = `[]`. **No default scaffold findings** for a saved Munin briefing.
 - **Truncation:** the dossier `body_paragraphs` keep the full report; the appended chat `ReportMessage.text` is deterministically truncated to 8000 chars (max per `report.py:88`) with a trailing `" …[gekürzt]"` marker, and is guaranteed non-empty (min_length=1).
-- **Reuse, no new write path:** hydration calls the existing `update_report(report.id, ReportUpdateRequest(...))`; the chat copy calls the existing `append_report_message(report.id, ReportMessageCreate(role="munin", text=<truncated>))`. Only `scope_key` plumbing (model + `REPORT_UPSERT` SET + `_report_params` + `REPORT_BY_SCOPE`) is genuinely new.
+- **Reuse, mostly:** hydration calls the existing `update_report` (which must re-validate the merged record so `DossierMetric`/`MarginEntry` patches survive `model_dump`); the chat copy calls the existing `append_report_message`. Genuinely new write surface: `scope_key` plumbing (model + `REPORT_UPSERT` SET + `_report_params` + `REPORT_BY_SCOPE`), the dedicated `REPORT_CREATE`, and the two unique-constraint templates.
 
 ### 3.8 Frontend
 
@@ -230,6 +231,8 @@ Honestly documented as **status-SSE** (not token streaming). Both `routers/intel
 | No matched live signals (empty 15-min window) | Grounding states it explicitly; ReAct/GDELT supplies the recent (24–72h) layer. |
 | Intelligence service down / model not loaded / timeout | `stream_intel_query` emits an SSE `error` event; panel shows "Munin nicht erreichbar"; no crash (mirrors `intel.py`). |
 | Save with malformed/missing analysis | Pydantic 422; panel shows save error. |
+| Report schema not bootstrapped (constraints absent) | `/briefing/save` returns 503; the generate path is unaffected. |
+| Dossier hydration / chat persistence returns None | `/briefing/save` returns 503 — no false success. |
 | Report text > 8000 chars | Chat copy truncated with marker; dossier body keeps full text. |
 
 ---

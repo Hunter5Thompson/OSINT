@@ -1341,6 +1341,19 @@ async def test_bootstrap_creates_both_constraints(monkeypatch):
     await report_store.bootstrap_report_schema()
     assert any("report_id_unique" in c for c in calls)
     assert any("report_scope_key_unique" in c for c in calls)
+
+
+@pytest.mark.asyncio
+async def test_update_report_accepts_metrics_patch_without_crashing(graph):
+    # Regression: hydration sends DossierMetric objects through update_report → _report_params.
+    # Without the merged-record re-validation this raises AttributeError on dict.model_dump().
+    from app.models.report import DossierMetric
+    rec = await report_store.create_report(_req(scope_key="country:MET"))
+    updated = await report_store.update_report(
+        rec.id,
+        ReportUpdateRequest(metrics=[DossierMetric(label="Threat", value="HIGH", sub="assessment", tone="amber")]),
+    )
+    assert updated is not None            # real _report_params(json.dumps([m.model_dump()...])) did not crash
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1436,7 +1449,26 @@ REPORT_BY_SCOPE = (
 
 - [ ] **Step 3d: `report_store.py` — params, row, retry, lookup-or-create, bootstrap**
 
-Add `scope_key` to `_report_params` return: `"scope_key": getattr(payload, "scope_key", None),`. Add to `_row_to_report`: `scope_key=row.get("scope_key"),`. Wrap `create_report` with an id-collision retry, and add the new functions:
+Add `scope_key` to `_report_params` return: `"scope_key": getattr(payload, "scope_key", None),`. Add to `_row_to_report`: `scope_key=row.get("scope_key"),`.
+
+**Fix the latent `update_report` metrics bug** (the hydration patch in Task 8 is the first path to send `metrics`/`margin` through `update_report`): `merged = current.model_copy(update=patch.model_dump(exclude_unset=True))` turns nested `DossierMetric`/`MarginEntry` into plain dicts (`model_copy` does not re-validate), then `_report_params` does `json.dumps([m.model_dump() for m in metrics])` → `AttributeError: 'dict' object has no attribute 'model_dump'`. Re-validate the merged record so submodels are reconstructed:
+
+```python
+async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRecord | None:
+    current = await get_report(report_id)
+    if current is None:
+        return None
+    merged = current.model_copy(update=patch.model_dump(exclude_unset=True))
+    merged = ReportRecord.model_validate(merged.model_dump())   # rebuild DossierMetric/MarginEntry from dicts
+    rows = await write_query(
+        REPORT_UPSERT, _report_params(report_id, current.paragraph_num, current.stamp, merged)
+    )
+    if not rows:
+        return None
+    return _row_to_report(rows[0])
+```
+
+Wrap `create_report` with an id-collision retry, and add the new functions:
 
 ```python
 from neo4j.exceptions import ConstraintError  # add to imports
