@@ -204,3 +204,21 @@ async def test_gdacs_config_skips_upsert(collector):
     assert any(
         c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
     )
+
+
+# ── Provenance builder tests (Task 15) ──────────────────────────────
+
+
+def test_build_gdacs_payload_stamps_provenance_and_no_published():
+    from feeds.gdacs_collector import build_gdacs_payload
+    event = {"gdacs_id": "EQ_1", "event_type": "EQ", "event_name": "Quake",
+             "alert_level": "Orange", "severity": 5.0, "country": "X",
+             "latitude": 1.0, "longitude": 2.0,
+             "from_date": "2026-05-30", "to_date": "2026-05-31"}
+    payload = build_gdacs_payload(event, "desc text")
+    assert payload["source_type"] == "dataset"
+    assert payload["provider"] == "gdacs.org"
+    assert "published_at" not in payload
+    assert "credibility_score" not in payload
+    assert "ingested_at" in payload
+    assert "ingested_epoch" in payload

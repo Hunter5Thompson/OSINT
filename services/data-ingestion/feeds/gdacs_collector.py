@@ -7,17 +7,32 @@ Mutable events: first-seen through Pipeline, updates Qdrant-only.
 from __future__ import annotations
 
 import asyncio
-import time
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from qdrant_client.models import PointStruct
 
 from feeds.base import BaseCollector
+from feeds.provenance import dataset_provenance
 
 log = structlog.get_logger("gdacs_collector")
 
 _GDACS_URL = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP"
+
+
+def build_gdacs_payload(event: dict, description: str) -> dict:
+    """GDACS Qdrant payload builder (no network/disk I/O). from_date/to_date stay
+    event times; they are NOT published_at."""
+    now = datetime.now(UTC)
+    return {
+        **dataset_provenance("gdacs"),
+        "source": "gdacs",
+        **event,
+        "ingested_epoch": now.timestamp(),
+        "ingested_at": now.isoformat(),
+        "description": description,
+    }
 
 
 class GDACSCollector(BaseCollector):
@@ -36,7 +51,9 @@ class GDACSCollector(BaseCollector):
             event_id = str(props.get("eventid", ""))
             severity_obj = props.get("severity", {})
             try:
-                severity = float(severity_obj.get("value", 0)) if isinstance(severity_obj, dict) else 0.0
+                severity = (
+                    float(severity_obj.get("value", 0)) if isinstance(severity_obj, dict) else 0.0
+                )
             except (TypeError, ValueError):
                 severity = 0.0
 
@@ -79,7 +96,9 @@ class GDACSCollector(BaseCollector):
             raw_event_id = event["gdacs_id"].split("_")[-1]
             chash = self._content_hash("gdacs", event["event_type"], raw_event_id)
             point_id = self._point_id(chash)
-            description = f"{event['event_name']} - {event['event_type']} alert ({event['alert_level']})"
+            description = (
+                f"{event['event_name']} - {event['event_type']} alert ({event['alert_level']})"
+            )
 
             existing = await asyncio.to_thread(
                 self.qdrant.retrieve,
@@ -136,16 +155,14 @@ class GDACSCollector(BaseCollector):
                 log.warning("gdacs_embed_failed", event_id=event["gdacs_id"])
                 continue
 
-            payload = {
-                "source": "gdacs",
-                **event,
-                "ingested_epoch": time.time(),
-                "description": description,
-            }
+            payload = build_gdacs_payload(event, description)
             point = PointStruct(id=point_id, vector=vector, payload=payload)
             points.append(point)
 
         if points:
             await self._batch_upsert(points)
 
-        log.info("gdacs_complete", total=len(events), new=new_count, updated=update_count, upserted=len(points))
+        log.info(
+            "gdacs_complete", total=len(events), new=new_count,
+            updated=update_count, upserted=len(points),
+        )

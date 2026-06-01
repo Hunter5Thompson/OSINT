@@ -4,6 +4,8 @@ import httpx
 import structlog
 from langchain_core.tools import tool
 
+from rag.evidence import format_evidence_pack, to_evidence_item
+
 logger = structlog.get_logger()
 
 GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
@@ -36,8 +38,10 @@ async def gdelt_query(query: str, max_records: int = 20) -> str:
         max_records: Articles to return (default 20, max 50).
 
     Returns:
-        List of recent articles with title, source domain, publish date,
-        URL — sorted newest first.
+        A budgeted evidence pack: one `[EVIDENCE] {json}` metadata line per
+        article (provider = source domain, source_type = gdelt, url, ...) followed
+        by Title/Excerpt lines. Ordered newest-first. Note: GDELT seendate is an
+        observation timestamp, so published_at is intentionally null.
     """
     try:
         params = {
@@ -74,19 +78,20 @@ async def gdelt_query(query: str, max_records: int = 20) -> str:
         if not articles:
             return f"No GDELT results found for: {query}"
 
-        results: list[str] = []
-        for article in articles[:max_records]:
-            title = article.get("title", "No title")
-            url = article.get("url", "")
-            source = article.get("domain", "unknown")
-            date = article.get("seendate", "")
-            language = article.get("language", "")
-            results.append(
-                f"- [{date}] {title}\n"
-                f"  Source: {source} ({language}) | {url}"
-            )
-
-        return f"[GDELT Results for: {query}]\n" + "\n".join(results)
+        items = [
+            to_evidence_item({
+                "score": 1.0 - idx * 0.001,  # preserve newest-first ordering
+                "source_type": "gdelt",
+                "provider": article.get("domain", "gdelt"),
+                "title": article.get("title", "No title"),
+                "content": article.get("title", ""),
+                "url": article.get("url", ""),
+                # seendate is GDELT observation metadata — deliberately NOT published_at
+            })
+            for idx, article in enumerate(articles[:max_records])
+        ]
+        pack = format_evidence_pack(items, budget=6500)
+        return f"[GDELT Evidence for: {query}]\n{pack}"
     except Exception as e:
         logger.warning("gdelt_query_failed", error=str(e))
         return f"GDELT query failed: {e}"

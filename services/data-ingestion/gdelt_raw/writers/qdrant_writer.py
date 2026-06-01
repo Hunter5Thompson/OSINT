@@ -16,6 +16,7 @@ import polars as pl
 import structlog
 from qdrant_client.models import PointStruct
 
+from feeds.provenance import provenance_fields
 from gdelt_raw.ids import qdrant_point_id_for_doc
 
 log = structlog.get_logger(__name__)
@@ -42,7 +43,14 @@ def build_payload(row: dict[str, Any]) -> dict[str, Any]:
     else:
         gdelt_date_iso = None
 
+    provider = row.get("source_name") or row.get("v2_source_common_name") or "gdelt"
+
     return {
+        **provenance_fields(
+            source_type="gdelt",
+            provider=provider,
+            published_at=row.get("published_at"),
+        ),
         "source": "gdelt_gkg",
         "doc_id": row["doc_id"],
         "url": row.get("url"),

@@ -14,6 +14,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import Settings
+from feeds.provenance import dataset_provenance
 from qdrant_doctor.schema import validate_collection_schema
 
 log = structlog.get_logger(__name__)
@@ -111,6 +112,11 @@ class BaseCollector(ABC):
     ) -> PointStruct:
         vector = await self._embed(text)
         point_id = self._point_id(content_hash)
+        # Canonical provenance facts. Dataset collectors carry `source`; derive
+        # from the explicit table (fail-fast on unknown — never guess). Indexing
+        # `payload["source"]` makes a missing key report as KeyError('source').
+        if "source_type" not in payload:
+            payload.update(dataset_provenance(str(payload["source"])))
         payload["content_hash"] = content_hash
         now = datetime.now(UTC)
         payload["ingested_at"] = now.isoformat()

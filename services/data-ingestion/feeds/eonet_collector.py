@@ -8,17 +8,32 @@ updates are Qdrant-only to avoid Neo4j duplicates.
 from __future__ import annotations
 
 import asyncio
-import time
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from qdrant_client.models import PointStruct
 
 from feeds.base import BaseCollector
+from feeds.provenance import dataset_provenance
 
 log = structlog.get_logger("eonet_collector")
 
 _EONET_URL = "https://eonet.gsfc.nasa.gov/api/v3/events"
+
+
+def build_eonet_payload(event: dict, description: str) -> dict:
+    """EONET Qdrant payload builder (no network/disk I/O). event_date stays an
+    event time; it is NOT published_at."""
+    now = datetime.now(UTC)
+    return {
+        **dataset_provenance("eonet"),
+        "source": "eonet",
+        **event,
+        "ingested_epoch": now.timestamp(),
+        "ingested_at": now.isoformat(),
+        "description": description,
+    }
 
 
 class EONETCollector(BaseCollector):
@@ -143,12 +158,7 @@ class EONETCollector(BaseCollector):
                 log.warning("eonet_embed_failed", event_id=event["eonet_id"])
                 continue
 
-            payload = {
-                "source": "eonet",
-                **event,
-                "ingested_epoch": time.time(),
-                "description": description,
-            }
+            payload = build_eonet_payload(event, description)
             points.append(PointStruct(id=point_id, vector=vector, payload=payload))
 
         if points:

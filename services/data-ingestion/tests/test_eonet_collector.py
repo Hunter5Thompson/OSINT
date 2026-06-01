@@ -216,3 +216,21 @@ async def test_eonet_config_skips_upsert(collector):
     assert any(
         c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
     )
+
+
+# ── Provenance builder tests (Task 15) ──────────────────────────────
+
+
+def test_build_eonet_payload_stamps_provenance_and_no_published():
+    from feeds.eonet_collector import build_eonet_payload
+    event = {"eonet_id": "E1", "title": "Wildfire", "category": "wildfires",
+             "status": "open", "latitude": 1.0, "longitude": 2.0,
+             "event_date": "2026-05-31T00:00:00Z"}
+    payload = build_eonet_payload(event, "desc text")
+    assert payload["source_type"] == "dataset"
+    assert payload["provider"] == "eonet.gsfc.nasa.gov"
+    assert payload["description"] == "desc text"
+    assert "published_at" not in payload      # event_date is NOT publication time
+    assert "credibility_score" not in payload
+    assert "ingested_at" in payload
+    assert "ingested_epoch" in payload
