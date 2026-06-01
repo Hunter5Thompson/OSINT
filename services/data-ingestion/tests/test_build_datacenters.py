@@ -7,7 +7,7 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from infra_atlas.build_datacenters import (
-    CityCentroidViolationError,
+    CityCentroidViolation,
     build_datacenters,
     haversine_km,
 )
@@ -115,7 +115,7 @@ def test_seed_with_city_centroid_coords_is_rejected(
     )
     out = tmp_path / "datacenters.geojson"
 
-    with pytest.raises(CityCentroidViolationError, match="Frankfurt"):
+    with pytest.raises(CityCentroidViolation, match="Frankfurt"):
         build_datacenters(
             out,
             existing_path=FIXTURE / "existing_datacenters_sample.geojson",

@@ -7,7 +7,7 @@ Phase 2 runtime contract (hybrid):
   - Named ``dense`` vector, size=1024, distance=Cosine.
   - At least one sparse vector config (BM25/SPLADE).
 
-``validate_collection_schema`` raises ``QdrantSchemaMismatchError`` on any violation.
+``validate_collection_schema`` raises ``QdrantSchemaMismatch`` on any violation.
 It must be called BEFORE any Qdrant write or search operation so schema drift
 is detected early, not at query-time.
 """
@@ -16,14 +16,14 @@ from __future__ import annotations
 
 from qdrant_client.models import CollectionInfo, Distance, VectorParams
 
-__all__ = ["QdrantSchemaMismatchError", "validate_collection_schema"]
+__all__ = ["QdrantSchemaMismatch", "validate_collection_schema"]
 
 EXPECTED_DENSE_SIZE = 1024
 EXPECTED_DISTANCE = Distance.COSINE
 NAMED_DENSE_KEY = "dense"
 
 
-class QdrantSchemaMismatchError(ValueError):
+class QdrantSchemaMismatch(ValueError):  # noqa: N818 — legacy name; rename is a separate API change
     """Raised when a Qdrant collection's vector schema does not match expectations.
 
     Inherits from ValueError so callers that catch broad exceptions still work.
@@ -43,7 +43,7 @@ def validate_collection_schema(
                        If False, expect Phase 1 schema (unnamed dense vector).
 
     Raises:
-        QdrantSchemaMismatchError: On ANY schema violation with a human-readable message
+        QdrantSchemaMismatch: On ANY schema violation with a human-readable message
                               that includes the actual and expected values.
     """
     params = info.config.params
@@ -65,7 +65,7 @@ def _validate_dense_only(vectors) -> None:  # type: ignore[type-arg]
     """Validate Phase 1: single unnamed dense vector."""
     # Must NOT be a named-vector dict — hybrid schema is not accepted
     if isinstance(vectors, dict):
-        raise QdrantSchemaMismatchError(
+        raise QdrantSchemaMismatch(
             "dense-only mode expects an unnamed vector, but the collection uses named "
             f"vectors: {list(vectors.keys())}. "
             "This looks like a hybrid (Phase 2) collection. "
@@ -80,7 +80,7 @@ def _validate_hybrid(vectors, sparse_vectors) -> None:  # type: ignore[type-arg]
     """Validate Phase 2: named 'dense' vector + at least one sparse vector config."""
     # Must be a named-vector dict
     if not isinstance(vectors, dict):
-        raise QdrantSchemaMismatchError(
+        raise QdrantSchemaMismatch(
             "hybrid mode expects a named 'dense' vector, but the collection has "
             "a single unnamed dense vector (Phase 1 schema). "
             "Migrate the collection to the Phase 2 schema before enabling hybrid search."
@@ -88,7 +88,7 @@ def _validate_hybrid(vectors, sparse_vectors) -> None:  # type: ignore[type-arg]
 
     # Named 'dense' vector must exist
     if NAMED_DENSE_KEY not in vectors:
-        raise QdrantSchemaMismatchError(
+        raise QdrantSchemaMismatch(
             f"hybrid mode requires a vector named '{NAMED_DENSE_KEY}', "
             f"but only found: {list(vectors.keys())}."
         )
@@ -97,7 +97,7 @@ def _validate_hybrid(vectors, sparse_vectors) -> None:  # type: ignore[type-arg]
 
     # Sparse vector config must exist
     if not sparse_vectors:
-        raise QdrantSchemaMismatchError(
+        raise QdrantSchemaMismatch(
             "hybrid mode requires at least one sparse vector config (BM25/SPLADE), "
             "but sparse_vectors is absent or empty. "
             "Add a sparse vector config to the collection before enabling hybrid search."
@@ -107,7 +107,7 @@ def _validate_hybrid(vectors, sparse_vectors) -> None:  # type: ignore[type-arg]
 def _check_dense_params(params: VectorParams, *, label: str) -> None:
     """Check size and distance of a dense VectorParams, raising on mismatch."""
     if params.size != EXPECTED_DENSE_SIZE:
-        raise QdrantSchemaMismatchError(
+        raise QdrantSchemaMismatch(
             f"Expected {label} vector size {EXPECTED_DENSE_SIZE}, "
             f"got {params.size}. "
             "The TEI embedding model produces 1024-dimensional vectors. "
@@ -117,7 +117,7 @@ def _check_dense_params(params: VectorParams, *, label: str) -> None:
     actual_distance = params.distance
     if actual_distance != EXPECTED_DISTANCE:
         shown = actual_distance.value if hasattr(actual_distance, "value") else actual_distance
-        raise QdrantSchemaMismatchError(
+        raise QdrantSchemaMismatch(
             f"Expected {label} vector distance {EXPECTED_DISTANCE.value} (Cosine), "
             f"got {shown}. "
             "The platform uses cosine similarity throughout. "

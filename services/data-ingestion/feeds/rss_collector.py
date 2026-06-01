@@ -177,7 +177,7 @@ class RSSCollector:
 
         If the collection already exists, its vector schema is validated against
         the active runtime mode (dense-only or hybrid) BEFORE any write occurs.
-        Raises QdrantSchemaMismatchError if the schema does not match.
+        Raises QdrantSchemaMismatch if the schema does not match.
         """
         enable_hybrid: bool = getattr(settings, "enable_hybrid", False)
         collections = [c.name for c in self.qdrant.get_collections().collections]

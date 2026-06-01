@@ -181,9 +181,9 @@ def test_rss_validates_schema_when_collection_exists():
 
 
 def test_rss_phase2_refuses_phase1_collection():
-    """RSSCollector._ensure_collection raises QdrantSchemaMismatchError on schema
+    """RSSCollector._ensure_collection raises QdrantSchemaMismatch on schema
     mismatch, without writing."""
-    from qdrant_doctor.schema import QdrantSchemaMismatchError
+    from qdrant_doctor.schema import QdrantSchemaMismatch
 
     coll = MagicMock()
     coll.name = "odin_intel"
@@ -192,14 +192,14 @@ def test_rss_phase2_refuses_phase1_collection():
     mock_qdrant.get_collections.return_value.collections = [coll]
     mock_qdrant.get_collection.return_value = _make_phase1_info()
 
-    # Simulate validate_collection_schema raising QdrantSchemaMismatchError (Phase 2 refusal)
+    # Simulate validate_collection_schema raising QdrantSchemaMismatch (Phase 2 refusal)
     with patch("feeds.rss_collector.QdrantClient", return_value=mock_qdrant), \
          patch("feeds.rss_collector.validate_collection_schema",
-               side_effect=QdrantSchemaMismatchError("named dense vector required")):
+               side_effect=QdrantSchemaMismatch("named dense vector required")):
         collector = RSSCollector.__new__(RSSCollector)
         collector.qdrant = mock_qdrant
         collector._redis = None
-        with pytest.raises(QdrantSchemaMismatchError):
+        with pytest.raises(QdrantSchemaMismatch):
             collector._ensure_collection()
 
     # Absolutely no upsert must have been attempted

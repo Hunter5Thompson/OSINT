@@ -125,9 +125,9 @@ def test_gdelt_validates_schema_when_collection_exists():
 
 
 def test_gdelt_phase2_refuses_phase1_collection():
-    """GDELTCollector._ensure_collection raises QdrantSchemaMismatchError on schema
+    """GDELTCollector._ensure_collection raises QdrantSchemaMismatch on schema
     mismatch, without writing."""
-    from qdrant_doctor.schema import QdrantSchemaMismatchError
+    from qdrant_doctor.schema import QdrantSchemaMismatch
 
     coll = MagicMock()
     coll.name = "odin_intel"
@@ -138,11 +138,11 @@ def test_gdelt_phase2_refuses_phase1_collection():
 
     with patch("feeds.gdelt_collector.QdrantClient", return_value=mock_qdrant), \
          patch("feeds.gdelt_collector.validate_collection_schema",
-               side_effect=QdrantSchemaMismatchError("named dense vector required")):
+               side_effect=QdrantSchemaMismatch("named dense vector required")):
         collector = GDELTCollector.__new__(GDELTCollector)
         collector.qdrant = mock_qdrant
         collector._redis = None
-        with pytest.raises(QdrantSchemaMismatchError):
+        with pytest.raises(QdrantSchemaMismatch):
             collector._ensure_collection()
 
     mock_qdrant.upsert.assert_not_called()

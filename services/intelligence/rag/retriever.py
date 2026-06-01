@@ -10,7 +10,7 @@ from config import settings
 from graph.client import GraphClient
 from rag.embedder import embed_text
 from rag.graph_context import get_graph_context as _graph_context_fn
-from rag.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
+from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
 from rag.reranker import rerank as _rerank_fn
 
 # Lazy singleton GraphClient for graph context injection
@@ -36,7 +36,7 @@ logger = structlog.get_logger()
 async def _ensure_schema_validated() -> None:
     """Validate the Qdrant collection schema once before the first search.
 
-    Raises QdrantSchemaMismatchError if the collection exists but has the wrong schema.
+    Raises QdrantSchemaMismatch if the collection exists but has the wrong schema.
     Network errors are swallowed — let the search call surface them naturally.
     """
     global _schema_validated
@@ -50,7 +50,7 @@ async def _ensure_schema_validated() -> None:
             info = await client.get_collection(settings.qdrant_collection)
             validate_collection_schema(info, enable_hybrid=settings.enable_hybrid)
         _schema_validated = True
-    except QdrantSchemaMismatchError:
+    except QdrantSchemaMismatch:
         raise
     except Exception:
         # Network / connection errors — don't block startup

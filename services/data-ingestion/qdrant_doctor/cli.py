@@ -17,7 +17,7 @@ import sys
 import click
 from qdrant_client import QdrantClient
 
-from qdrant_doctor.schema import QdrantSchemaMismatchError, validate_collection_schema
+from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
 
 __all__ = ["run_doctor", "main"]
 
@@ -144,7 +144,7 @@ def run_doctor(
     try:
         validate_collection_schema(info, enable_hybrid=enable_hybrid)
         _ok(f"Schema matches expected {'hybrid' if enable_hybrid else 'dense-only'} contract.")
-    except QdrantSchemaMismatchError as exc:
+    except QdrantSchemaMismatch as exc:
         _fail(str(exc))
         failed = True
 

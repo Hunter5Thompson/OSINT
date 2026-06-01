@@ -2,7 +2,7 @@
 
 Tests prove that validate_collection_schema is called inside _ensure_collection
 BEFORE any Qdrant write/upsert operation, and that a schema mismatch raises
-QdrantSchemaMismatchError without performing a write.
+QdrantSchemaMismatch without performing a write.
 """
 
 from __future__ import annotations
@@ -80,11 +80,11 @@ class TestBaseCollectorPreflight:
 
         This is the key Phase-2 refusal test: when enable_hybrid=True and the
         existing collection has the Phase 1 schema (unnamed dense, no sparse),
-        _ensure_collection must raise QdrantSchemaMismatchError without calling
+        _ensure_collection must raise QdrantSchemaMismatch without calling
         qdrant.upsert.
         """
         from feeds.base import BaseCollector
-        from qdrant_doctor.schema import QdrantSchemaMismatchError
+        from qdrant_doctor.schema import QdrantSchemaMismatch
 
         class ConcreteCollector(BaseCollector):
             async def collect(self) -> None:
@@ -103,7 +103,7 @@ class TestBaseCollectorPreflight:
         with patch("feeds.base.QdrantClient", return_value=mock_qdrant):
             collector = ConcreteCollector(settings=mock_settings)
 
-        with pytest.raises(QdrantSchemaMismatchError):
+        with pytest.raises(QdrantSchemaMismatch):
             await collector._ensure_collection()
 
         # Absolutely no upsert must have been attempted
@@ -135,7 +135,7 @@ class TestBaseCollectorPreflight:
     async def test_wrong_vector_size_raises_before_write(self):
         """Collection with wrong vector size must raise before any write."""
         from feeds.base import BaseCollector
-        from qdrant_doctor.schema import QdrantSchemaMismatchError
+        from qdrant_doctor.schema import QdrantSchemaMismatch
 
         class ConcreteCollector(BaseCollector):
             async def collect(self) -> None:
@@ -164,7 +164,7 @@ class TestBaseCollectorPreflight:
         with patch("feeds.base.QdrantClient", return_value=mock_qdrant):
             collector = ConcreteCollector(settings=mock_settings)
 
-        with pytest.raises(QdrantSchemaMismatchError, match="768"):
+        with pytest.raises(QdrantSchemaMismatch, match="768"):
             await collector._ensure_collection()
 
         mock_qdrant.upsert.assert_not_called()
