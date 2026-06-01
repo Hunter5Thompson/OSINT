@@ -127,4 +127,7 @@ class BaseCollector(ABC):
     async def collect(self) -> None: ...
 
     async def close(self) -> None:
-        await self.http.aclose()
+        try:
+            await self.http.aclose()
+        finally:
+            await asyncio.to_thread(self.qdrant.close)

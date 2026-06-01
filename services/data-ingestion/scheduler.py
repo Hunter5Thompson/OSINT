@@ -240,6 +240,8 @@ async def run_correlation_job() -> None:
         await job.run()
     except Exception:
         log.exception("correlation_job_failed")
+    finally:
+        await job.close()
 
 
 async def run_eonet_collector() -> None:
