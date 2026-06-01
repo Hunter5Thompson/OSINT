@@ -280,6 +280,10 @@ export function InspectorPanel({ selected, onClose, viewer }: InspectorPanelProp
       variant={selected ? "expanded" : "hidden"}
       onClose={onClose}
       width={360}
+      // Mounted absolutely at top:86 (WorldviewPage) with no document scroll. Cap the
+      // height to the viewport (86 top + ~42 bottom clearance for the HUD coord readout)
+      // so OverlayPanel's inner overflowY:auto region engages and long almanacs scroll.
+      style={{ maxHeight: "calc(100vh - 128px)" }}
     >
       {selected ? <InspectorBody selected={selected} viewer={viewer} /> : null}
     </OverlayPanel>

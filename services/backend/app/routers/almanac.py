@@ -31,4 +31,5 @@ async def get_country_signals(
         raise HTTPException(status_code=404, detail="country almanac not found")
     stream = get_signal_stream()
     items = store.match_signals(country.id, stream.get_latest(50), limit=limit)
-    return AlmanacSignalResponse(country_id=country.id, items=items)
+    # seed ids are UN M49 numerics; prefer iso3 for the response (frontend keys by iso3)
+    return AlmanacSignalResponse(country_id=country.iso3 or country.id, items=items)

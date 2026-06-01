@@ -1,6 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { InspectorPanel } from "./InspectorPanel";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("InspectorPanel", () => {
   it("is hidden when nothing is selected", () => {
@@ -144,5 +148,32 @@ describe("InspectorPanel", () => {
       />,
     );
     expect(screen.queryByRole("link", { name: /Source/i })).toBeNull();
+  });
+
+  it("bounds the panel height to the viewport so a tall country almanac can scroll", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
+    render(
+      <InspectorPanel
+        selected={{
+          type: "country",
+          data: {
+            m49: "276",
+            iso3: "DEU",
+            name: "Germany",
+            geometry: { type: "Polygon", coordinates: [[[0, 0], [0, 1], [1, 1], [0, 0]]] },
+            capital: { name: "Berlin", coords: { lon: 13.4, lat: 52.5 } },
+          },
+        }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+    const panel = screen.getByRole("region", { name: /Inspector/i });
+    // The Inspector is absolutely positioned at top:86 with no document scroll. Without a
+    // viewport-bounded max-height the section grows to its content, so its inner scroll
+    // region never overflows and a tall almanac's lower rows fall off-screen unreachable.
+    expect(panel.style.maxHeight).toMatch(/vh/);
+    // Flush the almanac fetch (404 -> error state) so the effect's state update settles.
+    await screen.findByText(/unavailable for this country/i);
   });
 });

@@ -1,0 +1,1244 @@
+{
+  "_refreshed_at": "2026-06-01",
+  "countries": [
+    {
+      "name": "Fiji",
+      "topo_id": "242",
+      "m49": "242",
+      "iso3": "FJI",
+      "gec": "fj"
+    },
+    {
+      "name": "Tanzania",
+      "topo_id": "834",
+      "m49": "834",
+      "iso3": "TZA",
+      "gec": "tz"
+    },
+    {
+      "name": "W. Sahara",
+      "topo_id": "732",
+      "m49": "732",
+      "iso3": "ESH",
+      "gec": ""
+    },
+    {
+      "name": "Canada",
+      "topo_id": "124",
+      "m49": "124",
+      "iso3": "CAN",
+      "gec": "ca"
+    },
+    {
+      "name": "United States of America",
+      "topo_id": "840",
+      "m49": "840",
+      "iso3": "USA",
+      "gec": "us"
+    },
+    {
+      "name": "Kazakhstan",
+      "topo_id": "398",
+      "m49": "398",
+      "iso3": "KAZ",
+      "gec": "kz"
+    },
+    {
+      "name": "Uzbekistan",
+      "topo_id": "860",
+      "m49": "860",
+      "iso3": "UZB",
+      "gec": "uz"
+    },
+    {
+      "name": "Papua New Guinea",
+      "topo_id": "598",
+      "m49": "598",
+      "iso3": "PNG",
+      "gec": "pp"
+    },
+    {
+      "name": "Indonesia",
+      "topo_id": "360",
+      "m49": "360",
+      "iso3": "IDN",
+      "gec": "id"
+    },
+    {
+      "name": "Argentina",
+      "topo_id": "032",
+      "m49": "032",
+      "iso3": "ARG",
+      "gec": "ar"
+    },
+    {
+      "name": "Chile",
+      "topo_id": "152",
+      "m49": "152",
+      "iso3": "CHL",
+      "gec": "ci"
+    },
+    {
+      "name": "Dem. Rep. Congo",
+      "topo_id": "180",
+      "m49": "180",
+      "iso3": "COD",
+      "gec": "cg"
+    },
+    {
+      "name": "Somalia",
+      "topo_id": "706",
+      "m49": "706",
+      "iso3": "SOM",
+      "gec": "so"
+    },
+    {
+      "name": "Kenya",
+      "topo_id": "404",
+      "m49": "404",
+      "iso3": "KEN",
+      "gec": "ke"
+    },
+    {
+      "name": "Sudan",
+      "topo_id": "729",
+      "m49": "729",
+      "iso3": "SDN",
+      "gec": "su"
+    },
+    {
+      "name": "Chad",
+      "topo_id": "148",
+      "m49": "148",
+      "iso3": "TCD",
+      "gec": "cd"
+    },
+    {
+      "name": "Haiti",
+      "topo_id": "332",
+      "m49": "332",
+      "iso3": "HTI",
+      "gec": "ha"
+    },
+    {
+      "name": "Dominican Rep.",
+      "topo_id": "214",
+      "m49": "214",
+      "iso3": "DOM",
+      "gec": "dr"
+    },
+    {
+      "name": "Russia",
+      "topo_id": "643",
+      "m49": "643",
+      "iso3": "RUS",
+      "gec": "rs"
+    },
+    {
+      "name": "Bahamas",
+      "topo_id": "044",
+      "m49": "044",
+      "iso3": "BHS",
+      "gec": "bf"
+    },
+    {
+      "name": "Falkland Is.",
+      "topo_id": "238",
+      "m49": "238",
+      "iso3": "FLK",
+      "gec": "fk"
+    },
+    {
+      "name": "Norway",
+      "topo_id": "578",
+      "m49": "578",
+      "iso3": "NOR",
+      "gec": "no"
+    },
+    {
+      "name": "Greenland",
+      "topo_id": "304",
+      "m49": "304",
+      "iso3": "GRL",
+      "gec": "gl"
+    },
+    {
+      "name": "Fr. S. Antarctic Lands",
+      "topo_id": "260",
+      "m49": "260",
+      "iso3": "ATF",
+      "gec": "fs"
+    },
+    {
+      "name": "Timor-Leste",
+      "topo_id": "626",
+      "m49": "626",
+      "iso3": "TLS",
+      "gec": "tt"
+    },
+    {
+      "name": "South Africa",
+      "topo_id": "710",
+      "m49": "710",
+      "iso3": "ZAF",
+      "gec": "sf"
+    },
+    {
+      "name": "Lesotho",
+      "topo_id": "426",
+      "m49": "426",
+      "iso3": "LSO",
+      "gec": "lt"
+    },
+    {
+      "name": "Mexico",
+      "topo_id": "484",
+      "m49": "484",
+      "iso3": "MEX",
+      "gec": "mx"
+    },
+    {
+      "name": "Uruguay",
+      "topo_id": "858",
+      "m49": "858",
+      "iso3": "URY",
+      "gec": "uy"
+    },
+    {
+      "name": "Brazil",
+      "topo_id": "076",
+      "m49": "076",
+      "iso3": "BRA",
+      "gec": "br"
+    },
+    {
+      "name": "Bolivia",
+      "topo_id": "068",
+      "m49": "068",
+      "iso3": "BOL",
+      "gec": "bl"
+    },
+    {
+      "name": "Peru",
+      "topo_id": "604",
+      "m49": "604",
+      "iso3": "PER",
+      "gec": "pe"
+    },
+    {
+      "name": "Colombia",
+      "topo_id": "170",
+      "m49": "170",
+      "iso3": "COL",
+      "gec": "co"
+    },
+    {
+      "name": "Panama",
+      "topo_id": "591",
+      "m49": "591",
+      "iso3": "PAN",
+      "gec": "pm"
+    },
+    {
+      "name": "Costa Rica",
+      "topo_id": "188",
+      "m49": "188",
+      "iso3": "CRI",
+      "gec": "cs"
+    },
+    {
+      "name": "Nicaragua",
+      "topo_id": "558",
+      "m49": "558",
+      "iso3": "NIC",
+      "gec": "nu"
+    },
+    {
+      "name": "Honduras",
+      "topo_id": "340",
+      "m49": "340",
+      "iso3": "HND",
+      "gec": "ho"
+    },
+    {
+      "name": "El Salvador",
+      "topo_id": "222",
+      "m49": "222",
+      "iso3": "SLV",
+      "gec": "es"
+    },
+    {
+      "name": "Guatemala",
+      "topo_id": "320",
+      "m49": "320",
+      "iso3": "GTM",
+      "gec": "gt"
+    },
+    {
+      "name": "Belize",
+      "topo_id": "084",
+      "m49": "084",
+      "iso3": "BLZ",
+      "gec": "bh"
+    },
+    {
+      "name": "Venezuela",
+      "topo_id": "862",
+      "m49": "862",
+      "iso3": "VEN",
+      "gec": "ve"
+    },
+    {
+      "name": "Guyana",
+      "topo_id": "328",
+      "m49": "328",
+      "iso3": "GUY",
+      "gec": "gy"
+    },
+    {
+      "name": "Suriname",
+      "topo_id": "740",
+      "m49": "740",
+      "iso3": "SUR",
+      "gec": "ns"
+    },
+    {
+      "name": "France",
+      "topo_id": "250",
+      "m49": "250",
+      "iso3": "FRA",
+      "gec": "fr"
+    },
+    {
+      "name": "Ecuador",
+      "topo_id": "218",
+      "m49": "218",
+      "iso3": "ECU",
+      "gec": "ec"
+    },
+    {
+      "name": "Puerto Rico",
+      "topo_id": "630",
+      "m49": "630",
+      "iso3": "PRI",
+      "gec": "rq"
+    },
+    {
+      "name": "Jamaica",
+      "topo_id": "388",
+      "m49": "388",
+      "iso3": "JAM",
+      "gec": "jm"
+    },
+    {
+      "name": "Cuba",
+      "topo_id": "192",
+      "m49": "192",
+      "iso3": "CUB",
+      "gec": "cu"
+    },
+    {
+      "name": "Zimbabwe",
+      "topo_id": "716",
+      "m49": "716",
+      "iso3": "ZWE",
+      "gec": "zi"
+    },
+    {
+      "name": "Botswana",
+      "topo_id": "072",
+      "m49": "072",
+      "iso3": "BWA",
+      "gec": "bc"
+    },
+    {
+      "name": "Namibia",
+      "topo_id": "516",
+      "m49": "516",
+      "iso3": "NAM",
+      "gec": "wa"
+    },
+    {
+      "name": "Senegal",
+      "topo_id": "686",
+      "m49": "686",
+      "iso3": "SEN",
+      "gec": "sg"
+    },
+    {
+      "name": "Mali",
+      "topo_id": "466",
+      "m49": "466",
+      "iso3": "MLI",
+      "gec": "ml"
+    },
+    {
+      "name": "Mauritania",
+      "topo_id": "478",
+      "m49": "478",
+      "iso3": "MRT",
+      "gec": "mr"
+    },
+    {
+      "name": "Benin",
+      "topo_id": "204",
+      "m49": "204",
+      "iso3": "BEN",
+      "gec": "bn"
+    },
+    {
+      "name": "Niger",
+      "topo_id": "562",
+      "m49": "562",
+      "iso3": "NER",
+      "gec": "ng"
+    },
+    {
+      "name": "Nigeria",
+      "topo_id": "566",
+      "m49": "566",
+      "iso3": "NGA",
+      "gec": "ni"
+    },
+    {
+      "name": "Cameroon",
+      "topo_id": "120",
+      "m49": "120",
+      "iso3": "CMR",
+      "gec": "cm"
+    },
+    {
+      "name": "Togo",
+      "topo_id": "768",
+      "m49": "768",
+      "iso3": "TGO",
+      "gec": "to"
+    },
+    {
+      "name": "Ghana",
+      "topo_id": "288",
+      "m49": "288",
+      "iso3": "GHA",
+      "gec": "gh"
+    },
+    {
+      "name": "Côte d'Ivoire",
+      "topo_id": "384",
+      "m49": "384",
+      "iso3": "CIV",
+      "gec": "iv"
+    },
+    {
+      "name": "Guinea",
+      "topo_id": "324",
+      "m49": "324",
+      "iso3": "GIN",
+      "gec": "gv"
+    },
+    {
+      "name": "Guinea-Bissau",
+      "topo_id": "624",
+      "m49": "624",
+      "iso3": "GNB",
+      "gec": "pu"
+    },
+    {
+      "name": "Liberia",
+      "topo_id": "430",
+      "m49": "430",
+      "iso3": "LBR",
+      "gec": "li"
+    },
+    {
+      "name": "Sierra Leone",
+      "topo_id": "694",
+      "m49": "694",
+      "iso3": "SLE",
+      "gec": "sl"
+    },
+    {
+      "name": "Burkina Faso",
+      "topo_id": "854",
+      "m49": "854",
+      "iso3": "BFA",
+      "gec": "uv"
+    },
+    {
+      "name": "Central African Rep.",
+      "topo_id": "140",
+      "m49": "140",
+      "iso3": "CAF",
+      "gec": "ct"
+    },
+    {
+      "name": "Congo",
+      "topo_id": "178",
+      "m49": "178",
+      "iso3": "COG",
+      "gec": "cf"
+    },
+    {
+      "name": "Gabon",
+      "topo_id": "266",
+      "m49": "266",
+      "iso3": "GAB",
+      "gec": "gb"
+    },
+    {
+      "name": "Eq. Guinea",
+      "topo_id": "226",
+      "m49": "226",
+      "iso3": "GNQ",
+      "gec": "ek"
+    },
+    {
+      "name": "Zambia",
+      "topo_id": "894",
+      "m49": "894",
+      "iso3": "ZMB",
+      "gec": "za"
+    },
+    {
+      "name": "Malawi",
+      "topo_id": "454",
+      "m49": "454",
+      "iso3": "MWI",
+      "gec": "mi"
+    },
+    {
+      "name": "Mozambique",
+      "topo_id": "508",
+      "m49": "508",
+      "iso3": "MOZ",
+      "gec": "mz"
+    },
+    {
+      "name": "eSwatini",
+      "topo_id": "748",
+      "m49": "748",
+      "iso3": "SWZ",
+      "gec": "wz"
+    },
+    {
+      "name": "Angola",
+      "topo_id": "024",
+      "m49": "024",
+      "iso3": "AGO",
+      "gec": "ao"
+    },
+    {
+      "name": "Burundi",
+      "topo_id": "108",
+      "m49": "108",
+      "iso3": "BDI",
+      "gec": "by"
+    },
+    {
+      "name": "Israel",
+      "topo_id": "376",
+      "m49": "376",
+      "iso3": "ISR",
+      "gec": "is"
+    },
+    {
+      "name": "Lebanon",
+      "topo_id": "422",
+      "m49": "422",
+      "iso3": "LBN",
+      "gec": "le"
+    },
+    {
+      "name": "Madagascar",
+      "topo_id": "450",
+      "m49": "450",
+      "iso3": "MDG",
+      "gec": "ma"
+    },
+    {
+      "name": "Palestine",
+      "topo_id": "275",
+      "m49": "275",
+      "iso3": "PSE",
+      "gec": ""
+    },
+    {
+      "name": "Gambia",
+      "topo_id": "270",
+      "m49": "270",
+      "iso3": "GMB",
+      "gec": "ga"
+    },
+    {
+      "name": "Tunisia",
+      "topo_id": "788",
+      "m49": "788",
+      "iso3": "TUN",
+      "gec": "ts"
+    },
+    {
+      "name": "Algeria",
+      "topo_id": "012",
+      "m49": "012",
+      "iso3": "DZA",
+      "gec": "ag"
+    },
+    {
+      "name": "Jordan",
+      "topo_id": "400",
+      "m49": "400",
+      "iso3": "JOR",
+      "gec": "jo"
+    },
+    {
+      "name": "United Arab Emirates",
+      "topo_id": "784",
+      "m49": "784",
+      "iso3": "ARE",
+      "gec": "ae"
+    },
+    {
+      "name": "Qatar",
+      "topo_id": "634",
+      "m49": "634",
+      "iso3": "QAT",
+      "gec": "qa"
+    },
+    {
+      "name": "Kuwait",
+      "topo_id": "414",
+      "m49": "414",
+      "iso3": "KWT",
+      "gec": "ku"
+    },
+    {
+      "name": "Iraq",
+      "topo_id": "368",
+      "m49": "368",
+      "iso3": "IRQ",
+      "gec": "iz"
+    },
+    {
+      "name": "Oman",
+      "topo_id": "512",
+      "m49": "512",
+      "iso3": "OMN",
+      "gec": "mu"
+    },
+    {
+      "name": "Vanuatu",
+      "topo_id": "548",
+      "m49": "548",
+      "iso3": "VUT",
+      "gec": "nh"
+    },
+    {
+      "name": "Cambodia",
+      "topo_id": "116",
+      "m49": "116",
+      "iso3": "KHM",
+      "gec": "cb"
+    },
+    {
+      "name": "Thailand",
+      "topo_id": "764",
+      "m49": "764",
+      "iso3": "THA",
+      "gec": "th"
+    },
+    {
+      "name": "Laos",
+      "topo_id": "418",
+      "m49": "418",
+      "iso3": "LAO",
+      "gec": "la"
+    },
+    {
+      "name": "Myanmar",
+      "topo_id": "104",
+      "m49": "104",
+      "iso3": "MMR",
+      "gec": "bm"
+    },
+    {
+      "name": "Vietnam",
+      "topo_id": "704",
+      "m49": "704",
+      "iso3": "VNM",
+      "gec": "vm"
+    },
+    {
+      "name": "North Korea",
+      "topo_id": "408",
+      "m49": "408",
+      "iso3": "PRK",
+      "gec": "kn"
+    },
+    {
+      "name": "South Korea",
+      "topo_id": "410",
+      "m49": "410",
+      "iso3": "KOR",
+      "gec": "ks"
+    },
+    {
+      "name": "Mongolia",
+      "topo_id": "496",
+      "m49": "496",
+      "iso3": "MNG",
+      "gec": "mg"
+    },
+    {
+      "name": "India",
+      "topo_id": "356",
+      "m49": "356",
+      "iso3": "IND",
+      "gec": "in"
+    },
+    {
+      "name": "Bangladesh",
+      "topo_id": "050",
+      "m49": "050",
+      "iso3": "BGD",
+      "gec": "bg"
+    },
+    {
+      "name": "Bhutan",
+      "topo_id": "064",
+      "m49": "064",
+      "iso3": "BTN",
+      "gec": "bt"
+    },
+    {
+      "name": "Nepal",
+      "topo_id": "524",
+      "m49": "524",
+      "iso3": "NPL",
+      "gec": "np"
+    },
+    {
+      "name": "Pakistan",
+      "topo_id": "586",
+      "m49": "586",
+      "iso3": "PAK",
+      "gec": "pk"
+    },
+    {
+      "name": "Afghanistan",
+      "topo_id": "004",
+      "m49": "004",
+      "iso3": "AFG",
+      "gec": "af"
+    },
+    {
+      "name": "Tajikistan",
+      "topo_id": "762",
+      "m49": "762",
+      "iso3": "TJK",
+      "gec": "ti"
+    },
+    {
+      "name": "Kyrgyzstan",
+      "topo_id": "417",
+      "m49": "417",
+      "iso3": "KGZ",
+      "gec": "kg"
+    },
+    {
+      "name": "Turkmenistan",
+      "topo_id": "795",
+      "m49": "795",
+      "iso3": "TKM",
+      "gec": "tx"
+    },
+    {
+      "name": "Iran",
+      "topo_id": "364",
+      "m49": "364",
+      "iso3": "IRN",
+      "gec": "ir"
+    },
+    {
+      "name": "Syria",
+      "topo_id": "760",
+      "m49": "760",
+      "iso3": "SYR",
+      "gec": "sy"
+    },
+    {
+      "name": "Armenia",
+      "topo_id": "051",
+      "m49": "051",
+      "iso3": "ARM",
+      "gec": "am"
+    },
+    {
+      "name": "Sweden",
+      "topo_id": "752",
+      "m49": "752",
+      "iso3": "SWE",
+      "gec": "sw"
+    },
+    {
+      "name": "Belarus",
+      "topo_id": "112",
+      "m49": "112",
+      "iso3": "BLR",
+      "gec": "bo"
+    },
+    {
+      "name": "Ukraine",
+      "topo_id": "804",
+      "m49": "804",
+      "iso3": "UKR",
+      "gec": "up"
+    },
+    {
+      "name": "Poland",
+      "topo_id": "616",
+      "m49": "616",
+      "iso3": "POL",
+      "gec": "pl"
+    },
+    {
+      "name": "Austria",
+      "topo_id": "040",
+      "m49": "040",
+      "iso3": "AUT",
+      "gec": "au"
+    },
+    {
+      "name": "Hungary",
+      "topo_id": "348",
+      "m49": "348",
+      "iso3": "HUN",
+      "gec": "hu"
+    },
+    {
+      "name": "Moldova",
+      "topo_id": "498",
+      "m49": "498",
+      "iso3": "MDA",
+      "gec": "md"
+    },
+    {
+      "name": "Romania",
+      "topo_id": "642",
+      "m49": "642",
+      "iso3": "ROU",
+      "gec": "ro"
+    },
+    {
+      "name": "Lithuania",
+      "topo_id": "440",
+      "m49": "440",
+      "iso3": "LTU",
+      "gec": "lh"
+    },
+    {
+      "name": "Latvia",
+      "topo_id": "428",
+      "m49": "428",
+      "iso3": "LVA",
+      "gec": "lg"
+    },
+    {
+      "name": "Estonia",
+      "topo_id": "233",
+      "m49": "233",
+      "iso3": "EST",
+      "gec": "en"
+    },
+    {
+      "name": "Germany",
+      "topo_id": "276",
+      "m49": "276",
+      "iso3": "DEU",
+      "gec": "gm"
+    },
+    {
+      "name": "Bulgaria",
+      "topo_id": "100",
+      "m49": "100",
+      "iso3": "BGR",
+      "gec": "bu"
+    },
+    {
+      "name": "Greece",
+      "topo_id": "300",
+      "m49": "300",
+      "iso3": "GRC",
+      "gec": "gr"
+    },
+    {
+      "name": "Turkey",
+      "topo_id": "792",
+      "m49": "792",
+      "iso3": "TUR",
+      "gec": "tu"
+    },
+    {
+      "name": "Albania",
+      "topo_id": "008",
+      "m49": "008",
+      "iso3": "ALB",
+      "gec": "al"
+    },
+    {
+      "name": "Croatia",
+      "topo_id": "191",
+      "m49": "191",
+      "iso3": "HRV",
+      "gec": "hr"
+    },
+    {
+      "name": "Switzerland",
+      "topo_id": "756",
+      "m49": "756",
+      "iso3": "CHE",
+      "gec": "sz"
+    },
+    {
+      "name": "Luxembourg",
+      "topo_id": "442",
+      "m49": "442",
+      "iso3": "LUX",
+      "gec": "lu"
+    },
+    {
+      "name": "Belgium",
+      "topo_id": "056",
+      "m49": "056",
+      "iso3": "BEL",
+      "gec": "be"
+    },
+    {
+      "name": "Netherlands",
+      "topo_id": "528",
+      "m49": "528",
+      "iso3": "NLD",
+      "gec": "nl"
+    },
+    {
+      "name": "Portugal",
+      "topo_id": "620",
+      "m49": "620",
+      "iso3": "PRT",
+      "gec": "po"
+    },
+    {
+      "name": "Spain",
+      "topo_id": "724",
+      "m49": "724",
+      "iso3": "ESP",
+      "gec": "sp"
+    },
+    {
+      "name": "Ireland",
+      "topo_id": "372",
+      "m49": "372",
+      "iso3": "IRL",
+      "gec": "ei"
+    },
+    {
+      "name": "New Caledonia",
+      "topo_id": "540",
+      "m49": "540",
+      "iso3": "NCL",
+      "gec": "nc"
+    },
+    {
+      "name": "Solomon Is.",
+      "topo_id": "090",
+      "m49": "090",
+      "iso3": "SLB",
+      "gec": "bp"
+    },
+    {
+      "name": "New Zealand",
+      "topo_id": "554",
+      "m49": "554",
+      "iso3": "NZL",
+      "gec": "nz"
+    },
+    {
+      "name": "Australia",
+      "topo_id": "036",
+      "m49": "036",
+      "iso3": "AUS",
+      "gec": "as"
+    },
+    {
+      "name": "Sri Lanka",
+      "topo_id": "144",
+      "m49": "144",
+      "iso3": "LKA",
+      "gec": "ce"
+    },
+    {
+      "name": "China",
+      "topo_id": "156",
+      "m49": "156",
+      "iso3": "CHN",
+      "gec": "ch"
+    },
+    {
+      "name": "Taiwan",
+      "topo_id": "158",
+      "m49": "158",
+      "iso3": "TWN",
+      "gec": "tw"
+    },
+    {
+      "name": "Italy",
+      "topo_id": "380",
+      "m49": "380",
+      "iso3": "ITA",
+      "gec": "it"
+    },
+    {
+      "name": "Denmark",
+      "topo_id": "208",
+      "m49": "208",
+      "iso3": "DNK",
+      "gec": "da"
+    },
+    {
+      "name": "United Kingdom",
+      "topo_id": "826",
+      "m49": "826",
+      "iso3": "GBR",
+      "gec": "uk"
+    },
+    {
+      "name": "Iceland",
+      "topo_id": "352",
+      "m49": "352",
+      "iso3": "ISL",
+      "gec": "ic"
+    },
+    {
+      "name": "Azerbaijan",
+      "topo_id": "031",
+      "m49": "031",
+      "iso3": "AZE",
+      "gec": "aj"
+    },
+    {
+      "name": "Georgia",
+      "topo_id": "268",
+      "m49": "268",
+      "iso3": "GEO",
+      "gec": "gg"
+    },
+    {
+      "name": "Philippines",
+      "topo_id": "608",
+      "m49": "608",
+      "iso3": "PHL",
+      "gec": "rp"
+    },
+    {
+      "name": "Malaysia",
+      "topo_id": "458",
+      "m49": "458",
+      "iso3": "MYS",
+      "gec": "my"
+    },
+    {
+      "name": "Brunei",
+      "topo_id": "096",
+      "m49": "096",
+      "iso3": "BRN",
+      "gec": "bx"
+    },
+    {
+      "name": "Slovenia",
+      "topo_id": "705",
+      "m49": "705",
+      "iso3": "SVN",
+      "gec": "si"
+    },
+    {
+      "name": "Finland",
+      "topo_id": "246",
+      "m49": "246",
+      "iso3": "FIN",
+      "gec": "fi"
+    },
+    {
+      "name": "Slovakia",
+      "topo_id": "703",
+      "m49": "703",
+      "iso3": "SVK",
+      "gec": "lo"
+    },
+    {
+      "name": "Czechia",
+      "topo_id": "203",
+      "m49": "203",
+      "iso3": "CZE",
+      "gec": "ez"
+    },
+    {
+      "name": "Eritrea",
+      "topo_id": "232",
+      "m49": "232",
+      "iso3": "ERI",
+      "gec": "er"
+    },
+    {
+      "name": "Japan",
+      "topo_id": "392",
+      "m49": "392",
+      "iso3": "JPN",
+      "gec": "ja"
+    },
+    {
+      "name": "Paraguay",
+      "topo_id": "600",
+      "m49": "600",
+      "iso3": "PRY",
+      "gec": "pa"
+    },
+    {
+      "name": "Yemen",
+      "topo_id": "887",
+      "m49": "887",
+      "iso3": "YEM",
+      "gec": "ym"
+    },
+    {
+      "name": "Saudi Arabia",
+      "topo_id": "682",
+      "m49": "682",
+      "iso3": "SAU",
+      "gec": "sa"
+    },
+    {
+      "name": "Antarctica",
+      "topo_id": "010",
+      "m49": "010",
+      "iso3": "ATA",
+      "gec": "ay"
+    },
+    {
+      "name": "N. Cyprus",
+      "topo_id": "N. Cyprus",
+      "m49": "N. Cyprus",
+      "iso3": null,
+      "gec": ""
+    },
+    {
+      "name": "Cyprus",
+      "topo_id": "196",
+      "m49": "196",
+      "iso3": "CYP",
+      "gec": "cy"
+    },
+    {
+      "name": "Morocco",
+      "topo_id": "504",
+      "m49": "504",
+      "iso3": "MAR",
+      "gec": "mo"
+    },
+    {
+      "name": "Egypt",
+      "topo_id": "818",
+      "m49": "818",
+      "iso3": "EGY",
+      "gec": "eg"
+    },
+    {
+      "name": "Libya",
+      "topo_id": "434",
+      "m49": "434",
+      "iso3": "LBY",
+      "gec": "ly"
+    },
+    {
+      "name": "Ethiopia",
+      "topo_id": "231",
+      "m49": "231",
+      "iso3": "ETH",
+      "gec": "et"
+    },
+    {
+      "name": "Djibouti",
+      "topo_id": "262",
+      "m49": "262",
+      "iso3": "DJI",
+      "gec": "dj"
+    },
+    {
+      "name": "Somaliland",
+      "topo_id": "Somaliland",
+      "m49": "Somaliland",
+      "iso3": null,
+      "gec": ""
+    },
+    {
+      "name": "Uganda",
+      "topo_id": "800",
+      "m49": "800",
+      "iso3": "UGA",
+      "gec": "ug"
+    },
+    {
+      "name": "Rwanda",
+      "topo_id": "646",
+      "m49": "646",
+      "iso3": "RWA",
+      "gec": "rw"
+    },
+    {
+      "name": "Bosnia and Herz.",
+      "topo_id": "070",
+      "m49": "070",
+      "iso3": "BIH",
+      "gec": "bk"
+    },
+    {
+      "name": "Macedonia",
+      "topo_id": "807",
+      "m49": "807",
+      "iso3": "MKD",
+      "gec": "mk"
+    },
+    {
+      "name": "Serbia",
+      "topo_id": "688",
+      "m49": "688",
+      "iso3": "SRB",
+      "gec": "ri"
+    },
+    {
+      "name": "Montenegro",
+      "topo_id": "499",
+      "m49": "499",
+      "iso3": "MNE",
+      "gec": "mj"
+    },
+    {
+      "name": "Kosovo",
+      "topo_id": "Kosovo",
+      "m49": "Kosovo",
+      "iso3": "XKX",
+      "gec": "kv"
+    },
+    {
+      "name": "Trinidad and Tobago",
+      "topo_id": "780",
+      "m49": "780",
+      "iso3": "TTO",
+      "gec": "td"
+    },
+    {
+      "name": "S. Sudan",
+      "topo_id": "728",
+      "m49": "728",
+      "iso3": "SSD",
+      "gec": "od"
+    }
+  ]
+}
