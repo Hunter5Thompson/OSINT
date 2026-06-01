@@ -1,0 +1,5669 @@
+{
+  "_refreshed_at": "2026-06-01",
+  "countries": {
+    "AIA": {
+      "m49": "660",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "The Valley",
+      "capital_latlng": [
+        18.22,
+        -63.05
+      ],
+      "centroid": [
+        18.25,
+        -63.16666666
+      ],
+      "area": 91.0,
+      "population": 16010,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Eastern Caribbean dollar ($)"
+      ]
+    },
+    "GTM": {
+      "m49": "320",
+      "region": "Americas",
+      "subregion": "Central America",
+      "capital": "Guatemala City",
+      "capital_latlng": [
+        14.62,
+        -90.52
+      ],
+      "centroid": [
+        15.5,
+        -90.25
+      ],
+      "area": 108889.0,
+      "population": 18079810,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Guatemalan quetzal (Q)"
+      ]
+    },
+    "GMB": {
+      "m49": "270",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Banjul",
+      "capital_latlng": [
+        13.45,
+        -16.57
+      ],
+      "centroid": [
+        13.46666666,
+        -16.56666666
+      ],
+      "area": 10689.0,
+      "population": 2422712,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "dalasi (D)"
+      ]
+    },
+    "MEX": {
+      "m49": "484",
+      "region": "Americas",
+      "subregion": "North America",
+      "capital": "Mexico City",
+      "capital_latlng": [
+        19.43,
+        -99.13
+      ],
+      "centroid": [
+        23.0,
+        -102.0
+      ],
+      "area": 1964375.0,
+      "population": 130575786,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Mexican peso ($)"
+      ]
+    },
+    "MWI": {
+      "m49": "454",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Lilongwe",
+      "capital_latlng": [
+        -13.97,
+        33.78
+      ],
+      "centroid": [
+        -13.5,
+        34.0
+      ],
+      "area": 118484.0,
+      "population": 20734262,
+      "languages": [
+        "Chewa",
+        "English"
+      ],
+      "currencies": [
+        "Malawian kwacha (MK)"
+      ]
+    },
+    "PCN": {
+      "m49": "612",
+      "region": "Oceania",
+      "subregion": "Polynesia",
+      "capital": "Adamstown",
+      "capital_latlng": [
+        -25.07,
+        -130.08
+      ],
+      "centroid": [
+        -25.06666666,
+        -130.1
+      ],
+      "area": 47.0,
+      "population": 35,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "New Zealand dollar ($)"
+      ]
+    },
+    "ARG": {
+      "m49": "032",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Buenos Aires",
+      "capital_latlng": [
+        -34.58,
+        -58.67
+      ],
+      "centroid": [
+        -34.0,
+        -64.0
+      ],
+      "area": 2780400.0,
+      "population": 46735004,
+      "languages": [
+        "Guaraní",
+        "Spanish"
+      ],
+      "currencies": [
+        "Argentine peso ($)"
+      ]
+    },
+    "GUM": {
+      "m49": "316",
+      "region": "Oceania",
+      "subregion": "Micronesia",
+      "capital": "Hagåtña",
+      "capital_latlng": [
+        13.48,
+        144.75
+      ],
+      "centroid": [
+        13.46666666,
+        144.78333333
+      ],
+      "area": 549.0,
+      "population": 153836,
+      "languages": [
+        "Chamorro",
+        "English",
+        "Spanish"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "BGR": {
+      "m49": "100",
+      "region": "Europe",
+      "subregion": "Southeast Europe",
+      "capital": "Sofia",
+      "capital_latlng": [
+        42.68,
+        23.32
+      ],
+      "centroid": [
+        43.0,
+        25.0
+      ],
+      "area": 110879.0,
+      "population": 6437360,
+      "languages": [
+        "Bulgarian"
+      ],
+      "currencies": [
+        "Bulgarian lev (лв)"
+      ]
+    },
+    "DMA": {
+      "m49": "212",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Roseau",
+      "capital_latlng": [
+        15.3,
+        -61.4
+      ],
+      "centroid": [
+        15.41666666,
+        -61.33333333
+      ],
+      "area": 751.0,
+      "population": 67408,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Eastern Caribbean dollar ($)"
+      ]
+    },
+    "GBR": {
+      "m49": "826",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "London",
+      "capital_latlng": [
+        51.5,
+        -0.08
+      ],
+      "centroid": [
+        54.0,
+        -2.0
+      ],
+      "area": 244376.0,
+      "population": 69281437,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "British pound (£)"
+      ]
+    },
+    "FSM": {
+      "m49": "583",
+      "region": "Oceania",
+      "subregion": "Micronesia",
+      "capital": "Palikir",
+      "capital_latlng": [
+        6.92,
+        158.15
+      ],
+      "centroid": [
+        6.91666666,
+        158.25
+      ],
+      "area": 702.0,
+      "population": 105564,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "PSE": {
+      "m49": "275",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Ramallah",
+      "capital_latlng": [
+        31.9,
+        35.2
+      ],
+      "centroid": [
+        31.9,
+        35.2
+      ],
+      "area": 6220.0,
+      "population": 5483450,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Egyptian pound (E£)",
+        "Israeli new shekel (₪)",
+        "Jordanian dinar (JD)"
+      ]
+    },
+    "CUW": {
+      "m49": "531",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Willemstad",
+      "capital_latlng": [
+        12.1,
+        -68.92
+      ],
+      "centroid": [
+        12.116667,
+        -68.933333
+      ],
+      "area": 444.0,
+      "population": 156115,
+      "languages": [
+        "Dutch",
+        "English",
+        "Papiamento"
+      ],
+      "currencies": [
+        "Netherlands Antillean guilder (ƒ)"
+      ]
+    },
+    "RWA": {
+      "m49": "646",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Kigali",
+      "capital_latlng": [
+        -1.95,
+        30.05
+      ],
+      "centroid": [
+        -2.0,
+        30.0
+      ],
+      "area": 26338.0,
+      "population": 14104969,
+      "languages": [
+        "English",
+        "French",
+        "Kinyarwanda"
+      ],
+      "currencies": [
+        "Rwandan franc (Fr)"
+      ]
+    },
+    "HKG": {
+      "m49": "344",
+      "region": "Asia",
+      "subregion": "Eastern Asia",
+      "capital": "City of Victoria",
+      "capital_latlng": [
+        22.267,
+        114.188
+      ],
+      "centroid": [
+        22.267,
+        114.188
+      ],
+      "area": 1104.0,
+      "population": 7527500,
+      "languages": [
+        "Chinese",
+        "English"
+      ],
+      "currencies": [
+        "Hong Kong dollar ($)"
+      ]
+    },
+    "UZB": {
+      "m49": "860",
+      "region": "Asia",
+      "subregion": "Central Asia",
+      "capital": "Tashkent",
+      "capital_latlng": [
+        41.32,
+        69.25
+      ],
+      "centroid": [
+        41.0,
+        64.0
+      ],
+      "area": 447400.0,
+      "population": 37859698,
+      "languages": [
+        "Russian",
+        "Uzbek"
+      ],
+      "currencies": [
+        "Uzbekistani soʻm (so'm)"
+      ]
+    },
+    "CHN": {
+      "m49": "156",
+      "region": "Asia",
+      "subregion": "Eastern Asia",
+      "capital": "Beijing",
+      "capital_latlng": [
+        39.92,
+        116.38
+      ],
+      "centroid": [
+        35.0,
+        105.0
+      ],
+      "area": 9706961.0,
+      "population": 1408280000,
+      "languages": [
+        "Chinese"
+      ],
+      "currencies": [
+        "Chinese yuan (¥)"
+      ]
+    },
+    "CYP": {
+      "m49": "196",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": "Nicosia",
+      "capital_latlng": [
+        35.17,
+        33.37
+      ],
+      "centroid": [
+        35.0,
+        33.0
+      ],
+      "area": 9251.0,
+      "population": 1442614,
+      "languages": [
+        "Greek",
+        "Turkish"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "ABW": {
+      "m49": "533",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Oranjestad",
+      "capital_latlng": [
+        12.52,
+        -70.03
+      ],
+      "centroid": [
+        12.5,
+        -69.96666666
+      ],
+      "area": 180.0,
+      "population": 107566,
+      "languages": [
+        "Dutch",
+        "Papiamento"
+      ],
+      "currencies": [
+        "Aruban florin (ƒ)"
+      ]
+    },
+    "REU": {
+      "m49": "638",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Saint-Denis",
+      "capital_latlng": [
+        -20.88,
+        55.45
+      ],
+      "centroid": [
+        -21.15,
+        55.5
+      ],
+      "area": 2511.0,
+      "population": 896175,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "KOR": {
+      "m49": "410",
+      "region": "Asia",
+      "subregion": "Eastern Asia",
+      "capital": "Seoul",
+      "capital_latlng": [
+        37.55,
+        126.98
+      ],
+      "centroid": [
+        37.0,
+        127.5
+      ],
+      "area": 100210.0,
+      "population": 51159889,
+      "languages": [
+        "Korean"
+      ],
+      "currencies": [
+        "South Korean won (₩)"
+      ]
+    },
+    "ATA": {
+      "m49": "010",
+      "region": "Antarctic",
+      "subregion": "",
+      "capital": null,
+      "capital_latlng": [],
+      "centroid": [
+        -90.0,
+        0.0
+      ],
+      "area": 14000000.0,
+      "population": 1300,
+      "languages": [],
+      "currencies": []
+    },
+    "SOM": {
+      "m49": "706",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Mogadishu",
+      "capital_latlng": [
+        2.07,
+        45.33
+      ],
+      "centroid": [
+        10.0,
+        49.0
+      ],
+      "area": 637657.0,
+      "population": 19655000,
+      "languages": [
+        "Arabic",
+        "Somali"
+      ],
+      "currencies": [
+        "Somali shilling (Sh)"
+      ]
+    },
+    "LBN": {
+      "m49": "422",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Beirut",
+      "capital_latlng": [
+        33.87,
+        35.5
+      ],
+      "centroid": [
+        33.83333333,
+        35.83333333
+      ],
+      "area": 10452.0,
+      "population": 5490000,
+      "languages": [
+        "Arabic",
+        "French"
+      ],
+      "currencies": [
+        "Lebanese pound (ل.ل)"
+      ]
+    },
+    "GIN": {
+      "m49": "324",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Conakry",
+      "capital_latlng": [
+        9.5,
+        -13.7
+      ],
+      "centroid": [
+        11.0,
+        -10.0
+      ],
+      "area": 245857.0,
+      "population": 14363931,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "Guinean franc (Fr)"
+      ]
+    },
+    "TJK": {
+      "m49": "762",
+      "region": "Asia",
+      "subregion": "Central Asia",
+      "capital": "Dushanbe",
+      "capital_latlng": [
+        38.55,
+        68.77
+      ],
+      "centroid": [
+        39.0,
+        71.0
+      ],
+      "area": 143100.0,
+      "population": 10499000,
+      "languages": [
+        "Russian",
+        "Tajik"
+      ],
+      "currencies": [
+        "Tajikistani somoni (ЅМ)"
+      ]
+    },
+    "MYS": {
+      "m49": "458",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Kuala Lumpur",
+      "capital_latlng": [
+        3.17,
+        101.7
+      ],
+      "centroid": [
+        2.5,
+        112.5
+      ],
+      "area": 330803.0,
+      "population": 34231700,
+      "languages": [
+        "English",
+        "Malay"
+      ],
+      "currencies": [
+        "Malaysian ringgit (RM)"
+      ]
+    },
+    "PRK": {
+      "m49": "408",
+      "region": "Asia",
+      "subregion": "Eastern Asia",
+      "capital": "Pyongyang",
+      "capital_latlng": [
+        39.02,
+        125.75
+      ],
+      "centroid": [
+        40.0,
+        127.0
+      ],
+      "area": 120538.0,
+      "population": 25950000,
+      "languages": [
+        "Korean"
+      ],
+      "currencies": [
+        "North Korean won (₩)"
+      ]
+    },
+    "SLE": {
+      "m49": "694",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Freetown",
+      "capital_latlng": [
+        8.48,
+        -13.23
+      ],
+      "centroid": [
+        8.5,
+        -11.5
+      ],
+      "area": 71740.0,
+      "population": 9077691,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Leone (Le)"
+      ]
+    },
+    "BEN": {
+      "m49": "204",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Porto-Novo",
+      "capital_latlng": [
+        6.48,
+        2.62
+      ],
+      "centroid": [
+        9.5,
+        2.25
+      ],
+      "area": 112622.0,
+      "population": 13224860,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "West African CFA franc (Fr)"
+      ]
+    },
+    "ITA": {
+      "m49": "380",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": "Rome",
+      "capital_latlng": [
+        41.9,
+        12.48
+      ],
+      "centroid": [
+        42.83333333,
+        12.83333333
+      ],
+      "area": 301336.0,
+      "population": 58927633,
+      "languages": [
+        "Catalan",
+        "Italian"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "TTO": {
+      "m49": "780",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Port of Spain",
+      "capital_latlng": [
+        10.65,
+        -61.52
+      ],
+      "centroid": [
+        10.6918,
+        -61.2225
+      ],
+      "area": 5130.0,
+      "population": 1367764,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Trinidad and Tobago dollar ($)"
+      ]
+    },
+    "SAU": {
+      "m49": "682",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Riyadh",
+      "capital_latlng": [
+        24.65,
+        46.7
+      ],
+      "centroid": [
+        25.0,
+        45.0
+      ],
+      "area": 2149690.0,
+      "population": 35300280,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Saudi riyal (ر.س)"
+      ]
+    },
+    "CRI": {
+      "m49": "188",
+      "region": "Americas",
+      "subregion": "Central America",
+      "capital": "San José",
+      "capital_latlng": [
+        9.93,
+        -84.09
+      ],
+      "centroid": [
+        10.0,
+        -84.0
+      ],
+      "area": 51100.0,
+      "population": 5309625,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Costa Rican colón (₡)"
+      ]
+    },
+    "SRB": {
+      "m49": "688",
+      "region": "Europe",
+      "subregion": "Southeast Europe",
+      "capital": "Belgrade",
+      "capital_latlng": [
+        44.83,
+        20.5
+      ],
+      "centroid": [
+        44.0,
+        21.0
+      ],
+      "area": 77589.0,
+      "population": 6567783,
+      "languages": [
+        "Serbian"
+      ],
+      "currencies": [
+        "Serbian dinar (дин.)"
+      ]
+    },
+    "TKL": {
+      "m49": "772",
+      "region": "Oceania",
+      "subregion": "Polynesia",
+      "capital": "Fakaofo",
+      "capital_latlng": [
+        -9.38,
+        -171.22
+      ],
+      "centroid": [
+        -9.0,
+        -172.0
+      ],
+      "area": 12.0,
+      "population": 2608,
+      "languages": [
+        "English",
+        "Samoan",
+        "Tokelauan"
+      ],
+      "currencies": [
+        "New Zealand dollar ($)"
+      ]
+    },
+    "MNG": {
+      "m49": "496",
+      "region": "Asia",
+      "subregion": "Eastern Asia",
+      "capital": "Ulan Bator",
+      "capital_latlng": [
+        47.92,
+        106.91
+      ],
+      "centroid": [
+        46.0,
+        105.0
+      ],
+      "area": 1564110.0,
+      "population": 3544835,
+      "languages": [
+        "Mongolian"
+      ],
+      "currencies": [
+        "Mongolian tögrög (₮)"
+      ]
+    },
+    "BRN": {
+      "m49": "096",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Bandar Seri Begawan",
+      "capital_latlng": [
+        4.88,
+        114.93
+      ],
+      "centroid": [
+        4.5,
+        114.66666666
+      ],
+      "area": 5765.0,
+      "population": 455500,
+      "languages": [
+        "Malay"
+      ],
+      "currencies": [
+        "Brunei dollar ($)",
+        "Singapore dollar ($)"
+      ]
+    },
+    "HUN": {
+      "m49": "348",
+      "region": "Europe",
+      "subregion": "Central Europe",
+      "capital": "Budapest",
+      "capital_latlng": [
+        47.5,
+        19.08
+      ],
+      "centroid": [
+        47.0,
+        20.0
+      ],
+      "area": 93028.0,
+      "population": 9539502,
+      "languages": [
+        "Hungarian"
+      ],
+      "currencies": [
+        "Hungarian forint (Ft)"
+      ]
+    },
+    "MOZ": {
+      "m49": "508",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Maputo",
+      "capital_latlng": [
+        -25.95,
+        32.58
+      ],
+      "centroid": [
+        -18.25,
+        35.0
+      ],
+      "area": 801590.0,
+      "population": 34090466,
+      "languages": [
+        "Portuguese"
+      ],
+      "currencies": [
+        "Mozambican metical (MT)"
+      ]
+    },
+    "KIR": {
+      "m49": "296",
+      "region": "Oceania",
+      "subregion": "Micronesia",
+      "capital": "South Tarawa",
+      "capital_latlng": [
+        1.33,
+        172.98
+      ],
+      "centroid": [
+        1.41666666,
+        173.0
+      ],
+      "area": 811.0,
+      "population": 120740,
+      "languages": [
+        "English",
+        "Gilbertese"
+      ],
+      "currencies": [
+        "Australian dollar ($)",
+        "Kiribati dollar ($)"
+      ]
+    },
+    "HTI": {
+      "m49": "332",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Port-au-Prince",
+      "capital_latlng": [
+        18.53,
+        -72.33
+      ],
+      "centroid": [
+        19.0,
+        -72.41666666
+      ],
+      "area": 27750.0,
+      "population": 11867032,
+      "languages": [
+        "French",
+        "Haitian Creole"
+      ],
+      "currencies": [
+        "Haitian gourde (G)"
+      ]
+    },
+    "KHM": {
+      "m49": "116",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Phnom Penh",
+      "capital_latlng": [
+        11.55,
+        104.92
+      ],
+      "centroid": [
+        13.0,
+        105.0
+      ],
+      "area": 181035.0,
+      "population": 17577760,
+      "languages": [
+        "Khmer"
+      ],
+      "currencies": [
+        "Cambodian riel (៛)",
+        "United States dollar ($)"
+      ]
+    },
+    "EGY": {
+      "m49": "818",
+      "region": "Africa",
+      "subregion": "Northern Africa",
+      "capital": "Cairo",
+      "capital_latlng": [
+        30.05,
+        31.25
+      ],
+      "centroid": [
+        27.0,
+        30.0
+      ],
+      "area": 1002450.0,
+      "population": 107271260,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Egyptian pound (£)"
+      ]
+    },
+    "TKM": {
+      "m49": "795",
+      "region": "Asia",
+      "subregion": "Central Asia",
+      "capital": "Ashgabat",
+      "capital_latlng": [
+        37.95,
+        58.38
+      ],
+      "centroid": [
+        40.0,
+        60.0
+      ],
+      "area": 488100.0,
+      "population": 7057841,
+      "languages": [
+        "Russian",
+        "Turkmen"
+      ],
+      "currencies": [
+        "Turkmenistan manat (m)"
+      ]
+    },
+    "OMN": {
+      "m49": "512",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Muscat",
+      "capital_latlng": [
+        23.62,
+        58.58
+      ],
+      "centroid": [
+        21.0,
+        57.0
+      ],
+      "area": 309500.0,
+      "population": 5343630,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Omani rial (ر.ع.)"
+      ]
+    },
+    "JAM": {
+      "m49": "388",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Kingston",
+      "capital_latlng": [
+        17.99702,
+        -76.79358
+      ],
+      "centroid": [
+        18.25,
+        -77.5
+      ],
+      "area": 10991.0,
+      "population": 2825544,
+      "languages": [
+        "English",
+        "Jamaican Patois"
+      ],
+      "currencies": [
+        "Jamaican dollar ($)"
+      ]
+    },
+    "AZE": {
+      "m49": "031",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Baku",
+      "capital_latlng": [
+        40.38,
+        49.87
+      ],
+      "centroid": [
+        40.5,
+        47.5
+      ],
+      "area": 86600.0,
+      "population": 10241722,
+      "languages": [
+        "Azerbaijani"
+      ],
+      "currencies": [
+        "Azerbaijani manat (₼)"
+      ]
+    },
+    "SVK": {
+      "m49": "703",
+      "region": "Europe",
+      "subregion": "Central Europe",
+      "capital": "Bratislava",
+      "capital_latlng": [
+        48.15,
+        17.12
+      ],
+      "centroid": [
+        48.66666666,
+        19.5
+      ],
+      "area": 49037.0,
+      "population": 5413813,
+      "languages": [
+        "Slovak"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "BLR": {
+      "m49": "112",
+      "region": "Europe",
+      "subregion": "Eastern Europe",
+      "capital": "Minsk",
+      "capital_latlng": [
+        53.9,
+        27.57
+      ],
+      "centroid": [
+        53.0,
+        28.0
+      ],
+      "area": 207600.0,
+      "population": 9109280,
+      "languages": [
+        "Belarusian",
+        "Russian"
+      ],
+      "currencies": [
+        "Belarusian ruble (Br)"
+      ]
+    },
+    "VNM": {
+      "m49": "704",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Hanoi",
+      "capital_latlng": [
+        21.03,
+        105.85
+      ],
+      "centroid": [
+        16.16666666,
+        107.83333333
+      ],
+      "area": 331212.0,
+      "population": 101343800,
+      "languages": [
+        "Vietnamese"
+      ],
+      "currencies": [
+        "Vietnamese đồng (₫)"
+      ]
+    },
+    "VIR": {
+      "m49": "850",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Charlotte Amalie",
+      "capital_latlng": [
+        18.35,
+        -64.93
+      ],
+      "centroid": [
+        18.35,
+        -64.933333
+      ],
+      "area": 347.0,
+      "population": 87146,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "GIB": {
+      "m49": "292",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": "Gibraltar",
+      "capital_latlng": [
+        36.13,
+        -5.35
+      ],
+      "centroid": [
+        36.13333333,
+        -5.35
+      ],
+      "area": 6.0,
+      "population": 38000,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Gibraltar pound (£)"
+      ]
+    },
+    "SXM": {
+      "m49": "534",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Philipsburg",
+      "capital_latlng": [
+        18.02,
+        -63.03
+      ],
+      "centroid": [
+        18.033333,
+        -63.05
+      ],
+      "area": 34.0,
+      "population": 41349,
+      "languages": [
+        "Dutch",
+        "English",
+        "French"
+      ],
+      "currencies": [
+        "Netherlands Antillean guilder (ƒ)"
+      ]
+    },
+    "ALA": {
+      "m49": "248",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Mariehamn",
+      "capital_latlng": [
+        60.12,
+        19.9
+      ],
+      "centroid": [
+        60.116667,
+        19.9
+      ],
+      "area": 1580.0,
+      "population": 30654,
+      "languages": [
+        "Swedish"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "SYR": {
+      "m49": "760",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Damascus",
+      "capital_latlng": [
+        33.5,
+        36.3
+      ],
+      "centroid": [
+        35.0,
+        38.0
+      ],
+      "area": 185180.0,
+      "population": 25620000,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Syrian pound (£)"
+      ]
+    },
+    "MTQ": {
+      "m49": "474",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Fort-de-France",
+      "capital_latlng": [
+        14.6,
+        -61.08
+      ],
+      "centroid": [
+        14.666667,
+        -61.0
+      ],
+      "area": 1128.0,
+      "population": 349925,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "GRL": {
+      "m49": "304",
+      "region": "Americas",
+      "subregion": "North America",
+      "capital": "Nuuk",
+      "capital_latlng": [
+        64.18,
+        -51.75
+      ],
+      "centroid": [
+        72.0,
+        -40.0
+      ],
+      "area": 2166086.0,
+      "population": 56542,
+      "languages": [
+        "Greenlandic"
+      ],
+      "currencies": [
+        "krone (kr.)"
+      ]
+    },
+    "HND": {
+      "m49": "340",
+      "region": "Americas",
+      "subregion": "Central America",
+      "capital": "Tegucigalpa",
+      "capital_latlng": [
+        14.1,
+        -87.22
+      ],
+      "centroid": [
+        15.0,
+        -86.5
+      ],
+      "area": 112492.0,
+      "population": 9892632,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Honduran lempira (L)"
+      ]
+    },
+    "TUN": {
+      "m49": "788",
+      "region": "Africa",
+      "subregion": "Northern Africa",
+      "capital": "Tunis",
+      "capital_latlng": [
+        36.8,
+        10.18
+      ],
+      "centroid": [
+        34.0,
+        9.0
+      ],
+      "area": 163610.0,
+      "population": 11972169,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Tunisian dinar (د.ت)"
+      ]
+    },
+    "COM": {
+      "m49": "174",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Moroni",
+      "capital_latlng": [
+        -11.7,
+        43.23
+      ],
+      "centroid": [
+        -12.16666666,
+        44.25
+      ],
+      "area": 1862.0,
+      "population": 919901,
+      "languages": [
+        "Arabic",
+        "Comorian",
+        "French"
+      ],
+      "currencies": [
+        "Comorian franc (Fr)"
+      ]
+    },
+    "SVN": {
+      "m49": "705",
+      "region": "Europe",
+      "subregion": "Central Europe",
+      "capital": "Ljubljana",
+      "capital_latlng": [
+        46.05,
+        14.52
+      ],
+      "centroid": [
+        46.11666666,
+        14.81666666
+      ],
+      "area": 20273.0,
+      "population": 2130638,
+      "languages": [
+        "Slovene"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "CHE": {
+      "m49": "756",
+      "region": "Europe",
+      "subregion": "Western Europe",
+      "capital": "Bern",
+      "capital_latlng": [
+        46.92,
+        7.47
+      ],
+      "centroid": [
+        47.0,
+        8.0
+      ],
+      "area": 41284.0,
+      "population": 9082848,
+      "languages": [
+        "French",
+        "Italian",
+        "Romansh",
+        "Swiss German"
+      ],
+      "currencies": [
+        "Swiss franc (Fr.)"
+      ]
+    },
+    "GGY": {
+      "m49": "831",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "St. Peter Port",
+      "capital_latlng": [
+        49.45,
+        -2.54
+      ],
+      "centroid": [
+        49.46666666,
+        -2.58333333
+      ],
+      "area": 78.0,
+      "population": 64781,
+      "languages": [
+        "English",
+        "French",
+        "Guernésiais"
+      ],
+      "currencies": [
+        "British pound (£)",
+        "Guernsey pound (£)"
+      ]
+    },
+    "MMR": {
+      "m49": "104",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Naypyidaw",
+      "capital_latlng": [
+        19.76,
+        96.07
+      ],
+      "centroid": [
+        22.0,
+        98.0
+      ],
+      "area": 676578.0,
+      "population": 51316756,
+      "languages": [
+        "Burmese"
+      ],
+      "currencies": [
+        "Burmese kyat (Ks)"
+      ]
+    },
+    "PRY": {
+      "m49": "600",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Asunción",
+      "capital_latlng": [
+        -25.28,
+        -57.57
+      ],
+      "centroid": [
+        -23.0,
+        -58.0
+      ],
+      "area": 406752.0,
+      "population": 6109644,
+      "languages": [
+        "Guaraní",
+        "Spanish"
+      ],
+      "currencies": [
+        "Paraguayan guaraní (₲)"
+      ]
+    },
+    "BES": {
+      "m49": "535",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Kralendijk",
+      "capital_latlng": [
+        12.14,
+        -68.27
+      ],
+      "centroid": [
+        12.18,
+        -68.25
+      ],
+      "area": 328.0,
+      "population": 31980,
+      "languages": [
+        "Dutch",
+        "English",
+        "Papiamento"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "BRB": {
+      "m49": "052",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Bridgetown",
+      "capital_latlng": [
+        13.1,
+        -59.62
+      ],
+      "centroid": [
+        13.16666666,
+        -59.53333333
+      ],
+      "area": 430.0,
+      "population": 267800,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Barbadian dollar ($)"
+      ]
+    },
+    "MAC": {
+      "m49": "446",
+      "region": "Asia",
+      "subregion": "Eastern Asia",
+      "capital": null,
+      "capital_latlng": [],
+      "centroid": [
+        22.16666666,
+        113.55
+      ],
+      "area": 30.0,
+      "population": 685900,
+      "languages": [
+        "Chinese",
+        "Portuguese"
+      ],
+      "currencies": [
+        "Macanese pataca (P)"
+      ]
+    },
+    "JOR": {
+      "m49": "400",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Amman",
+      "capital_latlng": [
+        31.95,
+        35.93
+      ],
+      "centroid": [
+        31.0,
+        36.0
+      ],
+      "area": 89342.0,
+      "population": 11734000,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Jordanian dinar (د.ا)"
+      ]
+    },
+    "LAO": {
+      "m49": "418",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Vientiane",
+      "capital_latlng": [
+        17.97,
+        102.6
+      ],
+      "centroid": [
+        18.0,
+        105.0
+      ],
+      "area": 236800.0,
+      "population": 7647000,
+      "languages": [
+        "Lao"
+      ],
+      "currencies": [
+        "Lao kip (₭)"
+      ]
+    },
+    "TGO": {
+      "m49": "768",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Lomé",
+      "capital_latlng": [
+        6.14,
+        1.21
+      ],
+      "centroid": [
+        8.0,
+        1.16666666
+      ],
+      "area": 56785.0,
+      "population": 8095498,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "West African CFA franc (Fr)"
+      ]
+    },
+    "MAR": {
+      "m49": "504",
+      "region": "Africa",
+      "subregion": "Northern Africa",
+      "capital": "Rabat",
+      "capital_latlng": [
+        34.02,
+        -6.82
+      ],
+      "centroid": [
+        32.0,
+        -5.0
+      ],
+      "area": 446550.0,
+      "population": 36828330,
+      "languages": [
+        "Arabic",
+        "Berber"
+      ],
+      "currencies": [
+        "Moroccan dirham (د.م.)"
+      ]
+    },
+    "PRI": {
+      "m49": "630",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "San Juan",
+      "capital_latlng": [
+        18.47,
+        -66.12
+      ],
+      "centroid": [
+        18.25,
+        -66.5
+      ],
+      "area": 8870.0,
+      "population": 3203295,
+      "languages": [
+        "English",
+        "Spanish"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "GUF": {
+      "m49": "254",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Cayenne",
+      "capital_latlng": [
+        4.94,
+        -52.33
+      ],
+      "centroid": [
+        4.0,
+        -53.0
+      ],
+      "area": 83534.0,
+      "population": 292354,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "SPM": {
+      "m49": "666",
+      "region": "Americas",
+      "subregion": "North America",
+      "capital": "Saint-Pierre",
+      "capital_latlng": [
+        46.77,
+        -56.18
+      ],
+      "centroid": [
+        46.83333333,
+        -56.33333333
+      ],
+      "area": 242.0,
+      "population": 5819,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "MAF": {
+      "m49": "663",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Marigot",
+      "capital_latlng": [
+        18.07,
+        -63.08
+      ],
+      "centroid": [
+        18.0708,
+        -63.0501
+      ],
+      "area": 53.0,
+      "population": 31496,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "EST": {
+      "m49": "233",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Tallinn",
+      "capital_latlng": [
+        59.43,
+        24.72
+      ],
+      "centroid": [
+        59.0,
+        26.0
+      ],
+      "area": 45227.0,
+      "population": 1369995,
+      "languages": [
+        "Estonian"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "IDN": {
+      "m49": "360",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Jakarta",
+      "capital_latlng": [
+        -6.17,
+        106.82
+      ],
+      "centroid": [
+        -5.0,
+        120.0
+      ],
+      "area": 1904569.0,
+      "population": 284438782,
+      "languages": [
+        "Indonesian"
+      ],
+      "currencies": [
+        "Indonesian rupiah (Rp)"
+      ]
+    },
+    "SYC": {
+      "m49": "690",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Victoria",
+      "capital_latlng": [
+        -4.62,
+        55.45
+      ],
+      "centroid": [
+        -4.58333333,
+        55.66666666
+      ],
+      "area": 452.0,
+      "population": 122729,
+      "languages": [
+        "English",
+        "French",
+        "Seychellois Creole"
+      ],
+      "currencies": [
+        "Seychellois rupee (₨)"
+      ]
+    },
+    "MLI": {
+      "m49": "466",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Bamako",
+      "capital_latlng": [
+        12.65,
+        -8.0
+      ],
+      "centroid": [
+        17.0,
+        -4.0
+      ],
+      "area": 1240192.0,
+      "population": 22395489,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "West African CFA franc (Fr)"
+      ]
+    },
+    "TLS": {
+      "m49": "626",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Dili",
+      "capital_latlng": [
+        -8.58,
+        125.6
+      ],
+      "centroid": [
+        -8.83333333,
+        125.91666666
+      ],
+      "area": 14874.0,
+      "population": 1391221,
+      "languages": [
+        "Portuguese",
+        "Tetum"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "BRA": {
+      "m49": "076",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Brasília",
+      "capital_latlng": [
+        -15.79,
+        -47.88
+      ],
+      "centroid": [
+        -10.0,
+        -55.0
+      ],
+      "area": 8515767.0,
+      "population": 213421037,
+      "languages": [
+        "Portuguese"
+      ],
+      "currencies": [
+        "Brazilian real (R$)"
+      ]
+    },
+    "GHA": {
+      "m49": "288",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Accra",
+      "capital_latlng": [
+        5.55,
+        -0.22
+      ],
+      "centroid": [
+        8.0,
+        -2.0
+      ],
+      "area": 238533.0,
+      "population": 33742380,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Ghanaian cedi (₵)"
+      ]
+    },
+    "KEN": {
+      "m49": "404",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Nairobi",
+      "capital_latlng": [
+        -1.28,
+        36.82
+      ],
+      "centroid": [
+        1.0,
+        38.0
+      ],
+      "area": 580367.0,
+      "population": 53330978,
+      "languages": [
+        "English",
+        "Swahili"
+      ],
+      "currencies": [
+        "Kenyan shilling (Sh)"
+      ]
+    },
+    "ISL": {
+      "m49": "352",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Reykjavik",
+      "capital_latlng": [
+        64.15,
+        -21.95
+      ],
+      "centroid": [
+        65.0,
+        -18.0
+      ],
+      "area": 103000.0,
+      "population": 391810,
+      "languages": [
+        "Icelandic"
+      ],
+      "currencies": [
+        "Icelandic króna (kr)"
+      ]
+    },
+    "MDG": {
+      "m49": "450",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Antananarivo",
+      "capital_latlng": [
+        -18.92,
+        47.52
+      ],
+      "centroid": [
+        -20.0,
+        47.0
+      ],
+      "area": 587041.0,
+      "population": 31727042,
+      "languages": [
+        "French",
+        "Malagasy"
+      ],
+      "currencies": [
+        "Malagasy ariary (Ar)"
+      ]
+    },
+    "BGD": {
+      "m49": "050",
+      "region": "Asia",
+      "subregion": "Southern Asia",
+      "capital": "Dhaka",
+      "capital_latlng": [
+        23.72,
+        90.4
+      ],
+      "centroid": [
+        24.0,
+        90.0
+      ],
+      "area": 147570.0,
+      "population": 169828911,
+      "languages": [
+        "Bengali"
+      ],
+      "currencies": [
+        "Bangladeshi taka (৳)"
+      ]
+    },
+    "COD": {
+      "m49": "180",
+      "region": "Africa",
+      "subregion": "Middle Africa",
+      "capital": "Kinshasa",
+      "capital_latlng": [
+        -4.32,
+        15.3
+      ],
+      "centroid": [
+        0.0,
+        25.0
+      ],
+      "area": 2344858.0,
+      "population": 112832000,
+      "languages": [
+        "French",
+        "Kikongo",
+        "Lingala",
+        "Swahili",
+        "Tshiluba"
+      ],
+      "currencies": [
+        "Congolese franc (FC)"
+      ]
+    },
+    "ZWE": {
+      "m49": "716",
+      "region": "Africa",
+      "subregion": "Southern Africa",
+      "capital": "Harare",
+      "capital_latlng": [
+        -17.82,
+        31.03
+      ],
+      "centroid": [
+        -20.0,
+        30.0
+      ],
+      "area": 390757.0,
+      "population": 17073087,
+      "languages": [
+        "Chewa",
+        "Chibarwe",
+        "English",
+        "Kalanga",
+        "Khoisan",
+        "Ndau",
+        "Northern Ndebele",
+        "Shona",
+        "Sotho",
+        "Tonga",
+        "Tsonga",
+        "Tswana",
+        "Venda",
+        "Xhosa",
+        "Zimbabwean Sign Language"
+      ],
+      "currencies": [
+        "Zimbabwean dollar ($)"
+      ]
+    },
+    "PYF": {
+      "m49": "258",
+      "region": "Oceania",
+      "subregion": "Polynesia",
+      "capital": "Papeetē",
+      "capital_latlng": [
+        -17.53,
+        -149.56
+      ],
+      "centroid": [
+        -17.6797,
+        -149.4068
+      ],
+      "area": 4167.0,
+      "population": 279500,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "CFP franc (₣)"
+      ]
+    },
+    "TUR": {
+      "m49": "792",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Ankara",
+      "capital_latlng": [
+        39.93,
+        32.87
+      ],
+      "centroid": [
+        39.0,
+        35.0
+      ],
+      "area": 783562.0,
+      "population": 85664944,
+      "languages": [
+        "Turkish"
+      ],
+      "currencies": [
+        "Turkish lira (₺)"
+      ]
+    },
+    "CPV": {
+      "m49": "132",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Praia",
+      "capital_latlng": [
+        14.92,
+        -23.52
+      ],
+      "centroid": [
+        16.5388,
+        -23.0418
+      ],
+      "area": 4033.0,
+      "population": 491233,
+      "languages": [
+        "Portuguese"
+      ],
+      "currencies": [
+        "Cape Verdean escudo (Esc)"
+      ]
+    },
+    "DOM": {
+      "m49": "214",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Santo Domingo",
+      "capital_latlng": [
+        18.47,
+        -69.9
+      ],
+      "centroid": [
+        19.0,
+        -70.66666666
+      ],
+      "area": 48671.0,
+      "population": 10771504,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Dominican peso ($)"
+      ]
+    },
+    "BHS": {
+      "m49": "044",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Nassau",
+      "capital_latlng": [
+        25.08,
+        -77.35
+      ],
+      "centroid": [
+        25.0343,
+        -77.3963
+      ],
+      "area": 13943.0,
+      "population": 398165,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Bahamian dollar ($)",
+        "United States dollar ($)"
+      ]
+    },
+    "DEU": {
+      "m49": "276",
+      "region": "Europe",
+      "subregion": "Western Europe",
+      "capital": "Berlin",
+      "capital_latlng": [
+        52.52,
+        13.4
+      ],
+      "centroid": [
+        51.0,
+        9.0
+      ],
+      "area": 357114.0,
+      "population": 83491249,
+      "languages": [
+        "German"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "SUR": {
+      "m49": "740",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Paramaribo",
+      "capital_latlng": [
+        5.83,
+        -55.17
+      ],
+      "centroid": [
+        4.0,
+        -56.0
+      ],
+      "area": 163820.0,
+      "population": 616500,
+      "languages": [
+        "Dutch"
+      ],
+      "currencies": [
+        "Surinamese dollar ($)"
+      ]
+    },
+    "TON": {
+      "m49": "776",
+      "region": "Oceania",
+      "subregion": "Polynesia",
+      "capital": "Nuku'alofa",
+      "capital_latlng": [
+        -21.13,
+        -175.2
+      ],
+      "centroid": [
+        -20.0,
+        -175.0
+      ],
+      "area": 747.0,
+      "population": 100179,
+      "languages": [
+        "English",
+        "Tongan"
+      ],
+      "currencies": [
+        "Tongan paʻanga (T$)"
+      ]
+    },
+    "IOT": {
+      "m49": "086",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Diego Garcia",
+      "capital_latlng": [
+        -7.3,
+        72.4
+      ],
+      "centroid": [
+        -6.0,
+        71.5
+      ],
+      "area": 60.0,
+      "population": 0,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "LCA": {
+      "m49": "662",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Castries",
+      "capital_latlng": [
+        14.0,
+        -61.0
+      ],
+      "centroid": [
+        13.88333333,
+        -60.96666666
+      ],
+      "area": 616.0,
+      "population": 184100,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Eastern Caribbean dollar ($)"
+      ]
+    },
+    "IRL": {
+      "m49": "372",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Dublin",
+      "capital_latlng": [
+        53.32,
+        -6.23
+      ],
+      "centroid": [
+        53.0,
+        -8.0
+      ],
+      "area": 70273.0,
+      "population": 5458600,
+      "languages": [
+        "English",
+        "Irish"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "VAT": {
+      "m49": "336",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": "Vatican City",
+      "capital_latlng": [
+        41.9,
+        12.45
+      ],
+      "centroid": [
+        41.9,
+        12.45
+      ],
+      "area": 0.49,
+      "population": 882,
+      "languages": [
+        "Italian",
+        "Latin"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "COL": {
+      "m49": "170",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Bogotá",
+      "capital_latlng": [
+        4.71,
+        -74.07
+      ],
+      "centroid": [
+        4.0,
+        -72.0
+      ],
+      "area": 1141748.0,
+      "population": 53057212,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Colombian peso ($)"
+      ]
+    },
+    "PRT": {
+      "m49": "620",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": "Lisbon",
+      "capital_latlng": [
+        38.72,
+        -9.13
+      ],
+      "centroid": [
+        39.5,
+        -8.0
+      ],
+      "area": 92090.0,
+      "population": 10749635,
+      "languages": [
+        "Portuguese"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "FRO": {
+      "m49": "234",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Tórshavn",
+      "capital_latlng": [
+        62.01,
+        -6.77
+      ],
+      "centroid": [
+        62.0,
+        -7.0
+      ],
+      "area": 1393.0,
+      "population": 54885,
+      "languages": [
+        "Danish",
+        "Faroese"
+      ],
+      "currencies": [
+        "Danish krone (kr)",
+        "Faroese króna (kr)"
+      ]
+    },
+    "STP": {
+      "m49": "678",
+      "region": "Africa",
+      "subregion": "Middle Africa",
+      "capital": "São Tomé",
+      "capital_latlng": [
+        0.34,
+        6.73
+      ],
+      "centroid": [
+        1.0,
+        7.0
+      ],
+      "area": 964.0,
+      "population": 209607,
+      "languages": [
+        "Portuguese"
+      ],
+      "currencies": [
+        "São Tomé and Príncipe dobra (Db)"
+      ]
+    },
+    "MNP": {
+      "m49": "580",
+      "region": "Oceania",
+      "subregion": "Micronesia",
+      "capital": "Saipan",
+      "capital_latlng": [
+        15.2,
+        145.75
+      ],
+      "centroid": [
+        15.2,
+        145.75
+      ],
+      "area": 464.0,
+      "population": 47329,
+      "languages": [
+        "Carolinian",
+        "Chamorro",
+        "English"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "JEY": {
+      "m49": "832",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Saint Helier",
+      "capital_latlng": [
+        49.18,
+        -2.1
+      ],
+      "centroid": [
+        49.25,
+        -2.16666666
+      ],
+      "area": 116.0,
+      "population": 103267,
+      "languages": [
+        "English",
+        "French",
+        "Jèrriais"
+      ],
+      "currencies": [
+        "British pound (£)",
+        "Jersey pound (£)"
+      ]
+    },
+    "MYT": {
+      "m49": "175",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Mamoudzou",
+      "capital_latlng": [
+        -12.78,
+        45.22
+      ],
+      "centroid": [
+        -12.83333333,
+        45.16666666
+      ],
+      "area": 374.0,
+      "population": 320901,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "YEM": {
+      "m49": "887",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Sana'a",
+      "capital_latlng": [
+        15.37,
+        44.19
+      ],
+      "centroid": [
+        15.0,
+        48.0
+      ],
+      "area": 527968.0,
+      "population": 32684503,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Yemeni rial (﷼)"
+      ]
+    },
+    "NGA": {
+      "m49": "566",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Abuja",
+      "capital_latlng": [
+        9.08,
+        7.53
+      ],
+      "centroid": [
+        10.0,
+        8.0
+      ],
+      "area": 923768.0,
+      "population": 223800000,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Nigerian naira (₦)"
+      ]
+    },
+    "AFG": {
+      "m49": "004",
+      "region": "Asia",
+      "subregion": "Southern Asia",
+      "capital": "Kabul",
+      "capital_latlng": [
+        34.52,
+        69.18
+      ],
+      "centroid": [
+        33.0,
+        65.0
+      ],
+      "area": 652230.0,
+      "population": 43844000,
+      "languages": [
+        "Dari",
+        "Pashto",
+        "Turkmen"
+      ],
+      "currencies": [
+        "Afghan afghani (؋)"
+      ]
+    },
+    "BWA": {
+      "m49": "072",
+      "region": "Africa",
+      "subregion": "Southern Africa",
+      "capital": "Gaborone",
+      "capital_latlng": [
+        -24.63,
+        25.9
+      ],
+      "centroid": [
+        -22.0,
+        24.0
+      ],
+      "area": 582000.0,
+      "population": 2359609,
+      "languages": [
+        "English",
+        "Tswana"
+      ],
+      "currencies": [
+        "Botswana pula (P)"
+      ]
+    },
+    "IMN": {
+      "m49": "833",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Douglas",
+      "capital_latlng": [
+        54.15,
+        -4.48
+      ],
+      "centroid": [
+        54.25,
+        -4.5
+      ],
+      "area": 572.0,
+      "population": 84530,
+      "languages": [
+        "English",
+        "Manx"
+      ],
+      "currencies": [
+        "British pound (£)",
+        "Manx pound (£)"
+      ]
+    },
+    "SLV": {
+      "m49": "222",
+      "region": "Americas",
+      "subregion": "Central America",
+      "capital": "San Salvador",
+      "capital_latlng": [
+        13.7,
+        -89.2
+      ],
+      "centroid": [
+        13.83333333,
+        -88.91666666
+      ],
+      "area": 21041.0,
+      "population": 6029976,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "UGA": {
+      "m49": "800",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Kampala",
+      "capital_latlng": [
+        0.32,
+        32.55
+      ],
+      "centroid": [
+        1.0,
+        32.0
+      ],
+      "area": 241550.0,
+      "population": 45905417,
+      "languages": [
+        "English",
+        "Swahili"
+      ],
+      "currencies": [
+        "Ugandan shilling (Sh)"
+      ]
+    },
+    "AND": {
+      "m49": "020",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": "Andorra la Vella",
+      "capital_latlng": [
+        42.5,
+        1.52
+      ],
+      "centroid": [
+        42.5,
+        1.5
+      ],
+      "area": 468.0,
+      "population": 88406,
+      "languages": [
+        "Catalan"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "TCA": {
+      "m49": "796",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Cockburn Town",
+      "capital_latlng": [
+        21.46,
+        -71.14
+      ],
+      "centroid": [
+        21.75,
+        -71.58333333
+      ],
+      "area": 948.0,
+      "population": 50828,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "TCD": {
+      "m49": "148",
+      "region": "Africa",
+      "subregion": "Middle Africa",
+      "capital": "N'Djamena",
+      "capital_latlng": [
+        12.1,
+        15.03
+      ],
+      "centroid": [
+        15.0,
+        19.0
+      ],
+      "area": 1284000.0,
+      "population": 19340757,
+      "languages": [
+        "Arabic",
+        "French"
+      ],
+      "currencies": [
+        "Central African CFA franc (Fr)"
+      ]
+    },
+    "FIN": {
+      "m49": "246",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Helsinki",
+      "capital_latlng": [
+        60.17,
+        24.93
+      ],
+      "centroid": [
+        64.0,
+        26.0
+      ],
+      "area": 338455.0,
+      "population": 5650325,
+      "languages": [
+        "Finnish",
+        "Swedish"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "RUS": {
+      "m49": "643",
+      "region": "Europe",
+      "subregion": "Eastern Europe",
+      "capital": "Moscow",
+      "capital_latlng": [
+        55.75,
+        37.6
+      ],
+      "centroid": [
+        60.0,
+        100.0
+      ],
+      "area": 17098246.0,
+      "population": 146028325,
+      "languages": [
+        "Russian"
+      ],
+      "currencies": [
+        "Russian ruble (₽)"
+      ]
+    },
+    "KAZ": {
+      "m49": "398",
+      "region": "Asia",
+      "subregion": "Central Asia",
+      "capital": "Astana",
+      "capital_latlng": [
+        51.16,
+        71.45
+      ],
+      "centroid": [
+        48.0196,
+        66.9237
+      ],
+      "area": 2724900.0,
+      "population": 20426568,
+      "languages": [
+        "Kazakh",
+        "Russian"
+      ],
+      "currencies": [
+        "Kazakhstani tenge (₸)"
+      ]
+    },
+    "SJM": {
+      "m49": "744",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Longyearbyen",
+      "capital_latlng": [
+        78.22,
+        15.63
+      ],
+      "centroid": [
+        78.0,
+        20.0
+      ],
+      "area": 61399.0,
+      "population": 2530,
+      "languages": [
+        "Norwegian"
+      ],
+      "currencies": [
+        "krone (kr)"
+      ]
+    },
+    "VEN": {
+      "m49": "862",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Caracas",
+      "capital_latlng": [
+        10.48,
+        -66.87
+      ],
+      "centroid": [
+        8.0,
+        -66.0
+      ],
+      "area": 916445.0,
+      "population": 28517000,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Venezuelan bolívar soberano (Bs.S.)"
+      ]
+    },
+    "MCO": {
+      "m49": "492",
+      "region": "Europe",
+      "subregion": "Western Europe",
+      "capital": "Monaco",
+      "capital_latlng": [
+        43.73,
+        7.42
+      ],
+      "centroid": [
+        43.73333333,
+        7.4
+      ],
+      "area": 2.02,
+      "population": 38423,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "SEN": {
+      "m49": "686",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Dakar",
+      "capital_latlng": [
+        14.73,
+        -17.63
+      ],
+      "centroid": [
+        14.0,
+        -14.0
+      ],
+      "area": 196722.0,
+      "population": 18593258,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "West African CFA franc (Fr)"
+      ]
+    },
+    "NPL": {
+      "m49": "524",
+      "region": "Asia",
+      "subregion": "Southern Asia",
+      "capital": "Kathmandu",
+      "capital_latlng": [
+        27.72,
+        85.32
+      ],
+      "centroid": [
+        28.0,
+        84.0
+      ],
+      "area": 147181.0,
+      "population": 29911840,
+      "languages": [
+        "Nepali"
+      ],
+      "currencies": [
+        "Nepalese rupee (₨)"
+      ]
+    },
+    "ARE": {
+      "m49": "784",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Abu Dhabi",
+      "capital_latlng": [
+        24.47,
+        54.37
+      ],
+      "centroid": [
+        24.0,
+        54.0
+      ],
+      "area": 83600.0,
+      "population": 11294243,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "United Arab Emirates dirham (د.إ)"
+      ]
+    },
+    "TWN": {
+      "m49": "158",
+      "region": "Asia",
+      "subregion": "Eastern Asia",
+      "capital": "Taipei",
+      "capital_latlng": [
+        25.03,
+        121.52
+      ],
+      "centroid": [
+        23.5,
+        121.0
+      ],
+      "area": 36197.0,
+      "population": 23317031,
+      "languages": [
+        "Chinese"
+      ],
+      "currencies": [
+        "New Taiwan dollar ($)"
+      ]
+    },
+    "NCL": {
+      "m49": "540",
+      "region": "Oceania",
+      "subregion": "Melanesia",
+      "capital": "Nouméa",
+      "capital_latlng": [
+        -22.27,
+        166.45
+      ],
+      "centroid": [
+        -21.5,
+        165.5
+      ],
+      "area": 18575.0,
+      "population": 264596,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "CFP franc (₣)"
+      ]
+    },
+    "BOL": {
+      "m49": "068",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Sucre",
+      "capital_latlng": [
+        -19.02,
+        -65.26
+      ],
+      "centroid": [
+        -17.0,
+        -65.0
+      ],
+      "area": 1098581.0,
+      "population": 11365333,
+      "languages": [
+        "Aymara",
+        "Guaraní",
+        "Quechua",
+        "Spanish"
+      ],
+      "currencies": [
+        "Bolivian boliviano (Bs.)"
+      ]
+    },
+    "CHL": {
+      "m49": "152",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Santiago",
+      "capital_latlng": [
+        -33.45,
+        -70.67
+      ],
+      "centroid": [
+        -30.0,
+        -71.0
+      ],
+      "area": 756102.0,
+      "population": 20206953,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Chilean peso ($)"
+      ]
+    },
+    "CIV": {
+      "m49": "384",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Yamoussoukro",
+      "capital_latlng": [
+        6.82,
+        -5.27
+      ],
+      "centroid": [
+        8.0,
+        -5.0
+      ],
+      "area": 322463.0,
+      "population": 31719275,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "West African CFA franc (Fr)"
+      ]
+    },
+    "LBY": {
+      "m49": "434",
+      "region": "Africa",
+      "subregion": "Northern Africa",
+      "capital": "Tripoli",
+      "capital_latlng": [
+        32.88,
+        13.17
+      ],
+      "centroid": [
+        25.0,
+        17.0
+      ],
+      "area": 1759540.0,
+      "population": 7459000,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Libyan dinar (ل.د)"
+      ]
+    },
+    "PER": {
+      "m49": "604",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Lima",
+      "capital_latlng": [
+        -12.05,
+        -77.05
+      ],
+      "centroid": [
+        -10.0,
+        -76.0
+      ],
+      "area": 1285216.0,
+      "population": 34350244,
+      "languages": [
+        "Aymara",
+        "Quechua",
+        "Spanish"
+      ],
+      "currencies": [
+        "Peruvian sol (S/ )"
+      ]
+    },
+    "CAN": {
+      "m49": "124",
+      "region": "Americas",
+      "subregion": "North America",
+      "capital": "Ottawa",
+      "capital_latlng": [
+        45.42,
+        -75.7
+      ],
+      "centroid": [
+        60.0,
+        -95.0
+      ],
+      "area": 9984670.0,
+      "population": 41651653,
+      "languages": [
+        "English",
+        "French"
+      ],
+      "currencies": [
+        "Canadian dollar ($)"
+      ]
+    },
+    "FRA": {
+      "m49": "250",
+      "region": "Europe",
+      "subregion": "Western Europe",
+      "capital": "Paris",
+      "capital_latlng": [
+        48.87,
+        2.33
+      ],
+      "centroid": [
+        46.0,
+        2.0
+      ],
+      "area": 543908.0,
+      "population": 66351959,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "DJI": {
+      "m49": "262",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Djibouti",
+      "capital_latlng": [
+        11.58,
+        43.15
+      ],
+      "centroid": [
+        11.5,
+        43.0
+      ],
+      "area": 23200.0,
+      "population": 1066809,
+      "languages": [
+        "Arabic",
+        "French"
+      ],
+      "currencies": [
+        "Djiboutian franc (Fr)"
+      ]
+    },
+    "BDI": {
+      "m49": "108",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Gitega",
+      "capital_latlng": [
+        -3.43,
+        29.93
+      ],
+      "centroid": [
+        -3.5,
+        30.0
+      ],
+      "area": 27834.0,
+      "population": 12332788,
+      "languages": [
+        "French",
+        "Kirundi"
+      ],
+      "currencies": [
+        "Burundian franc (Fr)"
+      ]
+    },
+    "UNK": {
+      "m49": null,
+      "region": "Europe",
+      "subregion": "Southeast Europe",
+      "capital": "Pristina",
+      "capital_latlng": [
+        42.67,
+        21.17
+      ],
+      "centroid": [
+        42.666667,
+        21.166667
+      ],
+      "area": 10908.0,
+      "population": 1585566,
+      "languages": [
+        "Albanian",
+        "Serbian"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "DNK": {
+      "m49": "208",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Copenhagen",
+      "capital_latlng": [
+        55.67,
+        12.58
+      ],
+      "centroid": [
+        56.0,
+        10.0
+      ],
+      "area": 43094.0,
+      "population": 6011488,
+      "languages": [
+        "Danish"
+      ],
+      "currencies": [
+        "Danish krone (kr)"
+      ]
+    },
+    "GRC": {
+      "m49": "300",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": "Athens",
+      "capital_latlng": [
+        37.98,
+        23.73
+      ],
+      "centroid": [
+        39.0,
+        22.0
+      ],
+      "area": 131990.0,
+      "population": 10400720,
+      "languages": [
+        "Greek"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "CZE": {
+      "m49": "203",
+      "region": "Europe",
+      "subregion": "Central Europe",
+      "capital": "Prague",
+      "capital_latlng": [
+        50.08,
+        14.47
+      ],
+      "centroid": [
+        49.75,
+        15.5
+      ],
+      "area": 78865.0,
+      "population": 10882341,
+      "languages": [
+        "Czech",
+        "Slovak"
+      ],
+      "currencies": [
+        "Czech koruna (Kč)"
+      ]
+    },
+    "ERI": {
+      "m49": "232",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Asmara",
+      "capital_latlng": [
+        15.33,
+        38.93
+      ],
+      "centroid": [
+        15.0,
+        39.0
+      ],
+      "area": 117600.0,
+      "population": 3607000,
+      "languages": [
+        "Arabic",
+        "English",
+        "Tigrinya"
+      ],
+      "currencies": [
+        "Eritrean nakfa (Nfk)"
+      ]
+    },
+    "NAM": {
+      "m49": "516",
+      "region": "Africa",
+      "subregion": "Southern Africa",
+      "capital": "Windhoek",
+      "capital_latlng": [
+        -22.57,
+        17.08
+      ],
+      "centroid": [
+        -22.0,
+        17.0
+      ],
+      "area": 825615.0,
+      "population": 3022401,
+      "languages": [
+        "Afrikaans",
+        "English",
+        "German",
+        "Herero",
+        "Khoekhoe",
+        "Kwangali",
+        "Lozi",
+        "Ndonga",
+        "Tswana"
+      ],
+      "currencies": [
+        "Namibian dollar ($)",
+        "South African rand (R)"
+      ]
+    },
+    "VGB": {
+      "m49": "092",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Road Town",
+      "capital_latlng": [
+        18.42,
+        -64.62
+      ],
+      "centroid": [
+        18.431383,
+        -64.62305
+      ],
+      "area": 151.0,
+      "population": 39471,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "IRN": {
+      "m49": "364",
+      "region": "Asia",
+      "subregion": "Southern Asia",
+      "capital": "Tehran",
+      "capital_latlng": [
+        35.7,
+        51.42
+      ],
+      "centroid": [
+        32.0,
+        53.0
+      ],
+      "area": 1648195.0,
+      "population": 85961000,
+      "languages": [
+        "Persian (Farsi)"
+      ],
+      "currencies": [
+        "Iranian rial (﷼)"
+      ]
+    },
+    "GNQ": {
+      "m49": "226",
+      "region": "Africa",
+      "subregion": "Middle Africa",
+      "capital": "Ciudad de la Paz",
+      "capital_latlng": [
+        1.35,
+        10.49
+      ],
+      "centroid": [
+        2.0,
+        10.0
+      ],
+      "area": 28051.0,
+      "population": 1668768,
+      "languages": [
+        "French",
+        "Portuguese",
+        "Spanish"
+      ],
+      "currencies": [
+        "Central African CFA franc (Fr)"
+      ]
+    },
+    "MRT": {
+      "m49": "478",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Nouakchott",
+      "capital_latlng": [
+        18.07,
+        -15.97
+      ],
+      "centroid": [
+        20.0,
+        -12.0
+      ],
+      "area": 1030700.0,
+      "population": 4927532,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Mauritanian ouguiya (UM)"
+      ]
+    },
+    "BHR": {
+      "m49": "048",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Manama",
+      "capital_latlng": [
+        26.23,
+        50.57
+      ],
+      "centroid": [
+        26.0,
+        50.55
+      ],
+      "area": 765.0,
+      "population": 1594654,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Bahraini dinar (.د.ب)"
+      ]
+    },
+    "CCK": {
+      "m49": "166",
+      "region": "Oceania",
+      "subregion": "Australia and New Zealand",
+      "capital": "West Island",
+      "capital_latlng": [
+        -12.17,
+        96.83
+      ],
+      "centroid": [
+        -12.1642,
+        96.871
+      ],
+      "area": 14.0,
+      "population": 593,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Australian dollar ($)"
+      ]
+    },
+    "ETH": {
+      "m49": "231",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Addis Ababa",
+      "capital_latlng": [
+        9.03,
+        38.7
+      ],
+      "centroid": [
+        8.0,
+        38.0
+      ],
+      "area": 1104300.0,
+      "population": 111652998,
+      "languages": [
+        "Amharic"
+      ],
+      "currencies": [
+        "Ethiopian birr (Br)"
+      ]
+    },
+    "ZMB": {
+      "m49": "894",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Lusaka",
+      "capital_latlng": [
+        -15.42,
+        28.28
+      ],
+      "centroid": [
+        -15.0,
+        30.0
+      ],
+      "area": 752612.0,
+      "population": 19693423,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Zambian kwacha (ZK)"
+      ]
+    },
+    "BIH": {
+      "m49": "070",
+      "region": "Europe",
+      "subregion": "Southeast Europe",
+      "capital": "Sarajevo",
+      "capital_latlng": [
+        43.87,
+        18.42
+      ],
+      "centroid": [
+        44.0,
+        18.0
+      ],
+      "area": 51209.0,
+      "population": 3422000,
+      "languages": [
+        "Bosnian",
+        "Croatian",
+        "Serbian"
+      ],
+      "currencies": [
+        "Bosnia and Herzegovina convertible mark (KM)"
+      ]
+    },
+    "FLK": {
+      "m49": "238",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Stanley",
+      "capital_latlng": [
+        -51.7,
+        -57.85
+      ],
+      "centroid": [
+        -51.75,
+        -59.0
+      ],
+      "area": 12173.0,
+      "population": 3662,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Falkland Islands pound (£)"
+      ]
+    },
+    "GRD": {
+      "m49": "308",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "St. George's",
+      "capital_latlng": [
+        32.38,
+        -64.68
+      ],
+      "centroid": [
+        12.11666666,
+        -61.66666666
+      ],
+      "area": 344.0,
+      "population": 109021,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Eastern Caribbean dollar ($)"
+      ]
+    },
+    "THA": {
+      "m49": "764",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Bangkok",
+      "capital_latlng": [
+        13.75,
+        100.52
+      ],
+      "centroid": [
+        15.0,
+        100.0
+      ],
+      "area": 513120.0,
+      "population": 65859640,
+      "languages": [
+        "Thai"
+      ],
+      "currencies": [
+        "Thai baht (฿)"
+      ]
+    },
+    "ROU": {
+      "m49": "642",
+      "region": "Europe",
+      "subregion": "Southeast Europe",
+      "capital": "Bucharest",
+      "capital_latlng": [
+        44.43,
+        26.1
+      ],
+      "centroid": [
+        46.0,
+        25.0
+      ],
+      "area": 238391.0,
+      "population": 19036031,
+      "languages": [
+        "Romanian"
+      ],
+      "currencies": [
+        "Romanian leu (lei)"
+      ]
+    },
+    "VCT": {
+      "m49": "670",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Kingstown",
+      "capital_latlng": [
+        13.13,
+        -61.22
+      ],
+      "centroid": [
+        13.25,
+        -61.2
+      ],
+      "area": 389.0,
+      "population": 110872,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Eastern Caribbean dollar ($)"
+      ]
+    },
+    "LBR": {
+      "m49": "430",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Monrovia",
+      "capital_latlng": [
+        6.3,
+        -10.8
+      ],
+      "centroid": [
+        6.5,
+        -9.5
+      ],
+      "area": 111369.0,
+      "population": 5248621,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Liberian dollar ($)"
+      ]
+    },
+    "USA": {
+      "m49": "840",
+      "region": "Americas",
+      "subregion": "North America",
+      "capital": "Washington, D.C.",
+      "capital_latlng": [
+        38.89,
+        -77.05
+      ],
+      "centroid": [
+        38.0,
+        -97.0
+      ],
+      "area": 9525067.0,
+      "population": 340110988,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "SSD": {
+      "m49": "728",
+      "region": "Africa",
+      "subregion": "Middle Africa",
+      "capital": "Juba",
+      "capital_latlng": [
+        4.85,
+        31.62
+      ],
+      "centroid": [
+        7.0,
+        30.0
+      ],
+      "area": 619745.0,
+      "population": 15786898,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "South Sudanese pound (£)"
+      ]
+    },
+    "BVT": {
+      "m49": "074",
+      "region": "Antarctic",
+      "subregion": "",
+      "capital": null,
+      "capital_latlng": [],
+      "centroid": [
+        -54.4208,
+        3.3464
+      ],
+      "area": 49.0,
+      "population": 0,
+      "languages": [
+        "Norwegian"
+      ],
+      "currencies": []
+    },
+    "ARM": {
+      "m49": "051",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Yerevan",
+      "capital_latlng": [
+        40.17,
+        44.5
+      ],
+      "centroid": [
+        40.0,
+        45.0
+      ],
+      "area": 29743.0,
+      "population": 3076200,
+      "languages": [
+        "Armenian"
+      ],
+      "currencies": [
+        "Armenian dram (֏)"
+      ]
+    },
+    "JPN": {
+      "m49": "392",
+      "region": "Asia",
+      "subregion": "Eastern Asia",
+      "capital": "Tokyo",
+      "capital_latlng": [
+        35.68,
+        139.75
+      ],
+      "centroid": [
+        36.0,
+        138.0
+      ],
+      "area": 377930.0,
+      "population": 123210000,
+      "languages": [
+        "Japanese"
+      ],
+      "currencies": [
+        "Japanese yen (¥)"
+      ]
+    },
+    "PAK": {
+      "m49": "586",
+      "region": "Asia",
+      "subregion": "Southern Asia",
+      "capital": "Islamabad",
+      "capital_latlng": [
+        33.68,
+        73.05
+      ],
+      "centroid": [
+        30.0,
+        70.0
+      ],
+      "area": 796095.0,
+      "population": 241499431,
+      "languages": [
+        "English",
+        "Urdu"
+      ],
+      "currencies": [
+        "Pakistani rupee (₨)"
+      ]
+    },
+    "SWZ": {
+      "m49": "748",
+      "region": "Africa",
+      "subregion": "Southern Africa",
+      "capital": "Mbabane",
+      "capital_latlng": [
+        -26.32,
+        31.13
+      ],
+      "centroid": [
+        -26.5,
+        31.5
+      ],
+      "area": 17364.0,
+      "population": 1235549,
+      "languages": [
+        "English",
+        "Swazi"
+      ],
+      "currencies": [
+        "Swazi lilangeni (L)",
+        "South African rand (R)"
+      ]
+    },
+    "LIE": {
+      "m49": "438",
+      "region": "Europe",
+      "subregion": "Western Europe",
+      "capital": "Vaduz",
+      "capital_latlng": [
+        47.13,
+        9.52
+      ],
+      "centroid": [
+        47.26666666,
+        9.53333333
+      ],
+      "area": 160.0,
+      "population": 40900,
+      "languages": [
+        "German"
+      ],
+      "currencies": [
+        "Swiss franc (Fr)"
+      ]
+    },
+    "ISR": {
+      "m49": "376",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Jerusalem",
+      "capital_latlng": [
+        31.77,
+        35.23
+      ],
+      "centroid": [
+        31.47,
+        35.13
+      ],
+      "area": 21937.0,
+      "population": 10134800,
+      "languages": [
+        "Arabic",
+        "Hebrew"
+      ],
+      "currencies": [
+        "Israeli new shekel (₪)"
+      ]
+    },
+    "ASM": {
+      "m49": "016",
+      "region": "Oceania",
+      "subregion": "Polynesia",
+      "capital": "Pago Pago",
+      "capital_latlng": [
+        -14.27,
+        -170.7
+      ],
+      "centroid": [
+        -14.33333333,
+        -170.0
+      ],
+      "area": 199.0,
+      "population": 49710,
+      "languages": [
+        "English",
+        "Samoan"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "LKA": {
+      "m49": "144",
+      "region": "Asia",
+      "subregion": "Southern Asia",
+      "capital": "Sri Jayawardenepura Kotte",
+      "capital_latlng": [
+        6.89,
+        79.9
+      ],
+      "centroid": [
+        7.0,
+        81.0
+      ],
+      "area": 65610.0,
+      "population": 21763170,
+      "languages": [
+        "Sinhala",
+        "Tamil"
+      ],
+      "currencies": [
+        "Sri Lankan rupee (Rs  රු)"
+      ]
+    },
+    "SGS": {
+      "m49": "239",
+      "region": "Antarctic",
+      "subregion": "",
+      "capital": "King Edward Point",
+      "capital_latlng": [
+        -54.28,
+        -36.5
+      ],
+      "centroid": [
+        -54.5,
+        -37.0
+      ],
+      "area": 3903.0,
+      "population": 0,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "British pound (£)"
+      ]
+    },
+    "ALB": {
+      "m49": "008",
+      "region": "Europe",
+      "subregion": "Southeast Europe",
+      "capital": "Tirana",
+      "capital_latlng": [
+        41.32,
+        19.82
+      ],
+      "centroid": [
+        41.0,
+        20.0
+      ],
+      "area": 28748.0,
+      "population": 2363314,
+      "languages": [
+        "Albanian"
+      ],
+      "currencies": [
+        "Albanian lek (L)"
+      ]
+    },
+    "DZA": {
+      "m49": "012",
+      "region": "Africa",
+      "subregion": "Northern Africa",
+      "capital": "Algiers",
+      "capital_latlng": [
+        36.75,
+        3.05
+      ],
+      "centroid": [
+        28.0,
+        3.0
+      ],
+      "area": 2381741.0,
+      "population": 47400000,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Algerian dinar (د.ج)"
+      ]
+    },
+    "UKR": {
+      "m49": "804",
+      "region": "Europe",
+      "subregion": "Eastern Europe",
+      "capital": "Kyiv",
+      "capital_latlng": [
+        50.43,
+        30.52
+      ],
+      "centroid": [
+        49.0,
+        32.0
+      ],
+      "area": 603550.0,
+      "population": 32862000,
+      "languages": [
+        "Ukrainian"
+      ],
+      "currencies": [
+        "Ukrainian hryvnia (₴)"
+      ]
+    },
+    "SHN": {
+      "m49": "654",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Jamestown",
+      "capital_latlng": [
+        -15.93,
+        -5.72
+      ],
+      "centroid": [
+        -15.95,
+        -5.72
+      ],
+      "area": 394.0,
+      "population": 5651,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Pound sterling (£)",
+        "Saint Helena pound (£)"
+      ]
+    },
+    "HMD": {
+      "m49": "334",
+      "region": "Antarctic",
+      "subregion": "",
+      "capital": null,
+      "capital_latlng": [],
+      "centroid": [
+        -53.0818,
+        73.5042
+      ],
+      "area": 412.0,
+      "population": 0,
+      "languages": [
+        "English"
+      ],
+      "currencies": []
+    },
+    "SMR": {
+      "m49": "674",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": "City of San Marino",
+      "capital_latlng": [
+        43.94,
+        12.45
+      ],
+      "centroid": [
+        43.76666666,
+        12.41666666
+      ],
+      "area": 61.0,
+      "population": 34132,
+      "languages": [
+        "Italian"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "CUB": {
+      "m49": "192",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Havana",
+      "capital_latlng": [
+        23.12,
+        -82.35
+      ],
+      "centroid": [
+        21.5,
+        -80.0
+      ],
+      "area": 109884.0,
+      "population": 9748007,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Cuban convertible peso ($)",
+        "Cuban peso ($)"
+      ]
+    },
+    "NRU": {
+      "m49": "520",
+      "region": "Oceania",
+      "subregion": "Micronesia",
+      "capital": "Yaren",
+      "capital_latlng": [
+        -0.55,
+        166.92
+      ],
+      "centroid": [
+        -0.53333333,
+        166.91666666
+      ],
+      "area": 21.0,
+      "population": 11680,
+      "languages": [
+        "English",
+        "Nauru"
+      ],
+      "currencies": [
+        "Australian dollar ($)"
+      ]
+    },
+    "ESP": {
+      "m49": "724",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": "Madrid",
+      "capital_latlng": [
+        40.4,
+        -3.68
+      ],
+      "centroid": [
+        40.0,
+        -4.0
+      ],
+      "area": 505992.0,
+      "population": 49315949,
+      "languages": [
+        "Basque",
+        "Catalan",
+        "Galician",
+        "Spanish"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "KWT": {
+      "m49": "414",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Kuwait City",
+      "capital_latlng": [
+        29.37,
+        47.97
+      ],
+      "centroid": [
+        29.5,
+        45.75
+      ],
+      "area": 17818.0,
+      "population": 4881254,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Kuwaiti dinar (د.ك)"
+      ]
+    },
+    "MSR": {
+      "m49": "500",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Plymouth",
+      "capital_latlng": [
+        16.7,
+        -62.22
+      ],
+      "centroid": [
+        16.75,
+        -62.2
+      ],
+      "area": 102.0,
+      "population": 4386,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Eastern Caribbean dollar ($)"
+      ]
+    },
+    "MUS": {
+      "m49": "480",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Port Louis",
+      "capital_latlng": [
+        -20.15,
+        57.48
+      ],
+      "centroid": [
+        -20.28333333,
+        57.55
+      ],
+      "area": 2040.0,
+      "population": 1243741,
+      "languages": [
+        "English",
+        "French",
+        "Mauritian Creole"
+      ],
+      "currencies": [
+        "Mauritian rupee (₨)"
+      ]
+    },
+    "SWE": {
+      "m49": "752",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Stockholm",
+      "capital_latlng": [
+        59.33,
+        18.05
+      ],
+      "centroid": [
+        62.0,
+        15.0
+      ],
+      "area": 450295.0,
+      "population": 10605098,
+      "languages": [
+        "Swedish"
+      ],
+      "currencies": [
+        "Swedish krona (kr)"
+      ]
+    },
+    "AUS": {
+      "m49": "036",
+      "region": "Oceania",
+      "subregion": "Australia and New Zealand",
+      "capital": "Canberra",
+      "capital_latlng": [
+        -35.27,
+        149.13
+      ],
+      "centroid": [
+        -27.0,
+        133.0
+      ],
+      "area": 7692024.0,
+      "population": 27536874,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Australian dollar ($)"
+      ]
+    },
+    "CMR": {
+      "m49": "120",
+      "region": "Africa",
+      "subregion": "Middle Africa",
+      "capital": "Yaoundé",
+      "capital_latlng": [
+        3.85,
+        11.5
+      ],
+      "centroid": [
+        6.0,
+        12.0
+      ],
+      "area": 475442.0,
+      "population": 29442327,
+      "languages": [
+        "English",
+        "French"
+      ],
+      "currencies": [
+        "Central African CFA franc (Fr)"
+      ]
+    },
+    "ECU": {
+      "m49": "218",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Quito",
+      "capital_latlng": [
+        -0.22,
+        -78.5
+      ],
+      "centroid": [
+        -2.0,
+        -77.5
+      ],
+      "area": 276841.0,
+      "population": 18103660,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "QAT": {
+      "m49": "634",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Doha",
+      "capital_latlng": [
+        25.28,
+        51.53
+      ],
+      "centroid": [
+        25.5,
+        51.25
+      ],
+      "area": 11586.0,
+      "population": 3173024,
+      "languages": [
+        "Arabic"
+      ],
+      "currencies": [
+        "Qatari riyal (ر.ق)"
+      ]
+    },
+    "MHL": {
+      "m49": "584",
+      "region": "Oceania",
+      "subregion": "Micronesia",
+      "capital": "Majuro",
+      "capital_latlng": [
+        7.1,
+        171.38
+      ],
+      "centroid": [
+        9.0,
+        168.0
+      ],
+      "area": 181.0,
+      "population": 42418,
+      "languages": [
+        "English",
+        "Marshallese"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "POL": {
+      "m49": "616",
+      "region": "Europe",
+      "subregion": "Central Europe",
+      "capital": "Warsaw",
+      "capital_latlng": [
+        52.25,
+        21.0
+      ],
+      "centroid": [
+        52.0,
+        20.0
+      ],
+      "area": 312679.0,
+      "population": 37392000,
+      "languages": [
+        "Polish"
+      ],
+      "currencies": [
+        "Polish złoty (zł)"
+      ]
+    },
+    "CYM": {
+      "m49": "136",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "George Town",
+      "capital_latlng": [
+        19.3,
+        -81.38
+      ],
+      "centroid": [
+        19.3133,
+        -81.2546
+      ],
+      "area": 264.0,
+      "population": 84738,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Cayman Islands dollar ($)"
+      ]
+    },
+    "ZAF": {
+      "m49": "710",
+      "region": "Africa",
+      "subregion": "Southern Africa",
+      "capital": "Pretoria",
+      "capital_latlng": [
+        -25.7,
+        28.22
+      ],
+      "centroid": [
+        -29.0,
+        24.0
+      ],
+      "area": 1221037.0,
+      "population": 63100945,
+      "languages": [
+        "Afrikaans",
+        "English",
+        "Northern Sotho",
+        "Southern Ndebele",
+        "Southern Sotho",
+        "Swazi",
+        "Tsonga",
+        "Tswana",
+        "Venda",
+        "Xhosa",
+        "Zulu"
+      ],
+      "currencies": [
+        "South African rand (R)"
+      ]
+    },
+    "WLF": {
+      "m49": "876",
+      "region": "Oceania",
+      "subregion": "Polynesia",
+      "capital": "Mata-Utu",
+      "capital_latlng": [
+        -13.95,
+        -171.93
+      ],
+      "centroid": [
+        -13.3,
+        -176.2
+      ],
+      "area": 142.0,
+      "population": 11620,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "CFP franc (₣)"
+      ]
+    },
+    "WSM": {
+      "m49": "882",
+      "region": "Oceania",
+      "subregion": "Polynesia",
+      "capital": "Apia",
+      "capital_latlng": [
+        -13.82,
+        -171.77
+      ],
+      "centroid": [
+        -13.58333333,
+        -172.33333333
+      ],
+      "area": 2842.0,
+      "population": 205557,
+      "languages": [
+        "English",
+        "Samoan"
+      ],
+      "currencies": [
+        "Samoan tālā (T)"
+      ]
+    },
+    "NLD": {
+      "m49": "528",
+      "region": "Europe",
+      "subregion": "Western Europe",
+      "capital": "Amsterdam",
+      "capital_latlng": [
+        52.35,
+        4.92
+      ],
+      "centroid": [
+        52.5,
+        5.75
+      ],
+      "area": 41865.0,
+      "population": 18100436,
+      "languages": [
+        "Dutch"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "ESH": {
+      "m49": "732",
+      "region": "Africa",
+      "subregion": "Northern Africa",
+      "capital": "El Aaiún",
+      "capital_latlng": [
+        -13.28,
+        27.14
+      ],
+      "centroid": [
+        24.5,
+        -13.0
+      ],
+      "area": 266000.0,
+      "population": 600904,
+      "languages": [
+        "Berber",
+        "Hassaniya",
+        "Spanish"
+      ],
+      "currencies": [
+        "Algerian dinar (دج)",
+        "Moroccan dirham (DH)",
+        "Mauritanian ouguiya (UM)"
+      ]
+    },
+    "MNE": {
+      "m49": "499",
+      "region": "Europe",
+      "subregion": "Southeast Europe",
+      "capital": "Podgorica",
+      "capital_latlng": [
+        42.43,
+        19.27
+      ],
+      "centroid": [
+        42.5,
+        19.3
+      ],
+      "area": 13812.0,
+      "population": 623327,
+      "languages": [
+        "Montenegrin"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "BTN": {
+      "m49": "064",
+      "region": "Asia",
+      "subregion": "Southern Asia",
+      "capital": "Thimphu",
+      "capital_latlng": [
+        27.47,
+        89.63
+      ],
+      "centroid": [
+        27.5,
+        90.5
+      ],
+      "area": 38394.0,
+      "population": 784043,
+      "languages": [
+        "Dzongkha"
+      ],
+      "currencies": [
+        "Bhutanese ngultrum (Nu.)",
+        "Indian rupee (₹)"
+      ]
+    },
+    "MLT": {
+      "m49": "470",
+      "region": "Europe",
+      "subregion": "Southern Europe",
+      "capital": "Valletta",
+      "capital_latlng": [
+        35.88,
+        14.5
+      ],
+      "centroid": [
+        35.9375,
+        14.3754
+      ],
+      "area": 316.0,
+      "population": 574250,
+      "languages": [
+        "English",
+        "Maltese"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "VUT": {
+      "m49": "548",
+      "region": "Oceania",
+      "subregion": "Melanesia",
+      "capital": "Port Vila",
+      "capital_latlng": [
+        -17.73,
+        168.32
+      ],
+      "centroid": [
+        -16.0,
+        167.0
+      ],
+      "area": 12189.0,
+      "population": 321409,
+      "languages": [
+        "Bislama",
+        "English",
+        "French"
+      ],
+      "currencies": [
+        "Vanuatu vatu (Vt)"
+      ]
+    },
+    "TZA": {
+      "m49": "834",
+      "region": "Africa",
+      "subregion": "Eastern Africa",
+      "capital": "Dodoma",
+      "capital_latlng": [
+        -6.16,
+        35.75
+      ],
+      "centroid": [
+        -6.0,
+        35.0
+      ],
+      "area": 947303.0,
+      "population": 68153004,
+      "languages": [
+        "English",
+        "Swahili"
+      ],
+      "currencies": [
+        "Tanzanian shilling (Sh)"
+      ]
+    },
+    "NZL": {
+      "m49": "554",
+      "region": "Oceania",
+      "subregion": "Australia and New Zealand",
+      "capital": "Wellington",
+      "capital_latlng": [
+        -41.3,
+        174.78
+      ],
+      "centroid": [
+        -41.0,
+        174.0
+      ],
+      "area": 268838.0,
+      "population": 5324700,
+      "languages": [
+        "English",
+        "Māori",
+        "New Zealand Sign Language"
+      ],
+      "currencies": [
+        "New Zealand dollar ($)"
+      ]
+    },
+    "PLW": {
+      "m49": "585",
+      "region": "Oceania",
+      "subregion": "Micronesia",
+      "capital": "Ngerulmud",
+      "capital_latlng": [
+        7.5,
+        134.62
+      ],
+      "centroid": [
+        7.5,
+        134.5
+      ],
+      "area": 459.0,
+      "population": 16733,
+      "languages": [
+        "English",
+        "Palauan"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    },
+    "PAN": {
+      "m49": "591",
+      "region": "Americas",
+      "subregion": "Central America",
+      "capital": "Panama City",
+      "capital_latlng": [
+        8.97,
+        -79.53
+      ],
+      "centroid": [
+        9.0,
+        -80.0
+      ],
+      "area": 75417.0,
+      "population": 4064780,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Panamanian balboa (B/.)",
+        "United States dollar ($)"
+      ]
+    },
+    "TUV": {
+      "m49": "798",
+      "region": "Oceania",
+      "subregion": "Polynesia",
+      "capital": "Funafuti",
+      "capital_latlng": [
+        -8.52,
+        179.22
+      ],
+      "centroid": [
+        -8.0,
+        178.0
+      ],
+      "area": 26.0,
+      "population": 10643,
+      "languages": [
+        "English",
+        "Tuvaluan"
+      ],
+      "currencies": [
+        "Australian dollar ($)",
+        "Tuvaluan dollar ($)"
+      ]
+    },
+    "FJI": {
+      "m49": "242",
+      "region": "Oceania",
+      "subregion": "Melanesia",
+      "capital": "Suva",
+      "capital_latlng": [
+        -18.13,
+        178.42
+      ],
+      "centroid": [
+        -17.7134,
+        178.065
+      ],
+      "area": 18272.0,
+      "population": 900869,
+      "languages": [
+        "English",
+        "Fiji Hindi",
+        "Fijian"
+      ],
+      "currencies": [
+        "Fijian dollar ($)"
+      ]
+    },
+    "NIC": {
+      "m49": "558",
+      "region": "Americas",
+      "subregion": "Central America",
+      "capital": "Managua",
+      "capital_latlng": [
+        12.13,
+        -86.25
+      ],
+      "centroid": [
+        13.0,
+        -85.0
+      ],
+      "area": 130373.0,
+      "population": 6803886,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Nicaraguan córdoba (C$)"
+      ]
+    },
+    "KGZ": {
+      "m49": "417",
+      "region": "Asia",
+      "subregion": "Central Asia",
+      "capital": "Bishkek",
+      "capital_latlng": [
+        42.87,
+        74.6
+      ],
+      "centroid": [
+        41.0,
+        75.0
+      ],
+      "area": 199951.0,
+      "population": 7281800,
+      "languages": [
+        "Kyrgyz",
+        "Russian"
+      ],
+      "currencies": [
+        "Kyrgyzstani som (с)"
+      ]
+    },
+    "ATF": {
+      "m49": "260",
+      "region": "Antarctic",
+      "subregion": "",
+      "capital": "Port-aux-Français",
+      "capital_latlng": [
+        48.81,
+        -1.4
+      ],
+      "centroid": [
+        -49.25,
+        69.167
+      ],
+      "area": 7747.0,
+      "population": 400,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "LVA": {
+      "m49": "428",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Riga",
+      "capital_latlng": [
+        56.95,
+        24.1
+      ],
+      "centroid": [
+        57.0,
+        25.0
+      ],
+      "area": 64559.0,
+      "population": 1829000,
+      "languages": [
+        "Latvian"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "GEO": {
+      "m49": "268",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Tbilisi",
+      "capital_latlng": [
+        41.68,
+        44.83
+      ],
+      "centroid": [
+        42.0,
+        43.5
+      ],
+      "area": 69700.0,
+      "population": 4000921,
+      "languages": [
+        "Georgian"
+      ],
+      "currencies": [
+        "lari (₾)"
+      ]
+    },
+    "LUX": {
+      "m49": "442",
+      "region": "Europe",
+      "subregion": "Western Europe",
+      "capital": "Luxembourg",
+      "capital_latlng": [
+        49.6,
+        6.12
+      ],
+      "centroid": [
+        49.75,
+        6.16666666
+      ],
+      "area": 2586.0,
+      "population": 681973,
+      "languages": [
+        "French",
+        "German",
+        "Luxembourgish"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "AUT": {
+      "m49": "040",
+      "region": "Europe",
+      "subregion": "Central Europe",
+      "capital": "Vienna",
+      "capital_latlng": [
+        48.2,
+        16.37
+      ],
+      "centroid": [
+        47.33333333,
+        13.33333333
+      ],
+      "area": 83871.0,
+      "population": 9200931,
+      "languages": [
+        "German"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "MKD": {
+      "m49": "807",
+      "region": "Europe",
+      "subregion": "Southeast Europe",
+      "capital": "Skopje",
+      "capital_latlng": [
+        42.0,
+        21.43
+      ],
+      "centroid": [
+        41.83333333,
+        22.0
+      ],
+      "area": 25713.0,
+      "population": 1822612,
+      "languages": [
+        "Macedonian"
+      ],
+      "currencies": [
+        "denar (den)"
+      ]
+    },
+    "BLM": {
+      "m49": "652",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Gustavia",
+      "capital_latlng": [
+        17.88,
+        -62.85
+      ],
+      "centroid": [
+        18.5,
+        -63.41666666
+      ],
+      "area": 21.0,
+      "population": 10562,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "CXR": {
+      "m49": "162",
+      "region": "Oceania",
+      "subregion": "Australia and New Zealand",
+      "capital": "Flying Fish Cove",
+      "capital_latlng": [
+        -10.42,
+        105.68
+      ],
+      "centroid": [
+        -10.5,
+        105.66666666
+      ],
+      "area": 135.0,
+      "population": 1692,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Australian dollar ($)"
+      ]
+    },
+    "SLB": {
+      "m49": "090",
+      "region": "Oceania",
+      "subregion": "Melanesia",
+      "capital": "Honiara",
+      "capital_latlng": [
+        -9.43,
+        159.95
+      ],
+      "centroid": [
+        -8.0,
+        159.0
+      ],
+      "area": 28896.0,
+      "population": 750325,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Solomon Islands dollar ($)"
+      ]
+    },
+    "ATG": {
+      "m49": "028",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Saint John's",
+      "capital_latlng": [
+        17.12,
+        -61.85
+      ],
+      "centroid": [
+        17.05,
+        -61.8
+      ],
+      "area": 442.0,
+      "population": 103603,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Eastern Caribbean dollar ($)"
+      ]
+    },
+    "IRQ": {
+      "m49": "368",
+      "region": "Asia",
+      "subregion": "Western Asia",
+      "capital": "Baghdad",
+      "capital_latlng": [
+        33.33,
+        44.4
+      ],
+      "centroid": [
+        33.0,
+        44.0
+      ],
+      "area": 438317.0,
+      "population": 46118793,
+      "languages": [
+        "Arabic",
+        "Aramaic",
+        "Sorani"
+      ],
+      "currencies": [
+        "Iraqi dinar (ع.د)"
+      ]
+    },
+    "MDA": {
+      "m49": "498",
+      "region": "Europe",
+      "subregion": "Eastern Europe",
+      "capital": "Chișinău",
+      "capital_latlng": [
+        47.01,
+        28.9
+      ],
+      "centroid": [
+        47.0,
+        29.0
+      ],
+      "area": 33847.0,
+      "population": 2749076,
+      "languages": [
+        "Romanian"
+      ],
+      "currencies": [
+        "Moldovan leu (L)"
+      ]
+    },
+    "NFK": {
+      "m49": "574",
+      "region": "Oceania",
+      "subregion": "Australia and New Zealand",
+      "capital": "Kingston",
+      "capital_latlng": [
+        -29.05,
+        167.97
+      ],
+      "centroid": [
+        -29.03333333,
+        167.95
+      ],
+      "area": 36.0,
+      "population": 2188,
+      "languages": [
+        "English",
+        "Norfuk"
+      ],
+      "currencies": [
+        "Australian dollar ($)"
+      ]
+    },
+    "COG": {
+      "m49": "178",
+      "region": "Africa",
+      "subregion": "Middle Africa",
+      "capital": "Brazzaville",
+      "capital_latlng": [
+        -4.25,
+        15.28
+      ],
+      "centroid": [
+        -1.0,
+        15.0
+      ],
+      "area": 342000.0,
+      "population": 6142180,
+      "languages": [
+        "French",
+        "Kikongo",
+        "Lingala"
+      ],
+      "currencies": [
+        "Central African CFA franc (Fr)"
+      ]
+    },
+    "NIU": {
+      "m49": "570",
+      "region": "Oceania",
+      "subregion": "Polynesia",
+      "capital": "Alofi",
+      "capital_latlng": [
+        -19.02,
+        -169.92
+      ],
+      "centroid": [
+        -19.03333333,
+        -169.86666666
+      ],
+      "area": 260.0,
+      "population": 1681,
+      "languages": [
+        "English",
+        "Niuean"
+      ],
+      "currencies": [
+        "New Zealand dollar ($)"
+      ]
+    },
+    "LTU": {
+      "m49": "440",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Vilnius",
+      "capital_latlng": [
+        54.68,
+        25.32
+      ],
+      "centroid": [
+        56.0,
+        24.0
+      ],
+      "area": 65300.0,
+      "population": 2894886,
+      "languages": [
+        "Lithuanian"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "NER": {
+      "m49": "562",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Niamey",
+      "capital_latlng": [
+        13.52,
+        2.12
+      ],
+      "centroid": [
+        16.0,
+        8.0
+      ],
+      "area": 1267000.0,
+      "population": 26312034,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "West African CFA franc (Fr)"
+      ]
+    },
+    "GUY": {
+      "m49": "328",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Georgetown",
+      "capital_latlng": [
+        6.8,
+        -58.15
+      ],
+      "centroid": [
+        5.0,
+        -59.0
+      ],
+      "area": 214969.0,
+      "population": 772975,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Guyanese dollar ($)"
+      ]
+    },
+    "BMU": {
+      "m49": "060",
+      "region": "Americas",
+      "subregion": "North America",
+      "capital": "Hamilton",
+      "capital_latlng": [
+        32.28,
+        -64.78
+      ],
+      "centroid": [
+        32.33333333,
+        -64.75
+      ],
+      "area": 54.0,
+      "population": 64055,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Bermudian dollar ($)"
+      ]
+    },
+    "GAB": {
+      "m49": "266",
+      "region": "Africa",
+      "subregion": "Middle Africa",
+      "capital": "Libreville",
+      "capital_latlng": [
+        0.38,
+        9.45
+      ],
+      "centroid": [
+        -1.0,
+        11.75
+      ],
+      "area": 267668.0,
+      "population": 2469296,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "Central African CFA franc (Fr)"
+      ]
+    },
+    "COK": {
+      "m49": "184",
+      "region": "Oceania",
+      "subregion": "Polynesia",
+      "capital": "Avarua",
+      "capital_latlng": [
+        -21.2,
+        -159.77
+      ],
+      "centroid": [
+        -21.23333333,
+        -159.76666666
+      ],
+      "area": 236.0,
+      "population": 15040,
+      "languages": [
+        "Cook Islands Māori",
+        "English"
+      ],
+      "currencies": [
+        "Cook Islands dollar ($)",
+        "New Zealand dollar ($)"
+      ]
+    },
+    "AGO": {
+      "m49": "024",
+      "region": "Africa",
+      "subregion": "Middle Africa",
+      "capital": "Luanda",
+      "capital_latlng": [
+        -8.83,
+        13.22
+      ],
+      "centroid": [
+        -12.5,
+        18.5
+      ],
+      "area": 1246700.0,
+      "population": 36170961,
+      "languages": [
+        "Portuguese"
+      ],
+      "currencies": [
+        "Angolan kwanza (Kz)"
+      ]
+    },
+    "NOR": {
+      "m49": "578",
+      "region": "Europe",
+      "subregion": "Northern Europe",
+      "capital": "Oslo",
+      "capital_latlng": [
+        59.92,
+        10.75
+      ],
+      "centroid": [
+        62.0,
+        10.0
+      ],
+      "area": 386224.0,
+      "population": 5606944,
+      "languages": [
+        "Norwegian Bokmål",
+        "Norwegian Nynorsk",
+        "Sami"
+      ],
+      "currencies": [
+        "Norwegian krone (kr)"
+      ]
+    },
+    "GLP": {
+      "m49": "312",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Basse-Terre",
+      "capital_latlng": [
+        16.03,
+        -61.73
+      ],
+      "centroid": [
+        16.25,
+        -61.583333
+      ],
+      "area": 1628.0,
+      "population": 378561,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "MDV": {
+      "m49": "462",
+      "region": "Asia",
+      "subregion": "Southern Asia",
+      "capital": "Malé",
+      "capital_latlng": [
+        4.17,
+        73.51
+      ],
+      "centroid": [
+        3.25,
+        73.0
+      ],
+      "area": 300.0,
+      "population": 515132,
+      "languages": [
+        "Maldivian"
+      ],
+      "currencies": [
+        "Maldivian rufiyaa (.ރ)"
+      ]
+    },
+    "BEL": {
+      "m49": "056",
+      "region": "Europe",
+      "subregion": "Western Europe",
+      "capital": "Brussels",
+      "capital_latlng": [
+        50.83,
+        4.33
+      ],
+      "centroid": [
+        50.83333333,
+        4.0
+      ],
+      "area": 30528.0,
+      "population": 11825551,
+      "languages": [
+        "Dutch",
+        "French",
+        "German"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "HRV": {
+      "m49": "191",
+      "region": "Europe",
+      "subregion": "Southeast Europe",
+      "capital": "Zagreb",
+      "capital_latlng": [
+        45.8,
+        16.0
+      ],
+      "centroid": [
+        45.16666666,
+        15.5
+      ],
+      "area": 56594.0,
+      "population": 3866233,
+      "languages": [
+        "Croatian"
+      ],
+      "currencies": [
+        "euro (€)"
+      ]
+    },
+    "BLZ": {
+      "m49": "084",
+      "region": "Americas",
+      "subregion": "Central America",
+      "capital": "Belmopan",
+      "capital_latlng": [
+        17.25,
+        -88.77
+      ],
+      "centroid": [
+        17.25,
+        -88.75
+      ],
+      "area": 22966.0,
+      "population": 417634,
+      "languages": [
+        "Belizean Creole",
+        "English",
+        "Spanish"
+      ],
+      "currencies": [
+        "Belize dollar ($)"
+      ]
+    },
+    "KNA": {
+      "m49": "659",
+      "region": "Americas",
+      "subregion": "Caribbean",
+      "capital": "Basseterre",
+      "capital_latlng": [
+        17.3,
+        -62.72
+      ],
+      "centroid": [
+        17.33333333,
+        -62.75
+      ],
+      "area": 261.0,
+      "population": 51320,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "Eastern Caribbean dollar ($)"
+      ]
+    },
+    "SGP": {
+      "m49": "702",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Singapore",
+      "capital_latlng": [
+        1.28,
+        103.85
+      ],
+      "centroid": [
+        1.36666666,
+        103.8
+      ],
+      "area": 710.0,
+      "population": 6110200,
+      "languages": [
+        "Chinese",
+        "English",
+        "Malay",
+        "Tamil"
+      ],
+      "currencies": [
+        "Singapore dollar ($)"
+      ]
+    },
+    "LSO": {
+      "m49": "426",
+      "region": "Africa",
+      "subregion": "Southern Africa",
+      "capital": "Maseru",
+      "capital_latlng": [
+        -29.32,
+        27.48
+      ],
+      "centroid": [
+        -29.5,
+        28.5
+      ],
+      "area": 30355.0,
+      "population": 2116427,
+      "languages": [
+        "English",
+        "Sotho"
+      ],
+      "currencies": [
+        "Lesotho loti (L)",
+        "South African rand (R)"
+      ]
+    },
+    "URY": {
+      "m49": "858",
+      "region": "Americas",
+      "subregion": "South America",
+      "capital": "Montevideo",
+      "capital_latlng": [
+        -34.85,
+        -56.17
+      ],
+      "centroid": [
+        -33.0,
+        -56.0
+      ],
+      "area": 181034.0,
+      "population": 3499451,
+      "languages": [
+        "Spanish"
+      ],
+      "currencies": [
+        "Uruguayan peso ($)"
+      ]
+    },
+    "BFA": {
+      "m49": "854",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Ouagadougou",
+      "capital_latlng": [
+        12.37,
+        -1.52
+      ],
+      "centroid": [
+        13.0,
+        -2.0
+      ],
+      "area": 272967.0,
+      "population": 24070553,
+      "languages": [
+        "French"
+      ],
+      "currencies": [
+        "West African CFA franc (Fr)"
+      ]
+    },
+    "IND": {
+      "m49": "356",
+      "region": "Asia",
+      "subregion": "Southern Asia",
+      "capital": "New Delhi",
+      "capital_latlng": [
+        28.6,
+        77.2
+      ],
+      "centroid": [
+        20.0,
+        77.0
+      ],
+      "area": 3287263.0,
+      "population": 1417492000,
+      "languages": [
+        "English",
+        "Hindi",
+        "Tamil"
+      ],
+      "currencies": [
+        "Indian rupee (₹)"
+      ]
+    },
+    "PHL": {
+      "m49": "608",
+      "region": "Asia",
+      "subregion": "South-Eastern Asia",
+      "capital": "Manila",
+      "capital_latlng": [
+        14.6,
+        120.97
+      ],
+      "centroid": [
+        13.0,
+        122.0
+      ],
+      "area": 342353.0,
+      "population": 114123600,
+      "languages": [
+        "English",
+        "Filipino"
+      ],
+      "currencies": [
+        "Philippine peso (₱)"
+      ]
+    },
+    "CAF": {
+      "m49": "140",
+      "region": "Africa",
+      "subregion": "Middle Africa",
+      "capital": "Bangui",
+      "capital_latlng": [
+        4.37,
+        18.58
+      ],
+      "centroid": [
+        7.0,
+        21.0
+      ],
+      "area": 622984.0,
+      "population": 6470307,
+      "languages": [
+        "French",
+        "Sango"
+      ],
+      "currencies": [
+        "Central African CFA franc (Fr)"
+      ]
+    },
+    "SDN": {
+      "m49": "729",
+      "region": "Africa",
+      "subregion": "Northern Africa",
+      "capital": "Khartoum",
+      "capital_latlng": [
+        15.6,
+        32.53
+      ],
+      "centroid": [
+        15.0,
+        30.0
+      ],
+      "area": 1886068.0,
+      "population": 51662000,
+      "languages": [
+        "Arabic",
+        "English"
+      ],
+      "currencies": [
+        "Sudanese pound (ج.س)"
+      ]
+    },
+    "GNB": {
+      "m49": "624",
+      "region": "Africa",
+      "subregion": "Western Africa",
+      "capital": "Bissau",
+      "capital_latlng": [
+        11.85,
+        -15.58
+      ],
+      "centroid": [
+        12.0,
+        -15.0
+      ],
+      "area": 36125.0,
+      "population": 1781308,
+      "languages": [
+        "Portuguese",
+        "Upper Guinea Creole"
+      ],
+      "currencies": [
+        "West African CFA franc (Fr)"
+      ]
+    },
+    "PNG": {
+      "m49": "598",
+      "region": "Oceania",
+      "subregion": "Melanesia",
+      "capital": "Port Moresby",
+      "capital_latlng": [
+        -9.45,
+        147.18
+      ],
+      "centroid": [
+        -6.0,
+        147.0
+      ],
+      "area": 462840.0,
+      "population": 11781559,
+      "languages": [
+        "English",
+        "Hiri Motu",
+        "Tok Pisin"
+      ],
+      "currencies": [
+        "Papua New Guinean kina (K)"
+      ]
+    },
+    "UMI": {
+      "m49": "581",
+      "region": "Americas",
+      "subregion": "North America",
+      "capital": "Washington DC",
+      "capital_latlng": [],
+      "centroid": [
+        19.3,
+        166.633333
+      ],
+      "area": 34.2,
+      "population": 0,
+      "languages": [
+        "English"
+      ],
+      "currencies": [
+        "United States dollar ($)"
+      ]
+    }
+  }
+}

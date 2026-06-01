@@ -1,0 +1,276 @@
+"""Refresh pinned CIA Factbook + REST Countries snapshots and the topo crosswalk.
+
+Network-bound build step. Fetches:
+  * GeoNames countryInfo.txt -> ISO3<->GEC (FIPS 10-4) candidate map
+  * the pinned Factbook .json tarball  -> per-GEC normalized fact snapshot
+  * REST Countries v3.1               -> per-ISO3 normalized snapshot
+
+and writes committed JSON artifacts under ``infra_atlas/data/``.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import tarfile
+from pathlib import Path
+
+import httpx
+
+from infra_atlas.almanac_clean import clean_html, format_composite, latest_year_value
+from infra_atlas.almanac_constants import (
+    FACTBOOK_TARBALL_URL,
+    FIELD_MAP,
+    MAP_STUB_TOPO_IDS,
+    RESTCOUNTRIES_URL,
+)
+
+DATA_DIR = Path(__file__).resolve().parent / "data"
+FRONTEND_TOPO = (
+    Path(__file__).resolve().parents[3]
+    / "services"
+    / "frontend"
+    / "public"
+    / "countries-110m.json"
+)
+GEONAMES_COUNTRYINFO_URL = "https://download.geonames.org/export/dump/countryInfo.txt"
+# Kosovo: no FIPS 10-4 code in GeoNames; CIA Factbook uses GEC "kv".
+KOSOVO_ISO3 = "XKX"
+KOSOVO_GEC = "kv"
+
+
+def _topo_ids() -> list[tuple[str, str]]:
+    topo = json.loads(FRONTEND_TOPO.read_text())
+    geoms = topo["objects"]["countries"]["geometries"]
+    out = []
+    for g in geoms:
+        name = (g.get("properties") or {}).get("name", "")
+        key = str(g["id"]) if g.get("id") is not None else name
+        out.append((key, name))
+    return out
+
+
+def _write_json(path: Path, obj: object) -> None:
+    path.write_text(
+        json.dumps(obj, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _fetch_factbook_tar(client: httpx.Client) -> bytes:
+    return client.get(FACTBOOK_TARBALL_URL, follow_redirects=True).content
+
+
+def _factbook_gec_set(tar_bytes: bytes) -> set[str]:
+    """Valid GEC codes = the ``<gec>.json`` profile filenames in the tarball."""
+    gecs: set[str] = set()
+    with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz") as tf:
+        for m in tf.getmembers():
+            if not m.isfile():
+                continue
+            parts = m.name.split("/")
+            if len(parts) != 3 or not parts[2].endswith(".json"):
+                continue
+            region, filename = parts[1], parts[2]
+            if region in ("", "meta") or filename == "world.json":
+                continue
+            gecs.add(filename[:-5])
+    return gecs
+
+
+def _build_iso3_gec(client: httpx.Client, valid_gec: set[str]) -> dict[str, str]:
+    """Fetch GeoNames ISO3<->FIPS, validate against the Factbook, vendor the map."""
+    text = client.get(GEONAMES_COUNTRYINFO_URL).text
+    candidates: dict[str, str] = {}
+    for line in text.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        cols = line.split("\t")
+        if len(cols) < 4:
+            continue
+        iso3, fips = cols[1].strip(), cols[3].strip()
+        if iso3 and fips:
+            candidates[iso3] = fips.lower()
+
+    iso3_gec: dict[str, str] = {}
+    dropped: list[tuple[str, str]] = []
+    for iso3, gec in candidates.items():
+        if gec in valid_gec:
+            iso3_gec[iso3] = gec
+        else:
+            dropped.append((iso3, gec))
+
+    # Known special case absent from GeoNames FIPS column.
+    iso3_gec[KOSOVO_ISO3] = KOSOVO_GEC
+
+    if dropped:
+        print(
+            f"[iso3_gec] dropped {len(dropped)} candidate(s) with no Factbook "
+            f"profile: {sorted(dropped)}"
+        )
+    iso3_gec = dict(sorted(iso3_gec.items()))
+    _write_json(DATA_DIR / "iso3_gec.json", iso3_gec)
+    print(f"[iso3_gec] wrote {len(iso3_gec)} ISO3->GEC entries")
+    return iso3_gec
+
+
+def _fetch_restcountries(client: httpx.Client) -> list[dict]:
+    """GET the pinned REST URL; fall back to a two-batch merge if the API
+    rejects >10 fields (HTTP 400 on /all). Same 12 fields either way."""
+    resp = client.get(RESTCOUNTRIES_URL)
+    if resp.status_code == 200:
+        return resp.json()
+    if resp.status_code != 400:
+        resp.raise_for_status()
+
+    base, _, query = RESTCOUNTRIES_URL.partition("?fields=")
+    fields = query.split(",")
+    half = (len(fields) + 1) // 2
+    batch1 = ["cca3", *fields[:half]]
+    batch2 = ["cca3", *fields[half:]]
+    merged: dict[str, dict] = {}
+    for batch in (batch1, batch2):
+        rows = client.get(f"{base}?fields={','.join(dict.fromkeys(batch))}").json()
+        for row in rows:
+            iso3 = row.get("cca3")
+            if iso3:
+                merged.setdefault(iso3, {}).update(row)
+    print(f"[rest] pinned URL returned 400; merged two field-batches -> {len(merged)}")
+    return list(merged.values())
+
+
+def _build_rest_snapshot(rows: list[dict]) -> dict[str, dict]:
+    countries: dict[str, dict] = {}
+    for row in rows:
+        iso3 = row.get("cca3")
+        if not iso3:
+            continue
+        ccn3 = row.get("ccn3")
+        capital_list = row.get("capital") or []
+        capital_info = row.get("capitalInfo") or {}
+        currencies = row.get("currencies") or {}
+        languages = row.get("languages") or {}
+        currency_strs = []
+        for code in sorted(currencies):
+            cur = currencies[code] or {}
+            name = cur.get("name", "")
+            symbol = cur.get("symbol")
+            currency_strs.append(f"{name} ({symbol})" if symbol else name)
+        countries[iso3] = {
+            "m49": str(ccn3).zfill(3) if ccn3 else None,
+            "region": row.get("region"),
+            "subregion": row.get("subregion"),
+            "capital": capital_list[0] if capital_list else None,
+            "capital_latlng": capital_info.get("latlng"),
+            "centroid": row.get("latlng"),
+            "area": row.get("area"),
+            "population": row.get("population"),
+            "languages": sorted(languages.values()),
+            "currencies": currency_strs,
+        }
+    return countries
+
+
+def _extract_factbook(profile: dict) -> dict:
+    facts = {s: [] for s in ["profile", "people", "government", "economy", "security"]}
+    for spec in FIELD_MAP:
+        node = profile
+        for k in spec["fb"]:
+            node = node.get(k) if isinstance(node, dict) else None
+            if node is None:
+                break
+        if node is None:
+            continue
+        if spec.get("composite"):
+            value = format_composite(node, spec["composite"])
+        elif spec.get("multiyear"):
+            value = latest_year_value(node)
+        elif isinstance(node, dict) and "text" in node:
+            value = clean_html(str(node["text"]))
+        else:
+            continue
+        if value:
+            facts[spec["section"]].append({"label": spec["label"], "value": value})
+    return facts
+
+
+def _build_factbook_snapshot(tar_bytes: bytes) -> dict[str, dict]:
+    by_gec: dict[str, dict] = {}
+    with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz") as tf:
+        for m in tf.getmembers():
+            if not m.isfile():
+                continue
+            parts = m.name.split("/")
+            if len(parts) != 3 or not parts[2].endswith(".json"):
+                continue
+            region, filename = parts[1], parts[2]
+            if region in ("", "meta") or filename == "world.json":
+                continue
+            gec = filename[:-5]
+            assert gec not in by_gec, f"duplicate GEC filename: {gec}"
+            data = json.loads(tf.extractfile(m).read())
+            by_gec[gec] = _extract_factbook(data)
+    return by_gec
+
+
+def refresh(refreshed_at: str) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with httpx.Client(timeout=120.0) as client:
+        tar_bytes = _fetch_factbook_tar(client)
+        valid_gec = _factbook_gec_set(tar_bytes)
+        iso3_gec = _build_iso3_gec(client, valid_gec)
+
+        rest_rows = _fetch_restcountries(client)
+
+    rest_countries = _build_rest_snapshot(rest_rows)
+    _write_json(
+        DATA_DIR / "restcountries_snapshot.json",
+        {"_refreshed_at": refreshed_at, "countries": rest_countries},
+    )
+
+    by_gec = _build_factbook_snapshot(tar_bytes)
+    _write_json(
+        DATA_DIR / "factbook_snapshot.json",
+        {"_refreshed_at": refreshed_at, "by_gec": by_gec},
+    )
+
+    rest_by_m49 = {
+        v["m49"]: iso3 for iso3, v in rest_countries.items() if v.get("m49")
+    }
+    countries = []
+    seen: set[str] = set()
+    for topo_id, name in _topo_ids():
+        assert topo_id not in seen, f"duplicate topo_id: {topo_id}"
+        seen.add(topo_id)
+        if topo_id in MAP_STUB_TOPO_IDS:
+            entry = {
+                "name": name,
+                "topo_id": topo_id,
+                "m49": topo_id,
+                "iso3": None,
+                "gec": "",
+            }
+        elif topo_id == "Kosovo":
+            entry = {
+                "name": "Kosovo",
+                "topo_id": "Kosovo",
+                "m49": "Kosovo",
+                "iso3": KOSOVO_ISO3,
+                "gec": KOSOVO_GEC,
+            }
+        else:
+            iso3 = rest_by_m49.get(topo_id.zfill(3))
+            entry = {
+                "name": name,
+                "topo_id": topo_id,
+                "m49": topo_id,
+                "iso3": iso3,
+                "gec": iso3_gec.get(iso3, ""),
+            }
+        countries.append(entry)
+
+    _write_json(
+        DATA_DIR / "crosswalk.json",
+        {"_refreshed_at": refreshed_at, "countries": countries},
+    )
+    print(f"[crosswalk] wrote {len(countries)} entries")
