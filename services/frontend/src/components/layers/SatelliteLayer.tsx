@@ -38,11 +38,25 @@ const COUNTRY_TINT: Record<string, Cesium.Color> = {
 };
 
 const ORBIT_ARC_POINTS = 50;
-const ORBIT_LOD_ALTITUDE = 12_000_000; // show orbits only when reasonably zoomed in
+const ORBIT_LOD_ALTITUDE = 45_000_000; // keep orbits visible across LEO..GEO globe-scale zoom
 const RECON_PREFIXES = ["USA ", "NROL", "COSMOS 25", "YAOGAN"];
 const MIN_ELEVATION_DEG = 5;
 /** Only render orbit arcs for high-interest categories (not all 15K active sats) */
 const ORBIT_ELIGIBLE_CATEGORIES = new Set(["military", "station", "gps", "weather"]);
+
+/**
+ * Decide whether orbit arcs should be visible.
+ *
+ * Orbit arcs are drawn only for a few hundred high-interest satellites (military / station /
+ * gps / weather), so they are NOT the FPS cost driver — the ~12K point primitives are.
+ * Earlier this was gated on `degradation < 3`, which meant the PerformanceGuard ratcheting up
+ * under the heavy point cloud would disable the (cheap) orbits first, so they "always vanished".
+ * We now only suppress orbits at the most extreme degradation (level 4) and keep them visible
+ * across globe-scale zoom (LEO..GEO).
+ */
+export function shouldShowOrbits(degradation: number, cameraAltitudeM: number): boolean {
+  return degradation < 4 && cameraAltitudeM < ORBIT_LOD_ALTITUDE;
+}
 
 function isReconSatellite(name: string): boolean {
   const upper = name.toUpperCase();
@@ -124,7 +138,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
 
     const now = new Date();
     const cameraAlt = viewer.camera.positionCartographic.height;
-    const showOrbits = degradation < 3 && cameraAlt < ORBIT_LOD_ALTITUDE;
+    const showOrbits = shouldShowOrbits(degradation, cameraAlt);
     lastShowOrbitsRef.current = showOrbits;
 
     // At global zoom, skip mega-constellations (Starlink=10K, OneWeb=651)
@@ -198,7 +212,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     const onMoveEnd = () => {
       if (!viewer || viewer.isDestroyed() || !visible) return;
       const cameraAlt = viewer.camera.positionCartographic.height;
-      const shouldShow = degradation < 3 && cameraAlt < ORBIT_LOD_ALTITUDE;
+      const shouldShow = shouldShowOrbits(degradation, cameraAlt);
 
       if (shouldShow !== lastShowOrbitsRef.current) {
         lastShowOrbitsRef.current = shouldShow;
