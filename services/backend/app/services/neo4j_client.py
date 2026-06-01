@@ -21,6 +21,14 @@ async def get_graph_client() -> neo4j.AsyncDriver:
     return _driver
 
 
+async def close_driver() -> None:
+    """Release and reset the shared Neo4j driver."""
+    global _driver
+    driver, _driver = _driver, None
+    if driver is not None:
+        await driver.close()
+
+
 async def read_query(cypher: str, params: dict[str, Any]) -> list[dict[str, Any]]:
     """Execute a read-only Cypher query."""
     driver = await get_graph_client()

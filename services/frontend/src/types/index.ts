@@ -104,7 +104,7 @@ export interface IntelAnalysis {
   threat_assessment: string | null;
   timestamp: string;
   tool_trace?: Array<{ tool_name: string; duration_ms?: number; success?: boolean }>;
-  mode?: "react" | "legacy" | "legacy_fallback" | "error";
+  mode?: "react" | "legacy" | "error";
 }
 
 export interface IntelQuery {

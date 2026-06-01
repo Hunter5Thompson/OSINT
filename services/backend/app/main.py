@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import structlog
 from fastapi import FastAPI
@@ -35,7 +36,7 @@ from app.routers import (
     vessels,
 )
 from app.routers import recon as recon_router_module
-from app.services import vessel_service
+from app.services import neo4j_client, qdrant_client, vessel_service
 from app.services.cache_service import CacheService
 from app.services.proxy_service import ProxyService
 from app.services.recon_manifest import (
@@ -60,107 +61,121 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Initialize and cleanup shared resources."""
-    # Startup
     proxy = ProxyService()
-    await proxy.start()
-    app.state.proxy = proxy
-
     cache = CacheService(settings.redis_url)
-    await cache.connect()
-    app.state.cache = cache
+    signal_stop_event: asyncio.Event | None = None
+    signal_task: asyncio.Task[None] | None = None
+    promoter = None
+    promoter_tasks: tuple[asyncio.Task[None] | None, asyncio.Task[None] | None] = (None, None)
+    vessel_started = False
 
-    # Start AISStream background collector
-    await vessel_service.start_collector(cache)
-
-    # Start Redis signals consumer
-    signal_stream = get_signal_stream()
-    signal_stop_event = asyncio.Event()
-    signal_task = asyncio.create_task(
-        redis_consumer_loop(signal_stream, signal_stop_event)
-    )
-    app.state.signal_stop_event = signal_stop_event
-    app.state.signal_task = signal_task
-
-    # Recon manifest — load into app.state for the recon router
-    recon_manifest_path = Path(os.environ.get(
-        "RECON_MANIFEST_PATH",
-        str(Path(__file__).resolve().parent.parent / "data" / "recon_manifest.json"),
-    ))
-    recon_loader = ReconManifestLoader(recon_manifest_path)
     try:
-        recon_loader.load()
-        logger.info("recon_manifest_loaded",
-                    path=str(recon_manifest_path),
-                    scenes=len(recon_loader.list_scenes()))
-    except ReconManifestMissingError:
-        logger.warning("recon_manifest_missing",
-                       path=str(recon_manifest_path),
-                       hint="run ./odin.sh recon bootstrap")
-    app.state.recon_manifest = recon_loader
+        await proxy.start()
+        app.state.proxy = proxy
 
-    # --- Auto-promoter (full wiring) ---
-    from app.services import incident_store as _incident_store_module
-    from app.services.incident_promoter.cluster_store import ClusterStore
-    from app.services.incident_promoter.config import PromoterConfig
-    from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
-    from app.services.incident_promoter.detectors.severity import SeverityBurstDetector
-    from app.services.incident_promoter.detectors.telegram import TelegramTopicDetector
-    from app.services.incident_promoter.promoter import Promoter
-    from app.services.incident_stream import get_incident_stream
+        await cache.connect()
+        app.state.cache = cache
 
-    def _promoter_clock() -> datetime:
-        return datetime.now(UTC)
-    _promoter_cfg = PromoterConfig.from_env()
-    _cluster_store = ClusterStore(clock=_promoter_clock)
-    app.state.cluster_store = _cluster_store
-    app.state.promoter_config = _promoter_cfg
+        # Start AISStream background collector
+        await vessel_service.start_collector(cache)
+        vessel_started = True
 
-    _detectors: list = []
-    if _promoter_cfg.firms_enabled:
-        _detectors.append(FIRMSGeoClusterDetector(config=_promoter_cfg, clock=_promoter_clock))
-    if _promoter_cfg.telegram_enabled:
-        _detectors.append(TelegramTopicDetector(config=_promoter_cfg, clock=_promoter_clock))
-    if _promoter_cfg.severity_enabled:
-        _detectors.append(SeverityBurstDetector(config=_promoter_cfg, clock=_promoter_clock))
+        # Start Redis signals consumer
+        signal_stream = get_signal_stream()
+        signal_stop_event = asyncio.Event()
+        signal_task = asyncio.create_task(
+            redis_consumer_loop(signal_stream, signal_stop_event)
+        )
+        app.state.signal_stop_event = signal_stop_event
+        app.state.signal_task = signal_task
 
-    _promoter = Promoter(
-        signal_stream=get_signal_stream(),
-        cluster_store=_cluster_store,
-        incident_store=_incident_store_module,
-        incident_event_stream=get_incident_stream(),
-        config=_promoter_cfg,
-        clock=_promoter_clock,
-        detectors=_detectors,
-    )
-    if _promoter_cfg.enabled:
-        _promoter_task = asyncio.create_task(_promoter.run(), name="promoter")
-        _sweeper_task = asyncio.create_task(_promoter.sweeper_loop(), name="promoter-sweeper")
-    else:
-        _promoter_task = None
-        _sweeper_task = None
+        # Recon manifest — load into app.state for the recon router
+        recon_manifest_path = Path(os.environ.get(
+            "RECON_MANIFEST_PATH",
+            str(Path(__file__).resolve().parent.parent / "data" / "recon_manifest.json"),
+        ))
+        recon_loader = ReconManifestLoader(recon_manifest_path)
+        try:
+            recon_loader.load()
+            logger.info("recon_manifest_loaded",
+                        path=str(recon_manifest_path),
+                        scenes=len(recon_loader.list_scenes()))
+        except ReconManifestMissingError:
+            logger.warning("recon_manifest_missing",
+                           path=str(recon_manifest_path),
+                           hint="run ./odin.sh recon bootstrap")
+        app.state.recon_manifest = recon_loader
 
-    logger.info("backend_started", vllm_url=settings.vllm_url, vllm_model=settings.vllm_model)
-    yield
+        # --- Auto-promoter (full wiring) ---
+        from app.services import incident_store as _incident_store_module
+        from app.services.incident_promoter.cluster_store import ClusterStore
+        from app.services.incident_promoter.config import PromoterConfig
+        from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
+        from app.services.incident_promoter.detectors.severity import SeverityBurstDetector
+        from app.services.incident_promoter.detectors.telegram import TelegramTopicDetector
+        from app.services.incident_promoter.promoter import Promoter
+        from app.services.incident_stream import get_incident_stream
 
-    # Shutdown
-    _promoter.request_stop()
-    for _t in (_promoter_task, _sweeper_task):
-        if _t is None:
-            continue
-        _t.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
-            await _t
+        def _promoter_clock() -> datetime:
+            return datetime.now(UTC)
+        promoter_cfg = PromoterConfig.from_env()
+        cluster_store = ClusterStore(clock=_promoter_clock)
+        app.state.cluster_store = cluster_store
+        app.state.promoter_config = promoter_cfg
 
-    signal_stop_event.set()
-    signal_task.cancel()
-    try:
-        await signal_task
-    except (asyncio.CancelledError, Exception):
-        pass
-    await vessel_service.stop_collector()
-    await proxy.stop()
-    await cache.close()
-    logger.info("backend_stopped")
+        detectors: list[Any] = []
+        if promoter_cfg.firms_enabled:
+            detectors.append(FIRMSGeoClusterDetector(config=promoter_cfg, clock=_promoter_clock))
+        if promoter_cfg.telegram_enabled:
+            detectors.append(TelegramTopicDetector(config=promoter_cfg, clock=_promoter_clock))
+        if promoter_cfg.severity_enabled:
+            detectors.append(SeverityBurstDetector(config=promoter_cfg, clock=_promoter_clock))
+
+        promoter = Promoter(
+            signal_stream=get_signal_stream(),
+            cluster_store=cluster_store,
+            incident_store=_incident_store_module,
+            incident_event_stream=get_incident_stream(),
+            config=promoter_cfg,
+            clock=_promoter_clock,
+            detectors=detectors,
+        )
+        if promoter_cfg.enabled:
+            promoter_tasks = (
+                asyncio.create_task(promoter.run(), name="promoter"),
+                asyncio.create_task(promoter.sweeper_loop(), name="promoter-sweeper"),
+            )
+
+        logger.info("backend_started", vllm_url=settings.vllm_url, vllm_model=settings.vllm_model)
+        yield
+    finally:
+        if promoter is not None:
+            promoter.request_stop()
+        for task in promoter_tasks:
+            if task is None:
+                continue
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+
+        if signal_stop_event is not None:
+            signal_stop_event.set()
+        if signal_task is not None:
+            signal_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await signal_task
+        if vessel_started:
+            with contextlib.suppress(Exception):
+                await vessel_service.stop_collector()
+        for cleanup in (
+            proxy.stop,
+            cache.close,
+            qdrant_client.close_qdrant_client,
+            neo4j_client.close_driver,
+        ):
+            with contextlib.suppress(Exception):
+                await cleanup()
+        logger.info("backend_stopped")
 
 
 app = FastAPI(
@@ -178,18 +193,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# REST Routers — unified prefix with /api/v1 back-compat aliases (remove 2026-05-21)
+# REST Routers — unified /api prefix
 for r in (
     flights.router, satellites.router, earthquakes.router, vessels.router,
     hotspots.router, intel.router, rag.router, graph.router, cables.router,
     firms.router, aircraft.router, eonet.router, gdacs.router, reports.router,
 ):
     app.include_router(r, prefix="/api")
-    app.include_router(r, prefix="/api/v1")
 
-# Recon router — dual /api + /api/v1 prefix (matches existing convention)
+# Recon router
 app.include_router(recon_router_module.router, prefix="/api")
-app.include_router(recon_router_module.router, prefix="/api/v1")
 
 # Static PLY assets for recon (immutable Cache-Control, Range supported)
 _recon_static_dir = Path(os.environ.get(
@@ -256,20 +269,6 @@ async def client_config() -> ClientConfig:
     )
 
 
-# Primary mounts at /api + /api/v1 back-compat aliases (remove 2026-05-21)
+# Health + config mounts at /api
 app.add_api_route("/api/health", health, response_model=HealthResponse, methods=["GET"])
 app.add_api_route("/api/config", client_config, response_model=ClientConfig, methods=["GET"])
-app.add_api_route(
-    "/api/v1/health",
-    health,
-    response_model=HealthResponse,
-    methods=["GET"],
-    include_in_schema=False,
-)
-app.add_api_route(
-    "/api/v1/config",
-    client_config,
-    response_model=ClientConfig,
-    methods=["GET"],
-    include_in_schema=False,
-)

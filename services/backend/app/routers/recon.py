@@ -1,4 +1,4 @@
-"""READ-ONLY recon scene router — `/api/recon/scenes` (+ `/api/v1` alias).
+"""READ-ONLY recon scene router — `/api/recon/scenes`.
 
 Serves the in-memory `ReconManifestLoader` cache populated at app startup.
 No writes, no LLM calls, no upstream fetches — this is a hard read-only

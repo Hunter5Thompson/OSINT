@@ -264,8 +264,8 @@ services:
   data-ingestion:
     profiles: ["ingestion"]
     build:
-      context: ./services/data-ingestion
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/data-ingestion/Dockerfile
     env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379/0
@@ -318,8 +318,8 @@ services:
     profiles: ["interactive-spark"]
     container_name: odin-data-ingestion-spark
     build:
-      context: ./services/data-ingestion
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/data-ingestion/Dockerfile
     env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379/0

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from datetime import UTC, datetime
@@ -112,7 +113,8 @@ class HotspotUpdater:
         """
         try:
             query_text = hotspot_name.replace("/", " ").replace("-", " ")
-            results, _ = self.qdrant.scroll(
+            results, _ = await asyncio.to_thread(
+                self.qdrant.scroll,
                 collection_name=settings.qdrant_collection,
                 scroll_filter=Filter(
                     should=[
@@ -207,6 +209,9 @@ class HotspotUpdater:
         log.info("hotspot_update_finished", hotspot_count=len(HOTSPOTS), elapsed_seconds=elapsed)
 
     async def close(self) -> None:
-        if self._redis is not None:
-            await self._redis.close()
-            self._redis = None
+        try:
+            if self._redis is not None:
+                await self._redis.close()
+                self._redis = None
+        finally:
+            await asyncio.to_thread(self.qdrant.close)

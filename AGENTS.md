@@ -16,7 +16,7 @@ cd services/intelligence && uv sync && uv run pytest
 cd services/data-ingestion && uv sync && uv run pytest
 ```
 
-**Lockfiles are gitignored** — `uv sync` regenerates `uv.lock`, `npm install` regenerates `package-lock.json`.
+**Lockfiles are gitignored** (`uv sync` / `npm install` regenerate them) **except** the tracked deployment lock `services/data-ingestion/uv.lock`.
 
 ## Docker Compose: profiles, not monolithic
 

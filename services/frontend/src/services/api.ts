@@ -1,7 +1,6 @@
 /**
  * Typed API client for WorldView backend.
  * All calls go through the Vite proxy to /api/*.
- * If an endpoint is not mounted there yet, we transparently fall back to /api/v1/*.
  */
 
 import type {
@@ -28,11 +27,9 @@ import type {
 } from "../types";
 
 const BASE = "/api";
-const LEGACY_BASE = "/api/v1";
 
-// ── S1 endpoints — mounted at /api (not /api/v1) ────────────────────────────
-// The Hlíðskjalf S1 backend router mounts at bare /api. Keep these helpers
-// separate from the legacy /api/v1 client rather than reshuffling everything.
+// ── S1 endpoints — mounted at /api ──────────────────────────────────────────
+// The Hlíðskjalf S1 backend router mounts at bare /api.
 
 import type { LandingSummary } from "../types/landing";
 import type { SignalEnvelope } from "../types/signals";
@@ -87,20 +84,27 @@ export async function getCountryAlmanacSignals(
   return (await res.json()) as AlmanacSignalResponse;
 }
 
-async function fetchWithFallback(path: string, init?: RequestInit): Promise<Response> {
-  let res = await fetch(`${BASE}${path}`, init);
-  if (res.status === 404) {
-    res = await fetch(`${LEGACY_BASE}${path}`, init);
-  }
-  return res;
-}
-
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetchWithFallback(path, init);
+  const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${res.statusText}`);
   }
   return res.json() as Promise<T>;
+}
+
+/** Extract the human-readable message from an SSE `error` event payload.
+ *  The backend sends a JSON body ({"error": "...", "code": "..."}); fall back to
+ *  the trimmed raw line if it is not JSON. */
+function parseSseError(data: string): string {
+  try {
+    const parsed = JSON.parse(data) as { error?: unknown };
+    if (typeof parsed.error === "string") {
+      return parsed.error;
+    }
+  } catch {
+    // Not JSON — use the raw line.
+  }
+  return data.trim();
 }
 
 export async function getConfig(): Promise<ClientConfig> {
@@ -157,7 +161,7 @@ export function queryIntel(
 ): AbortController {
   const controller = new AbortController();
 
-  fetchWithFallback("/intel/query", {
+  fetch(`${BASE}/intel/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(query),
@@ -172,16 +176,27 @@ export function queryIntel(
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      // Carried ACROSS chunk boundaries: an `event:` line and its `data:` line
+      // can arrive in separate reads, so the current event type must survive
+      // the per-chunk loop (like `buffer`).
+      let currentEvent = "";
+      let doneEmitted = false;
+      const emitDone = (): void => {
+        if (!doneEmitted) {
+          doneEmitted = true;
+          onDone();
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
+        // Split on CRLF or LF — the backend (sse-starlette) emits \r\n.
+        const lines = buffer.split(/\r?\n/);
         buffer = lines.pop() ?? "";
 
-        let currentEvent = "";
         for (const line of lines) {
           if (line.startsWith("event: ")) {
             currentEvent = line.slice(7).trim();
@@ -193,9 +208,9 @@ export function queryIntel(
               } else if (currentEvent === "result") {
                 onResult(JSON.parse(data) as IntelAnalysis);
               } else if (currentEvent === "error") {
-                onError(data);
+                onError(parseSseError(data));
               } else if (currentEvent === "done") {
-                onDone();
+                emitDone();
               }
             } catch {
               // skip malformed events
@@ -203,7 +218,7 @@ export function queryIntel(
           }
         }
       }
-      onDone();
+      emitDone();
     })
     .catch((err: Error) => {
       if (err.name !== "AbortError") {
@@ -266,7 +281,7 @@ export async function updateReport(
 }
 
 export async function deleteReport(reportId: string): Promise<void> {
-  const res = await fetchWithFallback(`/reports/${encodeURIComponent(reportId)}`, {
+  const res = await fetch(`${BASE}/reports/${encodeURIComponent(reportId)}`, {
     method: "DELETE",
   });
   if (!res.ok) {

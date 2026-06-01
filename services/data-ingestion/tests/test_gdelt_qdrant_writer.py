@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import polars as pl
 import pytest
@@ -88,10 +88,45 @@ async def test_qdrant_can_upsert_when_neo4j_failed_but_parquet_exists(tmp_path):
     df.write_parquet(gkg_dir / "20260425120000.parquet")
 
     mock_client = MagicMock()
+    mock_client.get_collections = AsyncMock(
+        return_value=MagicMock(collections=[]),
+    )
+    mock_client.create_collection = AsyncMock()
     mock_client.upsert = AsyncMock()
     embedder = AsyncMock(return_value=[0.1] * 1024)
 
     w = QdrantWriter(client=mock_client, embed=embedder, collection="test")
     n = await w.upsert_from_parquet(tmp_path, "20260425120000", "2026-04-25")
     assert n == 1
+    mock_client.create_collection.assert_awaited_once()
     mock_client.upsert.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_qdrant_writer_validates_existing_collection_only_once():
+    collection = MagicMock(name="odin_intel")
+    collection.name = "odin_intel"
+    info = MagicMock()
+    client = MagicMock()
+    client.get_collections = AsyncMock(
+        return_value=MagicMock(collections=[collection]),
+    )
+    client.get_collection = AsyncMock(return_value=info)
+
+    writer = QdrantWriter(client=client, embed=AsyncMock(), collection="odin_intel")
+    with patch("gdelt_raw.writers.qdrant_writer.validate_collection_schema") as validate:
+        await writer._ensure_collection()
+        await writer._ensure_collection()
+
+    validate.assert_called_once_with(info, enable_hybrid=False)
+    client.get_collections.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_qdrant_writer_close_releases_client():
+    client = MagicMock(close=AsyncMock())
+    writer = QdrantWriter(client=client, embed=AsyncMock(), collection="odin_intel")
+
+    await writer.close()
+
+    client.close.assert_awaited_once()

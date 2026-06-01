@@ -16,7 +16,7 @@ class TestGraphEndpoints:
     def test_entity_not_found(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = []
-            resp = client.get("/api/v1/graph/entity/NonExistent")
+            resp = client.get("/api/graph/entity/NonExistent")
             assert resp.status_code == 200
             data = resp.json()
             assert data["nodes"] == []
@@ -32,7 +32,7 @@ class TestGraphEndpoints:
                     "confidence": 0.9,
                 }
             ]
-            resp = client.get("/api/v1/graph/entity/NATO")
+            resp = client.get("/api/graph/entity/NATO")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["nodes"]) == 1
@@ -49,7 +49,7 @@ class TestGraphEndpoints:
                     "target_subtype": "organization",
                 },
             ]
-            resp = client.get("/api/v1/graph/neighbors/NATO")
+            resp = client.get("/api/graph/neighbors/NATO")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["edges"]) >= 1
@@ -79,7 +79,7 @@ class TestGraphEndpoints:
                     "target_subtype": "organization",
                 },
             ]
-            resp = client.get("/api/v1/graph/network/NATO")
+            resp = client.get("/api/graph/network/NATO")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["edges"]) == 1
@@ -89,7 +89,7 @@ class TestGraphEndpoints:
     def test_network_keeps_root_node_when_no_edges(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = []
-            resp = client.get("/api/v1/graph/network/NATO")
+            resp = client.get("/api/graph/network/NATO")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["nodes"]) == 1
@@ -102,7 +102,7 @@ class TestGraphEndpoints:
                 {"name": "NATO", "type": "organization", "id": "e-1"},
                 {"name": "National Guard", "type": "military_unit", "id": "e-2"},
             ]
-            resp = client.get("/api/v1/graph/search?q=nat&limit=10")
+            resp = client.get("/api/graph/search?q=nat&limit=10")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["nodes"]) == 2
@@ -110,7 +110,7 @@ class TestGraphEndpoints:
     def test_search_with_missing_id_falls_back_to_name(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = [{"name": "Iran", "type": "location", "id": None}]
-            resp = client.get("/api/v1/graph/search?q=ir&limit=10")
+            resp = client.get("/api/graph/search?q=ir&limit=10")
             assert resp.status_code == 200
             data = resp.json()
             assert data["nodes"][0]["id"] == "Iran"
@@ -118,7 +118,7 @@ class TestGraphEndpoints:
     def test_search_query_uses_element_id_not_e_id(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = []
-            resp = client.get("/api/v1/graph/search?q=ir&limit=10")
+            resp = client.get("/api/graph/search?q=ir&limit=10")
             assert resp.status_code == 200
             cypher = mock.call_args.args[0]
             assert "elementId(e) AS id" in cypher
@@ -135,7 +135,7 @@ class TestGraphEndpoints:
                     "timestamp": "2026-03-30",
                 },
             ]
-            resp = client.get("/api/v1/graph/events?entity=NorthKorea")
+            resp = client.get("/api/graph/events?entity=NorthKorea")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["nodes"]) == 1
@@ -143,7 +143,7 @@ class TestGraphEndpoints:
     def test_events_query_uses_element_id_not_ev_id(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = []
-            resp = client.get("/api/v1/graph/events")
+            resp = client.get("/api/graph/events")
             assert resp.status_code == 200
             cypher = mock.call_args.args[0]
             assert "elementId(ev) AS id" in cypher
@@ -166,7 +166,7 @@ class TestGeoEventsEndpoint:
                     "lat": 40.96, "lon": 100.28,
                 },
             ]
-            resp = client.get("/api/v1/graph/events/geo")
+            resp = client.get("/api/graph/events/geo")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["events"]) == 1
@@ -184,7 +184,7 @@ class TestGeoEventsEndpoint:
                     "lat": None, "lon": None,
                 },
             ]
-            resp = client.get("/api/v1/graph/events/geo")
+            resp = client.get("/api/graph/events/geo")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["events"]) == 1
@@ -201,7 +201,7 @@ class TestGeoEventsEndpoint:
                     "lat": 39.03, "lon": 125.75,
                 },
             ]
-            resp = client.get("/api/v1/graph/events/geo?entity=DPRK")
+            resp = client.get("/api/graph/events/geo?entity=DPRK")
             assert resp.status_code == 200
             call_args = mock.call_args
             assert "$entity" in call_args.args[0] or "entity" in str(call_args)
@@ -217,7 +217,7 @@ class TestGeoEventsEndpoint:
                     "lat": 36.20, "lon": 37.16,
                 },
             ]
-            resp = client.get("/api/v1/graph/events/geo?codebook_type=military")
+            resp = client.get("/api/graph/events/geo?codebook_type=military")
             assert resp.status_code == 200
             data = resp.json()
             assert len(data["events"]) == 1
@@ -230,7 +230,7 @@ class TestGeoEventsEndpoint:
     def test_geo_events_query_uses_element_id_not_ev_id(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = []
-            resp = client.get("/api/v1/graph/events/geo")
+            resp = client.get("/api/graph/events/geo")
             assert resp.status_code == 200
             cypher = mock.call_args.args[0]
             assert "elementId(ev) AS id" in cypher
@@ -243,7 +243,7 @@ class TestConfigEndpoint:
         return TestClient(app)
 
     def test_config_includes_events_in_default_layers(self, client):
-        resp = client.get("/api/v1/config")
+        resp = client.get("/api/config")
         assert resp.status_code == 200
         data = resp.json()
         assert "events" in data["default_layers"]

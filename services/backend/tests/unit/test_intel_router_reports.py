@@ -71,7 +71,7 @@ class TestIntelReportScopedPersistence:
     def test_returns_error_when_report_missing(self, client: TestClient) -> None:
         with patch("app.routers.intel.report_store.get_report", AsyncMock(return_value=None)):
             resp = client.post(
-                "/api/v1/intel/query",
+                "/api/intel/query",
                 json={"query": "Brief me", "report_id": "r-missing", "report_message": "Brief me"},
             )
 
@@ -89,7 +89,7 @@ class TestIntelReportScopedPersistence:
             patch("app.routers.intel.httpx.AsyncClient", return_value=_MockHttpClient()),
         ):
             resp = client.post(
-                "/api/v1/intel/query",
+                "/api/intel/query",
                 json={
                     "query": "Report 44: Brief me",
                     "report_id": "r-044",

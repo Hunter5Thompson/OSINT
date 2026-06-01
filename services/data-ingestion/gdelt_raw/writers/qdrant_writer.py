@@ -14,10 +14,11 @@ from typing import Any
 import httpx
 import polars as pl
 import structlog
-from qdrant_client.models import PointStruct
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from feeds.provenance import provenance_fields
 from gdelt_raw.ids import qdrant_point_id_for_doc
+from qdrant_doctor.schema import validate_collection_schema
 
 log = structlog.get_logger(__name__)
 
@@ -80,10 +81,51 @@ async def default_tei_embed(text: str, tei_url: str, http_timeout: float = 30.0)
 
 
 class QdrantWriter:
-    def __init__(self, client, embed: Callable[[str], Awaitable[list[float]]], collection: str):
+    def __init__(
+        self,
+        client,
+        embed: Callable[[str], Awaitable[list[float]]],
+        collection: str,
+        *,
+        embedding_dimensions: int = 1024,
+        enable_hybrid: bool = False,
+    ):
         self._client = client
         self._embed = embed
         self._collection = collection
+        self._embedding_dimensions = embedding_dimensions
+        self._enable_hybrid = enable_hybrid
+        self._collection_ready = False
+
+    async def _ensure_collection(self) -> None:
+        if self._collection_ready:
+            return
+
+        collections = await self._client.get_collections()
+        if not any(c.name == self._collection for c in collections.collections):
+            await self._client.create_collection(
+                collection_name=self._collection,
+                vectors_config=VectorParams(
+                    size=self._embedding_dimensions,
+                    distance=Distance.COSINE,
+                ),
+            )
+            log.info("qdrant_collection_created", collection=self._collection)
+        else:
+            info = await self._client.get_collection(self._collection)
+            validate_collection_schema(
+                info,
+                enable_hybrid=self._enable_hybrid,
+            )
+            log.debug(
+                "qdrant_schema_validated",
+                collection=self._collection,
+                enable_hybrid=self._enable_hybrid,
+            )
+        self._collection_ready = True
+
+    async def close(self) -> None:
+        await self._client.close()
 
     async def upsert_from_parquet(
         self, parquet_base: Path, slice_id: str, date: str,
@@ -105,6 +147,7 @@ class QdrantWriter:
                 payload=payload,
             ))
         if points:
+            await self._ensure_collection()
             await self._client.upsert(collection_name=self._collection, points=points)
         log.info("qdrant_written", slice=slice_id, count=len(points))
         return len(points)

@@ -739,7 +739,7 @@ docker exec osint-neo4j-1 cypher-shell \
 If running:
 
 ```bash
-curl -sf http://localhost:8080/api/v1/health
+curl -sf http://localhost:8080/api/health
 curl -sf http://localhost:8003/health
 docker compose ps
 ```

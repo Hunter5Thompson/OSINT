@@ -1,4 +1,4 @@
-"""Contract tests for /api/v1/cables endpoint."""
+"""Contract tests for /api/cables endpoint."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -38,7 +38,7 @@ class TestCablesRouter:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                resp = await client.get("/api/v1/cables")
+                resp = await client.get("/api/cables")
             assert resp.status_code == 200
 
     @pytest.mark.asyncio
@@ -50,7 +50,7 @@ class TestCablesRouter:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                resp = await client.get("/api/v1/cables")
+                resp = await client.get("/api/cables")
             body = resp.json()
             assert "cables" in body
             assert "landing_points" in body
@@ -68,5 +68,5 @@ class TestCablesRouter:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                resp = await client.get("/api/v1/cables")
+                resp = await client.get("/api/cables")
             assert resp.status_code == 502

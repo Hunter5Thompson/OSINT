@@ -58,3 +58,14 @@ def _async_iter(items):
 
 class _Record(dict):
     pass
+
+
+@pytest.mark.asyncio
+async def test_close_driver_releases_and_resets_singleton() -> None:
+    driver = MagicMock(close=AsyncMock())
+    nc._driver = driver
+
+    await nc.close_driver()
+
+    driver.close.assert_awaited_once()
+    assert nc._driver is None

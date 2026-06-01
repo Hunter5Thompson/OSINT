@@ -1,5 +1,6 @@
 """Tests for rss_collector error-handling behavior."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -157,7 +158,8 @@ def _make_phase1_info() -> CollectionInfo:
     )
 
 
-def test_rss_validates_schema_when_collection_exists():
+@pytest.mark.asyncio
+async def test_rss_validates_schema_when_collection_exists():
     """RSSCollector._ensure_collection calls validate_collection_schema when collection exists."""
     coll = MagicMock()
     coll.name = "odin_intel"
@@ -171,16 +173,16 @@ def test_rss_validates_schema_when_collection_exists():
         collector = RSSCollector.__new__(RSSCollector)
         collector.qdrant = mock_qdrant
         collector._redis = None
-        # Call _ensure_collection directly — the __init__ already calls it but
-        # we use __new__ to bypass __init__ so we control the qdrant mock exactly.
-        collector._ensure_collection()
+        collector._collection_ready = False
+        await collector._ensure_collection()
 
     mock_validate.assert_called_once()
     # No upsert should have happened
     mock_qdrant.upsert.assert_not_called()
 
 
-def test_rss_phase2_refuses_phase1_collection():
+@pytest.mark.asyncio
+async def test_rss_phase2_refuses_phase1_collection():
     """RSSCollector._ensure_collection raises QdrantSchemaMismatch on schema
     mismatch, without writing."""
     from qdrant_doctor.schema import QdrantSchemaMismatch
@@ -199,8 +201,81 @@ def test_rss_phase2_refuses_phase1_collection():
         collector = RSSCollector.__new__(RSSCollector)
         collector.qdrant = mock_qdrant
         collector._redis = None
+        collector._collection_ready = False
         with pytest.raises(QdrantSchemaMismatch):
-            collector._ensure_collection()
+            await collector._ensure_collection()
 
     # Absolutely no upsert must have been attempted
     mock_qdrant.upsert.assert_not_called()
+
+
+def test_rss_init_does_not_touch_qdrant_network():
+    """Construction is side-effect free so network setup can be awaited."""
+    mock_qdrant = MagicMock()
+    mock_qdrant.get_collections.side_effect = AssertionError("network call in __init__")
+
+    with patch("feeds.rss_collector.QdrantClient", return_value=mock_qdrant):
+        collector = RSSCollector()
+
+    assert collector._collection_ready is False
+
+
+@pytest.mark.asyncio
+async def test_rss_collect_preflights_collection_before_processing():
+    collector = RSSCollector.__new__(RSSCollector)
+    collector._ensure_collection = AsyncMock()
+
+    with patch("feeds.rss_collector.RSS_FEEDS", []):
+        await collector.collect()
+
+    collector._ensure_collection.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_rss_qdrant_calls_run_outside_event_loop():
+    parsed = MagicMock(entries=[_entry()], bozo=False)
+    qdrant = MagicMock()
+
+    def retrieve(**_: object) -> list[object]:
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()
+        return []
+
+    def upsert(**_: object) -> None:
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()
+
+    qdrant.retrieve = retrieve
+    qdrant.upsert = upsert
+
+    collector = RSSCollector.__new__(RSSCollector)
+    collector.qdrant = qdrant
+    collector._redis = None
+    collector._embed = AsyncMock(return_value=[0.0] * 1024)
+
+    with patch("feeds.rss_collector.feedparser.parse", return_value=parsed), \
+         patch("feeds.rss_collector.process_item",
+               new=AsyncMock(return_value={"codebook_type": "other", "entities": []})), \
+         patch("feeds.rss_collector.httpx.AsyncClient") as mock_http:
+        feed_resp = MagicMock(text="<rss/>")
+        feed_resp.raise_for_status = MagicMock()
+        client = AsyncMock()
+        client.get.return_value = feed_resp
+        mock_http.return_value.__aenter__ = AsyncMock(return_value=client)
+        mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        count = await collector._process_feed(
+            {"name": "test", "url": "http://feed/x", "provider": "test.example.com"}
+        )
+
+    assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_rss_close_releases_qdrant():
+    collector = RSSCollector.__new__(RSSCollector)
+    collector.qdrant = MagicMock()
+
+    await collector.close()
+
+    collector.qdrant.close.assert_called_once_with()

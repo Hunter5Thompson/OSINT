@@ -45,14 +45,9 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "", onAccept }: Se
     const timeout = window.setTimeout(async () => {
       setLoading(true);
       try {
-        let res = await fetch(`/api/graph/search?q=${encodeURIComponent(normalized)}&limit=20`, {
+        const res = await fetch(`/api/graph/search?q=${encodeURIComponent(normalized)}&limit=20`, {
           signal: controller.signal,
         });
-        if (res.status === 404) {
-          res = await fetch(`/api/v1/graph/search?q=${encodeURIComponent(normalized)}&limit=20`, {
-            signal: controller.signal,
-          });
-        }
         if (!res.ok) {
           throw new Error(`search failed: ${res.status}`);
         }

@@ -13,7 +13,7 @@ const ENTITY_TYPES = ["all", "person", "organization", "location", "military_uni
 
 export default function EntityExplorer({
   initialEntity,
-  apiBaseUrl = "/api/v1/graph",
+  apiBaseUrl = "/api/graph",
 }: EntityExplorerProps) {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
