@@ -13,6 +13,10 @@ class AgentState(TypedDict):
     query: str
     image_url: str | None
 
+    # Deterministic grounding (POSTed by the backend, e.g. country briefing)
+    grounding_context: str
+    grounding_evidence_pack: str
+
     # ReAct loop
     messages: Annotated[list[BaseMessage], add_messages]
     tool_calls_count: int
