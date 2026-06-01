@@ -1,11 +1,11 @@
 """Intelligence analysis models."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import partial
 
 from pydantic import BaseModel, Field
 
-_utc_now = partial(datetime.now, timezone.utc)
+_utc_now = partial(datetime.now, UTC)
 
 
 class IntelQuery(BaseModel):

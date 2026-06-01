@@ -98,7 +98,7 @@ async def test_rehydrate_then_subscribe_avoids_double_create(
 ):
     """Spec §9.2 #6 — buffer fills during rehydrate; first signal updates, not creates."""
     from app.models.incident import (
-        Incident, IncidentCreateRequest, IncidentStatus,
+        IncidentCreateRequest,
     )
     from app.services.incident_promoter.cluster_store import ClusterStore
     from app.services.incident_promoter.config import PromoterConfig
@@ -107,7 +107,7 @@ async def test_rehydrate_then_subscribe_avoids_double_create(
 
     cfg = PromoterConfig.from_env()
     # Pre-seed an owned open incident at the FIRMS bucket we'll hit
-    seeded = await fake_incident_store.create_incident(
+    await fake_incident_store.create_incident(
         IncidentCreateRequest(
             title="FIRMS cluster ignited · 3 detections in firms:geo:10.0:20.0",
             kind="firms.cluster",
@@ -167,7 +167,6 @@ async def test_rehydrate_then_subscribe_avoids_double_create(
 async def test_sweeper_closes_stale_open_and_drops_promoted(
     fake_clock, fake_incident_store, fake_incident_event_stream
 ):
-    from datetime import timedelta
     from app.models.incident import IncidentTimelineEvent
     from app.services.incident_promoter.cluster_store import ClusterStore
     from app.services.incident_promoter.config import PromoterConfig

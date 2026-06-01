@@ -19,9 +19,12 @@ async def test_aircraft_tracks_happy_path() -> None:
             "military_branch": "USAF",
             "registration": "05-5140",
             "points": [
-                {"lat": 51.0, "lon": 12.0, "altitude_m": 10000, "speed_ms": 240, "heading": 90, "timestamp": 1744300000},
-                {"lat": 51.2, "lon": 12.3, "altitude_m": 10100, "speed_ms": 242, "heading": 92, "timestamp": 1744300900},
-                {"lat": 51.4, "lon": 12.6, "altitude_m": 10200, "speed_ms": 245, "heading": 94, "timestamp": 1744301800},
+                {"lat": 51.0, "lon": 12.0, "altitude_m": 10000, "speed_ms": 240,
+                 "heading": 90, "timestamp": 1744300000},
+                {"lat": 51.2, "lon": 12.3, "altitude_m": 10100, "speed_ms": 242,
+                 "heading": 92, "timestamp": 1744300900},
+                {"lat": 51.4, "lon": 12.6, "altitude_m": 10200, "speed_ms": 245,
+                 "heading": 94, "timestamp": 1744301800},
             ],
         },
         {
@@ -31,7 +34,8 @@ async def test_aircraft_tracks_happy_path() -> None:
             "military_branch": "USAF",
             "registration": "58-0100",
             "points": [
-                {"lat": 49.0, "lon": 8.0, "altitude_m": 9000, "speed_ms": 220, "heading": 180, "timestamp": 1744302000},
+                {"lat": 49.0, "lon": 8.0, "altitude_m": 9000, "speed_ms": 220,
+                 "heading": 180, "timestamp": 1744302000},
             ],
         },
     ]

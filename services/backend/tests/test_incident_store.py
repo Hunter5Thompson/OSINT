@@ -200,7 +200,12 @@ async def test_apply_signal_update_appends_timeline_and_merges_severity_and_sour
 
     updated_timeline = json.dumps([
         {"t_offset_s": 0.0, "kind": "trigger", "text": "initial trigger", "severity": "elevated"},
-        {"t_offset_s": 120.0, "kind": "signal", "text": "Telegram corroboration", "severity": "high"},
+        {
+            "t_offset_s": 120.0,
+            "kind": "signal",
+            "text": "Telegram corroboration",
+            "severity": "high",
+        },
     ])
     mock_write = AsyncMock(
         return_value=[
@@ -210,7 +215,13 @@ async def test_apply_signal_update_appends_timeline_and_merges_severity_and_sour
                 lat=48.0,
                 lon=37.8,
                 sources=["FIRMS · VIIRS_SNPP_NRT", "Telegram · OSINTdefender"],
-                layer_hints=["firms", "events", "auto_promoter:v1", "cluster:firms:geo:48.0:37.8", "telegram"],
+                layer_hints=[
+                    "firms",
+                    "events",
+                    "auto_promoter:v1",
+                    "cluster:firms:geo:48.0:37.8",
+                    "telegram",
+                ],
                 timeline_json=updated_timeline,
             )
         ]
@@ -264,7 +275,8 @@ async def test_apply_signal_update_missing_incident_returns_none() -> None:
 
 @pytest.mark.asyncio
 async def test_list_owned_for_rehydrate_filters_by_auto_promoter_marker() -> None:
-    """Only incidents with 'auto_promoter:v1' in layer_hints are returned; manual ones are excluded."""
+    """Only incidents with 'auto_promoter:v1' in layer_hints are returned;
+    manual ones are excluded."""
     row1 = _row(
         id="inc-owned-open",
         status="open",

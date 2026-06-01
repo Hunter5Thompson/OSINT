@@ -1,6 +1,6 @@
 """RAG management endpoints."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 import structlog

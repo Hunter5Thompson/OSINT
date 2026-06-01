@@ -1,5 +1,4 @@
 """Unit tests for Severity Burst detector."""
-import pytest
 
 
 def test_severity_disabled_by_default(fake_clock, signal_envelope_factory):

@@ -1,6 +1,6 @@
 """Submarine cable data endpoints."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -26,6 +26,6 @@ async def get_cables(request: Request) -> CableDataset | JSONResponse:
                 error="Cable data unavailable",
                 detail="Failed to load submarine cable data",
                 code="CABLE_FETCH_ERROR",
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             ).model_dump(mode="json"),
         )

@@ -154,6 +154,7 @@ def test_firms_on_cluster_terminated_with_suppress_until_blocks_accumulation(
     signal_envelope_factory, fake_clock
 ):
     from datetime import timedelta
+
     from app.services.incident_promoter.config import PromoterConfig
     from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
 

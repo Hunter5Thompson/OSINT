@@ -1,6 +1,8 @@
 """Structural tests for ClusterStore (data + listener registration only)."""
 from datetime import UTC, datetime
 
+import pytest
+
 from app.services.incident_promoter.cluster_store import (
     ClusterState,
     ClusterStore,
@@ -43,9 +45,6 @@ def test_cluster_state_is_dataclass_with_required_fields():
     assert s.hit_count == 3
     # cooldown is tracked in ClusterStore._cooldowns, NOT here
     assert not hasattr(s, "silenced_until")
-
-
-import pytest
 
 
 @pytest.mark.asyncio
@@ -227,6 +226,7 @@ async def test_handle_cooldown_drops_hit(
     fake_clock, fake_incident_store, fake_incident_event_stream
 ):
     from datetime import timedelta
+
     from app.models.incident import IncidentTimelineEvent
     from app.services.incident_promoter.cluster_store import ClusterStore
     from app.services.incident_promoter.detectors.base import ClusterHit
@@ -254,6 +254,7 @@ async def test_handle_cooldown_expired_creates_normally(
     fake_clock, fake_incident_store, fake_incident_event_stream
 ):
     from datetime import timedelta
+
     from app.models.incident import IncidentTimelineEvent
     from app.services.incident_promoter.cluster_store import ClusterStore
     from app.services.incident_promoter.detectors.base import ClusterHit
@@ -280,9 +281,9 @@ async def test_handle_cooldown_expired_creates_normally(
 async def test_mark_promoted_sets_status_and_is_noop_for_unknown(
     fake_clock, fake_incident_store, fake_incident_event_stream
 ):
+    from app.models.incident import IncidentTimelineEvent
     from app.services.incident_promoter.cluster_store import ClusterStore
     from app.services.incident_promoter.detectors.base import ClusterHit
-    from app.models.incident import IncidentTimelineEvent
 
     store = ClusterStore(clock=fake_clock)
     hit = ClusterHit(
@@ -309,13 +310,16 @@ async def test_mark_silenced_drops_state_records_cooldown_fires_listeners(
     fake_clock, fake_incident_store, fake_incident_event_stream
 ):
     from datetime import timedelta
+
+    from app.models.incident import IncidentTimelineEvent
     from app.services.incident_promoter.cluster_store import ClusterStore
     from app.services.incident_promoter.detectors.base import ClusterHit
-    from app.models.incident import IncidentTimelineEvent
 
     received: list[tuple[str, object]] = []
     store = ClusterStore(clock=fake_clock)
-    store.add_termination_listener(lambda k, suppress_until=None: received.append((k, suppress_until)))
+    store.add_termination_listener(
+        lambda k, suppress_until=None: received.append((k, suppress_until))
+    )
 
     hit = ClusterHit(
         cluster_key="telegram:topic:abc", detector_id="telegram",
@@ -341,6 +345,7 @@ def test_snapshot_for_sweep_classifies_stale_open_promoted_and_expired_cooldowns
     fake_clock,
 ):
     from datetime import timedelta
+
     from app.services.incident_promoter.cluster_store import ClusterState, ClusterStore
 
     store = ClusterStore(clock=fake_clock)

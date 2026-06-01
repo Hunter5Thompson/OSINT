@@ -1,6 +1,6 @@
 """Flight data service - fetches from OpenSky Network and adsb.fi."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 
@@ -88,7 +88,7 @@ async def _fetch_opensky(proxy: ProxyService) -> list[Aircraft]:
                     heading=float(s[10] or 0),
                     vertical_rate=float(s[11] or 0),
                     on_ground=bool(s[8]),
-                    last_contact=datetime.fromtimestamp(s[4] or 0, tz=timezone.utc),
+                    last_contact=datetime.fromtimestamp(s[4] or 0, tz=UTC),
                     is_military=_is_military_callsign(callsign),
                 )
             )
@@ -164,7 +164,8 @@ async def _fetch_fr24(proxy: ProxyService) -> list[Aircraft]:
                 continue
 
             # FR24 array fields: [icao24, lat, lon, heading, altitude_ft, speed_kts,
-            #   squawk, radar, type, registration, timestamp, origin, dest, flight, ?, ?, callsign, ?, ?]
+            #   squawk, radar, type, registration, timestamp, origin, dest, flight,
+            #   ?, ?, callsign, ?, ?]
             icao24 = val[0]
             lat = val[1]
             lon = val[2]

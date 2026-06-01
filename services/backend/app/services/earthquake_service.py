@@ -1,6 +1,6 @@
 """Earthquake data service - fetches from USGS GeoJSON feed."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 
@@ -53,7 +53,7 @@ async def _fetch_usgs(proxy: ProxyService) -> list[Earthquake]:
                     magnitude=float(props.get("mag", 0)),
                     place=props.get("place", "Unknown"),
                     time=datetime.fromtimestamp(
-                        props.get("time", 0) / 1000, tz=timezone.utc
+                        props.get("time", 0) / 1000, tz=UTC
                     ),
                     tsunami=bool(props.get("tsunami", 0)),
                     url=props.get("url"),

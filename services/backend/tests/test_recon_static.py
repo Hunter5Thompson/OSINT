@@ -1,6 +1,6 @@
 """Integration smoke for the real app wiring (router + static mount)."""
 import json
-from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -37,6 +37,7 @@ def app_with_seeded_manifest(tmp_path, monkeypatch):
     # Use TestClient as a context manager so the FastAPI lifespan executes
     # and the manifest loader is wired into app.state.
     import importlib
+
     import app.main as main_mod
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as client:

@@ -10,7 +10,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from qdrant_client.models import (
     CollectionConfig,
     CollectionInfo,
@@ -20,7 +19,6 @@ from qdrant_client.models import (
     SparseVectorParams,
     VectorParams,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -70,46 +68,46 @@ class TestValidatorHappyPath:
 
 class TestValidatorFailures:
     def test_wrong_size_raises(self) -> None:
-        from app.services.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+        from app.services.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 
-        with pytest.raises(QdrantSchemaMismatch, match="768"):
+        with pytest.raises(QdrantSchemaMismatchError, match="768"):
             validate_collection_schema(_dense_only(size=768), enable_hybrid=False)
 
     def test_wrong_distance_raises(self) -> None:
-        from app.services.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+        from app.services.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)dot|distance"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)dot|distance"):
             validate_collection_schema(_dense_only(distance=Distance.DOT), enable_hybrid=False)
 
     def test_phase1_collection_in_hybrid_mode_raises(self) -> None:
         """Phase-2 refusal: unnamed dense vector must raise when hybrid is enabled."""
-        from app.services.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+        from app.services.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)named|hybrid|dense"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)named|hybrid|dense"):
             validate_collection_schema(_dense_only(), enable_hybrid=True)
 
     def test_hybrid_missing_sparse_raises(self) -> None:
-        from app.services.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+        from app.services.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)sparse|bm25"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)sparse|bm25"):
             validate_collection_schema(_hybrid(include_sparse=False), enable_hybrid=True)
 
     def test_hybrid_missing_named_dense_raises(self) -> None:
         """Hybrid collection without named 'dense' vector must raise."""
-        from app.services.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+        from app.services.qdrant_schema import QdrantSchemaMismatchError, validate_collection_schema
 
         # Named vectors, but NOT named 'dense'
         info = _make_info(
             vectors={"text": VectorParams(size=1024, distance=Distance.COSINE)},
             sparse_vectors={"bm25": SparseVectorParams(index=SparseIndexParams(on_disk=False))},
         )
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)dense"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)dense"):
             validate_collection_schema(info, enable_hybrid=True)
 
     def test_exception_is_value_error(self) -> None:
-        from app.services.qdrant_schema import QdrantSchemaMismatch
+        from app.services.qdrant_schema import QdrantSchemaMismatchError
 
-        assert issubclass(QdrantSchemaMismatch, ValueError)
+        assert issubclass(QdrantSchemaMismatchError, ValueError)
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +160,7 @@ class TestQdrantClientPreflight:
     async def test_schema_mismatch_raises_before_any_search(self) -> None:
         """Phase-2 refusal: Phase 1 collection + hybrid mode → raises before client returned."""
         import app.services.qdrant_client as qc
-        from app.services.qdrant_schema import QdrantSchemaMismatch
+        from app.services.qdrant_schema import QdrantSchemaMismatchError
 
         qc._client = None
         qc._schema_validated = False
@@ -182,7 +180,7 @@ class TestQdrantClientPreflight:
             mock_settings.qdrant_collection = "odin_intel"
             mock_settings.enable_hybrid = True  # hybrid mode enabled
 
-            with pytest.raises(QdrantSchemaMismatch):
+            with pytest.raises(QdrantSchemaMismatchError):
                 await qc.get_qdrant_client()
 
     @pytest.mark.asyncio

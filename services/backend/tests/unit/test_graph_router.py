@@ -1,7 +1,8 @@
 """Tests for graph router endpoints with mocked Neo4j."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -23,7 +24,13 @@ class TestGraphEndpoints:
     def test_entity_found(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = [
-                {"name": "NATO", "type": "organization", "id": "e-1", "aliases": [], "confidence": 0.9}
+                {
+                    "name": "NATO",
+                    "type": "organization",
+                    "id": "e-1",
+                    "aliases": [],
+                    "confidence": 0.9,
+                }
             ]
             resp = client.get("/api/v1/graph/entity/NATO")
             assert resp.status_code == 200
@@ -34,7 +41,13 @@ class TestGraphEndpoints:
     def test_neighbors_returns_edges(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = [
-                {"source": "NATO", "relationship": "INVOLVES", "target": "EU", "target_type": "Entity", "target_subtype": "organization"},
+                {
+                    "source": "NATO",
+                    "relationship": "INVOLVES",
+                    "target": "EU",
+                    "target_type": "Entity",
+                    "target_subtype": "organization",
+                },
             ]
             resp = client.get("/api/v1/graph/neighbors/NATO")
             assert resp.status_code == 200
@@ -44,9 +57,27 @@ class TestGraphEndpoints:
     def test_network_ignores_rows_with_missing_source_or_target(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = [
-                {"source": None, "relationship": "INVOLVES", "target": "EU", "target_type": "Entity", "target_subtype": "organization"},
-                {"source": "NATO", "relationship": "INVOLVES", "target": None, "target_type": "Entity", "target_subtype": "organization"},
-                {"source": "NATO", "relationship": "INVOLVES", "target": "EU", "target_type": "Entity", "target_subtype": "organization"},
+                {
+                    "source": None,
+                    "relationship": "INVOLVES",
+                    "target": "EU",
+                    "target_type": "Entity",
+                    "target_subtype": "organization",
+                },
+                {
+                    "source": "NATO",
+                    "relationship": "INVOLVES",
+                    "target": None,
+                    "target_type": "Entity",
+                    "target_subtype": "organization",
+                },
+                {
+                    "source": "NATO",
+                    "relationship": "INVOLVES",
+                    "target": "EU",
+                    "target_type": "Entity",
+                    "target_subtype": "organization",
+                },
             ]
             resp = client.get("/api/v1/graph/network/NATO")
             assert resp.status_code == 200
@@ -96,7 +127,13 @@ class TestGraphEndpoints:
     def test_events_endpoint(self, client):
         with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
             mock.return_value = [
-                {"id": "ev-1", "name": "Missile Test", "type": "military.weapons_test", "severity": "high", "timestamp": "2026-03-30"},
+                {
+                    "id": "ev-1",
+                    "name": "Missile Test",
+                    "type": "military.weapons_test",
+                    "severity": "high",
+                    "timestamp": "2026-03-30",
+                },
             ]
             resp = client.get("/api/v1/graph/events?entity=NorthKorea")
             assert resp.status_code == 200

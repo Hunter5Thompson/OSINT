@@ -5,7 +5,7 @@ Scenarios from spec §9.2: #1 FIRMS pipeline, #4 Promote mid-cluster,
 Tests #2 (Severity) and #3 (Telegram) live in Phases 5 and 6.
 """
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
 

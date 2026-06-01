@@ -27,10 +27,14 @@ async def flight_stream(websocket: WebSocket) -> None:
                     websocket.app.state.cache,
                 )
                 data = [f.model_dump(mode="json") for f in flights]
-                await websocket.send_text(json.dumps({"type": "flights", "data": data, "count": len(data)}))
+                await websocket.send_text(
+                    json.dumps({"type": "flights", "data": data, "count": len(data)})
+                )
             except Exception:
                 logger.warning("flight_ws_fetch_error")
-                await websocket.send_text(json.dumps({"type": "error", "message": "Failed to fetch flights"}))
+                await websocket.send_text(
+                    json.dumps({"type": "error", "message": "Failed to fetch flights"})
+                )
 
             await asyncio.sleep(10)
     except WebSocketDisconnect:
