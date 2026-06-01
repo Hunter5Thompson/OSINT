@@ -205,8 +205,9 @@ def build_briefing_context(
     )
     footer = "\n>>>END_GROUNDING_DATA"
     if matched:
+        # severity/source are also unbounded external strings → cap all three fields
         sig_lines = ["", "## Active ODIN signals (live, last 15 min)"] + [
-            f"- [{s.severity}] {s.title[:_SIG_TITLE_MAX]} — {s.source}" for s in matched
+            f"- [{s.severity[:16]}] {s.title[:_SIG_TITLE_MAX]} — {s.source[:60]}" for s in matched
         ]
     else:
         sig_lines = ["", "## Active ODIN signals", "- keine aktiven Signale im 15-Minuten-Fenster"]
@@ -228,7 +229,8 @@ def build_briefing_context(
 
     # --- grounding_evidence (≤6 items; bounds + allowlist enforced here) ---
     iso_or_m49 = country.iso3 or country.m49
-    almanac_content = (facts_block + f"\nQuelle: {country.source_note}")[:_CONTENT_MAX]
+    quelle = f"\nQuelle: {country.source_note}"           # reserve the provenance suffix; truncate facts to fit
+    almanac_content = facts_block[: max(_CONTENT_MAX - len(quelle), 0)] + quelle
     grounding_evidence: list[dict] = [{
         "source_type": "dataset",
         "provider": "odin-country-almanac",
@@ -239,10 +241,11 @@ def build_briefing_context(
         "score": 0.95,
     }]
     for s in matched:
-        content = (
-            f"{s.title}\ntype: {s.type} · severity: {s.severity} · source: {s.source}"
+        meta = (                                          # reserve meta+observation_time; truncate title to fit
+            f"\ntype: {s.type} · severity: {s.severity[:16]} · source: {s.source[:60]}"
             f"\nobservation_time: {s.ts}"
-        )[:_CONTENT_MAX]
+        )
+        content = s.title[: max(_CONTENT_MAX - len(meta), 0)] + meta
         grounding_evidence.append({
             "source_type": "dataset",
             "provider": "odin-live-signal",
@@ -306,12 +309,30 @@ def test_five_long_signal_titles_stay_within_budget():
     ctx = build_briefing_context(_country(), sigs, factbook_revision="r", refreshed_at="2026-05-17", budget_chars=4000)
     assert len(ctx.grounding_context) <= 4000          # capped signal titles can't blow the budget
     assert "Active ODIN signals" in ctx.grounding_context
+
+
+def test_long_facts_keep_source_note_provenance():
+    huge = CountryAlmanac(
+        id="364", iso3="IRN", m49="364", name="Iran", region="Asia", subregion="S", capital=None,
+        facts=AlmanacFacts(security=[AlmanacFact(label=f"S{i}", value="x" * 300) for i in range(20)]),
+        updated_at="2026-05-17", source_note="CIA World Factbook",
+    )
+    almanac = build_briefing_context(huge, [], factbook_revision="r", refreshed_at="2026-05-17").grounding_evidence[0]
+    assert len(almanac["content"]) <= 2000
+    assert almanac["content"].endswith("Quelle: CIA World Factbook")   # provenance never displaced
+
+
+def test_long_signal_title_keeps_observation_time():
+    sig = build_briefing_context(_country(), [_signal(title="T" * 5000, event_id="big")],
+                                 factbook_revision="r", refreshed_at="2026-05-17").grounding_evidence[1]
+    assert len(sig["content"]) <= 2000
+    assert "observation_time:" in sig["content"]          # metadata never displaced by a long title
 ```
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd services/backend && NEO4J_PASSWORD=dummy uv run pytest tests/test_briefing_context.py -v`
-Expected: PASS (7 tests).
+Expected: PASS (9 tests).
 
 - [ ] **Step 5: Lint + commit**
 
@@ -635,6 +656,11 @@ def test_query_request_bounds_and_allowlist():
         GroundingEvidenceItem(source_type="rss", provider="odin-live-signal", doc_id="d", title="t", content="c")
     with pytest.raises(ValidationError):
         GroundingEvidenceItem(source_type="dataset", provider="evil", doc_id="d", title="t", content="c")
+    with pytest.raises(ValidationError):                                 # content per-field bound
+        GroundingEvidenceItem(source_type="dataset", provider="odin-live-signal", doc_id="d", title="t", content="c" * 2001)
+    with pytest.raises(ValidationError):                                 # >6 evidence items
+        ok = GroundingEvidenceItem(source_type="dataset", provider="odin-live-signal", doc_id="d", title="t", content="c")
+        QueryRequest(query="q", grounding_evidence=[ok] * 7)
 
 
 def test_grounding_evidence_roundtrips_through_codec():
@@ -1097,6 +1123,21 @@ async def test_briefing_404_for_unknown_country(monkeypatch):
     async with AsyncClient(transport=transport, base_url="http://t") as ac:
         r = await ac.post("/api/almanac/countries/zzz/briefing")
         assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_briefing_works_for_rest_fallback_countries(monkeypatch):
+    async def fake_stream(**kwargs):
+        # sparse-facts countries still produce an almanac evidence item
+        assert kwargs["grounding_evidence"][0]["provider"] == "odin-country-almanac"
+        yield {"event": "result", "data": '{"analysis":"ok"}'}
+        yield {"event": "done", "data": ""}
+    monkeypatch.setattr("app.routers.almanac.stream_intel_query", fake_stream)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://t") as ac:
+        for cid in ("732", "275"):          # ESH (W. Sahara) + PSE (Palestine), REST-fallback profiles
+            r = await ac.post(f"/api/almanac/countries/{cid}/briefing")
+            assert r.status_code == 200
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1187,8 +1228,12 @@ class _FakeGraph:
         self.by_id: dict[str, dict] = {}
 
     async def write(self, cypher, params):
-        if "MERGE (r:Report" in cypher and "scope_key = $scope_key" in cypher:
+        is_create = "CREATE (r:Report" in cypher
+        is_upsert = "MERGE (r:Report" in cypher and "scope_key = $scope_key" in cypher
+        if is_create or is_upsert:
             rid, scope = params["report_id"], params.get("scope_key")
+            if is_create and rid in self.by_id:                       # CREATE → real id uniqueness
+                raise ConstraintError("already exists, constraint `report_id_unique`")
             if scope is not None and any(
                 r.get("scope_key") == scope and i != rid for i, r in self.by_id.items()
             ):
@@ -1243,27 +1288,59 @@ async def test_create_report_reraises_scope_conflict_not_id_retry(graph):
 
 
 @pytest.mark.asyncio
-async def test_create_report_retries_when_id_resolves_after_conflict(monkeypatch):
-    # Exercise the retry branch: first write raises a ConstraintError AND the id resolves
-    # to a node (id race) → retry → second write succeeds. (Scope-collision path is the
+async def test_create_report_retries_id_race_then_succeeds(graph, monkeypatch):
+    # Two creates forced onto the SAME paragraph (r-001): the second CREATE raises
+    # report_id_unique → get_report finds r-001 → retry with r-002. (Scope path is the
     # test above, where the id does NOT resolve → re-raise.)
-    calls = {"n": 0}
+    seq = iter([1, 1, 2])
 
-    async def flaky_write(cypher, params):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            raise ConstraintError("transient id race")
-        return [{"id": params["report_id"], "scope_key": params.get("scope_key"), "paragraph_num": 2}]
+    async def fake_next():
+        return next(seq)
+
+    monkeypatch.setattr(report_store, "_next_paragraph", fake_next)
+    first = await report_store.create_report(_req(scope_key="country:AAA"))
+    assert first.id == "r-001"
+    second = await report_store.create_report(_req(scope_key="country:BBB"))
+    assert second.id == "r-002"                          # r-001 taken → CREATE raises → retried to r-002
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_rereads_winner_on_scope_race(monkeypatch):
+    # True race: scope read misses, the CREATE loses to a concurrent racer (scope ConstraintError),
+    # the racer's id (r-005) ≠ our id (r-009) so create_report re-raises, and get_or_create re-reads
+    # the winner via REPORT_BY_SCOPE.
+    winner = {"id": "r-005", "scope_key": "country:RACE", "paragraph_num": 5}
+    reads = {"scope": 0}
 
     async def read(cypher, params):
+        if "scope_key: $scope_key" in cypher:
+            reads["scope"] += 1
+            return [] if reads["scope"] == 1 else [winner]   # miss, then the racer's winner
         if "max(r.paragraph_num)" in cypher:
-            return [{"next_paragraph": calls["n"] + 1}]
-        return [{"id": params.get("report_id"), "scope_key": "x", "paragraph_num": 1}]  # id resolves → retry
+            return [{"next_paragraph": 9}]                    # our create computes r-009 (≠ winner r-005)
+        return []                                             # get_report(r-009) → None → re-raise
 
-    monkeypatch.setattr(report_store, "write_query", flaky_write)
+    async def write(cypher, params):
+        raise ConstraintError("constraint `report_scope_key_unique`")
+
     monkeypatch.setattr(report_store, "read_query", read)
-    rec = await report_store.create_report(_req(scope_key="country:ZZZ"))
-    assert rec is not None and calls["n"] == 2           # retried exactly once after the conflict
+    monkeypatch.setattr(report_store, "write_query", write)
+    got = await report_store.get_or_create_report_by_scope("country:RACE", title="x", location="x", coords="--")
+    assert got.id == "r-005"                             # re-read the winner after losing the create race
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_creates_both_constraints(monkeypatch):
+    calls: list[str] = []
+
+    async def write(cypher, params):
+        calls.append(cypher)
+        return []
+
+    monkeypatch.setattr(report_store, "write_query", write)
+    await report_store.bootstrap_report_schema()
+    assert any("report_id_unique" in c for c in calls)
+    assert any("report_scope_key_unique" in c for c in calls)
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1281,9 +1358,42 @@ In `services/backend/app/models/report.py`, add to `ReportRecord` and `ReportCre
 
 - [ ] **Step 3b: Cypher — `report_write.py`**
 
-In `REPORT_UPSERT` `SET` block add `  r.scope_key = $scope_key, ` (before `r.updated_at`); in its `RETURN` add `  r.scope_key AS scope_key, `. Append constraints:
+In `REPORT_UPSERT` `SET` block add `  r.scope_key = $scope_key, ` (before `r.updated_at`); in its `RETURN` add `  r.scope_key AS scope_key, `. (`update_report` keeps `REPORT_UPSERT`/MERGE — upsert semantics are correct for edits.)
+
+Add a **dedicated `REPORT_CREATE` using `CREATE`** so a duplicate id actually raises (MERGE-by-id silently upserts/overwrites on a paragraph race, so the id-retry only works with `CREATE` under the `report_id` unique constraint). Only `create_report` uses it:
 
 ```python
+REPORT_CREATE = (
+    "CREATE (r:Report {id: $report_id}) "
+    "SET "
+    "  r.created_at = datetime($now), "
+    "  r.paragraph_num = $paragraph_num, "
+    "  r.stamp = $stamp, "
+    "  r.title = $title, "
+    "  r.status = $status, "
+    "  r.confidence = $confidence, "
+    "  r.location = $location, "
+    "  r.coords = $coords, "
+    "  r.findings = $findings, "
+    "  r.metrics_json = $metrics_json, "
+    "  r.context = $context, "
+    "  r.body_title = $body_title, "
+    "  r.body_paragraphs = $body_paragraphs, "
+    "  r.margin_json = $margin_json, "
+    "  r.sources = $sources, "
+    "  r.scope_key = $scope_key, "
+    "  r.updated_at = datetime($now) "
+    "RETURN "
+    "  r.id AS id, coalesce(r.paragraph_num, 0) AS paragraph_num, coalesce(r.stamp, '') AS stamp, "
+    "  coalesce(r.title, '') AS title, coalesce(r.status, 'Draft') AS status, "
+    "  coalesce(r.confidence, 0.0) AS confidence, coalesce(r.location, '') AS location, "
+    "  coalesce(r.coords, '') AS coords, coalesce(r.findings, []) AS findings, "
+    "  coalesce(r.metrics_json, '[]') AS metrics_json, coalesce(r.context, '') AS context, "
+    "  coalesce(r.body_title, '') AS body_title, coalesce(r.body_paragraphs, []) AS body_paragraphs, "
+    "  coalesce(r.margin_json, '[]') AS margin_json, coalesce(r.sources, []) AS sources, "
+    "  r.scope_key AS scope_key, toString(r.created_at) AS created_at, toString(r.updated_at) AS updated_at"
+)
+
 REPORT_ID_UNIQUE_CONSTRAINT = (
     "CREATE CONSTRAINT report_id_unique IF NOT EXISTS "
     "FOR (r:Report) REQUIRE r.id IS UNIQUE"
@@ -1332,7 +1442,7 @@ Add `scope_key` to `_report_params` return: `"scope_key": getattr(payload, "scop
 from neo4j.exceptions import ConstraintError  # add to imports
 from app.cypher.report_read import REPORT_BY_SCOPE  # add to imports
 from app.cypher.report_write import (  # extend existing import
-    REPORT_ID_UNIQUE_CONSTRAINT, REPORT_SCOPE_UNIQUE_CONSTRAINT,
+    REPORT_CREATE, REPORT_ID_UNIQUE_CONSTRAINT, REPORT_SCOPE_UNIQUE_CONSTRAINT,
 )
 
 
@@ -1386,12 +1496,12 @@ async def create_report(payload: ReportCreateRequest) -> ReportRecord:
             "sources": sources, "body_paragraphs": body_paragraphs,
         })
         try:
-            rows = await write_query(REPORT_UPSERT, _report_params(report_id, paragraph, stamp, hydrated))
+            rows = await write_query(REPORT_CREATE, _report_params(report_id, paragraph, stamp, hydrated))
         except ConstraintError:
-            # Message-independent (do NOT match on the constraint name). MERGE-by-id upserts,
-            # so in practice only report_scope_key_unique fires here. If this id now resolves
-            # to a real node it was an id race → retry with a fresh paragraph; otherwise it is
-            # a scope collision → re-raise so get_or_create_report_by_scope re-reads the winner.
+            # REPORT_CREATE uses CREATE, so a duplicate id genuinely raises (report_id_unique).
+            # Message-independent: if this id now resolves to a real node it was an id race →
+            # retry with a fresh paragraph; otherwise it's a scope collision (CREATE rolled back,
+            # id absent) → re-raise so get_or_create_report_by_scope re-reads the winner.
             if await get_report(report_id) is not None:
                 continue
             raise
@@ -1491,7 +1601,7 @@ import datetime as _dt
 from httpx import ASGITransport, AsyncClient
 from app.main import app
 from app.routers import almanac as almanac_router
-from app.models.report import ReportRecord
+from app.models.report import ReportMessage, ReportRecord
 
 
 def _rec(scope_key: str) -> ReportRecord:
@@ -1512,7 +1622,7 @@ async def test_save_requires_schema_and_truncates_with_marker(monkeypatch):
 
     async def fake_append(rid, payload):
         captured["text"] = payload.text
-        return None
+        return ReportMessage(id="m1", role="munin", text=payload.text)   # not None → endpoint succeeds
 
     monkeypatch.setattr(almanac_router, "get_or_create_report_by_scope", fake_goc)
     monkeypatch.setattr(almanac_router, "update_report", fake_update)
@@ -1609,10 +1719,14 @@ async def save_country_briefing(country_id: str, body: BriefingSaveRequest, requ
         scope_key, title=f"{country.name} — Lagebild", location=country.name, coords=coords)
     patch = build_hydration_patch(body.analysis, country_name=country.name)
     updated = await update_report(report.id, patch)
+    if updated is None:                                              # dossier vanished — never report false success
+        raise HTTPException(status_code=503, detail="dossier hydration failed")
     chat = truncate_message(body.analysis.analysis.strip()) or "—"   # ≤8000 incl " …[gekürzt]" marker
-    await append_report_message(
+    msg = await append_report_message(
         report.id, ReportMessageCreate(role="munin", text=chat, refs=body.analysis.sources_used[:6]))
-    return updated or report
+    if msg is None:
+        raise HTTPException(status_code=503, detail="briefing chat persistence failed")
+    return updated
 ```
 
 (`ReportRecord` is imported above for the `response_model`; `Request` for the `app.state` schema-ready guard.)
@@ -1993,7 +2107,11 @@ import { saveCountryBriefing } from "../../../services/api";
 
 // JSX block (after <SignalList .../>):
   <section className="country-almanac__briefing" aria-label="Munin briefing">
-    <button type="button" className="country-almanac__tab" onClick={() => { setSaved(false); briefing.run(); }}>
+    <button
+      type="button"
+      className="country-almanac__tab"
+      onClick={() => { setSaved(false); setSavedId(null); setSaveError(null); briefing.run(); }}
+    >
       § Munin-Briefing erzeugen
     </button>
     {briefing.loading && (
