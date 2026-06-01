@@ -14,7 +14,7 @@ from app.services.qdrant_schema import QdrantSchemaMismatch, validate_collection
 _client: AsyncQdrantClient | None = None
 _schema_validated: bool = False
 
-__all__ = ["get_qdrant_client", "QdrantSchemaMismatch"]
+__all__ = ["close_qdrant_client", "get_qdrant_client", "QdrantSchemaMismatch"]
 
 
 async def get_qdrant_client() -> AsyncQdrantClient:
@@ -29,19 +29,27 @@ async def get_qdrant_client() -> AsyncQdrantClient:
     if _client is None:
         _client = AsyncQdrantClient(url=settings.qdrant_url)
     if not _schema_validated:
-        await _validate_schema(_client)
-        _schema_validated = True
+        _schema_validated = await _validate_schema(_client)
     return _client
 
 
-async def _validate_schema(client: AsyncQdrantClient) -> None:
-    """Fetch collection info and validate the schema.  No-op if collection absent."""
+async def close_qdrant_client() -> None:
+    """Release and reset the cached client."""
+    global _client, _schema_validated
+    client, _client = _client, None
+    _schema_validated = False
+    if client is not None:
+        await client.close()
+
+
+async def _validate_schema(client: AsyncQdrantClient) -> bool:
+    """Fetch and validate collection info. Return whether validation completed."""
     try:
         collections = await client.get_collections()
         names = {c.name for c in collections.collections}
         if settings.qdrant_collection not in names:
             # Collection absent — nothing to validate; let callers handle 404
-            return
+            return True
         info = await client.get_collection(settings.qdrant_collection)
         enable_hybrid: bool = getattr(settings, "enable_hybrid", False)
         validate_collection_schema(info, enable_hybrid=enable_hybrid)
@@ -49,4 +57,5 @@ async def _validate_schema(client: AsyncQdrantClient) -> None:
         raise
     except Exception:
         # Network errors etc. — don't block startup; let operations fail naturally
-        pass
+        return False
+    return True
