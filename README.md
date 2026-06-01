@@ -1,5 +1,28 @@
 # WorldView — Tactical Intelligence Platform
 
+[![CI](https://github.com/Hunter5Thompson/OSINT/actions/workflows/ci.yml/badge.svg)](https://github.com/Hunter5Thompson/OSINT/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![CesiumJS](https://img.shields.io/badge/CesiumJS-3D%20Globe-6CADDF)
+![Local LLM](https://img.shields.io/badge/LLM-local%20·%20vLLM%20%2B%20Qwen-7C3AED)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-3da639)](LICENSE)
+
+> **Self-hosted, Palantir-style tactical intelligence.** A CesiumJS 3D globe fusing real-time flight / satellite / vessel / earthquake feeds with a LangGraph multi-agent RAG pipeline that runs **entirely on local GPUs** (vLLM + TEI + Qdrant + Neo4j) — no cloud LLM, no data leaving the box.
+
+<!--
+HERO IMAGE — the single highest-leverage addition for this visually-rich project.
+A ~10 s looping GIF of the rotating globe with live layers + a Munin query converts
+visitors far better than any prose. Capture at >=1280x720, then:
+  - screenshot -> docs/assets/hero.png   (<=1 MB)
+  - or GIF     -> docs/assets/demo.gif    (<=8 MB)
+and uncomment the block below (see docs/assets/README.md for capture tips):
+
+<p align="center">
+  <img src="docs/assets/hero.png" alt="WorldView — CesiumJS 3D globe with live intelligence layers" width="820">
+</p>
+-->
+
 Palantir-like tactical intelligence platform running locally. CesiumJS 3D Globe with Google Photorealistic 3D Tiles, FastAPI backend proxying real-time data feeds, LangGraph multi-agent RAG pipeline with local LLM inference (vLLM + TEI), and Qdrant vector database.
 
 ## Architecture
@@ -222,4 +245,6 @@ docker exec osint-neo4j-1 sh -lc \
 
 ## License
 
-Private project — not for redistribution.
+Licensed under the **[PolyForm Noncommercial License 1.0.0](LICENSE)**. Use, modification, and distribution are permitted for **any noncommercial purpose** — including research, experimentation, study, and use by educational, public-research, and government institutions. **Commercial use is not granted**; for a commercial license, contact the maintainer.
+
+> Note: PolyForm Noncommercial is a *source-available* license, not an OSI-approved open-source license (the OSD forbids field-of-use restrictions). The code is open to read and build on for research, but it is not "open source" in the strict sense.
