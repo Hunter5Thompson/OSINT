@@ -28,5 +28,7 @@ COPY services/intelligence/codebook/event_codebook.yaml runtime_contracts/event_
 # Install the local project so console-script entrypoints are available.
 RUN uv sync --locked --no-dev
 
-# Run the scheduler
-CMD ["uv", "run", "python", "scheduler.py"]
+# Run the scheduler with the built venv python (PATH points at /app/.venv/bin).
+# Do NOT launch it through uv at runtime: that re-resolves dependencies at
+# container start, pulling dev tooling (ruff/duckdb/...) and needing network.
+CMD ["python", "scheduler.py"]

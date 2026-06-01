@@ -67,4 +67,3 @@ def test_missing_codebook_raises(tmp_path):
 
 def test_codebook_error_is_not_extraction_config_error():
     assert not issubclass(CodebookConfigError, ExtractionConfigError)
-

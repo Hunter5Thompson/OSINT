@@ -51,6 +51,11 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert 'ENV EVENT_CODEBOOK_PATH="/app/runtime_contracts/event_codebook.yaml"' in dockerfile
     assert "RUN uv sync --locked --no-dev --no-install-project" in dockerfile
     assert "RUN uv sync --locked --no-dev" in dockerfile
+    # Runtime entrypoint must use the built venv python directly — never `uv run`,
+    # which re-resolves and would pull dev deps (ruff/duckdb/...) at container start
+    # and can fail offline.
+    assert 'CMD ["python", "scheduler.py"]' in dockerfile
+    assert "uv run" not in dockerfile
     assert "COPY . ." not in dockerfile
     assert "migrations/" not in dockerfile
 
