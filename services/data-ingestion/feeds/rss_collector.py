@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import time
 from datetime import UTC, datetime
@@ -167,22 +168,28 @@ class RSSCollector:
     def __init__(self, redis_client=None) -> None:
         self.qdrant = QdrantClient(url=settings.qdrant_url)
         self._redis = redis_client
-        self._ensure_collection()
+        self._collection_ready = False
 
     # ------------------------------------------------------------------
     # Collection bootstrap
     # ------------------------------------------------------------------
-    def _ensure_collection(self) -> None:
+    async def _ensure_collection(self) -> None:
         """Create the Qdrant collection if it does not exist.
 
         If the collection already exists, its vector schema is validated against
         the active runtime mode (dense-only or hybrid) BEFORE any write occurs.
         Raises QdrantSchemaMismatch if the schema does not match.
         """
+        if self._collection_ready:
+            return
+
         enable_hybrid: bool = getattr(settings, "enable_hybrid", False)
-        collections = [c.name for c in self.qdrant.get_collections().collections]
+        collections = await asyncio.to_thread(
+            lambda: [c.name for c in self.qdrant.get_collections().collections]
+        )
         if settings.qdrant_collection not in collections:
-            self.qdrant.create_collection(
+            await asyncio.to_thread(
+                self.qdrant.create_collection,
                 collection_name=settings.qdrant_collection,
                 vectors_config=VectorParams(
                     size=settings.embedding_dimensions,
@@ -192,13 +199,17 @@ class RSSCollector:
             log.info("qdrant_collection_created", collection=settings.qdrant_collection)
         else:
             # Collection exists — validate schema before any write
-            info = self.qdrant.get_collection(settings.qdrant_collection)
+            info = await asyncio.to_thread(
+                self.qdrant.get_collection,
+                settings.qdrant_collection,
+            )
             validate_collection_schema(info, enable_hybrid=enable_hybrid)
             log.debug(
                 "qdrant_schema_validated",
                 collection=settings.qdrant_collection,
                 enable_hybrid=enable_hybrid,
             )
+        self._collection_ready = True
 
     # ------------------------------------------------------------------
     # Embedding helper
@@ -255,7 +266,8 @@ class RSSCollector:
             point_id = _point_id_from_hash(chash)
 
             # Deduplicate — skip if already stored
-            existing = self.qdrant.retrieve(
+            existing = await asyncio.to_thread(
+                self.qdrant.retrieve,
                 collection_name=settings.qdrant_collection,
                 ids=[point_id],
             )
@@ -318,7 +330,8 @@ class RSSCollector:
             ingested += 1
 
         if points:
-            self.qdrant.upsert(
+            await asyncio.to_thread(
+                self.qdrant.upsert,
                 collection_name=settings.qdrant_collection,
                 points=points,
             )
@@ -330,6 +343,7 @@ class RSSCollector:
     # ------------------------------------------------------------------
     async def collect(self) -> None:
         """Fetch all RSS feeds and ingest new articles."""
+        await self._ensure_collection()
         log.info("rss_collection_started", feed_count=len(RSS_FEEDS))
         total = 0
         start = time.monotonic()
@@ -345,3 +359,6 @@ class RSSCollector:
 
         elapsed = round(time.monotonic() - start, 2)
         log.info("rss_collection_finished", total_new=total, elapsed_seconds=elapsed)
+
+    async def close(self) -> None:
+        await asyncio.to_thread(self.qdrant.close)

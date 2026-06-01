@@ -135,11 +135,13 @@ async def check_ingestion_llm() -> None:
 # ---------------------------------------------------------------------------
 async def run_rss_collector() -> None:
     """Collect RSS feeds."""
+    collector = RSSCollector(redis_client=_get_redis_client())
     try:
-        collector = RSSCollector(redis_client=_get_redis_client())
         await collector.collect()
     except Exception:
         log.exception("rss_job_failed")
+    finally:
+        await collector.close()
 
 
 async def run_tle_updater() -> None:

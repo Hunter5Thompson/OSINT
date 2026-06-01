@@ -91,3 +91,17 @@ async def test_scheduler_closes_correlation_job_after_failure() -> None:
         await scheduler.run_correlation_job()
 
     job.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_scheduler_closes_rss_collector_after_failure() -> None:
+    import scheduler
+
+    collector = MagicMock(
+        collect=AsyncMock(side_effect=RuntimeError("boom")),
+        close=AsyncMock(),
+    )
+    with patch("scheduler.RSSCollector", return_value=collector):
+        await scheduler.run_rss_collector()
+
+    collector.close.assert_awaited_once()

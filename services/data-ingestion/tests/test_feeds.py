@@ -184,7 +184,8 @@ class TestCollectorInstantiation:
 
         collector = RSSCollector()
         assert collector.qdrant is not None
-        mock_client.create_collection.assert_called_once()
+        assert collector._collection_ready is False
+        mock_client.create_collection.assert_not_called()
 
     @patch("feeds.gdelt_collector.QdrantClient")
     def test_gdelt_collector_init(self, mock_qdrant_cls: MagicMock) -> None:
