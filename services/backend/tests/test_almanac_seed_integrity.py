@@ -41,6 +41,27 @@ def test_store_resolves_major_countries_by_iso3() -> None:
         assert store.get_country(iso3) is not None, f"{iso3} not resolvable by iso3"
 
 
+def test_seed_is_enriched_not_stub() -> None:
+    """Guard against regression to placeholder stubs: the vast majority of countries
+    must carry real facts (Population) and a capital, not just 'Map entity'/'M49 code'."""
+    data = json.loads(DEFAULT_ALMANAC_PATH.read_text(encoding="utf-8"))
+    countries = data["countries"]
+
+    def has_population(c: dict) -> bool:
+        return any(
+            f.get("label") == "Population"
+            for section in c["facts"].values()
+            for f in section
+        )
+
+    with_pop = [c for c in countries if has_population(c)]
+    with_capital = [c for c in countries if c.get("capital")]
+    # 174/177 are ISO-matchable (Kosovo / N. Cyprus / Somaliland are not in REST Countries).
+    n = len(countries)
+    assert len(with_pop) >= 170, f"only {len(with_pop)}/{n} countries carry Population"
+    assert len(with_capital) >= 170, f"only {len(with_capital)}/{n} countries have a capital"
+
+
 def test_backend_image_packages_data_dir() -> None:
     """The image must contain the seed — Dockerfile must COPY data/ (root cause 1)."""
     dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text(encoding="utf-8")
