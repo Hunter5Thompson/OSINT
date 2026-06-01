@@ -193,18 +193,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# REST Routers — unified prefix with /api/v1 back-compat aliases (remove 2026-05-21)
+# REST Routers — unified /api prefix
 for r in (
     flights.router, satellites.router, earthquakes.router, vessels.router,
     hotspots.router, intel.router, rag.router, graph.router, cables.router,
     firms.router, aircraft.router, eonet.router, gdacs.router, reports.router,
 ):
     app.include_router(r, prefix="/api")
-    app.include_router(r, prefix="/api/v1")
 
-# Recon router — dual /api + /api/v1 prefix (matches existing convention)
+# Recon router
 app.include_router(recon_router_module.router, prefix="/api")
-app.include_router(recon_router_module.router, prefix="/api/v1")
 
 # Static PLY assets for recon (immutable Cache-Control, Range supported)
 _recon_static_dir = Path(os.environ.get(
@@ -271,20 +269,6 @@ async def client_config() -> ClientConfig:
     )
 
 
-# Primary mounts at /api + /api/v1 back-compat aliases (remove 2026-05-21)
+# Health + config mounts at /api
 app.add_api_route("/api/health", health, response_model=HealthResponse, methods=["GET"])
 app.add_api_route("/api/config", client_config, response_model=ClientConfig, methods=["GET"])
-app.add_api_route(
-    "/api/v1/health",
-    health,
-    response_model=HealthResponse,
-    methods=["GET"],
-    include_in_schema=False,
-)
-app.add_api_route(
-    "/api/v1/config",
-    client_config,
-    response_model=ClientConfig,
-    methods=["GET"],
-    include_in_schema=False,
-)

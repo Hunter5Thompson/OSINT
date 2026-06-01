@@ -49,7 +49,6 @@ def _build_app(loader: ReconManifestLoader) -> FastAPI:
     app = FastAPI()
     app.state.recon_manifest = loader
     app.include_router(recon_router.router, prefix="/api")
-    app.include_router(recon_router.router, prefix="/api/v1")
     return app
 
 
@@ -60,13 +59,6 @@ def test_list_scenes_returns_manifest_shape(tmp_path):
     body = r.json()
     assert "scenes" in body
     assert body["scenes"][0]["scene_id"] == "jax_068"
-
-
-def test_list_scenes_v1_alias_matches_primary(tmp_path):
-    client = TestClient(_build_app(_seed_manifest(tmp_path)))
-    a = client.get("/api/recon/scenes").json()
-    b = client.get("/api/v1/recon/scenes").json()
-    assert a == b
 
 
 def test_get_scene_by_id(tmp_path):

@@ -13,7 +13,7 @@ def client() -> TestClient:
 
 class TestHealthEndpoint:
     def test_health_returns_ok(self, client: TestClient) -> None:
-        resp = client.get("/api/v1/health")
+        resp = client.get("/api/health")
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
@@ -21,7 +21,7 @@ class TestHealthEndpoint:
         assert "version" in data
 
     def test_config_returns_token(self, client: TestClient) -> None:
-        resp = client.get("/api/v1/config")
+        resp = client.get("/api/config")
         assert resp.status_code == 200
         data = resp.json()
         assert "cesium_ion_token" in data

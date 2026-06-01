@@ -46,7 +46,7 @@ async def test_aircraft_tracks_happy_path() -> None:
 
     with patch("app.routers.aircraft.read_query", AsyncMock(return_value=rows)):
         client = TestClient(app)
-        resp = client.get("/api/v1/aircraft/tracks")
+        resp = client.get("/api/aircraft/tracks")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -79,7 +79,7 @@ async def test_aircraft_tracks_cache_hit_short_circuits_neo4j() -> None:
     read_mock = AsyncMock()
     with patch("app.routers.aircraft.read_query", read_mock):
         client = TestClient(app)
-        resp = client.get("/api/v1/aircraft/tracks")
+        resp = client.get("/api/aircraft/tracks")
 
     assert resp.status_code == 200
     assert resp.json()[0]["icao24"] == "AE9999"
@@ -94,7 +94,7 @@ async def test_aircraft_tracks_empty_neo4j_returns_empty_list() -> None:
 
     with patch("app.routers.aircraft.read_query", AsyncMock(return_value=[])):
         client = TestClient(app)
-        resp = client.get("/api/v1/aircraft/tracks")
+        resp = client.get("/api/aircraft/tracks")
 
     assert resp.status_code == 200
     assert resp.json() == []
@@ -102,13 +102,13 @@ async def test_aircraft_tracks_empty_neo4j_returns_empty_list() -> None:
 
 def test_aircraft_tracks_since_hours_too_low_returns_422() -> None:
     client = TestClient(app)
-    resp = client.get("/api/v1/aircraft/tracks?since_hours=0")
+    resp = client.get("/api/aircraft/tracks?since_hours=0")
     assert resp.status_code == 422
 
 
 def test_aircraft_tracks_since_hours_too_high_returns_422() -> None:
     client = TestClient(app)
-    resp = client.get("/api/v1/aircraft/tracks?since_hours=73")
+    resp = client.get("/api/aircraft/tracks?since_hours=73")
     assert resp.status_code == 422
 
 

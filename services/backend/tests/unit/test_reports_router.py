@@ -50,7 +50,7 @@ class TestReportsRouter:
             "app.routers.reports.report_store.list_reports",
             AsyncMock(return_value=[_sample_report()]),
         ):
-            resp = client.get("/api/v1/reports")
+            resp = client.get("/api/reports")
 
         assert resp.status_code == 200
         body = resp.json()
@@ -62,7 +62,7 @@ class TestReportsRouter:
         with patch(
             "app.routers.reports.report_store.create_report", AsyncMock(return_value=report)
         ):
-            resp = client.post("/api/v1/reports", json={"title": "Untitled Dossier"})
+            resp = client.post("/api/reports", json={"title": "Untitled Dossier"})
 
         assert resp.status_code == 201
         body = resp.json()
@@ -70,7 +70,7 @@ class TestReportsRouter:
 
     def test_get_report_404(self, client: TestClient) -> None:
         with patch("app.routers.reports.report_store.get_report", AsyncMock(return_value=None)):
-            resp = client.get("/api/v1/reports/r-missing")
+            resp = client.get("/api/reports/r-missing")
 
         assert resp.status_code == 404
 
@@ -79,14 +79,14 @@ class TestReportsRouter:
         with patch(
             "app.routers.reports.report_store.update_report", AsyncMock(return_value=patched)
         ):
-            resp = client.patch("/api/v1/reports/r-044", json={"title": "Updated title"})
+            resp = client.patch("/api/reports/r-044", json={"title": "Updated title"})
 
         assert resp.status_code == 200
         assert resp.json()["title"] == "Updated title"
 
     def test_delete_report_204(self, client: TestClient) -> None:
         with patch("app.routers.reports.report_store.delete_report", AsyncMock(return_value=True)):
-            resp = client.delete("/api/v1/reports/r-044")
+            resp = client.delete("/api/reports/r-044")
 
         assert resp.status_code == 204
 
@@ -109,7 +109,7 @@ class TestReportsRouter:
                 AsyncMock(return_value=[msg]),
             ),
         ):
-            resp = client.get("/api/v1/reports/r-044/messages")
+            resp = client.get("/api/reports/r-044/messages")
 
         assert resp.status_code == 200
         body = resp.json()
@@ -135,7 +135,7 @@ class TestReportsRouter:
             ),
         ):
             resp = client.post(
-                "/api/v1/reports/r-044/messages",
+                "/api/reports/r-044/messages",
                 json={"role": "user", "text": "Brief me on Sinjar"},
             )
 
