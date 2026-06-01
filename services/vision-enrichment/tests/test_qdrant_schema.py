@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 from qdrant_client.models import (
     CollectionConfig,
     CollectionInfo,
@@ -15,7 +14,6 @@ from qdrant_client.models import (
     SparseVectorParams,
     VectorParams,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -134,8 +132,8 @@ class TestVisionConsumerPreflight:
         We use a MagicMock settings object so we can set enable_hybrid=True freely
         without fighting pydantic's strict field validation on the real Settings class.
         """
-        from qdrant_schema import QdrantSchemaMismatch
         from consumer import VisionConsumer
+        from qdrant_schema import QdrantSchemaMismatch
 
         mock_settings = MagicMock()
         mock_settings.qdrant_url = "http://localhost:6333"

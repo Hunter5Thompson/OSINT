@@ -63,6 +63,21 @@ jobs:
       - run: uv sync --all-extras
       - run: uv run pytest -q
 
+  test-vision-enrichment:
+    name: tests · vision-enrichment
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/vision-enrichment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # dev deps (pytest, pytest-asyncio) live under [project.optional-dependencies].
+      - run: uv sync --all-extras
+      - run: uv run pytest -q
+
   test-frontend:
     name: tests · frontend
     runs-on: ubuntu-latest
@@ -99,4 +114,5 @@ jobs:
           uvx "ruff@${RUFF_VERSION}" check \
             services/intelligence \
             services/data-ingestion \
-            services/backend
+            services/backend \
+            services/vision-enrichment
