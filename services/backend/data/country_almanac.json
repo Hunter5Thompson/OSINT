@@ -2,7 +2,7 @@
   "countries": [
     {
       "id": "004",
-      "iso3": null,
+      "iso3": "AFG",
       "m49": "004",
       "name": "Afghanistan",
       "region": "",
@@ -29,7 +29,7 @@
     },
     {
       "id": "008",
-      "iso3": null,
+      "iso3": "ALB",
       "m49": "008",
       "name": "Albania",
       "region": "",
@@ -56,7 +56,7 @@
     },
     {
       "id": "012",
-      "iso3": null,
+      "iso3": "DZA",
       "m49": "012",
       "name": "Algeria",
       "region": "",
@@ -83,7 +83,7 @@
     },
     {
       "id": "024",
-      "iso3": null,
+      "iso3": "AGO",
       "m49": "024",
       "name": "Angola",
       "region": "",
@@ -110,7 +110,7 @@
     },
     {
       "id": "010",
-      "iso3": null,
+      "iso3": "ATA",
       "m49": "010",
       "name": "Antarctica",
       "region": "",
@@ -137,7 +137,7 @@
     },
     {
       "id": "032",
-      "iso3": null,
+      "iso3": "ARG",
       "m49": "032",
       "name": "Argentina",
       "region": "",
@@ -164,7 +164,7 @@
     },
     {
       "id": "051",
-      "iso3": null,
+      "iso3": "ARM",
       "m49": "051",
       "name": "Armenia",
       "region": "",
@@ -191,7 +191,7 @@
     },
     {
       "id": "036",
-      "iso3": null,
+      "iso3": "AUS",
       "m49": "036",
       "name": "Australia",
       "region": "",
@@ -218,7 +218,7 @@
     },
     {
       "id": "040",
-      "iso3": null,
+      "iso3": "AUT",
       "m49": "040",
       "name": "Austria",
       "region": "",
@@ -245,7 +245,7 @@
     },
     {
       "id": "031",
-      "iso3": null,
+      "iso3": "AZE",
       "m49": "031",
       "name": "Azerbaijan",
       "region": "",
@@ -272,7 +272,7 @@
     },
     {
       "id": "044",
-      "iso3": null,
+      "iso3": "BHS",
       "m49": "044",
       "name": "Bahamas",
       "region": "",
@@ -299,7 +299,7 @@
     },
     {
       "id": "050",
-      "iso3": null,
+      "iso3": "BGD",
       "m49": "050",
       "name": "Bangladesh",
       "region": "",
@@ -326,7 +326,7 @@
     },
     {
       "id": "112",
-      "iso3": null,
+      "iso3": "BLR",
       "m49": "112",
       "name": "Belarus",
       "region": "",
@@ -353,7 +353,7 @@
     },
     {
       "id": "056",
-      "iso3": null,
+      "iso3": "BEL",
       "m49": "056",
       "name": "Belgium",
       "region": "",
@@ -380,7 +380,7 @@
     },
     {
       "id": "084",
-      "iso3": null,
+      "iso3": "BLZ",
       "m49": "084",
       "name": "Belize",
       "region": "",
@@ -407,7 +407,7 @@
     },
     {
       "id": "204",
-      "iso3": null,
+      "iso3": "BEN",
       "m49": "204",
       "name": "Benin",
       "region": "",
@@ -434,7 +434,7 @@
     },
     {
       "id": "064",
-      "iso3": null,
+      "iso3": "BTN",
       "m49": "064",
       "name": "Bhutan",
       "region": "",
@@ -461,7 +461,7 @@
     },
     {
       "id": "068",
-      "iso3": null,
+      "iso3": "BOL",
       "m49": "068",
       "name": "Bolivia",
       "region": "",
@@ -488,7 +488,7 @@
     },
     {
       "id": "070",
-      "iso3": null,
+      "iso3": "BIH",
       "m49": "070",
       "name": "Bosnia and Herz.",
       "region": "",
@@ -515,7 +515,7 @@
     },
     {
       "id": "072",
-      "iso3": null,
+      "iso3": "BWA",
       "m49": "072",
       "name": "Botswana",
       "region": "",
@@ -542,7 +542,7 @@
     },
     {
       "id": "076",
-      "iso3": null,
+      "iso3": "BRA",
       "m49": "076",
       "name": "Brazil",
       "region": "",
@@ -569,7 +569,7 @@
     },
     {
       "id": "096",
-      "iso3": null,
+      "iso3": "BRN",
       "m49": "096",
       "name": "Brunei",
       "region": "",
@@ -596,7 +596,7 @@
     },
     {
       "id": "100",
-      "iso3": null,
+      "iso3": "BGR",
       "m49": "100",
       "name": "Bulgaria",
       "region": "",
@@ -623,7 +623,7 @@
     },
     {
       "id": "854",
-      "iso3": null,
+      "iso3": "BFA",
       "m49": "854",
       "name": "Burkina Faso",
       "region": "",
@@ -650,7 +650,7 @@
     },
     {
       "id": "108",
-      "iso3": null,
+      "iso3": "BDI",
       "m49": "108",
       "name": "Burundi",
       "region": "",
@@ -677,7 +677,7 @@
     },
     {
       "id": "116",
-      "iso3": null,
+      "iso3": "KHM",
       "m49": "116",
       "name": "Cambodia",
       "region": "",
@@ -704,7 +704,7 @@
     },
     {
       "id": "120",
-      "iso3": null,
+      "iso3": "CMR",
       "m49": "120",
       "name": "Cameroon",
       "region": "",
@@ -762,7 +762,7 @@
     },
     {
       "id": "140",
-      "iso3": null,
+      "iso3": "CAF",
       "m49": "140",
       "name": "Central African Rep.",
       "region": "",
@@ -789,7 +789,7 @@
     },
     {
       "id": "148",
-      "iso3": null,
+      "iso3": "TCD",
       "m49": "148",
       "name": "Chad",
       "region": "",
@@ -816,7 +816,7 @@
     },
     {
       "id": "152",
-      "iso3": null,
+      "iso3": "CHL",
       "m49": "152",
       "name": "Chile",
       "region": "",
@@ -843,7 +843,7 @@
     },
     {
       "id": "156",
-      "iso3": null,
+      "iso3": "CHN",
       "m49": "156",
       "name": "China",
       "region": "",
@@ -870,7 +870,7 @@
     },
     {
       "id": "170",
-      "iso3": null,
+      "iso3": "COL",
       "m49": "170",
       "name": "Colombia",
       "region": "",
@@ -897,7 +897,7 @@
     },
     {
       "id": "178",
-      "iso3": null,
+      "iso3": "COG",
       "m49": "178",
       "name": "Congo",
       "region": "",
@@ -924,7 +924,7 @@
     },
     {
       "id": "188",
-      "iso3": null,
+      "iso3": "CRI",
       "m49": "188",
       "name": "Costa Rica",
       "region": "",
@@ -951,7 +951,7 @@
     },
     {
       "id": "384",
-      "iso3": null,
+      "iso3": "CIV",
       "m49": "384",
       "name": "Côte d'Ivoire",
       "region": "",
@@ -978,7 +978,7 @@
     },
     {
       "id": "191",
-      "iso3": null,
+      "iso3": "HRV",
       "m49": "191",
       "name": "Croatia",
       "region": "",
@@ -1005,7 +1005,7 @@
     },
     {
       "id": "192",
-      "iso3": null,
+      "iso3": "CUB",
       "m49": "192",
       "name": "Cuba",
       "region": "",
@@ -1032,7 +1032,7 @@
     },
     {
       "id": "196",
-      "iso3": null,
+      "iso3": "CYP",
       "m49": "196",
       "name": "Cyprus",
       "region": "",
@@ -1090,7 +1090,7 @@
     },
     {
       "id": "180",
-      "iso3": null,
+      "iso3": "COD",
       "m49": "180",
       "name": "Dem. Rep. Congo",
       "region": "",
@@ -1117,7 +1117,7 @@
     },
     {
       "id": "208",
-      "iso3": null,
+      "iso3": "DNK",
       "m49": "208",
       "name": "Denmark",
       "region": "",
@@ -1144,7 +1144,7 @@
     },
     {
       "id": "262",
-      "iso3": null,
+      "iso3": "DJI",
       "m49": "262",
       "name": "Djibouti",
       "region": "",
@@ -1171,7 +1171,7 @@
     },
     {
       "id": "214",
-      "iso3": null,
+      "iso3": "DOM",
       "m49": "214",
       "name": "Dominican Rep.",
       "region": "",
@@ -1198,7 +1198,7 @@
     },
     {
       "id": "218",
-      "iso3": null,
+      "iso3": "ECU",
       "m49": "218",
       "name": "Ecuador",
       "region": "",
@@ -1225,7 +1225,7 @@
     },
     {
       "id": "818",
-      "iso3": null,
+      "iso3": "EGY",
       "m49": "818",
       "name": "Egypt",
       "region": "",
@@ -1252,7 +1252,7 @@
     },
     {
       "id": "222",
-      "iso3": null,
+      "iso3": "SLV",
       "m49": "222",
       "name": "El Salvador",
       "region": "",
@@ -1279,7 +1279,7 @@
     },
     {
       "id": "226",
-      "iso3": null,
+      "iso3": "GNQ",
       "m49": "226",
       "name": "Eq. Guinea",
       "region": "",
@@ -1306,7 +1306,7 @@
     },
     {
       "id": "232",
-      "iso3": null,
+      "iso3": "ERI",
       "m49": "232",
       "name": "Eritrea",
       "region": "",
@@ -1333,7 +1333,7 @@
     },
     {
       "id": "233",
-      "iso3": null,
+      "iso3": "EST",
       "m49": "233",
       "name": "Estonia",
       "region": "",
@@ -1360,7 +1360,7 @@
     },
     {
       "id": "748",
-      "iso3": null,
+      "iso3": "SWZ",
       "m49": "748",
       "name": "eSwatini",
       "region": "",
@@ -1387,7 +1387,7 @@
     },
     {
       "id": "231",
-      "iso3": null,
+      "iso3": "ETH",
       "m49": "231",
       "name": "Ethiopia",
       "region": "",
@@ -1414,7 +1414,7 @@
     },
     {
       "id": "238",
-      "iso3": null,
+      "iso3": "FLK",
       "m49": "238",
       "name": "Falkland Is.",
       "region": "",
@@ -1441,7 +1441,7 @@
     },
     {
       "id": "242",
-      "iso3": null,
+      "iso3": "FJI",
       "m49": "242",
       "name": "Fiji",
       "region": "",
@@ -1468,7 +1468,7 @@
     },
     {
       "id": "246",
-      "iso3": null,
+      "iso3": "FIN",
       "m49": "246",
       "name": "Finland",
       "region": "",
@@ -1495,7 +1495,7 @@
     },
     {
       "id": "260",
-      "iso3": null,
+      "iso3": "ATF",
       "m49": "260",
       "name": "Fr. S. Antarctic Lands",
       "region": "",
@@ -1522,7 +1522,7 @@
     },
     {
       "id": "250",
-      "iso3": null,
+      "iso3": "FRA",
       "m49": "250",
       "name": "France",
       "region": "",
@@ -1549,7 +1549,7 @@
     },
     {
       "id": "266",
-      "iso3": null,
+      "iso3": "GAB",
       "m49": "266",
       "name": "Gabon",
       "region": "",
@@ -1576,7 +1576,7 @@
     },
     {
       "id": "270",
-      "iso3": null,
+      "iso3": "GMB",
       "m49": "270",
       "name": "Gambia",
       "region": "",
@@ -1603,7 +1603,7 @@
     },
     {
       "id": "268",
-      "iso3": null,
+      "iso3": "GEO",
       "m49": "268",
       "name": "Georgia",
       "region": "",
@@ -1661,7 +1661,7 @@
     },
     {
       "id": "288",
-      "iso3": null,
+      "iso3": "GHA",
       "m49": "288",
       "name": "Ghana",
       "region": "",
@@ -1743,7 +1743,7 @@
     },
     {
       "id": "304",
-      "iso3": null,
+      "iso3": "GRL",
       "m49": "304",
       "name": "Greenland",
       "region": "",
@@ -1770,7 +1770,7 @@
     },
     {
       "id": "320",
-      "iso3": null,
+      "iso3": "GTM",
       "m49": "320",
       "name": "Guatemala",
       "region": "",
@@ -1797,7 +1797,7 @@
     },
     {
       "id": "324",
-      "iso3": null,
+      "iso3": "GIN",
       "m49": "324",
       "name": "Guinea",
       "region": "",
@@ -1824,7 +1824,7 @@
     },
     {
       "id": "624",
-      "iso3": null,
+      "iso3": "GNB",
       "m49": "624",
       "name": "Guinea-Bissau",
       "region": "",
@@ -1851,7 +1851,7 @@
     },
     {
       "id": "328",
-      "iso3": null,
+      "iso3": "GUY",
       "m49": "328",
       "name": "Guyana",
       "region": "",
@@ -1878,7 +1878,7 @@
     },
     {
       "id": "332",
-      "iso3": null,
+      "iso3": "HTI",
       "m49": "332",
       "name": "Haiti",
       "region": "",
@@ -1905,7 +1905,7 @@
     },
     {
       "id": "340",
-      "iso3": null,
+      "iso3": "HND",
       "m49": "340",
       "name": "Honduras",
       "region": "",
@@ -1932,7 +1932,7 @@
     },
     {
       "id": "348",
-      "iso3": null,
+      "iso3": "HUN",
       "m49": "348",
       "name": "Hungary",
       "region": "",
@@ -1959,7 +1959,7 @@
     },
     {
       "id": "352",
-      "iso3": null,
+      "iso3": "ISL",
       "m49": "352",
       "name": "Iceland",
       "region": "",
@@ -2017,7 +2017,7 @@
     },
     {
       "id": "360",
-      "iso3": null,
+      "iso3": "IDN",
       "m49": "360",
       "name": "Indonesia",
       "region": "",
@@ -2044,7 +2044,7 @@
     },
     {
       "id": "364",
-      "iso3": null,
+      "iso3": "IRN",
       "m49": "364",
       "name": "Iran",
       "region": "",
@@ -2071,7 +2071,7 @@
     },
     {
       "id": "368",
-      "iso3": null,
+      "iso3": "IRQ",
       "m49": "368",
       "name": "Iraq",
       "region": "",
@@ -2098,7 +2098,7 @@
     },
     {
       "id": "372",
-      "iso3": null,
+      "iso3": "IRL",
       "m49": "372",
       "name": "Ireland",
       "region": "",
@@ -2125,7 +2125,7 @@
     },
     {
       "id": "376",
-      "iso3": null,
+      "iso3": "ISR",
       "m49": "376",
       "name": "Israel",
       "region": "",
@@ -2152,7 +2152,7 @@
     },
     {
       "id": "380",
-      "iso3": null,
+      "iso3": "ITA",
       "m49": "380",
       "name": "Italy",
       "region": "",
@@ -2179,7 +2179,7 @@
     },
     {
       "id": "388",
-      "iso3": null,
+      "iso3": "JAM",
       "m49": "388",
       "name": "Jamaica",
       "region": "",
@@ -2237,7 +2237,7 @@
     },
     {
       "id": "400",
-      "iso3": null,
+      "iso3": "JOR",
       "m49": "400",
       "name": "Jordan",
       "region": "",
@@ -2264,7 +2264,7 @@
     },
     {
       "id": "398",
-      "iso3": null,
+      "iso3": "KAZ",
       "m49": "398",
       "name": "Kazakhstan",
       "region": "",
@@ -2291,7 +2291,7 @@
     },
     {
       "id": "404",
-      "iso3": null,
+      "iso3": "KEN",
       "m49": "404",
       "name": "Kenya",
       "region": "",
@@ -2345,7 +2345,7 @@
     },
     {
       "id": "414",
-      "iso3": null,
+      "iso3": "KWT",
       "m49": "414",
       "name": "Kuwait",
       "region": "",
@@ -2372,7 +2372,7 @@
     },
     {
       "id": "417",
-      "iso3": null,
+      "iso3": "KGZ",
       "m49": "417",
       "name": "Kyrgyzstan",
       "region": "",
@@ -2399,7 +2399,7 @@
     },
     {
       "id": "418",
-      "iso3": null,
+      "iso3": "LAO",
       "m49": "418",
       "name": "Laos",
       "region": "",
@@ -2426,7 +2426,7 @@
     },
     {
       "id": "428",
-      "iso3": null,
+      "iso3": "LVA",
       "m49": "428",
       "name": "Latvia",
       "region": "",
@@ -2453,7 +2453,7 @@
     },
     {
       "id": "422",
-      "iso3": null,
+      "iso3": "LBN",
       "m49": "422",
       "name": "Lebanon",
       "region": "",
@@ -2480,7 +2480,7 @@
     },
     {
       "id": "426",
-      "iso3": null,
+      "iso3": "LSO",
       "m49": "426",
       "name": "Lesotho",
       "region": "",
@@ -2507,7 +2507,7 @@
     },
     {
       "id": "430",
-      "iso3": null,
+      "iso3": "LBR",
       "m49": "430",
       "name": "Liberia",
       "region": "",
@@ -2534,7 +2534,7 @@
     },
     {
       "id": "434",
-      "iso3": null,
+      "iso3": "LBY",
       "m49": "434",
       "name": "Libya",
       "region": "",
@@ -2561,7 +2561,7 @@
     },
     {
       "id": "440",
-      "iso3": null,
+      "iso3": "LTU",
       "m49": "440",
       "name": "Lithuania",
       "region": "",
@@ -2588,7 +2588,7 @@
     },
     {
       "id": "442",
-      "iso3": null,
+      "iso3": "LUX",
       "m49": "442",
       "name": "Luxembourg",
       "region": "",
@@ -2615,7 +2615,7 @@
     },
     {
       "id": "807",
-      "iso3": null,
+      "iso3": "MKD",
       "m49": "807",
       "name": "Macedonia",
       "region": "",
@@ -2642,7 +2642,7 @@
     },
     {
       "id": "450",
-      "iso3": null,
+      "iso3": "MDG",
       "m49": "450",
       "name": "Madagascar",
       "region": "",
@@ -2669,7 +2669,7 @@
     },
     {
       "id": "454",
-      "iso3": null,
+      "iso3": "MWI",
       "m49": "454",
       "name": "Malawi",
       "region": "",
@@ -2696,7 +2696,7 @@
     },
     {
       "id": "458",
-      "iso3": null,
+      "iso3": "MYS",
       "m49": "458",
       "name": "Malaysia",
       "region": "",
@@ -2723,7 +2723,7 @@
     },
     {
       "id": "466",
-      "iso3": null,
+      "iso3": "MLI",
       "m49": "466",
       "name": "Mali",
       "region": "",
@@ -2750,7 +2750,7 @@
     },
     {
       "id": "478",
-      "iso3": null,
+      "iso3": "MRT",
       "m49": "478",
       "name": "Mauritania",
       "region": "",
@@ -2777,7 +2777,7 @@
     },
     {
       "id": "484",
-      "iso3": null,
+      "iso3": "MEX",
       "m49": "484",
       "name": "Mexico",
       "region": "",
@@ -2804,7 +2804,7 @@
     },
     {
       "id": "498",
-      "iso3": null,
+      "iso3": "MDA",
       "m49": "498",
       "name": "Moldova",
       "region": "",
@@ -2831,7 +2831,7 @@
     },
     {
       "id": "496",
-      "iso3": null,
+      "iso3": "MNG",
       "m49": "496",
       "name": "Mongolia",
       "region": "",
@@ -2858,7 +2858,7 @@
     },
     {
       "id": "499",
-      "iso3": null,
+      "iso3": "MNE",
       "m49": "499",
       "name": "Montenegro",
       "region": "",
@@ -2885,7 +2885,7 @@
     },
     {
       "id": "504",
-      "iso3": null,
+      "iso3": "MAR",
       "m49": "504",
       "name": "Morocco",
       "region": "",
@@ -2912,7 +2912,7 @@
     },
     {
       "id": "508",
-      "iso3": null,
+      "iso3": "MOZ",
       "m49": "508",
       "name": "Mozambique",
       "region": "",
@@ -2939,7 +2939,7 @@
     },
     {
       "id": "104",
-      "iso3": null,
+      "iso3": "MMR",
       "m49": "104",
       "name": "Myanmar",
       "region": "",
@@ -2993,7 +2993,7 @@
     },
     {
       "id": "516",
-      "iso3": null,
+      "iso3": "NAM",
       "m49": "516",
       "name": "Namibia",
       "region": "",
@@ -3020,7 +3020,7 @@
     },
     {
       "id": "524",
-      "iso3": null,
+      "iso3": "NPL",
       "m49": "524",
       "name": "Nepal",
       "region": "",
@@ -3047,7 +3047,7 @@
     },
     {
       "id": "528",
-      "iso3": null,
+      "iso3": "NLD",
       "m49": "528",
       "name": "Netherlands",
       "region": "",
@@ -3074,7 +3074,7 @@
     },
     {
       "id": "540",
-      "iso3": null,
+      "iso3": "NCL",
       "m49": "540",
       "name": "New Caledonia",
       "region": "",
@@ -3101,7 +3101,7 @@
     },
     {
       "id": "554",
-      "iso3": null,
+      "iso3": "NZL",
       "m49": "554",
       "name": "New Zealand",
       "region": "",
@@ -3128,7 +3128,7 @@
     },
     {
       "id": "558",
-      "iso3": null,
+      "iso3": "NIC",
       "m49": "558",
       "name": "Nicaragua",
       "region": "",
@@ -3155,7 +3155,7 @@
     },
     {
       "id": "562",
-      "iso3": null,
+      "iso3": "NER",
       "m49": "562",
       "name": "Niger",
       "region": "",
@@ -3182,7 +3182,7 @@
     },
     {
       "id": "566",
-      "iso3": null,
+      "iso3": "NGA",
       "m49": "566",
       "name": "Nigeria",
       "region": "",
@@ -3209,7 +3209,7 @@
     },
     {
       "id": "408",
-      "iso3": null,
+      "iso3": "PRK",
       "m49": "408",
       "name": "North Korea",
       "region": "",
@@ -3236,7 +3236,7 @@
     },
     {
       "id": "578",
-      "iso3": null,
+      "iso3": "NOR",
       "m49": "578",
       "name": "Norway",
       "region": "",
@@ -3263,7 +3263,7 @@
     },
     {
       "id": "512",
-      "iso3": null,
+      "iso3": "OMN",
       "m49": "512",
       "name": "Oman",
       "region": "",
@@ -3290,7 +3290,7 @@
     },
     {
       "id": "586",
-      "iso3": null,
+      "iso3": "PAK",
       "m49": "586",
       "name": "Pakistan",
       "region": "",
@@ -3317,7 +3317,7 @@
     },
     {
       "id": "275",
-      "iso3": null,
+      "iso3": "PSE",
       "m49": "275",
       "name": "Palestine",
       "region": "",
@@ -3344,7 +3344,7 @@
     },
     {
       "id": "591",
-      "iso3": null,
+      "iso3": "PAN",
       "m49": "591",
       "name": "Panama",
       "region": "",
@@ -3371,7 +3371,7 @@
     },
     {
       "id": "598",
-      "iso3": null,
+      "iso3": "PNG",
       "m49": "598",
       "name": "Papua New Guinea",
       "region": "",
@@ -3398,7 +3398,7 @@
     },
     {
       "id": "600",
-      "iso3": null,
+      "iso3": "PRY",
       "m49": "600",
       "name": "Paraguay",
       "region": "",
@@ -3425,7 +3425,7 @@
     },
     {
       "id": "604",
-      "iso3": null,
+      "iso3": "PER",
       "m49": "604",
       "name": "Peru",
       "region": "",
@@ -3452,7 +3452,7 @@
     },
     {
       "id": "608",
-      "iso3": null,
+      "iso3": "PHL",
       "m49": "608",
       "name": "Philippines",
       "region": "",
@@ -3479,7 +3479,7 @@
     },
     {
       "id": "616",
-      "iso3": null,
+      "iso3": "POL",
       "m49": "616",
       "name": "Poland",
       "region": "",
@@ -3506,7 +3506,7 @@
     },
     {
       "id": "620",
-      "iso3": null,
+      "iso3": "PRT",
       "m49": "620",
       "name": "Portugal",
       "region": "",
@@ -3533,7 +3533,7 @@
     },
     {
       "id": "630",
-      "iso3": null,
+      "iso3": "PRI",
       "m49": "630",
       "name": "Puerto Rico",
       "region": "",
@@ -3560,7 +3560,7 @@
     },
     {
       "id": "634",
-      "iso3": null,
+      "iso3": "QAT",
       "m49": "634",
       "name": "Qatar",
       "region": "",
@@ -3587,7 +3587,7 @@
     },
     {
       "id": "642",
-      "iso3": null,
+      "iso3": "ROU",
       "m49": "642",
       "name": "Romania",
       "region": "",
@@ -3645,7 +3645,7 @@
     },
     {
       "id": "646",
-      "iso3": null,
+      "iso3": "RWA",
       "m49": "646",
       "name": "Rwanda",
       "region": "",
@@ -3672,7 +3672,7 @@
     },
     {
       "id": "728",
-      "iso3": null,
+      "iso3": "SSD",
       "m49": "728",
       "name": "S. Sudan",
       "region": "",
@@ -3699,7 +3699,7 @@
     },
     {
       "id": "682",
-      "iso3": null,
+      "iso3": "SAU",
       "m49": "682",
       "name": "Saudi Arabia",
       "region": "",
@@ -3726,7 +3726,7 @@
     },
     {
       "id": "686",
-      "iso3": null,
+      "iso3": "SEN",
       "m49": "686",
       "name": "Senegal",
       "region": "",
@@ -3753,7 +3753,7 @@
     },
     {
       "id": "688",
-      "iso3": null,
+      "iso3": "SRB",
       "m49": "688",
       "name": "Serbia",
       "region": "",
@@ -3780,7 +3780,7 @@
     },
     {
       "id": "694",
-      "iso3": null,
+      "iso3": "SLE",
       "m49": "694",
       "name": "Sierra Leone",
       "region": "",
@@ -3807,7 +3807,7 @@
     },
     {
       "id": "703",
-      "iso3": null,
+      "iso3": "SVK",
       "m49": "703",
       "name": "Slovakia",
       "region": "",
@@ -3834,7 +3834,7 @@
     },
     {
       "id": "705",
-      "iso3": null,
+      "iso3": "SVN",
       "m49": "705",
       "name": "Slovenia",
       "region": "",
@@ -3861,7 +3861,7 @@
     },
     {
       "id": "090",
-      "iso3": null,
+      "iso3": "SLB",
       "m49": "090",
       "name": "Solomon Is.",
       "region": "",
@@ -3888,7 +3888,7 @@
     },
     {
       "id": "706",
-      "iso3": null,
+      "iso3": "SOM",
       "m49": "706",
       "name": "Somalia",
       "region": "",
@@ -3942,7 +3942,7 @@
     },
     {
       "id": "710",
-      "iso3": null,
+      "iso3": "ZAF",
       "m49": "710",
       "name": "South Africa",
       "region": "",
@@ -3969,7 +3969,7 @@
     },
     {
       "id": "410",
-      "iso3": null,
+      "iso3": "KOR",
       "m49": "410",
       "name": "South Korea",
       "region": "",
@@ -3996,7 +3996,7 @@
     },
     {
       "id": "724",
-      "iso3": null,
+      "iso3": "ESP",
       "m49": "724",
       "name": "Spain",
       "region": "",
@@ -4023,7 +4023,7 @@
     },
     {
       "id": "144",
-      "iso3": null,
+      "iso3": "LKA",
       "m49": "144",
       "name": "Sri Lanka",
       "region": "",
@@ -4050,7 +4050,7 @@
     },
     {
       "id": "729",
-      "iso3": null,
+      "iso3": "SDN",
       "m49": "729",
       "name": "Sudan",
       "region": "",
@@ -4077,7 +4077,7 @@
     },
     {
       "id": "740",
-      "iso3": null,
+      "iso3": "SUR",
       "m49": "740",
       "name": "Suriname",
       "region": "",
@@ -4104,7 +4104,7 @@
     },
     {
       "id": "752",
-      "iso3": null,
+      "iso3": "SWE",
       "m49": "752",
       "name": "Sweden",
       "region": "",
@@ -4131,7 +4131,7 @@
     },
     {
       "id": "756",
-      "iso3": null,
+      "iso3": "CHE",
       "m49": "756",
       "name": "Switzerland",
       "region": "",
@@ -4158,7 +4158,7 @@
     },
     {
       "id": "760",
-      "iso3": null,
+      "iso3": "SYR",
       "m49": "760",
       "name": "Syria",
       "region": "",
@@ -4185,7 +4185,7 @@
     },
     {
       "id": "158",
-      "iso3": null,
+      "iso3": "TWN",
       "m49": "158",
       "name": "Taiwan",
       "region": "",
@@ -4212,7 +4212,7 @@
     },
     {
       "id": "762",
-      "iso3": null,
+      "iso3": "TJK",
       "m49": "762",
       "name": "Tajikistan",
       "region": "",
@@ -4239,7 +4239,7 @@
     },
     {
       "id": "834",
-      "iso3": null,
+      "iso3": "TZA",
       "m49": "834",
       "name": "Tanzania",
       "region": "",
@@ -4266,7 +4266,7 @@
     },
     {
       "id": "764",
-      "iso3": null,
+      "iso3": "THA",
       "m49": "764",
       "name": "Thailand",
       "region": "",
@@ -4293,7 +4293,7 @@
     },
     {
       "id": "626",
-      "iso3": null,
+      "iso3": "TLS",
       "m49": "626",
       "name": "Timor-Leste",
       "region": "",
@@ -4320,7 +4320,7 @@
     },
     {
       "id": "768",
-      "iso3": null,
+      "iso3": "TGO",
       "m49": "768",
       "name": "Togo",
       "region": "",
@@ -4347,7 +4347,7 @@
     },
     {
       "id": "780",
-      "iso3": null,
+      "iso3": "TTO",
       "m49": "780",
       "name": "Trinidad and Tobago",
       "region": "",
@@ -4374,7 +4374,7 @@
     },
     {
       "id": "788",
-      "iso3": null,
+      "iso3": "TUN",
       "m49": "788",
       "name": "Tunisia",
       "region": "",
@@ -4401,7 +4401,7 @@
     },
     {
       "id": "792",
-      "iso3": null,
+      "iso3": "TUR",
       "m49": "792",
       "name": "Turkey",
       "region": "",
@@ -4428,7 +4428,7 @@
     },
     {
       "id": "795",
-      "iso3": null,
+      "iso3": "TKM",
       "m49": "795",
       "name": "Turkmenistan",
       "region": "",
@@ -4455,7 +4455,7 @@
     },
     {
       "id": "800",
-      "iso3": null,
+      "iso3": "UGA",
       "m49": "800",
       "name": "Uganda",
       "region": "",
@@ -4482,7 +4482,7 @@
     },
     {
       "id": "804",
-      "iso3": null,
+      "iso3": "UKR",
       "m49": "804",
       "name": "Ukraine",
       "region": "",
@@ -4509,7 +4509,7 @@
     },
     {
       "id": "784",
-      "iso3": null,
+      "iso3": "ARE",
       "m49": "784",
       "name": "United Arab Emirates",
       "region": "",
@@ -4536,7 +4536,7 @@
     },
     {
       "id": "826",
-      "iso3": null,
+      "iso3": "GBR",
       "m49": "826",
       "name": "United Kingdom",
       "region": "",
@@ -4605,7 +4605,7 @@
     },
     {
       "id": "858",
-      "iso3": null,
+      "iso3": "URY",
       "m49": "858",
       "name": "Uruguay",
       "region": "",
@@ -4632,7 +4632,7 @@
     },
     {
       "id": "860",
-      "iso3": null,
+      "iso3": "UZB",
       "m49": "860",
       "name": "Uzbekistan",
       "region": "",
@@ -4659,7 +4659,7 @@
     },
     {
       "id": "548",
-      "iso3": null,
+      "iso3": "VUT",
       "m49": "548",
       "name": "Vanuatu",
       "region": "",
@@ -4686,7 +4686,7 @@
     },
     {
       "id": "862",
-      "iso3": null,
+      "iso3": "VEN",
       "m49": "862",
       "name": "Venezuela",
       "region": "",
@@ -4713,7 +4713,7 @@
     },
     {
       "id": "704",
-      "iso3": null,
+      "iso3": "VNM",
       "m49": "704",
       "name": "Vietnam",
       "region": "",
@@ -4740,7 +4740,7 @@
     },
     {
       "id": "732",
-      "iso3": null,
+      "iso3": "ESH",
       "m49": "732",
       "name": "W. Sahara",
       "region": "Africa",
@@ -4767,7 +4767,7 @@
     },
     {
       "id": "887",
-      "iso3": null,
+      "iso3": "YEM",
       "m49": "887",
       "name": "Yemen",
       "region": "",
@@ -4794,7 +4794,7 @@
     },
     {
       "id": "894",
-      "iso3": null,
+      "iso3": "ZMB",
       "m49": "894",
       "name": "Zambia",
       "region": "",
@@ -4821,7 +4821,7 @@
     },
     {
       "id": "716",
-      "iso3": null,
+      "iso3": "ZWE",
       "m49": "716",
       "name": "Zimbabwe",
       "region": "",
