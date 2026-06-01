@@ -7,6 +7,7 @@ country-briefing feature. See docs/superpowers/specs/2026-06-01-country-briefing
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from app.models.almanac import AlmanacSignalItem, CountryAlmanac
@@ -158,3 +159,65 @@ def truncate_message(text: str, limit: int = 8000) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - len(_TRUNC_MARK)] + _TRUNC_MARK
+
+
+_HEADING_RE = re.compile(r"^\s*#{1,4}\s*(.+?)\s*$")
+_CONTEXT_MAX = 1200
+_SUMMARY_NAMES = ("executive summary", "summary", "zusammenfassung")
+_FINDING_NAMES = ("key findings", "findings", "erkenntnisse")
+_SKIP_NAMES = _SUMMARY_NAMES + _FINDING_NAMES
+
+
+@dataclass
+class ParsedReport:
+    context: str = ""
+    findings: list[str] = field(default_factory=list)
+    body_paragraphs: list[str] = field(default_factory=list)
+
+
+def _split_sections(text: str) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        m = _HEADING_RE.match(line)
+        if m:
+            current = m.group(1).strip().lower()
+            sections[current] = []
+        elif current is not None:
+            sections[current].append(line)
+    return sections
+
+
+def _bullets(lines: list[str]) -> list[str]:
+    out = []
+    for ln in lines:
+        s = ln.strip()
+        if s.startswith(("-", "*", "•")):
+            out.append(s.lstrip("-*• ").strip())
+    return [b for b in out if b]
+
+
+def parse_munin_report(text: str) -> ParsedReport:
+    sections = _split_sections(text)
+    if not sections:
+        # No headings → deterministic fallback (no scaffold defaults).
+        return ParsedReport(context=text[:_CONTEXT_MAX], findings=[], body_paragraphs=[text])
+
+    def find(*names: str) -> list[str]:
+        for n in names:
+            for key, lines in sections.items():
+                if n in key:
+                    return lines
+        return []
+
+    summary = "\n".join(find(*_SUMMARY_NAMES)).strip()
+    findings = _bullets(find(*_FINDING_NAMES))
+    body: list[str] = []
+    for key, lines in sections.items():
+        if any(n in key for n in _SKIP_NAMES):
+            continue
+        para = "\n".join(lines).strip()
+        if para:
+            body.append(f"{key.title()}\n{para}")
+    context = (summary or text[:_CONTEXT_MAX])[:_CONTEXT_MAX]
+    return ParsedReport(context=context, findings=findings, body_paragraphs=body or [text])
