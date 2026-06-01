@@ -27,6 +27,7 @@ from app.cypher.report_write import (
 )
 from app.models.intel import IntelAnalysis
 from app.models.report import (
+    AccentTone,
     DossierMetric,
     MarginEntry,
     ReportCreateRequest,
@@ -267,7 +268,13 @@ async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRec
 
 
 # Munin threat label → DossierMetric accent tone (AccentTone Literal: sentinel|amber|sage).
-_THREAT_TONE = {"CRITICAL": "amber", "HIGH": "amber", "ELEVATED": "amber", "MODERATE": "sentinel"}
+_THREAT_TONE: dict[str, AccentTone] = {
+    "CRITICAL": "amber",
+    "HIGH": "amber",
+    "ELEVATED": "amber",
+    "MODERATE": "sentinel",
+}
+_DEFAULT_TONE: AccentTone = "sentinel"
 
 
 def build_hydration_patch(analysis: IntelAnalysis, country_name: str) -> ReportUpdateRequest:
@@ -277,7 +284,7 @@ def build_hydration_patch(analysis: IntelAnalysis, country_name: str) -> ReportU
     metrics = [
         DossierMetric(
             label="Threat", value=threat, sub="assessment",
-            tone=_THREAT_TONE.get(threat, "sentinel"),
+            tone=_THREAT_TONE.get(threat, _DEFAULT_TONE),
         ),
         DossierMetric(
             label="Confidence", value=f"{analysis.confidence:.0%}", sub="munin", tone="sage",

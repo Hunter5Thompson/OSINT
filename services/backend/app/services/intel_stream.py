@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 import structlog
@@ -29,10 +30,10 @@ async def stream_intel_query(
     image_url: str | None = None,
     use_legacy: bool = False,
     grounding_context: str | None = None,
-    grounding_evidence: list[dict] | None = None,
+    grounding_evidence: list[dict[str, Any]] | None = None,
     report_id: str | None = None,
     report_message: str | None = None,
-) -> AsyncIterator[dict]:
+) -> AsyncIterator[dict[str, Any]]:
     """Run the intelligence /query call, yielding status → result/error SSE events.
 
     Shared by /intel/query (interactive) and the country-briefing endpoint. When
@@ -75,7 +76,7 @@ async def stream_intel_query(
             "data": json.dumps({"agent": "synthesis_agent", "status": "synthesizing"}),
         }
 
-        payload: dict = {
+        payload: dict[str, Any] = {
             "query": query,
             "region": region,
             "image_url": image_url,

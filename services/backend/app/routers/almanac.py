@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from sse_starlette.sse import EventSourceResponse
 
@@ -60,7 +63,7 @@ async def generate_country_briefing(country_id: str) -> EventSourceResponse:
         refreshed_at=store.refreshed_at,
     )
 
-    async def event_generator():  # type: ignore[no-untyped-def]
+    async def event_generator() -> AsyncIterator[dict[str, Any]]:
         async for ev in stream_intel_query(
             query=ctx.task,
             region=country.name,

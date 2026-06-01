@@ -1,5 +1,8 @@
 """Intelligence analysis endpoints with SSE streaming."""
 
+from collections.abc import AsyncIterator
+from typing import Any
+
 import structlog
 from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
@@ -19,7 +22,7 @@ _history: list[IntelAnalysis] = []
 async def query_intel(query: IntelQuery, request: Request) -> EventSourceResponse:
     """Run intelligence analysis via LangGraph pipeline, streaming results via SSE."""
 
-    async def event_generator():  # type: ignore[no-untyped-def]
+    async def event_generator() -> AsyncIterator[dict[str, Any]]:
         async for ev in stream_intel_query(
             query=query.query,
             region=query.region,

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from app.models.almanac import AlmanacSignalItem, CountryAlmanac
 
@@ -40,7 +41,7 @@ _SECTION_ORDER = ("profile", "government", "economy", "security")
 class BriefingContext:
     task: str
     grounding_context: str
-    grounding_evidence: list[dict] = field(default_factory=list)
+    grounding_evidence: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _aliases(country: CountryAlmanac) -> list[str]:
@@ -114,7 +115,7 @@ def build_briefing_context(
     # reserve the provenance suffix; truncate facts to fit
     quelle = f"\nQuelle: {country.source_note}"
     almanac_content = facts_block[: max(_CONTENT_MAX - len(quelle), 0)] + quelle
-    grounding_evidence: list[dict] = [{
+    grounding_evidence: list[dict[str, Any]] = [{
         "source_type": "dataset",
         "provider": "odin-country-almanac",
         "doc_id": f"odin-country-almanac:{factbook_revision}:{refreshed_at}:{iso_or_m49}"[:200],
