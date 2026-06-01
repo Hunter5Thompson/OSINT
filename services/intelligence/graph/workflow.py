@@ -1,4 +1,8 @@
-"""LangGraph workflow — ReAct agent + deterministic synthesis with legacy fallback."""
+"""LangGraph workflow — ReAct agent + deterministic synthesis.
+
+The ReAct path is fail-closed: on failure it propagates (no automatic legacy
+fallback). The legacy pipeline runs only when the caller passes use_legacy=True.
+"""
 
 import asyncio
 from datetime import UTC, datetime
@@ -338,7 +342,8 @@ async def run_intelligence_query(
     image_url: str | None = None,
     use_legacy: bool = False,
 ) -> dict:
-    """Run intelligence analysis — ReAct by default, legacy as fallback."""
+    """Run intelligence analysis — ReAct by default (fail-closed on failure);
+    the legacy pipeline runs only when use_legacy=True."""
     mode = "legacy" if use_legacy else "react"
     logger.info("intelligence_query_started", query=query, region=region, mode=mode)
 
