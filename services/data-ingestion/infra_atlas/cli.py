@@ -6,6 +6,8 @@ from pathlib import Path
 
 import click
 
+from infra_atlas.build_country_almanac import refresh as almanac_refresh
+from infra_atlas.build_country_almanac import render as almanac_render
 from infra_atlas.build_datacenters import build_datacenters
 from infra_atlas.build_pipelines import build_pipelines_from_seed, load_seed
 from infra_atlas.build_refineries import build_refineries
@@ -82,3 +84,23 @@ def datacenters(existing: Path, seed: Path, centroids: Path, out: Path) -> None:
         out, existing_path=existing, seed_path=seed, centroids_path=centroids
     )
     click.echo(f"Wrote {n} datacenters → {out.relative_to(REPO_ROOT)}")
+
+
+@cli.command()
+@click.option(
+    "--refresh", "do_refresh", is_flag=True,
+    help="Fetch sources + write snapshots (network).",
+)
+@click.option(
+    "--refreshed-at", "refreshed_at", default=None,
+    help="YYYY-MM-DD; MANDATORY with --refresh (no clock access).",
+)
+def almanac(do_refresh: bool, refreshed_at: str | None) -> None:
+    """Render services/backend/data/country_almanac.json (offline). --refresh updates snapshots."""
+    if do_refresh:
+        if not refreshed_at:
+            raise click.UsageError("--refreshed-at YYYY-MM-DD is required with --refresh")
+        almanac_refresh(refreshed_at)
+        click.echo(f"Refreshed snapshots @ {refreshed_at}")
+    n = almanac_render(refreshed_at=refreshed_at)
+    click.echo(f"Rendered {n} countries → services/backend/data/country_almanac.json")
