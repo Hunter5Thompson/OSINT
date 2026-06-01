@@ -154,6 +154,17 @@ class SignalStream:
         items.reverse()  # newest first
         return items
 
+    def snapshot(self) -> list[SignalEnvelope]:
+        """All retained entries, newest-first, after pruning the 15-min window.
+
+        Scans up to signals_ring_buffer_size (2000) so a country match is not
+        missed when a burst pushes it past the newest-N window.
+        """
+        self._prune()
+        items = list(self._buffer)
+        items.reverse()
+        return items
+
     def get_replay(
         self, last_event_id: str | None
     ) -> tuple[ReplayMode, list[SignalEnvelope]]:
