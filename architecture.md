@@ -173,37 +173,38 @@ class IntelAnalysis(BaseModel):
 ### REST Endpoints (FastAPI)
 
 ```
-GET  /api/v1/health                    → HealthResponse
-GET  /api/v1/config                    → ClientConfig (Cesium token, layer defaults)
+GET  /api/health                    → HealthResponse
+GET  /api/config                    → ClientConfig (Cesium token, layer defaults)
 
 # ── Data Layers ──
-GET  /api/v1/flights                   → list[Aircraft]       (cached 10s)
-GET  /api/v1/flights/military          → list[Aircraft]       (adsb.fi military filter)
-GET  /api/v1/satellites                → list[Satellite]      (cached 1h, TLE data)
-GET  /api/v1/earthquakes               → list[Earthquake]     (cached 5min)
-GET  /api/v1/vessels                   → list[Vessel]         (cached 60s)
-GET  /api/v1/hotspots                  → list[Hotspot]
-GET  /api/v1/hotspots/{id}             → Hotspot + context
+GET  /api/flights                   → list[Aircraft]       (cached 10s)
+GET  /api/flights/military          → list[Aircraft]       (adsb.fi military filter)
+GET  /api/satellites                → list[Satellite]      (cached 1h, TLE data)
+GET  /api/earthquakes               → list[Earthquake]     (cached 5min)
+GET  /api/vessels                   → list[Vessel]         (cached 60s)
+GET  /api/hotspots                  → list[Hotspot]
+GET  /api/hotspots/{id}             → Hotspot + context
 
 # ── Intelligence ──
-POST /api/v1/intel/query               → SSE stream IntelAnalysis
-POST /api/v1/intel/hotspot/{id}        → SSE stream IntelAnalysis
-GET  /api/v1/intel/history             → list[IntelAnalysis]
+POST /api/intel/query               → SSE stream IntelAnalysis
+POST /api/intel/hotspot/{id}        → SSE stream IntelAnalysis
+GET  /api/intel/history             → list[IntelAnalysis]
 
 # ── RAG Management ──
-POST /api/v1/rag/ingest                → IngestResult (Feed-URL oder Dokument)
-GET  /api/v1/rag/sources               → list[Source]
-GET  /api/v1/rag/stats                 → RAGStats (doc count, collection info)
+POST /api/rag/ingest                → IngestResult (Feed-URL oder Dokument)
+GET  /api/rag/sources               → list[Source]
+GET  /api/rag/stats                 → RAGStats (doc count, collection info)
 
 # ── Knowledge Graph (Neo4j) ──
-GET  /api/v1/graph/entity/{name}/neighborhood → Graph (nodes + edges within N hops)
-POST /api/v1/graph/query               → GraphQueryResult (NL → Cypher → Results)
-GET  /api/v1/graph/events/recent       → list[Event] (filtered by hours/type)
+GET  /api/graph/entity/{name}       → Entity + relations
+GET  /api/graph/neighbors/{name}    → list[Entity] (1-hop neighbors)
+GET  /api/graph/network/{name}      → Graph (nodes + edges, N hops)
+GET  /api/graph/search              → list[Entity] (name/type search)
+GET  /api/graph/events              → list[Event]
+GET  /api/graph/events/geo          → list[Event] (geo-tagged)
 
-# ── Vision ──
-POST /api/v1/vision/analyze            → ImageAnalysis (Qwen3.5 Vision)
-POST /api/v1/vision/detect/military    → list[Detection] (YOLOv8 → Qwen3.5 Reasoning)
-GET  /api/v1/vision/assets             → list[MilitaryAsset] (from Neo4j)
+# Vision (Qwen3.5 + YOLOv8) is internal to the intelligence agent / ingestion
+# enrichment, not a backend REST route.
 
 # ── WebSocket ──
 WS   /ws/flights                       → Live aircraft position stream
@@ -252,7 +253,7 @@ Kein User-Auth (Single-User-System). Backend erfordert keine Authentifizierung.
 └── LLM_BASE_URL=http://localhost:8000/v1
 ```
 
-**Regel:** Kein API-Key wird jemals ans Frontend geliefert. Alle externen Calls gehen über `/api/v1/*`.
+**Regel:** Kein API-Key wird jemals ans Frontend geliefert. Alle externen Calls gehen über `/api/*`.
 
 ### Datenverschlüsselung
 - At-Rest: Nicht erforderlich (lokaler Betrieb, keine sensitiven Daten)

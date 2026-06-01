@@ -196,14 +196,15 @@ GET  /api/rag/sources               → list[Source]
 GET  /api/rag/stats                 → RAGStats (doc count, collection info)
 
 # ── Knowledge Graph (Neo4j) ──
-GET  /api/graph/entity/{name}/neighborhood → Graph (nodes + edges within N hops)
-POST /api/graph/query               → GraphQueryResult (NL → Cypher → Results)
-GET  /api/graph/events/recent       → list[Event] (filtered by hours/type)
+GET  /api/graph/entity/{name}       → Entity + relations
+GET  /api/graph/neighbors/{name}    → list[Entity] (1-hop neighbors)
+GET  /api/graph/network/{name}      → Graph (nodes + edges, N hops)
+GET  /api/graph/search              → list[Entity] (name/type search)
+GET  /api/graph/events              → list[Event]
+GET  /api/graph/events/geo          → list[Event] (geo-tagged)
 
-# ── Vision ──
-POST /api/vision/analyze            → ImageAnalysis (Qwen3.5 Vision)
-POST /api/vision/detect/military    → list[Detection] (YOLOv8 → Qwen3.5 Reasoning)
-GET  /api/vision/assets             → list[MilitaryAsset] (from Neo4j)
+# Vision (Qwen3.5 + YOLOv8) is internal to the intelligence agent / ingestion
+# enrichment, not a backend REST route.
 
 # ── WebSocket ──
 WS   /ws/flights                       → Live aircraft position stream
