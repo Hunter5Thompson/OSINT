@@ -3,7 +3,7 @@
 import httpx
 import pytest
 
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = "http://localhost:8080/api"
 
 
 @pytest.fixture
