@@ -17,11 +17,20 @@ from pathlib import Path
 
 import httpx
 
-from infra_atlas.almanac_clean import clean_html, format_composite, latest_year_value
+from infra_atlas.almanac_clean import (
+    clean_html,
+    format_composite,
+    is_plausible_capital,
+    latest_year_value,
+)
 from infra_atlas.almanac_constants import (
+    CIA_SUNSET_DATE,
+    FACTBOOK_REVISION,
+    FACTBOOK_REVISION_DATE,
     FACTBOOK_TARBALL_URL,
     FIELD_MAP,
     MAP_STUB_TOPO_IDS,
+    MAX_CAPITAL_CENTROID_DISTANCE_KM,
     REST_FALLBACK_ISO3,
     RESTCOUNTRIES_URL,
 )
@@ -224,14 +233,14 @@ def _build_factbook_snapshot(tar_bytes: bytes) -> dict[str, dict]:
 
 
 def _km2(a: float | None) -> str:
-    return f"{int(a):,} km²" if a else ""
+    return f"{round(a):,} km²" if a else ""
 
 
 def _commas(n: int | None) -> str:
     return f"{n:,}" if n else ""
 
 
-def _note(iso3: str | None, gec: str) -> str:
+def _note(gec: str) -> str:
     return "CIA World Factbook" if gec else "REST Countries (no Factbook profile)"
 
 
@@ -255,6 +264,8 @@ def _apply_override(entry: dict, ov: dict | None) -> None:
         if key in ov:
             entry[key] = ov[key]
     for section, items in (ov.get("facts") or {}).items():
+        if section not in _SECTIONS:
+            continue
         existing = entry["facts"].setdefault(section, [])
         for item in items:  # override wins per label
             existing[:] = [f for f in existing if f["label"] != item["label"]]
@@ -262,14 +273,6 @@ def _apply_override(entry: dict, ov: dict | None) -> None:
 
 
 def render(out_path: Path = SEED_OUT, refreshed_at: str | None = None) -> int:
-    from infra_atlas.almanac_clean import is_plausible_capital
-    from infra_atlas.almanac_constants import (
-        CIA_SUNSET_DATE,
-        FACTBOOK_REVISION,
-        FACTBOOK_REVISION_DATE,
-        MAX_CAPITAL_CENTROID_DISTANCE_KM,
-    )
-
     cross = json.loads((DATA_DIR / "crosswalk.json").read_text())
     fb = json.loads((DATA_DIR / "factbook_snapshot.json").read_text())["by_gec"]
     rest = json.loads((DATA_DIR / "restcountries_snapshot.json").read_text())["countries"]
@@ -308,7 +311,7 @@ def render(out_path: Path = SEED_OUT, refreshed_at: str | None = None) -> int:
             "capital": capital,
             "facts": facts,
             "updated_at": refreshed,
-            "source_note": _note(iso3, gec),
+            "source_note": _note(gec),
         }
         _apply_override(entry, overrides.get(iso3) or overrides.get(topo))
         countries.append(entry)

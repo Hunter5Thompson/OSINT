@@ -4,6 +4,7 @@ from infra_atlas.almanac_clean import (
     is_plausible_capital,
     latest_year_value,
 )
+from infra_atlas.almanac_constants import FACTBOOK_REVISION
 
 
 def test_clean_html_strips_tags_and_unescapes():
@@ -53,4 +54,4 @@ def test_render_is_deterministic_and_covers(tmp_path):
     assert len(seed["countries"]) == 177
     ids = [c["id"] for c in seed["countries"]]
     assert len(ids) == len(set(ids))                       # no id collision
-    assert seed["_meta"]["factbook_revision"]
+    assert seed["_meta"]["factbook_revision"] == FACTBOOK_REVISION
