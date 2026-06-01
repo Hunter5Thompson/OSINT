@@ -63,7 +63,9 @@ def _load_codebook_types() -> frozenset[str]:
 _VALID_CODEBOOK_TYPES: frozenset[str] = _load_codebook_types()
 
 
-def _validate_codebook_type(value: str | None, *, source: str | None = None, url: str | None = None) -> str:
+def _validate_codebook_type(
+    value: str | None, *, source: str | None = None, url: str | None = None
+) -> str:
     """Return value if it's a known codebook_type, else log + fall back to other.unclassified.
 
     LLMs occasionally hallucinate types that don't exist in event_codebook.yaml

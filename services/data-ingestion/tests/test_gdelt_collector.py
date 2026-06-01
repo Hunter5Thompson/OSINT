@@ -3,9 +3,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from feeds.gdelt_collector import GDELTCollector
-from pipeline import ExtractionConfigError, ExtractionTransientError
 from qdrant_client.models import (
     CollectionConfig,
     CollectionInfo,
@@ -13,6 +10,9 @@ from qdrant_client.models import (
     Distance,
     VectorParams,
 )
+
+from feeds.gdelt_collector import GDELTCollector
+from pipeline import ExtractionConfigError, ExtractionTransientError
 
 
 def _gdelt_response(articles: list[dict] | None = None) -> MagicMock:
@@ -125,7 +125,8 @@ def test_gdelt_validates_schema_when_collection_exists():
 
 
 def test_gdelt_phase2_refuses_phase1_collection():
-    """GDELTCollector._ensure_collection raises QdrantSchemaMismatch on schema mismatch, no write."""
+    """GDELTCollector._ensure_collection raises QdrantSchemaMismatch on schema
+    mismatch, without writing."""
     from qdrant_doctor.schema import QdrantSchemaMismatch
 
     coll = MagicMock()

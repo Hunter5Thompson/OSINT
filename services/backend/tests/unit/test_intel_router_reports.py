@@ -81,7 +81,10 @@ class TestIntelReportScopedPersistence:
     def test_persists_user_and_munin_messages(self, client: TestClient) -> None:
         append_mock = AsyncMock()
         with (
-            patch("app.routers.intel.report_store.get_report", AsyncMock(return_value=_sample_report())),
+            patch(
+                "app.routers.intel.report_store.get_report",
+                AsyncMock(return_value=_sample_report()),
+            ),
             patch("app.routers.intel.report_store.append_report_message", append_mock),
             patch("app.routers.intel.httpx.AsyncClient", return_value=_MockHttpClient()),
         ):

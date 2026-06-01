@@ -1,6 +1,6 @@
 """Flight data endpoints."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -26,7 +26,7 @@ async def get_flights(request: Request) -> list[Aircraft] | JSONResponse:
                 error="Upstream unavailable",
                 detail="Flight data sources are not responding",
                 code="UPSTREAM_TIMEOUT",
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             ).model_dump(mode="json"),
         )
 
@@ -45,6 +45,6 @@ async def get_military_flights(request: Request) -> list[Aircraft] | JSONRespons
             content=APIError(
                 error="Upstream unavailable",
                 code="UPSTREAM_TIMEOUT",
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             ).model_dump(mode="json"),
         )

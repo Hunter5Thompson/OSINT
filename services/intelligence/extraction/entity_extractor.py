@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from typing import Literal
+
 import httpx
 import structlog
 from pydantic import BaseModel, Field
@@ -48,8 +49,14 @@ _RESPONSE_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "name":    {"type": "string"},
-                    "type":    {"type": "string", "enum": ["Person", "Organization", "Country", "Location", "Facility", "Commodity", "Event"]},
+                    "name": {"type": "string"},
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "Person", "Organization", "Country", "Location",
+                            "Facility", "Commodity", "Event",
+                        ],
+                    },
                     "mention": {"type": "string"},
                     "context": {"type": "string"},
                 },
@@ -89,7 +96,9 @@ class EntityExtractor:
 
     # ── LLM extraction ────────────────────────────────────────────────────────
 
-    async def extract(self, text: str, source_url: str = "", max_chars: int = 3000) -> ExtractionResult:
+    async def extract(
+        self, text: str, source_url: str = "", max_chars: int = 3000
+    ) -> ExtractionResult:
         """Extract entities from text using Qwen3.5-27B structured output."""
         truncated = text[:max_chars]
 
@@ -97,7 +106,10 @@ class EntityExtractor:
             "model": self.vllm_model,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": f"Extract entities from this OSINT document:\n\n{truncated}"},
+                {
+                    "role": "user",
+                    "content": f"Extract entities from this OSINT document:\n\n{truncated}",
+                },
             ],
             "temperature": 0,
             "max_tokens": 1500,

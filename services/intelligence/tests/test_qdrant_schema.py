@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from qdrant_client.models import (
     CollectionConfig,
     CollectionInfo,
@@ -15,7 +14,6 @@ from qdrant_client.models import (
     SparseVectorParams,
     VectorParams,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -93,7 +91,6 @@ class TestIntelligenceValidator:
         """Hybrid collection with named 'dense' vector and wrong distance must raise."""
         from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
 
-        info = _hybrid()
         # Override the dense vector with wrong distance
         wrong_info = _make_info(
             vectors={"dense": VectorParams(size=1024, distance=Distance.EUCLID)},

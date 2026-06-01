@@ -132,6 +132,7 @@ def test_telegram_lru_evicts_at_capacity(signal_envelope_factory, fake_clock):
 
 def test_telegram_on_cluster_terminated_with_suppress(signal_envelope_factory, fake_clock):
     from datetime import timedelta
+
     from app.services.incident_promoter.config import PromoterConfig
     from app.services.incident_promoter.detectors.telegram import TelegramTopicDetector
 

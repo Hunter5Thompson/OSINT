@@ -14,7 +14,9 @@ def test_admin_inspector_returns_snapshot(monkeypatch):
         incidents_router.settings, "incidents_admin_token", "secret-xyz"
     )
 
-    clock = lambda: datetime(2026, 5, 19, 12, 0, tzinfo=UTC)
+    def clock():
+        return datetime(2026, 5, 19, 12, 0, tzinfo=UTC)
+
     store = ClusterStore(clock=clock)
     store._by_key["firms:geo:1.0:1.0"] = ClusterState(  # noqa: SLF001
         cluster_key="firms:geo:1.0:1.0", incident_id="inc-a",

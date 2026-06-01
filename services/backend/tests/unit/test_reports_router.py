@@ -46,7 +46,10 @@ class TestReportsRouter:
         return TestClient(app)
 
     def test_list_reports(self, client: TestClient) -> None:
-        with patch("app.routers.reports.report_store.list_reports", AsyncMock(return_value=[_sample_report()])):
+        with patch(
+            "app.routers.reports.report_store.list_reports",
+            AsyncMock(return_value=[_sample_report()]),
+        ):
             resp = client.get("/api/v1/reports")
 
         assert resp.status_code == 200
@@ -56,7 +59,9 @@ class TestReportsRouter:
 
     def test_create_report(self, client: TestClient) -> None:
         report = _sample_report("r-045")
-        with patch("app.routers.reports.report_store.create_report", AsyncMock(return_value=report)):
+        with patch(
+            "app.routers.reports.report_store.create_report", AsyncMock(return_value=report)
+        ):
             resp = client.post("/api/v1/reports", json={"title": "Untitled Dossier"})
 
         assert resp.status_code == 201
@@ -71,7 +76,9 @@ class TestReportsRouter:
 
     def test_patch_report(self, client: TestClient) -> None:
         patched = _sample_report("r-044").model_copy(update={"title": "Updated title"})
-        with patch("app.routers.reports.report_store.update_report", AsyncMock(return_value=patched)):
+        with patch(
+            "app.routers.reports.report_store.update_report", AsyncMock(return_value=patched)
+        ):
             resp = client.patch("/api/v1/reports/r-044", json={"title": "Updated title"})
 
         assert resp.status_code == 200
@@ -93,8 +100,14 @@ class TestReportsRouter:
         )
 
         with (
-            patch("app.routers.reports.report_store.get_report", AsyncMock(return_value=_sample_report())),
-            patch("app.routers.reports.report_store.list_report_messages", AsyncMock(return_value=[msg])),
+            patch(
+                "app.routers.reports.report_store.get_report",
+                AsyncMock(return_value=_sample_report()),
+            ),
+            patch(
+                "app.routers.reports.report_store.list_report_messages",
+                AsyncMock(return_value=[msg]),
+            ),
         ):
             resp = client.get("/api/v1/reports/r-044/messages")
 
@@ -112,8 +125,14 @@ class TestReportsRouter:
             refs=[],
         )
         with (
-            patch("app.routers.reports.report_store.get_report", AsyncMock(return_value=_sample_report())),
-            patch("app.routers.reports.report_store.append_report_message", AsyncMock(return_value=msg)),
+            patch(
+                "app.routers.reports.report_store.get_report",
+                AsyncMock(return_value=_sample_report()),
+            ),
+            patch(
+                "app.routers.reports.report_store.append_report_message",
+                AsyncMock(return_value=msg),
+            ),
         ):
             resp = client.post(
                 "/api/v1/reports/r-044/messages",

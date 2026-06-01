@@ -57,8 +57,8 @@ async def _download_image(url: str) -> bytes:
             ip = sockaddr[0]
             if _is_private_ip(ip):
                 raise ValueError(f"URL resolves to private IP: {ip}")
-    except socket.gaierror:
-        raise ValueError(f"Cannot resolve hostname: {hostname}")
+    except socket.gaierror as e:
+        raise ValueError(f"Cannot resolve hostname: {hostname}") from e
 
     max_size = settings.vision_max_file_size_mb * 1024 * 1024
 
@@ -127,7 +127,10 @@ async def _load_image(url: str) -> str:
 @tool
 async def analyze_image(
     image_url: str,
-    question: str = "Describe this image in detail. Identify objects, text, locations, and any intelligence-relevant features.",
+    question: str = (
+        "Describe this image in detail. Identify objects, text, locations, "
+        "and any intelligence-relevant features."
+    ),
 ) -> str:
     """Analyze an image using Qwen3.5 multimodal vision.
     Use for satellite imagery, document photos, maps, or any visual content.

@@ -1,9 +1,21 @@
 """Unit tests for submarine cable models and service."""
 
+import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from pydantic import ValidationError
 
 from app.models.cable import CableDataset, LandingPoint, SubmarineCable
+from app.services.cable_service import (
+    _load_fallback,
+    _parse_cables,
+    _parse_capacity,
+    _parse_color,
+    _parse_landing_points,
+    _parse_length,
+    get_cable_dataset,
+)
 
 
 class TestSubmarineCableModel:
@@ -41,7 +53,9 @@ class TestSubmarineCableModel:
             SubmarineCable(id="x", name="Y")  # type: ignore[call-arg]  # missing coordinates
 
     def test_landing_point(self) -> None:
-        lp = LandingPoint(id="lp1", name="Marseille", country="France", latitude=43.3, longitude=5.4)
+        lp = LandingPoint(
+            id="lp1", name="Marseille", country="France", latitude=43.3, longitude=5.4
+        )
         assert lp.country == "France"
 
     def test_cable_dataset(self) -> None:
@@ -58,20 +72,6 @@ class TestSubmarineCableModel:
         b = SubmarineCable(id="b", name="B", coordinates=[[[0, 0], [1, 1]]])
         a.landing_point_ids.append("x")
         assert b.landing_point_ids == []
-
-
-import json
-from unittest.mock import AsyncMock, patch
-
-from app.services.cable_service import (
-    _load_fallback,
-    _parse_cables,
-    _parse_capacity,
-    _parse_color,
-    _parse_landing_points,
-    _parse_length,
-    get_cable_dataset,
-)
 
 
 class TestParsers:
@@ -137,11 +137,22 @@ class TestParseCables:
         assert cables[0].coordinates == [[[0, 1], [2, 3]]]
 
     def test_skip_missing_coordinates(self) -> None:
-        geo = {"features": [{"properties": {"id": "3", "name": "X"}, "geometry": {"type": "MultiLineString"}}]}
+        geo = {
+            "features": [
+                {"properties": {"id": "3", "name": "X"}, "geometry": {"type": "MultiLineString"}}
+            ]
+        }
         assert _parse_cables(geo) == []
 
     def test_skip_unknown_geometry_type(self) -> None:
-        geo = {"features": [{"properties": {"id": "4"}, "geometry": {"type": "Polygon", "coordinates": [[[0, 1]]]}}]}
+        geo = {
+            "features": [
+                {
+                    "properties": {"id": "4"},
+                    "geometry": {"type": "Polygon", "coordinates": [[[0, 1]]]},
+                }
+            ]
+        }
         assert _parse_cables(geo) == []
 
     def test_is_planned_flag(self) -> None:
@@ -172,7 +183,14 @@ class TestParseLandingPoints:
         assert pts[0].longitude == 5.4
 
     def test_skip_non_point(self) -> None:
-        geo = {"features": [{"properties": {"id": "x"}, "geometry": {"type": "LineString", "coordinates": [[0, 0]]}}]}
+        geo = {
+            "features": [
+                {
+                    "properties": {"id": "x"},
+                    "geometry": {"type": "LineString", "coordinates": [[0, 0]]},
+                }
+            ]
+        }
         assert _parse_landing_points(geo) == []
 
 
@@ -193,12 +211,18 @@ class TestFallback:
         raw = json.dumps({
             "cables_geojson": {
                 "features": [
-                    {"properties": {"id": "1", "name": "FB"}, "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}}
+                    {
+                        "properties": {"id": "1", "name": "FB"},
+                        "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+                    }
                 ]
             },
             "landing_points_geojson": {
                 "features": [
-                    {"properties": {"id": "lp1", "name": "LP"}, "geometry": {"type": "Point", "coordinates": [5.0, 43.0]}}
+                    {
+                        "properties": {"id": "lp1", "name": "LP"},
+                        "geometry": {"type": "Point", "coordinates": [5.0, 43.0]},
+                    }
                 ]
             },
         })
@@ -227,7 +251,14 @@ class TestGetCableDataset:
         cache.get.return_value = None
         proxy = AsyncMock()
         proxy.get_json.side_effect = [
-            {"features": [{"properties": {"id": "1", "name": "C"}, "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}}]},
+            {
+                "features": [
+                    {
+                        "properties": {"id": "1", "name": "C"},
+                        "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+                    }
+                ]
+            },
             {"features": []},
         ]
 

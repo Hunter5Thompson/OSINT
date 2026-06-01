@@ -4,9 +4,9 @@ import pytest
 
 from agents.tools.graph_templates import (
     TEMPLATES,
-    select_template,
-    inject_limit,
     build_cypher_from_template,
+    inject_limit,
+    select_template,
 )
 
 

@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from qdrant_client.models import (
     CollectionConfig,
     CollectionInfo,
@@ -18,7 +16,6 @@ from qdrant_client.models import (
     SparseVectorParams,
     VectorParams,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers to build mocked Qdrant client

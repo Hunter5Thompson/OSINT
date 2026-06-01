@@ -1,4 +1,5 @@
 """Geopolitical hotspot endpoints."""
+# ruff: noqa: E501 — DEFAULT_HOTSPOTS is a curated one-row-per-entry data table; keep entries on single lines.
 
 from typing import Any
 

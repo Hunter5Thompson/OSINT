@@ -5,7 +5,6 @@ import re
 
 import structlog
 
-from app.config import settings
 from app.models.satellite import Satellite
 from app.services.cache_service import CacheService
 from app.services.proxy_service import ProxyService
@@ -57,7 +56,10 @@ def _detect_type(name: str, category: str) -> str:
         return "weather"
     if category == "station":
         return "station"
-    if any(k in upper for k in ("INTELSAT", "ASTRA", "SES", "VIASAT", "STARLINK", "ONEWEB", "IRIDIUM", "TDRS")):
+    if any(
+        k in upper
+        for k in ("INTELSAT", "ASTRA", "SES", "VIASAT", "STARLINK", "ONEWEB", "IRIDIUM", "TDRS")
+    ):
         return "comms"
     return "unknown"
 
@@ -103,7 +105,11 @@ async def _fetch_celestrak_groups(proxy: ProxyService) -> list[Satellite]:
     for group in _CELESTRAK_GROUPS:
         # If we already have enough from targeted groups, skip "active"
         if group == "active" and len(all_sats) > 500:
-            logger.info("celestrak_skip_active", reason="enough from targeted groups", count=len(all_sats))
+            logger.info(
+                "celestrak_skip_active",
+                reason="enough from targeted groups",
+                count=len(all_sats),
+            )
             break
 
         try:
@@ -180,7 +186,10 @@ def _parse_tle_text(text: str) -> list[Satellite]:
 def _categorize(name: str, inclination: float) -> str:
     """Categorize satellite based on name and orbit parameters."""
     name_upper = name.upper()
-    if any(k in name_upper for k in ("USA ", "NROL", "NOSS", "MILSTAR", "DSP", "SBIRS", "WGS", "YAOGAN", "COSMOS 2")):
+    if any(
+        k in name_upper
+        for k in ("USA ", "NROL", "NOSS", "MILSTAR", "DSP", "SBIRS", "WGS", "YAOGAN", "COSMOS 2")
+    ):
         return "military"
     if any(k in name_upper for k in ("NOAA", "METEO", "GOES", "HIMAWARI", "FENGYUN")):
         return "weather"

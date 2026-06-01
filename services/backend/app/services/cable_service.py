@@ -104,7 +104,10 @@ def _parse_cables(geojson: dict) -> list[SubmarineCable]:
                 )
             )
         except Exception:
-            logger.debug("cable_feature_skipped", feature_id=feature.get("properties", {}).get("id"))
+            logger.debug(
+                "cable_feature_skipped",
+                feature_id=feature.get("properties", {}).get("id"),
+            )
             continue
     return cables
 

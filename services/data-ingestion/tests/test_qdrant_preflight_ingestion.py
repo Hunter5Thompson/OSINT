@@ -7,10 +7,9 @@ QdrantSchemaMismatch without performing a write.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-
 from qdrant_client.models import (
     CollectionConfig,
     CollectionInfo,

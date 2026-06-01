@@ -1,5 +1,7 @@
 """Qdrant retriever for hybrid search with payload filtering."""
 
+import contextlib
+
 import httpx
 import structlog
 from qdrant_client import AsyncQdrantClient
@@ -22,12 +24,10 @@ def _get_graph_client() -> GraphClient | None:
     """Get or create a shared GraphClient from config settings."""
     global _graph_client
     if _graph_client is None and settings.neo4j_uri:
-        try:
+        with contextlib.suppress(Exception):
             _graph_client = GraphClient(
                 settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password,
             )
-        except Exception:
-            pass
     return _graph_client
 
 logger = structlog.get_logger()
@@ -154,7 +154,10 @@ async def enhanced_search(
     if enable_hybrid:
         logger.warning(
             "hybrid_search_not_available",
-            reason="Requires odin_v2 collection with sparse vectors (Phase 2). Falling back to dense-only.",
+            reason=(
+                "Requires odin_v2 collection with sparse vectors (Phase 2). "
+                "Falling back to dense-only."
+            ),
         )
         enable_hybrid = False  # graceful fallback to dense
 

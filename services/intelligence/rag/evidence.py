@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -65,7 +65,7 @@ def _parse_dt(value):
     # Naive timestamps in OSINT feeds mean UTC; make them explicit so downstream
     # comparisons (recency, Slice 2) never mix naive and aware datetimes.
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -98,7 +98,7 @@ def _legacy_provenance(payload: dict) -> tuple[str, str, str | None]:
     return "unknown", "?", None
 
 
-def to_evidence_item(result: dict) -> "EvidenceItem":
+def to_evidence_item(result: dict) -> EvidenceItem:
     """Normalize one retriever result dict into an EvidenceItem.
 
     Order: canonical contract fields -> small explicit legacy matchers -> unknown.

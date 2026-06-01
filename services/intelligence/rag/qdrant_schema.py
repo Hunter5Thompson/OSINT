@@ -21,7 +21,7 @@ EXPECTED_DISTANCE = Distance.COSINE
 NAMED_DENSE_KEY = "dense"
 
 
-class QdrantSchemaMismatch(ValueError):
+class QdrantSchemaMismatch(ValueError):  # noqa: N818 — legacy name; rename is a separate API change
     """Raised when a Qdrant collection's vector schema does not match expectations."""
 
 
@@ -81,7 +81,8 @@ def _check_dense_params(params: VectorParams, *, label: str) -> None:
         )
     actual_distance = params.distance
     if actual_distance != EXPECTED_DISTANCE:
+        shown = actual_distance.value if hasattr(actual_distance, "value") else actual_distance
         raise QdrantSchemaMismatch(
             f"Expected {label} vector distance {EXPECTED_DISTANCE.value} (Cosine), "
-            f"got {actual_distance.value if hasattr(actual_distance, 'value') else actual_distance}."
+            f"got {shown}."
         )

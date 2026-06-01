@@ -9,7 +9,9 @@ def test_every_feed_has_explicit_non_google_provider():
         prov = feed.get("provider")
         assert prov, f"feed {feed['name']!r} is missing an explicit provider id"
         assert prov != "news.google.com", f"{feed['name']!r} leaks the google proxy host"
-        assert "://" not in prov and "/" not in prov, f"{feed['name']!r} provider must be a bare domain"
+        assert "://" not in prov and "/" not in prov, (
+            f"{feed['name']!r} provider must be a bare domain"
+        )
 
 
 def test_known_feeds_have_expected_publisher_domains():

@@ -70,7 +70,9 @@ class HAPICollector(BaseCollector):
             points = []
 
             for record in records:
-                chash = self._content_hash(record["location_code"], record["reference_period"], record["event_type"])
+                chash = self._content_hash(
+                    record["location_code"], record["reference_period"], record["event_type"]
+                )
                 point_id = self._point_id(chash)
 
                 # Standard dedup — skip if exists

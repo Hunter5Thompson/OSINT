@@ -1,7 +1,7 @@
 """Event codebook and intelligence extraction package."""
 
-from codebook.loader import load_codebook, get_all_event_types
-from codebook.extractor import IntelligenceExtractor, IntelligenceExtractionResult
+from codebook.extractor import IntelligenceExtractionResult, IntelligenceExtractor
+from codebook.loader import get_all_event_types, load_codebook
 
 __all__ = [
     "load_codebook",

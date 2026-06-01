@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-import yaml
 
+import yaml
 
 _DEFAULT_PATH = Path(__file__).parent / "event_codebook.yaml"
 

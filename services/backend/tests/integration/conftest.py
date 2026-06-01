@@ -5,7 +5,7 @@ of the same conftest as a local plugin, so we use explicit re-import here instea
 """
 from tests.incident_promoter.conftest import (  # noqa: F401
     fake_clock,
-    fake_incident_store,
     fake_incident_event_stream,
+    fake_incident_store,
     signal_envelope_factory,
 )

@@ -13,7 +13,6 @@ Exit codes:
 from __future__ import annotations
 
 import sys
-from typing import Any
 
 import click
 from qdrant_client import QdrantClient
@@ -87,7 +86,10 @@ def run_doctor(
             _fail(f"Collection '{collection_name}' does not exist (required for hybrid mode).")
             return 1
         else:
-            _fail(f"Collection '{collection_name}' does not exist (required for dense-only runtime).")
+            _fail(
+                f"Collection '{collection_name}' does not exist "
+                "(required for dense-only runtime)."
+            )
             return 1
     else:
         _ok(f"Collection '{collection_name}' exists.")
@@ -120,9 +122,14 @@ def run_doctor(
     if isinstance(vectors, dict):
         _info(f"Vector config:   named — {list(vectors.keys())}")
         for name, vp in vectors.items():
-            _info(f"  [{name}]  size={vp.size}  distance={vp.distance.value if hasattr(vp.distance, 'value') else vp.distance}")
+            dist = vp.distance.value if hasattr(vp.distance, "value") else vp.distance
+            _info(f"  [{name}]  size={vp.size}  distance={dist}")
     else:
-        dist_str = vectors.distance.value if hasattr(vectors.distance, "value") else str(vectors.distance)
+        dist_str = (
+            vectors.distance.value
+            if hasattr(vectors.distance, "value")
+            else str(vectors.distance)
+        )
         _info(f"Vector config:   unnamed  size={vectors.size}  distance={dist_str}")
 
     if sparse_vectors:

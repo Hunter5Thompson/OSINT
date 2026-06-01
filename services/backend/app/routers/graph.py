@@ -34,7 +34,11 @@ async def get_entity(name: str, limit: int = Query(default=50, le=200)) -> Graph
             id=r.get("id") or r.get("name", ""),
             name=r.get("name", ""),
             type=r.get("type", "unknown"),
-            properties={k: v for k, v in r.items() if k not in ("id", "name", "type") and v is not None},
+            properties={
+                k: v
+                for k, v in r.items()
+                if k not in ("id", "name", "type") and v is not None
+            },
         )
         for r in rows
     ]
@@ -145,7 +149,11 @@ async def get_events(
             id=r.get("id", ""),
             name=r.get("name", ""),
             type=r.get("type", "event"),
-            properties={k: v for k, v in r.items() if k not in ("id", "name", "type") and v is not None},
+            properties={
+                k: v
+                for k, v in r.items()
+                if k not in ("id", "name", "type") and v is not None
+            },
         )
         for r in rows
     ]
@@ -222,7 +230,11 @@ async def search_entities(
             id=r.get("id") or r.get("name", ""),
             name=r.get("name", ""),
             type=r.get("type", "unknown"),
-            properties={k: v for k, v in r.items() if k not in ("id", "name", "type") and v is not None},
+            properties={
+                k: v
+                for k, v in r.items()
+                if k not in ("id", "name", "type") and v is not None
+            },
         )
         for r in rows
     ]

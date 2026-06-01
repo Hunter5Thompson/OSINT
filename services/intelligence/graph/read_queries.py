@@ -28,10 +28,7 @@ def validate_cypher_readonly(cypher: str) -> bool:
         r"|CALL|LOAD\s+CSV|FOREACH"
         r")\b"
     )
-    if re.search(write_keywords, stripped, re.IGNORECASE):
-        return False
-
-    return True
+    return not re.search(write_keywords, stripped, re.IGNORECASE)
 
 
 def _strip_string_literals(cypher: str) -> str:

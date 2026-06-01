@@ -1,12 +1,13 @@
 """Tests for vision tool — URL validation, SSRF protection, image analysis."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import AsyncMock, patch
 
 from agents.tools.vision import (
-    validate_image_url,
     _is_private_ip,
     analyze_image,
+    validate_image_url,
 )
 
 

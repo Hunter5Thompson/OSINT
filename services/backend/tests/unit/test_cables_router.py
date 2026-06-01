@@ -31,17 +31,25 @@ def mock_cable_dataset() -> CableDataset:
 class TestCablesRouter:
     @pytest.mark.asyncio
     async def test_get_cables_returns_200(self, mock_cable_dataset: CableDataset) -> None:
-        with patch("app.services.cable_service.get_cable_dataset", new_callable=AsyncMock) as mock_fn:
+        with patch(
+            "app.services.cable_service.get_cable_dataset", new_callable=AsyncMock
+        ) as mock_fn:
             mock_fn.return_value = mock_cable_dataset
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 resp = await client.get("/api/v1/cables")
             assert resp.status_code == 200
 
     @pytest.mark.asyncio
     async def test_get_cables_response_shape(self, mock_cable_dataset: CableDataset) -> None:
-        with patch("app.services.cable_service.get_cable_dataset", new_callable=AsyncMock) as mock_fn:
+        with patch(
+            "app.services.cable_service.get_cable_dataset", new_callable=AsyncMock
+        ) as mock_fn:
             mock_fn.return_value = mock_cable_dataset
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 resp = await client.get("/api/v1/cables")
             body = resp.json()
             assert "cables" in body
@@ -53,8 +61,12 @@ class TestCablesRouter:
 
     @pytest.mark.asyncio
     async def test_get_cables_502_on_error(self) -> None:
-        with patch("app.services.cable_service.get_cable_dataset", new_callable=AsyncMock) as mock_fn:
+        with patch(
+            "app.services.cable_service.get_cable_dataset", new_callable=AsyncMock
+        ) as mock_fn:
             mock_fn.side_effect = Exception("boom")
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 resp = await client.get("/api/v1/cables")
             assert resp.status_code == 502

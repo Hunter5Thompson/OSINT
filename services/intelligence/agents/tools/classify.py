@@ -5,7 +5,7 @@ from __future__ import annotations
 import structlog
 from langchain_core.tools import tool
 
-from codebook.extractor import IntelligenceExtractor, IntelligenceExtractionResult
+from codebook.extractor import IntelligenceExtractionResult, IntelligenceExtractor
 from config import settings
 
 log = structlog.get_logger(__name__)

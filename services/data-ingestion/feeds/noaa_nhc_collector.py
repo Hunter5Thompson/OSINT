@@ -36,7 +36,9 @@ class NOAANHCCollector(BaseCollector):
             classification = _CLASSIFICATION_MAP.get(classification_code, classification_code)
 
             movement = storm.get("movement", {})
-            movement_text = movement.get("text", "") if isinstance(movement, dict) else str(movement)
+            movement_text = (
+                movement.get("text", "") if isinstance(movement, dict) else str(movement)
+            )
 
             storms.append({
                 "storm_id": str(storm.get("id", "")),

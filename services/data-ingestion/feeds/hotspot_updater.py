@@ -1,4 +1,5 @@
 """Geopolitical Hotspot Updater — maintains curated hotspot data and updates threat levels."""
+# ruff: noqa: E501 — HOTSPOTS is a curated one-row-per-entry data table; keep entries on single lines.
 
 from __future__ import annotations
 

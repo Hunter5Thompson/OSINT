@@ -23,7 +23,7 @@ WIKIDATA_DRIFT_THRESHOLD_KM = 5.0
 _NAME_NORMALIZE_RE = re.compile(r"[^a-z0-9]+")
 
 
-class CityCentroidViolation(ValueError):
+class CityCentroidViolation(ValueError):  # noqa: N818 — legacy name; rename is a separate API change
     pass
 
 

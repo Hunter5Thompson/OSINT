@@ -1,10 +1,14 @@
 """Tests for event codebook loader and IntelligenceExtractor."""
 
+import json
 import re
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from codebook.loader import load_codebook, get_all_event_types, validate_codebook
+
+from codebook.extractor import IntelligenceExtractionResult, IntelligenceExtractor
+from codebook.loader import get_all_event_types, load_codebook, validate_codebook
 
 
 class TestCodebookLoader:
@@ -158,11 +162,6 @@ class TestFrontendCategoryGuard:
             "the root to _DOCUMENTED_FALLBACK_ROOTS in this test AND leave a "
             "comment in EventLayer.tsx noting that DEFAULT_COLOR is intentional."
         )
-
-
-from unittest.mock import AsyncMock, patch, MagicMock
-import json
-from codebook.extractor import IntelligenceExtractor, IntelligenceExtractionResult
 
 
 def _mock_vllm_response(content: dict) -> MagicMock:

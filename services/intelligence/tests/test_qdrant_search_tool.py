@@ -69,6 +69,7 @@ class TestQdrantSearchTool:
         close to the budget limit, exposing the off-by-header bug without graph_text.
         """
         from unittest.mock import AsyncMock, patch
+
         from agents.tools.qdrant_search import TOOL_OUTPUT_MAX_CHARS
         results = [
             {"score": 0.9 - i * 0.01, "source_type": "rss", "provider": "p" * 10,

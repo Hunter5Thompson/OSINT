@@ -1,7 +1,7 @@
 """Intelligence service FastAPI app — exposes LangGraph pipeline over HTTP."""
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field

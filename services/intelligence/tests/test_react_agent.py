@@ -1,13 +1,11 @@
 """Tests for ReAct agent workflow — tool binding, guards, fallback."""
 
-import pytest
 from unittest.mock import MagicMock
 
 from agents.react_agent import (
     REACT_SYSTEM_PROMPT,
-    create_react_agent,
-    should_continue,
     guard_check,
+    should_continue,
 )
 from graph.state import AgentState
 

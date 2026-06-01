@@ -10,20 +10,18 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from datetime import UTC
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models.signals import SignalEnvelope
 from app.services.signal_stream import (
-    ReplayMode,
     SignalStream,
     get_signal_stream,
     redis_consumer_loop,
 )
-
 
 # ---------------------------------------------------------------------------
 # Ring buffer
@@ -111,10 +109,10 @@ def test_redis_record_to_envelope_mapping_and_monotonic_event_id() -> None:
     # ts derived from ms component
     assert env1.ts.endswith("Z")
     # ts should reflect ms precision
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     parsed = datetime.fromisoformat(env1.ts.replace("Z", "+00:00"))
-    assert parsed.tzinfo == timezone.utc
+    assert parsed.tzinfo == UTC
     assert int(parsed.timestamp() * 1000) == ms
 
     assert env1.type == "signal.firms"
@@ -348,6 +346,7 @@ async def test_stream_endpoint_content_type_and_connects(
     # the content-type check for the SSE endpoint is asserted on the generator's
     # EventSourceResponse which sse-starlette tags as text/event-stream by default.
     from sse_starlette.sse import EventSourceResponse
+
     from app.routers.signals import sse_generator
 
     class _StubRequest:
@@ -554,11 +553,11 @@ def test_stream_endpoint_declares_last_event_id_query_param() -> None:
     """Static route-schema check that the `last_event_id` query parameter is
     registered on the SSE endpoint. We can't exercise the live endpoint with
     TestClient because SSE heartbeats keep the body open indefinitely."""
-    from app.routers.signals import stream_signals
-
     # Inspect the endpoint's signature — must have a `last_event_id_query`
     # parameter aliased via FastAPI's Query(default=None, alias="last_event_id").
     import inspect
+
+    from app.routers.signals import stream_signals
 
     sig = inspect.signature(stream_signals)
     param_names = set(sig.parameters.keys())

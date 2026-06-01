@@ -1,6 +1,6 @@
 """Earthquake data endpoints."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -26,6 +26,6 @@ async def get_earthquakes(request: Request) -> list[Earthquake] | JSONResponse:
                 error="Upstream unavailable",
                 detail="USGS is not responding",
                 code="UPSTREAM_TIMEOUT",
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             ).model_dump(mode="json"),
         )

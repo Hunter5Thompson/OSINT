@@ -203,7 +203,9 @@ class GDELTCollector:
                         "seen_date": seendate,
                         "content_hash": chash,
                         "ingested_at": datetime.now(UTC).isoformat(),
-                        "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
+                        "codebook_type": (
+                            enrichment["codebook_type"] if enrichment else "other.unclassified"
+                        ),
                         "entities": enrichment["entities"] if enrichment else [],
                     },
                 )

@@ -1,6 +1,6 @@
 """Unit tests for Pydantic models."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.models.earthquake import Earthquake
 from app.models.flight import Aircraft
@@ -58,7 +58,7 @@ class TestEarthquakeModel:
             depth_km=10.5,
             magnitude=6.2,
             place="Near Tokyo, Japan",
-            time=datetime.now(timezone.utc),
+            time=datetime.now(UTC),
             tsunami=False,
         )
         assert e.magnitude == 6.2

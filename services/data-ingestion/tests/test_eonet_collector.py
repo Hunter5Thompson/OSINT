@@ -93,8 +93,16 @@ class TestEONETParser:
                     "title": "Storm",
                     "categories": [{"id": "severeStorms"}],
                     "geometry": [
-                        {"date": "2026-04-08T00:00:00Z", "type": "Point", "coordinates": [10.0, 20.0]},
-                        {"date": "2026-04-10T00:00:00Z", "type": "Point", "coordinates": [11.0, 21.0]},
+                        {
+                            "date": "2026-04-08T00:00:00Z",
+                            "type": "Point",
+                            "coordinates": [10.0, 20.0],
+                        },
+                        {
+                            "date": "2026-04-10T00:00:00Z",
+                            "type": "Point",
+                            "coordinates": [11.0, 21.0],
+                        },
                     ],
                     "closed": None,
                 }
@@ -137,8 +145,16 @@ class TestEONETParser:
                     "title": "Storm Mixed",
                     "categories": [{"id": "severeStorms"}],
                     "geometry": [
-                        {"date": "2026-04-10T00:00:00Z", "type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
-                        {"date": "2026-04-09T00:00:00Z", "type": "Point", "coordinates": [5.0, 10.0]},
+                        {
+                            "date": "2026-04-10T00:00:00Z",
+                            "type": "Polygon",
+                            "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]],
+                        },
+                        {
+                            "date": "2026-04-09T00:00:00Z",
+                            "type": "Point",
+                            "coordinates": [5.0, 10.0],
+                        },
                     ],
                     "closed": None,
                 }

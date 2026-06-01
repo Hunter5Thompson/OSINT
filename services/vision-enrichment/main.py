@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import signal
 
 import redis.asyncio as aioredis
@@ -52,10 +53,8 @@ async def main() -> None:
 
     log.info("vision_service_shutting_down")
     consumer_task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await consumer_task
-    except asyncio.CancelledError:
-        pass
     await redis_client.aclose()
     log.info("vision_service_stopped")
 
