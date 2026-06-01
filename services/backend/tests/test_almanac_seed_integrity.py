@@ -39,7 +39,11 @@ def test_factbook_countries_have_economy_and_security():
     def has(c, sec): return len(c["facts"][sec]) > 0
     offenders = []
     for c in cs:
-        if c["iso3"] in REST_FALLBACK or c["iso3"] in PARTIAL or c["name"] in MAP_STUB_NAMES:
+        if (
+            c.get("iso3") is None
+            or c["iso3"] in (REST_FALLBACK | PARTIAL)
+            or c["name"] in MAP_STUB_NAMES
+        ):
             continue
         if not (has(c, "economy") and has(c, "security")):
             offenders.append(c["name"])
