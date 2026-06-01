@@ -53,4 +53,34 @@ describe("queryIntel SSE parser", () => {
     expect(onResult.mock.calls[0]![0]).toMatchObject({ analysis: "ok" });
     expect(onDone).toHaveBeenCalledTimes(1);
   });
+
+  it("delivers the parsed error message on a CRLF-separated error event", async () => {
+    // The backend emits SSE with CRLF and a JSON error body
+    // ({"error": "...", "code": "..."}). onError must receive the human-readable
+    // message, not the raw JSON string with a trailing carriage return.
+    const chunks = [
+      "event: error\r\n",
+      'data: {"error":"boom","code":"INTEL_SERVICE_ERROR"}\r\n',
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(streamResponse(chunks)));
+
+    const onStatus = vi.fn();
+    const onResult = vi.fn();
+    const onDone = vi.fn();
+    let resolveFinished: () => void = () => {};
+    const finished = new Promise<void>((r) => {
+      resolveFinished = r;
+    });
+    const onError = vi.fn(() => resolveFinished());
+
+    const query: IntelQuery = { query: "q" };
+    queryIntel(query, onStatus, onResult, onError, onDone);
+
+    await finished;
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(onResult).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith("boom");
+  });
 });

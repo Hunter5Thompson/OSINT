@@ -92,6 +92,21 @@ async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Extract the human-readable message from an SSE `error` event payload.
+ *  The backend sends a JSON body ({"error": "...", "code": "..."}); fall back to
+ *  the trimmed raw line if it is not JSON. */
+function parseSseError(data: string): string {
+  try {
+    const parsed = JSON.parse(data) as { error?: unknown };
+    if (typeof parsed.error === "string") {
+      return parsed.error;
+    }
+  } catch {
+    // Not JSON — use the raw line.
+  }
+  return data.trim();
+}
+
 export async function getConfig(): Promise<ClientConfig> {
   return fetchJSON<ClientConfig>("/config");
 }
@@ -178,7 +193,8 @@ export function queryIntel(
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
+        // Split on CRLF or LF — the backend (sse-starlette) emits \r\n.
+        const lines = buffer.split(/\r?\n/);
         buffer = lines.pop() ?? "";
 
         for (const line of lines) {
@@ -192,7 +208,7 @@ export function queryIntel(
               } else if (currentEvent === "result") {
                 onResult(JSON.parse(data) as IntelAnalysis);
               } else if (currentEvent === "error") {
-                onError(data);
+                onError(parseSseError(data));
               } else if (currentEvent === "done") {
                 emitDone();
               }
