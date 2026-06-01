@@ -59,7 +59,9 @@ def _write_json(path: Path, obj: object) -> None:
 
 
 def _fetch_factbook_tar(client: httpx.Client) -> bytes:
-    return client.get(FACTBOOK_TARBALL_URL, follow_redirects=True).content
+    resp = client.get(FACTBOOK_TARBALL_URL, follow_redirects=True)
+    resp.raise_for_status()
+    return resp.content
 
 
 def _factbook_gec_set(tar_bytes: bytes) -> set[str]:
@@ -81,7 +83,9 @@ def _factbook_gec_set(tar_bytes: bytes) -> set[str]:
 
 def _build_iso3_gec(client: httpx.Client, valid_gec: set[str]) -> dict[str, str]:
     """Fetch GeoNames ISO3<->FIPS, validate against the Factbook, vendor the map."""
-    text = client.get(GEONAMES_COUNTRYINFO_URL).text
+    resp = client.get(GEONAMES_COUNTRYINFO_URL)
+    resp.raise_for_status()
+    text = resp.text
     candidates: dict[str, str] = {}
     for line in text.splitlines():
         if not line or line.startswith("#"):
