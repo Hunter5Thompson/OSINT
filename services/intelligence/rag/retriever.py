@@ -33,6 +33,15 @@ def _get_graph_client() -> GraphClient | None:
 logger = structlog.get_logger()
 
 
+async def close() -> None:
+    """Release retriever-owned resources and reset the schema preflight."""
+    global _graph_client, _schema_validated
+    graph_client, _graph_client = _graph_client, None
+    _schema_validated = False
+    if graph_client is not None:
+        await graph_client.close()
+
+
 async def _ensure_schema_validated() -> None:
     """Validate the Qdrant collection schema once before the first search.
 
@@ -42,8 +51,8 @@ async def _ensure_schema_validated() -> None:
     global _schema_validated
     if _schema_validated:
         return
+    client = AsyncQdrantClient(url=settings.qdrant_url)
     try:
-        client = AsyncQdrantClient(url=settings.qdrant_url)
         collections = await client.get_collections()
         names = {c.name for c in collections.collections}
         if settings.qdrant_collection in names:
@@ -55,6 +64,8 @@ async def _ensure_schema_validated() -> None:
     except Exception:
         # Network / connection errors — don't block startup
         pass
+    finally:
+        await client.close()
 
 
 async def search(
