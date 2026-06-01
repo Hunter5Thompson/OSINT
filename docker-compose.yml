@@ -214,6 +214,7 @@ services:
       - INTELLIGENCE_URL=http://intelligence:80
     volumes:
       - ./services/backend/app:/app/app
+      - ./services/backend/data:/app/data
     depends_on:
       redis:
         condition: service_healthy

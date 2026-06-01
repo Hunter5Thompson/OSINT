@@ -8,6 +8,7 @@ COPY pyproject.toml .
 RUN uv sync --no-dev --no-install-project
 
 COPY app/ app/
+COPY data/ data/
 
 EXPOSE 8000
 
