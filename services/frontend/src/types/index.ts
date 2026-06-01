@@ -137,6 +137,7 @@ export interface ReportRecord {
   paragraph_num: number;
   stamp: string;
   title: string;
+  scope_key?: string | null;
   status: ReportStatus;
   confidence: number;
   location: string;

@@ -7,14 +7,24 @@ import time
 from copy import deepcopy
 from datetime import UTC, datetime
 
+from neo4j.exceptions import ConstraintError
+
 from app.cypher.report_read import (
     REPORT_BY_ID,
+    REPORT_BY_SCOPE,
     REPORT_COUNT,
     REPORT_LIST,
     REPORT_MESSAGES_BY_REPORT_ID,
     REPORT_NEXT_PARAGRAPH,
 )
-from app.cypher.report_write import REPORT_APPEND_MESSAGE, REPORT_DELETE, REPORT_UPSERT
+from app.cypher.report_write import (
+    REPORT_APPEND_MESSAGE,
+    REPORT_CREATE,
+    REPORT_DELETE,
+    REPORT_ID_UNIQUE_CONSTRAINT,
+    REPORT_SCOPE_UNIQUE_CONSTRAINT,
+    REPORT_UPSERT,
+)
 from app.models.report import (
     DossierMetric,
     MarginEntry,
@@ -115,6 +125,7 @@ def _row_to_report(row: dict) -> ReportRecord:
         paragraph_num=int(row.get("paragraph_num") or 0),
         stamp=str(row.get("stamp") or ""),
         title=str(row.get("title") or ""),
+        scope_key=row.get("scope_key"),
         status=str(row.get("status") or "Draft"),
         confidence=float(row.get("confidence") or 0.0),
         location=str(row.get("location") or ""),
@@ -165,6 +176,7 @@ def _report_params(
         "body_paragraphs": payload.body_paragraphs,
         "margin_json": json.dumps([m.model_dump() for m in margin], ensure_ascii=True),
         "sources": payload.sources,
+        "scope_key": getattr(payload, "scope_key", None),
         "now": datetime.now(UTC).isoformat(),
     }
 
@@ -189,36 +201,49 @@ async def get_report(report_id: str) -> ReportRecord | None:
 
 
 async def create_report(payload: ReportCreateRequest) -> ReportRecord:
-    paragraph = await _next_paragraph()
-    now = datetime.now(UTC)
-    stamp = _stamp_from(now)
-    report_id = f"r-{paragraph:03d}"
+    for _ in range(5):
+        paragraph = await _next_paragraph()
+        now = datetime.now(UTC)
+        stamp = _stamp_from(now)
+        report_id = f"r-{paragraph:03d}"
 
-    findings = payload.findings or deepcopy(_DEFAULT_FINDINGS)
-    metrics = payload.metrics or deepcopy(_DEFAULT_METRICS)
-    margin = payload.margin or deepcopy(_DEFAULT_MARGIN)
-    sources = payload.sources or ["pending·1"]
-    body_paragraphs = payload.body_paragraphs or [
-        (
-            "Start with the operational summary, then expand into competing "
-            "hypotheses, risk corridors, and open questions."
-        ),
-    ]
+        findings = payload.findings or deepcopy(_DEFAULT_FINDINGS)
+        metrics = payload.metrics or deepcopy(_DEFAULT_METRICS)
+        margin = payload.margin or deepcopy(_DEFAULT_MARGIN)
+        sources = payload.sources or ["pending·1"]
+        body_paragraphs = payload.body_paragraphs or [
+            (
+                "Start with the operational summary, then expand into competing "
+                "hypotheses, risk corridors, and open questions."
+            ),
+        ]
 
-    hydrated = payload.model_copy(
-        update={
-            "findings": findings,
-            "metrics": metrics,
-            "margin": margin,
-            "sources": sources,
-            "body_paragraphs": body_paragraphs,
-        }
-    )
+        hydrated = payload.model_copy(
+            update={
+                "findings": findings,
+                "metrics": metrics,
+                "margin": margin,
+                "sources": sources,
+                "body_paragraphs": body_paragraphs,
+            }
+        )
 
-    rows = await write_query(REPORT_UPSERT, _report_params(report_id, paragraph, stamp, hydrated))
-    if not rows:
-        raise RuntimeError("failed to create report")
-    return _row_to_report(rows[0])
+        try:
+            rows = await write_query(
+                REPORT_CREATE, _report_params(report_id, paragraph, stamp, hydrated)
+            )
+        except ConstraintError:
+            # REPORT_CREATE uses CREATE, so a duplicate id genuinely raises (report_id_unique).
+            # Message-independent: if this id now resolves to a real node it was an id race →
+            # retry with a fresh paragraph; otherwise it's a scope collision (CREATE rolled back,
+            # id absent) → re-raise so get_or_create_report_by_scope re-reads the winner.
+            if await get_report(report_id) is not None:
+                continue
+            raise
+        if not rows:
+            raise RuntimeError("failed to create report")
+        return _row_to_report(rows[0])
+    raise RuntimeError("failed to allocate a unique report id after retries")
 
 
 async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRecord | None:
@@ -226,7 +251,10 @@ async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRec
     if current is None:
         return None
 
-    merged = current.model_copy(update=patch.model_dump(exclude_unset=True))
+    # merge patch over current, then re-validate so DossierMetric/MarginEntry rebuild from dicts
+    merged = ReportRecord.model_validate(
+        {**current.model_dump(), **patch.model_dump(exclude_unset=True)}
+    )
     rows = await write_query(
         REPORT_UPSERT,
         _report_params(report_id, current.paragraph_num, current.stamp, merged),
@@ -234,6 +262,36 @@ async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRec
     if not rows:
         return None
     return _row_to_report(rows[0])
+
+
+async def bootstrap_report_schema() -> None:
+    """Idempotent unique constraints. Run once at startup (main.py lifespan)."""
+    await write_query(REPORT_ID_UNIQUE_CONSTRAINT, {})
+    await write_query(REPORT_SCOPE_UNIQUE_CONSTRAINT, {})
+
+
+async def get_report_by_scope(scope_key: str) -> ReportRecord | None:
+    rows = await read_query(REPORT_BY_SCOPE, {"scope_key": scope_key})
+    return _row_to_report(rows[0]) if rows else None
+
+
+async def get_or_create_report_by_scope(
+    scope_key: str, title: str, location: str, coords: str
+) -> ReportRecord:
+    existing = await get_report_by_scope(scope_key)
+    if existing is not None:
+        return existing
+    try:
+        return await create_report(
+            ReportCreateRequest(
+                scope_key=scope_key, title=title, location=location, coords=coords
+            )
+        )
+    except ConstraintError:
+        winner = await get_report_by_scope(scope_key)
+        if winner is None:
+            raise
+        return winner
 
 
 async def delete_report(report_id: str) -> bool:

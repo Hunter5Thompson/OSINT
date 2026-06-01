@@ -69,6 +69,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await cache.connect()
     app.state.cache = cache
 
+    # Report schema — idempotent unique constraints (id + scope_key) for briefing dossiers
+    from app.services.report_store import bootstrap_report_schema
+    app.state.report_schema_ready = False
+    try:
+        await bootstrap_report_schema()
+        app.state.report_schema_ready = True
+    except Exception as exc:  # noqa: BLE001
+        # bootstrap failed → report_schema_ready stays False; save endpoint (Task 8) returns 503
+        logger.warning("report_schema_bootstrap_failed", error=str(exc))
+
     # Start AISStream background collector
     await vessel_service.start_collector(cache)
 
