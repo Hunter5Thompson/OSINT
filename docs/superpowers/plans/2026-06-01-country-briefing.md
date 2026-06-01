@@ -142,6 +142,7 @@ _TITLE_MAX = 300
 _URL_MAX = 500
 _MAX_EVIDENCE = 6
 _MAX_SIGNALS = _MAX_EVIDENCE - 1  # one slot reserved for the almanac item
+_SIG_TITLE_MAX = 120              # cap each context signal-line title (AlmanacSignalItem.title is unbounded)
 
 # Closed MVP research-alias map. Research hints, NOT almanac facts (kept out of the seed).
 # Keyed by ISO3 where present, else by the seed `name` for id-less stubs.
@@ -205,7 +206,7 @@ def build_briefing_context(
     footer = "\n>>>END_GROUNDING_DATA"
     if matched:
         sig_lines = ["", "## Active ODIN signals (live, last 15 min)"] + [
-            f"- [{s.severity}] {s.title} — {s.source}" for s in matched
+            f"- [{s.severity}] {s.title[:_SIG_TITLE_MAX]} — {s.source}" for s in matched
         ]
     else:
         sig_lines = ["", "## Active ODIN signals", "- keine aktiven Signale im 15-Minuten-Fenster"]
@@ -298,12 +299,19 @@ def test_truncate_message_marks_when_cut():
     assert truncate_message("short") == "short"
     out = truncate_message("y" * 9000, limit=8000)
     assert len(out) == 8000 and out.endswith("…[gekürzt]")
+
+
+def test_five_long_signal_titles_stay_within_budget():
+    sigs = [_signal(title="L" * 1000, event_id=f"s{i}") for i in range(5)]
+    ctx = build_briefing_context(_country(), sigs, factbook_revision="r", refreshed_at="2026-05-17", budget_chars=4000)
+    assert len(ctx.grounding_context) <= 4000          # capped signal titles can't blow the budget
+    assert "Active ODIN signals" in ctx.grounding_context
 ```
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd services/backend && NEO4J_PASSWORD=dummy uv run pytest tests/test_briefing_context.py -v`
-Expected: PASS (6 tests).
+Expected: PASS (7 tests).
 
 - [ ] **Step 5: Lint + commit**
 
@@ -664,8 +672,11 @@ async def test_grounding_reaches_react_seed_and_synthesis_sources(monkeypatch):
     human = [m for m in captured["messages"] if getattr(m, "type", "") == "human"][0]
     assert "GROUNDING_DATA" in human.content            # grounding injected into ReAct seed
 
+    synth_captured: dict = {}
+
     class FakeSynth:
         async def ainvoke(self, messages):
+            synth_captured["messages"] = messages
             return AIMessage(content="HIGH — moderate confidence")
 
     monkeypatch.setattr(wf, "create_synthesis_llm", lambda: FakeSynth())
@@ -674,9 +685,12 @@ async def test_grounding_reaches_react_seed_and_synthesis_sources(monkeypatch):
         "\nTitle: t\nExcerpt: e"
     )
     syn = await wf.react_synthesis_node({
+        "query": "Lage Iran",                       # react_synthesis_node reads state["query"] (workflow.py:201)
         "messages": [], "tool_trace": [], "agent_chain": [], "grounding_evidence_pack": pack,
     })
     assert "odin-country-almanac" in syn.get("sources_used", [])   # grounding surfaces as a source
+    human = [m for m in synth_captured["messages"] if getattr(m, "type", "") == "human"][0]
+    assert "odin-country-almanac" in human.content                 # evidence block embedded in the synthesis prompt
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -991,6 +1005,46 @@ async def query_intel(query: IntelQuery, request: Request) -> EventSourceRespons
 
 Add `from app.services.intel_stream import stream_intel_query`. **Keep** `_history` and the `IntelAnalysis` import (still used). Drop now-unused `httpx`, `json`, `datetime`, `report_store`, `ReportMessageCreate` imports if ruff flags them (the `/hotspot/{id}` and `/history` routes stay unchanged).
 
+- [ ] **Step 3c: Repoint the existing intel-router report test (it patches the router's now-moved deps)**
+
+`services/backend/tests/unit/test_intel_router_reports.py:72,88,89` patch `app.routers.intel.report_store.*` and `app.routers.intel.httpx.AsyncClient` — those now live in the helper. Change the three patch targets:
+
+```
+"app.routers.intel.report_store.get_report"            → "app.services.intel_stream.report_store.get_report"
+"app.routers.intel.report_store.append_report_message" → "app.services.intel_stream.report_store.append_report_message"
+"app.routers.intel.httpx.AsyncClient"                  → "app.services.intel_stream.httpx.AsyncClient"
+```
+
+Add `import httpx` and append an HTTP-error-persistence test (behavior moved from `intel.py:121`):
+
+```python
+    def test_persists_error_message_on_http_failure(self, client: TestClient) -> None:
+        append_mock = AsyncMock()
+
+        class _BoomClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return None
+
+            async def post(self, *a, **k):
+                raise httpx.ConnectError("down")
+
+        with (
+            patch("app.services.intel_stream.report_store.get_report",
+                  AsyncMock(return_value=_sample_report())),
+            patch("app.services.intel_stream.report_store.append_report_message", append_mock),
+            patch("app.services.intel_stream.httpx.AsyncClient", return_value=_BoomClient()),
+        ):
+            resp = client.post("/api/v1/intel/query",
+                               json={"query": "x", "report_id": "r-044", "report_message": "x"})
+
+        assert "INTEL_SERVICE_ERROR" in resp.text
+        roles = [c.args[1].role for c in append_mock.await_args_list]
+        assert "user" in roles and "munin" in roles     # user message + persisted error munin message
+```
+
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd services/backend && NEO4J_PASSWORD=dummy uv run pytest tests/test_intel_stream.py tests/unit/test_intel_router_reports.py -v` (the existing intel-router report test must still pass — it pins the report_id persistence behavior moved into the helper).
@@ -1000,9 +1054,9 @@ Expected: PASS.
 
 ```bash
 cd /home/deadpool-ultra/ODIN/OSINT
-uvx ruff@0.15.15 check services/backend/app/services/intel_stream.py services/backend/app/routers/intel.py services/backend/tests/test_intel_stream.py
-git add services/backend/app/services/intel_stream.py services/backend/app/routers/intel.py services/backend/tests/test_intel_stream.py
-git commit -m "refactor(intel): extract shared stream_intel_query helper; intel router delegates"
+uvx ruff@0.15.15 check services/backend/app/services/intel_stream.py services/backend/app/routers/intel.py services/backend/tests/test_intel_stream.py services/backend/tests/unit/test_intel_router_reports.py
+git add services/backend/app/services/intel_stream.py services/backend/app/routers/intel.py services/backend/tests/test_intel_stream.py services/backend/tests/unit/test_intel_router_reports.py
+git commit -m "refactor(intel): extract shared stream_intel_query helper; intel router delegates; repoint router test"
 ```
 
 ---
@@ -1186,6 +1240,30 @@ async def test_create_report_reraises_scope_conflict_not_id_retry(graph):
     await report_store.create_report(_req(scope_key="country:ITA"))
     with pytest.raises(ConstraintError):                 # scope error must NOT be swallowed by the id-retry loop
         await report_store.create_report(_req(scope_key="country:ITA"))
+
+
+@pytest.mark.asyncio
+async def test_create_report_retries_when_id_resolves_after_conflict(monkeypatch):
+    # Exercise the retry branch: first write raises a ConstraintError AND the id resolves
+    # to a node (id race) → retry → second write succeeds. (Scope-collision path is the
+    # test above, where the id does NOT resolve → re-raise.)
+    calls = {"n": 0}
+
+    async def flaky_write(cypher, params):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ConstraintError("transient id race")
+        return [{"id": params["report_id"], "scope_key": params.get("scope_key"), "paragraph_num": 2}]
+
+    async def read(cypher, params):
+        if "max(r.paragraph_num)" in cypher:
+            return [{"next_paragraph": calls["n"] + 1}]
+        return [{"id": params.get("report_id"), "scope_key": "x", "paragraph_num": 1}]  # id resolves → retry
+
+    monkeypatch.setattr(report_store, "write_query", flaky_write)
+    monkeypatch.setattr(report_store, "read_query", read)
+    rec = await report_store.create_report(_req(scope_key="country:ZZZ"))
+    assert rec is not None and calls["n"] == 2           # retried exactly once after the conflict
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1309,10 +1387,14 @@ async def create_report(payload: ReportCreateRequest) -> ReportRecord:
         })
         try:
             rows = await write_query(REPORT_UPSERT, _report_params(report_id, paragraph, stamp, hydrated))
-        except ConstraintError as exc:
-            if "report_scope_key_unique" in str(exc):
-                raise          # scope collision — caller re-reads the winner; never swallow
-            continue           # r-NNN id collision — recompute paragraph and retry
+        except ConstraintError:
+            # Message-independent (do NOT match on the constraint name). MERGE-by-id upserts,
+            # so in practice only report_scope_key_unique fires here. If this id now resolves
+            # to a real node it was an id race → retry with a fresh paragraph; otherwise it is
+            # a scope collision → re-raise so get_or_create_report_by_scope re-reads the winner.
+            if await get_report(report_id) is not None:
+                continue
+            raise
         if not rows:
             raise RuntimeError("failed to create report")
         return _row_to_report(rows[0])
@@ -1500,8 +1582,11 @@ def build_hydration_patch(analysis, country_name: str) -> ReportUpdateRequest:
 - [ ] **Step 3c: `routers/almanac.py` — save endpoint**
 
 ```python
+# extend the existing fastapi import to include Request (the router currently imports
+# `APIRouter, HTTPException, Query` — almanac.py:5): `from fastapi import APIRouter, HTTPException, Query, Request`
+from fastapi import Request
 from app.models.almanac import BriefingSaveRequest
-from app.models.report import ReportMessageCreate
+from app.models.report import ReportMessageCreate, ReportRecord
 from app.services.briefing import truncate_message
 from app.services.report_store import (
     get_or_create_report_by_scope, update_report, append_report_message, build_hydration_patch,
@@ -1530,7 +1615,7 @@ async def save_country_briefing(country_id: str, body: BriefingSaveRequest, requ
     return updated or report
 ```
 
-Add `from app.models.report import ReportRecord` to the router imports if missing.
+(`ReportRecord` is imported above for the `response_model`; `Request` for the `app.state` schema-ready guard.)
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -1836,33 +1921,50 @@ describe("CountryAlmanacPanel briefing block", () => {
     expect(run).toHaveBeenCalled();
   });
 
-  it("renders the report and saves it", async () => {
+  it("shows the loader while running", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
     const briefing = await import("../../../../hooks/useCountryBriefing");
     vi.spyOn(briefing, "useCountryBriefing").mockReturnValue({
+      loading: true, currentAgent: "synthesis_agent", result: null, error: null, run: vi.fn(), reset: vi.fn(),
+    } as never);
+    const { CountryAlmanacPanel } = await import("../CountryAlmanacPanel");
+    render(<CountryAlmanacPanel iso3="DEU" m49="276" />);
+    expect(screen.getByText(/Munin · synthesis_agent/)).toBeInTheDocument();
+  });
+
+  function _resultMock(over: object = {}) {
+    return {
       loading: false, currentAgent: null, error: null, run: vi.fn(), reset: vi.fn(),
       result: { query: "q", analysis: "Lagebericht…", confidence: 0.8, threat_assessment: "HIGH", sources_used: [] },
-    } as never);
+      ...over,
+    };
+  }
+
+  it("renders the report, saves it, and links to the dossier", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
+    const briefing = await import("../../../../hooks/useCountryBriefing");
+    vi.spyOn(briefing, "useCountryBriefing").mockReturnValue(_resultMock() as never);
     const api = await import("../../../../services/api");
     const save = vi.spyOn(api, "saveCountryBriefing").mockResolvedValue({ id: "r-001" } as never);
     const { CountryAlmanacPanel } = await import("../CountryAlmanacPanel");
     render(<CountryAlmanacPanel iso3="DEU" m49="276" />);
+    fireEvent.click(screen.getByText(/HIGH · 80%/));                 // open the default-closed <details>
     expect(screen.getByText(/Lagebericht/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /speichern/i }));
     expect(save).toHaveBeenCalledWith("DEU", expect.objectContaining({ analysis: "Lagebericht…" }));
+    const link = await screen.findByRole("link", { name: /öffnen/i });
+    expect(link).toHaveAttribute("href", "/briefing/r-001");        // navigation to the saved dossier
   });
 
   it("shows a save error without crashing", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
     const briefing = await import("../../../../hooks/useCountryBriefing");
-    vi.spyOn(briefing, "useCountryBriefing").mockReturnValue({
-      loading: false, currentAgent: null, error: null, run: vi.fn(), reset: vi.fn(),
-      result: { query: "q", analysis: "X", confidence: 0.5, sources_used: [] },
-    } as never);
+    vi.spyOn(briefing, "useCountryBriefing").mockReturnValue(_resultMock() as never);
     const api = await import("../../../../services/api");
     vi.spyOn(api, "saveCountryBriefing").mockRejectedValue(new Error("save failed: 503"));
     const { CountryAlmanacPanel } = await import("../CountryAlmanacPanel");
     render(<CountryAlmanacPanel iso3="DEU" m49="276" />);
+    fireEvent.click(screen.getByText(/HIGH · 80%/));                 // open the <details>
     fireEvent.click(screen.getByRole("button", { name: /speichern/i }));
     expect(await screen.findByText(/Speichern ·/)).toBeInTheDocument();
   });
@@ -1886,6 +1988,7 @@ import { saveCountryBriefing } from "../../../services/api";
   const countryId = iso3 ?? m49;
   const briefing = useCountryBriefing(countryId);
   const [saved, setSaved] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
 // JSX block (after <SignalList .../>):
@@ -1909,12 +2012,17 @@ import { saveCountryBriefing } from "../../../services/api";
           onClick={() => {
             setSaveError(null);
             saveCountryBriefing(countryId, briefing.result!)
-              .then(() => setSaved(true))
+              .then((rec) => { setSaved(true); setSavedId(rec.id); })
               .catch((e: unknown) => setSaveError(String(e)));
           }}
         >
           {saved ? "✓ in Briefing Room" : "In Briefing Room speichern"}
         </button>
+        {savedId && (
+          <a className="country-almanac__tab" href={`/briefing/${savedId}`}>
+            Im Briefing Room öffnen →
+          </a>
+        )}
         {saveError && <div className="country-almanac__muted">§ Speichern · {saveError}</div>}
       </details>
     )}

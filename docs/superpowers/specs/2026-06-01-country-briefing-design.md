@@ -175,7 +175,7 @@ async def stream_intel_query(
 ) -> AsyncIterator[ServerSentEvent]:
     # emit status events; POST to {settings.intelligence_url}/query; emit result/error/done
 ```
-Honestly documented as **status-SSE** (not token streaming). Both `routers/intel.py` (`/intel/query`) and `routers/almanac.py` (`/briefing`) call it. `/intel/query` keeps its `report_id`/`report_message` persistence behavior by composing around the helper (helper yields events; the router persists on the terminal result as today).
+Honestly documented as **status-SSE** (not token streaming). Both `routers/intel.py` (`/intel/query`) and `routers/almanac.py` (`/briefing`) call it. **The `report_id`/`report_message` persistence (user message in, munin message + error message out) moves INTO the helper** — both routers delegate fully. `/intel/query` preserves its in-memory `_history` by capturing the terminal `result` event as it passes through. (Note: backend route decorators use the router's existing `prefix="/almanac"`, so the decorator path is `/countries/{id}/briefing[/save]` — the full external path is `/api/almanac/countries/...`.)
 
 ### 3.6 Backend endpoints (`services/backend/app/routers/almanac.py`)
 
