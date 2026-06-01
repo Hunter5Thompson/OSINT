@@ -1,0 +1,15 @@
+.git
+.worktrees
+.claude/worktrees
+.env
+**/.env
+**/.env.*
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/node_modules
+**/dist
+services/frontend
+docs
+*.dump

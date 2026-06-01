@@ -10,7 +10,16 @@ from infra_atlas.build_datacenters import build_datacenters
 from infra_atlas.build_pipelines import build_pipelines_from_seed, load_seed
 from infra_atlas.build_refineries import build_refineries
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+
+def _find_repo_root(module_path: Path, *, fallback: Path | None = None) -> Path:
+    """Find the monorepo root without assuming a fixed installed-package depth."""
+    for parent in module_path.resolve().parents:
+        if (parent / "services" / "frontend").is_dir():
+            return parent
+    return fallback or Path.cwd()
+
+
+REPO_ROOT = _find_repo_root(Path(__file__))
 SEEDS_DIR = Path(__file__).resolve().parent / "seeds"
 FRONTEND_DATA = REPO_ROOT / "services" / "frontend" / "public" / "data"
 

@@ -17,7 +17,7 @@ def _compose_service_block(compose: str, service: str) -> str:
 def test_data_ingestion_image_copies_gdelt_raw_package():
     dockerfile = (REPO_ROOT / "services" / "data-ingestion" / "Dockerfile").read_text()
 
-    assert "COPY gdelt_raw/ gdelt_raw/" in dockerfile
+    assert "COPY services/data-ingestion/gdelt_raw/ gdelt_raw/" in dockerfile
 
 
 def test_data_ingestion_image_exposes_venv_scripts_on_path():
