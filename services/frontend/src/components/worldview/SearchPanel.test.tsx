@@ -13,7 +13,7 @@ describe("SearchPanel", () => {
     expect(input).toBeInTheDocument();
   });
 
-  it("calls /api/v1/graph/search with typed query after debounce", async () => {
+  it("calls /api/graph/search with typed query after debounce", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
