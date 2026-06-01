@@ -1,5 +1,7 @@
 """Configuration loaded from environment variables via pydantic-settings."""
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -34,6 +36,9 @@ class Settings(BaseSettings):
     ingestion_vllm_url: str = "http://192.168.178.39:8000"
     ingestion_vllm_model: str = "Qwen/Qwen3.6-35B-A3B"
     ingestion_vllm_timeout: float = 120.0
+    event_codebook_path: Path = (
+        Path(__file__).parent.parent / "intelligence" / "codebook" / "event_codebook.yaml"
+    )
 
     # Neo4j
     # neo4j_url is the Bolt driver URI. neo4j_http_url is for the HTTP
