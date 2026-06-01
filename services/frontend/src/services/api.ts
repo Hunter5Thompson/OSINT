@@ -172,6 +172,17 @@ export function queryIntel(
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      // Carried ACROSS chunk boundaries: an `event:` line and its `data:` line
+      // can arrive in separate reads, so the current event type must survive
+      // the per-chunk loop (like `buffer`).
+      let currentEvent = "";
+      let doneEmitted = false;
+      const emitDone = (): void => {
+        if (!doneEmitted) {
+          doneEmitted = true;
+          onDone();
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -181,7 +192,6 @@ export function queryIntel(
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
 
-        let currentEvent = "";
         for (const line of lines) {
           if (line.startsWith("event: ")) {
             currentEvent = line.slice(7).trim();
@@ -195,7 +205,7 @@ export function queryIntel(
               } else if (currentEvent === "error") {
                 onError(data);
               } else if (currentEvent === "done") {
-                onDone();
+                emitDone();
               }
             } catch {
               // skip malformed events
@@ -203,7 +213,7 @@ export function queryIntel(
           }
         }
       }
-      onDone();
+      emitDone();
     })
     .catch((err: Error) => {
       if (err.name !== "AbortError") {
