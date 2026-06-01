@@ -51,6 +51,10 @@ jobs:
     defaults:
       run:
         working-directory: services/backend
+    # Settings() requires NEO4J_PASSWORD at import time (no default). Tests mock
+    # Neo4j, so a dummy value is enough to let the app import under pytest.
+    env:
+      NEO4J_PASSWORD: ci-test-password
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -70,9 +74,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-          cache-dependency-path: services/frontend/package-lock.json
-      - run: npm ci
+      # package-lock.json is gitignored repo-wide (no committed lockfiles), so
+      # `npm ci` / setup-node caching can't be used — resolve from package.json.
+      - run: npm install
       - run: npm run lint
       - run: npm run type-check
       - run: npm run test
