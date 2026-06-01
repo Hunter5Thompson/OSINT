@@ -64,6 +64,15 @@ e180f54 refactor(frontend): drop /api/v1 fallback; call /api directly (no replay
 - F5: stale "automatic legacy fallback" wording removed from `workflow.py`; dead
   `legacy_fallback` value removed from the frontend `IntelAnalysis.mode` union.
 
+### Review follow-ups, round 2 (all fixed)
+- Ingestion image `CMD` runs the built venv python directly (was `uv run python`,
+  which re-resolved dependencies at container start — pulling dev tooling and
+  needing network); the Dockerfile contract test now guards against a uv-run CMD.
+- `TASKS.md` active future-task specs (TTS-briefing audio, Fusion-Core endpoints)
+  and the completed TASK-105 graph endpoint de-aliased to `/api`
+  (`GET /api/graph/network/{name}`); the point7 ops doc health check → `/api/health`.
+- Trimmed a trailing blank line flagged by `git diff --check`.
+
 ## Verification (fresh, 2026-06-01)
 
 ```text
