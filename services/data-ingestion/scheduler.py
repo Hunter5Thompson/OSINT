@@ -174,7 +174,7 @@ async def run_telegram_collector() -> None:
     except Exception:
         log.exception("telegram_job_failed")
     finally:
-        await collector.disconnect()
+        await collector.close()
 
 
 

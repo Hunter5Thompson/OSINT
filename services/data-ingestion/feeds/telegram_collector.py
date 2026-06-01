@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from pathlib import Path
 from typing import Any
 
 import structlog
 import yaml
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import Settings, settings
 from feeds.provenance import provenance_fields
 from feeds.telegram_models import ChannelConfig, ChannelsFile
+from qdrant_doctor.schema import validate_collection_schema
 
 log = structlog.get_logger(__name__)
 
@@ -87,6 +91,8 @@ class TelegramCollector:
         self._redis = redis_client
         self._channels = _load_channels(self._settings.telegram_channels_config)
         self._client = None  # TelegramClient, initialized in connect()
+        self.qdrant: QdrantClient | None = None
+        self._collection_ready = False
 
     async def connect(self) -> None:
         """Initialize and connect the Telethon client."""
@@ -105,6 +111,59 @@ class TelegramCollector:
         if self._client:
             await self._client.disconnect()
             log.info("telegram_disconnected")
+
+    async def _ensure_collection(self) -> None:
+        """Create or validate the Qdrant collection before the first write."""
+        if self._collection_ready:
+            return
+
+        qdrant = await self._get_qdrant()
+        collections = await asyncio.to_thread(
+            lambda: qdrant.get_collections().collections
+        )
+        if not any(c.name == self._settings.qdrant_collection for c in collections):
+            await asyncio.to_thread(
+                qdrant.create_collection,
+                collection_name=self._settings.qdrant_collection,
+                vectors_config=VectorParams(
+                    size=self._settings.embedding_dimensions,
+                    distance=Distance.COSINE,
+                ),
+            )
+            log.info(
+                "qdrant_collection_created",
+                collection=self._settings.qdrant_collection,
+            )
+        else:
+            info = await asyncio.to_thread(
+                qdrant.get_collection,
+                self._settings.qdrant_collection,
+            )
+            validate_collection_schema(
+                info,
+                enable_hybrid=self._settings.enable_hybrid,
+            )
+            log.debug(
+                "qdrant_schema_validated",
+                collection=self._settings.qdrant_collection,
+                enable_hybrid=self._settings.enable_hybrid,
+            )
+        self._collection_ready = True
+
+    async def _get_qdrant(self) -> QdrantClient:
+        if self.qdrant is None:
+            self.qdrant = await asyncio.to_thread(
+                QdrantClient,
+                url=self._settings.qdrant_url,
+            )
+        return self.qdrant
+
+    async def close(self) -> None:
+        try:
+            await self.disconnect()
+        finally:
+            if self.qdrant is not None:
+                await asyncio.to_thread(self.qdrant.close)
 
     async def _is_duplicate(self, content_hash: str) -> bool:
         """Check if message was already processed via Redis."""
@@ -606,8 +665,6 @@ class TelegramCollector:
     ) -> bool:
         """Embed text and upsert to Qdrant. Returns True on success, False on failure."""
         import httpx
-        from qdrant_client import QdrantClient
-        from qdrant_client.models import PointStruct
 
         embed_text = f"{title}\n{text}"[:2000]
 
@@ -633,8 +690,10 @@ class TelegramCollector:
             media_paths=media_paths, media_types=media_types, vision_status=vision_status,
         )
 
-        qdrant = QdrantClient(url=self._settings.qdrant_url)
-        qdrant.upsert(
+        await self._ensure_collection()
+        qdrant = await self._get_qdrant()
+        await asyncio.to_thread(
+            qdrant.upsert,
             collection_name=self._settings.qdrant_collection,
             points=[PointStruct(id=point_id, vector=vector, payload=payload)],
         )

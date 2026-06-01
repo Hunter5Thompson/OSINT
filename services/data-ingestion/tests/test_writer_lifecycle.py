@@ -105,3 +105,17 @@ async def test_scheduler_closes_rss_collector_after_failure() -> None:
         await scheduler.run_rss_collector()
 
     collector.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_scheduler_closes_telegram_collector_after_failure() -> None:
+    import scheduler
+
+    collector = MagicMock(
+        collect=AsyncMock(side_effect=RuntimeError("boom")),
+        close=AsyncMock(),
+    )
+    with patch("scheduler.TelegramCollector", return_value=collector):
+        await scheduler.run_telegram_collector()
+
+    collector.close.assert_awaited_once()
