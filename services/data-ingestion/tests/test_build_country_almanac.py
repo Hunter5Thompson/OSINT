@@ -37,3 +37,20 @@ def test_is_plausible_capital():
     assert is_plausible_capital(52.52, 13.40, 51.0, 9.0) is True
     assert is_plausible_capital(-13.28, 27.14, 24.2, -12.9) is False  # swapped El Aaiún, far
     assert is_plausible_capital(95.0, 0.0, 0.0, 0.0) is False          # lat out of range
+
+
+def test_render_is_deterministic_and_covers(tmp_path):
+    import json
+
+    from infra_atlas import build_country_almanac as b
+
+    out1 = tmp_path / "a.json"
+    out2 = tmp_path / "b.json"
+    b.render(out_path=out1, refreshed_at="2026-06-01")
+    b.render(out_path=out2, refreshed_at="2026-06-01")
+    assert out1.read_text() == out2.read_text()           # byte-identical
+    seed = json.loads(out1.read_text())
+    assert len(seed["countries"]) == 177
+    ids = [c["id"] for c in seed["countries"]]
+    assert len(ids) == len(set(ids))                       # no id collision
+    assert seed["_meta"]["factbook_revision"]
