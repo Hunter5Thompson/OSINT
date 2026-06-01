@@ -7,7 +7,6 @@ All tests use mocked CollectionInfo — no live Qdrant required.
 from __future__ import annotations
 
 import pytest
-
 from qdrant_client.models import (
     CollectionConfig,
     CollectionInfo,
@@ -90,26 +89,26 @@ class TestDenseOnlyHappyPath:
 class TestDenseOnlyFailures:
     def test_wrong_vector_size_raises(self):
         """Dense-only with size != 1024 must raise mentioning the size."""
-        from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+        from qdrant_doctor.schema import QdrantSchemaMismatchError, validate_collection_schema
 
         info = _dense_only_collection(size=768)
-        with pytest.raises(QdrantSchemaMismatch, match="768"):
+        with pytest.raises(QdrantSchemaMismatchError, match="768"):
             validate_collection_schema(info, enable_hybrid=False)
 
     def test_wrong_distance_raises(self):
         """Dense-only with distance != Cosine must raise mentioning distance."""
-        from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+        from qdrant_doctor.schema import QdrantSchemaMismatchError, validate_collection_schema
 
         info = _dense_only_collection(distance=Distance.DOT)
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)dot|distance"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)dot|distance"):
             validate_collection_schema(info, enable_hybrid=False)
 
     def test_named_dense_in_dense_only_mode_raises(self):
         """Hybrid collection (named 'dense') passed to dense-only mode must raise."""
-        from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+        from qdrant_doctor.schema import QdrantSchemaMismatchError, validate_collection_schema
 
         info = _hybrid_collection()
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)named|hybrid|unnamed"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)named|hybrid|unnamed"):
             validate_collection_schema(info, enable_hybrid=False)
 
 
@@ -125,46 +124,46 @@ class TestHybridFailures:
         This is the Phase-2 refusal test: code with enable_hybrid=True must
         detect a Phase 1 collection and refuse BEFORE any Qdrant I/O.
         """
-        from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+        from qdrant_doctor.schema import QdrantSchemaMismatchError, validate_collection_schema
 
         info = _dense_only_collection()
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)named|hybrid|dense"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)named|hybrid|dense"):
             validate_collection_schema(info, enable_hybrid=True)
 
     def test_hybrid_missing_dense_vector_raises(self):
         """Hybrid collection without named 'dense' vector must raise."""
-        from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+        from qdrant_doctor.schema import QdrantSchemaMismatchError, validate_collection_schema
 
         # Named vectors, but NOT named 'dense'
         info = _make_collection_info(
             vectors={"text": VectorParams(size=1024, distance=Distance.COSINE)},
             sparse_vectors={"bm25": SparseVectorParams(index=SparseIndexParams(on_disk=False))},
         )
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)dense"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)dense"):
             validate_collection_schema(info, enable_hybrid=True)
 
     def test_hybrid_missing_sparse_vector_raises(self):
         """Hybrid mode but no sparse vector config must raise."""
-        from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+        from qdrant_doctor.schema import QdrantSchemaMismatchError, validate_collection_schema
 
         info = _hybrid_collection(include_sparse=False)
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)sparse|bm25"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)sparse|bm25"):
             validate_collection_schema(info, enable_hybrid=True)
 
     def test_hybrid_dense_wrong_size_raises(self):
         """Hybrid collection with named 'dense' vector of wrong size must raise."""
-        from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+        from qdrant_doctor.schema import QdrantSchemaMismatchError, validate_collection_schema
 
         info = _hybrid_collection(dense_size=512)
-        with pytest.raises(QdrantSchemaMismatch, match="512"):
+        with pytest.raises(QdrantSchemaMismatchError, match="512"):
             validate_collection_schema(info, enable_hybrid=True)
 
     def test_hybrid_dense_wrong_distance_raises(self):
         """Hybrid collection with named 'dense' vector and wrong distance must raise."""
-        from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+        from qdrant_doctor.schema import QdrantSchemaMismatchError, validate_collection_schema
 
         info = _hybrid_collection(dense_distance=Distance.EUCLID)
-        with pytest.raises(QdrantSchemaMismatch, match="(?i)euclid|distance"):
+        with pytest.raises(QdrantSchemaMismatchError, match="(?i)euclid|distance"):
             validate_collection_schema(info, enable_hybrid=True)
 
 
@@ -176,17 +175,17 @@ class TestHybridFailures:
 class TestErrorMessages:
     def test_size_error_includes_actual_and_expected(self):
         """Error message must include both actual size and expected 1024."""
-        from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+        from qdrant_doctor.schema import QdrantSchemaMismatchError, validate_collection_schema
 
         info = _dense_only_collection(size=384)
-        with pytest.raises(QdrantSchemaMismatch) as exc_info:
+        with pytest.raises(QdrantSchemaMismatchError) as exc_info:
             validate_collection_schema(info, enable_hybrid=False)
         msg = str(exc_info.value)
         assert "384" in msg
         assert "1024" in msg
 
     def test_exception_is_subclass_of_value_error(self):
-        """QdrantSchemaMismatch must be catchable as ValueError for broad compatibility."""
-        from qdrant_doctor.schema import QdrantSchemaMismatch
+        """QdrantSchemaMismatchError must be catchable as ValueError for broad compatibility."""
+        from qdrant_doctor.schema import QdrantSchemaMismatchError
 
-        assert issubclass(QdrantSchemaMismatch, ValueError)
+        assert issubclass(QdrantSchemaMismatchError, ValueError)

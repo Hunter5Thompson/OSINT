@@ -23,7 +23,7 @@ WIKIDATA_DRIFT_THRESHOLD_KM = 5.0
 _NAME_NORMALIZE_RE = re.compile(r"[^a-z0-9]+")
 
 
-class CityCentroidViolation(ValueError):
+class CityCentroidViolationError(ValueError):
     pass
 
 
@@ -71,7 +71,7 @@ def _check_centroid(
 ) -> None:
     for c in centroids:
         if haversine_km(lat, lon, c["lat"], c["lon"]) <= tol_km:
-            raise CityCentroidViolation(
+            raise CityCentroidViolationError(
                 f"seed entry {name!r} coord ({lon}, {lat}) matches city centroid {c['name']!r}; "
                 f"replace with the actual datacenter campus coords."
             )

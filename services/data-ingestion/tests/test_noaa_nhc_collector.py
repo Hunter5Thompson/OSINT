@@ -67,8 +67,20 @@ class TestNOAAParser:
         assert storms == []
 
     def test_classification_mapping(self, collector):
-        for code, label in [("TD", "Tropical Depression"), ("TS", "Tropical Storm"), ("HU", "Hurricane")]:
-            data = {"activeStorms": [{"id": "t1", "name": "T", "classification": code, "intensity": 50, "pressure": 1000, "lat": 20, "lon": -80, "movement": {"text": "N"}, "lastUpdate": "", "advisoryNumber": "1"}]}
+        for code, label in [
+            ("TD", "Tropical Depression"),
+            ("TS", "Tropical Storm"),
+            ("HU", "Hurricane"),
+        ]:
+            data = {
+                "activeStorms": [
+                    {
+                        "id": "t1", "name": "T", "classification": code,
+                        "intensity": 50, "pressure": 1000, "lat": 20, "lon": -80,
+                        "movement": {"text": "N"}, "lastUpdate": "", "advisoryNumber": "1",
+                    }
+                ]
+            }
             storms = collector._parse_storms(data)
             assert storms[0]["classification"] == label
 

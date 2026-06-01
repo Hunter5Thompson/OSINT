@@ -1,4 +1,7 @@
-"""TLE (Two-Line Element) Updater — fetches satellite orbital data from CelesTrak and caches in Redis."""
+"""TLE (Two-Line Element) Updater.
+
+Fetches satellite orbital data from CelesTrak and caches in Redis.
+"""
 
 from __future__ import annotations
 

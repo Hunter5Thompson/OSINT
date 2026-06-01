@@ -7,7 +7,7 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from infra_atlas.build_datacenters import (
-    CityCentroidViolation,
+    CityCentroidViolationError,
     build_datacenters,
     haversine_km,
 )
@@ -19,7 +19,9 @@ SEEDS_DIR = Path(__file__).resolve().parents[1] / "infra_atlas" / "seeds"
 def test_existing_coord_replaced_when_wikidata_distance_exceeds_5km(
     tmp_path: Path, httpx_mock: HTTPXMock
 ) -> None:
-    httpx_mock.add_response(json=json.loads((FIXTURE / "wikidata_datacenter_sample.json").read_text()))
+    httpx_mock.add_response(
+        json=json.loads((FIXTURE / "wikidata_datacenter_sample.json").read_text())
+    )
     seed = tmp_path / "seed.yaml"
     seed.write_text("datacenters: []\n")
     out = tmp_path / "datacenters.geojson"
@@ -41,7 +43,9 @@ def test_existing_coord_replaced_when_wikidata_distance_exceeds_5km(
 
 
 def test_existing_unmatched_marked_legacy(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(json=json.loads((FIXTURE / "wikidata_datacenter_sample.json").read_text()))
+    httpx_mock.add_response(
+        json=json.loads((FIXTURE / "wikidata_datacenter_sample.json").read_text())
+    )
     seed = tmp_path / "seed.yaml"
     seed.write_text("datacenters: []\n")
     out = tmp_path / "datacenters.geojson"
@@ -60,7 +64,9 @@ def test_existing_unmatched_marked_legacy(tmp_path: Path, httpx_mock: HTTPXMock)
 def test_seed_overrides_existing_and_marks_campus_verified(
     tmp_path: Path, httpx_mock: HTTPXMock
 ) -> None:
-    httpx_mock.add_response(json=json.loads((FIXTURE / "wikidata_datacenter_sample.json").read_text()))
+    httpx_mock.add_response(
+        json=json.loads((FIXTURE / "wikidata_datacenter_sample.json").read_text())
+    )
     seed = tmp_path / "seed.yaml"
     seed.write_text(
         "datacenters:\n"
@@ -109,7 +115,7 @@ def test_seed_with_city_centroid_coords_is_rejected(
     )
     out = tmp_path / "datacenters.geojson"
 
-    with pytest.raises(CityCentroidViolation, match="Frankfurt"):
+    with pytest.raises(CityCentroidViolationError, match="Frankfurt"):
         build_datacenters(
             out,
             existing_path=FIXTURE / "existing_datacenters_sample.geojson",

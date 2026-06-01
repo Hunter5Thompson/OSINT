@@ -11,7 +11,9 @@ FIXTURE = Path(__file__).parent / "fixtures"
 
 
 def test_existing_image_is_preserved(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(json=json.loads((FIXTURE / "wikidata_refinery_sample.json").read_text()))
+    httpx_mock.add_response(
+        json=json.loads((FIXTURE / "wikidata_refinery_sample.json").read_text())
+    )
     out = tmp_path / "refineries.geojson"
     build_refineries(
         out,
@@ -31,8 +33,12 @@ def test_existing_image_is_preserved(tmp_path: Path, httpx_mock: HTTPXMock) -> N
     assert any("Largest" in s for s in specs)
 
 
-def test_existing_capacity_and_operator_not_overwritten(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(json=json.loads((FIXTURE / "wikidata_refinery_sample.json").read_text()))
+def test_existing_capacity_and_operator_not_overwritten(
+    tmp_path: Path, httpx_mock: HTTPXMock
+) -> None:
+    httpx_mock.add_response(
+        json=json.loads((FIXTURE / "wikidata_refinery_sample.json").read_text())
+    )
     out = tmp_path / "refineries.geojson"
     build_refineries(
         out,
@@ -46,7 +52,9 @@ def test_existing_capacity_and_operator_not_overwritten(tmp_path: Path, httpx_mo
 
 
 def test_existing_without_image_gets_wikidata_image(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(json=json.loads((FIXTURE / "wikidata_refinery_sample.json").read_text()))
+    httpx_mock.add_response(
+        json=json.loads((FIXTURE / "wikidata_refinery_sample.json").read_text())
+    )
     out = tmp_path / "refineries.geojson"
     build_refineries(
         out,
@@ -59,8 +67,12 @@ def test_existing_without_image_gets_wikidata_image(tmp_path: Path, httpx_mock: 
     assert rt["properties"]["qid"] == "Q860840"
 
 
-def test_wikidata_only_entry_appended_with_zero_capacity(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(json=json.loads((FIXTURE / "wikidata_refinery_sample.json").read_text()))
+def test_wikidata_only_entry_appended_with_zero_capacity(
+    tmp_path: Path, httpx_mock: HTTPXMock
+) -> None:
+    httpx_mock.add_response(
+        json=json.loads((FIXTURE / "wikidata_refinery_sample.json").read_text())
+    )
     out = tmp_path / "refineries.geojson"
     count = build_refineries(
         out,
@@ -69,14 +81,18 @@ def test_wikidata_only_entry_appended_with_zero_capacity(tmp_path: Path, httpx_m
     data = json.loads(out.read_text())
     # 3 existing + 1 wikidata-only = 4 (Jamnagar + Ras Tanura matched in-place)
     assert count == 4
-    new_entry = next(f for f in data["features"] if f["properties"]["name"] == "New Wikidata Refinery")
+    new_entry = next(
+        f for f in data["features"] if f["properties"]["name"] == "New Wikidata Refinery"
+    )
     assert new_entry["properties"]["capacity_bpd"] == 0
     assert new_entry["properties"]["coord_quality"] == "wikidata_verified"
     assert new_entry["properties"]["coord_source"] == "wikidata"
 
 
 def test_existing_unmatched_entry_marked_legacy(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(json=json.loads((FIXTURE / "wikidata_refinery_sample.json").read_text()))
+    httpx_mock.add_response(
+        json=json.loads((FIXTURE / "wikidata_refinery_sample.json").read_text())
+    )
     out = tmp_path / "refineries.geojson"
     build_refineries(
         out,

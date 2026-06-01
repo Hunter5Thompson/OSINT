@@ -77,7 +77,7 @@ class GDELTCollector:
 
         If the collection already exists, its vector schema is validated against
         the active runtime mode (dense-only or hybrid) BEFORE any write occurs.
-        Raises QdrantSchemaMismatch if the schema does not match.
+        Raises QdrantSchemaMismatchError if the schema does not match.
         """
         enable_hybrid: bool = getattr(settings, "enable_hybrid", False)
         collections = [c.name for c in self.qdrant.get_collections().collections]
@@ -203,7 +203,9 @@ class GDELTCollector:
                         "seen_date": seendate,
                         "content_hash": chash,
                         "ingested_at": datetime.now(UTC).isoformat(),
-                        "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
+                        "codebook_type": (
+                            enrichment["codebook_type"] if enrichment else "other.unclassified"
+                        ),
                         "entities": enrichment["entities"] if enrichment else [],
                     },
                 )

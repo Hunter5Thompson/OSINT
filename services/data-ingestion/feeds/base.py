@@ -38,7 +38,7 @@ class BaseCollector(ABC):
 
         If the collection already exists, its vector schema is validated against
         the active runtime mode (dense-only or hybrid) BEFORE any write occurs.
-        Raises QdrantSchemaMismatch if the schema does not match.
+        Raises QdrantSchemaMismatchError if the schema does not match.
         """
         if self._collection_ready:
             return

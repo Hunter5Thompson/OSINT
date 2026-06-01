@@ -136,7 +136,11 @@ def _wikidata_only_feature(row: dict[str, Any]) -> dict[str, Any] | None:
     }
     if row.get("image"):
         props["image_url"] = _normalize_commons_image(row["image"])
-    return {"type": "Feature", "geometry": {"type": "Point", "coordinates": [lon, lat]}, "properties": props}
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [lon, lat]},
+        "properties": props,
+    }
 
 
 def build_refineries(out_path: Path, existing_path: Path) -> int:

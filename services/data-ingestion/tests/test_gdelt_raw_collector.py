@@ -60,8 +60,8 @@ async def test_run_once_uses_project_qdrant_collection():
             new=AsyncMock(),
         ),
     ):
-        from feeds.gdelt_raw_collector import run_once
         from config import settings as project_settings
+        from feeds.gdelt_raw_collector import run_once
 
         await run_once()
 
@@ -77,7 +77,6 @@ async def test_run_once_uses_project_qdrant_collection():
 async def test_run_once_passes_gdelt_parquet_path_to_run_forward():
     """run_once must pass the GDELT-specific parquet_path (from GDELTSettings,
     env_prefix GDELT_) to run_forward, not some other settings object."""
-    captured: dict = {}
 
     class FakeQdrantWriter:
         def __init__(self, *, client, embed, collection):
