@@ -58,7 +58,7 @@ status-SSE back → Panel renders streaming status + final result (long report c
   ▼
 POST /api/almanac/countries/{id}/briefing/save  { analysis: IntelAnalysis }   (stateless)
   │  scope_key = "country:<ISO3>"  (fallback "country:m49:<M49>")
-  │  report = get_or_create_report_by_scope(scope_key, country)
+  │  report = get_or_create_report_by_scope(scope_key, title=…, location=…, coords=…)
   │  hydrate report fields from parsed analysis + append ReportMessage(role="munin")
   ▼
 Briefing Room renders the full dossier (findings/context/body/confidence/sources + munin chat)
@@ -172,7 +172,9 @@ New constant `GROUNDING_EVIDENCE_MAX_CHARS` (~3000) in the workflow module.
 async def stream_intel_query(
     *, query, region=None, image_url=None, use_legacy=False,
     grounding_context=None, grounding_evidence=None,
+    report_id=None, report_message=None,
 ) -> AsyncIterator[ServerSentEvent]:
+    # report_id/report_message → persists user msg in + munin/error msg out (moved from the router);
     # emit status events; POST to {settings.intelligence_url}/query; emit result/error/done
 ```
 Honestly documented as **status-SSE** (not token streaming). Both `routers/intel.py` (`/intel/query`) and `routers/almanac.py` (`/briefing`) call it. **The `report_id`/`report_message` persistence (user message in, munin message + error message out) moves INTO the helper** — both routers delegate fully. `/intel/query` preserves its in-memory `_history` by capturing the terminal `result` event as it passes through. (Note: backend route decorators use the router's existing `prefix="/almanac"`, so the decorator path is `/countries/{id}/briefing[/save]` — the full external path is `/api/almanac/countries/...`.)
@@ -268,7 +270,7 @@ Honestly documented as **status-SSE** (not token streaming). Both `routers/intel
 4. Intelligence touch: typed `GroundingEvidenceItem` + bounded `QueryRequest` fields + `AgentState` + `run_intelligence_query` evidence rendering + ReAct seed + synthesis threading + untrusted-data prompt line + tests.
 5. `intel_stream.py` shared status-SSE helper; refactor `/intel/query` onto it (no behavior change) + tests.
 6. `/briefing` endpoint on the shared helper + tests.
-7. Report `scope_key` threaded through model/projections/`_row_to_report`/`_report_params`/`REPORT_UPSERT` + `REPORT_BY_SCOPE` + idempotent schema bootstrap (`:Report(id)` + `:Report(scope_key)` constraints) + `create_report` `r-NNN` retry + `get_or_create_report_by_scope` (conflict re-read) + tests.
+7. Report `scope_key` threaded through model/projections/`_row_to_report`/`_report_params`/`REPORT_UPSERT` + dedicated `REPORT_CREATE` (CREATE) + `update_report` re-validation + `REPORT_BY_SCOPE` + idempotent schema bootstrap (`:Report(id)` + `:Report(scope_key)` constraints) + `create_report` `r-NNN` retry + `get_or_create_report_by_scope` (conflict re-read) + tests.
 8. `/briefing/save` (empty-analysis 422 validator; hydration via `update_report` incl. `body_title`+rebuilt `metrics`; `append_report_message` with truncation) + tests.
 9. Frontend shared `consumeSSE` parser (block-based, single onDone) + `streamCountryBriefing` + `saveCountryBriefing`; migrate `queryIntel` onto it.
 10. `useCountryBriefing` hook + tests.

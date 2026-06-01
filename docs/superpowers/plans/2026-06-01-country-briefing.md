@@ -21,9 +21,9 @@
 - Modify `services/backend/app/services/country_almanac.py` — `lru_cache` provider, load `_meta`/`factbook_revision`/`refreshed_at`.
 - Modify `services/backend/app/models/almanac.py` — `BriefingSaveRequest`.
 - Modify `services/backend/app/models/report.py` — `scope_key` on `ReportRecord` + `ReportCreateRequest`.
-- Modify `services/backend/app/cypher/report_write.py` — `scope_key` in `REPORT_UPSERT`; `REPORT_ID_UNIQUE_CONSTRAINT`, `REPORT_SCOPE_UNIQUE_CONSTRAINT`.
+- Modify `services/backend/app/cypher/report_write.py` — `scope_key` in `REPORT_UPSERT`; dedicated `REPORT_CREATE`; `REPORT_ID_UNIQUE_CONSTRAINT`, `REPORT_SCOPE_UNIQUE_CONSTRAINT`.
 - Modify `services/backend/app/cypher/report_read.py` — `scope_key` in projections; `REPORT_BY_SCOPE`.
-- Modify `services/backend/app/services/report_store.py` — `scope_key` plumbing, `create_report` retry, `get_or_create_report_by_scope`, `bootstrap_report_schema`, `hydrate_report_from_briefing`.
+- Modify `services/backend/app/services/report_store.py` — `scope_key` plumbing, `update_report` re-validation, `create_report` (`REPORT_CREATE`) retry, `get_or_create_report_by_scope`, `bootstrap_report_schema`, `build_hydration_patch`.
 - Modify `services/backend/app/main.py` — call `bootstrap_report_schema()` in lifespan.
 - Modify `services/backend/app/routers/almanac.py` — `/briefing` + `/briefing/save`.
 - Modify `services/backend/app/routers/intel.py` — delegate to `stream_intel_query`.
@@ -242,7 +242,7 @@ def build_briefing_context(
     }]
     for s in matched:
         meta = (                                          # reserve meta+observation_time; truncate title to fit
-            f"\ntype: {s.type} · severity: {s.severity[:16]} · source: {s.source[:60]}"
+            f"\ntype: {s.type[:48]} · severity: {s.severity[:16]} · source: {s.source[:60]}"
             f"\nobservation_time: {s.ts}"
         )
         content = s.title[: max(_CONTENT_MAX - len(meta), 0)] + meta
@@ -327,12 +327,22 @@ def test_long_signal_title_keeps_observation_time():
                                  factbook_revision="r", refreshed_at="2026-05-17").grounding_evidence[1]
     assert len(sig["content"]) <= 2000
     assert "observation_time:" in sig["content"]          # metadata never displaced by a long title
+
+
+def test_long_signal_type_stays_within_content_bound():
+    # Redis codebook_type is unbounded (signal_stream.py:108) — an overlong type must not
+    # blow _CONTENT_MAX, which would make Intelligence reject the GroundingEvidenceItem.
+    huge_type = AlmanacSignalItem(event_id="t1", ts="2026-06-01T10:00:00Z", type="x" * 5000,
+                                  title="short", severity="high", source="reuters", url="")
+    out = build_briefing_context(_country(), [huge_type], factbook_revision="r", refreshed_at="2026-05-17").grounding_evidence[1]
+    assert len(out["content"]) <= 2000
+    assert "observation_time:" in out["content"]
 ```
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd services/backend && NEO4J_PASSWORD=dummy uv run pytest tests/test_briefing_context.py -v`
-Expected: PASS (9 tests).
+Expected: PASS (10 tests).
 
 - [ ] **Step 5: Lint + commit**
 
@@ -1184,7 +1194,7 @@ async def generate_country_briefing(country_id: str) -> EventSourceResponse:
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd services/backend && NEO4J_PASSWORD=dummy uv run pytest tests/test_briefing_endpoint.py -v`
-Expected: PASS (2 tests).
+Expected: PASS (3 tests).
 
 - [ ] **Step 5: Lint + commit**
 
@@ -1586,7 +1596,7 @@ git commit -m "feat(reports): scope_key (backend+frontend) + unique constraints 
 
 **Files:**
 - Modify: `services/backend/app/models/almanac.py`
-- Modify: `services/backend/app/services/report_store.py` (add `hydrate_report_from_briefing`)
+- Modify: `services/backend/app/services/report_store.py` (add `build_hydration_patch`)
 - Modify: `services/backend/app/routers/almanac.py`
 - Test: `services/backend/tests/test_briefing_save.py`
 
@@ -1766,7 +1776,7 @@ async def save_country_briefing(country_id: str, body: BriefingSaveRequest, requ
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd services/backend && NEO4J_PASSWORD=dummy uv run pytest tests/test_briefing_save.py -v`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 5: Lint + commit**
 
