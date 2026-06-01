@@ -119,3 +119,47 @@ async def test_scheduler_closes_telegram_collector_after_failure() -> None:
         await scheduler.run_telegram_collector()
 
     collector.close.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ("runner_name", "factory_name", "operation"),
+    [
+        ("run_rss_collector", "RSSCollector", "collect"),
+        ("run_hotspot_updater", "HotspotUpdater", "update"),
+        ("run_telegram_collector", "TelegramCollector", "collect"),
+        ("run_ucdp_collector", "UCDPCollector", "collect"),
+        ("run_firms_collector", "FIRMSCollector", "collect"),
+        ("run_usgs_collector", "USGSCollector", "collect"),
+        ("run_military_collector", "MilitaryAircraftCollector", "collect"),
+        ("run_ofac_collector", "OFACCollector", "collect"),
+        ("run_correlation_job", "CorrelationJob", "run"),
+        ("run_eonet_collector", "EONETCollector", "collect"),
+        ("run_gdacs_collector", "GDACSCollector", "collect"),
+        ("run_hapi_collector", "HAPICollector", "collect"),
+        ("run_noaa_nhc_collector", "NOAANHCCollector", "collect"),
+        ("run_portwatch_collector", "PortWatchCollector", "collect"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_scheduler_constructs_qdrant_owners_outside_event_loop(
+    runner_name: str,
+    factory_name: str,
+    operation: str,
+) -> None:
+    import scheduler
+
+    owner = MagicMock(close=AsyncMock())
+    setattr(owner, operation, AsyncMock())
+
+    def build(**_: object) -> MagicMock:
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()
+        return owner
+
+    with (
+        patch.object(scheduler, factory_name, side_effect=build),
+        patch("scheduler._get_redis_client", return_value=MagicMock()),
+    ):
+        await getattr(scheduler, runner_name)()
+
+    owner.close.assert_awaited_once()
