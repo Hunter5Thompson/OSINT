@@ -28,6 +28,35 @@ The next strategic milestone is TASK-108 Fusion Core:
 
 Vision / YOLO is not the foundation. It should plug into Fusion Core later.
 
+## Engineering Mindset
+
+Use a pragmatic blend:
+
+- Dijkstra is the constitution: simplicity is a prerequisite for reliability.
+  Reduce hidden assumptions, duplicated state, and unnecessary branches before
+  adding abstractions.
+- Parnas is the module rule: split by information hiding. A module owns one
+  decision or secret and exposes the smallest stable contract required by its
+  consumers.
+- DDD is the map, not a ceremony: use bounded contexts and precise domain
+  language where they clarify ownership. Do not add repositories, aggregates,
+  or domain services unless the domain invariant requires them.
+- Beck and Feathers guide change: write a failing test first, make the smallest
+  behavior-preserving change, then refactor behind characterization tests.
+
+Natural bounded contexts are Collection, Evidence, Incident, Intelligence, and
+Presentation. Prefer explicit contracts between them. Avoid imports across
+service boundaries, implicit filesystem dependencies, no-op APIs, and generic
+framework abstractions without demonstrated value.
+
+Before each PR, answer:
+
+1. Which domain invariant does this protect?
+2. Which context owns that invariant?
+3. What is the smallest explicit contract?
+4. Which test fails before the change?
+5. Which assumption, branch, or duplication disappears afterward?
+
 ## Repo Hygiene
 
 Before changing files:
