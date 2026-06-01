@@ -6,7 +6,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![CesiumJS](https://img.shields.io/badge/CesiumJS-3D%20Globe-6CADDF)
 ![Local LLM](https://img.shields.io/badge/LLM-local%20·%20vLLM%20%2B%20Qwen-7C3AED)
-![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-lightgrey)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-3da639)](LICENSE)
 
 > **Self-hosted, Palantir-style tactical intelligence.** A CesiumJS 3D globe fusing real-time flight / satellite / vessel / earthquake feeds with a LangGraph multi-agent RAG pipeline that runs **entirely on local GPUs** (vLLM + TEI + Qdrant + Neo4j) — no cloud LLM, no data leaving the box.
 
@@ -245,4 +245,6 @@ docker exec osint-neo4j-1 sh -lc \
 
 ## License
 
-Private project — not for redistribution.
+Licensed under the **[PolyForm Noncommercial License 1.0.0](LICENSE)**. Use, modification, and distribution are permitted for **any noncommercial purpose** — including research, experimentation, study, and use by educational, public-research, and government institutions. **Commercial use is not granted**; for a commercial license, contact the maintainer.
+
+> Note: PolyForm Noncommercial is a *source-available* license, not an OSI-approved open-source license (the OSD forbids field-of-use restrictions). The code is open to read and build on for research, but it is not "open source" in the strict sense.
