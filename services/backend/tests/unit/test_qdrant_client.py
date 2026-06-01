@@ -44,6 +44,36 @@ async def test_transient_error_keeps_guard_retryable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_schema_mismatch_propagates_and_guard_stays_unvalidated() -> None:
+    """A real schema mismatch must propagate out of the guard and NOT mark the
+    schema validated — so a later call re-checks instead of silently caching a
+    misconfigured collection (plan Task 3.1 / 3.3 step 1d)."""
+    collection = MagicMock()
+    collection.name = qc.settings.qdrant_collection
+    client = MagicMock(
+        get_collections=AsyncMock(
+            return_value=MagicMock(collections=[collection]),
+        ),
+        get_collection=AsyncMock(return_value=MagicMock()),
+    )
+    with (
+        patch("app.services.qdrant_client.AsyncQdrantClient", return_value=client),
+        patch(
+            "app.services.qdrant_client.validate_collection_schema",
+            side_effect=qc.QdrantSchemaMismatch("dense size 768 != 1024"),
+        ),
+    ):
+        with pytest.raises(qc.QdrantSchemaMismatch):
+            await qc.get_qdrant_client()
+        assert qc._schema_validated is False
+        # Guard must re-validate on the next call, not short-circuit to True.
+        with pytest.raises(qc.QdrantSchemaMismatch):
+            await qc.get_qdrant_client()
+
+    assert client.get_collections.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_close_qdrant_client_releases_and_resets_singleton() -> None:
     client = MagicMock(close=AsyncMock())
     qc._client = client

@@ -46,6 +46,34 @@ async def test_transient_schema_error_keeps_guard_retryable_and_closes_client() 
 
 
 @pytest.mark.asyncio
+async def test_schema_mismatch_propagates_and_closes_client() -> None:
+    """A real schema mismatch must re-raise out of the preflight, leave the guard
+    unvalidated, and still close the temporary client via the finally block
+    (plan Task 3.3 step 1d)."""
+    collection = MagicMock()
+    collection.name = retriever.settings.qdrant_collection
+    qdrant = MagicMock(
+        get_collections=AsyncMock(
+            return_value=MagicMock(collections=[collection]),
+        ),
+        get_collection=AsyncMock(return_value=MagicMock()),
+        close=AsyncMock(),
+    )
+    with (
+        patch("rag.retriever.AsyncQdrantClient", return_value=qdrant),
+        patch(
+            "rag.retriever.validate_collection_schema",
+            side_effect=retriever.QdrantSchemaMismatch("dense size 768 != 1024"),
+        ),
+        pytest.raises(retriever.QdrantSchemaMismatch),
+    ):
+        await retriever._ensure_schema_validated()
+
+    assert retriever._schema_validated is False
+    qdrant.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_close_releases_graph_client_and_resets_guard() -> None:
     graph_client = MagicMock(close=AsyncMock())
     retriever._graph_client = graph_client
