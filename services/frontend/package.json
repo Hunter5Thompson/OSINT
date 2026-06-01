@@ -32,6 +32,7 @@
     "@testing-library/react": "^16.3.2",
     "@types/d3-array": "^3.2.2",
     "@types/d3-geo": "^3.1.0",
+    "@types/node": "^25",
     "@types/rbush": "^4.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
