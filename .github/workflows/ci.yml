@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel an in-flight run when a new commit is pushed to the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-intelligence:
+    name: tests · intelligence
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/intelligence
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # intelligence keeps dev deps (pytest, ruff) under [project.optional-dependencies],
+      # which `uv sync` does NOT install by default — hence --all-extras.
+      - run: uv sync --all-extras
+      - run: uv run pytest -q
+
+  test-data-ingestion:
+    name: tests · data-ingestion
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/data-ingestion
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras
+      - run: uv run pytest -q
+
+  test-backend:
+    name: tests · backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/backend
+    # Settings() requires NEO4J_PASSWORD at import time (no default). Tests mock
+    # Neo4j, so a dummy value is enough to let the app import under pytest.
+    env:
+      NEO4J_PASSWORD: ci-test-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras
+      - run: uv run pytest -q
+
+  test-frontend:
+    name: tests · frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # package-lock.json is gitignored repo-wide (no committed lockfiles), so
+      # `npm ci` / setup-node caching can't be used — resolve from package.json.
+      - run: npm install
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm run test
+      - run: npm run build
+
+  lint-python-diff:
+    name: ruff · changed files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so we can diff against the merge-base / previous commit.
+          fetch-depth: 0
+          # Lint the actual PR head (not the synthetic merge commit) on PRs.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: astral-sh/setup-uv@v5
+      - name: Ruff on changed Python files (diff-based, per-service config)
+        env:
+          # Pinned for reproducibility; matches the ruff floor in each service's dev deps.
+          RUFF_VERSION: "0.15.15"
+        run: |
+          set -euo pipefail
+
+          # Determine the diff base:
+          #  - pull_request: the merge-base of the PR head and its target branch
+          #  - push:         the commit before this push (fallback to HEAD^)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)"
+          else
+            before="${{ github.event.before }}"
+            case "$before" in
+              ""|0000000000000000000000000000000000000000) before="HEAD^" ;;
+            esac
+            base="$before"
+          fi
+          echo "Diff base: $base"
+
+          # Changed Python files, excluding deletions (--diff-filter=ACMR).
+          mapfile -t files < <(git diff --name-only --diff-filter=ACMR "$base" HEAD -- '*.py')
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No Python files changed — skipping ruff."
+            exit 0
+          fi
+
+          printf 'Linting %d changed Python file(s):\n' "${#files[@]}"
+          printf '  %s\n' "${files[@]}"
+
+          # ruff resolves each file's [tool.ruff] config from its own service pyproject.
+          # New/changed code must be clean; pre-existing debt is grandfathered (only
+          # changed files are checked). No continue-on-error — violations fail the build.
+          uvx "ruff@${RUFF_VERSION}" check -- "${files[@]}"
