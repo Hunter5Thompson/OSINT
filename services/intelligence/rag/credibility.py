@@ -27,8 +27,8 @@ PROVIDER_OVERRIDES: dict[str, float] = {
     "bbc.co.uk": 0.80,    # public broadcaster (UK domain — the RSS feed's provider)
     # RSS feed_name keys (provider == normalize_provider(feed_name.lower())).
     # Registry models reliability, not document genre — wire services included.
-    "reuters (google)": 0.85,
-    "ap news (google)": 0.85,
+    "reuters (google)": 0.85,  # wire via Google News feed — same source, different discovery path
+    "ap news (google)": 0.85,  # international wire via Google News feed
     "bbc world": 0.80,
     "bellingcat": 0.85,                       # OSINT verification, methodical
     "rand corporation": 0.82,

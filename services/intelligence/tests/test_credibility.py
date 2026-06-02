@@ -87,6 +87,6 @@ class TestProviderOverrides:
     def test_local_rss_keeps_baseline(self):
         assert credibility_score("rss", "some local paper") == 0.60
 
-    def test_unknown_source_type_still_fail_fast(self):
+    def test_fail_fast_is_on_source_type_not_provider(self):
         with pytest.raises(KeyError):
             credibility_score("not_a_type", "whatever")
