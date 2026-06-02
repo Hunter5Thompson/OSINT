@@ -33,3 +33,42 @@ class TestLaneFilters:
         # pin the documented starting values
         assert (cp.TIER_BOOST_LAMBDA, cp.ANALYSIS_POOL, cp.REALTIME_POOL) == (0.2, 40, 20)
         assert (cp.RT_SCORE_THRESHOLD, cp.FINAL_K, cp.TELEGRAM_MAX) == (0.45, 5, 1)
+
+
+class TestTierBoost:
+    def _rss(self, feed, content, score, rerank):
+        return {"source": "rss", "feed_name": feed, "content": content,
+                "title": content, "score": score, "rerank_score": rerank}
+
+    def test_credibility_of_rss_and_nlm(self):
+        assert cp.credibility_of(self._rss("CSIS", "x", 0.9, 5.0)) == 0.82
+        assert cp.credibility_of(self._rss("Local Paper", "x", 0.9, 5.0)) == 0.60
+        nlm = {"notebook_id": "nb1", "content": "claim", "title": "t", "score": 0.9}
+        assert cp.credibility_of(nlm) == 0.60  # notebooklm baseline
+
+    def test_near_tie_flips_to_higher_credibility(self):
+        # local slightly more relevant, think-tank slightly less — tank should win
+        local = self._rss("Local Paper", "a", 0.9, 1.01)
+        tank = self._rss("CSIS", "b", 0.9, 1.00)
+        out = cp.apply_tier_boost([local, tank])
+        assert out[0]["feed_name"] == "CSIS"
+
+    def test_large_relevance_gap_not_flipped(self):
+        local = self._rss("Local Paper", "a", 0.9, 10.0)  # much more relevant
+        tank = self._rss("CSIS", "b", 0.9, 0.0)
+        out = cp.apply_tier_boost([local, tank])
+        assert out[0]["feed_name"] == "Local Paper"
+
+    def test_max_equals_min_sorts_by_credibility_no_zerodiv(self):
+        local = self._rss("Local Paper", "a", 0.5, 3.0)
+        tank = self._rss("CSIS", "b", 0.5, 3.0)  # identical rerank scores
+        out = cp.apply_tier_boost([local, tank])
+        assert out[0]["feed_name"] == "CSIS"
+
+    def test_falls_back_to_dense_score_without_rerank_score(self):
+        a = {"source": "rss", "feed_name": "CSIS", "content": "a", "title": "a", "score": 0.8}
+        b = {"source": "rss", "feed_name": "Local Paper",
+             "content": "b", "title": "b", "score": 0.2}
+        out = cp.apply_tier_boost([a, b])  # no rerank_score key
+        assert out[0]["feed_name"] == "CSIS"
+        assert "tier_score" in out[0]
