@@ -52,6 +52,7 @@ async def _run() -> None:
         FINAL_K,
         REALTIME_POOL,
         RT_SCORE_THRESHOLD,
+        TELEGRAM_MAX,
         analysis_filter,
         apply_tier_boost,
         merge_lanes,
@@ -73,7 +74,7 @@ async def _run() -> None:
         )
         realtime = await enhanced_search(
             q,
-            limit=1,
+            limit=TELEGRAM_MAX,
             pool=REALTIME_POOL,
             query_filter=realtime_filter(),
             post_rerank=apply_tier_boost,
