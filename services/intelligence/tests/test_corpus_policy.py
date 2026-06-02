@@ -79,3 +79,51 @@ class TestTierBoost:
         out = cp.apply_tier_boost([a, b])  # no rerank_score key
         assert out[0]["feed_name"] == "CSIS"
         assert "tier_score" in out[0]
+
+
+class TestGuardAndMerge:
+    def test_validate_analysis_drops_cross_lane(self, caplog):
+        rss = {"source": "rss", "feed_name": "CSIS"}
+        nlm = {"source": "unknown", "notebook_id": "nb1"}
+        junk = {"source": "gdelt_gkg", "doc_id": "gdelt:gkg:1"}
+        firms = {"source": "firms"}
+        kept = cp.validate_lane([rss, nlm, junk, firms], "analysis")
+        assert kept == [rss, nlm]
+
+    def test_validate_realtime_only_allowlisted(self):
+        ok = {"source": "telegram", "telegram_channel": "wartranslated"}
+        bad = {"source": "telegram", "telegram_channel": "rybar"}
+        assert cp.validate_lane([ok, bad], "realtime") == [ok]
+
+    def test_merge_caps_one_realtime_at_end(self):
+        analysis = [{"id": i} for i in range(5)]
+        realtime = [{"source": "telegram", "telegram_channel": "wartranslated"}]
+        out = cp.merge_lanes(analysis, realtime)
+        assert len(out) == 5
+        assert out[:4] == analysis[:4]
+        assert out[4]["source_class"] == "realtime"
+
+    def test_merge_no_realtime_keeps_five_analysis(self):
+        analysis = [{"id": i} for i in range(5)]
+        out = cp.merge_lanes(analysis, [])
+        assert out == analysis[:5]
+        assert all("source_class" not in r for r in out)
+
+    def test_validate_rejects_inconsistent_source_type(self):
+        # raw source says rss but canonical source_type says gdelt -> reject
+        bad = {"source": "rss", "feed_name": "x", "source_type": "gdelt"}
+        good = {"source": "rss", "feed_name": "CSIS", "source_type": "rss"}
+        assert cp.validate_lane([good, bad], "analysis") == [good]
+
+    def test_validate_realtime_rejects_inconsistent_source_type(self):
+        bad = {"source": "telegram", "telegram_channel": "wartranslated",
+               "source_type": "rss"}
+        assert cp.validate_lane([bad], "realtime") == []
+
+    def test_merge_uses_telegram_max(self):
+        analysis = [{"id": i} for i in range(5)]
+        realtime = [{"source": "telegram", "telegram_channel": "wartranslated"},
+                    {"source": "telegram", "telegram_channel": "OSINTdefender"}]
+        out = cp.merge_lanes(analysis, realtime)
+        assert sum(1 for r in out if r.get("source_class") == "realtime") == cp.TELEGRAM_MAX
+        assert len(out) == 5

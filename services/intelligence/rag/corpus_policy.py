@@ -85,3 +85,45 @@ def apply_tier_boost(results: list[dict], *, lam: float = TIER_BOOST_LAMBDA) -> 
                  "final": round(x["tier_score"], 4)} for x in out],
     )
     return out
+
+
+# Canonical source_types consistent with each lane (when the contract field
+# is present on a payload).
+_ANALYSIS_TYPES: frozenset[str] = frozenset({"rss", "notebooklm"})
+
+
+def validate_lane(results: list[dict], lane: str) -> list[dict]:
+    """Second barrier (AC-2): keep only results that satisfy the lane invariant.
+    Qdrant filter is the first barrier; index lag / a filter bug must not break
+    AC-2. A payload whose canonical `source_type` contradicts the lane (e.g.
+    source="rss" but source_type="gdelt") is rejected too. Dropped are logged."""
+    kept, dropped = [], []
+    for r in results:
+        st = r.get("source_type")  # canonical contract field, if present
+        if lane == "analysis":
+            identity = r.get("source") in ANALYSIS_SOURCES or bool(r.get("notebook_id"))
+            type_ok = st is None or st in _ANALYSIS_TYPES
+            ok = identity and type_ok
+        elif lane == "realtime":
+            identity = (r.get("source") == "telegram"
+                        and r.get("telegram_channel") in TELEGRAM_ALLOWLIST)
+            type_ok = st is None or st == "telegram"
+            ok = identity and type_ok
+        else:
+            ok = False
+        (kept if ok else dropped).append(r)
+    if dropped:
+        log.warning("corpus_guard_dropped", lane=lane, count=len(dropped),
+                    sources=[d.get("source") for d in dropped])
+    return kept
+
+
+def merge_lanes(analysis: list[dict], realtime: list[dict],
+                *, final_k: int = FINAL_K, telegram_max: int = TELEGRAM_MAX) -> list[dict]:
+    """Analysis dominates the top; at most `telegram_max` realtime leads, last,
+    each marked source_class="realtime". Realtime displaces at most
+    `telegram_max` analysis slots."""
+    rt = [{**r, "source_class": "realtime"} for r in realtime[:telegram_max]]
+    if rt:
+        return list(analysis[:final_k - len(rt)]) + rt
+    return list(analysis[:final_k])
