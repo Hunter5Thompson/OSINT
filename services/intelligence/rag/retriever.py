@@ -1,6 +1,7 @@
 """Qdrant retriever for hybrid search with payload filtering."""
 
 import contextlib
+from collections.abc import Callable
 
 import httpx
 import structlog
@@ -115,7 +116,8 @@ async def search(
     if query_filter:
         for k, v in query_filter.items():
             if k == "must":
-                filt["must"] = filt.get("must", []) + v
+                # Qdrant `must` is a list; tolerate a single-condition dict.
+                filt["must"] = filt.get("must", []) + (v if isinstance(v, list) else [v])
             else:
                 filt[k] = v
     if filt:
@@ -154,7 +156,7 @@ async def enhanced_search(
     score_threshold: float = 0.3,
     query_filter: dict | None = None,
     pool: int | None = None,
-    post_rerank=None,
+    post_rerank: Callable[[list[dict]], list[dict]] | None = None,
     *,
     enable_hybrid: bool | None = None,
     enable_rerank: bool | None = None,

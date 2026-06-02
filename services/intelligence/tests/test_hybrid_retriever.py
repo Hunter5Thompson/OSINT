@@ -258,3 +258,28 @@ class TestQueryFilterAndPostRerank:
                 "q", post_rerank=reverse, enable_rerank=False, enable_graph_context=False,
             )
         assert [r["title"] for r in out] == ["b", "a"]
+
+    async def test_rerank_then_post_rerank_then_cut(self):
+        from rag.retriever import enhanced_search
+
+        pool_results = [{"title": str(i), "content": str(i), "score": 0.0} for i in range(10)]
+
+        async def fake_rerank(query, docs, top_k):
+            assert top_k == 10          # rerank keeps the whole pool when a hook is set
+            return docs                  # identity rerank
+
+        seen = {}
+
+        def hook(rs):
+            seen["count"] = len(rs)      # hook must see the full reranked pool
+            return list(reversed(rs))
+
+        with patch("rag.retriever.search", AsyncMock(return_value=pool_results)), \
+             patch("rag.retriever._rerank_fn", AsyncMock(side_effect=fake_rerank)):
+            out = await enhanced_search(
+                "q", pool=10, limit=3, post_rerank=hook,
+                enable_rerank=True, enable_graph_context=False,
+            )
+        assert seen["count"] == 10       # saw full pool before the cut
+        assert len(out) == 3             # cut to limit AFTER the hook
+        assert [r["title"] for r in out] == ["9", "8", "7"]  # reversed pool, top-3
