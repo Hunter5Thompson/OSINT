@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from qdrant_client.models import CollectionInfo, Distance, VectorParams
 
-__all__ = ["QdrantSchemaMismatch", "validate_collection_schema"]
+__all__ = ["QdrantSchemaMismatch", "validate_collection_schema", "REQUIRED_PAYLOAD_INDEXES"]
+
+REQUIRED_PAYLOAD_INDEXES = ("source", "telegram_channel", "notebook_id")
 
 EXPECTED_DENSE_SIZE = 1024
 EXPECTED_DISTANCE = Distance.COSINE
