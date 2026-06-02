@@ -114,9 +114,9 @@ TELEGRAM_ALLOWLIST: frozenset[str] = frozenset({
 })
 
 def analysis_filter() -> dict:
-    """Qdrant-Filter: source==rss ODER notebook_id vorhanden (NLM)."""
+    """Qdrant-Filter: source ∈ ANALYSIS_SOURCES ODER notebook_id vorhanden (NLM)."""
     return {"should": [
-        {"key": "source", "match": {"value": "rss"}},
+        {"key": "source", "match": {"any": sorted(ANALYSIS_SOURCES)}},
         {"must_not": [{"is_empty": {"key": "notebook_id"}}]},   # NLM-Punkte
     ]}  # min_should=1 (Default)
 
@@ -130,10 +130,13 @@ def realtime_filter() -> dict:
 def validate_lane(results: list[dict], lane: str) -> list[dict]:
     """Zweite Schranke am Output (AC-2). Behält nur Treffer, die die
     Lane-Invariante erfüllen; verworfene werden strukturiert geloggt.
-      analysis: source=="rss" ODER notebook_id vorhanden+nicht-leer
+      analysis: (source ∈ ANALYSIS_SOURCES ODER notebook_id vorhanden+nicht-leer)
+                UND (falls source_type vorhanden: source_type ∈ {rss, notebooklm})
       realtime: source=="telegram" UND telegram_channel ∈ TELEGRAM_ALLOWLIST
-    Begründung: Qdrant-Filter ist die erste Schranke; Index-Lag oder ein
-    Filter-Bug darf AC-2 nicht brechen."""
+                UND (falls source_type vorhanden: source_type == telegram)
+    Inkonsistente Payloads (z.B. source="rss" aber source_type="gdelt") werden
+    abgelehnt. Begründung: Qdrant-Filter ist die erste Schranke; Index-Lag oder
+    ein Filter-Bug darf AC-2 nicht brechen."""
 ```
 
 - Whitelist = **sicher by default**: jeder nicht genannte Source-Typ (`gdelt`, `gdelt_gkg`, `firms`, `eonet`, `usgs`, `gdacs`, `noaa_nhc`, `adsb.fi`, `hapi`, `ofac`, `ucdp`, `portwatch`) ist automatisch draußen, bis explizit freigegeben.
@@ -142,12 +145,15 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
 Außerdem in diesem Modul:
 
 ```python
-TIER_BOOST_LAMBDA: float = 0.2     # konfigurierbar (settings)
-ANALYSIS_POOL: int = 40            # Overfetch Analyse-Lane
-REALTIME_POOL: int = 20            # Overfetch Realtime-Lane
-RT_SCORE_THRESHOLD: float = 0.45   # messbarer Default, nicht dauerhaft kalibriert
-FINAL_K: int = 5
-TELEGRAM_MAX: int = 1
+# Aus settings, env-overridable (RAG_TIER_BOOST_LAMBDA, RAG_ANALYSIS_POOL,
+# RAG_REALTIME_POOL, RAG_REALTIME_SCORE_THRESHOLD, RAG_FINAL_K, RAG_TELEGRAM_MAX).
+# Kalibrierung darf KEIN Code-Deploy sein.
+TIER_BOOST_LAMBDA: float = settings.rag_tier_boost_lambda          # 0.2
+ANALYSIS_POOL: int = settings.rag_analysis_pool                    # 40
+REALTIME_POOL: int = settings.rag_realtime_pool                    # 20
+RT_SCORE_THRESHOLD: float = settings.rag_realtime_score_threshold  # 0.45
+FINAL_K: int = settings.rag_final_k                                # 5
+TELEGRAM_MAX: int = settings.rag_telegram_max                      # 1
 
 def credibility_of(payload: dict) -> float:
     """Reliability für ein rohes Result-Payload. Wiederverwendet die
@@ -176,11 +182,15 @@ def merge_lanes(analysis: list[dict], realtime: list[dict]) -> list[dict]:
 ```
 analysis = enhanced_search(query, query_filter=analysis_filter(),
                            limit=FINAL_K, pool=ANALYSIS_POOL,
-                           post_rerank=apply_tier_boost)
-realtime = enhanced_search(query, query_filter=realtime_filter(),
-                           limit=1, pool=REALTIME_POOL,
-                           score_threshold=RT_SCORE_THRESHOLD,
-                           post_rerank=apply_tier_boost)
+                           region=region or None, post_rerank=apply_tier_boost)
+try:
+    realtime = enhanced_search(query, query_filter=realtime_filter(),
+                               limit=1, pool=REALTIME_POOL,
+                               score_threshold=RT_SCORE_THRESHOLD,
+                               region=region or None, post_rerank=apply_tier_boost)
+except Exception as e:            # Realtime-Fehler degradiert graceful
+    log.warning("realtime_lane_failed", error=str(e))
+    realtime = []
 
 analysis = validate_lane(analysis, "analysis")   # zweite Schranke (AC-2)
 realtime = validate_lane(realtime, "realtime")
@@ -191,7 +201,9 @@ final = merge_lanes(analysis, realtime)
 - `final = analysis[:FINAL_K]` (Analyse dominiert, oben).
 - Falls `realtime` non-empty (das Top-Item hat bereits `RT_SCORE_THRESHOLD` im Dense-Schritt passiert): nimm `realtime[0]`, markiere `source_class="realtime"`, setze `final = analysis[:FINAL_K-1] + [realtime[0]]` (Realtime an Position 5, verdrängt höchstens **einen** Analyse-Slot).
 - Andernfalls bleiben 5 Analyse-Resultate.
-- Evidence-Items: Analyse → `source_class="analysis"`, Realtime → `source_class="realtime"`. Die `[EVIDENCE]`-Zeile eines Realtime-Items kennzeichnet es als **Realtime-Lead, keine verifizierte Primärquelle**, damit Synthesis es entsprechend gewichtet.
+- Evidence-Items: **nur** das Realtime-Item wird mit `source_class="realtime"` markiert; Analyse-Items bleiben unmarkiert (kein `source_class`-Key → EVIDENCE-Output für Analyse stabil). Die `[EVIDENCE]`-Zeile eines Realtime-Items kennzeichnet es als **Realtime-Lead, keine verifizierte Primärquelle**, damit Synthesis es entsprechend gewichtet.
+- `region` wird (auch wenn der Index aktuell keine region-Tags trägt) an **beide** Lanes weitergereicht (`region=region or None`) — das API-Verhalten verschwindet nicht still.
+- **Tool-Docstring (`qdrant_search`) und ReAct-Prompt (`react_agent.py`) werden aktualisiert:** „geprüfte Analyse-Prosa + höchstens ein vetted Realtime-Lead; GKG/FIRMS/UCDP/GDACS/EONET sind hier NICHT abrufbar — strukturierte Events/Sensorik laufen über `query_knowledge_graph`."
 
 ### 5.4 `rag/reranker.py` — RSS-Teaser nutzen (verpflichtend in diesem Slice)
 
@@ -217,7 +229,8 @@ ebenfalls geboostet. Vorgeschlagene Tiers (konfigurierbar, Reviewer darf tunen):
 
 ### 5.6 Qdrant-Payload-Indizes — explizites idempotentes Migrationsskript
 
-- **Migrationsskript** `services/intelligence/scripts/ensure_payload_indexes.py` (idempotent, `wait=true`) legt Keyword-Indizes auf `source`, `telegram_channel`, `notebook_id` an. Bereits vorhandene Indizes werden ignoriert.
+- **Feld-Vertrag zentral:** `REQUIRED_PAYLOAD_INDEXES = ("source", "telegram_channel", "notebook_id")` lebt **einmal** in `rag/qdrant_schema.py`; Migrationsskript und Startup-Validierung importieren es (eine Wahrheit).
+- **Migrationsskript** `services/intelligence/scripts/ensure_payload_indexes.py` (idempotent, `wait=true`) legt die `REQUIRED_PAYLOAD_INDEXES` als Keyword-Indizes an. Bereits vorhandene werden ignoriert.
 - **Service-Startup mutiert NICHT.** Die bestehende `validate_collection_schema`-Preflight wird erweitert: sie **prüft** nur, ob die drei Indizes existieren, und **warnt** strukturiert, falls nicht (kein stiller Index-Build im Read-Pfad).
 - **HNSW-Rebuild-Hinweis:** Qdrant dokumentiert, dass nachträglich (nach Befüllung) angelegte Payload-Indizes einen HNSW-Rebuild brauchen, damit filter-aware Links vollständig genutzt werden. Das Migrationsskript ist daher **einmalig vor** dem Verlassen auf gefilterte Suche auszuführen; bis dahin funktioniert der Filter korrekt, nur langsamer (Full-Scan).
 
