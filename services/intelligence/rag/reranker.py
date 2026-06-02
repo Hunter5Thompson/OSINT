@@ -20,7 +20,7 @@ async def rerank(
     if not documents:
         return []
 
-    texts = [d.get("content", d.get("title", "")) for d in documents]
+    texts = [d.get("content") or d.get("summary") or d.get("title", "") for d in documents]
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
