@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     enable_hybrid: bool = False       # Phase 2: needs sparse vectors in Qdrant
     enable_rerank: bool = True
     enable_graph_context: bool = True
+    # Read-corpus scoping (P1+P4) — tunable via env
+    # (RAG_TIER_BOOST_LAMBDA, RAG_ANALYSIS_POOL, RAG_REALTIME_POOL,
+    #  RAG_REALTIME_SCORE_THRESHOLD, RAG_FINAL_K, RAG_TELEGRAM_MAX)
+    rag_tier_boost_lambda: float = 0.2
+    rag_analysis_pool: int = 40
+    rag_realtime_pool: int = 20
+    rag_realtime_score_threshold: float = 0.45
+    rag_final_k: int = 5
+    rag_telegram_max: int = 1
     # ReAct agent guards
     react_max_tool_calls: int = 8
     react_max_iterations: int = 5
