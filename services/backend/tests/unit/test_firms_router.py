@@ -48,7 +48,7 @@ async def test_firms_hotspots_happy_path() -> None:
 
     with patch("app.routers.firms.get_qdrant_client", AsyncMock(return_value=mock_qdrant)):
         client = TestClient(app)
-        resp = client.get("/api/v1/firms/hotspots")
+        resp = client.get("/api/firms/hotspots")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -75,7 +75,7 @@ async def test_firms_hotspots_pagination_concatenates_pages() -> None:
 
     with patch("app.routers.firms.get_qdrant_client", AsyncMock(return_value=mock_qdrant)):
         client = TestClient(app)
-        resp = client.get("/api/v1/firms/hotspots")
+        resp = client.get("/api/firms/hotspots")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -100,7 +100,7 @@ async def test_firms_hotspots_cache_hit_short_circuits_qdrant() -> None:
     mock_qdrant = AsyncMock()
     with patch("app.routers.firms.get_qdrant_client", AsyncMock(return_value=mock_qdrant)):
         client = TestClient(app)
-        resp = client.get("/api/v1/firms/hotspots")
+        resp = client.get("/api/firms/hotspots")
 
     assert resp.status_code == 200
     assert resp.json()[0]["id"] == "cached-a"
@@ -109,11 +109,11 @@ async def test_firms_hotspots_cache_hit_short_circuits_qdrant() -> None:
 
 def test_firms_hotspots_since_hours_too_low_returns_422() -> None:
     client = TestClient(app)
-    resp = client.get("/api/v1/firms/hotspots?since_hours=0")
+    resp = client.get("/api/firms/hotspots?since_hours=0")
     assert resp.status_code == 422
 
 
 def test_firms_hotspots_since_hours_too_high_returns_422() -> None:
     client = TestClient(app)
-    resp = client.get("/api/v1/firms/hotspots?since_hours=169")
+    resp = client.get("/api/firms/hotspots?since_hours=169")
     assert resp.status_code == 422

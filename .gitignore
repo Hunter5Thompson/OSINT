@@ -21,6 +21,7 @@ coverage/
 
 # Local lockfiles generated during ad-hoc test runs
 services/**/uv.lock
+!services/data-ingestion/uv.lock
 services/frontend/package-lock.json
 
 # OS / editor noise

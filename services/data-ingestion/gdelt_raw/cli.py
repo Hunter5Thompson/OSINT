@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import uuid
@@ -54,8 +55,20 @@ async def _get_clients():
         client=qdrant_client,
         embed=embed,
         collection=settings.qdrant_collection,
+        embedding_dimensions=settings.embedding_dimensions,
+        enable_hybrid=settings.enable_hybrid,
     )
     return state, neo4j, qdrant
+
+
+async def _close_clients(state, neo4j, qdrant) -> None:
+    try:
+        await neo4j.close()
+    finally:
+        try:
+            await qdrant.close()
+        finally:
+            await state.r.aclose()
 
 
 @click.group()
@@ -67,7 +80,7 @@ def main():
 def status():
     """Show last processed slice and pending counts."""
     async def _go():
-        state, neo4j, _ = await _get_clients()
+        state, neo4j, qdrant = await _get_clients()
         try:
             for store in ("parquet", "neo4j", "qdrant"):
                 last = await state.get_last_slice(store)
@@ -76,7 +89,7 @@ def status():
                 pending = await state.list_pending(store, limit=100)
                 click.echo(f"pending[{store:>6}]: {len(pending)}")
         finally:
-            await neo4j.close()
+            await _close_clients(state, neo4j, qdrant)
     _run(_go())
 
 
@@ -89,7 +102,7 @@ def forward():
         try:
             await run_forward(state, neo4j, qdrant, Path(settings.parquet_path))
         finally:
-            await neo4j.close()
+            await _close_clients(state, neo4j, qdrant)
     _run(_go())
     click.echo("forward tick complete")
 
@@ -120,7 +133,7 @@ def backfill(from_date: datetime, to_date: datetime | None, parallel: int):
                 job_id=job_id, parallel=parallel,
             )
         finally:
-            await neo4j.close()
+            await _close_clients(state, neo4j, qdrant)
     _run(_go())
 
 
@@ -141,7 +154,7 @@ def resume(job_id: str):
             )
             click.echo("replay_pending complete")
         finally:
-            await neo4j.close()
+            await _close_clients(state, neo4j, qdrant)
     _run(_go())
 
 
@@ -211,11 +224,9 @@ def doctor():
             click.echo(f"TEI:             ✗ {e}")
             errors.append("tei")
 
-        try:
-            if neo4j is not None:
-                await neo4j.close()
-        except Exception:
-            pass
+        if state is not None and neo4j is not None and qdrant is not None:
+            with contextlib.suppress(Exception):
+                await _close_clients(state, neo4j, qdrant)
 
         # Filter config summary (quick sanity check)
         click.echo(f"Filter mode:     {settings.filter_mode}")

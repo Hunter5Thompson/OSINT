@@ -8,12 +8,16 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from graph.workflow import run_intelligence_query, shutdown_graph_client
+from rag import retriever
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     yield
-    await shutdown_graph_client()
+    try:
+        await retriever.close()
+    finally:
+        await shutdown_graph_client()
 
 
 app = FastAPI(title="WorldView Intelligence Service", version="0.2.0", lifespan=lifespan)

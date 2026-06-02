@@ -16,7 +16,7 @@ import httpx
 import structlog
 import yaml
 
-from config import Settings
+from config import Settings, settings
 from nlm_ingest.schemas import normalize_entity_type
 
 log = structlog.get_logger(__name__)
@@ -36,31 +36,71 @@ class ExtractionConfigError(Exception):
     """
 
 
+class CodebookConfigError(RuntimeError):
+    """Canonical event codebook is missing or invalid."""
+
+
 # Load event types from the canonical codebook YAML (single source of truth)
-_CODEBOOK_PATH = Path(__file__).parent.parent / "intelligence" / "codebook" / "event_codebook.yaml"
 _FALLBACK_CODEBOOK_TYPE = "other.unclassified"
 
 
-def _load_codebook_types() -> frozenset[str]:
-    """Load valid codebook types from YAML. Returns at minimum the fallback type."""
+def _load_codebook(path: Path) -> dict[str, Any]:
+    """Load and validate the canonical event codebook."""
     try:
-        with open(_CODEBOOK_PATH) as f:
-            codebook = yaml.safe_load(f)
-        types = {
-            entry["type"]
-            for cat_data in codebook.get("categories", {}).values()
-            for entry in cat_data.get("types", [])
-        }
-        if not types:
-            log.warning("codebook_load_empty_using_fallback_only")
-            return frozenset({_FALLBACK_CODEBOOK_TYPE})
-        return frozenset(types)
-    except (FileNotFoundError, yaml.YAMLError, KeyError) as e:
-        log.warning("codebook_load_failed_using_fallback_only", error=str(e))
-        return frozenset({_FALLBACK_CODEBOOK_TYPE})
+        text = path.read_text()
+    except OSError as exc:
+        raise CodebookConfigError(f"cannot read event codebook {path}: {exc}") from exc
+    if not text.strip():
+        raise CodebookConfigError(f"event codebook is empty: {path}")
+
+    try:
+        codebook = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise CodebookConfigError(f"invalid event codebook YAML {path}: {exc}") from exc
+
+    if not isinstance(codebook, dict):
+        raise CodebookConfigError(f"event codebook root must be a mapping: {path}")
+    categories = codebook.get("categories")
+    if not isinstance(categories, dict) or not categories:
+        raise CodebookConfigError(f"event codebook has no categories: {path}")
+
+    type_count = 0
+    for category_name, category in categories.items():
+        if not isinstance(category, dict):
+            raise CodebookConfigError(f"event codebook category {category_name!r} is not a mapping")
+        entries = category.get("types")
+        if not isinstance(entries, list):
+            raise CodebookConfigError(
+                f"event codebook category {category_name!r} has no types list"
+            )
+        for entry in entries:
+            if (
+                not isinstance(entry, dict)
+                or not isinstance(entry.get("type"), str)
+                or not entry["type"].strip()
+                or not isinstance(entry.get("description"), str)
+            ):
+                raise CodebookConfigError(
+                    f"event codebook category {category_name!r} contains an invalid type entry"
+                )
+            type_count += 1
+    if type_count == 0:
+        raise CodebookConfigError(f"event codebook has no types: {path}")
+    return codebook
 
 
-_VALID_CODEBOOK_TYPES: frozenset[str] = _load_codebook_types()
+def _get_codebook_types(codebook: dict[str, Any]) -> frozenset[str]:
+    """Return the validated type identifiers from a loaded codebook."""
+    return frozenset(
+        entry["type"]
+        for category in codebook["categories"].values()
+        for entry in category["types"]
+    )
+
+
+def _load_codebook_types(path: Path | None = None) -> frozenset[str]:
+    """Load valid codebook types from the configured YAML file."""
+    return _get_codebook_types(_load_codebook(path or settings.event_codebook_path))
 
 
 def _validate_codebook_type(
@@ -85,22 +125,13 @@ def _validate_codebook_type(
     return _FALLBACK_CODEBOOK_TYPE
 
 
-def _build_system_prompt() -> str:
-    """Build system prompt from the codebook YAML. Falls back to minimal prompt if YAML missing."""
-    type_lines = []
-    try:
-        with open(_CODEBOOK_PATH) as f:
-            codebook = yaml.safe_load(f)
-        for cat_data in codebook.get("categories", {}).values():
-            for entry in cat_data.get("types", []):
-                type_lines.append(f"   {entry['type']}: {entry['description']}")
-    except (FileNotFoundError, yaml.YAMLError, KeyError) as e:
-        log.warning("codebook_load_failed_using_fallback", error=str(e))
-        type_lines = [
-            "   military.airstrike, military.drone_attack, political.election,",
-            "   space.satellite_launch, cyber.data_breach, other.unclassified",
-        ]
-
+def _build_system_prompt(codebook: dict[str, Any]) -> str:
+    """Build the extraction system prompt from a loaded codebook."""
+    type_lines = [
+        f"   {entry['type']}: {entry['description']}"
+        for category in codebook["categories"].values()
+        for entry in category["types"]
+    ]
     event_types_str = "\n".join(type_lines)
     return f"""\
 You are an OSINT intelligence extraction specialist. Analyze the provided text and extract:
@@ -121,7 +152,9 @@ RULES:
 - Return valid JSON only"""
 
 
-_SYSTEM_PROMPT = _build_system_prompt()
+_CODEBOOK = _load_codebook(settings.event_codebook_path)
+_VALID_CODEBOOK_TYPES: frozenset[str] = _get_codebook_types(_CODEBOOK)
+_SYSTEM_PROMPT = _build_system_prompt(_CODEBOOK)
 
 _RESPONSE_SCHEMA = {
     "type": "object",

@@ -12,6 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 
 async def test_run_once_uses_project_qdrant_collection():
     """Regression: run_once must pass project-level settings.qdrant_collection
@@ -23,8 +25,11 @@ async def test_run_once_uses_project_qdrant_collection():
     captured: dict = {}
 
     class FakeQdrantWriter:
-        def __init__(self, *, client, embed, collection: str):
+        def __init__(self, *, client, embed, collection: str, **kwargs):
             captured["collection"] = collection
+
+        async def close(self):
+            pass
 
     fake_redis = AsyncMock()
     fake_state = MagicMock()
@@ -79,7 +84,10 @@ async def test_run_once_passes_gdelt_parquet_path_to_run_forward():
     env_prefix GDELT_) to run_forward, not some other settings object."""
 
     class FakeQdrantWriter:
-        def __init__(self, *, client, embed, collection):
+        def __init__(self, *, client, embed, collection, **kwargs):
+            pass
+
+        async def close(self):
             pass
 
     fake_neo4j = MagicMock()
@@ -114,3 +122,29 @@ async def test_run_once_passes_gdelt_parquet_path_to_run_forward():
             f"run_forward received parquet_path={actual_path!r} "
             f"but expected GDELTSettings.parquet_path={gdelt_cfg.parquet_path!r}"
         )
+
+
+async def test_run_once_closes_all_owned_clients_when_forward_fails():
+    fake_redis = MagicMock(aclose=AsyncMock())
+    fake_neo4j = MagicMock(close=AsyncMock())
+    fake_qdrant = MagicMock(close=AsyncMock())
+
+    with (
+        patch("feeds.gdelt_raw_collector.aioredis.from_url", return_value=fake_redis),
+        patch("feeds.gdelt_raw_collector.GDELTState", return_value=MagicMock()),
+        patch("feeds.gdelt_raw_collector.Neo4jWriter", return_value=fake_neo4j),
+        patch("feeds.gdelt_raw_collector.AsyncQdrantClient", return_value=MagicMock()),
+        patch("feeds.gdelt_raw_collector.QdrantWriter", return_value=fake_qdrant),
+        patch(
+            "feeds.gdelt_raw_collector.run_forward",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ),
+    ):
+        from feeds.gdelt_raw_collector import run_once
+
+        with pytest.raises(RuntimeError, match="boom"):
+            await run_once()
+
+    fake_neo4j.close.assert_awaited_once()
+    fake_qdrant.close.assert_awaited_once()
+    fake_redis.aclose.assert_awaited_once()

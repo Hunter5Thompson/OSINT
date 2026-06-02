@@ -34,18 +34,12 @@ def test_cameo_targets_subset_of_codebook_types():
 
     Without this guard, the GDELT collector silently writes codebook_types
     that the LLM prompt and downstream filters reject."""
-    from pathlib import Path
-
     import yaml
 
+    from config import Settings
     from gdelt_raw.cameo_mapping import CAMEO_ROOT_TO_CODEBOOK
 
-    codebook_path = (
-        Path(__file__).parents[2]
-        / "intelligence"
-        / "codebook"
-        / "event_codebook.yaml"
-    )
+    codebook_path = Settings(_env_file=None).event_codebook_path
     codebook = yaml.safe_load(codebook_path.read_text())
     types = {
         entry["type"]

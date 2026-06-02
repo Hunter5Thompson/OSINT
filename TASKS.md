@@ -187,7 +187,7 @@ Siehe `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` für d
 Qdrant Collection Lifecycle und Migration Path.
 
 ## Tests
-- Bestehender `POST /api/v1/intel/query` funktioniert mit vLLM
+- Bestehender `POST /api/intel/query` funktioniert mit vLLM
 - Embedding-Server returned Vektoren mit korrekter Dimension (1024)
 - Response-Qualität Spot-Check (3 Fragen manuell vergleichen)
 
@@ -810,7 +810,7 @@ async def analyze_image(image_path: str, question: str = "Describe this image in
 
 ### EntityExplorer.tsx
 - `react-force-graph-2d` für Netzwerk-Visualisierung
-- API: `GET /api/v1/graph/entity/{name}/neighborhood?depth=2`
+- API: `GET /api/graph/network/{name}?limit=50`
 - Click auf Node → Detail Panel + Timeline
 - Neuer Tab in bestehendem UI neben Intel/Threats
 
@@ -1354,7 +1354,7 @@ Option C — GGUF Quantisiert (Phase 2, experimentell):
    - Deps im Image: espeak-ng, ffmpeg, sox (vorinstalliert)
 2. odin.sh: `swap tts` und `up tts` Kommandos
    - Swap stoppt vllm-9b/vllm-27b vor TTS-Start (kein VRAM-Konflikt)
-3. Backend: Neuer Endpoint `POST /api/v1/briefings/{id}/audio`
+3. Backend: Neuer Endpoint `POST /api/briefings/{id}/audio`
    - Nimmt Briefing-Text aus bestehender Pipeline
    - Ruft Voxtral via `POST http://vllm:8000/v1/audio/speech` auf
    - Parameter: `voice` (Preset oder Custom), `response_format` (default: mp3)
@@ -1435,7 +1435,7 @@ Observation-Producer.
 ## Deliverables
 1. Shared package: `SourceRef`, `Observation`, `WorldObject`, `IncidentCandidate`,
    `FusionLink`, `ReviewItem`, ID Builder, Normalisierung, Confidence-Helfer.
-2. Backend: `/api/v1/fusion/*` und HMAC-geschützte `/internal/fusion/*` Endpoints.
+2. Backend: `/api/fusion/*` und HMAC-geschützte `/internal/fusion/*` Endpoints.
 3. Backend: deterministische, parametergebundene Neo4j Fusion-Write-Templates.
 4. Data-Ingestion: AIS/ADS-B/TLE/FIRMS/GDELT/RSS/NLM Observation Producer in Phase-1-Cadence.
 5. Intelligence: Fusion Read Tools für Timeline, Lineage und Review-Evidence.

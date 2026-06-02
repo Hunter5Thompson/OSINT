@@ -1,5 +1,8 @@
 """Tests for the intelligence pipeline workflow graphs."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from langchain_core.messages import ToolMessage
 
 from graph.state import AgentState
@@ -10,6 +13,7 @@ from graph.workflow import (
     _compact_tool_messages,
     build_legacy_graph,
     build_react_graph,
+    run_intelligence_query,
 )
 
 
@@ -72,3 +76,24 @@ class TestWorkflowGraph:
         assert compacted[0].tool_call_id == "old"
         assert compacted[1].tool_call_id == "new"
         assert "new " in compacted[1].content
+
+
+@pytest.mark.asyncio
+async def test_react_failure_propagates_instead_of_silent_legacy_fallback() -> None:
+    """A ReAct failure (use_legacy=False) must propagate out of
+    run_intelligence_query so the backend sees a non-2xx — never a silent legacy
+    (no-sources) fallback or a mode:'error' HTTP-200 dict (Phase 4 / C7)."""
+    react = MagicMock(ainvoke=AsyncMock(side_effect=RuntimeError("react exploded")))
+    legacy = MagicMock(
+        ainvoke=AsyncMock(return_value={"sources_used": [], "synthesis": "legacy"}),
+    )
+    with (
+        patch("graph.workflow.react_graph", react),
+        patch("graph.workflow.legacy_graph", legacy),
+        patch("graph.workflow._ensure_graph_client"),
+        pytest.raises(RuntimeError, match="react exploded"),
+    ):
+        await run_intelligence_query("test query", use_legacy=False)
+
+    # The ReAct path must not silently fall back to the legacy pipeline.
+    legacy.ainvoke.assert_not_awaited()

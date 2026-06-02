@@ -74,7 +74,7 @@ class TestIntelReportScopedPersistence:
             "app.services.intel_stream.report_store.get_report", AsyncMock(return_value=None)
         ):
             resp = client.post(
-                "/api/v1/intel/query",
+                "/api/intel/query",
                 json={"query": "Brief me", "report_id": "r-missing", "report_message": "Brief me"},
             )
 
@@ -92,7 +92,7 @@ class TestIntelReportScopedPersistence:
             patch("app.services.intel_stream.httpx.AsyncClient", return_value=_MockHttpClient()),
         ):
             resp = client.post(
-                "/api/v1/intel/query",
+                "/api/intel/query",
                 json={
                     "query": "Report 44: Brief me",
                     "report_id": "r-044",
@@ -131,7 +131,7 @@ class TestIntelReportScopedPersistence:
             patch("app.services.intel_stream.httpx.AsyncClient", return_value=_BoomClient()),
         ):
             resp = client.post(
-                "/api/v1/intel/query",
+                "/api/intel/query",
                 json={"query": "x", "report_id": "r-044", "report_message": "x"},
             )
 

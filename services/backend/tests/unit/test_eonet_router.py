@@ -44,7 +44,7 @@ async def test_eonet_events_returns_data() -> None:
 
     with patch("app.routers.eonet.get_qdrant_client", AsyncMock(return_value=mock_qdrant)):
         client = TestClient(app)
-        resp = client.get("/api/v1/eonet/events")
+        resp = client.get("/api/eonet/events")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -77,7 +77,7 @@ async def test_eonet_events_cache_hit() -> None:
     mock_qdrant = AsyncMock()
     with patch("app.routers.eonet.get_qdrant_client", AsyncMock(return_value=mock_qdrant)):
         client = TestClient(app)
-        resp = client.get("/api/v1/eonet/events")
+        resp = client.get("/api/eonet/events")
 
     assert resp.status_code == 200
     assert resp.json()[0]["id"] == "cached-a"
@@ -96,7 +96,7 @@ async def test_eonet_events_qdrant_down() -> None:
 
     with patch("app.routers.eonet.get_qdrant_client", AsyncMock(return_value=mock_qdrant)):
         client = TestClient(app)
-        resp = client.get("/api/v1/eonet/events")
+        resp = client.get("/api/eonet/events")
 
     assert resp.status_code == 503
     assert "qdrant" in resp.json()["detail"].lower()

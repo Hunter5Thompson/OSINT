@@ -272,21 +272,21 @@ smoke() {
   _check_container "tei-rerank"
   _check_if_running "tei-rerank" "TEI Rerank health" "http://localhost:8002/health"
   _check_if_running "intelligence" "Intelligence health" "http://localhost:8003/health"
-  _check_if_running "backend" "Backend health" "http://localhost:8080/api/v1/health"
+  _check_if_running "backend" "Backend health" "http://localhost:8080/api/health"
   echo ""
 
   # Functional checks (only if backend is up)
   local backend_up
   backend_up="000"
   if _service_running "backend"; then
-    backend_up=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:8080/api/v1/health" 2>/dev/null) || backend_up="000"
+    backend_up=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:8080/api/health" 2>/dev/null) || backend_up="000"
   fi
   if [[ "$backend_up" == "200" ]]; then
     echo "[Functional]"
 
     # Config endpoint (cesium token present?)
     local config_json
-    config_json=$(curl -sf --max-time 5 "http://localhost:8080/api/v1/config" 2>/dev/null) || config_json=""
+    config_json=$(curl -sf --max-time 5 "http://localhost:8080/api/config" 2>/dev/null) || config_json=""
     if [[ -n "$config_json" ]]; then
       local token_len
       token_len=$(echo "$config_json" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('cesium_ion_token','')))" 2>/dev/null) || token_len=0
@@ -301,10 +301,10 @@ smoke() {
 
     # Flights endpoint
     local flights_code
-    flights_code=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 15 "http://localhost:8080/api/v1/flights" 2>/dev/null) || flights_code="000"
+    flights_code=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 15 "http://localhost:8080/api/flights" 2>/dev/null) || flights_code="000"
     if [[ "$flights_code" == "200" ]]; then
       local flight_count
-      flight_count=$(curl -sf --max-time 15 "http://localhost:8080/api/v1/flights" 2>/dev/null \
+      flight_count=$(curl -sf --max-time 15 "http://localhost:8080/api/flights" 2>/dev/null \
         | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null) || flight_count="?"
       printf "  %-28s %s\n" "Flights endpoint" "OK ($flight_count aircraft)"
       _inc_pass

@@ -356,3 +356,6 @@ class CorrelationJob:
         else:
             await self._set_last_run()
             log.info("correlation.run.complete")
+
+    async def close(self) -> None:
+        await asyncio.to_thread(self.qdrant.close)

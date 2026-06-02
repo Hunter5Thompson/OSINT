@@ -65,6 +65,13 @@ structlog.configure(
 
 log = structlog.get_logger("scheduler")
 
+async def _construct_off_loop[T](factory: Callable[..., T], **kwargs: object) -> T:
+    """Construct sync clients outside the event loop.
+
+    QdrantClient performs a compatibility probe during initialization.
+    """
+    return await asyncio.to_thread(factory, **kwargs)
+
 
 # ---------------------------------------------------------------------------
 # Startup healthcheck — Spark / local ingestion vLLM reachability
@@ -135,11 +142,16 @@ async def check_ingestion_llm() -> None:
 # ---------------------------------------------------------------------------
 async def run_rss_collector() -> None:
     """Collect RSS feeds."""
+    collector = await _construct_off_loop(
+        RSSCollector,
+        redis_client=_get_redis_client(),
+    )
     try:
-        collector = RSSCollector(redis_client=_get_redis_client())
         await collector.collect()
     except Exception:
         log.exception("rss_job_failed")
+    finally:
+        await collector.close()
 
 
 async def run_tle_updater() -> None:
@@ -155,7 +167,7 @@ async def run_tle_updater() -> None:
 
 async def run_hotspot_updater() -> None:
     """Update geopolitical hotspot data."""
-    updater = HotspotUpdater()
+    updater = await _construct_off_loop(HotspotUpdater)
     try:
         await updater.update()
     except Exception:
@@ -166,19 +178,26 @@ async def run_hotspot_updater() -> None:
 
 async def run_telegram_collector() -> None:
     """Collect Telegram channel messages."""
-    collector = TelegramCollector(redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        TelegramCollector,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:
         log.exception("telegram_job_failed")
     finally:
-        await collector.disconnect()
+        await collector.close()
 
 
 
 async def run_ucdp_collector() -> None:
     """Collect UCDP GED conflict events."""
-    collector = UCDPCollector(settings=settings, redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        UCDPCollector,
+        settings=settings,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:
@@ -189,7 +208,11 @@ async def run_ucdp_collector() -> None:
 
 async def run_firms_collector() -> None:
     """Collect NASA FIRMS thermal anomalies."""
-    collector = FIRMSCollector(settings=settings, redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        FIRMSCollector,
+        settings=settings,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:
@@ -200,7 +223,11 @@ async def run_firms_collector() -> None:
 
 async def run_usgs_collector() -> None:
     """Collect USGS earthquakes with nuclear enrichment."""
-    collector = USGSCollector(settings=settings, redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        USGSCollector,
+        settings=settings,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:
@@ -211,7 +238,11 @@ async def run_usgs_collector() -> None:
 
 async def run_military_collector() -> None:
     """Collect military aircraft positions."""
-    collector = MilitaryAircraftCollector(settings=settings, redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        MilitaryAircraftCollector,
+        settings=settings,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:
@@ -222,7 +253,11 @@ async def run_military_collector() -> None:
 
 async def run_ofac_collector() -> None:
     """Collect OFAC sanctions list."""
-    collector = OFACCollector(settings=settings, redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        OFACCollector,
+        settings=settings,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:
@@ -233,18 +268,26 @@ async def run_ofac_collector() -> None:
 
 async def run_correlation_job() -> None:
     """Correlate FIRMS thermal anomalies with ACLED conflict events."""
-    job = CorrelationJob(
-        settings=settings, redis_client=_get_redis_client()
+    job = await _construct_off_loop(
+        CorrelationJob,
+        settings=settings,
+        redis_client=_get_redis_client(),
     )
     try:
         await job.run()
     except Exception:
         log.exception("correlation_job_failed")
+    finally:
+        await job.close()
 
 
 async def run_eonet_collector() -> None:
     """Collect NASA EONET natural events."""
-    collector = EONETCollector(settings=settings, redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        EONETCollector,
+        settings=settings,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:
@@ -255,7 +298,11 @@ async def run_eonet_collector() -> None:
 
 async def run_gdacs_collector() -> None:
     """Collect GDACS global disaster alerts."""
-    collector = GDACSCollector(settings=settings, redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        GDACSCollector,
+        settings=settings,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:
@@ -266,7 +313,11 @@ async def run_gdacs_collector() -> None:
 
 async def run_hapi_collector() -> None:
     """Collect HAPI humanitarian data."""
-    collector = HAPICollector(settings=settings, redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        HAPICollector,
+        settings=settings,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:
@@ -277,7 +328,11 @@ async def run_hapi_collector() -> None:
 
 async def run_noaa_nhc_collector() -> None:
     """Collect NOAA NHC tropical storm advisories."""
-    collector = NOAANHCCollector(settings=settings, redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        NOAANHCCollector,
+        settings=settings,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:
@@ -288,7 +343,11 @@ async def run_noaa_nhc_collector() -> None:
 
 async def run_portwatch_collector() -> None:
     """Collect IMF PortWatch maritime trade data."""
-    collector = PortWatchCollector(settings=settings, redis_client=_get_redis_client())
+    collector = await _construct_off_loop(
+        PortWatchCollector,
+        settings=settings,
+        redis_client=_get_redis_client(),
+    )
     try:
         await collector.collect()
     except Exception:

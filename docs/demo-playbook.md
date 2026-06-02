@@ -7,7 +7,7 @@
 docker compose up -d
 
 # Verify health
-curl http://localhost:8080/api/v1/health   # Backend
+curl http://localhost:8080/api/health   # Backend
 curl http://localhost:8003/health           # Intelligence
 ```
 

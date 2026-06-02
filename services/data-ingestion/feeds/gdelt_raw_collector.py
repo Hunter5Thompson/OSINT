@@ -44,11 +44,19 @@ async def run_once() -> None:
         client=qdrant_client,
         embed=embed,
         collection=settings.qdrant_collection,
+        embedding_dimensions=settings.embedding_dimensions,
+        enable_hybrid=settings.enable_hybrid,
     )
     try:
         await run_forward(state, neo4j, qdrant, Path(gdelt_cfg.parquet_path))
     finally:
-        await neo4j.close()
+        try:
+            await neo4j.close()
+        finally:
+            try:
+                await qdrant.close()
+            finally:
+                await r.aclose()
 
 
 def collect() -> None:

@@ -168,16 +168,16 @@ services/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/health` | Health check |
-| GET | `/api/v1/config` | Client config (Cesium token) |
-| GET | `/api/v1/flights` | Aircraft positions (cache configurable, default 30s) |
-| GET | `/api/v1/flights/military` | Military aircraft filter |
-| GET | `/api/v1/satellites` | Satellite TLE data (cached 1h) |
-| GET | `/api/v1/earthquakes` | M4.5+ earthquakes (cached 5min) |
-| GET | `/api/v1/vessels` | Ship positions (cached 60s) |
-| GET | `/api/v1/hotspots` | Geopolitical hotspots |
-| POST | `/api/v1/intel/query` | Intelligence analysis (SSE stream) |
-| POST | `/api/v1/rag/ingest` | Ingest document into RAG |
+| GET | `/api/health` | Health check |
+| GET | `/api/config` | Client config (Cesium token) |
+| GET | `/api/flights` | Aircraft positions (cache configurable, default 30s) |
+| GET | `/api/flights/military` | Military aircraft filter |
+| GET | `/api/satellites` | Satellite TLE data (cached 1h) |
+| GET | `/api/earthquakes` | M4.5+ earthquakes (cached 5min) |
+| GET | `/api/vessels` | Ship positions (cached 60s) |
+| GET | `/api/hotspots` | Geopolitical hotspots |
+| POST | `/api/intel/query` | Intelligence analysis (SSE stream) |
+| POST | `/api/rag/ingest` | Ingest document into RAG |
 | WS | `/ws/flights` | Live flight stream |
 | WS | `/ws/vessels` | Live vessel stream |
 
