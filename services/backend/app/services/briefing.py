@@ -22,6 +22,7 @@ _MAX_SIGNALS = _MAX_EVIDENCE - 1  # one slot reserved for the almanac item
 # cap each context signal-line title (AlmanacSignalItem.title is unbounded)
 _SIG_TITLE_MAX = 120
 _NAME_MAX = 120  # cap country.name in the header (model field is unbounded)
+_SOURCE_NOTE_MAX = 200  # cap source_note in the almanac evidence provenance suffix
 
 # Closed MVP research-alias map. Research hints, NOT almanac facts (kept out of the seed).
 # Keyed by ISO3 where present, else by the seed `name` for id-less stubs.
@@ -82,9 +83,12 @@ def build_briefing_context(
     budget_chars: int = 4000,
 ) -> BriefingContext:
     aliases = _aliases(country)
-    alias_str = ", ".join(aliases) if aliases else country.name
+    name_safe = _sanitize(country.name)
+    # aliases come from the static RESEARCH_ALIASES map → already safe; only the
+    # fallback (raw country.name) needs sanitizing.
+    alias_str = ", ".join(aliases) if aliases else name_safe
     task = (
-        f"Erstelle ein Lage-Briefing für {country.name} "
+        f"Erstelle ein Lage-Briefing für {name_safe} "
         f"(ISO3 {country.iso3 or '—'}, M49 {country.m49}). "
         f"Stütze dich auf das bereitgestellte Grounding (Almanac-Profil + aktuelle "
         f"Live-Signale) und recherchiere die aktuelle Lage mit deinen Tools. "
@@ -131,8 +135,9 @@ def build_briefing_context(
     # --- grounding_evidence (≤6 items; bounds + allowlist enforced here) ---
     iso_or_m49 = country.iso3 or country.m49
     # reserve the provenance suffix; truncate facts to fit
-    quelle = f"\nQuelle: {_sanitize(country.source_note)}"
-    almanac_content = facts_block[: max(_CONTENT_MAX - len(quelle), 0)] + quelle
+    quelle = f"\nQuelle: {_sanitize(country.source_note)[:_SOURCE_NOTE_MAX]}"
+    # hard backstop: the content invariant holds regardless of source_note length
+    almanac_content = (facts_block[: max(_CONTENT_MAX - len(quelle), 0)] + quelle)[:_CONTENT_MAX]
     grounding_evidence: list[dict[str, Any]] = [{
         "source_type": "dataset",
         "provider": "odin-country-almanac",
