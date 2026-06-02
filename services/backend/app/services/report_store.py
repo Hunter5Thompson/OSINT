@@ -254,9 +254,12 @@ async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRec
     if current is None:
         return None
 
-    # merge patch over current, then re-validate so DossierMetric/MarginEntry rebuild from dicts
+    # merge patch over current, then re-validate so DossierMetric/MarginEntry rebuild from dicts.
+    # exclude_none drops explicit-null patch fields (nulling a required field was never valid →
+    # ReportRecord forbids it) so a PATCH like {"title": null} is a NO-OP, not a 500. Zero/empty
+    # values (confidence=0.0, findings=[]) are not None → still applied.
     merged = ReportRecord.model_validate(
-        {**current.model_dump(), **patch.model_dump(exclude_unset=True)}
+        {**current.model_dump(), **patch.model_dump(exclude_unset=True, exclude_none=True)}
     )
     rows = await write_query(
         REPORT_UPSERT,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
+import structlog
 from fastapi import APIRouter, HTTPException, Query, Request
 from sse_starlette.sse import EventSourceResponse
 
@@ -20,6 +21,8 @@ from app.services.report_store import (
     update_report,
 )
 from app.services.signal_stream import get_signal_stream
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/almanac", tags=["almanac"])
 
@@ -92,21 +95,29 @@ async def save_country_briefing(
     coords = (
         f"{country.capital.lat:.2f},{country.capital.lon:.2f}" if country.capital else "--"
     )
-    report = await get_or_create_report_by_scope(
-        scope_key, title=f"{country.name} — Lagebild", location=country.name, coords=coords
-    )
-    patch = build_hydration_patch(body.analysis, country_name=country.name)
-    updated = await update_report(report.id, patch)
-    if updated is None:  # dossier vanished between create and update — never report false success
-        raise HTTPException(status_code=503, detail="dossier hydration failed")
-    chat = truncate_message(body.analysis.analysis.strip()) or "—"  # ≤8000 incl marker
-    msg = await append_report_message(
-        report.id,
-        ReportMessageCreate(role="munin", text=chat, ts=body.analysis.timestamp,
-                            refs=body.analysis.sources_used[:6]),
-    )
-    if msg is None:
-        # dossier already hydrated above; a client retry re-hydrates (idempotent) but appends a
-        # second munin message (append is not idempotent) — acceptable for append-only chat.
-        raise HTTPException(status_code=503, detail="briefing chat persistence failed")
-    return updated
+    # Map storage failures (Neo4j outage) to 503 for consistency with the reports router. Our own
+    # 404/503 HTTPExceptions are re-raised as-is; the schema-ready + country 404 checks stay above.
+    try:
+        report = await get_or_create_report_by_scope(
+            scope_key, title=f"{country.name} — Lagebild", location=country.name, coords=coords
+        )
+        patch = build_hydration_patch(body.analysis, country_name=country.name)
+        updated = await update_report(report.id, patch)
+        if updated is None:  # dossier vanished between create and update — never false success
+            raise HTTPException(status_code=503, detail="dossier hydration failed")
+        chat = truncate_message(body.analysis.analysis.strip()) or "—"  # ≤8000 incl marker
+        msg = await append_report_message(
+            report.id,
+            ReportMessageCreate(role="munin", text=chat, ts=body.analysis.timestamp,
+                                refs=body.analysis.sources_used[:6]),
+        )
+        if msg is None:
+            # dossier already hydrated above; a client retry re-hydrates (idempotent) but appends a
+            # second munin message (append is not idempotent) — acceptable for append-only chat.
+            raise HTTPException(status_code=503, detail="briefing chat persistence failed")
+        return updated
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        log.warning("briefing_save_failed", country_id=country_id, error=str(exc))
+        raise HTTPException(status_code=503, detail="report store unavailable") from exc

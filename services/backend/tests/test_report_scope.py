@@ -149,6 +149,19 @@ async def test_bootstrap_creates_both_constraints(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_update_report_ignores_explicit_null_fields(graph):
+    rec = await report_store.create_report(
+        ReportCreateRequest(title="Original", location="L", coords="--", scope_key="country:NUL")
+    )
+    updated = await report_store.update_report(
+        rec.id, ReportUpdateRequest(title=None, confidence=0.7)
+    )
+    assert updated is not None                 # no ValidationError 500
+    assert updated.title == "Original"         # explicit null was a no-op, title preserved
+    assert updated.confidence == 0.7           # non-null field still applied
+
+
+@pytest.mark.asyncio
 async def test_update_report_accepts_metrics_patch_without_crashing(graph):
     # Regression: hydration sends DossierMetric objects through update_report → _report_params.
     # Without the merged-record re-validation this raises AttributeError on dict.model_dump().

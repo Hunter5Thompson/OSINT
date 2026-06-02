@@ -94,6 +94,22 @@ async def test_save_404_for_unknown_country(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_save_maps_storage_failure_to_503(monkeypatch):
+    async def boom(*a, **k):
+        raise RuntimeError("neo4j down")
+
+    monkeypatch.setattr(almanac_router, "get_or_create_report_by_scope", boom)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://t") as ac:
+        app.state.report_schema_ready = True
+        r = await ac.post(
+            "/api/almanac/countries/276/briefing/save",
+            json={"analysis": {"query": "q", "analysis": "Lage stabil"}},
+        )
+        assert r.status_code == 503
+
+
+@pytest.mark.asyncio
 async def test_save_503_when_hydration_returns_none(monkeypatch):
     async def fake_goc(scope_key, title, location, coords):
         return _rec(scope_key)
