@@ -168,3 +168,21 @@ class TestTwoLaneScoping:
 
         assert "CSIS" in out or "A" in out          # analysis lane survives
         assert '"source_class":"realtime"' not in out
+
+    async def test_emitted_order_preserves_tier_rank_not_dense_score(self):
+        from agents.tools import qdrant_search as qs
+
+        # analysis arrives ALREADY in tier order (think-tank first) even though the
+        # think-tank has a LOWER raw dense score than the local source. The emitted
+        # pack must keep tier order, not re-sort by dense score.
+        analysis = [
+            {"source": "rss", "feed_name": "CSIS", "title": "TANKVIEW",
+             "summary": "x", "score": 0.40},
+            {"source": "rss", "feed_name": "Local Paper", "title": "LOCALVIEW",
+             "summary": "y", "score": 0.95},
+        ]
+        with patch("agents.tools.qdrant_search.enhanced_search",
+                   self._lane_mock(analysis, [])):
+            out = await qs.ainvoke({"query": "x"})
+
+        assert out.index("TANKVIEW") < out.index("LOCALVIEW")

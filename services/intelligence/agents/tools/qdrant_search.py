@@ -119,7 +119,8 @@ async def qdrant_search(query: str, region: str = "") -> str:
 
         header = f"[Knowledge Base Evidence for: {query}]\n"
         evidence_budget = TOOL_OUTPUT_MAX_CHARS - len(graph_text) - len(header)
-        pack = format_evidence_pack(items, budget=max(evidence_budget, 0))
+        pack = format_evidence_pack(
+            items, budget=max(evidence_budget, 0), preserve_order=True)
         output = header + pack
         if graph_text and len(output) + len(graph_text) <= TOOL_OUTPUT_MAX_CHARS:
             output += graph_text

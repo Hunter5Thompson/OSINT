@@ -177,10 +177,16 @@ def _block(item: EvidenceItem) -> str:
     return f"{header}\nTitle: {item.title}\nExcerpt: {item.excerpt}"
 
 
-def format_evidence_pack(items: list[EvidenceItem], *, budget: int) -> str:
-    """Deterministic, budgeted pack. Sorted by relevance desc, deduped, and a
-    block is only appended if it fits whole — never a partial/truncated block."""
-    ordered = sorted(items, key=lambda it: it.relevance_score, reverse=True)
+def format_evidence_pack(items: list[EvidenceItem], *, budget: int,
+                         preserve_order: bool = False) -> str:
+    """Deterministic, budgeted pack. Deduped, and a block is only appended if it
+    fits whole — never a partial/truncated block.
+
+    If preserve_order, items are emitted in the caller's order (already ranked);
+    otherwise sorted by relevance desc.
+    """
+    ordered = items if preserve_order else sorted(
+        items, key=lambda it: it.relevance_score, reverse=True)
     seen: set[str] = set()
     blocks: list[str] = []
     used = 0
