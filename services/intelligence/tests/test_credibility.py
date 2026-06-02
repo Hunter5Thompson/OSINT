@@ -57,3 +57,36 @@ def test_credibility_unknown_fallback_score():
 def test_unknown_source_type_raises():
     with pytest.raises(KeyError):
         credibility_score("not-a-type", "x")
+
+
+class TestProviderOverrides:
+    @pytest.mark.parametrize("feed_name,expected", [
+        ("csis", 0.82),
+        ("rand corporation", 0.82),
+        ("rusi commentary", 0.82),
+        ("rusi publications", 0.82),
+        ("sipri", 0.82),
+        ("atlantic council", 0.82),
+        ("war on the rocks", 0.82),
+        ("brookings", 0.82),
+        ("crisis group", 0.82),
+        ("arms control association", 0.82),
+        ("swp publications (de)", 0.82),
+        ("swp publications (en)", 0.82),
+        ("bellingcat", 0.85),
+        ("reuters (google)", 0.85),
+        ("ap news (google)", 0.85),
+        ("bbc world", 0.80),
+        ("eu parliament security and defence", 0.80),
+        ("euvsdisinfo", 0.80),
+    ])
+    def test_analysis_feed_override(self, feed_name, expected):
+        # rss provider is the lowercased feed_name
+        assert credibility_score("rss", feed_name) == expected
+
+    def test_local_rss_keeps_baseline(self):
+        assert credibility_score("rss", "some local paper") == 0.60
+
+    def test_unknown_source_type_still_fail_fast(self):
+        with pytest.raises(KeyError):
+            credibility_score("not_a_type", "whatever")
