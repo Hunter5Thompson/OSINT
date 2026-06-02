@@ -126,3 +126,23 @@ async def test_save_503_when_hydration_returns_none(monkeypatch):
                           json={"analysis": {"query": "q", "analysis": "Lage stabil"}})
         assert r.status_code == 503
         assert "hydration failed" in r.text
+
+
+@pytest.mark.asyncio
+async def test_save_invalid_confidence_is_422_without_store_write(monkeypatch):
+    called = {"goc": False}
+
+    async def fake_goc(scope_key, title, location, coords):
+        called["goc"] = True
+        return _rec(scope_key)
+
+    monkeypatch.setattr(almanac_router, "get_or_create_report_by_scope", fake_goc)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://t") as ac:
+        app.state.report_schema_ready = True
+        r = await ac.post(
+            "/api/almanac/countries/276/briefing/save",
+            json={"analysis": {"query": "q", "analysis": "Lage", "confidence": 2.0}},
+        )
+        assert r.status_code == 422               # client error, not 503
+        assert called["goc"] is False             # no orphan dossier created before validation

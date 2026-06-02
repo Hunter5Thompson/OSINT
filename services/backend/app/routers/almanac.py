@@ -7,6 +7,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
 
 from app.models.almanac import AlmanacSignalResponse, BriefingSaveRequest, CountryAlmanac
@@ -95,13 +96,19 @@ async def save_country_briefing(
     coords = (
         f"{country.capital.lat:.2f},{country.capital.lon:.2f}" if country.capital else "--"
     )
+    # Build (and thereby validate) the hydration patch BEFORE any store access so an invalid
+    # client payload (e.g. confidence outside [0,1]) returns 422 with no orphan dossier write.
+    # build_hydration_patch is pure (no I/O), so this cannot itself cause a storage side effect.
+    try:
+        patch = build_hydration_patch(body.analysis, country_name=country.name)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid analysis payload: {exc}") from exc
     # Map storage failures (Neo4j outage) to 503 for consistency with the reports router. Our own
     # 404/503 HTTPExceptions are re-raised as-is; the schema-ready + country 404 checks stay above.
     try:
         report = await get_or_create_report_by_scope(
             scope_key, title=f"{country.name} — Lagebild", location=country.name, coords=coords
         )
-        patch = build_hydration_patch(body.analysis, country_name=country.name)
         updated = await update_report(report.id, patch)
         if updated is None:  # dossier vanished between create and update — never false success
             raise HTTPException(status_code=503, detail="dossier hydration failed")
