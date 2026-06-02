@@ -131,13 +131,13 @@ def build_briefing_context(
     # --- grounding_evidence (≤6 items; bounds + allowlist enforced here) ---
     iso_or_m49 = country.iso3 or country.m49
     # reserve the provenance suffix; truncate facts to fit
-    quelle = f"\nQuelle: {country.source_note}"
+    quelle = f"\nQuelle: {_sanitize(country.source_note)}"
     almanac_content = facts_block[: max(_CONTENT_MAX - len(quelle), 0)] + quelle
     grounding_evidence: list[dict[str, Any]] = [{
         "source_type": "dataset",
         "provider": "odin-country-almanac",
         "doc_id": f"odin-country-almanac:{factbook_revision}:{refreshed_at}:{iso_or_m49}"[:200],
-        "title": f"{country.name} — ODIN country almanac"[:_TITLE_MAX],
+        "title": f"{_sanitize(country.name)} — ODIN country almanac"[:_TITLE_MAX],
         "content": almanac_content,
         "url": None,
         "score": 0.95,
