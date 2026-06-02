@@ -127,3 +127,17 @@ class TestGuardAndMerge:
         out = cp.merge_lanes(analysis, realtime)
         assert sum(1 for r in out if r.get("source_class") == "realtime") == cp.TELEGRAM_MAX
         assert len(out) == 5
+
+    def test_merge_empty_analysis_with_realtime(self):
+        out = cp.merge_lanes([], [{"source": "telegram", "telegram_channel": "wartranslated"}])
+        assert len(out) == 1
+        assert out[0]["source_class"] == "realtime"
+
+    def test_merge_respects_final_k_when_telegram_max_exceeds_it(self):
+        # misconfig guard: telegram_max > final_k must NOT exceed final_k total
+        analysis = [{"id": i} for i in range(5)]
+        realtime = [{"source": "telegram", "telegram_channel": "wartranslated"},
+                    {"source": "telegram", "telegram_channel": "OSINTdefender"},
+                    {"source": "telegram", "telegram_channel": "liveuamap"}]
+        out = cp.merge_lanes(analysis, realtime, final_k=2, telegram_max=3)
+        assert len(out) == 2  # never more than final_k

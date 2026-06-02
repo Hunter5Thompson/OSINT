@@ -123,7 +123,7 @@ def merge_lanes(analysis: list[dict], realtime: list[dict],
     """Analysis dominates the top; at most `telegram_max` realtime leads, last,
     each marked source_class="realtime". Realtime displaces at most
     `telegram_max` analysis slots."""
-    rt = [{**r, "source_class": "realtime"} for r in realtime[:telegram_max]]
+    rt = [{**r, "source_class": "realtime"} for r in realtime[:min(telegram_max, final_k)]]
     if rt:
         return list(analysis[:final_k - len(rt)]) + rt
     return list(analysis[:final_k])
