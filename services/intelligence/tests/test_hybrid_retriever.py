@@ -283,3 +283,29 @@ class TestQueryFilterAndPostRerank:
         assert seen["count"] == 10       # saw full pool before the cut
         assert len(out) == 3             # cut to limit AFTER the hook
         assert [r["title"] for r in out] == ["9", "8", "7"]  # reversed pool, top-3
+
+
+class TestStartupIndexPreflight:
+    async def test_startup_warns_missing_indexes_and_never_mutates(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+
+        import rag.retriever as retr
+
+        client = SimpleNamespace(
+            get_collections=AsyncMock(return_value=SimpleNamespace(
+                collections=[SimpleNamespace(name=retr.settings.qdrant_collection)])),
+            get_collection=AsyncMock(return_value=SimpleNamespace(
+                payload_schema={"source": 1})),   # telegram_channel + notebook_id missing
+            create_payload_index=AsyncMock(),
+            close=AsyncMock(),
+        )
+        retr._schema_validated = False
+        with patch("rag.retriever.AsyncQdrantClient", return_value=client), \
+             patch("rag.retriever.validate_collection_schema"), \
+             patch.object(retr.logger, "warning") as warn:
+            await retr._ensure_schema_validated()
+
+        client.create_payload_index.assert_not_called()   # startup is read-only
+        assert any(c.args[:1] == ("payload_indexes_missing",) for c in warn.call_args_list)
+        retr._schema_validated = False

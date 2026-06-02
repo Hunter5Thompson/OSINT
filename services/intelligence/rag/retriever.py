@@ -11,7 +11,11 @@ from config import settings
 from graph.client import GraphClient
 from rag.embedder import embed_text
 from rag.graph_context import get_graph_context as _graph_context_fn
-from rag.qdrant_schema import QdrantSchemaMismatch, validate_collection_schema
+from rag.qdrant_schema import (
+    QdrantSchemaMismatch,
+    missing_payload_indexes,
+    validate_collection_schema,
+)
 from rag.reranker import rerank as _rerank_fn
 
 # Lazy singleton GraphClient for graph context injection
@@ -59,6 +63,13 @@ async def _ensure_schema_validated() -> None:
         if settings.qdrant_collection in names:
             info = await client.get_collection(settings.qdrant_collection)
             validate_collection_schema(info, enable_hybrid=settings.enable_hybrid)
+            missing = missing_payload_indexes(info)
+            if missing:
+                logger.warning(
+                    "payload_indexes_missing",
+                    fields=missing,
+                    hint="run: uv run python -m scripts.ensure_payload_indexes",
+                )
         _schema_validated = True
     except QdrantSchemaMismatch:
         raise
