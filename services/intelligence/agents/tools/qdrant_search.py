@@ -8,6 +8,7 @@ from rag.corpus_policy import (
     FINAL_K,
     REALTIME_POOL,
     RT_SCORE_THRESHOLD,
+    TELEGRAM_MAX,
     analysis_filter,
     apply_tier_boost,
     merge_lanes,
@@ -78,7 +79,7 @@ async def qdrant_search(query: str, region: str = "") -> str:
         )
         try:
             realtime = await enhanced_search(
-                query, limit=1, pool=REALTIME_POOL,
+                query, limit=TELEGRAM_MAX, pool=REALTIME_POOL,
                 query_filter=realtime_filter(), region=region or None,
                 post_rerank=apply_tier_boost, score_threshold=RT_SCORE_THRESHOLD,
             )
