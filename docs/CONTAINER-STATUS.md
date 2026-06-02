@@ -11,7 +11,9 @@
   situation briefing from the country's Almanac profile + matched live signals +
   ReAct/RAG/graph) and `POST /api/almanac/countries/{id}/briefing/save` (hydrates a
   lookup-or-create per-country dossier keyed by unique `scope_key`, appends a Munin
-  chat message). Both are gated on `app.state.report_schema_ready`.
+  chat message). Only `/briefing/save` is gated on `app.state.report_schema_ready`
+  (returns 503 until the constraints are bootstrapped); `/briefing` (generate) is not
+  gated and streams regardless.
 - Startup now bootstraps two Neo4j constraints in the lifespan
   (`report_id_unique`, `report_scope_key_unique`); saves return 503 until ready.
 - Grounding reaches the intelligence service via new `QueryRequest.grounding_context`
