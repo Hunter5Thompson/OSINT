@@ -20,12 +20,15 @@ async def osint_node(state: AgentState) -> dict:
 
     try:
         llm = create_osint_llm()
+        grounding = state.get("grounding_context") or ""
+        grounding_note = f"\n\n{grounding}" if grounding else ""
         messages = [
             osint_sys(),
             HumanMessage(
                 content=f"Gather OSINT information about: {state['query']}\n\n"
                 "Use your knowledge to provide relevant intelligence findings. "
                 "Focus on recent events, key actors, and geopolitical context."
+                f"{grounding_note}"
             ),
         ]
         response = await llm.ainvoke(messages)

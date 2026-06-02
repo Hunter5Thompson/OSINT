@@ -17,3 +17,47 @@ async def test_osint_node_sources_used_is_empty():
             "query": "q", "agent_chain": [], "iteration": 0,
         })
     assert out["sources_used"] == []
+
+
+@pytest.mark.asyncio
+async def test_legacy_osint_node_seeds_grounding(monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    import graph.nodes as nodes
+    captured = {}
+
+    class FakeLLM:
+        async def ainvoke(self, messages):
+            captured["messages"] = messages
+            return AIMessage(content="ok")
+
+    monkeypatch.setattr(nodes, "create_osint_llm", lambda: FakeLLM())
+    state = {
+        "query": "Lage Iran",
+        "grounding_context": "<<<GROUNDING_DATA\nfakten\n>>>END_GROUNDING_DATA",
+        "agent_chain": [],
+        "iteration": 0,
+        "messages": [],
+    }
+    await nodes.osint_node(state)
+    human = [m for m in captured["messages"] if getattr(m, "type", "") == "human"][0]
+    assert "GROUNDING_DATA" in human.content  # grounding reaches the legacy osint prompt
+
+
+@pytest.mark.asyncio
+async def test_legacy_osint_node_no_grounding_is_noop(monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    import graph.nodes as nodes
+    captured = {}
+
+    class FakeLLM:
+        async def ainvoke(self, messages):
+            captured["messages"] = messages
+            return AIMessage(content="ok")
+
+    monkeypatch.setattr(nodes, "create_osint_llm", lambda: FakeLLM())
+    state = {"query": "Lage Iran", "agent_chain": [], "iteration": 0, "messages": []}
+    await nodes.osint_node(state)
+    human = [m for m in captured["messages"] if getattr(m, "type", "") == "human"][0]
+    assert "GROUNDING_DATA" not in human.content  # empty grounding → no block appended
