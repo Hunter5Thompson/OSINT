@@ -70,4 +70,36 @@ describe("useCountryBriefing", () => {
     const [first] = controllers;
     expect(first?.abort).toHaveBeenCalled(); // first stream aborted on second run
   });
+
+  it("aborts the in-flight stream on reset", async () => {
+    const controllers: AbortController[] = [];
+    const api = await import("../../services/api");
+    vi.spyOn(api, "streamCountryBriefing").mockImplementation((_id, _s, _r, _e, _d) => {
+      const c = new AbortController();
+      vi.spyOn(c, "abort");
+      controllers.push(c);
+      return c; // do NOT fire callbacks (simulate in-flight)
+    });
+    const { useCountryBriefing } = await import("../useCountryBriefing");
+    const { result } = renderHook(() => useCountryBriefing("276"));
+    act(() => result.current.run());
+    act(() => result.current.reset());
+    const [first] = controllers;
+    expect(first?.abort).toHaveBeenCalled();
+  });
+
+  it("ignores a stale callback that arrives after reset (no result lands under the new country)", async () => {
+    let capturedOnResult: ((a: never) => void) | undefined;
+    const api = await import("../../services/api");
+    vi.spyOn(api, "streamCountryBriefing").mockImplementation((_id, _s, onResult) => {
+      capturedOnResult = onResult; // capture, fire later (simulate late arrival)
+      return new AbortController();
+    });
+    const { useCountryBriefing } = await import("../useCountryBriefing");
+    const { result } = renderHook(() => useCountryBriefing("276"));
+    act(() => result.current.run()); // stream A starts
+    act(() => result.current.reset()); // country switched away → reset aborts + invalidates
+    act(() => capturedOnResult?.({ query: "q", analysis: "STALE-A", confidence: 0.5 } as never));
+    expect(result.current.result).toBeNull(); // A's late result is ignored, not shown
+  });
 });
