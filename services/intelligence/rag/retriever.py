@@ -74,6 +74,7 @@ async def search(
     region: str | None = None,
     source: str | None = None,
     score_threshold: float = 0.3,
+    query_filter: dict | None = None,
 ) -> list[dict]:
     """Search the knowledge base with optional filters.
 
@@ -108,8 +109,17 @@ async def search(
     if source:
         must_conditions.append({"key": "source", "match": {"value": source}})
 
+    filt: dict = {}
     if must_conditions:
-        search_body["filter"] = {"must": must_conditions}
+        filt["must"] = must_conditions
+    if query_filter:
+        for k, v in query_filter.items():
+            if k == "must":
+                filt["must"] = filt.get("must", []) + v
+            else:
+                filt[k] = v
+    if filt:
+        search_body["filter"] = filt
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -142,6 +152,9 @@ async def enhanced_search(
     region: str | None = None,
     source: str | None = None,
     score_threshold: float = 0.3,
+    query_filter: dict | None = None,
+    pool: int | None = None,
+    post_rerank=None,
     *,
     enable_hybrid: bool | None = None,
     enable_rerank: bool | None = None,
@@ -172,21 +185,30 @@ async def enhanced_search(
         )
         enable_hybrid = False  # graceful fallback to dense
 
-    # Stage 1: Dense search (baseline)
-    overfetch = limit * 2 if enable_rerank else limit
+    # Stage 1: Dense search (baseline). pool overrides the rerank overfetch.
+    overfetch = pool if pool is not None else (limit * 2 if enable_rerank else limit)
     results = await search(
         query, limit=overfetch, region=region,
-        source=source, score_threshold=score_threshold,
+        source=source, score_threshold=score_threshold, query_filter=query_filter,
     )
 
     if not results:
         return []
 
-    # Stage 2: Rerank (optional)
+    # Stage 2: Rerank (optional). When a post_rerank hook is set we rerank the
+    # whole pool so the hook can re-order across all candidates before the cut.
     if enable_rerank:
-        results = await _rerank_fn(query, results, top_k=limit)
+        rerank_top_k = overfetch if post_rerank is not None else limit
+        results = await _rerank_fn(query, results, top_k=rerank_top_k)
 
-    # Stage 3: Graph Context Injection (optional)
+    # Stage 2b: Optional post-rerank hook (e.g. tier-boost). Keeps the primitive
+    # neutral when None — no corpus policy leaks into the generic retriever.
+    if post_rerank is not None:
+        results = post_rerank(results)
+
+    results = results[:limit]
+
+    # Stage 3: Graph Context Injection (optional) — only for the final items.
     if enable_graph_context:
         entity_names = set()
         for r in results:
@@ -194,11 +216,8 @@ async def enhanced_search(
                 if isinstance(e, dict) and "name" in e:
                     entity_names.add(e["name"])
         if entity_names:
-            # Use provided client or fall back to lazy singleton from config
             gc = graph_client or _get_graph_client()
-            graph_ctx = await _graph_context_fn(
-                list(entity_names), graph_client=gc,
-            )
+            graph_ctx = await _graph_context_fn(list(entity_names), graph_client=gc)
             if graph_ctx:
                 for r in results:
                     r["graph_context"] = graph_ctx

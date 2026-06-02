@@ -210,3 +210,51 @@ class TestEnhancedSearch:
 
         call_kwargs = mock_graph_ctx.call_args.kwargs
         assert call_kwargs["graph_client"] is explicit_gc
+
+
+class TestQueryFilterAndPostRerank:
+    async def test_query_filter_passed_to_search(self):
+        from rag.retriever import enhanced_search
+
+        captured = {}
+
+        async def fake_search(query, **kwargs):
+            captured.update(kwargs)
+            return [{"title": "r", "content": "c", "score": 0.9}]
+
+        with patch("rag.retriever.search", AsyncMock(side_effect=fake_search)):
+            await enhanced_search(
+                "q", query_filter={"should": [{"key": "source", "match": {"value": "rss"}}]},
+                pool=40, enable_rerank=False, enable_graph_context=False,
+            )
+        expected_filter = {"should": [{"key": "source", "match": {"value": "rss"}}]}
+        assert captured["query_filter"] == expected_filter
+        assert captured["limit"] == 40  # pool drives overfetch
+
+    async def test_post_rerank_none_is_neutral(self):
+        from rag.retriever import enhanced_search
+
+        results = [{"title": "a", "content": "a", "score": 0.1},
+                   {"title": "b", "content": "b", "score": 0.9}]
+        with patch("rag.retriever.search", AsyncMock(return_value=results)):
+            out = await enhanced_search(
+                "q", enable_rerank=False, enable_graph_context=False,
+            )
+        # untouched order, no tier_* keys injected
+        assert [r["title"] for r in out] == ["a", "b"]
+        assert all("tier_score" not in r for r in out)
+
+    async def test_post_rerank_callback_applied(self):
+        from rag.retriever import enhanced_search
+
+        results = [{"title": "a", "content": "a", "score": 0.1},
+                   {"title": "b", "content": "b", "score": 0.9}]
+
+        def reverse(rs):
+            return list(reversed(rs))
+
+        with patch("rag.retriever.search", AsyncMock(return_value=results)):
+            out = await enhanced_search(
+                "q", post_rerank=reverse, enable_rerank=False, enable_graph_context=False,
+            )
+        assert [r["title"] for r in out] == ["b", "a"]
