@@ -19,10 +19,17 @@ class TestLaneFilters:
         assert {"wartranslated", "OSINTdefender"} <= allowed
         assert "rybar" not in allowed
 
-    def test_constants_present(self):
-        assert cp.ANALYSIS_POOL == 40
-        assert cp.REALTIME_POOL == 20
-        assert cp.RT_SCORE_THRESHOLD == 0.45
-        assert cp.FINAL_K == 5
-        assert cp.TELEGRAM_MAX == 1
-        assert cp.TIER_BOOST_LAMBDA == 0.2
+    def test_constants_wired_to_settings(self):
+        from config import settings
+        # the constants must READ from settings (env-overridable), not be hardcoded
+        assert settings.rag_tier_boost_lambda == cp.TIER_BOOST_LAMBDA
+        assert settings.rag_analysis_pool == cp.ANALYSIS_POOL
+        assert settings.rag_realtime_pool == cp.REALTIME_POOL
+        assert settings.rag_realtime_score_threshold == cp.RT_SCORE_THRESHOLD
+        assert settings.rag_final_k == cp.FINAL_K
+        assert settings.rag_telegram_max == cp.TELEGRAM_MAX
+
+    def test_constant_defaults(self):
+        # pin the documented starting values
+        assert (cp.TIER_BOOST_LAMBDA, cp.ANALYSIS_POOL, cp.REALTIME_POOL) == (0.2, 40, 20)
+        assert (cp.RT_SCORE_THRESHOLD, cp.FINAL_K, cp.TELEGRAM_MAX) == (0.45, 5, 1)
