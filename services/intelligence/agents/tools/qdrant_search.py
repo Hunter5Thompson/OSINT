@@ -3,6 +3,17 @@
 import structlog
 from langchain_core.tools import tool
 
+from rag.corpus_policy import (
+    ANALYSIS_POOL,
+    FINAL_K,
+    REALTIME_POOL,
+    RT_SCORE_THRESHOLD,
+    analysis_filter,
+    apply_tier_boost,
+    merge_lanes,
+    realtime_filter,
+    validate_lane,
+)
 from rag.evidence import format_evidence_pack, to_evidence_item
 from rag.retriever import enhanced_search
 
@@ -24,14 +35,17 @@ def _clip_text(text: str, max_chars: int) -> str:
 async def qdrant_search(query: str, region: str = "") -> str:
     """Semantic vector search across the OSINT knowledge base.
 
-    Index content (≈20k documents, 1024-dim cosine):
-    - 37 RSS feeds (Reuters, BBC, AP, BMVg, Bundeswehr, Bundestag, SWP, RUSI,
-      EU Parliament Security and Defence, NATO/UN/US Gov, defense media, etc.)
-    - Telegram channels: OSINTdefender, DeepStateEN, wartranslated, liveuamap, rybar
-    - UCDP-GED conflict events with casualty counts and locations
-    - FIRMS thermal-anomaly annotations
-    - GDACS disaster bulletins, EONET natural events
+    Index content — VETTED ANALYSIS PROSE only (1024-dim cosine):
+    - 37 RSS feeds: think-tanks (CSIS, RUSI, RAND, SIPRI, SWP, Atlantic Council,
+      War on the Rocks, Brookings, Crisis Group, Bellingcat), gov/mil (BMVg,
+      Bundeswehr, Bundestag, NATO, UN, US Gov), wire (Reuters, AP, BBC), defense media
     - NotebookLM extractions from briefing audio and research reports
+    Plus AT MOST ONE vetted Telegram realtime LEAD (wartranslated, OSINTdefender,
+    liveuamap, AuroraIntel, DeepStateEN), marked source_class="realtime" — treat it
+    as an unverified lead, not a primary source.
+
+    NOT here: GDELT-GKG, FIRMS, UCDP, GDACS, EONET and other structured/sensor data
+    — reach those via query_knowledge_graph (Neo4j), not this tool.
 
     Each result includes a graph context block (entity → relation → entity)
     derived from Neo4j — useful for spotting actors and locations connected
@@ -57,15 +71,30 @@ async def qdrant_search(query: str, region: str = "") -> str:
         block. Sorted by relevance; bounded by an internal character budget.
     """
     try:
-        results = await enhanced_search(
-            query,
-            limit=5,
-            region=region or None,
+        analysis = await enhanced_search(
+            query, limit=FINAL_K, pool=ANALYSIS_POOL,
+            query_filter=analysis_filter(), region=region or None,
+            post_rerank=apply_tier_boost,
         )
+        try:
+            realtime = await enhanced_search(
+                query, limit=1, pool=REALTIME_POOL,
+                query_filter=realtime_filter(), region=region or None,
+                post_rerank=apply_tier_boost, score_threshold=RT_SCORE_THRESHOLD,
+            )
+        except Exception as e:  # realtime is best-effort; never fail the analysis lane
+            logger.warning("realtime_lane_failed", query=query, error=str(e))
+            realtime = []
+
+        analysis = validate_lane(analysis, "analysis")
+        realtime = validate_lane(realtime, "realtime")
+        results = merge_lanes(analysis, realtime)
+
         logger.info(
             "qdrant_search_executed",
             query=query,
-            region=region or None,
+            analysis_count=len(analysis),
+            realtime_count=len(realtime),
             result_count=len(results),
         )
 
