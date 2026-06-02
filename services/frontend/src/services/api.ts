@@ -262,6 +262,7 @@ export function queryIntel(
     .catch((err: Error) => {
       if (err.name !== "AbortError") {
         onError(err.message);
+        onDone();
       }
     });
 
