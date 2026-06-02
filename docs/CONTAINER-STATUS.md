@@ -4,6 +4,27 @@
 
 ## Release Notes
 
+### 2026-06-02 — Country Briefing (Munin) landed
+
+- New backend status-SSE endpoints (require the **interactive vLLM 9B stack**, not
+  the ingestion stack): `POST /api/almanac/countries/{id}/briefing` (streams a Munin
+  situation briefing from the country's Almanac profile + matched live signals +
+  ReAct/RAG/graph) and `POST /api/almanac/countries/{id}/briefing/save` (hydrates a
+  lookup-or-create per-country dossier keyed by unique `scope_key`, appends a Munin
+  chat message). Both are gated on `app.state.report_schema_ready`.
+- Startup now bootstraps two Neo4j constraints in the lifespan
+  (`report_id_unique`, `report_scope_key_unique`); saves return 503 until ready.
+- Grounding reaches the intelligence service via new `QueryRequest.grounding_context`
+  + `grounding_evidence` (bounded/allowlisted) → ReAct seed + synthesis evidence.
+  **The intelligence image must be rebuilt** (`docker compose build intelligence`)
+  to activate grounding; the backend picks up the new routes via its mounted source
+  on restart. Until the intelligence rebuild, briefings still stream (grounding is
+  accepted but unused — graceful).
+- Frontend: "§ Munin-Briefing erzeugen" block in `CountryAlmanacPanel` (generate →
+  collapsed report → save to Briefing Room → dossier link).
+- Spec: `docs/superpowers/specs/2026-06-01-country-briefing-design.md`.
+- Plan: `docs/superpowers/plans/2026-06-01-country-briefing.md`.
+
 ### 2026-05-20 — Auto-Promoter v1 landed
 
 - New backend lifespan task observes `/api/signals/stream` and promotes
