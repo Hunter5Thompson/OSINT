@@ -186,7 +186,10 @@ def truncate_message(text: str, limit: int = 8000) -> str:
     return text[: limit - len(_TRUNC_MARK)] + _TRUNC_MARK
 
 
-_HEADING_RE = re.compile(r"^\s*#{1,4}\s*(.+?)\s*$")
+# Linear-time (ReDoS-safe): bounded leading/inter whitespace + capture starts at a non-space,
+# so there is no ambiguous overlap between the \s quantifiers and the heading text on
+# untrusted (LLM/grounding-derived) report lines. Trailing whitespace is stripped by the caller.
+_HEADING_RE = re.compile(r"^[ \t]{0,8}#{1,4}[ \t]{0,8}(\S.*)$")
 _CONTEXT_MAX = 1200
 _SUMMARY_NAMES = ("executive summary", "summary", "zusammenfassung")
 _FINDING_NAMES = ("key findings", "findings", "erkenntnisse")
