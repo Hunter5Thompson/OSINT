@@ -26,13 +26,14 @@ from graph.client import GraphClient
 from graph.nodes import analyst_node, osint_node, router_node
 from graph.nodes import synthesis_node as legacy_synthesis_node
 from graph.state import AgentState
-from rag.evidence import parse_evidence_refs
+from rag.evidence import format_evidence_pack, parse_evidence_refs, to_evidence_item
 
 logger = structlog.get_logger()
 
 TOOL_MESSAGE_MAX_CHARS = 2500
 REACT_TOOL_HISTORY_MAX_CHARS = 12000
 SYNTHESIS_RESEARCH_MAX_CHARS = 18000
+GROUNDING_EVIDENCE_MAX_CHARS = 3000
 
 
 def _clip_text(text: str, max_chars: int) -> str:
@@ -110,9 +111,12 @@ async def react_agent_node(state: AgentState) -> dict:
             if state.get("image_url"):
                 image_note = f"\n\nAn image has been provided for analysis: {state['image_url']}"
 
+            grounding = state.get("grounding_context") or ""
+            grounding_note = f"\n\n{grounding}" if grounding else ""
+
             initial_messages = [
                 SystemMessage(content=REACT_SYSTEM_PROMPT),
-                HumanMessage(content=f"{query}{image_note}"),
+                HumanMessage(content=f"{query}{image_note}{grounding_note}"),
             ]
             messages = list(state.get("messages", [])) + initial_messages
         else:
@@ -177,6 +181,11 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 tool_results.append(
                     msg.content if isinstance(msg.content, str) else str(msg.content)
                 )
+
+        # Prepend the deterministic grounding pack so it is part of the synthesis
+        # research text AND counted first by derive_sources_used (sources_used).
+        pack = state.get("grounding_evidence_pack") or ""
+        tool_results = ([pack] if pack else []) + tool_results
 
         research_text = (
             "\n\n---\n\n".join(tool_results)
@@ -341,6 +350,8 @@ async def run_intelligence_query(
     region: str | None = None,
     image_url: str | None = None,
     use_legacy: bool = False,
+    grounding_context: str | None = None,
+    grounding_evidence: list[dict] | None = None,
 ) -> dict:
     """Run intelligence analysis — ReAct by default (fail-closed on failure);
     the legacy pipeline runs only when use_legacy=True."""
@@ -350,9 +361,16 @@ async def run_intelligence_query(
     # Wire Neo4j client for graph_query tool (lazy singleton)
     _ensure_graph_client()
 
+    items = [to_evidence_item(d) for d in (grounding_evidence or [])]
+    grounding_evidence_pack = (
+        format_evidence_pack(items, budget=GROUNDING_EVIDENCE_MAX_CHARS) if items else ""
+    )
+
     initial_state: AgentState = {
         "query": query,
         "image_url": image_url,
+        "grounding_context": grounding_context or "",
+        "grounding_evidence_pack": grounding_evidence_pack,
         "messages": [],
         "tool_calls_count": 0,
         "iteration": 0,

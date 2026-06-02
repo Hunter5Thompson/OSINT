@@ -47,6 +47,11 @@ class TestSystemPrompt:
     def test_includes_tool_budget(self):
         assert "8" in REACT_SYSTEM_PROMPT or "max" in REACT_SYSTEM_PROMPT.lower()
 
+    def test_react_system_prompt_has_untrusted_data_rule(self):
+        low = REACT_SYSTEM_PROMPT.lower()
+        assert "untrusted" in low
+        assert "anweisungen" in low or "instructions" in low
+
 
 class TestGuardCheck:
     def test_under_limit_continues(self):

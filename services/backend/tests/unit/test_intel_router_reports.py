@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -69,7 +70,9 @@ class TestIntelReportScopedPersistence:
         return TestClient(app)
 
     def test_returns_error_when_report_missing(self, client: TestClient) -> None:
-        with patch("app.routers.intel.report_store.get_report", AsyncMock(return_value=None)):
+        with patch(
+            "app.services.intel_stream.report_store.get_report", AsyncMock(return_value=None)
+        ):
             resp = client.post(
                 "/api/intel/query",
                 json={"query": "Brief me", "report_id": "r-missing", "report_message": "Brief me"},
@@ -82,11 +85,11 @@ class TestIntelReportScopedPersistence:
         append_mock = AsyncMock()
         with (
             patch(
-                "app.routers.intel.report_store.get_report",
+                "app.services.intel_stream.report_store.get_report",
                 AsyncMock(return_value=_sample_report()),
             ),
-            patch("app.routers.intel.report_store.append_report_message", append_mock),
-            patch("app.routers.intel.httpx.AsyncClient", return_value=_MockHttpClient()),
+            patch("app.services.intel_stream.report_store.append_report_message", append_mock),
+            patch("app.services.intel_stream.httpx.AsyncClient", return_value=_MockHttpClient()),
         ):
             resp = client.post(
                 "/api/intel/query",
@@ -105,3 +108,33 @@ class TestIntelReportScopedPersistence:
         assert first_call.args[0] == "r-044"
         assert first_call.args[1].role == "user"
         assert second_call.args[1].role == "munin"
+
+    def test_persists_error_message_on_http_failure(self, client: TestClient) -> None:
+        append_mock = AsyncMock()
+
+        class _BoomClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return None
+
+            async def post(self, *a, **k):
+                raise httpx.ConnectError("down")
+
+        with (
+            patch(
+                "app.services.intel_stream.report_store.get_report",
+                AsyncMock(return_value=_sample_report()),
+            ),
+            patch("app.services.intel_stream.report_store.append_report_message", append_mock),
+            patch("app.services.intel_stream.httpx.AsyncClient", return_value=_BoomClient()),
+        ):
+            resp = client.post(
+                "/api/intel/query",
+                json={"query": "x", "report_id": "r-044", "report_message": "x"},
+            )
+
+        assert "INTEL_SERVICE_ERROR" in resp.text
+        roles = [c.args[1].role for c in append_mock.await_args_list]
+        assert "user" in roles and "munin" in roles  # user message + persisted error munin message

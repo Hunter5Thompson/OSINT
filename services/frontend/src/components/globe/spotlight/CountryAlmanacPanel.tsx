@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useCountryAlmanac } from "../../../hooks/useCountryAlmanac";
+import { useCountryBriefing } from "../../../hooks/useCountryBriefing";
+import { saveCountryBriefing } from "../../../services/api";
 import type { AlmanacFact, AlmanacFacts, AlmanacSignalItem } from "../../../types/almanac";
 
 const sections: Array<{ key: keyof AlmanacFacts; label: string }> = [
@@ -21,6 +23,21 @@ interface Props {
 export function CountryAlmanacPanel({ iso3, m49 }: Props) {
   const { facts, signals } = useCountryAlmanac({ iso3, m49 });
   const [active, setActive] = useState<keyof AlmanacFacts>("profile");
+
+  const countryId = iso3 ?? m49;
+  const briefing = useCountryBriefing(countryId);
+  const [saved, setSaved] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // inspected country changed → drop any prior briefing result + save state so we never
+    // show or save country A's briefing under country B.
+    setSaved(false);
+    setSavedId(null);
+    setSaveError(null);
+    briefing.reset();
+  }, [countryId]);
 
   const activeFacts = useMemo<AlmanacFact[]>(() => {
     if (facts.status !== "ready") return [];
@@ -72,6 +89,57 @@ export function CountryAlmanacPanel({ iso3, m49 }: Props) {
         </>
       )}
       <SignalList status={signals.status} items={signals.status === "ready" ? signals.data.items : []} />
+      <section className="country-almanac__briefing" aria-label="Munin briefing">
+        <button
+          type="button"
+          className="country-almanac__tab"
+          onClick={() => {
+            setSaved(false);
+            setSavedId(null);
+            setSaveError(null);
+            briefing.run();
+          }}
+        >
+          § Munin-Briefing erzeugen
+        </button>
+        {briefing.loading && (
+          <div className="country-almanac__muted">§ Munin · {briefing.currentAgent ?? "läuft"}</div>
+        )}
+        {briefing.error && <div className="country-almanac__muted">§ Munin · {briefing.error}</div>}
+        {briefing.result && (
+          <details className="country-almanac__report">
+            <summary>
+              {briefing.result.threat_assessment ?? "REPORT"} ·{" "}
+              {(briefing.result.confidence * 100).toFixed(0)}%
+            </summary>
+            <pre className="country-almanac__report-body">{briefing.result.analysis}</pre>
+            <button
+              type="button"
+              className="country-almanac__tab"
+              disabled={saved}
+              onClick={() => {
+                const r = briefing.result;
+                if (!r) return;
+                setSaveError(null);
+                saveCountryBriefing(countryId, r)
+                  .then((rec) => {
+                    setSaved(true);
+                    setSavedId(rec.id);
+                  })
+                  .catch((e: unknown) => setSaveError(e instanceof Error ? e.message : String(e)));
+              }}
+            >
+              {saved ? "✓ in Briefing Room" : "In Briefing Room speichern"}
+            </button>
+            {savedId && (
+              <a className="country-almanac__tab" href={`/briefing/${savedId}`}>
+                Im Briefing Room öffnen →
+              </a>
+            )}
+            {saveError && <div className="country-almanac__muted">§ Speichern · {saveError}</div>}
+          </details>
+        )}
+      </section>
       <div className="country-almanac__capabilities" aria-label="ODIN capabilities">
         {capabilities.map((capability) => (
           <span key={capability}>{capability}</span>

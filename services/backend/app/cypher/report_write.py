@@ -18,6 +18,7 @@ REPORT_UPSERT = (
     "  r.body_paragraphs = $body_paragraphs, "
     "  r.margin_json = $margin_json, "
     "  r.sources = $sources, "
+    "  r.scope_key = $scope_key, "
     "  r.updated_at = datetime($now) "
     "RETURN "
     "  r.id AS id, "
@@ -35,8 +36,60 @@ REPORT_UPSERT = (
     "  coalesce(r.body_paragraphs, []) AS body_paragraphs, "
     "  coalesce(r.margin_json, '[]') AS margin_json, "
     "  coalesce(r.sources, []) AS sources, "
+    "  r.scope_key AS scope_key, "
     "  toString(r.created_at) AS created_at, "
     "  toString(r.updated_at) AS updated_at"
+)
+
+REPORT_CREATE = (
+    "CREATE (r:Report {id: $report_id}) "
+    "SET "
+    "  r.created_at = datetime($now), "
+    "  r.paragraph_num = $paragraph_num, "
+    "  r.stamp = $stamp, "
+    "  r.title = $title, "
+    "  r.status = $status, "
+    "  r.confidence = $confidence, "
+    "  r.location = $location, "
+    "  r.coords = $coords, "
+    "  r.findings = $findings, "
+    "  r.metrics_json = $metrics_json, "
+    "  r.context = $context, "
+    "  r.body_title = $body_title, "
+    "  r.body_paragraphs = $body_paragraphs, "
+    "  r.margin_json = $margin_json, "
+    "  r.sources = $sources, "
+    "  r.scope_key = $scope_key, "
+    "  r.updated_at = datetime($now) "
+    "RETURN "
+    "  r.id AS id, "
+    "  coalesce(r.paragraph_num, 0) AS paragraph_num, "
+    "  coalesce(r.stamp, '') AS stamp, "
+    "  coalesce(r.title, '') AS title, "
+    "  coalesce(r.status, 'Draft') AS status, "
+    "  coalesce(r.confidence, 0.0) AS confidence, "
+    "  coalesce(r.location, '') AS location, "
+    "  coalesce(r.coords, '') AS coords, "
+    "  coalesce(r.findings, []) AS findings, "
+    "  coalesce(r.metrics_json, '[]') AS metrics_json, "
+    "  coalesce(r.context, '') AS context, "
+    "  coalesce(r.body_title, '') AS body_title, "
+    "  coalesce(r.body_paragraphs, []) AS body_paragraphs, "
+    "  coalesce(r.margin_json, '[]') AS margin_json, "
+    "  coalesce(r.sources, []) AS sources, "
+    "  r.scope_key AS scope_key, "
+    "  toString(r.created_at) AS created_at, "
+    "  toString(r.updated_at) AS updated_at"
+)
+
+REPORT_ID_UNIQUE_CONSTRAINT = (
+    "CREATE CONSTRAINT report_id_unique IF NOT EXISTS "
+    "FOR (r:Report) REQUIRE r.id IS UNIQUE"
+)
+
+REPORT_SCOPE_UNIQUE_CONSTRAINT = (
+    "CREATE CONSTRAINT report_scope_key_unique IF NOT EXISTS "
+    "FOR (r:Report) REQUIRE r.scope_key IS UNIQUE"
 )
 
 REPORT_DELETE = "MATCH (r:Report {id: $report_id}) DETACH DELETE r"

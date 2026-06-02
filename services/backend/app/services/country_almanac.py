@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,11 @@ class CountryAlmanacStore:
     def __init__(self, path: Path = DEFAULT_ALMANAC_PATH) -> None:
         self.path = path
         self._by_id: dict[str, CountryAlmanac] | None = None
+        self.factbook_revision: str = ""
+        self.refreshed_at: str = ""
+        # Eager-load so `_meta` (factbook_revision / refreshed_at) is available
+        # on the store immediately; the singleton loads this once.
+        self._ensure_loaded()
 
     def get_country(self, country_id: str) -> CountryAlmanac | None:
         self._ensure_loaded()
@@ -45,6 +51,9 @@ class CountryAlmanacStore:
         if self._by_id is not None:
             return
         raw = json.loads(self.path.read_text(encoding="utf-8"))
+        meta = raw.get("_meta") or {}
+        self.factbook_revision = str(meta.get("factbook_revision", ""))
+        self.refreshed_at = str(meta.get("refreshed_at", ""))
         by_id: dict[str, CountryAlmanac] = {}
         for item in raw.get("countries", []):
             country = CountryAlmanac.model_validate(item)
@@ -55,6 +64,7 @@ class CountryAlmanacStore:
         self._by_id = by_id
 
 
+@lru_cache(maxsize=1)
 def get_country_almanac_store() -> CountryAlmanacStore:
     return CountryAlmanacStore()
 

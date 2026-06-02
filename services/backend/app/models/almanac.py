@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.models.intel import IntelAnalysis
 
 
 class AlmanacCapital(BaseModel):
@@ -50,3 +52,16 @@ class AlmanacSignalItem(BaseModel):
 class AlmanacSignalResponse(BaseModel):
     country_id: str
     items: list[AlmanacSignalItem]
+
+
+class BriefingSaveRequest(BaseModel):
+    """Stateless save payload: a finished Munin IntelAnalysis for one country."""
+
+    analysis: IntelAnalysis
+
+    @field_validator("analysis")
+    @classmethod
+    def _non_empty(cls, v: IntelAnalysis) -> IntelAnalysis:
+        if not v.analysis.strip():
+            raise ValueError("analysis.analysis must be non-empty")
+        return v

@@ -263,6 +263,9 @@
 .country-almanac__signal span { color: var(--ash); font-family: "Martian Mono", ui-monospace, monospace; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
 .country-almanac__capabilities { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; color: var(--ash); font-size: 8px; }
 .country-almanac__capabilities span { border: 1px solid var(--granite); padding: 6px 4px; text-align: center; }
+.country-almanac__briefing { display: grid; gap: 8px; border-top: 1px solid var(--granite); padding-top: 12px; }
+.country-almanac__report summary { cursor: pointer; font-family: "Martian Mono", ui-monospace, monospace; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--ash); }
+.country-almanac__report-body { white-space: pre-wrap; font-size: 12px; line-height: 1.4; color: var(--parchment); margin: 8px 0; max-height: 240px; overflow-y: auto; }
 @media (max-width: 720px) {
   .country-almanac__facts,
   .country-almanac__capabilities { grid-template-columns: 1fr; }

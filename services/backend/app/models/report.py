@@ -32,6 +32,7 @@ class ReportRecord(BaseModel):
     paragraph_num: int
     stamp: str
     title: str
+    scope_key: str | None = None
     status: ReportStatus = "Draft"
     confidence: float = Field(default=0.62, ge=0.0, le=1.0)
     location: str = "unspecified theatre"
@@ -49,6 +50,7 @@ class ReportRecord(BaseModel):
 
 class ReportCreateRequest(BaseModel):
     title: str = "Untitled Dossier"
+    scope_key: str | None = None
     status: ReportStatus = "Draft"
     confidence: float = Field(default=0.62, ge=0.0, le=1.0)
     location: str = "unspecified theatre"

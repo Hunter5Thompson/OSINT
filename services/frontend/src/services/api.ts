@@ -149,6 +149,94 @@ export async function getGeoEvents(limit = 100): Promise<IntelEvent[]> {
 }
 
 /**
+ * Callbacks fired by {@link consumeSSE} as parsed SSE frames arrive.
+ */
+export interface SSEHandlers {
+  onStatus: (d: { agent: string; status: string }) => void;
+  onResult: (a: IntelAnalysis) => void;
+  onError: (msg: string) => void;
+  onDone: () => void;
+}
+
+/**
+ * Block-based SSE frame parser.
+ *
+ * Reads a response body stream and dispatches whole frames (delimited by a
+ * blank line) to the supplied handlers. Event type and data are preserved
+ * across chunk boundaries because parsing happens per-frame, not per-chunk.
+ * `onDone` is guaranteed to fire exactly once: either via an explicit `done`
+ * frame, or when the stream ends without one.
+ *
+ * Note: consumeSSE has no independent cancel path — to stop streaming the
+ * caller must abort the underlying fetch via its AbortController `signal`.
+ */
+export async function consumeSSE(
+  body: ReadableStream<Uint8Array>,
+  h: SSEHandlers,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let done = false;
+
+  const dispatch = (frame: string): void => {
+    let event = "";
+    let data = "";
+    for (const raw of frame.split("\n")) {
+      const line = raw.replace(/\r$/, "");
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data += line.slice(5).replace(/^ /, "");
+    }
+    if (!event) return;
+    try {
+      if (event === "status") {
+        h.onStatus(JSON.parse(data) as { agent: string; status: string });
+      } else if (event === "result") {
+        h.onResult(JSON.parse(data) as IntelAnalysis);
+      } else if (event === "error") {
+        h.onError(parseSseError(data));
+      } else if (event === "done") {
+        if (!done) {
+          done = true;
+          h.onDone();
+        }
+      }
+    } catch {
+      // skip malformed events
+    }
+  };
+
+  try {
+    let streaming = true;
+    while (streaming) {
+      const { done: streamDone, value } = await reader.read();
+      if (streamDone) {
+        streaming = false;
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      // frame boundary = blank line (handle \n\n and \r\n\r\n)
+      let idx = buffer.search(/\r?\n\r?\n/);
+      while (idx !== -1) {
+        const frame = buffer.slice(0, idx);
+        const delim = buffer.slice(idx).match(/^\r?\n\r?\n/);
+        // search already matched at idx → delim is always present;
+        // 2 is an unreachable belt-and-suspenders fallback.
+        const delimLen = delim ? delim[0].length : 2;
+        buffer = buffer.slice(idx + delimLen);
+        dispatch(frame);
+        idx = buffer.search(/\r?\n\r?\n/);
+      }
+    }
+    if (buffer.trim()) dispatch(buffer);
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (!done) h.onDone();
+}
+
+/**
  * Query intelligence via SSE stream.
  * Calls the provided callbacks as events arrive.
  */
@@ -170,59 +258,15 @@ export function queryIntel(
     .then(async (res) => {
       if (!res.ok || !res.body) {
         onError(`HTTP ${res.status}`);
+        onDone();
         return;
       }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      // Carried ACROSS chunk boundaries: an `event:` line and its `data:` line
-      // can arrive in separate reads, so the current event type must survive
-      // the per-chunk loop (like `buffer`).
-      let currentEvent = "";
-      let doneEmitted = false;
-      const emitDone = (): void => {
-        if (!doneEmitted) {
-          doneEmitted = true;
-          onDone();
-        }
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        // Split on CRLF or LF — the backend (sse-starlette) emits \r\n.
-        const lines = buffer.split(/\r?\n/);
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            currentEvent = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            try {
-              if (currentEvent === "status") {
-                onStatus(JSON.parse(data) as { agent: string; status: string });
-              } else if (currentEvent === "result") {
-                onResult(JSON.parse(data) as IntelAnalysis);
-              } else if (currentEvent === "error") {
-                onError(parseSseError(data));
-              } else if (currentEvent === "done") {
-                emitDone();
-              }
-            } catch {
-              // skip malformed events
-            }
-          }
-        }
-      }
-      emitDone();
+      await consumeSSE(res.body, { onStatus, onResult, onError, onDone });
     })
     .catch((err: Error) => {
       if (err.name !== "AbortError") {
         onError(err.message);
+        onDone();
       }
     });
 
@@ -231,6 +275,63 @@ export function queryIntel(
 
 export async function getIntelHistory(): Promise<IntelAnalysis[]> {
   return fetchJSON<IntelAnalysis[]>("/intel/history");
+}
+
+/**
+ * Stream a country briefing via status-SSE.
+ * POSTs to the almanac briefing endpoint and dispatches frames through
+ * {@link consumeSSE}. Returns an AbortController to cancel the stream.
+ */
+export function streamCountryBriefing(
+  countryId: string,
+  onStatus: SSEHandlers["onStatus"],
+  onResult: SSEHandlers["onResult"],
+  onError: SSEHandlers["onError"],
+  onDone: SSEHandlers["onDone"],
+): AbortController {
+  const controller = new AbortController();
+  fetch(
+    `${BASE}/almanac/countries/${encodeURIComponent(countryId)}/briefing`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+    },
+  )
+    .then(async (res) => {
+      if (!res.ok || !res.body) {
+        onError(`HTTP ${res.status}`);
+        onDone();
+        return;
+      }
+      await consumeSSE(res.body, { onStatus, onResult, onError, onDone });
+    })
+    .catch((err: Error) => {
+      if (err.name !== "AbortError") {
+        onError(err.message);
+        onDone();
+      }
+    });
+  return controller;
+}
+
+/**
+ * Persist a generated country briefing as a report record.
+ */
+export async function saveCountryBriefing(
+  countryId: string,
+  analysis: IntelAnalysis,
+): Promise<ReportRecord> {
+  const res = await fetch(
+    `${BASE}/almanac/countries/${encodeURIComponent(countryId)}/briefing/save`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ analysis }),
+    },
+  );
+  if (!res.ok) throw new Error(`briefing save failed: ${res.status}`);
+  return (await res.json()) as ReportRecord;
 }
 
 export async function getFIRMSHotspots(sinceHours = 24): Promise<FIRMSHotspot[]> {
