@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,6 +15,8 @@ from qdrant_client.models import (
     SparseVectorParams,
     VectorParams,
 )
+
+from rag.qdrant_schema import missing_payload_indexes
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -112,28 +115,16 @@ class TestIntelligenceValidator:
 
 class TestMissingPayloadIndexes:
     def test_reports_missing(self):
-        from types import SimpleNamespace
-
-        from rag.qdrant_schema import missing_payload_indexes
-
         info = SimpleNamespace(payload_schema={"source": object()})
         assert set(missing_payload_indexes(info)) == {"telegram_channel", "notebook_id"}
 
     def test_none_missing(self):
-        from types import SimpleNamespace
-
-        from rag.qdrant_schema import missing_payload_indexes
-
         info = SimpleNamespace(
             payload_schema={"source": 1, "telegram_channel": 1, "notebook_id": 1}
         )
         assert missing_payload_indexes(info) == []
 
     def test_handles_absent_schema(self):
-        from types import SimpleNamespace
-
-        from rag.qdrant_schema import missing_payload_indexes
-
         info = SimpleNamespace(payload_schema=None)
         assert set(missing_payload_indexes(info)) == {"source", "telegram_channel", "notebook_id"}
 

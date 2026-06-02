@@ -301,11 +301,13 @@ class TestStartupIndexPreflight:
             close=AsyncMock(),
         )
         retr._schema_validated = False
-        with patch("rag.retriever.AsyncQdrantClient", return_value=client), \
-             patch("rag.retriever.validate_collection_schema"), \
-             patch.object(retr.logger, "warning") as warn:
-            await retr._ensure_schema_validated()
+        try:
+            with patch("rag.retriever.AsyncQdrantClient", return_value=client), \
+                 patch("rag.retriever.validate_collection_schema"), \
+                 patch.object(retr.logger, "warning") as warn:
+                await retr._ensure_schema_validated()
 
-        client.create_payload_index.assert_not_called()   # startup is read-only
-        assert any(c.args[:1] == ("payload_indexes_missing",) for c in warn.call_args_list)
-        retr._schema_validated = False
+            client.create_payload_index.assert_not_called()   # startup is read-only
+            assert any(c.args[:1] == ("payload_indexes_missing",) for c in warn.call_args_list)
+        finally:
+            retr._schema_validated = False
