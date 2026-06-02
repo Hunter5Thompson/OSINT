@@ -34,6 +34,7 @@ class EvidenceItem(BaseModel):
     excerpt: str
     relevance_score: float
     content_hash: str | None = None     # for dedup only, not public provenance
+    source_class: str | None = None     # "realtime" marks an unverified lead
 
 
 EXCERPT_MAX_CHARS = 700
@@ -150,6 +151,7 @@ def to_evidence_item(result: dict) -> EvidenceItem:
         excerpt=excerpt,
         relevance_score=float(result.get("score", 0.0)),
         content_hash=str(content_hash) if content_hash else None,
+        source_class=result.get("source_class"),
     )
 
 
@@ -169,6 +171,8 @@ def _block(item: EvidenceItem) -> str:
         "source_type": s.source_type,
         "url": s.url,
     }
+    if item.source_class:
+        meta["source_class"] = item.source_class
     header = _EVIDENCE_PREFIX + json.dumps(meta, sort_keys=True, separators=(",", ":"))
     return f"{header}\nTitle: {item.title}\nExcerpt: {item.excerpt}"
 
