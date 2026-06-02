@@ -47,11 +47,18 @@ class TestTierBoost:
         assert cp.credibility_of(nlm) == 0.60  # notebooklm baseline
 
     def test_near_tie_flips_to_higher_credibility(self):
-        # local slightly more relevant, think-tank slightly less — tank should win
-        local = self._rss("Local Paper", "a", 0.9, 1.01)
-        tank = self._rss("CSIS", "b", 0.9, 1.00)
-        out = cp.apply_tier_boost([local, tank])
-        assert out[0]["feed_name"] == "CSIS"
+        # In a realistic pool, two near-tie middle items differ by a small
+        # fraction of the span; the think-tank's credibility flips the order.
+        pool = [
+            self._rss("Filler Low", "lo", 0.5, 0.0),     # establishes min
+            self._rss("Filler High", "hi", 0.5, 10.0),   # establishes max (span)
+            self._rss("Local Paper", "a", 0.9, 5.05),    # cred 0.60, slightly MORE relevant
+            self._rss("CSIS", "b", 0.9, 5.00),           # cred 0.82, slightly less relevant
+        ]
+        out = cp.apply_tier_boost(pool)
+        csis_idx = next(i for i, r in enumerate(out) if r["feed_name"] == "CSIS")
+        local_idx = next(i for i, r in enumerate(out) if r["feed_name"] == "Local Paper")
+        assert csis_idx < local_idx   # think-tank overtakes the near-tie local source
 
     def test_large_relevance_gap_not_flipped(self):
         local = self._rss("Local Paper", "a", 0.9, 10.0)  # much more relevant

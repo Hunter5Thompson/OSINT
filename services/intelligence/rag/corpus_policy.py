@@ -66,10 +66,11 @@ def apply_tier_boost(results: list[dict], *, lam: float = TIER_BOOST_LAMBDA) -> 
     if not results:
         return results
     raws = [float(r.get("rerank_score", r.get("score", 0.0))) for r in results]
-    hi = max(raws)
+    lo, hi = min(raws), max(raws)
+    span = hi - lo
     out: list[dict] = []
     for r, raw in zip(results, raws, strict=True):
-        r_norm = 1.0 if hi == 0 else raw / hi
+        r_norm = 1.0 if span == 0 else (raw - lo) / span
         cred = credibility_of(r)
         final = (1.0 - lam) * r_norm + lam * cred
         out.append({**r, "tier_raw": raw, "tier_norm": r_norm,
