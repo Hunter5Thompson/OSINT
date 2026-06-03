@@ -210,3 +210,104 @@ class TestEnhancedSearch:
 
         call_kwargs = mock_graph_ctx.call_args.kwargs
         assert call_kwargs["graph_client"] is explicit_gc
+
+
+class TestQueryFilterAndPostRerank:
+    async def test_query_filter_passed_to_search(self):
+        from rag.retriever import enhanced_search
+
+        captured = {}
+
+        async def fake_search(query, **kwargs):
+            captured.update(kwargs)
+            return [{"title": "r", "content": "c", "score": 0.9}]
+
+        with patch("rag.retriever.search", AsyncMock(side_effect=fake_search)):
+            await enhanced_search(
+                "q", query_filter={"should": [{"key": "source", "match": {"value": "rss"}}]},
+                pool=40, enable_rerank=False, enable_graph_context=False,
+            )
+        expected_filter = {"should": [{"key": "source", "match": {"value": "rss"}}]}
+        assert captured["query_filter"] == expected_filter
+        assert captured["limit"] == 40  # pool drives overfetch
+
+    async def test_post_rerank_none_is_neutral(self):
+        from rag.retriever import enhanced_search
+
+        results = [{"title": "a", "content": "a", "score": 0.1},
+                   {"title": "b", "content": "b", "score": 0.9}]
+        with patch("rag.retriever.search", AsyncMock(return_value=results)):
+            out = await enhanced_search(
+                "q", enable_rerank=False, enable_graph_context=False,
+            )
+        # untouched order, no tier_* keys injected
+        assert [r["title"] for r in out] == ["a", "b"]
+        assert all("tier_score" not in r for r in out)
+
+    async def test_post_rerank_callback_applied(self):
+        from rag.retriever import enhanced_search
+
+        results = [{"title": "a", "content": "a", "score": 0.1},
+                   {"title": "b", "content": "b", "score": 0.9}]
+
+        def reverse(rs):
+            return list(reversed(rs))
+
+        with patch("rag.retriever.search", AsyncMock(return_value=results)):
+            out = await enhanced_search(
+                "q", post_rerank=reverse, enable_rerank=False, enable_graph_context=False,
+            )
+        assert [r["title"] for r in out] == ["b", "a"]
+
+    async def test_rerank_then_post_rerank_then_cut(self):
+        from rag.retriever import enhanced_search
+
+        pool_results = [{"title": str(i), "content": str(i), "score": 0.0} for i in range(10)]
+
+        async def fake_rerank(query, docs, top_k):
+            assert top_k == 10          # rerank keeps the whole pool when a hook is set
+            return docs                  # identity rerank
+
+        seen = {}
+
+        def hook(rs):
+            seen["count"] = len(rs)      # hook must see the full reranked pool
+            return list(reversed(rs))
+
+        with patch("rag.retriever.search", AsyncMock(return_value=pool_results)), \
+             patch("rag.retriever._rerank_fn", AsyncMock(side_effect=fake_rerank)):
+            out = await enhanced_search(
+                "q", pool=10, limit=3, post_rerank=hook,
+                enable_rerank=True, enable_graph_context=False,
+            )
+        assert seen["count"] == 10       # saw full pool before the cut
+        assert len(out) == 3             # cut to limit AFTER the hook
+        assert [r["title"] for r in out] == ["9", "8", "7"]  # reversed pool, top-3
+
+
+class TestStartupIndexPreflight:
+    async def test_startup_warns_missing_indexes_and_never_mutates(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+
+        import rag.retriever as retr
+
+        client = SimpleNamespace(
+            get_collections=AsyncMock(return_value=SimpleNamespace(
+                collections=[SimpleNamespace(name=retr.settings.qdrant_collection)])),
+            get_collection=AsyncMock(return_value=SimpleNamespace(
+                payload_schema={"source": 1})),   # telegram_channel + notebook_id missing
+            create_payload_index=AsyncMock(),
+            close=AsyncMock(),
+        )
+        retr._schema_validated = False
+        try:
+            with patch("rag.retriever.AsyncQdrantClient", return_value=client), \
+                 patch("rag.retriever.validate_collection_schema"), \
+                 patch.object(retr.logger, "warning") as warn:
+                await retr._ensure_schema_validated()
+
+            client.create_payload_index.assert_not_called()   # startup is read-only
+            assert any(c.args[:1] == ("payload_indexes_missing",) for c in warn.call_args_list)
+        finally:
+            retr._schema_validated = False

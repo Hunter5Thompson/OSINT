@@ -14,7 +14,23 @@ from __future__ import annotations
 
 from qdrant_client.models import CollectionInfo, Distance, VectorParams
 
-__all__ = ["QdrantSchemaMismatch", "validate_collection_schema"]
+__all__ = [
+    "QdrantSchemaMismatch",
+    "validate_collection_schema",
+    "REQUIRED_PAYLOAD_INDEXES",
+    "missing_payload_indexes",
+]
+
+REQUIRED_PAYLOAD_INDEXES = ("source", "telegram_channel", "notebook_id")
+
+
+def missing_payload_indexes(info) -> list[str]:
+    """Return required payload-index fields absent from the collection.
+    Read-only: callers warn; the migration script (scripts/ensure_payload_indexes)
+    is the only writer."""
+    existing = set((getattr(info, "payload_schema", None) or {}).keys())
+    return [f for f in REQUIRED_PAYLOAD_INDEXES if f not in existing]
+
 
 EXPECTED_DENSE_SIZE = 1024
 EXPECTED_DISTANCE = Distance.COSINE

@@ -21,9 +21,30 @@ TYPE_BASELINES: dict[str, float] = {
 # Keys must match the canonical `provider` the WRITE side actually stamps
 # (e.g. the BBC RSS feed resolves to bbc.co.uk, not bbc.com).
 PROVIDER_OVERRIDES: dict[str, float] = {
+    # Domain keys (GDELT-discovery path surfaces bare domains)
     "reuters.com": 0.85,  # international wire, strong editorial standards
     "bbc.com": 0.80,      # public broadcaster (international domain)
     "bbc.co.uk": 0.80,    # public broadcaster (UK domain — the RSS feed's provider)
+    # RSS feed_name keys (provider == normalize_provider(feed_name.lower())).
+    # Registry models reliability, not document genre — wire services included.
+    "reuters (google)": 0.85,  # wire via Google News feed — same source, different discovery path
+    "ap news (google)": 0.85,  # international wire via Google News feed
+    "bbc world": 0.80,
+    "bellingcat": 0.85,                       # OSINT verification, methodical
+    "rand corporation": 0.82,
+    "csis": 0.82,
+    "rusi commentary": 0.82,
+    "rusi publications": 0.82,
+    "sipri": 0.82,
+    "swp publications (de)": 0.82,
+    "swp publications (en)": 0.82,
+    "atlantic council": 0.82,
+    "brookings": 0.82,
+    "crisis group": 0.82,
+    "war on the rocks": 0.82,
+    "arms control association": 0.82,
+    "eu parliament security and defence": 0.80,
+    "euvsdisinfo": 0.80,
 }
 
 
