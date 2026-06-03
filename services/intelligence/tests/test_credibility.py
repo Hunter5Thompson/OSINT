@@ -90,3 +90,14 @@ class TestProviderOverrides:
     def test_fail_fast_is_on_source_type_not_provider(self):
         with pytest.raises(KeyError):
             credibility_score("not_a_type", "whatever")
+
+
+class TestThinkTankDomainOverrides:
+    @pytest.mark.parametrize("domain,expected", [
+        ("csis.org", 0.82), ("rusi.org", 0.82), ("rand.org", 0.82), ("sipri.org", 0.82),
+        ("swp-berlin.org", 0.82), ("atlanticcouncil.org", 0.82), ("brookings.edu", 0.82),
+        ("crisisgroup.org", 0.82), ("warontherocks.com", 0.82), ("bellingcat.com", 0.85),
+    ])
+    def test_canonical_domain_override(self, domain, expected):
+        # rss_fulltext writes provider=domain (canonical); the boost must fire
+        assert credibility_score("rss", domain) == expected

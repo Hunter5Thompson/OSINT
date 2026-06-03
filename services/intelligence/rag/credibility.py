@@ -45,6 +45,18 @@ PROVIDER_OVERRIDES: dict[str, float] = {
     "arms control association": 0.82,
     "eu parliament security and defence": 0.80,
     "euvsdisinfo": 0.80,
+    # Think-tank canonical DOMAIN overrides (rss_fulltext writes provider=domain).
+    # Distinct from the feed_name LABEL keys above (legacy teasers lack canonical provider).
+    "csis.org": 0.82,
+    "rusi.org": 0.82,
+    "rand.org": 0.82,
+    "sipri.org": 0.82,
+    "swp-berlin.org": 0.82,
+    "atlanticcouncil.org": 0.82,
+    "brookings.edu": 0.82,
+    "crisisgroup.org": 0.82,
+    "warontherocks.com": 0.82,
+    "bellingcat.com": 0.85,
 }
 
 
