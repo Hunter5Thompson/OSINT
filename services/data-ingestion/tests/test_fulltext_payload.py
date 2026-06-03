@@ -1,8 +1,11 @@
+import pytest
+
 from feeds.fulltext_collector import (
     THINKTANK_FEEDS,
     article_id,
     build_fulltext_payload,
     fulltext_point_id,
+    normalize_url,
 )
 
 
@@ -37,3 +40,21 @@ def test_payload_canonical_provenance_and_inherited_meta():
     assert p["chunk_index"] == 2 and p["chunk_count"] == 5
     assert p["fulltext_article_id"] == article_id("https://csis.org/a")
     assert "chunk_uid" in p
+
+
+def test_normalize_url_lowercases_host_preserves_path():
+    assert normalize_url("HTTPS://CSIS.ORG/Analysis/Foo/") == "https://csis.org/Analysis/Foo"
+    assert normalize_url("  https://rusi.org/x  ") == "https://rusi.org/x"
+    assert normalize_url("") == ""
+    assert normalize_url(None) == ""
+
+
+def test_article_id_deterministic_and_distinct():
+    assert article_id("https://csis.org/a") == article_id("https://csis.org/a")
+    assert article_id("https://csis.org/a") != article_id("https://csis.org/b")
+
+
+def test_payload_requires_url():
+    with pytest.raises(KeyError):
+        build_fulltext_payload({"feed_name": "CSIS"}, provider="csis.org",
+                               chunk_text="x", chunk_index=0, chunk_count=1)

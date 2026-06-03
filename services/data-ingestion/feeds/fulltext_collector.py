@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
+from urllib.parse import urlparse, urlunparse
 
 # feed_name -> canonical provider domain (verified against rss_collector.py feed config)
 THINKTANK_FEEDS: dict[str, str] = {
@@ -26,7 +27,11 @@ THINKTANK_FEEDS: dict[str, str] = {
 
 
 def normalize_url(url: str) -> str:
-    return (url or "").strip().rstrip("/").lower()
+    """Normalize for stable IDs: strip whitespace + trailing slash; lowercase
+    scheme + host (the RFC 3986 case-insensitive parts), preserve path case."""
+    cleaned = (url or "").strip().rstrip("/")
+    parsed = urlparse(cleaned)
+    return urlunparse(parsed._replace(scheme=parsed.scheme.lower(), netloc=parsed.netloc.lower()))
 
 
 def article_id(url: str) -> str:
@@ -51,7 +56,7 @@ def build_fulltext_payload(
     chunk_count: int,
 ) -> dict:
     """Pure rss_fulltext payload (no I/O). Canonical provenance + inherited teaser meta."""
-    url = teaser["url"]
+    url = teaser["url"]  # URL is required; KeyError here is the intended fail-fast
     return {
         "source": "rss_fulltext",
         "source_type": "rss",                 # canonical → credibility/tiering/guard
@@ -61,7 +66,8 @@ def build_fulltext_payload(
         "title": teaser.get("title"),
         "published_at": teaser.get("published_at"),
         "published": teaser.get("published"),  # legacy compat
-        "entities": teaser.get("entities", []),  # INHERITED → graph-context reuse, no LLM
+        # defensive copy — INHERITED entities, no LLM re-extraction
+        "entities": list(teaser.get("entities", [])),
         "content": chunk_text,
         "content_hash": hashlib.sha256(chunk_text.encode()).hexdigest()[:16],
         "chunk_uid": _chunk_uid(url, chunk_index),
