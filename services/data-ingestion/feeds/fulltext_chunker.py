@@ -1,6 +1,8 @@
 """Structure-aware markdown chunking. Splits at heading→paragraph→sentence
 boundaries, accumulates to ~target_tokens (char-approx), with token overlap.
-No blind fixed-window (keeps nav/footnote noise from cross-cutting chunks)."""
+No blind fixed-window (keeps nav/footnote noise from cross-cutting chunks).
+No hard cap on single-segment size: a paragraph with no .!? terminators
+(URL lines, table rows) emits as one segment and may exceed target_tokens."""
 from __future__ import annotations
 
 import re
@@ -17,8 +19,8 @@ def _segments(md: str) -> list[str]:
         p = para.strip()
         if not p:
             continue
-        clean = _HEADING.sub("", p)
-        segs.extend(s.strip() for s in _SENT.split(clean) if s.strip())
+        p = _HEADING.sub("", p).replace("\n", " ")
+        segs.extend(s.strip() for s in _SENT.split(p) if s.strip())
     return segs
 
 
