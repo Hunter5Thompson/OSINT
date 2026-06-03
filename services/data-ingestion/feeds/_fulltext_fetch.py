@@ -5,6 +5,7 @@ Network response shapes are pinned by tests/fixtures/fulltext (Task 1)."""
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import httpx
 import structlog
@@ -36,7 +37,7 @@ def is_quality(cleaned: str, *, paragraphs: int, min_chars: int, min_paras: int)
     return len(cleaned) >= min_chars and paragraphs >= min_paras
 
 
-def _dig(d: dict, path: tuple[str, ...]):
+def _dig(d: dict, path: tuple[str, ...]) -> Any | None:
     for k in path:
         d = d.get(k) if isinstance(d, dict) else None
         if d is None:
