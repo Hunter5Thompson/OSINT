@@ -15,7 +15,7 @@ from config import settings
 log = structlog.get_logger(__name__)
 
 # Analysis lane: prose analysis.
-ANALYSIS_SOURCES: frozenset[str] = frozenset({"rss"})
+ANALYSIS_SOURCES: frozenset[str] = frozenset({"rss", "rss_fulltext"})
 
 # Realtime lane: vetted Telegram leads. rybar (state-aligned) deliberately excluded.
 TELEGRAM_ALLOWLIST: frozenset[str] = frozenset({
@@ -32,12 +32,15 @@ TELEGRAM_MAX: int = settings.rag_telegram_max
 
 
 def analysis_filter() -> dict:
-    """Qdrant filter: source ∈ ANALYSIS_SOURCES OR notebook_id present (NLM).
-    min_should=1 (Qdrant default)."""
-    return {"should": [
-        {"key": "source", "match": {"any": sorted(ANALYSIS_SOURCES)}},
-        {"must_not": [{"is_empty": {"key": "notebook_id"}}]},
-    ]}
+    """Qdrant filter: source ∈ ANALYSIS_SOURCES OR notebook_id present (NLM);
+    never a superseded teaser. min_should=1 (Qdrant default)."""
+    return {
+        "should": [
+            {"key": "source", "match": {"any": sorted(ANALYSIS_SOURCES)}},
+            {"must_not": [{"is_empty": {"key": "notebook_id"}}]},
+        ],
+        "must_not": [{"key": "superseded_by_fulltext", "match": {"value": True}}],
+    }
 
 
 def realtime_filter() -> dict:
@@ -99,6 +102,9 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
     source="rss" but source_type="gdelt") is rejected too. Dropped are logged."""
     kept, dropped = [], []
     for r in results:
+        if r.get("superseded_by_fulltext") is True:
+            dropped.append(r)
+            continue
         st = r.get("source_type")  # canonical contract field, if present
         if lane == "analysis":
             identity = r.get("source") in ANALYSIS_SOURCES or bool(r.get("notebook_id"))
