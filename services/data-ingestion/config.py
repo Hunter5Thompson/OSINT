@@ -123,6 +123,19 @@ class Settings(BaseSettings):
     # after the canonical EntityType set has been validated end-to-end.
     entity_type_normalize: bool = False
 
+    # Think-Tank Full-Text (Slice A) — opt-in (external crawls + Qdrant mutation)
+    fulltext_enabled: bool = False
+    crawl4ai_url: str = "http://localhost:11235"
+    docling_url: str = "http://localhost:5001"
+    fulltext_batch_size: int = 25
+    fulltext_min_body_chars: int = 1500
+    fulltext_min_paragraphs: int = 3
+    fulltext_chunk_tokens: int = 650
+    fulltext_chunk_overlap: int = 100
+    fulltext_max_attempts: int = 4
+    fulltext_rate_limit_per_domain_s: float = 2.0
+    fulltext_interval_minutes: int = 60
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
