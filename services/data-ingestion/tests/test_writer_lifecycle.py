@@ -138,6 +138,7 @@ async def test_scheduler_closes_telegram_collector_after_failure() -> None:
         ("run_hapi_collector", "HAPICollector", "collect"),
         ("run_noaa_nhc_collector", "NOAANHCCollector", "collect"),
         ("run_portwatch_collector", "PortWatchCollector", "collect"),
+        ("run_fulltext_collector", "FulltextCollector", "collect"),
     ],
 )
 @pytest.mark.asyncio
@@ -145,8 +146,13 @@ async def test_scheduler_constructs_qdrant_owners_outside_event_loop(
     runner_name: str,
     factory_name: str,
     operation: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import scheduler
+
+    # fulltext_collector is gated — enable it so the wrapper reaches _construct_off_loop.
+    # Harmless for all other parametrized cases (they don't read this flag).
+    monkeypatch.setattr(scheduler.settings, "fulltext_enabled", True, raising=False)
 
     owner = MagicMock(close=AsyncMock())
     setattr(owner, operation, AsyncMock())

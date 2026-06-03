@@ -20,6 +20,7 @@ from config import settings
 from feeds.correlation_job import CorrelationJob
 from feeds.eonet_collector import EONETCollector
 from feeds.firms_collector import FIRMSCollector
+from feeds.fulltext_collector import FulltextCollector
 from feeds.gdacs_collector import GDACSCollector
 from feeds.hapi_collector import HAPICollector
 from feeds.hotspot_updater import HotspotUpdater
@@ -370,6 +371,20 @@ async def run_gdelt_raw_collector() -> None:
         log.exception("gdelt_raw_job_failed")
 
 
+async def run_fulltext_collector() -> None:
+    """Think-tank full-text enrichment — opt-in (FULLTEXT_ENABLED)."""
+    if not settings.fulltext_enabled:
+        log.info("fulltext_job_disabled")
+        return
+    collector = await _construct_off_loop(FulltextCollector)   # Qdrant owner → off-loop
+    try:
+        await collector.collect()
+    except Exception:
+        log.exception("fulltext_job_failed")
+    finally:
+        await collector.close()
+
+
 # ---------------------------------------------------------------------------
 # Scheduler setup
 # ---------------------------------------------------------------------------
@@ -531,6 +546,15 @@ def create_scheduler() -> AsyncIOScheduler:
         next_run_time=datetime.now(UTC) + timedelta(seconds=30),
         replace_existing=True,
     )
+
+    # Think-Tank Full-Text Enrichment — opt-in (FULLTEXT_ENABLED=true required)
+    if settings.fulltext_enabled:
+        scheduler.add_job(
+            run_fulltext_collector,
+            trigger=IntervalTrigger(minutes=settings.fulltext_interval_minutes),
+            id="fulltext_collector", name="Think-Tank Full-Text Enrichment",
+            replace_existing=True,
+        )
 
     return scheduler
 
