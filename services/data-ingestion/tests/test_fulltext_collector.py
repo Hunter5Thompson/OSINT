@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from feeds.fulltext_collector import FulltextCollector
@@ -75,6 +76,33 @@ class TestCollect:
                    AsyncMock(side_effect=lambda s: sleeps.append(s))):
             await c.collect()
         assert any(s > 0 for s in sleeps)            # 2nd csis.org URL was throttled
+
+    @pytest.mark.asyncio
+    async def test_embed_failure_routes_retry_and_continues_batch(self):
+        c, qc = _collector([_teaser(rid=1, url="https://csis.org/a"),
+                            _teaser(rid=2, url="https://csis.org/b")])
+        c._embed = AsyncMock(side_effect=httpx.ConnectError("tei down"))  # type: ignore[method-assign]
+        with patch("feeds.fulltext_collector.fetch_fulltext",
+                   AsyncMock(return_value="## H\n\n" + "Real analysis. " * 300)), \
+             patch("feeds.fulltext_collector.asyncio.sleep", AsyncMock()):
+            await c.collect()
+        qc.upsert.assert_not_called()                       # embed failed before any upsert
+        marked = [call.kwargs["points"][0] for call in qc.set_payload.call_args_list]
+        assert marked == [1, 2]                             # both attempted; batch NOT aborted
+        assert all(call.kwargs["payload"]["fulltext_status"] == "retry"
+                   for call in qc.set_payload.call_args_list)
+
+    @pytest.mark.asyncio
+    async def test_retry_becomes_failed_permanent_at_max_attempts(self):
+        t = _teaser(rid=5)
+        t.payload["fulltext_attempts"] = 3                  # default fulltext_max_attempts == 4
+        c, qc = _collector([t])
+        with patch("feeds.fulltext_collector.fetch_fulltext",
+                   AsyncMock(side_effect=httpx.ConnectError("down"))):
+            await c.collect()
+        pl = qc.set_payload.call_args.kwargs["payload"]
+        assert pl["fulltext_attempts"] == 4
+        assert pl["fulltext_status"] == "failed_permanent"
 
 
 class TestPreflight:

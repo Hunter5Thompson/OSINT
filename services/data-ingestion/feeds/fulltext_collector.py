@@ -167,7 +167,18 @@ class FulltextCollector:
         records = await asyncio.to_thread(self._select)
         log.info("fulltext_batch", count=len(records))
         for rec in records:
-            await self._process(rec)
+            try:
+                await self._process(rec)
+            except Exception as exc:
+                # Resilience: a transient embed/upsert failure (TEI shares the GPU and
+                # swaps out) must not abort the whole batch. Route to retry+backoff;
+                # if even the mark fails, log and move on (self-heals next run).
+                log.exception("fulltext_record_failed", record_id=getattr(rec, "id", None))
+                try:
+                    await self._mark_retry(rec, str(exc))
+                except Exception:
+                    log.exception("fulltext_mark_retry_failed",
+                                  record_id=getattr(rec, "id", None))
 
     async def _process(self, rec) -> None:
         pl = rec.payload or {}
