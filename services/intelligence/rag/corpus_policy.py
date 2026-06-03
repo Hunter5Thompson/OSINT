@@ -103,7 +103,10 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
     kept, dropped = [], []
     for r in results:
         if r.get("superseded_by_fulltext") is True:
-            dropped.append(r)
+            # normal supersede (fulltext chunks already replace it); logged separately
+            # so corpus_guard_dropped stays a true anomaly signal (filter bug / leakage)
+            log.debug("corpus_supersede_skipped", lane=lane,
+                      source=r.get("source"), feed_name=r.get("feed_name"))
             continue
         st = r.get("source_type")  # canonical contract field, if present
         if lane == "analysis":
