@@ -16,7 +16,7 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from rag.qdrant_schema import missing_payload_indexes
+from rag.qdrant_schema import PAYLOAD_INDEXES, missing_payload_indexes
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -116,17 +116,22 @@ class TestIntelligenceValidator:
 class TestMissingPayloadIndexes:
     def test_reports_missing(self):
         info = SimpleNamespace(payload_schema={"source": object()})
-        assert set(missing_payload_indexes(info)) == {"telegram_channel", "notebook_id"}
+        assert set(missing_payload_indexes(info)) == set(PAYLOAD_INDEXES) - {"source"}
 
     def test_none_missing(self):
-        info = SimpleNamespace(
-            payload_schema={"source": 1, "telegram_channel": 1, "notebook_id": 1}
-        )
+        info = SimpleNamespace(payload_schema={k: 1 for k in PAYLOAD_INDEXES})
         assert missing_payload_indexes(info) == []
 
     def test_handles_absent_schema(self):
         info = SimpleNamespace(payload_schema=None)
-        assert set(missing_payload_indexes(info)) == {"source", "telegram_channel", "notebook_id"}
+        assert set(missing_payload_indexes(info)) == set(PAYLOAD_INDEXES)
+
+
+class TestPayloadIndexesTypedDict:
+    def test_payload_indexes_is_typed_dict(self):
+        from rag.qdrant_schema import PAYLOAD_INDEXES
+        assert PAYLOAD_INDEXES["superseded_by_fulltext"] == "bool"
+        assert PAYLOAD_INDEXES["source"] == "keyword"
 
 
 # ---------------------------------------------------------------------------

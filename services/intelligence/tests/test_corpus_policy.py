@@ -141,3 +141,21 @@ class TestGuardAndMerge:
                     {"source": "telegram", "telegram_channel": "liveuamap"}]
         out = cp.merge_lanes(analysis, realtime, final_k=2, telegram_max=3)
         assert len(out) == 2  # never more than final_k
+
+
+class TestFulltextReadPath:
+    def test_analysis_sources_includes_fulltext(self):
+        assert frozenset({"rss", "rss_fulltext"}) == cp.ANALYSIS_SOURCES
+
+    def test_analysis_filter_allows_fulltext_and_excludes_superseded(self):
+        f = cp.analysis_filter()
+        assert {"key": "source", "match": {"any": sorted(cp.ANALYSIS_SOURCES)}} in f["should"]
+        assert {"key": "superseded_by_fulltext", "match": {"value": True}} in f["must_not"]
+
+    def test_validate_lane_keeps_fulltext_chunk(self):
+        chunk = {"source": "rss_fulltext", "source_type": "rss", "feed_name": "CSIS"}
+        assert cp.validate_lane([chunk], "analysis") == [chunk]
+
+    def test_validate_lane_drops_superseded_teaser(self):
+        teaser = {"source": "rss", "feed_name": "CSIS", "superseded_by_fulltext": True}
+        assert cp.validate_lane([teaser], "analysis") == []

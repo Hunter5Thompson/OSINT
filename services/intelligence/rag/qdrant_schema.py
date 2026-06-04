@@ -17,11 +17,23 @@ from qdrant_client.models import CollectionInfo, Distance, VectorParams
 __all__ = [
     "QdrantSchemaMismatch",
     "validate_collection_schema",
+    "PAYLOAD_INDEXES",
     "REQUIRED_PAYLOAD_INDEXES",
     "missing_payload_indexes",
 ]
 
-REQUIRED_PAYLOAD_INDEXES = ("source", "telegram_channel", "notebook_id")
+PAYLOAD_INDEXES: dict[str, str] = {
+    "source": "keyword",
+    "telegram_channel": "keyword",
+    "notebook_id": "keyword",
+    "feed_name": "keyword",
+    "url": "keyword",
+    "fulltext_article_id": "keyword",
+    "fulltext_status": "keyword",
+    "superseded_by_fulltext": "bool",
+    "fulltext_retry_epoch": "float",
+}
+REQUIRED_PAYLOAD_INDEXES = tuple(PAYLOAD_INDEXES)   # field names (back-compat)
 
 
 def missing_payload_indexes(info) -> list[str]:

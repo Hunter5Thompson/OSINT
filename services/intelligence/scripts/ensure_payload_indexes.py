@@ -12,7 +12,7 @@ import asyncio
 import structlog
 
 from config import settings
-from rag.qdrant_schema import REQUIRED_PAYLOAD_INDEXES
+from rag.qdrant_schema import PAYLOAD_INDEXES
 
 log = structlog.get_logger(__name__)
 
@@ -27,18 +27,18 @@ async def ensure_indexes(*, client=None, collection: str | None = None) -> list[
         info = await client.get_collection(collection)
         existing = set((info.payload_schema or {}).keys())
         created: list[str] = []
-        for field in REQUIRED_PAYLOAD_INDEXES:
+        for field, schema in PAYLOAD_INDEXES.items():
             if field in existing:
                 continue
             await client.create_payload_index(
                 collection_name=collection,
                 field_name=field,
-                field_schema="keyword",
+                field_schema=schema,
                 wait=True,
             )
             created.append(field)
         log.info("payload_indexes_ensured", created=created,
-                 already_present=sorted(existing & set(REQUIRED_PAYLOAD_INDEXES)))
+                 already_present=sorted(existing & set(PAYLOAD_INDEXES)))
         return created
     finally:
         if own_client:
