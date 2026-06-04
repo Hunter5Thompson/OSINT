@@ -11,7 +11,13 @@ class TestRoutingAndGate:
         assert route_kind("https://x.org/commentary/abc") == "html"
 
     def test_clean_body_strips_nav_link_lines(self):
-        md = "[Home](/) [About](/about)\n\nReal prose paragraph one.\n\nReal prose two.\n"
+        md = (
+            "[Home](/) [About](/about)\n"
+            "This is a substantial analytical paragraph that comfortably clears"
+            " the eighty character minimum for real prose.\n"
+            "Here is a second equally substantial paragraph, also well beyond"
+            " the eighty character threshold for counting.\n"
+        )
         cleaned, paras = clean_body(md)
         assert "Home" not in cleaned and "About" not in cleaned
         assert paras == 2
@@ -20,6 +26,24 @@ class TestRoutingAndGate:
         assert is_quality("x" * 5000, paragraphs=5, min_chars=1500, min_paras=3) is True
         assert is_quality("x" * 500, paragraphs=5, min_chars=1500, min_paras=3) is False
         assert is_quality("x" * 5000, paragraphs=1, min_chars=1500, min_paras=3) is False
+
+    def test_real_crawl4ai_fixture_passes_default_gate(self):
+        import json
+        from pathlib import Path
+        fixture = Path(__file__).parent / "fixtures" / "fulltext" / "crawl4ai_md.json"
+        md = json.loads(fixture.read_text())["markdown"]
+        cleaned, paras = clean_body(md)
+        assert paras >= 3                       # real article, single-\n separated
+        assert is_quality(cleaned, paragraphs=paras, min_chars=1500, min_paras=3) is True
+
+    def test_real_docling_fixture_passes_default_gate(self):
+        import json
+        from pathlib import Path
+        fixture = Path(__file__).parent / "fixtures" / "fulltext" / "docling_convert.json"
+        doc = json.loads(fixture.read_text())["document"]["md_content"]
+        cleaned, paras = clean_body(doc)
+        assert paras >= 3
+        assert is_quality(cleaned, paragraphs=paras, min_chars=1500, min_paras=3) is True
 
 
 class TestFetch:
