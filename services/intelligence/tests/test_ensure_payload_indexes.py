@@ -63,4 +63,5 @@ class TestTypedIndexes:
         assert by_field["superseded_by_fulltext"] == "bool"      # NOT keyword
         assert by_field["source"] == "keyword"
         assert by_field["feed_name"] == "keyword"
+        assert by_field["fulltext_retry_epoch"] == "float"       # server-side Range filter field
         assert set(by_field) == set(PAYLOAD_INDEXES)

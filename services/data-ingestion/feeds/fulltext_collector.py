@@ -134,14 +134,21 @@ class FulltextCollector:
 
     def _select(self) -> list:
         """Scroll un-superseded, non-terminal think-tank teasers whose backoff has
-        elapsed. Sync (called via asyncio.to_thread)."""
+        elapsed. Sync (called via asyncio.to_thread).
+
+        The backoff predicate (fulltext_retry_epoch > now) is applied SERVER-SIDE
+        via a must_not Range(gt=now) condition so that a page of future-backoff
+        records can never consume all fulltext_batch_size slots and starve
+        due/new records from being reached."""
         from qdrant_client.models import (
             FieldCondition,
             Filter,
             MatchAny,
             MatchValue,
+            Range,
         )
 
+        now = time.time()
         flt = Filter(
             must=[
                 FieldCondition(key="source", match=MatchValue(value="rss")),
@@ -150,6 +157,7 @@ class FulltextCollector:
             must_not=[
                 FieldCondition(key="superseded_by_fulltext", match=MatchValue(value=True)),
                 FieldCondition(key="fulltext_status", match=MatchAny(any=list(_TERMINAL))),
+                FieldCondition(key="fulltext_retry_epoch", range=Range(gt=now)),
             ],
         )
         points, _ = self.qdrant.scroll(
@@ -158,8 +166,7 @@ class FulltextCollector:
             limit=settings.fulltext_batch_size,
             with_payload=True,
         )
-        now = time.time()
-        return [p for p in points if (p.payload or {}).get("fulltext_retry_epoch", 0) <= now]
+        return list(points)
 
     async def collect(self) -> None:
         # Schema preflight before select/writes — propagates on mismatch (nothing upserted).

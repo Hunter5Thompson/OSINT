@@ -31,6 +31,7 @@ PAYLOAD_INDEXES: dict[str, str] = {
     "fulltext_article_id": "keyword",
     "fulltext_status": "keyword",
     "superseded_by_fulltext": "bool",
+    "fulltext_retry_epoch": "float",
 }
 REQUIRED_PAYLOAD_INDEXES = tuple(PAYLOAD_INDEXES)   # field names (back-compat)
 

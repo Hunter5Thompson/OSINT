@@ -105,6 +105,27 @@ class TestCollect:
         assert pl["fulltext_status"] == "failed_permanent"
 
 
+class TestServerSideBackoff:
+    @pytest.mark.asyncio
+    async def test_select_excludes_future_backoff_server_side(self):
+        """Backoff predicate must be in the Qdrant scroll filter (must_not Range gt),
+        not applied as a Python post-filter.  A page of future-backoff records must
+        never consume batch slots and starve due/new records."""
+        c, qc = _collector([])   # scroll returns []; we only care about the filter shape
+        with patch("feeds.fulltext_collector.fetch_fulltext", AsyncMock(return_value=None)):
+            await c.collect()
+        flt = qc.scroll.call_args.kwargs["scroll_filter"]
+        # must_not must contain a FieldCondition on fulltext_retry_epoch with a Range(gt=...)
+        ranges = [
+            cond.range
+            for cond in flt.must_not
+            if getattr(cond, "key", None) == "fulltext_retry_epoch"
+        ]
+        assert ranges, "No must_not condition on fulltext_retry_epoch found in scroll filter"
+        assert ranges[0] is not None, "fulltext_retry_epoch must_not condition has no range"
+        assert ranges[0].gt is not None, "Range.gt must be set (future-backoff predicate)"
+
+
 class TestPreflight:
     @pytest.mark.asyncio
     async def test_invalid_schema_prevents_upsert(self):
