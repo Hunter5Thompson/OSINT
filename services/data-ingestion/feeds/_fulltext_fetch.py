@@ -28,12 +28,15 @@ def route_kind(url: str) -> str:
 def clean_body(markdown: str) -> tuple[str, int]:
     """Drop nav/link-only lines; return (cleaned_text, substantial-prose-block count).
 
-    crawl4ai fit-markdown and docling both separate blocks with single newlines
-    (crawl4ai uses no blank lines at all), so paragraphs are counted by splitting on
-    any run of newlines and keeping blocks of >= 80 chars (real prose, not nav/headings/dates)."""
+    crawl4ai fit-markdown and docling separate blocks with single newlines (crawl4ai uses
+    no blank lines at all), so paragraphs are counted by splitting on any run of newlines.
+    Blocks must be >= 45 chars to count: this filters nav/headings/dates/bylines (typically
+    shorter) while admitting real prose sentences. Deliberately permissive — a backfill
+    false-skip is terminal (skipped_paywall, never retried), and the min_chars gate already
+    rejects true stubs; a slightly-thin article slipping through is the cheap failure mode."""
     lines = [ln for ln in markdown.splitlines() if not _LINK_LINE.match(ln)]
     cleaned = "\n".join(lines).strip()
-    paras = [p for p in re.split(r"\n+", cleaned) if len(p.strip()) >= 80]
+    paras = [p for p in re.split(r"\n+", cleaned) if len(p.strip()) >= 45]
     return cleaned, len(paras)
 
 

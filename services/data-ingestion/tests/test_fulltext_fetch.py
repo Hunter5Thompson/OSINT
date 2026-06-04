@@ -45,6 +45,22 @@ class TestRoutingAndGate:
         assert paras >= 3
         assert is_quality(cleaned, paragraphs=paras, min_chars=1500, min_paras=3) is True
 
+    def test_terse_but_real_article_passes_gate(self):
+        # 1500+ chars of real prose in short blocks (45-79 chars each), single-newline
+        # separated (mirrors crawl4ai). Must PASS — false-skip in backfill is terminal.
+        block = "Economic sanctions cut Russian seaborne crude exports sharply.\n"  # ~62 chars
+        md = block * 30
+        cleaned, paras = clean_body(md)
+        assert len(cleaned) >= 1500
+        assert paras >= 3
+        assert is_quality(cleaned, paragraphs=paras, min_chars=1500, min_paras=3) is True
+
+    def test_nav_fragments_below_threshold_dont_count(self):
+        # short nav/heading/date fragments must NOT count as prose paragraphs
+        md = "Home\nAbout\nApril 8, 2026\nExecutive Summary\nBy Jane Doe\n"
+        _cleaned, paras = clean_body(md)
+        assert paras == 0
+
 
 class TestFetch:
     @pytest.mark.asyncio
