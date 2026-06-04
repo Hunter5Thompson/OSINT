@@ -1,0 +1,12 @@
+[Unit]
+Description=Hourly trigger for ODIN think-tank full-text enrichment (host bridge)
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+# spread the fire so it doesn't slam crawl4ai/TEI exactly on the hour
+RandomizedDelaySec=300
+AccuracySec=60
+
+[Install]
+WantedBy=timers.target

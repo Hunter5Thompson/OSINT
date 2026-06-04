@@ -1,0 +1,14 @@
+[Unit]
+Description=ODIN think-tank full-text enrichment (host bridge until container-native scheduler)
+Documentation=file:///home/deadpool-ultra/ODIN/OSINT/ops/fulltext-enrich/README.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# small batch by default; the runner health-gates + flocks itself
+Environment=FULLTEXT_BATCH_SIZE=10
+ExecStart=/home/deadpool-ultra/ODIN/OSINT/ops/fulltext-enrich/fulltext_enrich.sh
+# hard ceiling at the unit level too (script has its own 600s timeout)
+RuntimeMaxSec=900
+Nice=10

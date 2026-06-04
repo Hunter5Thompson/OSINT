@@ -1442,3 +1442,30 @@ Observation-Producer.
 6. Frontend: Review Panel, Inspector-Lineage, Fusion Object/Incident Details.
 7. Tests: Idempotenz, deterministic identity, HMAC, actor binding, projection transaction,
    review-state transitions, cadence caps.
+
+
+# ══════════════════════════════════════════
+# TASK-113: Container-native Think-Tank Full-Text Scheduler (Host-Bridge ablösen)
+# ══════════════════════════════════════════
+# Status: OFFEN | Aufwand: 0.5–1 Tag | Priorität: mittel
+#
+# Kontext: P2 Slice A (rss_fulltext) ist live (PR #38, main 874d6db). Einmaliger Backfill
+# 2026-06-05 (1.053 Artikel → 8.297 Chunks) durch, Read-Path nutzt rss_fulltext. Laufende
+# Anreicherung NEUER Think-Tank-Artikel fährt aktuell als HOST-BRIDGE:
+#   ops/fulltext-enrich/  (systemd --user Timer, stündlich, health-gated, flock, kleine Batch).
+#
+# Warum Bridge statt Container-Scheduler: der gated Job (FULLTEXT_ENABLED) lebt im
+# data-ingestion-spark-Container (osint_default), erreicht crawl4ai (:11235)/docling (:5001)
+# aber NICHT — die liegen in fremden Compose-Netzen (crawl4ai_default/docling_default),
+# nur über Host-Ports publiziert. host.docker.internal/docker0/osint-Gateway alle nicht routbar.
+#
+# Ziel (sauber als Branch/PR, getestet — nicht ad-hoc am laufenden Container):
+# 1. data-ingestion(-spark) zusätzlich an externe Netze crawl4ai_default + docling_default
+#    hängen (compose networks: external) — ODER crawl4ai/docling persistent an osint_default.
+# 2. CRAWL4AI_URL / DOCLING_URL auf die Container-Servicenamen setzen.
+# 3. data-ingestion-spark aus main neu bauen (#38-Code) + FULLTEXT_ENABLED=true.
+# 4. Verifizieren: Scheduler registriert fulltext_collector-Job (stündlich); Fetch erreicht
+#    crawl4ai/docling; Zugriff auf qdrant/tei/DGX bleibt intakt (Netz-Umstellung = Risiko!).
+# 5. Host-Bridge ablösen: systemctl --user disable --now odin-fulltext-enrich.timer
+#
+# Invariante: qdrant nofile-ulimit (65536, commit c1e2330) MUSS bleiben — Bulk-Writes brauchen es.
