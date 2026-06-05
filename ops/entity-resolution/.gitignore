@@ -1,0 +1,3 @@
+# Live-graph backup artifacts (node/relationship dumps) — never commit.
+# These contain production Neo4j data; keep them local / as ops artifacts.
+backups/

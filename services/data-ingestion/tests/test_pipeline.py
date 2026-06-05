@@ -26,6 +26,7 @@ def _make_settings(**overrides) -> Settings:
         "neo4j_user": "neo4j",
         "neo4j_password": "test",
         "redis_stream_events": "events:new",
+        "entity_type_normalize": False,
     }
     defaults.update(overrides)
     return Settings(_env_file=None, **defaults)
@@ -352,6 +353,60 @@ class TestEntityTypeNormalization:
         assert warnings[0].get("source") == "rss"
         assert warnings[0].get("extraction_model") == "Qwen/Qwen3.6-35B-A3B"
         assert warnings[0].get("entity_name") == "Wraith"
+
+
+class TestEntityCanonicalization:
+    """Curated alias canonicalization runs before the Neo4j write.
+
+    Unlike the type-normalize flag, name/type canonicalization for *known*
+    aliases is always on — its whole job is to stop the pipeline regenerating
+    the duplicates the one-off Neo4j merge just removed.
+    """
+
+    def _entity_param(self, mock_client) -> dict:
+        neo4j_call = mock_client.post.call_args_list[1]
+        for stmt in neo4j_call.kwargs["json"]["statements"]:
+            if "MERGE (e:Entity" in stmt["statement"]:
+                return stmt["parameters"]
+        raise AssertionError("no Entity MERGE statement found")
+
+    async def _run(self, entity, **settings_overrides) -> dict:
+        vllm_resp = _mock_vllm_response(entities=[entity])
+        neo4j_resp = _mock_neo4j_response()
+        with patch("pipeline.httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = [vllm_resp, neo4j_resp]
+            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            await process_item(
+                title="t",
+                text="x",
+                url="http://example.com/canon",
+                source="rss",
+                settings=_make_settings(**settings_overrides),
+            )
+        return self._entity_param(mock_client)
+
+    async def test_curated_alias_canonicalized_even_with_flag_off(self):
+        params = await self._run(
+            {"name": "US Navy", "type": "organization", "confidence": 0.8}
+        )
+        assert params["name"] == "U.S. Navy"
+        assert params["type"] == "MILITARY_UNIT"
+
+    async def test_generic_name_is_not_folded(self):
+        params = await self._run(
+            {"name": "Navy", "type": "organization", "confidence": 0.8}
+        )
+        assert params["name"] == "Navy"
+        assert params["type"] == "organization"
+
+    async def test_raw_spelling_preserved_in_aliases(self):
+        params = await self._run(
+            {"name": "USAF", "type": "organization", "confidence": 0.8}
+        )
+        assert params["name"] == "U.S. Air Force"
+        assert "USAF" in params["aliases"]
 
 
 class TestPipelineCodebookBinding:

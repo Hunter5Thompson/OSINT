@@ -5,6 +5,7 @@ import base64
 import httpx
 import structlog
 
+from canonicalize import canonicalize_entity
 from nlm_ingest.schemas import Extraction, claim_hash
 from nlm_ingest.write_templates import (
     LINK_CLAIM_DOCUMENT,
@@ -19,6 +20,11 @@ from nlm_ingest.write_templates import (
 )
 
 log = structlog.get_logger()
+
+
+def _canonical_name(name: str) -> str:
+    """Canonical entity name only (type-independent), for name-based MATCHes."""
+    return canonicalize_entity(name, "").name
 
 
 def _build_statements(extraction: Extraction, source_name: str) -> list[dict]:
@@ -53,14 +59,21 @@ def _build_statements(extraction: Extraction, source_name: str) -> list[dict]:
         },
     })
 
-    # 4. Upsert Entities
+    # 4. Upsert Entities (canonicalize known aliases before the write; the
+    #    same map drives relations/claim links below so endpoints stay matched)
     for entity in extraction.entities:
+        canon = canonicalize_entity(entity.name, entity.type)
+        aliases = (
+            sorted({*entity.aliases, *canon.aliases})
+            if canon.aliases
+            else entity.aliases
+        )
         statements.append({
             "statement": UPSERT_ENTITY,
             "parameters": {
-                "name": entity.name,
-                "type": entity.type,
-                "aliases": entity.aliases,
+                "name": canon.name,
+                "type": canon.type,
+                "aliases": aliases,
                 "confidence": entity.confidence,
             },
         })
@@ -81,8 +94,8 @@ def _build_statements(extraction: Extraction, source_name: str) -> list[dict]:
         statements.append({
             "statement": template,
             "parameters": {
-                "source": relation.source,
-                "target": relation.target,
+                "source": _canonical_name(relation.source),
+                "target": _canonical_name(relation.target),
                 "evidence": relation.evidence,
                 "confidence": relation.confidence,
             },
@@ -124,7 +137,7 @@ def _build_statements(extraction: Extraction, source_name: str) -> list[dict]:
                 "statement": LINK_CLAIM_ENTITY,
                 "parameters": {
                     "statement_hash": stmt_hash,
-                    "entity_name": entity_name,
+                    "entity_name": _canonical_name(entity_name),
                 },
             })
 

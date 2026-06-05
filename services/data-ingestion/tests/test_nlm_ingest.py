@@ -37,6 +37,103 @@ def _make_extraction() -> Extraction:
 
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:7474/db/neo4j/tx/commit")
 
+class TestEntityCanonicalizationNLM:
+    """Curated alias canonicalization is applied consistently across the NLM
+    write-path — entity upsert AND the name-based MATCHes (relations, claim
+    links) — so canonicalizing a name never orphans its relationships.
+    """
+
+    def _entity_upserts(self, statements) -> list[dict]:
+        return [
+            s["parameters"]
+            for s in statements
+            if "MERGE (e:Entity" in s["statement"]
+        ]
+
+    def _params_for(self, statements, needle) -> list[dict]:
+        return [s["parameters"] for s in statements if needle in s["statement"]]
+
+    def _extraction(self, entities, relations=None, claims=None) -> Extraction:
+        return Extraction(
+            notebook_id="nb1",
+            entities=entities,
+            relations=relations or [],
+            claims=claims or [],
+            extraction_model="qwen3.5",
+            prompt_version="v1",
+            source_kind="transcript",
+            source_id="transcript",
+        )
+
+    def test_curated_alias_canonicalized_in_entity_upsert(self):
+        ex = self._extraction(
+            [Entity(name="US Navy", type="ORGANIZATION", aliases=[], confidence=0.9)]
+        )
+        params = self._entity_upserts(_build_statements(ex, "RAND"))
+        assert params[0]["name"] == "U.S. Navy"
+        assert params[0]["type"] == "MILITARY_UNIT"
+        assert "US Navy" in params[0]["aliases"]
+
+    def test_generic_name_not_folded(self):
+        ex = self._extraction(
+            [Entity(name="Navy", type="ORGANIZATION", aliases=[], confidence=0.9)]
+        )
+        params = self._entity_upserts(_build_statements(ex, "RAND"))
+        assert params[0]["name"] == "Navy"
+        assert params[0]["type"] == "ORGANIZATION"
+
+    def test_relation_endpoints_canonicalized_consistently(self):
+        ex = self._extraction(
+            entities=[
+                Entity(name="US Navy", type="ORGANIZATION", aliases=[], confidence=0.9),
+                Entity(name="Iran", type="COUNTRY", aliases=[], confidence=0.9),
+            ],
+            relations=[
+                Relation(
+                    source="US Navy", target="Iran", type="TARGETS",
+                    evidence="patrols", confidence=0.8,
+                ),
+            ],
+        )
+        rel = self._params_for(_build_statements(ex, "RAND"), "r:TARGETS")[0]
+        # endpoint must match the canonicalized entity node, else the MATCH fails
+        assert rel["source"] == "U.S. Navy"
+        assert rel["target"] == "Iran"
+
+    def test_entity_upsert_preserves_existing_aliases(self):
+        # UPSERT_ENTITY must append-dedup aliases, never overwrite — a later NLM
+        # ingest with a smaller alias list must not delete aliases preserved by
+        # the canonicalization cleanup or an earlier ingest.
+        ex = self._extraction(
+            [Entity(
+                name="NATO", type="ORGANIZATION",
+                aliases=["North Atlantic Treaty Organization"], confidence=0.9,
+            )]
+        )
+        stmt = next(
+            s for s in _build_statements(ex, "RAND")
+            if "MERGE (e:Entity" in s["statement"]
+        )
+        assert "coalesce(e.aliases" in stmt["statement"]
+        assert "SET e.aliases = $aliases" not in stmt["statement"]
+
+    def test_claim_entity_link_canonicalized_consistently(self):
+        ex = self._extraction(
+            entities=[
+                Entity(name="US Navy", type="ORGANIZATION", aliases=[], confidence=0.9)
+            ],
+            claims=[
+                Claim(
+                    statement="US Navy deployed", type="factual", polarity="neutral",
+                    entities_involved=["US Navy"], confidence=0.9,
+                    temporal_scope="ongoing",
+                )
+            ],
+        )
+        link = self._params_for(_build_statements(ex, "RAND"), "MERGE (c)-[:INVOLVES]")[0]
+        assert link["entity_name"] == "U.S. Navy"
+
+
 class TestIngestExtraction:
     @pytest.mark.asyncio
     async def test_sends_cypher_statements(self):

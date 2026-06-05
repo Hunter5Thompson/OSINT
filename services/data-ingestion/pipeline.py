@@ -16,6 +16,7 @@ import httpx
 import structlog
 import yaml
 
+from canonicalize import canonicalize_entity
 from config import Settings, settings
 from nlm_ingest.schemas import normalize_entity_type
 
@@ -371,11 +372,17 @@ async def _write_to_neo4j(
 
     # Upsert Entities with MENTIONS
     for entity in entities:
+        # Canonicalize known aliases (e.g. "US Navy" -> "U.S. Navy" /
+        # MILITARY_UNIT) BEFORE the write so the pipeline cannot regenerate the
+        # duplicates the curated Neo4j merge removed. Unknown names pass through
+        # unchanged. See canonicalize.py for the curated alias map and policy.
+        canon = canonicalize_entity(entity["name"], entity["type"])
+        entity_name = canon.name
+        entity_type = canon.type
         # Patch C Phase 5: optional canonicalisation of legacy lowercase
         # entity-type emissions onto the uppercase EntityType set. Default
-        # OFF — when settings.entity_type_normalize is False this branch is
-        # a true no-op and entity["type"] reaches Cypher unchanged.
-        entity_type = entity["type"]
+        # OFF — when settings.entity_type_normalize is False this is a no-op
+        # for names the alias map did not already resolve to a canonical type.
         if settings.entity_type_normalize:
             try:
                 entity_type = normalize_entity_type(entity_type)
@@ -386,25 +393,34 @@ async def _write_to_neo4j(
                     url=doc_url,
                     source=doc_source,
                     extraction_model=settings.ingestion_vllm_model,
-                    entity_name=entity.get("name"),
+                    entity_name=entity["name"],
                 )
                 # Fail-soft: pass through unchanged so a single bad LLM emission
-                # does not block the whole document. The Patch C migration will
-                # surface stragglers via the post-resume drift check.
-        statements.append({
-            "statement": (
-                "MERGE (e:Entity {name: $name, type: $type}) "
-                "SET e.last_seen = datetime() "
-                "WITH e "
-                "MATCH (d:Document {url: $url}) "
-                "MERGE (d)-[r:MENTIONS]->(e)"
-            ),
-            "parameters": {
-                "name": entity["name"],
-                "type": entity_type,
-                "url": doc_url,
-            },
-        })
+                # does not block the whole document.
+        statement = (
+            "MERGE (e:Entity {name: $name, type: $type}) "
+            "SET e.last_seen = datetime() "
+        )
+        parameters = {
+            "name": entity_name,
+            "type": entity_type,
+            "url": doc_url,
+        }
+        # Preserve the original spelling as provenance only when we actually
+        # rewrote the name — avoids stamping a redundant aliases list on the
+        # entities whose name was left unchanged.
+        if canon.aliases:
+            statement += (
+                "SET e.aliases = coalesce(e.aliases, []) + "
+                "[a IN $aliases WHERE NOT a IN coalesce(e.aliases, [])] "
+            )
+            parameters["aliases"] = list(canon.aliases)
+        statement += (
+            "WITH e "
+            "MATCH (d:Document {url: $url}) "
+            "MERGE (d)-[r:MENTIONS]->(e)"
+        )
+        statements.append({"statement": statement, "parameters": parameters})
 
     # Create Events
     for event in events:

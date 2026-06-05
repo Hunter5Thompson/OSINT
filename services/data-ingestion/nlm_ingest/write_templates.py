@@ -9,10 +9,14 @@ NLM-specific templates (Claim, Source tier) are new.
 
 # --- Pinned from intelligence (stable) ---
 
+# Aliases are append-deduplicated (never overwritten) so a later ingest with a
+# smaller alias list cannot delete aliases preserved by the canonicalization
+# cleanup or an earlier ingest — matches the pipeline.py MENTIONS write path.
 UPSERT_ENTITY = """
 MERGE (e:Entity {name: $name, type: $type})
 ON CREATE SET e.first_seen = datetime()
-SET e.aliases = $aliases,
+SET e.aliases = coalesce(e.aliases, []) +
+        [a IN $aliases WHERE NOT a IN coalesce(e.aliases, [])],
     e.confidence = $confidence,
     e.last_seen = datetime()
 """
