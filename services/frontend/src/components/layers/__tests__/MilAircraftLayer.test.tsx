@@ -1,5 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render } from "@testing-library/react";
+
+afterEach(() => vi.restoreAllMocks());
 import * as Cesium from "cesium";
 import {
   MilAircraftLayer,
@@ -84,5 +86,14 @@ describe("MilAircraftLayer component", () => {
         onSelect={vi.fn()}
       />,
     );
+  });
+
+  it("renders track polylines thin and translucent (cosmetic declutter)", () => {
+    const polyAdd = vi.spyOn(Cesium.PolylineCollection.prototype, "add");
+    const viewer = fakeViewer();
+    render(<MilAircraftLayer viewer={viewer} tracks={[track("a", 5)]} visible={true} onSelect={vi.fn()} />);
+    const opts = polyAdd.mock.calls[0]![0] as { width: number; material: { uniforms: { color: Cesium.Color } } };
+    expect(opts.width).toBe(1.0);
+    expect(opts.material.uniforms.color.alpha).toBeCloseTo(0.3);
   });
 });
