@@ -3,16 +3,19 @@ import {
   bandForHeight,
   inViewBounds,
   selectVisible,
+  bulkScaleByDistance,
+  bulkTranslucencyByDistance,
   GLOBE_ALTITUDE_M,
   LOCAL_ALTITUDE_M,
   ORBIT_LOD_ALTITUDE_M,
 } from "../lod";
 
 describe("altitude constants", () => {
-  it("pin the shared thresholds (Task 5 sources these to replace local literals)", () => {
+  it("expose stable altitude thresholds", () => {
     expect(GLOBE_ALTITUDE_M).toBe(8_000_000);
     expect(LOCAL_ALTITUDE_M).toBe(1_000_000);
     expect(ORBIT_LOD_ALTITUDE_M).toBe(45_000_000);
+    expect(bandForHeight(ORBIT_LOD_ALTITUDE_M - 1)).toBe("GLOBE");
   });
 });
 
@@ -41,6 +44,11 @@ describe("inViewBounds", () => {
     expect(inViewBounds(175, 0, wrap)).toBe(true);
     expect(inViewBounds(-175, 0, wrap)).toBe(true);
     expect(inViewBounds(0, 0, wrap)).toBe(false);
+  });
+  it("treats west === east as a zero-width strip", () => {
+    const strip = { south: 0, north: 10, west: 5, east: 5 };
+    expect(inViewBounds(5, 5, strip)).toBe(true);
+    expect(inViewBounds(6, 5, strip)).toBe(false);
   });
 });
 
@@ -72,5 +80,19 @@ describe("selectVisible", () => {
       { cap: 10 },
     );
     expect(r.length).toBe(1);
+  });
+  it("returns empty for a non-positive cap", () => {
+    const items = [{ lon: 5, lat: 5 }];
+    expect(selectVisible(items, ll, box, { cap: 0 })).toEqual([]);
+    expect(selectVisible(items, ll, box, { cap: -3 })).toEqual([]);
+  });
+});
+
+describe("bulk distance attenuation factories", () => {
+  it("return the canonical NearFarScalar defaults", () => {
+    const s = bulkScaleByDistance();
+    expect([s.near, s.nearValue, s.far, s.farValue]).toEqual([100_000, 1.0, 12_000_000, 0.45]);
+    const t = bulkTranslucencyByDistance();
+    expect([t.near, t.nearValue, t.far, t.farValue]).toEqual([100_000, 1.0, 14_000_000, 0.35]);
   });
 });

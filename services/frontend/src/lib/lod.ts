@@ -35,7 +35,10 @@ export function getViewBounds(viewer: Cesium.Viewer): ViewBounds | null {
   };
 }
 
-/** True if (lon,lat) lies within bounds. Handles anti-meridian wrap (west > east). */
+/**
+ * True if (lon,lat) lies within bounds. Handles anti-meridian wrap (west > east).
+ * A zero-width viewport (west === east) matches only that exact longitude.
+ */
 export function inViewBounds(lon: number, lat: number, bounds: ViewBounds | null): boolean {
   if (!bounds) return true;
   if (lat < bounds.south || lat > bounds.north) return false;
@@ -71,7 +74,8 @@ export function selectVisible<T>(
     const rank = opts.rank;
     inView.sort((a, b) => rank(b) - rank(a));
   }
-  return inView.length > opts.cap ? inView.slice(0, opts.cap) : inView;
+  const cap = Math.max(0, opts.cap);
+  return inView.length > cap ? inView.slice(0, cap) : inView;
 }
 
 /** Shared distance attenuation for bulk billboards — full size/opacity near, faded far. */
