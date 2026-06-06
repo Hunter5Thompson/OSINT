@@ -4,6 +4,7 @@ import * as satellite from "satellite.js";
 import { glyphColor } from "./glyphTokens";
 import type { Satellite } from "../../types";
 import { usePerformance } from "../globe/PerformanceGuard";
+import { GLOBE_ALTITUDE_M, ORBIT_LOD_ALTITUDE_M } from "../../lib/lod";
 
 export function shouldRenderCone(sat: {
   lat: number;
@@ -38,7 +39,7 @@ const COUNTRY_TINT: Record<string, Cesium.Color> = {
 };
 
 const ORBIT_ARC_POINTS = 50;
-const ORBIT_LOD_ALTITUDE = 45_000_000; // keep orbits visible across LEO..GEO globe-scale zoom
+const ORBIT_LOD_ALTITUDE = ORBIT_LOD_ALTITUDE_M; // keep orbits visible across LEO..GEO globe-scale zoom
 const RECON_PREFIXES = ["USA ", "NROL", "COSMOS 25", "YAOGAN"];
 const MIN_ELEVATION_DEG = 5;
 /** Only render orbit arcs for high-interest categories (not all 15K active sats) */
@@ -143,7 +144,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
 
     // At global zoom, skip mega-constellations (Starlink=10K, OneWeb=651)
     // They render as an indistinguishable green mass anyway
-    const showMegaConstellations = cameraAlt < 8_000_000;
+    const showMegaConstellations = cameraAlt < GLOBE_ALTITUDE_M;
 
     for (const sat of satellites) {
       if (!showMegaConstellations && sat.category === "active") {
