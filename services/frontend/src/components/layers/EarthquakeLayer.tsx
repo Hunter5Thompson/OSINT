@@ -1,8 +1,17 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import type { Earthquake } from "../../types";
 import { glyphColor } from "./glyphTokens";
 import { usePerformance } from "../globe/PerformanceGuard";
+import {
+  getViewBounds,
+  selectVisible,
+  bulkScaleByDistance,
+  bulkTranslucencyByDistance,
+} from "../../lib/lod";
+
+const MAX_QUAKES = 250;
+const QUAKE_LABEL_ALTITUDE_M = 5_000_000;
 
 interface EarthquakeLayerProps {
   viewer: Cesium.Viewer | null;
@@ -45,6 +54,12 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
   const degradationRef = useRef(degradation);
   degradationRef.current = degradation;
 
+  const earthquakesRef = useRef(earthquakes);
+  earthquakesRef.current = earthquakes;
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+
+  // Setup: create BillboardCollection + LabelCollection
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
 
@@ -69,37 +84,49 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
     };
   }, [viewer]);
 
-  // Render quakes
-  useEffect(() => {
+  const renderVisible = useCallback(() => {
     const bc = collectionRef.current;
     const lc = labelCollectionRef.current;
-    if (!bc || !lc) return;
+    if (!bc || !lc || !viewer || viewer.isDestroyed()) return;
 
     bc.removeAll();
     lc.removeAll();
     pulsesRef.current = [];
+    if (!visibleRef.current) return;
 
-    if (!visible) return;
+    const bounds = getViewBounds(viewer);
+    const shown = selectVisible(
+      earthquakesRef.current,
+      (q) => [q.longitude, q.latitude] as const,
+      bounds,
+      { cap: MAX_QUAKES, rank: (q) => q.magnitude },
+    );
 
-    for (const quake of earthquakes) {
+    // Shared immutable NearFarScalar instances, reused across every billboard this pass.
+    const scaleByDistance = bulkScaleByDistance();
+    const translucencyByDistance = bulkTranslucencyByDistance();
+
+    for (const quake of shown) {
       const position = Cesium.Cartesian3.fromDegrees(quake.longitude, quake.latitude, 0);
       const color = magnitudeToColor(quake.magnitude);
       const size = magnitudeToSize(quake.magnitude);
 
-      // Inner dot (static)
       const billboard = bc.add({
         position,
         image: createQuakeDot(size * 0.4, color),
         scale: 1.0,
         eyeOffset: new Cesium.Cartesian3(0, 0, -50),
+        scaleByDistance,
+        translucencyByDistance,
       });
 
-      // Outer ring (animated — expanding + fading)
+      // No scaleByDistance on the ring — the pulse animation owns its scale.
       const ringBillboard = bc.add({
         position,
         image: createQuakeRing(size, color),
         scale: 1.0,
         eyeOffset: new Cesium.Cartesian3(0, 0, -49),
+        translucencyByDistance,
       });
 
       lc.add({
@@ -112,6 +139,7 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
         pixelOffset: new Cesium.Cartesian2(0, -size - 5),
         eyeOffset: new Cesium.Cartesian3(0, 0, -50),
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, QUAKE_LABEL_ALTITUDE_M),
       });
 
       pulsesRef.current.push({
@@ -123,7 +151,22 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
         color,
       });
     }
-  }, [earthquakes, visible]);
+  }, [viewer]);
+
+  // Re-render on data / visibility change
+  useEffect(() => {
+    renderVisible();
+  }, [earthquakes, visible, renderVisible]);
+
+  // Re-render on camera move (viewport culling)
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const onMoveEnd = () => renderVisible();
+    viewer.camera.moveEnd.addEventListener(onMoveEnd);
+    return () => {
+      if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
+    };
+  }, [viewer, renderVisible]);
 
   // Pulse animation loop
   useEffect(() => {
