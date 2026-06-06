@@ -34,10 +34,12 @@ RSS_FEEDS: list[dict[str, str]] = [
     {"name": "Bundestag Auswaertiges",
      "url": "https://www.bundestag.de/static/appdata/includes/rss/auswaertiges.rss",
      "provider": "bundestag.de"},
-    # Teaser-only (paywall), but keywords are extraction-rich.
-    # Full knowledge via YouTube → NotebookLM → NLM pipeline.
-    {"name": "SUV Sicherheit & Verteidigung", "url": "https://steady.page/de/suv/rss",
-     "provider": "steady.page"},
+    # Full-text German defense analysis (own domain, ~weekly fachbeiträge).
+    # Enriched to rss_fulltext via THINKTANK_FEEDS; video-only/podcast content
+    # still flows through the YouTube → NotebookLM → NLM pipeline.
+    {"name": "SUV Sicherheit & Verteidigung",
+     "url": "https://suv.report/category/fachbeitraege/feed/",
+     "provider": "suv.report"},
     # ── Major News — World ──
     # Reuters/AP have no public RSS; Google News proxies provide equivalent coverage.
     {"name": "Reuters (Google)",

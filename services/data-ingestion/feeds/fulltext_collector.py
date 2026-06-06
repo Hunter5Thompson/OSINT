@@ -39,6 +39,7 @@ THINKTANK_FEEDS: dict[str, str] = {
     "Crisis Group": "crisisgroup.org",
     "War on the Rocks": "warontherocks.com",
     "Bellingcat": "bellingcat.com",
+    "SUV Sicherheit & Verteidigung": "suv.report",
 }
 
 

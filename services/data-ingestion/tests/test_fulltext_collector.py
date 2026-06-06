@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from feeds.fulltext_collector import FulltextCollector
+from feeds.fulltext_collector import THINKTANK_FEEDS, FulltextCollector
+from feeds.rss_collector import RSS_FEEDS
 
 TERMINAL = {"done", "failed_permanent", "skipped_paywall"}
 
@@ -142,3 +143,26 @@ class TestPreflight:
              pytest.raises(QdrantSchemaMismatch):
             await c.collect()
         qc.upsert.assert_not_called()                 # preflight aborts before any write
+
+
+class TestThinktankRegistry:
+    """THINKTANK_FEEDS is the enrichment allow-list (feed_name -> canonical domain).
+    The selector matches teasers by feed_name and stamps provider=domain, so the
+    registry MUST stay in lock-step with the rss_collector feed config."""
+
+    def test_suv_report_is_enriched_as_fulltext(self):
+        # SUV fachbeiträge → rss_fulltext via the same path as the think-tanks.
+        assert THINKTANK_FEEDS["SUV Sicherheit & Verteidigung"] == "suv.report"
+
+    def test_every_thinktank_feed_matches_an_rss_feed_provider(self):
+        # No drift: each enriched feed_name exists in RSS_FEEDS and its canonical
+        # domain equals that feed's explicit provider (what the teaser stamps).
+        by_name = {f["name"]: f for f in RSS_FEEDS}
+        for feed_name, domain in THINKTANK_FEEDS.items():
+            assert feed_name in by_name, (
+                f"THINKTANK_FEEDS feed {feed_name!r} is not a configured RSS feed"
+            )
+            assert by_name[feed_name]["provider"] == domain, (
+                f"{feed_name!r}: THINKTANK_FEEDS domain {domain!r} != "
+                f"rss provider {by_name[feed_name]['provider']!r}"
+            )
