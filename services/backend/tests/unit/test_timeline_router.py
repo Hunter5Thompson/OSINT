@@ -34,7 +34,9 @@ def test_events_window_returns_samples(client):
 
 
 def test_reversed_window_422(client):
-    resp = client.get("/api/timeline/window?t_start=2026-05-02T00:00:00Z&t_end=2026-05-01T00:00:00Z")
+    resp = client.get(
+        "/api/timeline/window?t_start=2026-05-02T00:00:00Z&t_end=2026-05-01T00:00:00Z"
+    )
     assert resp.status_code == 422
 
 
