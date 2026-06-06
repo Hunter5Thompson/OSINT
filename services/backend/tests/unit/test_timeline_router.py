@@ -51,3 +51,49 @@ def test_events_with_movement_kind_422(client):
 def test_events_fine_422(client):
     resp = client.get(f"/api/timeline/window{W}&tier=fine")
     assert resp.status_code == 422
+
+
+def test_movements_mil_aircraft_window(client):
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        mock.return_value = [{
+            "icao24": "abc123", "callsign": "FORTE10", "type_code": "RQ4",
+            "military_branch": "USAF", "registration": None,
+            "points": [
+                {"ts_ms": 1714521600000, "lat": 50.0, "lon": 30.0,
+                 "altitude_m": 18000.0, "speed_ms": 200.0, "heading": 90.0},
+            ],
+        }]
+        resp = client.get(
+            f"/api/timeline/window{W}&domain=movements&tier=fine&movement_kind=mil_aircraft"
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["domain"] == "movements"
+    s = data["samples"][0]
+    assert s["kind"] == "track" and s["icao24"] == "abc123"
+    assert s["points"][0]["ts_ms"] == 1714521600000
+    assert data["total_count"] == 1  # counts TRACKS not points
+
+
+def test_movements_missing_kind_422(client):
+    resp = client.get(f"/api/timeline/window{W}&domain=movements&tier=fine")
+    assert resp.status_code == 422
+
+
+def test_movements_coarse_422(client):
+    resp = client.get(f"/api/timeline/window{W}&domain=movements&movement_kind=mil_aircraft")
+    assert resp.status_code == 422  # tier defaults to coarse
+
+
+def test_movements_civil_501(client):
+    resp = client.get(
+        f"/api/timeline/window{W}&domain=movements&tier=fine&movement_kind=civil_aircraft"
+    )
+    assert resp.status_code == 501
+
+
+def test_movements_unknown_kind_422(client):
+    resp = client.get(
+        f"/api/timeline/window{W}&domain=movements&tier=fine&movement_kind=bicycle"
+    )
+    assert resp.status_code == 422

@@ -7,7 +7,7 @@ from datetime import datetime
 import structlog
 from fastapi import APIRouter, HTTPException, Query
 
-from app.models.timeline import BBox, EventSample, WindowResponse
+from app.models.timeline import BBox, EventSample, TrackPoint, TrackSample, WindowResponse
 from app.services.neo4j_client import read_query
 
 log = structlog.get_logger(__name__)
@@ -156,6 +156,65 @@ async def _events_window(
     )
 
 
-async def _movements_window(*args, **kwargs) -> WindowResponse:
-    # Replaced by the real mil-aircraft branch in Task 4.
-    raise HTTPException(status_code=501, detail="movements not implemented")
+_MIL_TRACKS_QUERY = """
+MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
+WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
+  AND r.latitude IS NOT NULL AND r.longitude IS NOT NULL
+WITH a, r ORDER BY r.timestamp ASC
+WITH a, collect(r) AS rs
+WITH a, rs,
+  [x IN rs WHERE $bbox_off
+     OR (x.latitude >= $south AND x.latitude <= $north
+         AND ( ($west <= $east AND x.longitude >= $west AND x.longitude <= $east)
+            OR ($west >  $east AND (x.longitude >= $west OR x.longitude <= $east)) ))] AS inbox
+WHERE size(inbox) >= 1
+WITH a, [x IN rs | {
+    ts_ms: x.timestamp * 1000, lat: x.latitude, lon: x.longitude,
+    altitude_m: x.altitude_m, speed_ms: x.speed_ms, heading: x.heading
+  }] AS points
+RETURN a.icao24 AS icao24, a.callsign AS callsign, a.type_code AS type_code,
+       a.military_branch AS military_branch, a.registration AS registration, points
+ORDER BY points[-1].ts_ms DESC
+LIMIT $limit
+"""
+
+
+async def _movements_window(
+    t_start: str, t_end: str, tier: str, movement_kind: str | None,
+    box: BBox | None, limit: int,
+) -> WindowResponse:
+    if movement_kind is None:
+        raise HTTPException(status_code=422, detail="movement_kind required for domain=movements")
+    if movement_kind not in _SUPPORTED_MOVEMENT_KINDS:
+        raise HTTPException(status_code=422, detail="unknown movement_kind")
+    if tier != "fine":
+        raise HTTPException(status_code=422, detail="movements only support tier=fine")
+    if movement_kind not in _IMPLEMENTED_MOVEMENT_KINDS:
+        raise HTTPException(status_code=501, detail=f"{movement_kind} not implemented")
+
+    start, end = validate_window(t_start, t_end)
+    params = {
+        "start_s": int(start.timestamp()), "end_s": int(end.timestamp()),
+        "limit": limit, **_bbox_params(box),
+    }
+    try:
+        rows = await read_query(_MIL_TRACKS_QUERY, params)
+    except Exception as exc:
+        log.error("timeline_movements_neo4j_query_failed", error=str(exc))
+        raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
+    samples = [
+        TrackSample(
+            id=str(r.get("icao24") or ""),
+            icao24=r.get("icao24"),
+            callsign=r.get("callsign"),
+            type_code=r.get("type_code"),
+            military_branch=r.get("military_branch"),
+            registration=r.get("registration"),
+            points=[TrackPoint(**p) for p in (r.get("points") or [])],
+        )
+        for r in rows
+    ]
+    return WindowResponse(
+        domain="movements", tier="fine", t_start=t_start, t_end=t_end, bbox=box,
+        samples=samples, total_count=len(samples), truncated=len(samples) >= limit,
+    )
