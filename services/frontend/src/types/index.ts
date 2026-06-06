@@ -95,6 +95,64 @@ export interface AircraftTrack {
   points: AircraftPoint[];
 }
 
+// --- Windowed-data contract (/api/timeline/window) ---
+export interface WindowTrackPoint {
+  ts_ms: number;
+  lat: number;
+  lon: number;
+  altitude_m?: number | null;
+  speed_ms?: number | null;
+  heading?: number | null;
+}
+
+export interface WindowTrackSample {
+  kind: "track";
+  id: string;
+  icao24?: string | null;
+  callsign?: string | null;
+  type_code?: string | null;
+  military_branch?: string | null;
+  registration?: string | null;
+  points: WindowTrackPoint[];
+}
+
+export interface WindowEventSample {
+  kind: "event";
+  id: string;
+  time: string;
+  time_basis: string;
+  title?: string | null;
+  codebook_type?: string | null;
+  severity?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+  location_name?: string | null;
+  country?: string | null;
+}
+
+export type WindowSample = WindowEventSample | WindowTrackSample;
+
+export interface WindowResponse {
+  domain: "events" | "movements";
+  tier: "coarse" | "fine";
+  t_start: string;
+  t_end: string;
+  bbox: { west: number; south: number; east: number; north: number } | null;
+  samples: WindowSample[];
+  total_count: number;
+  truncated: boolean;
+}
+
+export interface TimeWindowQuery {
+  tStart: string;
+  tEnd: string;
+  domain?: "events" | "movements";
+  tier?: "coarse" | "fine";
+  movementKind?: "mil_aircraft" | "civil_aircraft" | "ship" | "satellite";
+  bbox?: [number, number, number, number];
+  limit?: number;
+}
+
 export interface IntelAnalysis {
   query: string;
   agent_chain: string[];
