@@ -33,6 +33,7 @@ from app.routers import (
     reports,
     satellites,
     signals,
+    timeline,
     vessels,
 )
 from app.routers import recon as recon_router_module
@@ -210,6 +211,7 @@ for r in (
     flights.router, satellites.router, earthquakes.router, vessels.router,
     hotspots.router, intel.router, rag.router, graph.router, cables.router,
     firms.router, aircraft.router, eonet.router, gdacs.router, reports.router,
+    timeline.router,
 ):
     app.include_router(r, prefix="/api")
 

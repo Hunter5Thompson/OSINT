@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import HTTPException
+from fastapi import APIRouter, HTTPException
 
 from app.models.timeline import BBox
+
+router = APIRouter(prefix="/timeline", tags=["timeline"])
 
 _MAX_LIMIT = 500
 _SUPPORTED_MOVEMENT_KINDS = {"mil_aircraft", "civil_aircraft", "ship", "satellite"}
