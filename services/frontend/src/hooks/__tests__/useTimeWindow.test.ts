@@ -29,4 +29,32 @@ describe("useTimeWindow", () => {
     renderHook(() => useTimeWindow(false, { tStart: "a", tEnd: "b" }));
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it("aborts the in-flight request on unmount", () => {
+    let signal: AbortSignal | undefined;
+    vi.spyOn(api, "getTimeWindow").mockImplementation((_q, s) => {
+      signal = s;
+      return new Promise<never>(() => {}); // never resolves
+    });
+    const { unmount } = renderHook(() =>
+      useTimeWindow(true, { tStart: "a", tEnd: "b" }),
+    );
+    expect(signal?.aborted).toBe(false);
+    unmount();
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("aborts the previous request when the query changes (seq guard)", () => {
+    const signals: AbortSignal[] = [];
+    vi.spyOn(api, "getTimeWindow").mockImplementation((_q, s) => {
+      if (s) signals.push(s);
+      return new Promise<never>(() => {});
+    });
+    const { rerender } = renderHook(({ q }) => useTimeWindow(true, q), {
+      initialProps: { q: { tStart: "a", tEnd: "b" } },
+    });
+    rerender({ q: { tStart: "a", tEnd: "c" } });
+    expect(signals.length).toBeGreaterThanOrEqual(2);
+    expect(signals[0]?.aborted).toBe(true); // first request cancelled on key change
+  });
 });

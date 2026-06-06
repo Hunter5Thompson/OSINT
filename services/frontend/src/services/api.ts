@@ -459,7 +459,6 @@ export async function getTimeWindow(
   return fetchJSON<WindowResponse>(`/timeline/window?${p.toString()}`, { signal });
 }
 
-
 export async function promoteIncident(id: string): Promise<Incident> {
   const resp = await fetch(`${BASE}/incidents/${encodeURIComponent(id)}/promote`, {
     method: "POST",

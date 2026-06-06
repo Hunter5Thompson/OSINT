@@ -361,7 +361,7 @@ function ScrubberMount({
   coarseWindow: { tStart: string; tEnd: string };
   onSelectWindow: (w: { tStart: string; tEnd: string }) => void;
 }) {
-  const { mode, cursorMs, seek, setMode } = useTime();
+  const { mode, cursorMs, seek, setMode, setReplayWindow } = useTime();
   const { data } = useTimeWindow(
     true,
     {
@@ -385,10 +385,13 @@ function ScrubberMount({
       onSelectEvent={(e) => {
         const t = Date.parse(e.time);
         if (!Number.isNaN(t)) {
+          const start = t - 3 * 3600_000;
+          const end = t + 3 * 3600_000;
           onSelectWindow({
-            tStart: new Date(t - 3 * 3600_000).toISOString(),
-            tEnd: new Date(t + 3 * 3600_000).toISOString(),
+            tStart: new Date(start).toISOString(),
+            tEnd: new Date(end).toISOString(),
           });
+          setReplayWindow(start, end); // give the Cesium clock real CLAMP bounds
           setMode("replay");
         }
       }}

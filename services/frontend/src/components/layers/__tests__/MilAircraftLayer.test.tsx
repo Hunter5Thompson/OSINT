@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
 import * as Cesium from "cesium";
 import { MilAircraftLayer, branchColor, createJetIcon } from "../MilAircraftLayer";
@@ -92,4 +92,34 @@ describe("MilAircraftLayer component (time-aware)", () => {
       />,
     );
   });
+
+  it("resets its render primitives on a discontinuityEpoch bump (§7.3)", () => {
+    const removeAll = vi.spyOn(Cesium.BillboardCollection.prototype, "removeAll");
+    const { viewer } = fakeViewer();
+    const tracks = [track("a", 5)];
+    const { rerender } = render(
+      <MilAircraftLayer
+        viewer={viewer}
+        tracks={tracks}
+        visible={true}
+        getTimeMs={() => 0}
+        discontinuityEpoch={0}
+      />,
+    );
+    const before = removeAll.mock.calls.length;
+    // same tracks, only the epoch changes -> the layer must still rebuild (cache reset)
+    rerender(
+      <MilAircraftLayer
+        viewer={viewer}
+        tracks={tracks}
+        visible={true}
+        getTimeMs={() => 0}
+        discontinuityEpoch={1}
+      />,
+    );
+    expect(removeAll.mock.calls.length).toBeGreaterThan(before);
+    removeAll.mockRestore();
+  });
 });
+
+afterEach(() => vi.restoreAllMocks());

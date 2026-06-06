@@ -29,7 +29,11 @@ export function TwoTierScrubber({
         <button type="button" onClick={onToggleMode} aria-label="toggle mode">
           {mode === "live" ? "● LIVE" : "▶ REPLAY"}
         </button>
-        <span>{new Date(cursorMs).toISOString().replace("T", " ").slice(0, 19)}Z</span>
+        <span>
+          {Number.isFinite(cursorMs)
+            ? `${new Date(cursorMs).toISOString().replace("T", " ").slice(0, 19)}Z`
+            : "--"}
+        </span>
       </div>
 
       {/* Coarse tier: event ticks */}
@@ -48,7 +52,8 @@ export function TwoTierScrubber({
               title={`${e.time} · ${e.time_basis}`}
               onClick={() => {
                 onSelectEvent(e);
-                onSeek(Date.parse(e.time));
+                const t = Date.parse(e.time);
+                if (!Number.isNaN(t)) onSeek(t);
               }}
               style={{ padding: "1px 4px", fontSize: 10 }}
             >
