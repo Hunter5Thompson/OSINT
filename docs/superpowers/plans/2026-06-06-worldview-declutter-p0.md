@@ -8,6 +8,8 @@
 
 **Tech Stack:** React 19 + TypeScript, CesiumJS 1.132 (imperative `BillboardCollection` / `PointPrimitiveCollection` / `PolylineCollection` — **no Entity API for bulk**, per CLAUDE.md), Vitest 4 + @testing-library/react.
 
+**Testing note — behavioral assertions, not smoke tests:** The cull/cap logic is unit-tested pure in `lib/lod.ts` (Task 1). The *layer* tests then assert real behavior by spying on the relevant Cesium collection prototype (`vi.spyOn(Cesium.BillboardCollection.prototype, "add")` etc., which **calls through** by default so the real layer still runs): the cap actually bites (N capped to the limit), out-of-viewport markers are dropped, distance attenuation is attached, and a `moveEnd` re-render re-queries the viewport. Each such test is RED against today's code (which renders everything, never culls, and registers no `moveEnd` listener) and GREEN after the task. `usePerformance()` has a safe context default (`{fps:60, degradation:0}`), so layers that call it render in tests without a provider.
+
 **Scope (read before starting):**
 - **In P0 (this plan):** `lib/lod.ts` + tests; FIRMS (dial-down + cull/cap/moveEnd/NearFar); Earthquakes (cull/cap/moveEnd/NearFar + label distance gate); Satellites (consolidate magic altitudes into `lib/lod.ts`, no behavior change); Mil-air (cosmetic polyline weight reduction only).
 - **Deferred to P0.2 fast-follow (separate plan, trivial once `lib/lod.ts` exists):** apply the exact FIRMS/Earthquake pattern to GDACS, EONET, EventLayer — they were OFF in the trigger screenshot, so they do not block the quick-win.
@@ -35,7 +37,16 @@ import {
   selectVisible,
   GLOBE_ALTITUDE_M,
   LOCAL_ALTITUDE_M,
+  ORBIT_LOD_ALTITUDE_M,
 } from "../lod";
+
+describe("altitude constants", () => {
+  it("pin the shared thresholds (Task 5 sources these to replace local literals)", () => {
+    expect(GLOBE_ALTITUDE_M).toBe(8_000_000);
+    expect(LOCAL_ALTITUDE_M).toBe(1_000_000);
+    expect(ORBIT_LOD_ALTITUDE_M).toBe(45_000_000);
+  });
+});
 
 describe("bandForHeight", () => {
   it("classifies GLOBE / REGIONAL / LOCAL by camera height", () => {
@@ -214,7 +225,7 @@ git commit -m "feat(frontend): add shared LOD/viewport-cull core (lib/lod.ts)"
 
 ### Task 2: FIRMS dial-down (kill the "thermal blobs")
 
-The FIRMS glow billboards dominate the view: `frpToSize` returns up to 22px and dots render at `scale: 1.0`. Shrink the ceiling and base scale so hotspots read as markers, not blobs. Pure change — only the size function + render scale.
+The FIRMS glow billboards dominate the view: `frpToSize` returns up to 22px and dots render at `scale: 1.0`. Shrink the ceiling and base scale so hotspots read as markers, not blobs. (The component test file is fully rewritten in Task 3; here we change only `frpToSize` and its existing assertion + the dot render scale.)
 
 **Files:**
 - Modify: `services/frontend/src/components/layers/FIRMSLayer.tsx:5-7` (frpToSize) and the dot `bc.add({ scale })` call
@@ -227,7 +238,7 @@ In `__tests__/FIRMSLayer.test.tsx`, replace the `frpToSize` test (lines 26-30) w
 ```ts
   it("frpToSize clamps between 4 and 14", () => {
     expect(frpToSize(0)).toBe(4);
-    expect(frpToSize(40)).toBeCloseTo(11);
+    expect(frpToSize(35)).toBeCloseTo(11);
     expect(frpToSize(500)).toBe(14);
   });
 ```
@@ -247,13 +258,7 @@ export function frpToSize(frp: number): number {
 }
 ```
 
-And in the render loop, change the dot's `scale` (currently `scale: 1.0` in the `bc.add` for the dot) to:
-
-```ts
-        scale: 0.7,
-```
-
-(Leave the explosion ring `bc.add` scale as-is; it is gated on `possible_explosion` and is rare.)
+And in the render loop, change the dot's `scale` (currently `scale: 1.0` in the `bc.add` for the dot) to `scale: 0.7`. (Leave the explosion ring `bc.add` scale as-is.)
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -271,24 +276,31 @@ git commit -m "fix(frontend): shrink FIRMS hotspot glyphs to markers, not blobs"
 
 ### Task 3: FIRMS — viewport cull + cap + moveEnd + distance fade (reference application)
 
-Refactor `FIRMSLayer` to the ShipLayer culling pattern: render through a `renderVisible` callback that culls to the viewport and caps to 400 hotspots (ranked by FRP), re-rendering on `camera.moveEnd`, and attach distance attenuation to each billboard. This is the canonical per-layer transform reused in later tasks.
+Refactor `FIRMSLayer` to the ShipLayer culling pattern: render through a `renderVisible` callback that culls to the viewport and caps to 400 hotspots (ranked by FRP), re-rendering on `camera.moveEnd`, with distance attenuation on every billboard. Tests assert the cap actually bites, out-of-view markers drop, NearFar is attached, and a move re-queries the viewport.
 
 **Files:**
-- Modify: `services/frontend/src/components/layers/FIRMSLayer.tsx` (imports, refs, render effect → callback, add moveEnd effect)
-- Test: `services/frontend/src/components/layers/__tests__/FIRMSLayer.test.tsx` (extend fake viewer with a camera)
+- Modify: `services/frontend/src/components/layers/FIRMSLayer.tsx`
+- Test (full rewrite): `services/frontend/src/components/layers/__tests__/FIRMSLayer.test.tsx`
 
-- [ ] **Step 1: Extend the test's fake viewer with a camera + assert no-throw on move**
+- [ ] **Step 1: Replace the whole test file with behavioral tests**
 
-In `__tests__/FIRMSLayer.test.tsx`, replace `fakeViewer()` (lines 7-23) with:
+Overwrite `services/frontend/src/components/layers/__tests__/FIRMSLayer.test.tsx` with:
 
 ```ts
-function fakeViewer(): Cesium.Viewer {
-  const primitives = {
-    add: vi.fn((p: unknown) => p),
-    remove: vi.fn(),
-  };
-  const canvas = document.createElement("canvas");
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render } from "@testing-library/react";
+import * as Cesium from "cesium";
+import { FIRMSLayer, createFIRMSDot, frpToSize, frpToColor } from "../FIRMSLayer";
+import type { FIRMSHotspot } from "../../../types";
+
+afterEach(() => vi.restoreAllMocks());
+
+function fakeViewer(
+  rect: Cesium.Rectangle = Cesium.Rectangle.fromDegrees(-180, -85, 180, 85),
+): Cesium.Viewer & { _fireMoveEnd: () => void; _computeViewRectangle: ReturnType<typeof vi.fn> } {
+  const primitives = { add: vi.fn((p: unknown) => p), remove: vi.fn() };
   const moveEndListeners: Array<() => void> = [];
+  const computeViewRectangle = vi.fn(() => rect);
   return {
     scene: {
       primitives,
@@ -299,44 +311,98 @@ function fakeViewer(): Cesium.Viewer {
     },
     camera: {
       positionCartographic: { height: 3_000_000 },
-      computeViewRectangle: vi.fn(() => Cesium.Rectangle.fromDegrees(-180, -85, 180, 85)),
+      computeViewRectangle,
       moveEnd: {
-        addEventListener: vi.fn((cb: () => void) => {
-          moveEndListeners.push(cb);
-        }),
+        addEventListener: vi.fn((cb: () => void) => { moveEndListeners.push(cb); }),
         removeEventListener: vi.fn(),
       },
     },
-    canvas,
+    canvas: document.createElement("canvas"),
     isDestroyed: () => false,
-    // test helper: fire all registered moveEnd listeners
     _fireMoveEnd: () => moveEndListeners.forEach((cb) => cb()),
-  } as unknown as Cesium.Viewer & { _fireMoveEnd: () => void };
+    _computeViewRectangle: computeViewRectangle,
+  } as unknown as Cesium.Viewer & { _fireMoveEnd: () => void; _computeViewRectangle: ReturnType<typeof vi.fn> };
 }
-```
 
-Add a test at the end of the `FIRMSLayer component` describe block:
+describe("FIRMS canvas helpers", () => {
+  it("frpToSize clamps between 4 and 14", () => {
+    expect(frpToSize(0)).toBe(4);
+    expect(frpToSize(35)).toBeCloseTo(11);
+    expect(frpToSize(500)).toBe(14);
+  });
 
-```ts
-  it("re-renders on camera move without throwing", () => {
-    const viewer = fakeViewer() as Cesium.Viewer & { _fireMoveEnd: () => void };
+  it("frpToColor interpolates yellow → orange → red", () => {
+    const cold = frpToColor(0);
+    const hot = frpToColor(100);
+    expect(cold.red).toBeGreaterThan(0.9);
+    expect(cold.green).toBeGreaterThan(0.8);
+    expect(hot.red).toBeGreaterThan(0.9);
+    expect(hot.green).toBeLessThan(0.3);
+  });
+
+  it("createFIRMSDot returns a canvas of non-zero size", () => {
+    const c = createFIRMSDot(10, Cesium.Color.RED);
+    expect(c.width).toBeGreaterThan(0);
+    expect(c.height).toBeGreaterThan(0);
+  });
+});
+
+describe("FIRMSLayer component", () => {
+  const baseHotspot = (over: Partial<FIRMSHotspot>): FIRMSHotspot => ({
+    id: over.id ?? "h",
+    latitude: 48, longitude: 37,
+    frp: 20, brightness: 370, confidence: "n",
+    acq_date: "2026-04-11", acq_time: "1200",
+    satellite: "VIIRS_SNPP_NRT", bbox_name: "ukraine",
+    possible_explosion: false,
+    firms_map_url: "https://example/",
+    ...over,
+  });
+
+  const manyHotspots = (n: number, lon: number, lat: number): FIRMSHotspot[] =>
+    Array.from({ length: n }, (_, i) => baseHotspot({ id: `h${i}`, longitude: lon, latitude: lat, frp: i }));
+
+  it("caps rendered hotspots at 400 and attaches distance attenuation", () => {
+    const addSpy = vi.spyOn(Cesium.BillboardCollection.prototype, "add");
+    const viewer = fakeViewer();
+    render(<FIRMSLayer viewer={viewer} hotspots={manyHotspots(600, 37, 48)} visible={true} />);
+    // non-explosion hotspots → exactly one dot billboard each
+    expect(addSpy.mock.calls.length).toBe(400);
+    const opts = addSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(opts.scaleByDistance).toBeInstanceOf(Cesium.NearFarScalar);
+    expect(opts.translucencyByDistance).toBeInstanceOf(Cesium.NearFarScalar);
+  });
+
+  it("culls hotspots outside the viewport", () => {
+    const addSpy = vi.spyOn(Cesium.BillboardCollection.prototype, "add");
+    const viewer = fakeViewer(Cesium.Rectangle.fromDegrees(30, 40, 45, 50)); // Black Sea box
     render(
       <FIRMSLayer
         viewer={viewer}
-        hotspots={[baseHotspot({ id: "a" }), baseHotspot({ id: "b" })]}
+        hotspots={[
+          baseHotspot({ id: "in", longitude: 37, latitude: 45 }),
+          baseHotspot({ id: "out", longitude: -120, latitude: 35 }),
+        ]}
         visible={true}
       />,
     );
-    expect(() => viewer._fireMoveEnd()).not.toThrow();
+    expect(addSpy.mock.calls.length).toBe(1);
   });
+
+  it("re-renders on camera move (re-queries the viewport)", () => {
+    const viewer = fakeViewer();
+    render(<FIRMSLayer viewer={viewer} hotspots={[baseHotspot({ id: "a" })]} visible={true} />);
+    const before = viewer._computeViewRectangle.mock.calls.length;
+    viewer._fireMoveEnd();
+    expect(viewer._computeViewRectangle.mock.calls.length).toBeGreaterThan(before);
+  });
+});
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `npm run test -- FIRMSLayer`
-Expected: FAIL — `viewer.camera.moveEnd.addEventListener` is never called yet, so `_fireMoveEnd()` fires nothing AND the new render path is not wired; specifically the test for move re-render passes trivially today, so first make the imports/refactor below; if green prematurely, that is acceptable — proceed.
-
-> Note: this is an integration smoke test (the cull/cap *logic* is unit-tested in Task 1). Its value is catching a thrown error from the new camera wiring.
+Expected: FAIL — today's layer renders all 600 (cap test expects 400), renders both in/out hotspots (cull test expects 1), and registers no `moveEnd` listener (move test: `computeViewRectangle` count does not grow).
 
 - [ ] **Step 3: Refactor `FIRMSLayer` to cull + cap + moveEnd + distance fade**
 
@@ -358,7 +424,7 @@ import {
 const MAX_FIRMS = 400;
 ```
 
-(b) Inside `FIRMSLayer`, add refs for the latest props (after the existing `onSelectRef`):
+(b) Inside `FIRMSLayer`, add prop refs (after the existing `onSelectRef`):
 
 ```ts
   const hotspotsRef = useRef(hotspots);
@@ -433,12 +499,12 @@ const MAX_FIRMS = 400;
   }, [viewer, renderVisible]);
 ```
 
-(Keep the setup effect at lines 75-104 and the pulse-animation effect at 138-158 unchanged. The `scale: 0.7` already applied in Task 2 stays.)
+(Keep the setup effect at lines 75-104 and the pulse-animation effect at 138-158 unchanged.)
 
 - [ ] **Step 4: Run the tests**
 
 Run: `npm run test -- FIRMSLayer`
-Expected: PASS (both the existing render test and the new move test).
+Expected: PASS (cap=400, cull=1, move re-queries, helpers green).
 
 - [ ] **Step 5: Type-check**
 
@@ -456,26 +522,31 @@ git commit -m "feat(frontend): FIRMS viewport cull + 400 cap + distance fade"
 
 ### Task 4: Earthquakes — viewport cull + cap + moveEnd + distance fade + label gate
 
-Apply the same transform to `EarthquakeLayer` (rank by magnitude, cap 250) and add a distance gate to the magnitude labels so they stop stacking at globe scale. The pulse loop reads `pulsesRef`, which `renderVisible` rebuilds — preserved.
+Apply the same transform to `EarthquakeLayer` (rank by magnitude, cap 250) + a distance gate on the magnitude labels. Each quake renders exactly one label → spy `LabelCollection.prototype.add` to assert the cap/cull; spy `BillboardCollection.prototype.add` to assert distance attenuation. The pulse loop reads `pulsesRef`, which `renderVisible` rebuilds.
 
 **Files:**
 - Modify: `services/frontend/src/components/layers/EarthquakeLayer.tsx`
 - Test: `services/frontend/src/components/layers/__tests__/EarthquakeLayer.test.tsx` (new)
 
-- [ ] **Step 1: Write the failing integration test**
+- [ ] **Step 1: Write the failing behavioral test**
 
-Create `services/frontend/src/components/layers/__tests__/EarthquakeLayer.test.tsx`:
+Create `services/frontend/src/components/layers/__tests__/EarthquakeLayer.test.tsx` (the `Earthquake` type requires `tsunami: boolean` and `url: string | null` — both in the factory):
 
 ```ts
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render } from "@testing-library/react";
 import * as Cesium from "cesium";
 import { EarthquakeLayer } from "../EarthquakeLayer";
 import type { Earthquake } from "../../../types";
 
-function fakeViewer(): Cesium.Viewer & { _fireMoveEnd: () => void } {
+afterEach(() => vi.restoreAllMocks());
+
+function fakeViewer(
+  rect: Cesium.Rectangle = Cesium.Rectangle.fromDegrees(-180, -85, 180, 85),
+): Cesium.Viewer & { _fireMoveEnd: () => void; _computeViewRectangle: ReturnType<typeof vi.fn> } {
   const primitives = { add: vi.fn((p: unknown) => p), remove: vi.fn() };
   const moveEndListeners: Array<() => void> = [];
+  const computeViewRectangle = vi.fn(() => rect);
   return {
     scene: {
       primitives,
@@ -485,7 +556,7 @@ function fakeViewer(): Cesium.Viewer & { _fireMoveEnd: () => void } {
     },
     camera: {
       positionCartographic: { height: 3_000_000 },
-      computeViewRectangle: vi.fn(() => Cesium.Rectangle.fromDegrees(-180, -85, 180, 85)),
+      computeViewRectangle,
       moveEnd: {
         addEventListener: vi.fn((cb: () => void) => { moveEndListeners.push(cb); }),
         removeEventListener: vi.fn(),
@@ -494,43 +565,79 @@ function fakeViewer(): Cesium.Viewer & { _fireMoveEnd: () => void } {
     canvas: document.createElement("canvas"),
     isDestroyed: () => false,
     _fireMoveEnd: () => moveEndListeners.forEach((cb) => cb()),
-  } as unknown as Cesium.Viewer & { _fireMoveEnd: () => void };
+    _computeViewRectangle: computeViewRectangle,
+  } as unknown as Cesium.Viewer & { _fireMoveEnd: () => void; _computeViewRectangle: ReturnType<typeof vi.fn> };
 }
 
 const quake = (over: Partial<Earthquake>): Earthquake => ({
   id: over.id ?? "q",
-  latitude: 45, longitude: 37, magnitude: 5.2, depth_km: 10,
-  place: "x", time: "2026-06-06T12:00:00Z", url: "https://example/",
+  latitude: 45,
+  longitude: 37,
+  depth_km: 10,
+  magnitude: 5.2,
+  place: "x",
+  time: "2026-06-06T12:00:00Z",
+  tsunami: false,
+  url: "https://example/",
   ...over,
 });
 
+const manyQuakes = (n: number, lon: number, lat: number): Earthquake[] =>
+  Array.from({ length: n }, (_, i) => quake({ id: `q${i}`, longitude: lon, latitude: lat, magnitude: 3 + (i % 50) / 10 }));
+
 describe("EarthquakeLayer", () => {
-  it("renders and re-renders on camera move without throwing", () => {
+  it("caps rendered quakes at 250 (one label each)", () => {
+    const labelAdd = vi.spyOn(Cesium.LabelCollection.prototype, "add");
     const viewer = fakeViewer();
+    render(<EarthquakeLayer viewer={viewer} earthquakes={manyQuakes(600, 37, 45)} visible={true} />);
+    expect(labelAdd.mock.calls.length).toBe(250);
+  });
+
+  it("attaches distance attenuation to the quake billboards", () => {
+    const billboardAdd = vi.spyOn(Cesium.BillboardCollection.prototype, "add");
+    const viewer = fakeViewer();
+    render(<EarthquakeLayer viewer={viewer} earthquakes={[quake({ id: "a" })]} visible={true} />);
+    const opts = billboardAdd.mock.calls[0]![0] as Record<string, unknown>;
+    expect(opts.scaleByDistance).toBeInstanceOf(Cesium.NearFarScalar);
+    expect(opts.translucencyByDistance).toBeInstanceOf(Cesium.NearFarScalar);
+  });
+
+  it("culls quakes outside the viewport", () => {
+    const labelAdd = vi.spyOn(Cesium.LabelCollection.prototype, "add");
+    const viewer = fakeViewer(Cesium.Rectangle.fromDegrees(30, 40, 45, 50));
     render(
       <EarthquakeLayer
         viewer={viewer}
-        earthquakes={[quake({ id: "a", magnitude: 6.1 }), quake({ id: "b", magnitude: 4.5 })]}
+        earthquakes={[
+          quake({ id: "in", longitude: 37, latitude: 45 }),
+          quake({ id: "out", longitude: -120, latitude: 35 }),
+        ]}
         visible={true}
       />,
     );
-    expect(() => viewer._fireMoveEnd()).not.toThrow();
+    expect(labelAdd.mock.calls.length).toBe(1);
+  });
+
+  it("re-renders on camera move", () => {
+    const viewer = fakeViewer();
+    render(<EarthquakeLayer viewer={viewer} earthquakes={[quake({ id: "a" })]} visible={true} />);
+    const before = viewer._computeViewRectangle.mock.calls.length;
+    viewer._fireMoveEnd();
+    expect(viewer._computeViewRectangle.mock.calls.length).toBeGreaterThan(before);
   });
 });
 ```
 
-> If the real `Earthquake` type differs from the fields above, open `src/types/index.ts`, find `Earthquake`, and adjust the `quake()` factory to match (the test must compile).
-
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `npm run test -- EarthquakeLayer`
-Expected: FAIL — `viewer.camera.computeViewRectangle` is never called by the current layer, and (once wired) confirms no throw.
+Expected: FAIL — today's layer renders all 600 labels (cap test expects 250), adds billboards without `scaleByDistance` (attenuation test), renders both in/out (cull test expects 1), and registers no `moveEnd` listener (move test).
 
 - [ ] **Step 3: Refactor `EarthquakeLayer`**
 
 In `EarthquakeLayer.tsx`:
 
-(a) Imports + constant:
+(a) Imports + constants:
 
 ```ts
 import { useEffect, useRef, useCallback } from "react";
@@ -646,10 +753,10 @@ const QUAKE_LABEL_ALTITUDE_M = 5_000_000;
 
 (Keep the setup effect at 48-70 and the pulse-animation effect at 128-182 unchanged.)
 
-- [ ] **Step 4: Run the test + full suite to verify no regression**
+- [ ] **Step 4: Run the test**
 
 Run: `npm run test -- EarthquakeLayer`
-Expected: PASS.
+Expected: PASS (cap=250, attenuation set, cull=1, move re-queries).
 
 - [ ] **Step 5: Type-check**
 
@@ -667,7 +774,7 @@ git commit -m "feat(frontend): earthquake viewport cull + 250 cap + distance fad
 
 ### Task 5: Satellites — consolidate magic altitudes into `lib/lod.ts` (no behavior change)
 
-`SatelliteLayer` hard-codes `8_000_000` (mega-constellation cutoff) and `45_000_000` (orbit LOD) as local literals. Point them at the shared constants so `lib/lod.ts` is the single source of altitude thresholds. Behavior is identical — this is a consistency/maintainability change that makes the P1 satellite-thinning work land cleanly.
+`SatelliteLayer` hard-codes `8_000_000` (mega-constellation cutoff) and `45_000_000` (orbit LOD) as local literals. Point them at the shared constants so `lib/lod.ts` is the single source of altitude thresholds. **Provably value-identical:** Task 1's `lod.test.ts` pins `GLOBE_ALTITUDE_M === 8_000_000` and `ORBIT_LOD_ALTITUDE_M === 45_000_000`, and the existing `SatelliteLayer.test.tsx` exercises `shouldShowOrbits` across the 45M boundary (`shouldShowOrbits(0, 35_786_000) === true`, `shouldShowOrbits(0, 60_000_000) === false`) — so any drift in the orbit-LOD constant breaks a test.
 
 **Files:**
 - Modify: `services/frontend/src/components/layers/SatelliteLayer.tsx:41` and `:146`
@@ -675,13 +782,13 @@ git commit -m "feat(frontend): earthquake viewport cull + 250 cap + distance fad
 - [ ] **Step 1: Run the existing satellite tests (baseline)**
 
 Run: `npm run test -- SatelliteLayer`
-Expected: PASS (record the count).
+Expected: PASS (`shouldShowOrbits` + satData-guard suites green). Record the count.
 
 - [ ] **Step 2: Replace the local literals with shared constants**
 
 In `SatelliteLayer.tsx`:
 
-(a) Add to imports (top of file, after the `usePerformance` import):
+(a) Add to imports (after the `usePerformance` import):
 
 ```ts
 import { GLOBE_ALTITUDE_M, ORBIT_LOD_ALTITUDE_M } from "../../lib/lod";
@@ -699,10 +806,10 @@ const ORBIT_LOD_ALTITUDE = ORBIT_LOD_ALTITUDE_M; // keep orbits visible across L
     const showMegaConstellations = cameraAlt < GLOBE_ALTITUDE_M;
 ```
 
-- [ ] **Step 3: Run the satellite tests to verify no behavior change**
+- [ ] **Step 3: Run the satellite tests + the lod constant-pin test to verify no behavior change**
 
-Run: `npm run test -- SatelliteLayer`
-Expected: PASS (same count as Step 1).
+Run: `npm run test -- SatelliteLayer lod`
+Expected: PASS (same satellite count as Step 1; `lod` constant-pin green — guarantees the swapped literals are identical).
 
 - [ ] **Step 4: Type-check**
 
@@ -720,14 +827,35 @@ git commit -m "refactor(frontend): source satellite altitude thresholds from lib
 
 ### Task 6: Mil-air — cosmetic polyline weight reduction (low-risk only)
 
-The white/cyan track "gewirr" needs *temporal* declutter (only show recent track segments) — that is temporal-tracking Slice 0, which will restructure this file. To avoid churn that conflicts with Slice 0, P0 makes a **cosmetic-only** change: thinner, more translucent track polylines so the tangle recedes. No structural / data-flow change.
+The white/cyan track "gewirr" needs *temporal* declutter (only show recent track segments) — that is temporal-tracking Slice 0, which will restructure this file. To avoid churn that conflicts with Slice 0, P0 makes a **cosmetic-only** change: thinner, more translucent track polylines. We assert the rendered polyline's `width` and material color alpha by spying on `PolylineCollection.prototype.add`.
 
 **Files:**
-- Modify: `services/frontend/src/components/layers/MilAircraftLayer.tsx:121-125` (the track polyline `pc.add`)
+- Modify: `services/frontend/src/components/layers/MilAircraftLayer.tsx:119-127` (the track polyline `pc.add`)
+- Test: `services/frontend/src/components/layers/__tests__/MilAircraftLayer.test.tsx` (add one behavioral test)
 
-- [ ] **Step 1: Reduce polyline width + alpha**
+- [ ] **Step 1: Add the failing test**
 
-In `MilAircraftLayer.tsx`, change the track polyline `pc.add` (currently width `1.5`, `color.withAlpha(0.6)`) to:
+In `__tests__/MilAircraftLayer.test.tsx`, add `afterEach(() => vi.restoreAllMocks());` after the imports, and add this test inside the existing `describe("MilAircraftLayer component", ...)` block (it reuses the file's existing `fakeViewer()` and `track()` helpers):
+
+```ts
+  it("renders track polylines thin and translucent (cosmetic declutter)", () => {
+    const polyAdd = vi.spyOn(Cesium.PolylineCollection.prototype, "add");
+    const viewer = fakeViewer();
+    render(<MilAircraftLayer viewer={viewer} tracks={[track("a", 5)]} visible={true} onSelect={vi.fn()} />);
+    const opts = polyAdd.mock.calls[0]![0] as { width: number; material: { uniforms: { color: Cesium.Color } } };
+    expect(opts.width).toBe(1.0);
+    expect(opts.material.uniforms.color.alpha).toBeCloseTo(0.3);
+  });
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npm run test -- MilAircraftLayer`
+Expected: FAIL — the track polyline is currently added with `width: 1.5` and `color.withAlpha(0.6)`.
+
+- [ ] **Step 3: Reduce polyline width + alpha**
+
+In `MilAircraftLayer.tsx`, change the track polyline `pc.add` (currently `width: 1.5`, `color.withAlpha(0.6)`) to:
 
 ```ts
         const poly = pc.add({
@@ -739,17 +867,17 @@ In `MilAircraftLayer.tsx`, change the track polyline `pc.add` (currently width `
 
 (Leave the jet-icon billboard untouched — heads stay crisp; only the trailing lines recede.)
 
-- [ ] **Step 2: Run mil-air tests + type-check**
+- [ ] **Step 4: Run the test + type-check**
 
 Run: `npm run test -- MilAircraftLayer`
-Expected: PASS (existing tests assert structure/colors, not alpha — confirm green; if a test asserts the old alpha, update it to 0.3).
+Expected: PASS.
 Run: `npm run type-check`
 Expected: 0 errors.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/components/layers/MilAircraftLayer.tsx
+git add src/components/layers/MilAircraftLayer.tsx src/components/layers/__tests__/MilAircraftLayer.test.tsx
 git commit -m "fix(frontend): soften mil-air track polylines (cosmetic, pre-Slice0)"
 ```
 
@@ -762,7 +890,7 @@ git commit -m "fix(frontend): soften mil-air track polylines (cosmetic, pre-Slic
 - [ ] **Step 1: Full test suite**
 
 Run: `npm run test`
-Expected: all pass, ≥ 277 tests (275 baseline + new lod + EarthquakeLayer; FIRMS unchanged count). 0 failures.
+Expected: all pass, 0 failures. New/changed vs the 275 baseline: `lib/__tests__/lod.test.ts` (+1 file), `EarthquakeLayer.test.tsx` (+1 file), strengthened FIRMS + Mil-air component tests. Confirm the new behavioral tests (FIRMS cap/cull/move, Earthquake cap/cull/attenuation/move, mil-air width/alpha, lod) are all green.
 
 - [ ] **Step 2: Type-check + lint**
 
@@ -771,14 +899,14 @@ Expected: 0 type errors; lint clean (no new warnings in touched files).
 
 - [ ] **Step 3: Visual check (the real acceptance test)**
 
-Run: `npm run dev`, open the app, go to WORLDVIEW, enable **FIRMS Hotspots + Earthquakes + Satellites + Mil-air**, and navigate to the Black Sea / Caucasus (the trigger screenshot). Confirm:
+Run: `npm run dev`, open the app → WORLDVIEW, enable **FIRMS Hotspots + Earthquakes + Satellites + Mil-air**, navigate to the Black Sea / Caucasus (the trigger screenshot). Confirm:
 - FIRMS hotspots are small markers, not large overlapping blobs.
 - At regional zoom the periphery markers visibly fade (distance attenuation).
-- Zooming out caps the on-screen FIRMS/quake count (no unbounded dot field); panning re-culls.
-- Mil-air tracks read as faint trails, jet heads still crisp.
+- Zooming out caps the on-screen FIRMS/quake count (no unbounded dot field); panning re-culls to the viewport.
+- Mil-air tracks read as faint trails; jet heads still crisp.
 - Basemap is legible again.
 
-Capture a before/after note in the PR description.
+Capture a before/after note for the PR description.
 
 - [ ] **Step 4: Finish the branch**
 
@@ -789,14 +917,14 @@ Use the **superpowers:finishing-a-development-branch** skill to open the PR (bas
 ## Self-Review
 
 **Spec coverage (vs TASK-114 P0 bullets):**
-- "translucencyByDistance + scaleByDistance on all bulk layers" → `bulkNearFar` factories in Task 1, applied to FIRMS (T3) + Earthquakes (T4). EventLayer already had it; GDACS/EONET get it in the P0.2 fast-follow (documented deferral — they were OFF on screen).
+- "translucencyByDistance + scaleByDistance on all bulk layers" → `bulkScaleByDistance`/`bulkTranslucencyByDistance` (Task 1), applied + asserted on FIRMS (T3) and Earthquakes (T4). EventLayer already had it; GDACS/EONET get it in the P0.2 fast-follow (off-screen, documented deferral).
 - "ONE shared LOD module (3 bands, camera.moveEnd height)" → `lib/lod.ts` `bandForHeight` + `getViewBounds` (T1); SatelliteLayer thresholds consolidated into it (T5).
-- "Viewport culling on GDACS/EONET/Earthquakes/Events" → Earthquakes done (T4); GDACS/EONET/Events deferred to P0.2 (off-screen). FIRMS culling added (T3) as the reference.
-- "Max-count caps" → FIRMS 400 (T3), Earthquakes 250 (T4) via `selectVisible`.
-- Mil-air: cosmetic only, structural declutter explicitly routed to Slice 0 (T6).
+- "Viewport culling on GDACS/EONET/Earthquakes/Events" → Earthquakes done + asserted (T4); FIRMS culling added + asserted (T3, the reference); GDACS/EONET/Events deferred to P0.2 (off-screen).
+- "Max-count caps" → FIRMS 400 (T3), Earthquakes 250 (T4) via `selectVisible`, both asserted by spying on the rendered-marker count.
+- Mil-air: cosmetic only (width/alpha asserted via spy); structural track declutter explicitly routed to Slice 0.
 
-**Placeholder scan:** No "TBD"/"similar to Task N"; every code step shows full code. The two `> Note:` callouts flag (a) a possibly-trivially-green smoke test and (b) verifying the real `Earthquake` type — both are verification instructions, not missing content.
+**Placeholder scan:** No "TBD"/"similar to Task N"; every code step shows full code. No trivially-green tests: each layer test asserts cap count, viewport culling, distance attenuation, or a moveEnd re-query, and is RED against current code (verified by the "Expected: FAIL" rationale in each Step 2).
 
-**Type consistency:** `selectVisible` / `inViewBounds` / `getViewBounds` / `bulkScaleByDistance` / `bulkTranslucencyByDistance` / `bandForHeight` / `GLOBE_ALTITUDE_M` / `ORBIT_LOD_ALTITUDE_M` are defined in Task 1 and consumed with matching signatures in T3/T4/T5. Accessor returns `readonly [number, number] | null` consistently. Caps are module constants per layer.
+**Type consistency:** `selectVisible` / `inViewBounds` / `getViewBounds` / `bulkScaleByDistance` / `bulkTranslucencyByDistance` / `bandForHeight` / `GLOBE_ALTITUDE_M` / `ORBIT_LOD_ALTITUDE_M` defined in Task 1, consumed with matching signatures in T3/T4/T5. Accessor returns `readonly [number, number] | null`. Test factories match the real types in `src/types/index.ts` (`Earthquake` includes `tsunami: boolean`, `url: string | null`; `FIRMSHotspot` and `AircraftTrack` fields verified).
 
 **Scope check:** Single subsystem (frontend globe layers); one coherent plan. Off-screen layers and heavier techniques explicitly deferred with rationale.
