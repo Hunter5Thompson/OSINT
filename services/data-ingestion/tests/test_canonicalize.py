@@ -79,11 +79,41 @@ def test_irgc_acronym_canonicalizes_only_via_explicit_map():
     assert r.type == "MILITARY_UNIT"
 
 
-def test_irgc_full_name_kept_separate_from_acronym():
-    # Curated DB policy kept these distinct (Tier-2 alias, decided separately):
-    # the full name must NOT auto-collapse into the IRGC acronym node.
-    r = canonicalize_entity("Islamic Revolutionary Guard Corps", "organization")
-    assert r.name == "Islamic Revolutionary Guard Corps"
+# --- Tier-2: curated cross-name aliases (different strings, one real entity) ---
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "IRGC",
+        "Islamic Revolutionary Guard Corps",
+        "Iran's Revolutionary Guards",
+        "Iran's Revolutionary Guards Corps",
+        "Iranian Revolutionary Guards",
+    ],
+)
+def test_irgc_cross_name_aliases_collapse(raw):
+    # Tier-2 reverses the Tier-1 "kept separate" decision: the full name and the
+    # Iran-qualified variants are the same real entity as the IRGC acronym.
+    r = canonicalize_entity(raw, "organization")
+    assert r.name == "IRGC"
+    assert r.type == "MILITARY_UNIT"
+
+
+def test_irgc_navy_subunit_kept_separate():
+    # The naval branch is a *subordinate command*, a distinct entity — it must
+    # NOT be folded into its parent IRGC.
+    r = canonicalize_entity("IRGC Navy", "military_unit")
+    assert r.name == "IRGC Navy"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["Malian Army", "Malian army", "Mali army", "Mali Army", "Mali's army", "Mali’s army"],
+)
+def test_malian_army_cross_name_aliases_collapse(raw):
+    r = canonicalize_entity(raw, "military_unit")
+    assert r.name == "Malian Army"
     assert r.type == "MILITARY_UNIT"
 
 
