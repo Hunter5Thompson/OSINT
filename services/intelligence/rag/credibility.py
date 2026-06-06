@@ -57,6 +57,10 @@ PROVIDER_OVERRIDES: dict[str, float] = {
     "crisisgroup.org": 0.82,
     "warontherocks.com": 0.82,
     "bellingcat.com": 0.85,
+    # SUV.report — paid German defense analysis (think-tank-grade), licensing cleared.
+    # Domain key covers the suv.report teaser (provider=suv.report) and its rss_fulltext
+    # chunks; legacy steady.page teasers fall back to the rss baseline until superseded.
+    "suv.report": 0.78,
 }
 
 

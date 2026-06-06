@@ -2,10 +2,13 @@
 
 ## Use Case
 
-Paywalled or video-only defense/intelligence sources (e.g., SUV Sicherheit & Verteidigung)
-publish valuable analysis on YouTube but lock written content behind subscriptions.
-NotebookLM acts as a knowledge distillation layer — processing public YouTube videos into
-structured audio summaries that our NLM pipeline can ingest.
+Video-only defense/intelligence sources publish valuable analysis on YouTube that has no
+written equivalent. NotebookLM acts as a knowledge distillation layer — processing public
+YouTube videos into structured audio summaries that our NLM pipeline can ingest.
+
+> **Note:** SUV Sicherheit & Verteidigung's *written* fachbeiträge are now ingested
+> directly as full text (`suv.report/category/fachbeitraege/feed/` → `rss_fulltext`, see
+> `THINKTANK_FEEDS`). This pipeline now covers only its video-only/podcast material.
 
 ## Workflow
 
@@ -39,18 +42,18 @@ point per claim in `odin_intel`. The extraction prompt is source-agnostic
 whether it is reading a podcast transcript or a written report. `v1`/`v2` remain
 available for rollback.
 
-## Parallel Signal: RSS Teaser
+## Parallel Signal: RSS Full Text
 
-The RSS feed (`https://steady.page/de/suv/rss`) provides weekly teaser keywords
-(weapon systems, budget figures, organization names) that are processed through the
-standard RSS ingestion pipeline. These lightweight signals complement the deep
-knowledge extracted via NotebookLM.
+SUV's written analysis is ingested directly from its own full-text feed
+(`https://suv.report/category/fachbeitraege/feed/`) through the standard RSS pipeline and
+enriched to `rss_fulltext` (see `THINKTANK_FEEDS`), grounding briefings on the full article
+body. The NotebookLM path below complements this with video-only/podcast content.
 
 ## Current Sources Using This Pattern
 
-| Source | RSS (Teaser) | YouTube | NotebookLM |
-|--------|-------------|---------|------------|
-| SUV Sicherheit & Verteidigung | `steady.page/de/suv/rss` | Manual | Manual trigger |
+| Source | RSS | YouTube | NotebookLM |
+|--------|-----|---------|------------|
+| SUV Sicherheit & Verteidigung | `suv.report/…/fachbeitraege/feed` (full text → `rss_fulltext`) | Manual | Manual trigger |
 
 ## Steps for Adding a New Source
 

@@ -22,6 +22,18 @@ def test_known_feeds_have_expected_publisher_domains():
         assert by_name["Reuters (Google)"]["provider"] == "reuters.com"
 
 
+def test_suv_feed_uses_fulltext_fachbeitraege_not_steady_teaser():
+    """SUV.report's fachbeiträge feed is full-text German defense analysis (own
+    domain); we ingest it directly instead of the steady.page teaser proxy so it
+    can be enriched to rss_fulltext. Provider must be the bare publisher domain."""
+    by_name = {f["name"]: f for f in RSS_FEEDS}
+    suv = by_name["SUV Sicherheit & Verteidigung"]
+    assert "suv.report" in suv["url"]
+    assert "fachbeitraege" in suv["url"]
+    assert "steady.page" not in suv["url"]
+    assert suv["provider"] == "suv.report"
+
+
 # ---------------------------------------------------------------------------
 # Steps 5–7: pure payload builder tests
 # ---------------------------------------------------------------------------

@@ -101,3 +101,17 @@ class TestThinkTankDomainOverrides:
     def test_canonical_domain_override(self, domain, expected):
         # rss_fulltext writes provider=domain (canonical); the boost must fire
         assert credibility_score("rss", domain) == expected
+
+
+class TestSuvReportOverride:
+    """SUV.report — paid German defense analysis (think-tank-grade), licensing
+    cleared for ODIN use. Both the teaser (rss provider=suv.report) and the
+    enriched rss_fulltext (provider=domain) resolve to the single domain key."""
+
+    def test_suv_report_domain_override(self):
+        # 0.78: below the SWP/RAND cluster (0.82), well above the rss baseline (0.60).
+        assert credibility_score("rss", "suv.report") == 0.78
+
+    def test_suv_report_override_survives_gdelt_discovery_path(self):
+        # If ever surfaced via GDELT discovery, it's still SUV → keeps the override.
+        assert credibility_score("gdelt", "suv.report") == 0.78
