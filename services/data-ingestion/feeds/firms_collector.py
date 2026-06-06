@@ -20,6 +20,19 @@ log = structlog.get_logger(__name__)
 FIRMS_BASE_URL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
 FIRMS_DAYS = 1  # last N days of data per request
 
+
+def _firms_observed_at(acq_date: str, acq_time: str | int | None) -> str | None:
+    """ISO acquisition instant from FIRMS acq_date + HHMM acq_time (UTC).
+
+    Returns None when either part is missing so an absent acq_time falls back to
+    ingested_at downstream — rather than fabricating a midnight 'observed' instant.
+    An out-of-range HHMM yields a string that _normalize_iso later rejects (-> None).
+    """
+    if not acq_date or acq_time in (None, ""):
+        return None
+    hhmm = str(acq_time).zfill(4)
+    return f"{acq_date}T{hhmm[:2]}:{hhmm[2:]}:00+00:00"
+
 # Geopolitical hotspot bounding boxes: "west,south,east,north"
 FIRMS_BBOXES: dict[str, str] = {
     "ukraine": "22.0,44.0,40.0,52.5",
@@ -187,10 +200,7 @@ class FIRMSCollector(BaseCollector):
                     # Intelligence extraction. Transient/config errors skip Qdrant
                     # upsert so the row is retried on the next source re-fetch
                     # (Hash-Dedup doesn't trip).
-                    # FIRMS acq_time is HHMM (UTC); build an ISO acquisition instant.
-                    acq = row.get("acq_date", "")
-                    hhmm = str(row.get("acq_time", "")).zfill(4)
-                    observed = f"{acq}T{hhmm[:2]}:{hhmm[2:]}:00+00:00" if acq else None
+                    observed = _firms_observed_at(row.get("acq_date", ""), row.get("acq_time"))
                     try:
                         await process_item(
                             title=title,

@@ -35,3 +35,21 @@ def test_usgs_passes_occurred_at():
 
 def test_firms_passes_observed_at():
     assert "observed_at" in _process_item_kwargs(firms_collector)
+
+
+def test_firms_observed_at_normal_hhmm():
+    assert firms_collector._firms_observed_at("2026-05-01", "1430") == "2026-05-01T14:30:00+00:00"
+
+
+def test_firms_observed_at_zfills_three_digit_time():
+    assert firms_collector._firms_observed_at("2026-05-01", "345") == "2026-05-01T03:45:00+00:00"
+
+
+def test_firms_observed_at_empty_time_is_none_not_fabricated_midnight():
+    # missing acq_time must NOT fabricate a midnight 'observed' instant
+    assert firms_collector._firms_observed_at("2026-05-01", "") is None
+    assert firms_collector._firms_observed_at("2026-05-01", None) is None
+
+
+def test_firms_observed_at_no_date_is_none():
+    assert firms_collector._firms_observed_at("", "1430") is None

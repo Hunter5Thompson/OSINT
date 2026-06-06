@@ -25,8 +25,12 @@ log = structlog.get_logger(__name__)
 
 
 def _normalize_iso(value: str | None) -> str | None:
-    """Validate + normalize an ISO-8601 string to tz-aware UTC; None if invalid."""
-    if not value:
+    """Validate + normalize an ISO-8601 string to tz-aware UTC; None if invalid.
+
+    A non-string (or empty) value drops to None — exactly like a malformed string —
+    so a stray hint falls back to ingested_at instead of crashing the whole write.
+    """
+    if not value or not isinstance(value, str):
         return None
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
