@@ -44,6 +44,14 @@ import { useVessels } from "../hooks/useVessels";
 import { usePipelines } from "../hooks/usePipelines";
 import { useFIRMSHotspots } from "../hooks/useFIRMSHotspots";
 import { useAircraftTracks } from "../hooks/useAircraftTracks";
+import { useTimeWindow } from "../hooks/useTimeWindow";
+import { TimeProvider, useTime } from "../state/TimeContext";
+import { TwoTierScrubber } from "../components/time/TwoTierScrubber";
+import {
+  fromLiveTrack,
+  fromWindowTrack,
+  type MilTrackRender,
+} from "../components/layers/milTrackAdapter";
 import { useDatacenters } from "../hooks/useDatacenters";
 import { useRefineries } from "../hooks/useRefineries";
 import { useEONETEvents } from "../hooks/useEONETEvents";
@@ -54,11 +62,13 @@ import type {
   LayerVisibility,
   ShaderType,
   FIRMSHotspot,
-  AircraftTrack,
   DatacenterGeoJSON,
   RefineryGeoJSON,
   EONETEvent,
   GDACSEvent,
+  TimeWindowQuery,
+  WindowEventSample,
+  WindowTrackSample,
 } from "../types";
 
 type PanelId = "layers" | "search" | "ticker";
@@ -124,7 +134,7 @@ interface GlobeChildrenProps {
   layers: LayerVisibility;
   setSelected: Dispatch<SetStateAction<Selected | null>>;
   firmsHotspots: FIRMSHotspot[];
-  milTracks: AircraftTrack[];
+  selectedWindow: { tStart: string; tEnd: string };
   datacenterData: DatacenterGeoJSON | null;
   refineryData: RefineryGeoJSON | null;
   eonetEvents: EONETEvent[];
@@ -136,7 +146,7 @@ function GlobeChildren({
   layers,
   setSelected,
   firmsHotspots,
-  milTracks,
+  selectedWindow,
   datacenterData,
   refineryData,
   eonetEvents,
@@ -168,28 +178,11 @@ function GlobeChildren({
           });
         }}
       />
-      <MilAircraftLayer
+      <MilTrackSource
         viewer={viewer}
-        tracks={milTracks}
-        visible={layers.milAircraft}
-        onSelect={(track) => {
-          setSelected({ type: "aircraft", data: track });
-          const lastPoint = track.points[track.points.length - 1];
-          if (lastPoint) {
-            dispatchSpotlight({
-              type: "set",
-              target: {
-                kind: "circle",
-                trigger: "pin",
-                center: { lon: lastPoint.lon, lat: lastPoint.lat },
-                radius: 1,
-                altitude: 0,
-                label: track.callsign ?? track.icao24,
-                sourcePin: { layer: "milAircraft", entityId: track.icao24 },
-              },
-            });
-          }
-        }}
+        layers={layers}
+        selectedWindow={selectedWindow}
+        setSelected={setSelected}
       />
       <DatacenterLayer
         viewer={viewer}
@@ -280,6 +273,131 @@ function GlobeChildren({
   );
 }
 
+// ── MilTrackSource ─────────────────────────────────────────────────────────────
+// Isolated useTime() consumer so only this tiny node re-renders at the throttled
+// (~4 Hz) cursor cadence — not the whole GlobeChildren subtree. Selects the mil
+// track source by mode (live = useAircraftTracks; replay = windowed contract) and
+// normalizes both shapes through the canonical adapter before the layer/inspector.
+
+function MilTrackSource({
+  viewer,
+  layers,
+  selectedWindow,
+  setSelected,
+}: {
+  viewer: Cesium.Viewer | null;
+  layers: LayerVisibility;
+  selectedWindow: { tStart: string; tEnd: string };
+  setSelected: Dispatch<SetStateAction<Selected | null>>;
+}) {
+  const { dispatch: dispatchSpotlight } = useSpotlight();
+  const { mode, getTimeMs, discontinuityEpoch } = useTime();
+
+  const { tracks: liveTracks } = useAircraftTracks(layers.milAircraft && mode === "live");
+
+  const replayQuery = useMemo<TimeWindowQuery>(
+    () => ({
+      tStart: selectedWindow.tStart,
+      tEnd: selectedWindow.tEnd,
+      domain: "movements",
+      tier: "fine",
+      movementKind: "mil_aircraft",
+    }),
+    [selectedWindow.tStart, selectedWindow.tEnd],
+  );
+  const { data: replayData } = useTimeWindow(
+    layers.milAircraft && mode === "replay",
+    replayQuery,
+  );
+
+  const milRender = useMemo<MilTrackRender[]>(
+    () =>
+      mode === "live"
+        ? liveTracks.map(fromLiveTrack)
+        : (replayData?.samples ?? [])
+            .filter((s): s is WindowTrackSample => s.kind === "track")
+            .map(fromWindowTrack),
+    [mode, liveTracks, replayData],
+  );
+
+  return (
+    <MilAircraftLayer
+      viewer={viewer}
+      tracks={milRender}
+      visible={layers.milAircraft}
+      getTimeMs={getTimeMs}
+      discontinuityEpoch={discontinuityEpoch}
+      onSelect={(track) => {
+        setSelected({ type: "aircraft", data: track });
+        const lastPoint = track.points[track.points.length - 1];
+        if (lastPoint) {
+          dispatchSpotlight({
+            type: "set",
+            target: {
+              kind: "circle",
+              trigger: "pin",
+              center: { lon: lastPoint.lon, lat: lastPoint.lat },
+              radius: 1,
+              altitude: 0,
+              label: track.callsign ?? track.icao24,
+              sourcePin: { layer: "milAircraft", entityId: track.icao24 },
+            },
+          });
+        }
+      }}
+    />
+  );
+}
+
+// ── ScrubberMount ──────────────────────────────────────────────────────────────
+// useTime() consumer that drives the two-tier scrubber: coarse graph events on a
+// rolling recent window, mode toggle, and (on event click) scoping the replay
+// window + switching to replay.
+
+function ScrubberMount({
+  coarseWindow,
+  onSelectWindow,
+}: {
+  coarseWindow: { tStart: string; tEnd: string };
+  onSelectWindow: (w: { tStart: string; tEnd: string }) => void;
+}) {
+  const { mode, cursorMs, seek, setMode } = useTime();
+  const { data } = useTimeWindow(
+    true,
+    {
+      tStart: coarseWindow.tStart,
+      tEnd: coarseWindow.tEnd,
+      domain: "events",
+      tier: "coarse",
+      limit: 200,
+    },
+    30_000,
+  );
+  const events = (data?.samples ?? []).filter(
+    (s): s is WindowEventSample => s.kind === "event",
+  );
+
+  return (
+    <TwoTierScrubber
+      events={events}
+      mode={mode}
+      cursorMs={cursorMs}
+      onSelectEvent={(e) => {
+        const t = Date.parse(e.time);
+        if (!Number.isNaN(t)) {
+          onSelectWindow({
+            tStart: new Date(t - 3 * 3600_000).toISOString(),
+            tEnd: new Date(t + 3 * 3600_000).toISOString(),
+          });
+          setMode("replay");
+        }
+      }}
+      onSeek={seek}
+      onToggleMode={() => setMode(mode === "live" ? "replay" : "live")}
+    />
+  );
+}
+
 // ── SearchAcceptHook ───────────────────────────────────────────────────────────
 // Inner component that lives inside <SpotlightProvider> so it can call
 // useSpotlight(). Mounts SearchPanel and wires onAccept → camera flyTo + Spotlight.
@@ -352,6 +470,24 @@ export function WorldviewPage() {
     search: false,
     ticker: true,
   });
+  // Replay window for mil tracks — defaults to the last 6h; an event click on the
+  // scrubber scopes it to that event ±3h. Kept as stable state (not derived from
+  // the cursor) so replay does not refetch on every cursor tick.
+  const [selectedWindow, setSelectedWindow] = useState<{ tStart: string; tEnd: string }>(() => {
+    const now = Date.now();
+    return {
+      tStart: new Date(now - 6 * 3600_000).toISOString(),
+      tEnd: new Date(now).toISOString(),
+    };
+  });
+  // Rolling coarse-tier window (last 7d) for the scrubber's event ticks.
+  const [coarseWindow] = useState<{ tStart: string; tEnd: string }>(() => {
+    const now = Date.now();
+    return {
+      tStart: new Date(now - 7 * 86_400_000).toISOString(),
+      tEnd: new Date(now).toISOString(),
+    };
+  });
 
   const { flights } = useFlights(layers.flights);
   const { satellites } = useSatellites(layers.satellites);
@@ -361,7 +497,6 @@ export function WorldviewPage() {
   const { vessels } = useVessels(layers.vessels);
   const { pipelines: pipelineData } = usePipelines(layers.pipelines);
   const { hotspots: firmsHotspots } = useFIRMSHotspots(layers.firmsHotspots);
-  const { tracks: milTracks } = useAircraftTracks(layers.milAircraft);
   const { datacenters: datacenterData } = useDatacenters(layers.datacenters);
   const { refineries: refineryData } = useRefineries(layers.refineries);
   const { events: eonetEvents } = useEONETEvents(layers.eonet);
@@ -453,6 +588,7 @@ export function WorldviewPage() {
   return (
     <SpotlightProvider>
     <PerformanceGuard>
+    <TimeProvider viewer={viewer}>
       <div style={{ flex: 1, position: "relative", minHeight: 0 }} data-page="worldview">
         <div style={{ position: "absolute", inset: 0 }}>
           <GlobeViewer
@@ -483,7 +619,7 @@ export function WorldviewPage() {
           layers={layers}
           setSelected={setSelected}
           firmsHotspots={firmsHotspots}
-          milTracks={milTracks}
+          selectedWindow={selectedWindow}
           datacenterData={datacenterData}
           refineryData={refineryData}
           eonetEvents={eonetEvents}
@@ -560,7 +696,10 @@ export function WorldviewPage() {
             onExpand={() => setExpandedPanels((prev) => ({ ...prev, ticker: true }))}
           />
         </div>
+
+        <ScrubberMount coarseWindow={coarseWindow} onSelectWindow={setSelectedWindow} />
       </div>
+    </TimeProvider>
     </PerformanceGuard>
     </SpotlightProvider>
   );
