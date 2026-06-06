@@ -42,6 +42,7 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert "COPY --from=ghcr.io/astral-sh/uv:0.10.0 /uv /usr/local/bin/uv" in dockerfile
     assert "COPY services/data-ingestion/pyproject.toml ." in dockerfile
     assert "COPY services/data-ingestion/uv.lock ." in dockerfile
+    assert "COPY services/data-ingestion/canonicalize.py ." in dockerfile
     assert "COPY services/data-ingestion/qdrant_doctor/ qdrant_doctor/" in dockerfile
     assert "COPY services/data-ingestion/infra_atlas/ infra_atlas/" in dockerfile
     assert (
