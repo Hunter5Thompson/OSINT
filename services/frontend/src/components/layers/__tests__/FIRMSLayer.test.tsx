@@ -1,32 +1,45 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render } from "@testing-library/react";
 import * as Cesium from "cesium";
 import { FIRMSLayer, createFIRMSDot, frpToSize, frpToColor } from "../FIRMSLayer";
 import type { FIRMSHotspot } from "../../../types";
 
-function fakeViewer(): Cesium.Viewer {
-  const primitives = {
-    add: vi.fn((p: unknown) => p),
-    remove: vi.fn(),
-  };
-  const canvas = document.createElement("canvas");
+afterEach(() => vi.restoreAllMocks());
+
+function fakeViewer(
+  rect: Cesium.Rectangle = Cesium.Rectangle.fromDegrees(-180, -85, 180, 85),
+): Cesium.Viewer & { _fireMoveEnd: () => void; _computeViewRectangle: ReturnType<typeof vi.fn> } {
+  const primitives = { add: vi.fn((p: unknown) => p), remove: vi.fn() };
+  const moveEndListeners: Array<() => void> = [];
+  const computeViewRectangle = vi.fn(() => rect);
   return {
     scene: {
       primitives,
       requestRender: vi.fn(),
       frameState: { mode: Cesium.SceneMode.SCENE3D },
       pick: vi.fn(() => undefined),
+      globe: { ellipsoid: Cesium.Ellipsoid.WGS84 },
     },
-    canvas,
+    camera: {
+      positionCartographic: { height: 3_000_000 },
+      computeViewRectangle,
+      moveEnd: {
+        addEventListener: vi.fn((cb: () => void) => { moveEndListeners.push(cb); }),
+        removeEventListener: vi.fn(),
+      },
+    },
+    canvas: document.createElement("canvas"),
     isDestroyed: () => false,
-  } as unknown as Cesium.Viewer;
+    _fireMoveEnd: () => moveEndListeners.forEach((cb) => cb()),
+    _computeViewRectangle: computeViewRectangle,
+  } as unknown as Cesium.Viewer & { _fireMoveEnd: () => void; _computeViewRectangle: ReturnType<typeof vi.fn> };
 }
 
 describe("FIRMS canvas helpers", () => {
-  it("frpToSize clamps between 6 and 22", () => {
-    expect(frpToSize(0)).toBe(6);
-    expect(frpToSize(40)).toBeCloseTo(16);
-    expect(frpToSize(500)).toBe(22);
+  it("frpToSize clamps between 4 and 14", () => {
+    expect(frpToSize(0)).toBe(4);
+    expect(frpToSize(35)).toBeCloseTo(11);
+    expect(frpToSize(500)).toBe(14);
   });
 
   it("frpToColor interpolates yellow → orange → red", () => {
@@ -57,20 +70,40 @@ describe("FIRMSLayer component", () => {
     ...over,
   });
 
-  it("renders without throwing for three hotspots (one flagged)", () => {
+  const manyHotspots = (n: number, lon: number, lat: number): FIRMSHotspot[] =>
+    Array.from({ length: n }, (_, i) => baseHotspot({ id: `h${i}`, longitude: lon, latitude: lat, frp: i }));
+
+  it("caps rendered hotspots at 400 and attaches distance attenuation", () => {
+    const addSpy = vi.spyOn(Cesium.BillboardCollection.prototype, "add");
     const viewer = fakeViewer();
-    const onSelect = vi.fn();
+    render(<FIRMSLayer viewer={viewer} hotspots={manyHotspots(600, 37, 48)} visible={true} />);
+    expect(addSpy.mock.calls.length).toBe(400);
+    const opts = addSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(opts.scaleByDistance).toBeInstanceOf(Cesium.NearFarScalar);
+    expect(opts.translucencyByDistance).toBeInstanceOf(Cesium.NearFarScalar);
+  });
+
+  it("culls hotspots outside the viewport", () => {
+    const addSpy = vi.spyOn(Cesium.BillboardCollection.prototype, "add");
+    const viewer = fakeViewer(Cesium.Rectangle.fromDegrees(30, 40, 45, 50));
     render(
       <FIRMSLayer
         viewer={viewer}
         hotspots={[
-          baseHotspot({ id: "a" }),
-          baseHotspot({ id: "b" }),
-          baseHotspot({ id: "c", possible_explosion: true }),
+          baseHotspot({ id: "in", longitude: 37, latitude: 45 }),
+          baseHotspot({ id: "out", longitude: -120, latitude: 35 }),
         ]}
         visible={true}
-        onSelect={onSelect}
       />,
     );
+    expect(addSpy.mock.calls.length).toBe(1);
+  });
+
+  it("re-renders on camera move (re-queries the viewport)", () => {
+    const viewer = fakeViewer();
+    render(<FIRMSLayer viewer={viewer} hotspots={[baseHotspot({ id: "a" })]} visible={true} />);
+    const before = viewer._computeViewRectangle.mock.calls.length;
+    viewer._fireMoveEnd();
+    expect(viewer._computeViewRectangle.mock.calls.length).toBeGreaterThan(before);
   });
 });

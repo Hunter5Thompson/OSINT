@@ -130,8 +130,9 @@ export function MilAircraftLayer({
         for (const p of t.points) arr.push(p.lon, p.lat, p.altitude_m ?? 0);
         const poly = pc.add({
           positions: Cesium.Cartesian3.fromDegreesArrayHeights(arr),
-          width: 1.5,
-          material: Cesium.Material.fromType("Color", { color: color.withAlpha(0.6) }),
+          // softened per declutter P0 (#43): thin + translucent track polylines
+          width: 1.0,
+          material: Cesium.Material.fromType("Color", { color: color.withAlpha(0.3) }),
         });
         idMapRef.current.set(poly as unknown as object, t);
       }
