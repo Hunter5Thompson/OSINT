@@ -55,3 +55,19 @@ async def apply_phase2(driver) -> None:
         for stmt in statements:
             await session.run(stmt)
             log.info("index_applied", stmt=stmt[:60])
+
+
+async def apply_phase3(driver) -> None:
+    """Backfill timeline_at on existing GDELT events. Idempotent + batched.
+
+    Each statement runs in auto-commit mode (CALL {} IN TRANSACTIONS cannot run
+    inside an explicit transaction). Re-running is safe (timeline_at IS NULL guard).
+    """
+    statements = [
+        s.strip() for s in read_cypher_file("phase3_timeline_at.cypher").split(";")
+        if s.strip()
+    ]
+    async with driver.session() as session:
+        for stmt in statements:
+            await session.run(stmt)
+            log.info("phase3_applied", stmt=stmt[:60])

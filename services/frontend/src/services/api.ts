@@ -23,7 +23,9 @@ import type {
   ReportRecord,
   ReportUpdateRequest,
   Satellite,
+  TimeWindowQuery,
   Vessel,
+  WindowResponse,
 } from "../types";
 
 const BASE = "/api";
@@ -442,6 +444,19 @@ export async function silenceIncident(id: string): Promise<Incident> {
   });
   if (!resp.ok) throw new Error(`silence ${id}: ${resp.status}`);
   return (await resp.json()) as Incident;
+}
+
+export async function getTimeWindow(
+  q: TimeWindowQuery,
+  signal?: AbortSignal,
+): Promise<WindowResponse> {
+  const p = new URLSearchParams({ t_start: q.tStart, t_end: q.tEnd });
+  if (q.domain) p.set("domain", q.domain);
+  if (q.tier) p.set("tier", q.tier);
+  if (q.movementKind) p.set("movement_kind", q.movementKind);
+  if (q.bbox) p.set("bbox", q.bbox.join(","));
+  if (q.limit) p.set("limit", String(q.limit));
+  return fetchJSON<WindowResponse>(`/timeline/window?${p.toString()}`, { signal });
 }
 
 export async function promoteIncident(id: string): Promise<Incident> {

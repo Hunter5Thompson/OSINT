@@ -31,6 +31,8 @@ MERGE (e:Event:GDELTEvent {event_id: $event_id})
     e.num_sources = $num_sources,
     e.num_articles = $num_articles,
     e.date_added = datetime($date_added),
+    e.timeline_at = datetime($date_added),
+    e.time_basis = 'indexed',
     e.fraction_date = $fraction_date,
     e.actor1_code = $actor1_code,
     e.actor1_name = $actor1_name,
@@ -42,7 +44,9 @@ MERGE (e:Event:GDELTEvent {event_id: $event_id})
   ON MATCH SET
     e.num_mentions = $num_mentions,
     e.num_sources = $num_sources,
-    e.num_articles = $num_articles
+    e.num_articles = $num_articles,
+    e.timeline_at = datetime($date_added),
+    e.time_basis = 'indexed'
 """
 
 MERGE_DOC = """

@@ -1,22 +1,16 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
 import * as Cesium from "cesium";
-import {
-  MilAircraftLayer,
-  branchColor,
-  createJetIcon,
-  trackToPolylinePositions,
-} from "../MilAircraftLayer";
-import type { AircraftTrack } from "../../../types";
+import { MilAircraftLayer, branchColor, createJetIcon } from "../MilAircraftLayer";
+import type { MilTrackRender } from "../milTrackAdapter";
 
-afterEach(() => vi.restoreAllMocks());
-
-function fakeViewer(): Cesium.Viewer {
+function fakeViewer(): { viewer: Cesium.Viewer; ticks: Array<() => void> } {
+  const ticks: Array<() => void> = [];
   const primitives = {
     add: vi.fn((p: unknown) => p),
     remove: vi.fn(),
   };
-  return {
+  const viewer = {
     scene: {
       primitives,
       requestRender: vi.fn(),
@@ -24,8 +18,17 @@ function fakeViewer(): Cesium.Viewer {
       pick: vi.fn(() => undefined),
     },
     canvas: document.createElement("canvas"),
+    clock: {
+      onTick: {
+        addEventListener: vi.fn((cb: () => void) => {
+          ticks.push(cb);
+          return vi.fn();
+        }),
+      },
+    },
     isDestroyed: () => false,
   } as unknown as Cesium.Viewer;
+  return { viewer, ticks };
 }
 
 describe("MilAircraft helpers", () => {
@@ -39,28 +42,12 @@ describe("MilAircraft helpers", () => {
     const c = createJetIcon(Cesium.Color.CYAN, 24);
     expect(c.width).toBe(24);
     expect(c.height).toBe(24);
-    const ctx = c.getContext("2d");
-    expect(ctx).not.toBeNull();
-  });
-
-  it("trackToPolylinePositions returns one Cartesian3 per point", () => {
-    const positions = trackToPolylinePositions([
-      { lat: 51, lon: 12, altitude_m: 10000, speed_ms: 240, heading: 90, timestamp: 1 },
-      { lat: 52, lon: 13, altitude_m: 10100, speed_ms: 240, heading: 90, timestamp: 2 },
-    ]);
-    expect(positions.length).toBe(2);
-  });
-
-  it("trackToPolylinePositions falls back to 0 for null altitude", () => {
-    const positions = trackToPolylinePositions([
-      { lat: 0, lon: 0, altitude_m: null, speed_ms: null, heading: null, timestamp: 1 },
-    ]);
-    expect(positions.length).toBe(1);
+    expect(c.getContext("2d")).not.toBeNull();
   });
 });
 
-describe("MilAircraftLayer component", () => {
-  const track = (id: string, nPoints: number): AircraftTrack => ({
+describe("MilAircraftLayer component (time-aware)", () => {
+  const track = (id: string, nPoints: number): MilTrackRender => ({
     icao24: id,
     callsign: "TEST",
     type_code: "C17",
@@ -72,28 +59,88 @@ describe("MilAircraftLayer component", () => {
       altitude_m: 10000,
       speed_ms: 240,
       heading: 90,
-      timestamp: 1744300000 + i * 60,
+      ts_ms: 1_744_300_000_000 + i * 60_000,
     })),
   });
 
-  it("renders without throwing for mixed-length tracks", () => {
-    const viewer = fakeViewer();
+  it("renders mixed-length render-model tracks and registers a clock tick loop", () => {
+    const { viewer, ticks } = fakeViewer();
     render(
       <MilAircraftLayer
         viewer={viewer}
         tracks={[track("a", 5), track("b", 1)]}
         visible={true}
+        getTimeMs={() => 1_744_300_000_000 + 120_000}
+        discontinuityEpoch={0}
         onSelect={vi.fn()}
+      />,
+    );
+    // the tick effect subscribed to clock.onTick
+    expect(ticks.length).toBe(1);
+    // invoking the tick loop drives interpolation without throwing
+    expect(() => ticks[0]!()).not.toThrow();
+  });
+
+  it("does not register a tick loop without a viewer", () => {
+    render(
+      <MilAircraftLayer
+        viewer={null}
+        tracks={[track("a", 3)]}
+        visible={true}
+        getTimeMs={() => 0}
+        discontinuityEpoch={0}
       />,
     );
   });
 
+  it("resets its render primitives on a discontinuityEpoch bump (§7.3)", () => {
+    const removeAll = vi.spyOn(Cesium.BillboardCollection.prototype, "removeAll");
+    const { viewer } = fakeViewer();
+    const tracks = [track("a", 5)];
+    const { rerender } = render(
+      <MilAircraftLayer
+        viewer={viewer}
+        tracks={tracks}
+        visible={true}
+        getTimeMs={() => 0}
+        discontinuityEpoch={0}
+      />,
+    );
+    const before = removeAll.mock.calls.length;
+    // same tracks, only the epoch changes -> the layer must still rebuild (cache reset)
+    rerender(
+      <MilAircraftLayer
+        viewer={viewer}
+        tracks={tracks}
+        visible={true}
+        getTimeMs={() => 0}
+        discontinuityEpoch={1}
+      />,
+    );
+    expect(removeAll.mock.calls.length).toBeGreaterThan(before);
+    removeAll.mockRestore();
+  });
+
   it("renders track polylines thin and translucent (cosmetic declutter)", () => {
     const polyAdd = vi.spyOn(Cesium.PolylineCollection.prototype, "add");
-    const viewer = fakeViewer();
-    render(<MilAircraftLayer viewer={viewer} tracks={[track("a", 5)]} visible={true} onSelect={vi.fn()} />);
-    const opts = polyAdd.mock.calls[0]![0] as { width: number; material: { uniforms: { color: Cesium.Color } } };
+    const { viewer } = fakeViewer();
+    render(
+      <MilAircraftLayer
+        viewer={viewer}
+        tracks={[track("a", 5)]}
+        visible={true}
+        getTimeMs={() => 0}
+        discontinuityEpoch={0}
+        onSelect={vi.fn()}
+      />,
+    );
+    const opts = polyAdd.mock.calls[0]![0] as {
+      width: number;
+      material: { uniforms: { color: Cesium.Color } };
+    };
     expect(opts.width).toBe(1.0);
     expect(opts.material.uniforms.color.alpha).toBeCloseTo(0.3);
   });
 });
+
+afterEach(() => vi.restoreAllMocks());

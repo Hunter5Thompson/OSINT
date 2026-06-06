@@ -1,20 +1,20 @@
 import type { CSSProperties } from "react";
 import * as Cesium from "cesium";
 import type {
-  AircraftTrack,
   DatacenterProperties,
   EONETEvent,
   FIRMSHotspot,
   GDACSEvent,
   RefineryProperties,
 } from "../../types";
+import type { MilTrackRender } from "../layers/milTrackAdapter";
 import { OverlayPanel } from "../hlidskjalf/OverlayPanel";
 import type { CountryHit } from "../globe/hooks/useCountryHitTest";
 import { CountryHeader } from "../globe/spotlight/CountryHeader";
 
 export type Selected =
   | { type: "firms"; data: FIRMSHotspot }
-  | { type: "aircraft"; data: AircraftTrack }
+  | { type: "aircraft"; data: MilTrackRender }
   | { type: "datacenter"; data: DatacenterProperties }
   | { type: "refinery"; data: RefineryProperties }
   | { type: "eonet"; data: EONETEvent }
@@ -115,7 +115,7 @@ function AircraftInspector({
   track,
   viewer,
 }: {
-  track: AircraftTrack;
+  track: MilTrackRender;
   viewer: Cesium.Viewer | null;
 }) {
   const lastPoint = track.points[track.points.length - 1];

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
-import type { AircraftPoint, AircraftTrack } from "../../types";
 import { glyphColor } from "./glyphTokens";
+import { positionAtTime, type MilTrackRender } from "./milTrackAdapter";
 
 export function branchColor(branch: string | null): Cesium.Color {
   switch ((branch || "").toUpperCase()) {
@@ -45,29 +45,30 @@ export function createJetIcon(color: Cesium.Color, size = 24): HTMLCanvasElement
   return canvas;
 }
 
-export function trackToPolylinePositions(points: AircraftPoint[]): Cesium.Cartesian3[] {
-  const arr: number[] = [];
-  for (const p of points) {
-    arr.push(p.lon, p.lat, p.altitude_m ?? 0);
-  }
-  return Cesium.Cartesian3.fromDegreesArrayHeights(arr);
-}
-
 interface MilAircraftLayerProps {
   viewer: Cesium.Viewer | null;
-  tracks: AircraftTrack[];
+  tracks: MilTrackRender[];
   visible: boolean;
-  onSelect?: (t: AircraftTrack) => void;
+  getTimeMs: () => number;
+  discontinuityEpoch: number;
+  onSelect?: (t: MilTrackRender) => void;
 }
 
-export function MilAircraftLayer({ viewer, tracks, visible, onSelect }: MilAircraftLayerProps) {
+export function MilAircraftLayer({
+  viewer, tracks, visible, getTimeMs, discontinuityEpoch, onSelect,
+}: MilAircraftLayerProps) {
   const polyCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
   const billboardCollectionRef = useRef<Cesium.BillboardCollection | null>(null);
-  const idMapRef = useRef<Map<object, AircraftTrack>>(new Map());
+  const idMapRef = useRef<Map<object, MilTrackRender>>(new Map());
+  const billboardMapRef = useRef<Map<string, { bb: Cesium.Billboard; track: MilTrackRender }>>(
+    new Map(),
+  );
   const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
+  const tickRemoveRef = useRef<(() => void) | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
 
+  // Init: collections + pick handler (once per viewer).
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
     if (!polyCollectionRef.current) {
@@ -95,14 +96,19 @@ export function MilAircraftLayer({ viewer, tracks, visible, onSelect }: MilAircr
       }
       if (!viewer.isDestroyed()) {
         if (polyCollectionRef.current) viewer.scene.primitives.remove(polyCollectionRef.current);
-        if (billboardCollectionRef.current) viewer.scene.primitives.remove(billboardCollectionRef.current);
+        if (billboardCollectionRef.current)
+          viewer.scene.primitives.remove(billboardCollectionRef.current);
       }
       polyCollectionRef.current = null;
       billboardCollectionRef.current = null;
       idMapRef.current.clear();
+      billboardMapRef.current.clear();
     };
   }, [viewer]);
 
+  // Build polylines (full history) + per-track billboards (hidden until positioned).
+  // Rebuilds — and resets this layer's render caches — on tracks/visibility change
+  // and on every discontinuityEpoch bump (seek/rewind/mode change).
   useEffect(() => {
     const pc = polyCollectionRef.current;
     const bc = billboardCollectionRef.current;
@@ -110,36 +116,71 @@ export function MilAircraftLayer({ viewer, tracks, visible, onSelect }: MilAircr
     pc.removeAll();
     bc.removeAll();
     idMapRef.current.clear();
+    billboardMapRef.current.clear();
     if (!visible) return;
 
     for (const t of tracks) {
       if (t.points.length === 0) continue;
+      const last = t.points[t.points.length - 1];
+      if (!last) continue;
       const color = branchColor(t.military_branch);
 
       if (t.points.length >= 2) {
-        const positions = trackToPolylinePositions(t.points);
+        const arr: number[] = [];
+        for (const p of t.points) arr.push(p.lon, p.lat, p.altitude_m ?? 0);
         const poly = pc.add({
-          positions,
+          positions: Cesium.Cartesian3.fromDegreesArrayHeights(arr),
+          // softened per declutter P0 (#43): thin + translucent track polylines
           width: 1.0,
           material: Cesium.Material.fromType("Color", { color: color.withAlpha(0.3) }),
         });
         idMapRef.current.set(poly as unknown as object, t);
       }
 
-      const last = t.points[t.points.length - 1]!;
-      const position = Cesium.Cartesian3.fromDegrees(last.lon, last.lat, last.altitude_m ?? 0);
-      const rotationRad = Cesium.Math.toRadians(-(last.heading ?? 0) + 90);
+      // Rotation from the last known heading preserves live-mode parity (in live
+      // the cursor clamps to the last point, so this renders identically to before).
       const bb = bc.add({
-        position,
+        position: Cesium.Cartesian3.fromDegrees(last.lon, last.lat, last.altitude_m ?? 0),
         image: createJetIcon(color, 24),
         scale: 0.8,
-        rotation: rotationRad,
+        rotation: Cesium.Math.toRadians(-(last.heading ?? 0) + 90),
         alignedAxis: Cesium.Cartesian3.UNIT_Z,
         eyeOffset: new Cesium.Cartesian3(0, 0, -40),
+        show: false, // positioned/shown by the tick loop at the clock cursor
       });
       idMapRef.current.set(bb as unknown as object, t);
+      billboardMapRef.current.set(t.icao24, { bb, track: t });
     }
-  }, [tracks, visible, viewer]);
+  }, [tracks, visible, viewer, discontinuityEpoch]);
+
+  // Move each billboard to the interpolated position at the clock cursor every frame.
+  // Hidden before the first point; clamped at the last (no dead reckoning) — §7.3.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    if (tickRemoveRef.current) {
+      tickRemoveRef.current();
+      tickRemoveRef.current = null;
+    }
+    const remove = viewer.clock.onTick.addEventListener(() => {
+      const t = getTimeMs();
+      for (const { bb, track } of billboardMapRef.current.values()) {
+        const pos = positionAtTime(track.points, t);
+        if (!pos) {
+          bb.show = false;
+          continue;
+        }
+        bb.show = true;
+        bb.position = Cesium.Cartesian3.fromDegrees(pos.lon, pos.lat, pos.alt);
+      }
+    });
+    tickRemoveRef.current = remove;
+    return () => {
+      if (tickRemoveRef.current) {
+        tickRemoveRef.current();
+        tickRemoveRef.current = null;
+      }
+    };
+  }, [viewer, getTimeMs]);
 
   return null;
 }

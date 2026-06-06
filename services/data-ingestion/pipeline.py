@@ -9,6 +9,7 @@ Called between feed-fetch and Qdrant-embed to:
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,39 @@ from config import Settings, settings
 from nlm_ingest.schemas import normalize_entity_type
 
 log = structlog.get_logger(__name__)
+
+
+def _normalize_iso(value: str | None) -> str | None:
+    """Validate + normalize an ISO-8601 string to tz-aware UTC; None if invalid.
+
+    A non-string (or empty) value drops to None — exactly like a malformed string —
+    so a stray hint falls back to ingested_at instead of crashing the whole write.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.isoformat()
+
+
+def _resolve_timeline(
+    *, occurred_at: str | None, observed_at: str | None,
+    published_at: str | None, ingested_at: str,
+) -> tuple[str, str]:
+    """Canonical timeline_at + time_basis by precedence. Never fabricates a time."""
+    for value, basis in (
+        (occurred_at, "occurred"),
+        (observed_at, "observed"),
+        (published_at, "published"),
+    ):
+        norm = _normalize_iso(value)
+        if norm is not None:
+            return norm, basis
+    return ingested_at, "ingested"
 
 
 class ExtractionTransientError(Exception):
@@ -218,6 +252,9 @@ async def process_item(
     *,
     settings: Settings,
     redis_client: Any | None = None,
+    occurred_at: str | None = None,
+    observed_at: str | None = None,
+    published_at: str | None = None,
 ) -> dict | None:
     """Extract intelligence from a feed item, write to Neo4j, publish to Redis.
 
@@ -248,8 +285,16 @@ async def process_item(
 
     # Step 2: Write to Neo4j
     if events or entities:
+        # ingested_at is the always-present honest fallback for the canonical
+        # timeline anchor; structured collector time (occurred/observed/published)
+        # takes precedence and we never fabricate an occurred_at from now().
+        ingested_at = datetime.now(UTC).isoformat()
         try:
-            await _write_to_neo4j(events, entities, url, title, source, settings)
+            await _write_to_neo4j(
+                events, entities, url, title, source, settings,
+                occurred_at=occurred_at, observed_at=observed_at,
+                published_at=published_at, ingested_at=ingested_at,
+            )
         except Exception as e:
             log.error("pipeline_neo4j_failed", url=url, error=str(e))
 
@@ -357,6 +402,11 @@ async def _write_to_neo4j(
     doc_title: str,
     doc_source: str,
     settings: Settings,
+    *,
+    occurred_at: str | None = None,
+    observed_at: str | None = None,
+    published_at: str | None = None,
+    ingested_at: str | None = None,
 ) -> None:
     """Write extraction results to Neo4j via HTTP transactional API."""
     statements = []
@@ -422,14 +472,24 @@ async def _write_to_neo4j(
         )
         statements.append({"statement": statement, "parameters": parameters})
 
-    # Create Events
+    # Create Events — stamp the canonical timeline anchor with honest precedence
+    # (occurred -> observed -> published -> ingested). Structured collector time
+    # beats the optional LLM 'timestamp' hint; a malformed hint is dropped, never
+    # turned into a fabricated occurred_at.
+    effective_ingested = ingested_at or datetime.now(UTC).isoformat()
     for event in events:
+        ev_occurred = occurred_at or event.get("timestamp")
+        timeline_at, time_basis = _resolve_timeline(
+            occurred_at=ev_occurred, observed_at=observed_at,
+            published_at=published_at, ingested_at=effective_ingested,
+        )
         statements.append({
             "statement": (
                 "CREATE (ev:Event {"
                 "  title: $title, summary: $summary,"
                 "  codebook_type: $codebook_type,"
-                "  severity: $severity, confidence: $confidence"
+                "  severity: $severity, confidence: $confidence,"
+                "  timeline_at: datetime($timeline_at), time_basis: $time_basis"
                 "}) "
                 "WITH ev "
                 "MATCH (d:Document {url: $url}) "
@@ -441,6 +501,8 @@ async def _write_to_neo4j(
                 "codebook_type": event.get("codebook_type", "other.unclassified"),
                 "severity": event.get("severity", "low"),
                 "confidence": event.get("confidence", 0.5),
+                "timeline_at": timeline_at,
+                "time_basis": time_basis,
                 "url": doc_url,
             },
         })
