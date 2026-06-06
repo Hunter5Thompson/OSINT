@@ -1469,3 +1469,65 @@ Observation-Producer.
 # 5. Host-Bridge ablösen: systemctl --user disable --now odin-fulltext-enrich.timer
 #
 # Invariante: qdrant nofile-ulimit (65536, commit c1e2330) MUSS bleiben — Bulk-Writes brauchen es.
+
+
+# ══════════════════════════════════════════
+# TASK-114: WorldView Globe Declutter — Lesbarkeit & Performance (LOD/Clustering/Density/Color)
+# ══════════════════════════════════════════
+# Status: OFFEN | Aufwand: 4–6 Tage (phasiert P0→P3) | Priorität: hoch (UX-Kern: Globe ist unlesbar)
+#
+# Kontext: Screenshot 2026-06-06 (WorldView, Schwarzes Meer/Kaukasus) zeigt den Globe als
+# unlesbaren Matsch — hunderte gelbe Punkte, orange Thermal-Blobs, weiß/cyan Linien-Gewirr,
+# Basemap kaum sichtbar. Diagnose via Deep-Dive-Workflow (Code-Scan ALLER Layer + Cesium-/
+# Dataviz-Best-Practice-Recherche mit Quell-URLs). Ein dedizierter "Dataviz-Agent-Skill" wurde
+# erwogen und 2026-06-06 bewusst VERWORFEN (User-Entscheid) — die Findings leben hier im Backlog.
+# Volle Recherche + Quell-URLs: Workflow wf_e0ad1f86-5a0 dieser Session; Memory project_viz_declutter.md.
+#
+# WAS IST WAS (aus Code verifiziert):
+#   gelbe Punkte    = FIRMS-Hotspots (dominant) + GPS-Sats (gelb) + M5–6 Erdbeben
+#   orange Blobs    = FIRMS-Hi-FRP + GDACS-Orange-Alerts + GEO-Sats + M6–7 Beben
+#   weiß/cyan Linien= Mil-air Polylines (USAF #66e6ff / USN #4d9fff / unknown weiß), 1.5px @ α0.6
+#
+# ROOT CAUSES (Architektur, nicht Geschmack):
+#   1. KEIN Clustering nirgends — jeder Datenpunkt einzeln gezeichnet.
+#   2. Kein konsistentes Distanz-LOD — nur ad-hoc Schwellen pro Layer (z.B. SatelliteLayer 8M Cutoff).
+#   3. Keine Max-Count-Caps auf FIRMS/Earthquakes/GDACS/Events/EONET/Cables/Pipelines
+#      (nur FlightLayer=500 Trails + ShipLayer=3000 Vessels haben Caps).
+#   4. Gesättigte Palette (gelb/orange/rot/cyan) mehrfach über Layer → verschmilzt zu Farbmatsch.
+#   5. Polyline-Overdraw (Mil-air + Cables + Pipelines + Trails bei 1.5–2px) → Linien-Matte.
+#   6. Kein Viewport-Culling auf GDACS/EONET/FIRMS/Earthquakes/Events (global verteilt gezeichnet).
+#
+# FIX-PLAN (Prinzip → Cesium-Hebel), phasiert:
+#   P0 (größter Win, billig, rein GPU-seitig):
+#     - translucencyByDistance + scaleByDistance (Cesium.NearFarScalar) auf ALLE Bulk-Layer.
+#     - EIN shared LOD-Modul: services/frontend/src/lib/lod.ts + useCameraAltitudeBand-Hook
+#       (3 Bänder GLOBE/REGIONAL/LOCAL, getrieben von camera.moveEnd + positionCartographic.height).
+#       Ersetzt die verstreuten ad-hoc Schwellen (SatelliteLayer 8M/45M, *Layer LABEL/VECTOR-Konstanten).
+#     - Viewport-Frustum-Culling auf GDACS/EONET/Earthquakes/Events (Vorlage: ShipLayer viewRect).
+#   P0/P1: Spatial Clustering für Flights/Events/Sats. ⚠ CLAUDE.md: KEINE Entity-API für Bulk!
+#       → entweder EntityCluster nur auf dediziertem CustomDataSource (kleine Layer), ODER
+#         app-side grid/supercluster auf der imperativen Primitive-Path (rebuild on moveEnd).
+#   P1: FIRMS-Dichteoberfläche statt Einzel-Ring-Billboards bei GLOBE/REGIONAL
+#       (heatmap.js → Cesium.SingleTileImageryProvider; Swap zu Billboards beim Reinzoomen)
+#       → killt die "Thermal-Blobs". + EIN Hlíðskjalf-Noir Cesium-Color-Token-Modul:
+#       ≤6–8 qualitative Hues für Kategorien, Sättigung NUR für Alerts, Viridis-Ramp für Magnitude,
+#       Lightness-differenziert (colorblind-safe). Ersetzt rohe Cesium.Color.RED/CYAN/YELLOW/LIME.
+#   P2: Salience-Encoding (size/alpha/luminance) als shared helper; PerformanceGuard so umbauen,
+#       dass er PRIORISIERT sheddet (on-demand/conditional Tiers VOR always-show/Alert-Tier).
+#   P3 (später, größerer Aufwand): Edge-Bundling (FDEB im Worker) für Cables/Pipelines/Trails;
+#       Temporal-Windowing (recency→alpha fade) — koppelt an temporal-tracking Slice 0
+#       (Spec/Plan via PR #34, Gate via PR #33 jetzt offen → siehe project_temporal_tracking).
+#
+# ZUSATZ-CLUTTER (eigene Entscheidung): EONET + GDACS + FIRMS + USGS überlappen — Vulkane/Brände/
+#   Beben werden bis zu 4× gezeichnet. Beide EONET+GDACS sind LIVE verdrahtet (Collector →
+#   /api/{eonet,gdacs}/events → Layer, nur default OFF). Dedup-/Layer-Konsolidierungs-Entscheidung
+#   offen: welche Quelle ist kanonisch pro Event-Typ (Brand→FIRMS? Beben→USGS? Naturereignis→EONET?).
+#
+# INVARIANTEN/CONSTRAINTS:
+#   - CLAUDE.md: NUR imperative Primitives (Billboard/PointPrimitive/PolylineCollection),
+#     KEINE Entity-API für Bulk-Rendering.
+#   - Hlíðskjalf-Noir ist das committed Design-System (project_hlidskjalf_aesthetic) —
+#     Color-Tokens daraus ableiten, kein paralleles Tactical-Dark erfinden.
+#   - PerformanceGuard (components/globe/PerformanceGuard.tsx, DegradationLevel) existiert schon —
+#     drauf aufbauen, nicht ersetzen.
+#   - LOD-Rebuilds auf camera.moveEnd (debounced), NICHT per-frame / nicht auf camera.changed.
