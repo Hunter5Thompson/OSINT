@@ -134,6 +134,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
       { cap: MAX_FIRMS, rank: (h) => h.frp },
     );
 
+    // Shared immutable NearFarScalar instances, reused across every billboard this pass.
     const scaleByDistance = bulkScaleByDistance();
     const translucencyByDistance = bulkTranslucencyByDistance();
 
@@ -151,6 +152,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
       });
       idMapRef.current.set(dot as unknown as object, h);
       if (h.possible_explosion) {
+        // No scaleByDistance on the ring — the pulse animation owns its scale.
         const ring = bc.add({
           position,
           image: createFIRMSRing(size * 1.5, color),
@@ -181,10 +183,12 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
 
   // Pulse animation for explosion hotspots
   useEffect(() => {
-    if (!visible || pulsesRef.current.length === 0) {
+    if (!visible) {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       return;
     }
+    // The loop reads pulsesRef.current live each frame, so explosion rings added or
+    // removed by renderVisible() on camera move are handled without restarting the effect.
     const animate = () => {
       const now = Date.now();
       const phase = (now * 0.003) % (Math.PI * 2);
