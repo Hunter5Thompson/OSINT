@@ -40,7 +40,7 @@ export function useTimeWindow(
       ctrl.abort();
       if (timer) clearInterval(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // deps intentionally use `key` (stringified query) instead of `query`
   }, [enabled, key, refreshMs]);
 
   return { data, loading };
