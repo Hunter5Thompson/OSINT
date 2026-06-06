@@ -52,11 +52,22 @@ _ALIAS_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
     "U.S. Air Force": ("MILITARY_UNIT", ("United States Air Force", "USAF")),
     "U.S. Army": ("MILITARY_UNIT", ("United States Army",)),
     "U.S. Marine Corps": ("MILITARY_UNIT", ("United States Marine Corps", "USMC")),
-    "IRGC": ("MILITARY_UNIT", ()),
-    "Islamic Revolutionary Guard Corps": ("MILITARY_UNIT", ()),
+    # Tier-2 cross-name aliases: different surface forms, one real entity.
+    # NOTE: "IRGC Navy" / "Navy of Iran's IRGC" are a subordinate command, a
+    # distinct entity — deliberately NOT listed here so they stay separate.
+    "IRGC": (
+        "MILITARY_UNIT",
+        (
+            "Islamic Revolutionary Guard Corps",
+            "Iran's Revolutionary Guards",
+            "Iran's Revolutionary Guards Corps",
+            "Iranian Revolutionary Guards",
+        ),
+    ),
     "Bundeswehr": ("MILITARY_UNIT", ()),
     "Deutsche Marine": ("MILITARY_UNIT", ()),
     "Nigerian Army": ("MILITARY_UNIT", ()),
+    "Malian Army": ("MILITARY_UNIT", ("Malian army", "Mali army", "Mali's army")),
     "French Navy": ("MILITARY_UNIT", ()),
     "Royal Navy": ("MILITARY_UNIT", ()),
     "Royal Air Force": ("MILITARY_UNIT", ()),

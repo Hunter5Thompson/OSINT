@@ -13,8 +13,11 @@ Merge **only** when two names *surely* denote the same real entity.
   Iranian / IRGC Navy depending on context). Generics are tagged `generic=true`.
 - Same exact string typed both `ORGANIZATION` and `MILITARY_UNIT` → collapse to
   `MILITARY_UNIT` (coast guards → `ORGANIZATION`, a deliberate choice).
-- Cross-name aliases (e.g. `IRGC` ≡ `Islamic Revolutionary Guard Corps`) are a
-  separate **Tier-2** decision — not part of the safe same-identity merge.
+- Cross-name aliases (different surface forms, one real entity) are **Tier-2**:
+  a curated, explicitly-approved decision layer. Implemented for `IRGC`
+  (≡ Islamic Revolutionary Guard Corps / Iran's Revolutionary Guards) and
+  `Malian Army`. Subordinate commands (e.g. `IRGC Navy`) and generic forms
+  (`Revolutionary Guard`) deliberately stay separate.
 
 ## One-off graph cleanup (manual, reviewed)
 
