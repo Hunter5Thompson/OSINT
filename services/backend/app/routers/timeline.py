@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+import structlog
+from fastapi import APIRouter, HTTPException, Query
 
-from app.models.timeline import BBox
+from app.models.timeline import BBox, EventSample, WindowResponse
+from app.services.neo4j_client import read_query
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/timeline", tags=["timeline"])
 
@@ -46,3 +50,112 @@ def parse_bbox(raw: str | None) -> BBox | None:
     if south > north:
         raise HTTPException(status_code=422, detail="bbox south must be <= north")
     return BBox(west=west, south=south, east=east, north=north)
+
+
+_EVENTS_QUERY = """
+MATCH (ev:Event)
+WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+WITH ev, l
+WHERE $bbox_off
+   OR (l.lat IS NOT NULL AND l.lon IS NOT NULL
+       AND l.lat >= $south AND l.lat <= $north
+       AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
+          OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) ))
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       ev.title AS title, ev.codebook_type AS codebook_type, ev.severity AS severity,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       l.name AS location_name, l.country AS country, l.lat AS lat, l.lon AS lon
+ORDER BY ev.timeline_at ASC
+LIMIT $limit
+"""
+
+_EVENTS_COUNT_QUERY = """
+MATCH (ev:Event)
+WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+WITH ev, l
+WHERE $bbox_off
+   OR (l.lat IS NOT NULL AND l.lon IS NOT NULL
+       AND l.lat >= $south AND l.lat <= $north
+       AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
+          OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) ))
+RETURN count(DISTINCT ev) AS total
+"""
+
+
+def _bbox_params(bbox: BBox | None) -> dict:
+    if bbox is None:
+        return {"bbox_off": True, "west": -180.0, "east": 180.0, "south": -90.0, "north": 90.0}
+    return {
+        "bbox_off": False,
+        "west": bbox.west, "east": bbox.east, "south": bbox.south, "north": bbox.north,
+    }
+
+
+@router.get("/window", response_model=WindowResponse)
+async def get_window(
+    t_start: str,
+    t_end: str,
+    domain: str = "events",
+    tier: str = "coarse",
+    movement_kind: str | None = None,
+    bbox: str | None = None,
+    limit: int = Query(default=200),
+) -> WindowResponse:
+    if domain not in ("events", "movements"):
+        raise HTTPException(status_code=422, detail="domain must be events|movements")
+    if tier not in ("coarse", "fine"):
+        raise HTTPException(status_code=422, detail="tier must be coarse|fine")
+    if not (1 <= limit <= _MAX_LIMIT):
+        raise HTTPException(status_code=422, detail=f"limit must be in [1,{_MAX_LIMIT}]")
+    validate_window(t_start, t_end)
+    box = parse_bbox(bbox)
+
+    if domain == "events":
+        if movement_kind is not None:
+            raise HTTPException(
+                status_code=422, detail="movement_kind only valid for domain=movements"
+            )
+        if tier != "coarse":
+            raise HTTPException(status_code=422, detail="events only support tier=coarse")
+        return await _events_window(t_start, t_end, box, limit)
+
+    return await _movements_window(t_start, t_end, tier, movement_kind, box, limit)
+
+
+async def _events_window(
+    t_start: str, t_end: str, box: BBox | None, limit: int
+) -> WindowResponse:
+    params = {"t_start": t_start, "t_end": t_end, "limit": limit, **_bbox_params(box)}
+    try:
+        rows = await read_query(_EVENTS_QUERY, params)
+        count_rows = await read_query(_EVENTS_COUNT_QUERY, params)
+    except Exception as exc:
+        log.error("timeline_events_neo4j_query_failed", error=str(exc))
+        raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
+    total = int(count_rows[0]["total"]) if count_rows else len(rows)
+    samples = [
+        EventSample(
+            id=str(r.get("id") or ""),
+            time=str(r.get("time") or ""),
+            time_basis=str(r.get("time_basis") or "indexed"),
+            title=r.get("title"),
+            codebook_type=r.get("codebook_type"),
+            severity=r.get("severity"),
+            lat=float(r["lat"]) if r.get("lat") is not None else None,
+            lon=float(r["lon"]) if r.get("lon") is not None else None,
+            location_name=r.get("location_name"),
+            country=r.get("country"),
+        )
+        for r in rows
+    ]
+    return WindowResponse(
+        domain="events", tier="coarse", t_start=t_start, t_end=t_end, bbox=box,
+        samples=samples, total_count=total, truncated=total > len(samples),
+    )
+
+
+async def _movements_window(*args, **kwargs) -> WindowResponse:
+    # Replaced by the real mil-aircraft branch in Task 4.
+    raise HTTPException(status_code=501, detail="movements not implemented")
