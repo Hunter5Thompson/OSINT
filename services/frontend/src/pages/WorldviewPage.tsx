@@ -46,7 +46,7 @@ import { useFIRMSHotspots } from "../hooks/useFIRMSHotspots";
 import { useAircraftTracks } from "../hooks/useAircraftTracks";
 import { useTimeWindow } from "../hooks/useTimeWindow";
 import { TimeProvider, useTime } from "../state/TimeContext";
-import { TwoTierScrubber } from "../components/time/TwoTierScrubber";
+import { ScrubberMount } from "../components/time/ScrubberMount";
 import {
   fromLiveTrack,
   fromWindowTrack,
@@ -67,7 +67,6 @@ import type {
   EONETEvent,
   GDACSEvent,
   TimeWindowQuery,
-  WindowEventSample,
   WindowTrackSample,
 } from "../types";
 
@@ -349,58 +348,6 @@ function MilTrackSource({
   );
 }
 
-// ── ScrubberMount ──────────────────────────────────────────────────────────────
-// useTime() consumer that drives the two-tier scrubber: coarse graph events on a
-// rolling recent window, mode toggle, and (on event click) scoping the replay
-// window + switching to replay.
-
-function ScrubberMount({
-  coarseWindow,
-  onSelectWindow,
-}: {
-  coarseWindow: { tStart: string; tEnd: string };
-  onSelectWindow: (w: { tStart: string; tEnd: string }) => void;
-}) {
-  const { mode, cursorMs, seek, setMode, setReplayWindow } = useTime();
-  const { data } = useTimeWindow(
-    true,
-    {
-      tStart: coarseWindow.tStart,
-      tEnd: coarseWindow.tEnd,
-      domain: "events",
-      tier: "coarse",
-      limit: 200,
-    },
-    30_000,
-  );
-  const events = (data?.samples ?? []).filter(
-    (s): s is WindowEventSample => s.kind === "event",
-  );
-
-  return (
-    <TwoTierScrubber
-      events={events}
-      mode={mode}
-      cursorMs={cursorMs}
-      onSelectEvent={(e) => {
-        const t = Date.parse(e.time);
-        if (!Number.isNaN(t)) {
-          const start = t - 3 * 3600_000;
-          const end = t + 3 * 3600_000;
-          onSelectWindow({
-            tStart: new Date(start).toISOString(),
-            tEnd: new Date(end).toISOString(),
-          });
-          setReplayWindow(start, end); // give the Cesium clock real CLAMP bounds
-          setMode("replay");
-        }
-      }}
-      onSeek={seek}
-      onToggleMode={() => setMode(mode === "live" ? "replay" : "live")}
-    />
-  );
-}
-
 // ── SearchAcceptHook ───────────────────────────────────────────────────────────
 // Inner component that lives inside <SpotlightProvider> so it can call
 // useSpotlight(). Mounts SearchPanel and wires onAccept → camera flyTo + Spotlight.
@@ -480,14 +427,6 @@ export function WorldviewPage() {
     const now = Date.now();
     return {
       tStart: new Date(now - 6 * 3600_000).toISOString(),
-      tEnd: new Date(now).toISOString(),
-    };
-  });
-  // Rolling coarse-tier window (last 7d) for the scrubber's event ticks.
-  const [coarseWindow] = useState<{ tStart: string; tEnd: string }>(() => {
-    const now = Date.now();
-    return {
-      tStart: new Date(now - 7 * 86_400_000).toISOString(),
       tEnd: new Date(now).toISOString(),
     };
   });
@@ -700,7 +639,7 @@ export function WorldviewPage() {
           />
         </div>
 
-        <ScrubberMount coarseWindow={coarseWindow} onSelectWindow={setSelectedWindow} />
+        <ScrubberMount onSelectWindow={setSelectedWindow} />
       </div>
     </TimeProvider>
     </PerformanceGuard>
