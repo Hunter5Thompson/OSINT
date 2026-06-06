@@ -90,4 +90,23 @@ describe("EarthquakeLayer", () => {
     viewer._fireMoveEnd();
     expect(viewer._computeViewRectangle.mock.calls.length).toBeGreaterThan(before);
   });
+
+  it("ring billboard has translucency but no scaleByDistance (pulse owns scale)", () => {
+    const billboardAdd = vi.spyOn(Cesium.BillboardCollection.prototype, "add");
+    const viewer = fakeViewer();
+    render(<EarthquakeLayer viewer={viewer} earthquakes={[quake({ id: "a" })]} visible={true} />);
+    // calls[0] = dot, calls[1] = ring (added in that order per quake)
+    const ringOpts = billboardAdd.mock.calls[1]![0] as Record<string, unknown>;
+    expect(ringOpts.translucencyByDistance).toBeInstanceOf(Cesium.NearFarScalar);
+    expect(ringOpts.scaleByDistance).toBeUndefined();
+  });
+
+  it("emits nothing when not visible, even after a camera move", () => {
+    const labelAdd = vi.spyOn(Cesium.LabelCollection.prototype, "add");
+    const viewer = fakeViewer();
+    render(<EarthquakeLayer viewer={viewer} earthquakes={[quake({ id: "a" })]} visible={false} />);
+    labelAdd.mockClear();
+    viewer._fireMoveEnd();
+    expect(labelAdd.mock.calls.length).toBe(0);
+  });
 });
