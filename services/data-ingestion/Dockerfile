@@ -16,6 +16,7 @@ RUN uv sync --locked --no-dev --no-install-project
 
 # Copy application code
 COPY services/data-ingestion/config.py .
+COPY services/data-ingestion/canonicalize.py .
 COPY services/data-ingestion/pipeline.py .
 COPY services/data-ingestion/scheduler.py .
 COPY services/data-ingestion/feeds/ feeds/
