@@ -3,7 +3,7 @@ import * as Cesium from "cesium";
 import type { FIRMSHotspot } from "../../types";
 
 export function frpToSize(frp: number): number {
-  return Math.min(22, 6 + Math.min(frp / 4, 16));
+  return Math.min(14, 4 + Math.min(frp / 5, 10));
 }
 
 export function frpToColor(frp: number): Cesium.Color {
@@ -118,7 +118,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
       const dot = bc.add({
         position,
         image: createFIRMSDot(size, color),
-        scale: 1.0,
+        scale: 0.7,
         eyeOffset: new Cesium.Cartesian3(0, 0, -45),
       });
       idMapRef.current.set(dot as unknown as object, h);

@@ -23,10 +23,10 @@ function fakeViewer(): Cesium.Viewer {
 }
 
 describe("FIRMS canvas helpers", () => {
-  it("frpToSize clamps between 6 and 22", () => {
-    expect(frpToSize(0)).toBe(6);
-    expect(frpToSize(40)).toBeCloseTo(16);
-    expect(frpToSize(500)).toBe(22);
+  it("frpToSize clamps between 4 and 14", () => {
+    expect(frpToSize(0)).toBe(4);
+    expect(frpToSize(35)).toBeCloseTo(11);
+    expect(frpToSize(500)).toBe(14);
   });
 
   it("frpToColor interpolates yellow → orange → red", () => {
