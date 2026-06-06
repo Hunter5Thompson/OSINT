@@ -120,8 +120,8 @@ export function MilAircraftLayer({ viewer, tracks, visible, onSelect }: MilAircr
         const positions = trackToPolylinePositions(t.points);
         const poly = pc.add({
           positions,
-          width: 1.5,
-          material: Cesium.Material.fromType("Color", { color: color.withAlpha(0.6) }),
+          width: 1.0,
+          material: Cesium.Material.fromType("Color", { color: color.withAlpha(0.3) }),
         });
         idMapRef.current.set(poly as unknown as object, t);
       }

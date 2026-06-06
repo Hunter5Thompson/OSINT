@@ -1,9 +1,17 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import type { FIRMSHotspot } from "../../types";
+import {
+  getViewBounds,
+  selectVisible,
+  bulkScaleByDistance,
+  bulkTranslucencyByDistance,
+} from "../../lib/lod";
+
+const MAX_FIRMS = 400;
 
 export function frpToSize(frp: number): number {
-  return Math.min(22, 6 + Math.min(frp / 4, 16));
+  return Math.min(14, 4 + Math.min(frp / 5, 10));
 }
 
 export function frpToColor(frp: number): Cesium.Color {
@@ -72,6 +80,12 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
 
+  const hotspotsRef = useRef(hotspots);
+  hotspotsRef.current = hotspots;
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+
+  // Setup: create BillboardCollection + ScreenSpaceEventHandler click handler
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
     if (!collectionRef.current) {
@@ -103,43 +117,78 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
     };
   }, [viewer]);
 
-  useEffect(() => {
+  const renderVisible = useCallback(() => {
     const bc = collectionRef.current;
-    if (!bc) return;
+    if (!bc || !viewer || viewer.isDestroyed()) return;
+
     bc.removeAll();
     idMapRef.current.clear();
     pulsesRef.current = [];
-    if (!visible) return;
+    if (!visibleRef.current) return;
 
-    for (const h of hotspots) {
+    const bounds = getViewBounds(viewer);
+    const shown = selectVisible(
+      hotspotsRef.current,
+      (h) => [h.longitude, h.latitude] as const,
+      bounds,
+      { cap: MAX_FIRMS, rank: (h) => h.frp },
+    );
+
+    // Shared immutable NearFarScalar instances, reused across every billboard this pass.
+    const scaleByDistance = bulkScaleByDistance();
+    const translucencyByDistance = bulkTranslucencyByDistance();
+
+    for (const h of shown) {
       const position = Cesium.Cartesian3.fromDegrees(h.longitude, h.latitude, 0);
       const size = frpToSize(h.frp);
       const color = frpToColor(h.frp);
       const dot = bc.add({
         position,
         image: createFIRMSDot(size, color),
-        scale: 1.0,
+        scale: 0.7,
         eyeOffset: new Cesium.Cartesian3(0, 0, -45),
+        scaleByDistance,
+        translucencyByDistance,
       });
       idMapRef.current.set(dot as unknown as object, h);
       if (h.possible_explosion) {
+        // No scaleByDistance on the ring — the pulse animation owns its scale.
         const ring = bc.add({
           position,
           image: createFIRMSRing(size * 1.5, color),
           scale: 1.0,
           eyeOffset: new Cesium.Cartesian3(0, 0, -44),
+          translucencyByDistance,
         });
         idMapRef.current.set(ring as unknown as object, h);
         pulsesRef.current.push({ ring, color });
       }
     }
-  }, [hotspots, visible, viewer]);
+  }, [viewer]);
 
+  // Re-render on data / visibility change
   useEffect(() => {
-    if (!visible || pulsesRef.current.length === 0) {
+    renderVisible();
+  }, [hotspots, visible, renderVisible]);
+
+  // Re-render on camera move (viewport culling)
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const onMoveEnd = () => renderVisible();
+    viewer.camera.moveEnd.addEventListener(onMoveEnd);
+    return () => {
+      if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
+    };
+  }, [viewer, renderVisible]);
+
+  // Pulse animation for explosion hotspots
+  useEffect(() => {
+    if (!visible) {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       return;
     }
+    // The loop reads pulsesRef.current live each frame, so explosion rings added or
+    // removed by renderVisible() on camera move are handled without restarting the effect.
     const animate = () => {
       const now = Date.now();
       const phase = (now * 0.003) % (Math.PI * 2);
@@ -155,7 +204,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [visible, hotspots]);
+  }, [visible]);
 
   return null;
 }
