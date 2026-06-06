@@ -187,6 +187,10 @@ class FIRMSCollector(BaseCollector):
                     # Intelligence extraction. Transient/config errors skip Qdrant
                     # upsert so the row is retried on the next source re-fetch
                     # (Hash-Dedup doesn't trip).
+                    # FIRMS acq_time is HHMM (UTC); build an ISO acquisition instant.
+                    acq = row.get("acq_date", "")
+                    hhmm = str(row.get("acq_time", "")).zfill(4)
+                    observed = f"{acq}T{hhmm[:2]}:{hhmm[2:]}:00+00:00" if acq else None
                     try:
                         await process_item(
                             title=title,
@@ -195,6 +199,7 @@ class FIRMSCollector(BaseCollector):
                             source="firms",
                             settings=self.settings,
                             redis_client=self.redis,
+                            observed_at=observed,
                         )
                     except ExtractionTransientError as exc:
                         log.warning("extraction_skipped_transient", url=url, error=str(exc))

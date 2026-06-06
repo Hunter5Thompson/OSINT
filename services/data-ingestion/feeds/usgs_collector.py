@@ -280,6 +280,7 @@ ON CREATE SET r.distance_km   = $distance_km,
                     source="usgs",
                     settings=self.settings,
                     redis_client=self.redis,
+                    occurred_at=event.get("event_time"),
                 )
             except ExtractionTransientError as exc:
                 log.warning(

@@ -300,6 +300,7 @@ class RSSCollector:
                     source="rss",
                     settings=settings,
                     redis_client=self._redis,
+                    published_at=published_dt,
                 )
             except ExtractionTransientError as exc:
                 log.warning("extraction_skipped_transient", url=link, error=str(exc))
