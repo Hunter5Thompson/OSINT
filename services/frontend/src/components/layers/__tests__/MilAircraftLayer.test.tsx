@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render } from "@testing-library/react";
-
-afterEach(() => vi.restoreAllMocks());
 import * as Cesium from "cesium";
 import {
   MilAircraftLayer,
@@ -10,6 +8,8 @@ import {
   trackToPolylinePositions,
 } from "../MilAircraftLayer";
 import type { AircraftTrack } from "../../../types";
+
+afterEach(() => vi.restoreAllMocks());
 
 function fakeViewer(): Cesium.Viewer {
   const primitives = {

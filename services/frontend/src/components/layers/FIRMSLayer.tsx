@@ -204,7 +204,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [visible, hotspots]);
+  }, [visible]);
 
   return null;
 }
