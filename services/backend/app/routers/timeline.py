@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.models.timeline import (
     BBox,
+    EventDetail,
     EventSample,
     GeoEvent,
     HistogramBucket,
@@ -473,3 +474,38 @@ async def _histogram_geo(t_start: str, t_end: str, box: BBox | None):
         for r in ranked[:_GEO_CAP]
     ]
     return out, total, total > _GEO_CAP
+
+
+_EVENT_DETAIL_QUERY = """
+MATCH (ev:Event)
+WHERE coalesce(ev.id, ev.event_id, toString(elementId(ev))) = $id
+OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+OPTIONAL MATCH (d:Document)-[:DESCRIBES]->(ev)
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       ev.title AS title, ev.codebook_type AS codebook_type, ev.severity AS severity,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       coalesce(d.source, ev.source) AS source, coalesce(d.url, ev.source_url) AS url,
+       l.name AS location_name, l.country AS country, l.lat AS lat, l.lon AS lon
+LIMIT 1
+"""
+
+
+@router.get("/events/{event_id}", response_model=EventDetail)
+async def get_event_detail(event_id: str) -> EventDetail:
+    try:
+        rows = await read_query(_EVENT_DETAIL_QUERY, {"id": event_id})
+    except Exception as exc:
+        log.error("timeline_event_detail_neo4j_query_failed", error=str(exc))
+        raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
+    if not rows:
+        raise HTTPException(status_code=404, detail="event not found")
+    r = rows[0]
+    return EventDetail(
+        id=str(r.get("id") or event_id),
+        time=str(r.get("time") or ""), time_basis=str(r.get("time_basis") or "indexed"),
+        title=r.get("title"), codebook_type=r.get("codebook_type"),
+        severity=r.get("severity"), source=r.get("source"), url=r.get("url"),
+        location_name=r.get("location_name"), country=r.get("country"),
+        lat=float(r["lat"]) if r.get("lat") is not None else None,
+        lon=float(r["lon"]) if r.get("lon") is not None else None,
+    )
