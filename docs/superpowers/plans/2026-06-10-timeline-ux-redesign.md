@@ -540,6 +540,20 @@ def test_notables_union_capped_and_ranked(client):
     assert notables[0]["severity"] == "critical"     # critical > high
     assert notables[0]["is_incident"] is True
     assert all(notables[i]["rank"] <= notables[i + 1]["rank"] for i in range(len(notables) - 1))
+
+
+def test_notables_pass_bbox_params_to_queries(client):
+    # bbox plumbing: when bbox is set, the notable queries receive bbox_off=False + bounds
+    # (the actual Cypher spatial filter is exercised in integration; here we lock the wiring)
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        mock.side_effect = [[], [], [], []]  # hist, notable-events, incidents, geo
+        client.get(f"/api/timeline/histogram{W}&bbox=170,-10,-170,10")
+    # call_args_list[1] = notable-events, [2] = incidents
+    ev_params = mock.call_args_list[1].args[1]
+    inc_params = mock.call_args_list[2].args[1]
+    for p in (ev_params, inc_params):
+        assert p["bbox_off"] is False
+        assert p["west"] == 170.0 and p["east"] == -170.0  # anti-meridian preserved
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -550,11 +564,19 @@ Expected: FAIL — stub returns `[]`.
 - [ ] **Step 3: Replace the stub**
 
 ```python
+# NOTE (review finding #4): notables MUST respect bbox so dots don't fall outside the
+# spatial scope. Same anti-meridian convention as the bucket query.
 _NOTABLE_EVENTS_QUERY = """
 MATCH (ev:Event)
 WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
   AND ev.severity IS NOT NULL
 OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+WITH ev, l
+WHERE $bbox_off
+   OR (l.lat IS NOT NULL AND l.lon IS NOT NULL
+       AND l.lat >= $south AND l.lat <= $north
+       AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
+          OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) ))
 RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
        toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
        ev.severity AS severity, ev.title AS title, ev.codebook_type AS codebook_type,
@@ -567,6 +589,11 @@ _NOTABLE_INCIDENTS_QUERY = """
 MATCH (i:Incident)
 WHERE datetime(i.trigger_ts) >= datetime($t_start)
   AND datetime(i.trigger_ts) <= datetime($t_end)
+  AND ($bbox_off
+       OR (i.lat IS NOT NULL AND i.lon IS NOT NULL
+           AND i.lat >= $south AND i.lat <= $north
+           AND ( ($west <= $east AND i.lon >= $west AND i.lon <= $east)
+              OR ($west >  $east AND (i.lon >= $west OR i.lon <= $east)) )))
 RETURN i.incident_id AS id, toString(i.trigger_ts) AS time, 'occurred' AS time_basis,
        i.severity AS severity, i.title AS title, i.lat AS lat, i.lon AS lon
 ORDER BY i.trigger_ts DESC
@@ -577,7 +604,7 @@ _NOTABLE_CAP = 40
 
 
 async def _histogram_notables(t_start: str, t_end: str, box: BBox | None) -> list[Notable]:
-    params = {"t_start": t_start, "t_end": t_end}
+    params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
     ev_rows = await read_query(_NOTABLE_EVENTS_QUERY, params)
     inc_rows = await read_query(_NOTABLE_INCIDENTS_QUERY, params)
 
@@ -1096,7 +1123,7 @@ describe("ChronikTimeline", () => {
   positioned via `msToX(time)` and coloured by `severityRank`, the playhead at `msToX(cursorMs)`,
   the controls row (`▶/⏸` → `onTogglePlay`, `⏭ NOW` → `onNow`, preset chips → `onPreset`),
   and the `located: {geoLocatedCount} / {totalCount}` line. Pure inline Hlíðskjalf tokens
-  (final visuals in Task 14's frontend-design pass).
+  (final visuals in Task 15's polish pass).
 
 - [ ] **Step 4: Run (GREEN)** + `npm run type-check` + eslint on the new files.
 
@@ -1165,8 +1192,14 @@ export function fadeAlpha(
 
 Then wire it: add a `clock.onTick` effect (only when `getTimeMs` + `window` present) that
 sets each placement's billboard `.color = base.withAlpha(fadeAlpha(eventMs, getTimeMs(), window, falloffMs))`,
-with `falloffMs = (window.endMs - window.startMs) * 0.05`. Keep the existing pulse logic;
-the alpha multiplies onto it. When `window` is null, behave exactly as today.
+where `eventMs = Date.parse(placement.event.timestamp ?? "")` (skip `NaN`), and
+`falloffMs = (window.endMs - window.startMs) * 0.05`. Keep the existing pulse logic; the
+alpha multiplies onto it. When `window` is null, behave exactly as today.
+
+**Also (review findings #1/#2):** when the billboard is created, ensure its `_eventData`
+carries `id` **and** `time: event.timestamp` (EntityClickHandler reads `_eventData.time` to
+seek on click and `_eventData.id` to open the callout). If the current `_eventData` block
+omits `time`, add it.
 
 - [ ] **Step 4: Run (GREEN)** — fade test + existing `EventLayer` tests + `npm run type-check`.
 
@@ -1179,18 +1212,148 @@ the alpha multiplies onto it. When `window` is null, behave exactly as today.
 **Files:**
 - Create: `services/frontend/src/components/time/EventCallout.tsx` (+ `__tests__`)
 
-A controlled component: prop `eventId: string | null` and `onClose`. On `eventId` change it
-calls `getEventDetail(id)` (AbortController; clears on null), renders a single Hlíðskjalf box
-(`title ?? codebook_type ?? id`, `time · time_basis · source · severity`, a `→ Inspector`
-button via an `onInspect` callback), and a loading state while the detail resolves.
+A controlled component: props `eventId: string | null`, `onClose: () => void`,
+`onInspect: (d: TimelineEventDetail) => void`. On `eventId` change it fetches
+`getEventDetail(id)` (AbortController; clears on null), renders **one** Hlíðskjalf box
+(`title ?? codebook_type ?? id`; `time · time_basis · source · severity`; a `→ Inspector`
+button) + a loading state.
 
-- [ ] **Step 1: Test (RED)** — render with `eventId="e1"`, mock `getEventDetail` resolving
-  `{id:"e1", title:"Strike", time:"…", time_basis:"indexed", source:"gdelt", severity:"critical"}`;
-  `waitFor` the title; assert one box; assert `eventId={null}` renders nothing.
-- [ ] **Step 2: Run (RED).**
-- [ ] **Step 3: Implement** `EventCallout.tsx` (mirror the abort pattern from `useTimeWindow`).
-- [ ] **Step 4: Run (GREEN)** + type-check.
-- [ ] **Step 5: Commit** — `feat(frontend): single EventCallout (detail-fetched)`.
+- [ ] **Step 1: Write the failing test**
+
+```tsx
+// services/frontend/src/components/time/__tests__/EventCallout.test.tsx
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import * as api from "../../../services/api";
+import { EventCallout } from "../EventCallout";
+
+afterEach(() => vi.restoreAllMocks());
+
+const DETAIL = {
+  id: "e1", title: "Strike", time: "2026-06-01T00:00:00Z", time_basis: "indexed",
+  codebook_type: "military.airstrike", severity: "critical", source: "gdelt",
+  url: "http://x", location_name: "Kyiv", country: "UA", lat: 50.4, lon: 30.5,
+} as const;
+
+describe("EventCallout", () => {
+  it("renders nothing when eventId is null", () => {
+    const { container } = render(
+      <EventCallout eventId={null} onClose={vi.fn()} onInspect={vi.fn()} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("fetches detail and renders a single callout", async () => {
+    const spy = vi.spyOn(api, "getEventDetail").mockResolvedValue(DETAIL as never);
+    render(<EventCallout eventId="e1" onClose={vi.fn()} onInspect={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Strike")).toBeInTheDocument());
+    expect(spy).toHaveBeenCalledWith("e1", expect.anything());
+    expect(screen.getAllByRole("group", { name: /event callout/i })).toHaveLength(1);
+  });
+
+  it("falls back to codebook_type when title is missing", async () => {
+    vi.spyOn(api, "getEventDetail").mockResolvedValue(
+      { ...DETAIL, title: null } as never,
+    );
+    render(<EventCallout eventId="e1" onClose={vi.fn()} onInspect={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("military.airstrike")).toBeInTheDocument());
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `cd services/frontend && npx vitest run src/components/time/__tests__/EventCallout.test.tsx`
+Expected: FAIL — module missing.
+
+- [ ] **Step 3: Implement `EventCallout.tsx`**
+
+```tsx
+// services/frontend/src/components/time/EventCallout.tsx
+import { useEffect, useRef, useState } from "react";
+import type { TimelineEventDetail } from "../../types";
+import { getEventDetail } from "../../services/api";
+
+interface EventCalloutProps {
+  eventId: string | null;
+  onClose: () => void;
+  onInspect: (d: TimelineEventDetail) => void;
+}
+
+export function EventCallout({ eventId, onClose, onInspect }: EventCalloutProps) {
+  const [detail, setDetail] = useState<TimelineEventDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const seqRef = useRef(0);
+
+  useEffect(() => {
+    if (!eventId) {
+      setDetail(null);
+      setLoading(false);
+      return;
+    }
+    const seq = ++seqRef.current;
+    const ctrl = new AbortController();
+    setLoading(true);
+    void getEventDetail(eventId, ctrl.signal)
+      .then((d) => {
+        if (seq === seqRef.current) {
+          setDetail(d);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (seq === seqRef.current) setLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [eventId]);
+
+  if (!eventId) return null;
+
+  const label = detail?.title || detail?.codebook_type || eventId;
+  return (
+    <section
+      role="group"
+      aria-label="event callout"
+      style={{
+        position: "absolute", top: 96, left: "50%", transform: "translateX(-50%)",
+        minWidth: 240, maxWidth: 360, padding: "8px 12px",
+        background: "var(--hl-panel-bg, rgba(10,10,12,0.82))",
+        backdropFilter: "blur(var(--hl-panel-blur, 12px))",
+        border: "1px solid var(--granite, #333)", borderRadius: 6, zIndex: 20,
+        fontFamily: "var(--hl-font-mono, monospace)", fontSize: 11, color: "#ddd",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <strong>{loading ? "…" : label}</strong>
+        <button type="button" aria-label="close callout" onClick={onClose}>×</button>
+      </div>
+      {detail ? (
+        <>
+          <div style={{ opacity: 0.7, marginTop: 4 }}>
+            {detail.time.replace("T", " ").slice(0, 19)}Z · {detail.time_basis}
+            {detail.source ? ` · ${detail.source}` : ""}
+            {detail.severity ? ` · ${detail.severity}` : ""}
+          </div>
+          <button
+            type="button"
+            style={{ marginTop: 6 }}
+            onClick={() => onInspect(detail)}
+          >
+            → Inspector
+          </button>
+        </>
+      ) : null}
+    </section>
+  );
+}
+```
+
+- [ ] **Step 4: Run to verify it passes**
+
+Run: `cd services/frontend && npx vitest run src/components/time/__tests__/EventCallout.test.tsx && npm run type-check`
+Expected: PASS, types clean.
+
+- [ ] **Step 5: Commit** — `feat(frontend): single EventCallout (detail-fetched, → Inspector)`.
 
 ---
 
@@ -1201,18 +1364,39 @@ button via an `onInspect` callback), and a loading state while the detail resolv
 - Delete: `services/frontend/src/components/time/TwoTierScrubber.tsx` + `__tests__/TwoTierScrubber.test.tsx`
 - Test: `services/frontend/src/components/time/__tests__/ScrubberMount.test.tsx` (update)
 
-`ScrubberMount` (already a `useTime()` consumer) now:
-- calls `useTimeHistogram(true, { tStart: coarse.tStart, tEnd: coarse.tEnd, buckets: 120 }, 30_000)`
-  over the rolling coarse window (keep the existing 60s roll + preset state; add `preset`
-  state defaulting `"7d"` controlling the coarse span: 24h/7d/30d);
-- renders `<ChronikTimeline>` with `{buckets, notables, …}` and callbacks:
+**Props (HARD — review finding #3, concrete interface — selection + geo + window are lifted
+to WorldviewPage via callbacks; no state lives in two places):**
+
+```ts
+interface ScrubberMountProps {
+  onSelectEvent: (id: string) => void;          // notable-dot click → opens the callout
+  onTimelineData: (d: {
+    geoEvents: TimelineGeoEvent[];
+    window: { startMs: number; endMs: number } | null;  // active fade window for EventLayer (§7)
+  }) => void;
+}
+```
+
+`ScrubberMount` is a `useTime()` consumer
+(`{ mode, cursorMs, playing, seek, pause, play, setMode, setReplayWindow }`) and now:
+- holds `preset` state (default `"7d"`, controls the coarse span 24h/7d/30d), the rolling
+  coarse window (keep the existing 60s roll, span driven by `preset`), and a `brush` state
+  `{ startMs, endMs } | null`;
+- `const { data } = useTimeHistogram(true, { tStart: coarse.tStart, tEnd: coarse.tEnd, buckets: 120 }, 30_000)`;
+- computes the **active window**: `brush` when `mode === "replay"`, else a live trailing band
+  `{ startMs: cursorMs - 6 * 3600_000, endMs: cursorMs }`;
+- pushes data up:
+  `useEffect(() => onTimelineData({ geoEvents: data?.geo_events ?? [], window }), [data, window, onTimelineData])`;
+- renders `<ChronikTimeline buckets={data?.buckets ?? []} notables={data?.notables ?? []}
+  geoLocatedCount={data?.geo_located_count ?? 0} totalCount={data?.total_count ?? 0}
+  rangeStartMs={Date.parse(coarse.tStart)} rangeEndMs={Date.parse(coarse.tEnd)}
+  cursorMs={cursorMs} mode={mode} playing={playing} preset={preset} ... />` with callbacks:
   - `onSeek={(ms) => { pause(); seek(ms); }}` (HARD §5 — pause so the cursor holds in live),
-  - `onBrush={(s,e) => { setReplayWindow(s,e); setMode("replay"); seek(s); }}`,
-  - `onSelectNotable={(id) => setSelectedEventId(id)}` (lifts selection to WorldviewPage in Task 13),
+  - `onBrush={(s, e) => { setBrush({ startMs: s, endMs: e }); setReplayWindow(s, e); setMode("replay"); seek(s); }}`,
+  - `onSelectNotable={(id) => onSelectEvent(id)}`,
   - `onTogglePlay={() => (playing ? pause() : play())}`,
-  - `onNow={() => { setMode("live"); play(); }}`,
-  - `onPreset={setPreset}` (changes coarse span only — must NOT reset selection/mode/playing);
-- exposes `geo_events` (from the histogram) upward so WorldviewPage feeds `EventLayer` (Task 13).
+  - `onNow={() => { setBrush(null); setMode("live"); play(); }}`,
+  - `onPreset={setPreset}` (coarse span only — must NOT reset brush/selection/mode/playing).
 
 - [ ] **Step 1: Update the test (RED)** — replace the TwoTierScrubber-based assertions with:
   click a bar/strip → `seek` called after `pause`; toggle preset → histogram refetched with
@@ -1226,36 +1410,167 @@ button via an `onInspect` callback), and a loading state while the detail resolv
 
 ---
 
-### Task 13: Wire WorldviewPage — histogram-driven EventLayer + callout + bottom layout
+### Task 13: EntityClickHandler → onEventSelect (review finding #1)
 
 **Files:**
-- Modify: `services/frontend/src/pages/WorldviewPage.tsx`
-- Test: manual (browser) — see Final Verification.
+- Modify: `services/frontend/src/components/globe/EntityClickHandler.tsx`
 
-- [ ] **Step 1:** Lift `selectedEventId` + `geoEvents` + the active `window` into the
-  `GlobeChildren`/`WorldviewPage` boundary (inside `<TimeProvider>`), threaded from
-  `ScrubberMount`. Replace the `useEvents`→`EventLayer` feed: build `EventLayer.events`
-  from the histogram `geo_events` (mapped to the `IntelEvent` shape) and pass
-  `getTimeMs` + the active `window` (replay brush, or a live trailing band ~6h ending now).
-  Keep the `layers.events` visibility toggle.
-- [ ] **Step 2:** Mount `<EventCallout eventId={selectedEventId} onClose={() => setSelectedEventId(null)} onInspect={…open InspectorPanel…} />`.
-- [ ] **Step 3:** Raise the bottom-left panels' `bottom` offset so nothing overlaps the
-  full-width `§ CHRONIK` strip; mount the strip via `ScrubberMount` at the very bottom.
-- [ ] **Step 4:** `cd services/frontend && npm run type-check && npm run test && npm run build`
-  — all green.
-- [ ] **Step 5: Commit** — `feat(frontend): wire histogram-driven EventLayer + ChronikTimeline + callout in WorldviewPage`.
+Event-billboard clicks are picked **here** (via `_eventData`), not in `EventLayer`. Today
+the handler sets a local bottom-popup. Reroute event clicks to the new callout and drop the
+local popup **for events only** (keep it for cables/ships/etc.).
+
+- [ ] **Step 1: Add the prop + reroute the event guard**
+
+```tsx
+// EntityClickHandlerProps:
+interface EntityClickHandlerProps {
+  viewer: Cesium.Viewer | null;
+  onCountrySelect: (sel: Selected | null) => void;
+  onEventSelect?: (id: string, timeIso?: string) => void;   // NEW
+}
+// signature:
+export function EntityClickHandler({ viewer, onCountrySelect, onEventSelect }: EntityClickHandlerProps) {
+```
+
+Widen the `_eventData` type to include the optional `time`, and in the event guard replace
+the local `setSelected({...})` with `onEventSelect`:
+
+```tsx
+      const eventData = (picked?.primitive as Record<string, unknown>)?._eventData as
+        | { id: string; title: string; codebook_type: string; lat: number; lon: number;
+            severity: string; location_name?: string; time?: string }
+        | undefined;
+
+      if (eventData) {
+        onEventSelect?.(eventData.id, eventData.time);   // open the new EventCallout
+        dispatchSpotlight({ /* keep the existing spotlight pin block unchanged */ });
+        return;
+      }
+```
+
+(Leave the other guards — cable/ship/etc. — and the `if (!selected) return null` local popup
+untouched; events simply no longer populate `selected`.)
+
+- [ ] **Step 2: Verify no type/lint regressions**
+
+Run: `cd services/frontend && npm run type-check && npx eslint src/components/globe/EntityClickHandler.tsx`
+Expected: clean (the new prop is optional; existing callers unaffected).
+
+- [ ] **Step 3: Commit** — `feat(frontend): EntityClickHandler routes event clicks to onEventSelect`.
 
 ---
 
-### Task 14: frontend-design pass (visual polish)
+### Task 14: Wire WorldviewPage — histogram-driven EventLayer + callout + bottom layout
 
-**Files:** `ChronikTimeline.tsx`, `EventCallout.tsx`, `EventLayer.tsx` styling only.
+**Files:**
+- Modify: `services/frontend/src/pages/WorldviewPage.tsx`
+- Test: type-check + build + manual (browser) — see Final Verification.
 
-- [ ] Invoke the **frontend-design** skill to finalize: bar/dot styling within Hlíðskjalf-Noir
-  (using `EVENT_COLORS` for category, `severityRank` for dot emphasis), the playhead +
-  brush handles, the callout box + connector line, the controls/preset chips, the strip's
-  glass/scanline treatment. No behavioural changes; keep all tests green.
-- [ ] Run `npm run type-check && npm run test && npm run build`; commit
+- [ ] **Step 1: Lift the timeline state into WorldviewPage**
+
+```tsx
+const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+const [timelineGeo, setTimelineGeo] = useState<TimelineGeoEvent[]>([]);
+const [timelineWindow, setTimelineWindow] = useState<{ startMs: number; endMs: number } | null>(null);
+
+// stable callback for ScrubberMount.onTimelineData
+const handleTimelineData = useCallback(
+  (d: { geoEvents: TimelineGeoEvent[]; window: { startMs: number; endMs: number } | null }) => {
+    setTimelineGeo(d.geoEvents);
+    setTimelineWindow(d.window);
+  },
+  [],
+);
+```
+
+- [ ] **Step 2: Map `geo_events` → `IntelEvent` for EventLayer (review finding #2)**
+
+`TimelineGeoEvent` has no `title`/`timestamp`/`location_name`; `IntelEvent.title` is
+**required** and `EventLayer` reads `event.title.length`. Map explicitly:
+
+```tsx
+const eventLayerEvents: IntelEvent[] = useMemo(
+  () =>
+    timelineGeo.map((g) => ({
+      id: g.id,
+      title: g.codebook_type ?? g.id,        // non-empty: EventLayer uses .length
+      codebook_type: g.codebook_type ?? "other",
+      severity: g.severity,
+      timestamp: g.time,                      // drives _eventData.time + fade
+      location_name: null,
+      country: null,
+      lat: g.lat,
+      lon: g.lon,
+    })),
+  [timelineGeo],
+);
+```
+
+Feed `EventLayer` with these (replacing the `useEvents`/`/graph/events/geo` source) plus the
+fade props from Task 10 (`getTimeMs={getTimeMs}` and
+`window={timelineWindow ? timelineWindow : null}`). Keep the `layers.events` toggle.
+(Remove the now-unused `useEvents` import/usage if nothing else needs it.)
+
+- [ ] **Step 3: Pass `onEventSelect` to EntityClickHandler + mount the callout**
+
+```tsx
+<EntityClickHandler
+  viewer={viewer}
+  onCountrySelect={setSelected}
+  onEventSelect={(id) => setSelectedEventId(id)}
+/>
+...
+<EventCallout
+  eventId={selectedEventId}
+  onClose={() => setSelectedEventId(null)}
+  onInspect={(d) => {
+    // focus the globe on the event (the callout itself is the detail view)
+    if (viewer && !viewer.isDestroyed() && d.lat != null && d.lon != null) {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(d.lon, d.lat, 600_000),
+        duration: 1.2,
+      });
+    }
+  }}
+/>
+```
+
+- [ ] **Step 4: Mount the strip via ScrubberMount + reconcile bottom layout**
+
+```tsx
+<ScrubberMount onSelectEvent={(id) => setSelectedEventId(id)} onTimelineData={handleTimelineData} />
+```
+
+Raise the bottom-left panels' `bottom` offset (e.g. Ticker) so nothing overlaps the
+full-width `§ CHRONIK` strip docked at the very bottom.
+
+- [ ] **Step 5: Verify**
+
+Run: `cd services/frontend && npm run type-check && npm run test && npm run build`
+Expected: type-check clean, all Vitest green, build succeeds.
+
+- [ ] **Step 6: Commit** — `feat(frontend): wire histogram EventLayer + ChronikTimeline + EventCallout in WorldviewPage`.
+
+---
+
+### Task 15: Visual polish — Hlíðskjalf-Noir design (review finding #6)
+
+**Files:** `ChronikTimeline.tsx`, `EventCallout.tsx`, `EventLayer.tsx` — styling only.
+
+> Apply the Hlíðskjalf-Noir design guidance from the developer instructions / the committed
+> design system (palette, Martian Mono, § grammar, `OverlayPanel` glass/scanline). If a
+> dedicated frontend-design helper skill is available in the environment, use it; otherwise
+> hand-craft the styling. **No behavioural changes** — every test stays green.
+
+- [ ] **Step 1:** Style within the established tokens: bars coloured via `EVENT_COLORS`
+  (category) with severity surfaced as a small tick / dot emphasis via `severityRank`; the
+  playhead + brush handles; the callout box + connector line to the globe location; the
+  controls/preset chips; the strip's glass/scanline treatment. Keep all `data-testid`s and
+  ARIA roles from Tasks 9/11 intact so the tests keep passing.
+- [ ] **Step 2: Visual verification (concrete):** `npm run dev`; confirm against the
+  deployed stack — thin bottom strip, category-coloured bars, readable notable dots,
+  single callout, faded globe dots; capture a before/after screenshot for the PR.
+- [ ] **Step 3:** `npm run type-check && npm run test && npm run build`; commit
   `style(frontend): Hlíðskjalf-Noir polish for ChronikTimeline + callout`.
 
 ---
@@ -1278,19 +1593,30 @@ button via an `onInspect` callback), and a loading state while the detail resolv
 
 ## Self-Review
 
-**Spec coverage:** §3 architecture → Tasks 1,3,6,8,9,10,11,12,13. §4 bars (dominant_category
-modal, EVENT_COLORS) → Tasks 1,3,9. §4 notables (cap40/rank/incident-union) → Task 4.
-§5 cursor=pause+seek / drag=brush / preset-no-reset → Tasks 9,12. §6 single callout +
-detail endpoint → Tasks 6,11,13. §7 geo_events + EventLayer fade → Tasks 5,10,13. §8 non-geo
-honesty line → Tasks 3,9. §9.1 histogram → Tasks 3,4,5. §9.2 detail → Task 6. §11 tests →
-each task. §12 severity normalizer keystone → Task 1; incident-union → Task 4; EventLayer
-repurpose → Tasks 10,12,13.
+**Tasks (after review-driven insert):** 1 severity · 2 models · 3 histogram buckets ·
+4 notables(+bbox) · 5 geo_events · 6 detail · 7 fe-severity/types/api · 8 useTimeHistogram ·
+9 ChronikTimeline · 10 EventLayer-fade(+_eventData.time) · 11 EventCallout · 12 ScrubberMount ·
+13 EntityClickHandler · 14 WorldviewPage-wiring · 15 polish.
+
+**Spec coverage:** §3 architecture → 1,3,6,8,9,10,11,12,13,14. §4 bars (dominant_category
+modal, EVENT_COLORS) → 1,3,9. §4 notables (cap40/rank/incident-union/**bbox**) → 4. §5
+cursor=pause+seek / drag=brush / preset-no-reset → 9,12. §6 single callout + detail endpoint
+→ 6,11,13,14. §7 geo_events + EventLayer fade → 5,10,14. §8 non-geo honesty line → 3,9.
+§9.1 histogram → 3,4,5. §9.2 detail → 6. §11 tests → each task. §12 severity keystone → 1;
+incident-union → 4; EventLayer repurpose → 10,14.
+
+**Review findings (all addressed):** #1 globe-click → Task 13 (EntityClickHandler
+`onEventSelect`) + Task 14 mount. #2 geo_events↔IntelEvent shape → Task 14 explicit map +
+Task 10 `_eventData.time`. #3 ScrubberMount interface → Task 12 concrete props. #4 bbox in
+notables → Task 4 queries + test. #5 frontend code completeness → Tasks 11/13/14 full code.
+#6 frontend-design skill ref → Task 15 reworded (design guidance + concrete visual verify).
 
 **Type consistency:** `HistogramResponse/HistogramBucket/TimelineNotable/TimelineGeoEvent/
-TimelineEventDetail` field names match backend models (Tasks 2,7). `normalizeSeverity/
-severityRank` mirror `normalize_severity/severity_rank`. `EVENT_COLORS` imported from
-`EventLayer.tsx` is the single category-colour source (Tasks 9,13). `fadeAlpha` signature
-matches between Task 10 export and its WorldviewPage use.
+TimelineEventDetail` field names match backend models (2,7). `normalizeSeverity/severityRank`
+mirror `normalize_severity/severity_rank`. `EVENT_COLORS` imported from `EventLayer.tsx` is
+the single category-colour source (9,14). `fadeAlpha` signature matches between Task 10
+export and Task 14 use. `ScrubberMountProps`/`EntityClickHandler.onEventSelect`/
+`EventCallout` props are defined once and consumed in Task 14.
 
 **Known follow-ups (not blockers):** the Slice-0 phase-3 `CALL {}` deprecation; event geo
 backfill (Slice 1) would make the globe denser; civil movements (Slice 2).
