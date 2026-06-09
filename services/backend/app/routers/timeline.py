@@ -7,14 +7,24 @@ from datetime import UTC, datetime
 import structlog
 from fastapi import APIRouter, HTTPException, Query
 
-from app.models.timeline import BBox, EventSample, TrackPoint, TrackSample, WindowResponse
+from app.models.timeline import (
+    BBox,
+    EventSample,
+    HistogramBucket,
+    HistogramResponse,
+    TrackPoint,
+    TrackSample,
+    WindowResponse,
+)
 from app.services.neo4j_client import read_query
+from app.services.severity import category_of, dominant_category, normalize_severity
 
 log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/timeline", tags=["timeline"])
 
 _MAX_LIMIT = 500
+_MAX_BUCKETS = 240
 _SUPPORTED_MOVEMENT_KINDS = {"mil_aircraft", "civil_aircraft", "ship", "satellite"}
 _IMPLEMENTED_MOVEMENT_KINDS = {"mil_aircraft"}
 
@@ -250,3 +260,97 @@ async def _movements_window(
         domain="movements", tier="fine", t_start=t_start, t_end=t_end, bbox=box,
         samples=samples, total_count=total, truncated=total > len(samples),
     )
+
+
+_HISTOGRAM_QUERY = """
+MATCH (ev:Event)
+WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+WITH ev, l
+WHERE $bbox_off
+   OR (l.lat IS NOT NULL AND l.lon IS NOT NULL
+       AND l.lat >= $south AND l.lat <= $north
+       AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
+          OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) ))
+WITH DISTINCT ev
+RETURN toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
+       ev.severity AS severity
+"""
+
+
+@router.get("/histogram", response_model=HistogramResponse)
+async def get_histogram(
+    t_start: str,
+    t_end: str,
+    buckets: int = 120,
+    domain: str = "events",
+    bbox: str | None = None,
+) -> HistogramResponse:
+    if domain != "events":
+        raise HTTPException(status_code=422, detail="histogram supports domain=events only")
+    if not (1 <= buckets <= _MAX_BUCKETS):
+        raise HTTPException(status_code=422, detail=f"buckets must be in [1,{_MAX_BUCKETS}]")
+    start, end = validate_window(t_start, t_end)
+    box = parse_bbox(bbox)
+    params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
+
+    start_ms = int(start.timestamp() * 1000)
+    end_ms = int(end.timestamp() * 1000)
+    span = max(end_ms - start_ms, 1)
+    bucket_ms = max(span // buckets, 1)
+
+    try:
+        rows = await read_query(_HISTOGRAM_QUERY, params)
+    except Exception as exc:
+        log.error("timeline_histogram_neo4j_query_failed", error=str(exc))
+        raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
+
+    # Bin in Python so the deterministic rules live in one tested place.
+    cats: dict[int, list[str | None]] = {}
+    sevs: dict[int, list[str]] = {}
+    counts: dict[int, int] = {}
+    for r in rows:
+        t = r.get("time")
+        if not t:
+            continue
+        ts_ms = int(datetime.fromisoformat(str(t).replace("Z", "+00:00")).timestamp() * 1000)
+        bi = min(int((ts_ms - start_ms) // bucket_ms), buckets - 1)
+        bi = max(bi, 0)
+        counts[bi] = counts.get(bi, 0) + 1
+        cats.setdefault(bi, []).append(r.get("codebook_type"))
+        sevs.setdefault(bi, []).append(normalize_severity(r.get("severity")))
+
+    bucket_list: list[HistogramBucket] = []
+    for bi in sorted(counts):
+        bcats = cats[bi]
+        by_cat: dict[str, int] = {}
+        for c in bcats:
+            cat = category_of(c)
+            by_cat[cat] = by_cat.get(cat, 0) + 1
+        by_sev: dict[str, int] = {}
+        for s in sevs[bi]:
+            by_sev[s] = by_sev.get(s, 0) + 1
+        bucket_list.append(HistogramBucket(
+            ts=datetime.fromtimestamp((start_ms + bi * bucket_ms) / 1000, tz=UTC).isoformat(),
+            count=counts[bi],
+            dominant_category=dominant_category(bcats),
+            by_category=by_cat,
+            by_severity=by_sev,
+        ))
+
+    notables = await _histogram_notables(t_start, t_end, box)
+    geo_events, geo_count, geo_trunc = await _histogram_geo(t_start, t_end, box)
+
+    return HistogramResponse(
+        t_start=t_start, t_end=t_end, bucket_ms=bucket_ms, buckets=bucket_list,
+        notables=notables, geo_events=geo_events, total_count=len(rows),
+        geo_located_count=geo_count, geo_truncated=geo_trunc,
+    )
+
+
+async def _histogram_notables(t_start: str, t_end: str, box: BBox | None) -> list:
+    return []  # replaced in Task 4
+
+
+async def _histogram_geo(t_start: str, t_end: str, box: BBox | None):
+    return [], 0, False  # replaced in Task 5
