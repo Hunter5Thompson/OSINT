@@ -58,25 +58,31 @@ ScrubberMount (rewired)                                                      │
    │  useTimeHistogram(range,buckets) ─► { buckets, notables, geo_events }   │
    ▼                       │                         │                       ▼
 § CHRONIK strip (NEW) ◄────┘                         ▼                MilAircraftLayer
-  density bars (dominant_severity)        EventDotLayer (NEW)         (unchanged, fine tier)
-  notable dots (≤40)                       BillboardCollection dots
-  click=pause+seek / drag=brush            from geo_events + fade rules
+  density bars (dominant_category)        EventLayer (MODIFIED:        (unchanged, fine tier)
+  notable dots (≤40, severity/incident)    time-aware + fade, fed by
+  click=pause+seek / drag=brush            geo_events; keeps category color)
         │ select dot
         ▼
   Callout ─ getEventDetail(id) ─► /api/timeline/events/{id}  (NEW)
 ```
 
-New units, each one clear purpose:
-- **`ChronikTimeline.tsx`** — pure presentational strip: given `{buckets, notables,
+Units, each one clear purpose:
+- **`severity.py` / `severity.ts`** (NEW, shared) — `normalize_severity(raw)` mapping the
+  messy real vocab (`low|moderate|medium|elevated|high|critical|warning|extreme|…`, null)
+  onto one canonical ordered scale with a defined `unknown` sentinel + a deterministic
+  tie-break. Used by the notable criteria/ranking + `by_severity` (backend) and the
+  optional severity tick (frontend). **This is the data-integrity keystone (§12).**
+- **`ChronikTimeline.tsx`** (NEW) — pure presentational strip: given `{buckets, notables,
   cursorMs, mode, playing, range}` + callbacks `{onSeek, onBrush, onSelectNotable,
   onPreset, onTogglePlay, onNow}`, renders bars + dots + playhead + controls. No fetching.
-- **`useTimeHistogram.ts`** — fetches `/api/timeline/histogram` for the active range
-  (buckets + notables + geo_events).
-- **`EventDotLayer.tsx`** — imperative Cesium `BillboardCollection` of `geo_events` dots
-  with the §7 fade rules.
-- **`EventCallout`** + **`getEventDetail(id)`** — single callout, content from
+- **`useTimeHistogram.ts`** (NEW) — fetches `/api/timeline/histogram` for the active range.
+- **`EventLayer.tsx`** (MODIFIED) — the **existing** category-coloured globe dot layer,
+  made time-aware: fed by `geo_events`, gated by the §7 fade rules; keeps its
+  `EVENT_COLORS` palette + stacking. No new parallel layer.
+- **`EventCallout`** + **`getEventDetail(id)`** (NEW) — single callout, content from
   `/api/timeline/events/{id}` (§6/§9.2).
-- Backend **`/api/timeline/histogram`** (§9.1) + **`/api/timeline/events/{id}`** (§9.2).
+- Backend **`/api/timeline/histogram`** (§9.1) + **`/api/timeline/events/{id}`** (§9.2),
+  both using the shared severity normalizer.
 
 ---
 
@@ -89,18 +95,20 @@ raised so nothing overlaps the strip. Hlíðskjalf `OverlayPanel` chrome + theme
 
 **Density histogram (HARD — bucket colour semantics, constraint #1):**
 - `height = event count` in the bucket (the *only* thing height encodes).
-- `colour = the bucket's **dominant** severity` — the severity level that the
-  **plurality** of the bucket's events fall in (modal), **NOT** the max. A single
-  outlier can never repaint the bar: a bucket of 200 Low + 1 Critical is a **tall
-  Low-coloured bar** (`dominant_severity = low`), and the lone Critical is **not lost**
-  — it is surfaced **additionally** as a Notable-Dot above the bar (§4 Notable-Dots).
-- The full `by_severity` breakdown `{low, medium, high, critical}` is returned alongside
-  for an optional richer treatment (e.g. a thin stacked severity tick), but the bar's
-  primary colour is `dominant_severity`. Count (height) and severity (colour) are two
-  independent readings.
+- `colour = the bucket's **dominant category**` — the codebook **category** (first
+  segment of `codebook_type`, e.g. `military`, `conflict`, `civil`) that the **plurality**
+  of the bucket's events fall in (modal), **NOT** any single-outlier rule. A bucket of 200
+  `civil` + 1 `military` is a **tall civil-coloured bar** (`dominant_category = civil`).
+  - **Why category, not severity (data reality, §9):** GDELT events — the bulk — carry
+    `codebook_type` but **no severity**. Category is present on essentially all events;
+    severity is sparse. Colouring by severity would leave most bars/dots neutral.
+  - Reuses the existing **`EVENT_COLORS`** category palette from `EventLayer.tsx` (single
+    source of truth, shared with the globe dots in §7).
+- The full `by_category` breakdown is returned alongside for an optional richer treatment.
+- **Severity is not discarded:** it drives the **Notable-Dots** (below) and an **optional
+  thin severity tick** on bars where severity is present. Count (height), category
+  (colour), and severity (dots/tick) are three independent readings.
 - ~120 buckets across the active range; bucket width = range / 120.
-- Severity → Hlíðskjalf palette (low → … → critical); exact tokens via a
-  `frontend-design` pass, not invented here.
 
 **Notable-Dots (HARD — cap + ranking, constraint #2):**
 - **Criteria:** severity ∈ {high, critical} OR the event is an **auto-promoted
@@ -160,14 +168,20 @@ hover-tooltip need). The callout shows a brief loading state until the detail re
 
 ## 7. Globe event-dots (spatial axis) + fade rules (HARD — constraint #4)
 
-Geo-events (those with `lat/lon`) render as **severity-coloured dots on the globe** via
-an imperative Cesium **`BillboardCollection`** (NOT the Entity API — CLAUDE.md).
+**Reuse, don't duplicate:** the codebase already has **`EventLayer.tsx`** — an imperative
+Cesium `BillboardCollection` of geo-events coloured by **category** (`EVENT_COLORS`) with
+position-stacking/declutter, but it is **not time-aware**. This redesign **makes
+`EventLayer` time-aware** (drives it from the timeline window/cursor with the fade rules
+below) rather than adding a parallel layer (two event layers = worse clutter). It keeps
+the **category** colouring (consistent with the §4 bars; grounded — see §4) and its
+stacking. Still imperative `BillboardCollection`, NOT the Entity API (CLAUDE.md).
 
-**Data source (HARD — review finding #2):** the dot layer is **NOT** fed by `/window`
-(which is capped at ≤500 samples and cannot represent 64k). It is fed by the histogram
-endpoint's **`geo_events`** array (§9): geo-located events across the active coarse
-range, **capped at ≤200, ranked by `severity` then `recency`**, with a `geo_truncated`
-flag and a `geo_located_count`. ≤200 ranked dots over the range — gated further by the
+**Data source (HARD — review finding #2):** the layer is **NOT** fed by `/window`
+(capped ≤500, cannot represent 64k). It is fed by the histogram endpoint's **`geo_events`**
+array (§9): geo-located events across the active coarse range, **capped at ≤200, ranked by
+`severity` then `recency`**, with a `geo_truncated` flag and a `geo_located_count`. (This
+replaces `EventLayer`'s current un-scoped `/graph/events/geo` poll.) ≤200 ranked dots over
+the range — gated further by the
 fade rules below — is bounded and salient (never a 64k flood). If geo-events exceed the
 cap, the lowest-severity/oldest are dropped (reflected by `geo_truncated`); the strip's
 buckets still count **all** events, so nothing silently disappears from the totals.
@@ -214,23 +228,27 @@ GET /api/timeline/histogram
 → {
     t_start, t_end, bucket_ms,
     buckets: [ { ts, count,
-                 by_severity: { low, medium, high, critical },
-                 dominant_severity } ],          // colour = dominant (modal), NOT max (§4)
+                 by_category: { <category>: n, ... },     // codebook 1st-segment counts
+                 dominant_category,                        // colour = modal category (§4)
+                 by_severity: { low, medium, high, critical, unknown } } ],  // for optional tick
     notables: [ { id, time, time_basis, severity, title?, codebook_type?,
                   lat?, lon?, is_incident, rank } ],   // cap ≤40, ranked (§4) — dots+tooltip only
-    geo_events: [ { id, time, severity, lat, lon, is_incident } ],  // cap ≤200, ranked (§7)
+    geo_events: [ { id, time, codebook_type, severity, lat, lon, is_incident } ],  // cap ≤200 (§7)
     total_count, geo_located_count, geo_truncated
   }
 ```
 
-- `buckets[].dominant_severity` = the **modal** (plurality) severity in the bucket, with
-  the full `by_severity` breakdown alongside (§4). Never the max — one Critical can't
-  repaint a Low bucket.
+- `buckets[].dominant_category` = the **modal** (plurality) codebook category in the
+  bucket (bar colour, via `EVENT_COLORS`); `by_category` is the full breakdown (§4). One
+  outlier category can never repaint the bar. `by_severity` is included for the optional
+  severity tick (severity is sparse — most GDELT events land in `unknown`).
 - `notables` = **cap ≤40, ranked `critical > promoted-incident > high > recency`** (§4),
   computed server-side so the client never receives or renders more. Lean payload
-  (enough for a dot + hover tooltip).
+  (enough for a dot + hover tooltip). Source = severity high/critical `:Event` nodes
+  **plus** `:Incident` nodes in the window (GDELT has no severity, so incidents are a
+  distinct notable source — see §12).
 - `geo_events` = geo-located events, **cap ≤200, ranked `severity` then `recency`** (§7);
-  `geo_truncated` true when more existed. Lean payload (dot rendering only).
+  `geo_truncated` true when more existed. Carries `codebook_type` for the category colour.
 - `total_count` / `geo_located_count` feed the §8 "X / Y located" honesty line.
 
 ### 9.2 `GET /api/timeline/events/{id}` — callout detail (review finding #3)
@@ -262,26 +280,43 @@ pass during implementation** — this spec fixes behaviour and structure, not pi
 
 ## 11. Testing
 
-- **Backend (histogram):** bucketing (counts per bucket, `by_severity`,
-  `dominant_severity` = **modal not max** — assert a 200-low+1-critical bucket yields
-  `dominant_severity = low`); notable **cap ≤40 + ranking order**
-  (`critical > promoted > high > recency`); `geo_events` **cap ≤200 + ranking + `geo_truncated`**;
-  `geo_located_count`; 422/503 paths.
+- **Severity normalizer (keystone):** `normalize_severity` maps every real-world value
+  (`low|moderate|medium|elevated|high|critical|warning|extreme`, mixed case, null,
+  unknown garbage) to the canonical scale; assert each mapping + that null/unknown →
+  `unknown` sentinel (never a random colour/rank); assert the deterministic tie-break.
+- **Backend (histogram):** bucketing (counts per bucket, `by_category`,
+  `dominant_category` = **modal not outlier** — assert a 200-`civil`+1-`military` bucket
+  yields `dominant_category = civil`); `by_severity` (incl. `unknown`); notable **cap ≤40
+  + ranking** (`critical > promoted > high > recency`) over `:Event`+`:Incident` sources;
+  `geo_events` **cap ≤200 + ranking + `geo_truncated`**; `geo_located_count`; 422/503.
 - **Backend (detail):** `events/{id}` returns the full payload for a known id (incl.
   source/url/location); 404 for an unknown id.
-- **Frontend:** bin→bar mapping (height=count, colour=`dominant_severity`, NOT blended,
-  NOT max); notable cap/ranking + overflow; **click = `pause()`+`seek` (cursor holds in
-  live) vs drag = brush** semantics; preset change does not reset selection/mode/playing;
-  globe-dot fade (in-window full, near falloff, outside invisible); single-callout
-  replacement + detail-fetch loading state.
+- **Frontend:** bin→bar mapping (height=count, colour=`dominant_category` via
+  `EVENT_COLORS`, NOT blended); notable cap/ranking + overflow; **click = `pause()`+`seek`
+  (cursor holds in live) vs drag = brush** semantics; preset change does not reset
+  selection/mode/playing; `EventLayer` time-aware fade (in-window full, near falloff,
+  outside invisible); single-callout replacement + detail-fetch loading state.
 
 ---
 
 ## 12. Risks & Open Questions
 
+- **Severity vocabulary is genuinely inconsistent** across the codebase (hotspots use
+  `{low,moderate,elevated,high,critical}`; incidents `{low,elevated,high,critical}`;
+  RSS extraction `{low,medium,high,critical}`; GDACS numeric; GDELT **none**). The shared
+  `normalize_severity` + deterministic tie-break is **Task 1** of the plan; everything
+  severity-touching (notables, ranking, `by_severity`, tick) derives from it. Without it,
+  colours/rankings would be non-deterministic.
+- **Notables span two node types.** Because GDELT (the bulk) has no severity, the notable
+  set = high/critical `:Event` nodes **∪** `:Incident` nodes in the window (the
+  auto-promoter's curated set). The histogram query unions both, dedupes, then caps/ranks.
+- **`EventLayer` is being repurposed** from an un-scoped poll (`/graph/events/geo`) to the
+  timeline-scoped `geo_events`. Verify no other consumer depends on its old behaviour
+  (it is mounted only in `WorldviewPage`); keep the `layers.events` toggle working.
 - Histogram endpoint perf on ~64k events — mitigated by the `event_timeline_at` index;
   verify with `EXPLAIN`/timing in the plan.
 - Bucket→pixel aliasing at 120 buckets on narrow viewports — clamp bucket count to width.
 - The Slice-0 phase-3 migration's deprecated `CALL {}` Cypher is a **separate** tiny
   follow-up, not part of this redesign.
-- Two-stage review (spec + quality) mandatory per task; no shortcuts.
+- Two-stage review (spec + quality) mandatory per task; **lean/solo by default** (token
+  cost); multi-agent review only with a cost heads-up + opt-in.
