@@ -12,6 +12,7 @@ from app.models.timeline import (
     EventSample,
     HistogramBucket,
     HistogramResponse,
+    Notable,
     TrackPoint,
     TrackSample,
     WindowResponse,
@@ -348,8 +349,87 @@ async def get_histogram(
     )
 
 
-async def _histogram_notables(t_start: str, t_end: str, box: BBox | None) -> list:
-    return []  # replaced in Task 4
+_NOTABLE_EVENTS_QUERY = """
+MATCH (ev:Event)
+WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+  AND ev.severity IS NOT NULL
+OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+WITH ev, l
+WHERE $bbox_off
+   OR (l.lat IS NOT NULL AND l.lon IS NOT NULL
+       AND l.lat >= $south AND l.lat <= $north
+       AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
+          OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) ))
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       ev.severity AS severity, ev.title AS title, ev.codebook_type AS codebook_type,
+       l.lat AS lat, l.lon AS lon
+ORDER BY ev.timeline_at DESC
+LIMIT 400
+"""
+
+_NOTABLE_INCIDENTS_QUERY = """
+MATCH (i:Incident)
+WHERE datetime(i.trigger_ts) >= datetime($t_start)
+  AND datetime(i.trigger_ts) <= datetime($t_end)
+  AND ($bbox_off
+       OR (i.lat IS NOT NULL AND i.lon IS NOT NULL
+           AND i.lat >= $south AND i.lat <= $north
+           AND ( ($west <= $east AND i.lon >= $west AND i.lon <= $east)
+              OR ($west >  $east AND (i.lon >= $west OR i.lon <= $east)) )))
+RETURN i.incident_id AS id, toString(i.trigger_ts) AS time, 'occurred' AS time_basis,
+       i.severity AS severity, i.title AS title, i.lat AS lat, i.lon AS lon
+ORDER BY i.trigger_ts DESC
+LIMIT 200
+"""
+
+_NOTABLE_CAP = 40
+
+
+def _neg_time_key(t: object) -> str:
+    # newer time sorts first within a rank tier (descending by ISO string)
+    return "".join(chr(0x10FFFF - ord(ch)) for ch in str(t or ""))
+
+
+async def _histogram_notables(t_start: str, t_end: str, box: BBox | None) -> list[Notable]:
+    params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
+    ev_rows = await read_query(_NOTABLE_EVENTS_QUERY, params)
+    inc_rows = await read_query(_NOTABLE_INCIDENTS_QUERY, params)
+
+    candidates: list[dict] = []
+    for r in ev_rows:
+        sev = normalize_severity(r.get("severity"))
+        if sev in ("high", "critical"):
+            candidates.append({**r, "severity": sev, "is_incident": False})
+    for r in inc_rows:
+        candidates.append({
+            **r, "severity": normalize_severity(r.get("severity")),
+            "codebook_type": None, "is_incident": True,
+        })
+
+    def _key(c: dict) -> tuple:
+        sev = c["severity"]
+        tier = 0 if sev == "critical" else (1 if c["is_incident"] else (2 if sev == "high" else 3))
+        return (tier, _neg_time_key(c.get("time")))
+
+    candidates.sort(key=_key)
+    out: list[Notable] = []
+    seen: set[str] = set()
+    for c in candidates:
+        if c["id"] in seen:
+            continue
+        seen.add(c["id"])
+        out.append(Notable(
+            id=str(c["id"]), time=str(c.get("time") or ""),
+            time_basis=str(c.get("time_basis") or "indexed"), severity=c["severity"],
+            title=c.get("title"), codebook_type=c.get("codebook_type"),
+            lat=float(c["lat"]) if c.get("lat") is not None else None,
+            lon=float(c["lon"]) if c.get("lon") is not None else None,
+            is_incident=bool(c["is_incident"]), rank=len(out),
+        ))
+        if len(out) >= _NOTABLE_CAP:
+            break
+    return out
 
 
 async def _histogram_geo(t_start: str, t_end: str, box: BBox | None):

@@ -57,3 +57,31 @@ def test_histogram_neo4j_down_503(client):
         mock.side_effect = RuntimeError("boom")
         resp = client.get(f"/api/timeline/histogram{W}")
     assert resp.status_code == 503
+
+
+def test_notables_union_capped_and_ranked(client):
+    events = [{"id": f"ev{i}", "time": "2026-06-01T01:00:00Z", "time_basis": "indexed",
+               "severity": "high", "title": "T", "codebook_type": "conflict.armed",
+               "lat": None, "lon": None} for i in range(50)]
+    incidents = [{"id": "inc-1", "time": "2026-06-01T02:00:00Z", "time_basis": "occurred",
+                  "severity": "critical", "title": "Strike", "lat": 50.0, "lon": 30.0}]
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        mock.side_effect = [[], events, incidents, []]  # hist, notable-events, incidents, geo
+        resp = client.get(f"/api/timeline/histogram{W}")
+    data = resp.json()
+    notables = data["notables"]
+    assert len(notables) <= 40                       # cap
+    assert notables[0]["severity"] == "critical"     # critical > high
+    assert notables[0]["is_incident"] is True
+    assert all(notables[i]["rank"] <= notables[i + 1]["rank"] for i in range(len(notables) - 1))
+
+
+def test_notables_pass_bbox_params_to_queries(client):
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        mock.side_effect = [[], [], [], []]  # hist, notable-events, incidents, geo
+        client.get(f"/api/timeline/histogram{W}&bbox=170,-10,-170,10")
+    ev_params = mock.call_args_list[1].args[1]
+    inc_params = mock.call_args_list[2].args[1]
+    for p in (ev_params, inc_params):
+        assert p["bbox_off"] is False
+        assert p["west"] == 170.0 and p["east"] == -170.0  # anti-meridian preserved
