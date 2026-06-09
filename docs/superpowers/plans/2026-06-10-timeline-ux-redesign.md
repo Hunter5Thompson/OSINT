@@ -1395,8 +1395,13 @@ interface ScrubberMountProps {
   - `onBrush={(s, e) => { setBrush({ startMs: s, endMs: e }); setReplayWindow(s, e); setMode("replay"); seek(s); }}`,
   - `onSelectNotable={(id) => onSelectEvent(id)}`,
   - `onTogglePlay={() => (playing ? pause() : play())}`,
-  - `onNow={() => { setBrush(null); setMode("live"); play(); }}`,
+  - `onNow={() => { setBrush(null); seek(Date.now()); setMode("live"); play(); }}` — the
+    explicit `seek(Date.now())` is **load-bearing** (HARD): if already in *live but paused*,
+    `setMode("live")` is a no-op (mode unchanged → the clock-config effect doesn't run), so
+    without it `play()` would resume from the stale cursor instead of re-pinning to now.
   - `onPreset={setPreset}` (coarse span only — must NOT reset brush/selection/mode/playing).
+- The strip-click `onSeek` test (Task 12 test) must also assert `onNow` re-pins: simulate
+  live-paused (click to pause), then `⏭ NOW`, and assert `seek` was called with ≈`Date.now()`.
 
 - [ ] **Step 1: Update the test (RED)** — replace the TwoTierScrubber-based assertions with:
   click a bar/strip → `seek` called after `pause`; toggle preset → histogram refetched with
@@ -1442,10 +1447,19 @@ the local `setSelected({...})` with `onEventSelect`:
         | undefined;
 
       if (eventData) {
-        onEventSelect?.(eventData.id, eventData.time);   // open the new EventCallout
+        onEventSelectRef.current?.(eventData.id, eventData.time);  // open the callout (+ time)
         dispatchSpotlight({ /* keep the existing spotlight pin block unchanged */ });
         return;
       }
+```
+
+**Ref the callback (HARD):** the pick handler is created once in a `[viewer]`-keyed effect;
+its parent (the Task-14 `useTime()` bridge) re-renders at the ~4 Hz cursor cadence, so store
+`onEventSelect` in a ref read inside the handler — never re-subscribe the Cesium handler:
+
+```tsx
+  const onEventSelectRef = useRef(onEventSelect);
+  onEventSelectRef.current = onEventSelect;
 ```
 
 (Leave the other guards — cable/ship/etc. — and the `if (!selected) return null` local popup
@@ -1511,15 +1525,52 @@ fade props from Task 10 (`getTimeMs={getTimeMs}` and
 `window={timelineWindow ? timelineWindow : null}`). Keep the `layers.events` toggle.
 (Remove the now-unused `useEvents` import/usage if nothing else needs it.)
 
-- [ ] **Step 3: Pass `onEventSelect` to EntityClickHandler + mount the callout**
+- [ ] **Step 3: `useTime()` bridge so a globe-dot click seeks to the event time (gap #1)**
+
+`setSelectedEventId` lives in WorldviewPage (outside `<TimeProvider>`), but seeking on click
+needs `pause`/`seek` from `useTime()`. Add a tiny bridge (a `useTime()` consumer, mounted
+inside `GlobeChildren` like `MilTrackSource`) that owns `EntityClickHandler` and wires the
+time-aware handler. Thread `onSelectEvent` (= `setSelectedEventId`) down through
+`GlobeChildrenProps`:
 
 ```tsx
-<EntityClickHandler
-  viewer={viewer}
-  onCountrySelect={setSelected}
-  onEventSelect={(id) => setSelectedEventId(id)}
-/>
-...
+function EventClickBridge({
+  viewer, onCountrySelect, onSelectEvent,
+}: {
+  viewer: Cesium.Viewer | null;
+  onCountrySelect: (sel: Selected | null) => void;
+  onSelectEvent: (id: string) => void;
+}) {
+  const { pause, seek } = useTime();
+  const handleEventSelect = useCallback(
+    (id: string, timeIso?: string) => {
+      onSelectEvent(id);                       // open the callout
+      if (timeIso) {
+        const t = Date.parse(timeIso);
+        if (Number.isFinite(t)) { pause(); seek(t); }   // hold the cursor on the clicked event
+      }
+    },
+    [onSelectEvent, pause, seek],
+  );
+  return (
+    <EntityClickHandler
+      viewer={viewer}
+      onCountrySelect={onCountrySelect}
+      onEventSelect={handleEventSelect}
+    />
+  );
+}
+```
+
+In `GlobeChildren`, replace the existing `<EntityClickHandler viewer={viewer}
+onCountrySelect={setSelected} />` with
+`<EventClickBridge viewer={viewer} onCountrySelect={setSelected} onSelectEvent={onSelectEvent} />`
+(add `onSelectEvent: (id: string) => void` to `GlobeChildrenProps`, passed from WorldviewPage
+as `setSelectedEventId`).
+
+Mount the single callout (the bridge is unnecessary here — `onInspect` only needs `viewer`):
+
+```tsx
 <EventCallout
   eventId={selectedEventId}
   onClose={() => setSelectedEventId(null)}
@@ -1610,6 +1661,11 @@ incident-union → 4; EventLayer repurpose → 10,14.
 Task 10 `_eventData.time`. #3 ScrubberMount interface → Task 12 concrete props. #4 bbox in
 notables → Task 4 queries + test. #5 frontend code completeness → Tasks 11/13/14 full code.
 #6 frontend-design skill ref → Task 15 reworded (design guidance + concrete visual verify).
+
+**Semantic gaps (2nd review, addressed):** (A) globe-dot click must seek to the event time
+→ Task 13 refs `onEventSelect`; Task 14 `EventClickBridge` (useTime consumer) does
+`pause()+seek(Date.parse(time))`. (B) `⏭ NOW` must re-pin to now even from live-paused →
+Task 12 `onNow` does an explicit `seek(Date.now())` (setMode is a no-op when already live).
 
 **Type consistency:** `HistogramResponse/HistogramBucket/TimelineNotable/TimelineGeoEvent/
 TimelineEventDetail` field names match backend models (2,7). `normalizeSeverity/severityRank`
