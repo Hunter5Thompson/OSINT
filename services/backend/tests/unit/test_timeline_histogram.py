@@ -85,3 +85,17 @@ def test_notables_pass_bbox_params_to_queries(client):
     for p in (ev_params, inc_params):
         assert p["bbox_off"] is False
         assert p["west"] == 170.0 and p["east"] == -170.0  # anti-meridian preserved
+
+
+def test_geo_events_capped_ranked_and_truncated(client):
+    geo = [{"id": f"g{i}", "time": "2026-06-01T01:00:00Z", "codebook_type": "military.x",
+            "severity": "low", "lat": 1.0 + i, "lon": 2.0} for i in range(205)]
+    geo[0]["severity"] = "critical"
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        mock.side_effect = [[], [], [], geo]  # hist, notable-events, incidents, geo
+        resp = client.get(f"/api/timeline/histogram{W}")
+    data = resp.json()
+    assert len(data["geo_events"]) == 200          # cap
+    assert data["geo_truncated"] is True
+    assert data["geo_located_count"] == 205
+    assert data["geo_events"][0]["severity"] == "critical"   # severity-ranked

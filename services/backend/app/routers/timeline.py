@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.models.timeline import (
     BBox,
     EventSample,
+    GeoEvent,
     HistogramBucket,
     HistogramResponse,
     Notable,
@@ -18,7 +19,12 @@ from app.models.timeline import (
     WindowResponse,
 )
 from app.services.neo4j_client import read_query
-from app.services.severity import category_of, dominant_category, normalize_severity
+from app.services.severity import (
+    category_of,
+    dominant_category,
+    normalize_severity,
+    severity_rank,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -432,5 +438,38 @@ async def _histogram_notables(t_start: str, t_end: str, box: BBox | None) -> lis
     return out
 
 
+_GEO_EVENTS_QUERY = """
+MATCH (ev:Event)-[:OCCURRED_AT]->(l:Location)
+WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+  AND l.lat IS NOT NULL AND l.lon IS NOT NULL
+  AND ($bbox_off
+       OR (l.lat >= $south AND l.lat <= $north
+           AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
+              OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) )))
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
+       ev.severity AS severity, l.lat AS lat, l.lon AS lon
+"""
+
+_GEO_CAP = 200
+
+
 async def _histogram_geo(t_start: str, t_end: str, box: BBox | None):
-    return [], 0, False  # replaced in Task 5
+    params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
+    rows = await read_query(_GEO_EVENTS_QUERY, params)
+    total = len(rows)
+    ranked = sorted(
+        rows,
+        key=lambda r: (-severity_rank(r.get("severity")), _neg_time_key(r.get("time"))),
+    )
+    out = [
+        GeoEvent(
+            id=str(r["id"]), time=str(r.get("time") or ""),
+            codebook_type=r.get("codebook_type"),
+            severity=normalize_severity(r.get("severity")),
+            lat=float(r["lat"]), lon=float(r["lon"]),
+            is_incident=False,
+        )
+        for r in ranked[:_GEO_CAP]
+    ]
+    return out, total, total > _GEO_CAP
