@@ -7,6 +7,24 @@ interface EventLayerProps {
   viewer: Cesium.Viewer | null;
   events: IntelEvent[];
   visible: boolean;
+  // Timeline integration (§7): when both are provided the dots fade by the cursor
+  // within the active window; absent -> behaves exactly as before (full opacity).
+  getTimeMs?: () => number;
+  window?: { startMs: number; endMs: number } | null;
+}
+
+// §7 fade: outside the window -> hidden; inside -> linear from full at the cursor
+// down to a faint floor far from it (so an in-window dot is never fully invisible).
+export function fadeAlpha(
+  eventMs: number,
+  cursorMs: number,
+  window: { startMs: number; endMs: number },
+  falloffMs: number,
+): number {
+  if (eventMs < window.startMs || eventMs > window.endMs) return 0;
+  const FLOOR = 0.18;
+  const d = Math.abs(eventMs - cursorMs);
+  return Math.max(FLOOR, 1 - d / Math.max(falloffMs, 1));
 }
 
 export const EVENT_COLORS: Record<string, string> = {
@@ -110,15 +128,21 @@ export function buildPlacements(events: IntelEvent[]): EventPlacement[] {
  * - high: slow pulse (0.5 Hz)
  * - medium/low: static marker
  */
-export function EventLayer({ viewer, events, visible }: EventLayerProps) {
+export function EventLayer({ viewer, events, visible, getTimeMs, window }: EventLayerProps) {
   const collectionRef = useRef<Cesium.BillboardCollection | null>(null);
   const labelCollectionRef = useRef<Cesium.LabelCollection | null>(null);
   const pulsesRef = useRef<EventPulse[]>([]);
+  const fadeListRef = useRef<{ billboard: Cesium.Billboard; eventMs: number }[]>([]);
   const animFrameRef = useRef<number | null>(null);
   const labelsVisibleRef = useRef(false);
   const { degradation } = usePerformance();
   const degradationRef = useRef(degradation);
   degradationRef.current = degradation;
+  // Refs so the rAF loop reads the latest cursor/window without re-subscribing.
+  const getTimeMsRef = useRef(getTimeMs);
+  getTimeMsRef.current = getTimeMs;
+  const windowRef = useRef(window);
+  windowRef.current = window;
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -171,6 +195,7 @@ export function EventLayer({ viewer, events, visible }: EventLayerProps) {
     bc.removeAll();
     lc.removeAll();
     pulsesRef.current = [];
+    fadeListRef.current = [];
 
     if (!visible) return;
 
@@ -199,9 +224,15 @@ export function EventLayer({ viewer, events, visible }: EventLayerProps) {
         location_name: event.location_name,
         lat: event.lat,
         lon: event.lon,
+        time: event.timestamp,  // EntityClickHandler reads this to seek on click (§7)
       };
+      fadeListRef.current.push({ billboard, eventMs: Date.parse(event.timestamp ?? "") });
 
-      const shouldLabel = placement.stackIndex === 0;
+      // In time-aware (timeline) mode the §7 fade only governs billboard alpha; labels
+      // can't be alpha-faded per-event cheaply, and out-of-window labels would re-introduce
+      // the globe text-wall. The click→EventCallout replaces them, so suppress labels here
+      // (review finding #2). Non-time-aware (legacy) callers keep labels.
+      const shouldLabel = placement.stackIndex === 0 && getTimeMsRef.current == null;
       if (shouldLabel) {
         const baseLabel = event.title.length > 20 ? event.title.slice(0, 18) + "…" : event.title;
         const labelText = placement.stackSize > 1 ? `${baseLabel} (+${placement.stackSize - 1})` : baseLabel;
@@ -256,6 +287,18 @@ export function EventLayer({ viewer, events, visible }: EventLayerProps) {
         // Reset scales when animations are degraded
         for (const pulse of pulsesRef.current) {
           pulse.billboard.scale = 1.0;
+        }
+      }
+
+      // §7 temporal fade: dim dots by the cursor within the active window.
+      const win = windowRef.current;
+      const getT = getTimeMsRef.current;
+      if (win && getT) {
+        const cursor = getT();
+        const falloff = (win.endMs - win.startMs) * 0.05;
+        for (const { billboard, eventMs } of fadeListRef.current) {
+          if (Number.isNaN(eventMs)) continue;
+          billboard.color = Cesium.Color.WHITE.withAlpha(fadeAlpha(eventMs, cursor, win, falloff));
         }
       }
 

@@ -21,9 +21,11 @@ import type {
   ReportMessage,
   ReportMessageCreate,
   ReportRecord,
+  HistogramResponse,
   ReportUpdateRequest,
   Satellite,
   TimeWindowQuery,
+  TimelineEventDetail,
   Vessel,
   WindowResponse,
 } from "../types";
@@ -465,4 +467,21 @@ export async function promoteIncident(id: string): Promise<Incident> {
   });
   if (!resp.ok) throw new Error(`promote ${id}: ${resp.status}`);
   return (await resp.json()) as Incident;
+}
+
+export async function getTimeHistogram(
+  q: { tStart: string; tEnd: string; buckets?: number; bbox?: [number, number, number, number] },
+  signal?: AbortSignal,
+): Promise<HistogramResponse> {
+  const p = new URLSearchParams({ t_start: q.tStart, t_end: q.tEnd, domain: "events" });
+  if (q.buckets) p.set("buckets", String(q.buckets));
+  if (q.bbox) p.set("bbox", q.bbox.join(","));
+  return fetchJSON<HistogramResponse>(`/timeline/histogram?${p.toString()}`, { signal });
+}
+
+export async function getEventDetail(
+  id: string,
+  signal?: AbortSignal,
+): Promise<TimelineEventDetail> {
+  return fetchJSON<TimelineEventDetail>(`/timeline/events/${encodeURIComponent(id)}`, { signal });
 }

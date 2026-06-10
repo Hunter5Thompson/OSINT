@@ -55,3 +55,61 @@ class WindowResponse(BaseModel):
     samples: list[EventSample | TrackSample] = Field(default_factory=list)
     total_count: int = 0
     truncated: bool = False
+
+
+class HistogramBucket(BaseModel):
+    ts: str  # ISO-8601 UTC bucket start
+    count: int
+    dominant_category: str
+    by_category: dict[str, int] = Field(default_factory=dict)
+    by_severity: dict[str, int] = Field(default_factory=dict)
+
+
+class Notable(BaseModel):
+    id: str
+    time: str
+    time_basis: str
+    severity: str
+    title: str | None = None
+    codebook_type: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    is_incident: bool = False
+    rank: int = 0
+
+
+class GeoEvent(BaseModel):
+    id: str
+    time: str
+    codebook_type: str | None = None
+    severity: str
+    lat: float
+    lon: float
+    is_incident: bool = False
+
+
+class HistogramResponse(BaseModel):
+    t_start: str
+    t_end: str
+    bucket_ms: int
+    buckets: list[HistogramBucket] = Field(default_factory=list)
+    notables: list[Notable] = Field(default_factory=list)
+    geo_events: list[GeoEvent] = Field(default_factory=list)
+    total_count: int = 0
+    geo_located_count: int = 0
+    geo_truncated: bool = False
+
+
+class EventDetail(BaseModel):
+    id: str
+    time: str
+    time_basis: str
+    title: str | None = None
+    codebook_type: str | None = None
+    severity: str | None = None
+    source: str | None = None
+    url: str | None = None
+    location_name: str | None = None
+    country: str | None = None
+    lat: float | None = None
+    lon: float | None = None

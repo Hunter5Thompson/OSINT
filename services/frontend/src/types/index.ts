@@ -363,3 +363,58 @@ export type {
   DatacenterGeoJSON,
   RefineryGeoJSON,
 } from "./infrastructure";
+
+// --- Timeline histogram + detail contract (/api/timeline/histogram, /events/{id}) ---
+export interface HistogramBucket {
+  ts: string;
+  count: number;
+  dominant_category: string;
+  by_category: Record<string, number>;
+  by_severity: Record<string, number>;
+}
+export interface TimelineNotable {
+  id: string;
+  time: string;
+  time_basis: string;
+  severity: string;
+  title?: string | null;
+  codebook_type?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+  is_incident: boolean;
+  rank: number;
+}
+export interface TimelineGeoEvent {
+  id: string;
+  time: string;
+  codebook_type?: string | null;
+  severity: string;
+  lat: number;
+  lon: number;
+  is_incident: boolean;
+}
+export interface HistogramResponse {
+  t_start: string;
+  t_end: string;
+  bucket_ms: number;
+  buckets: HistogramBucket[];
+  notables: TimelineNotable[];
+  geo_events: TimelineGeoEvent[];
+  total_count: number;
+  geo_located_count: number;
+  geo_truncated: boolean;
+}
+export interface TimelineEventDetail {
+  id: string;
+  time: string;
+  time_basis: string;
+  title?: string | null;
+  codebook_type?: string | null;
+  severity?: string | null;
+  source?: string | null;
+  url?: string | null;
+  location_name?: string | null;
+  country?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+}

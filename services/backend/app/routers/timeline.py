@@ -7,14 +7,32 @@ from datetime import UTC, datetime
 import structlog
 from fastapi import APIRouter, HTTPException, Query
 
-from app.models.timeline import BBox, EventSample, TrackPoint, TrackSample, WindowResponse
+from app.models.timeline import (
+    BBox,
+    EventDetail,
+    EventSample,
+    GeoEvent,
+    HistogramBucket,
+    HistogramResponse,
+    Notable,
+    TrackPoint,
+    TrackSample,
+    WindowResponse,
+)
 from app.services.neo4j_client import read_query
+from app.services.severity import (
+    category_of,
+    dominant_category,
+    normalize_severity,
+    severity_rank,
+)
 
 log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/timeline", tags=["timeline"])
 
 _MAX_LIMIT = 500
+_MAX_BUCKETS = 240
 _SUPPORTED_MOVEMENT_KINDS = {"mil_aircraft", "civil_aircraft", "ship", "satellite"}
 _IMPLEMENTED_MOVEMENT_KINDS = {"mil_aircraft"}
 
@@ -249,4 +267,255 @@ async def _movements_window(
     return WindowResponse(
         domain="movements", tier="fine", t_start=t_start, t_end=t_end, bbox=box,
         samples=samples, total_count=total, truncated=total > len(samples),
+    )
+
+
+_HISTOGRAM_QUERY = """
+MATCH (ev:Event)
+WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+WITH ev, l
+WHERE $bbox_off
+   OR (l.lat IS NOT NULL AND l.lon IS NOT NULL
+       AND l.lat >= $south AND l.lat <= $north
+       AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
+          OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) ))
+WITH DISTINCT ev
+RETURN toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
+       ev.severity AS severity
+"""
+
+
+@router.get("/histogram", response_model=HistogramResponse)
+async def get_histogram(
+    t_start: str,
+    t_end: str,
+    buckets: int = 120,
+    domain: str = "events",
+    bbox: str | None = None,
+) -> HistogramResponse:
+    if domain != "events":
+        raise HTTPException(status_code=422, detail="histogram supports domain=events only")
+    if not (1 <= buckets <= _MAX_BUCKETS):
+        raise HTTPException(status_code=422, detail=f"buckets must be in [1,{_MAX_BUCKETS}]")
+    start, end = validate_window(t_start, t_end)
+    box = parse_bbox(bbox)
+    params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
+
+    start_ms = int(start.timestamp() * 1000)
+    end_ms = int(end.timestamp() * 1000)
+    span = max(end_ms - start_ms, 1)
+    bucket_ms = max(span // buckets, 1)
+
+    try:
+        rows = await read_query(_HISTOGRAM_QUERY, params)
+    except Exception as exc:
+        log.error("timeline_histogram_neo4j_query_failed", error=str(exc))
+        raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
+
+    # Bin in Python so the deterministic rules live in one tested place.
+    cats: dict[int, list[str | None]] = {}
+    sevs: dict[int, list[str]] = {}
+    counts: dict[int, int] = {}
+    for r in rows:
+        t = r.get("time")
+        if not t:
+            continue
+        ts_ms = int(datetime.fromisoformat(str(t).replace("Z", "+00:00")).timestamp() * 1000)
+        bi = min(int((ts_ms - start_ms) // bucket_ms), buckets - 1)
+        bi = max(bi, 0)
+        counts[bi] = counts.get(bi, 0) + 1
+        cats.setdefault(bi, []).append(r.get("codebook_type"))
+        sevs.setdefault(bi, []).append(normalize_severity(r.get("severity")))
+
+    bucket_list: list[HistogramBucket] = []
+    for bi in sorted(counts):
+        bcats = cats[bi]
+        by_cat: dict[str, int] = {}
+        for c in bcats:
+            cat = category_of(c)
+            by_cat[cat] = by_cat.get(cat, 0) + 1
+        by_sev: dict[str, int] = {}
+        for s in sevs[bi]:
+            by_sev[s] = by_sev.get(s, 0) + 1
+        bucket_list.append(HistogramBucket(
+            ts=datetime.fromtimestamp((start_ms + bi * bucket_ms) / 1000, tz=UTC).isoformat(),
+            count=counts[bi],
+            dominant_category=dominant_category(bcats),
+            by_category=by_cat,
+            by_severity=by_sev,
+        ))
+
+    # The notable + geo reads hit Neo4j too — keep them inside a 503 guard so a failure
+    # there returns the promised 503, not an unhandled 500 (review finding #1).
+    try:
+        notables = await _histogram_notables(t_start, t_end, box)
+        geo_events, geo_count, geo_trunc = await _histogram_geo(t_start, t_end, box)
+    except Exception as exc:
+        log.error("timeline_histogram_aux_neo4j_query_failed", error=str(exc))
+        raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
+
+    return HistogramResponse(
+        t_start=t_start, t_end=t_end, bucket_ms=bucket_ms, buckets=bucket_list,
+        notables=notables, geo_events=geo_events, total_count=len(rows),
+        geo_located_count=geo_count, geo_truncated=geo_trunc,
+    )
+
+
+# Pre-filter to high/critical synonyms IN Cypher (review finding #3): otherwise the
+# recency LIMIT could be filled by low/medium rows and starve older high/critical events
+# before Python ranks them. Keep in lockstep with normalize_severity's high/critical inputs.
+_NOTABLE_EVENTS_QUERY = """
+MATCH (ev:Event)
+WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+  AND ev.severity IS NOT NULL
+  AND toLower(trim(ev.severity)) IN ['high', 'elevated', 'critical', 'severe', 'extreme']
+OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+WITH ev, l
+WHERE $bbox_off
+   OR (l.lat IS NOT NULL AND l.lon IS NOT NULL
+       AND l.lat >= $south AND l.lat <= $north
+       AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
+          OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) ))
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       ev.severity AS severity, ev.title AS title, ev.codebook_type AS codebook_type,
+       l.lat AS lat, l.lon AS lon
+ORDER BY ev.timeline_at DESC
+LIMIT 400
+"""
+
+_NOTABLE_INCIDENTS_QUERY = """
+MATCH (i:Incident)
+WHERE datetime(i.trigger_ts) >= datetime($t_start)
+  AND datetime(i.trigger_ts) <= datetime($t_end)
+  AND ($bbox_off
+       OR (i.lat IS NOT NULL AND i.lon IS NOT NULL
+           AND i.lat >= $south AND i.lat <= $north
+           AND ( ($west <= $east AND i.lon >= $west AND i.lon <= $east)
+              OR ($west >  $east AND (i.lon >= $west OR i.lon <= $east)) )))
+RETURN i.incident_id AS id, toString(i.trigger_ts) AS time, 'occurred' AS time_basis,
+       i.severity AS severity, i.title AS title, i.lat AS lat, i.lon AS lon
+ORDER BY i.trigger_ts DESC
+LIMIT 200
+"""
+
+_NOTABLE_CAP = 40
+
+
+def _neg_time_key(t: object) -> str:
+    # newer time sorts first within a rank tier (descending by ISO string)
+    return "".join(chr(0x10FFFF - ord(ch)) for ch in str(t or ""))
+
+
+async def _histogram_notables(t_start: str, t_end: str, box: BBox | None) -> list[Notable]:
+    params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
+    ev_rows = await read_query(_NOTABLE_EVENTS_QUERY, params)
+    inc_rows = await read_query(_NOTABLE_INCIDENTS_QUERY, params)
+
+    candidates: list[dict] = []
+    for r in ev_rows:
+        sev = normalize_severity(r.get("severity"))
+        if sev in ("high", "critical"):
+            candidates.append({**r, "severity": sev, "is_incident": False})
+    for r in inc_rows:
+        candidates.append({
+            **r, "severity": normalize_severity(r.get("severity")),
+            "codebook_type": None, "is_incident": True,
+        })
+
+    def _key(c: dict) -> tuple:
+        sev = c["severity"]
+        tier = 0 if sev == "critical" else (1 if c["is_incident"] else (2 if sev == "high" else 3))
+        return (tier, _neg_time_key(c.get("time")))
+
+    candidates.sort(key=_key)
+    out: list[Notable] = []
+    seen: set[str] = set()
+    for c in candidates:
+        if c["id"] in seen:
+            continue
+        seen.add(c["id"])
+        out.append(Notable(
+            id=str(c["id"]), time=str(c.get("time") or ""),
+            time_basis=str(c.get("time_basis") or "indexed"), severity=c["severity"],
+            title=c.get("title"), codebook_type=c.get("codebook_type"),
+            lat=float(c["lat"]) if c.get("lat") is not None else None,
+            lon=float(c["lon"]) if c.get("lon") is not None else None,
+            is_incident=bool(c["is_incident"]), rank=len(out),
+        ))
+        if len(out) >= _NOTABLE_CAP:
+            break
+    return out
+
+
+_GEO_EVENTS_QUERY = """
+MATCH (ev:Event)-[:OCCURRED_AT]->(l:Location)
+WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+  AND l.lat IS NOT NULL AND l.lon IS NOT NULL
+  AND ($bbox_off
+       OR (l.lat >= $south AND l.lat <= $north
+           AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
+              OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) )))
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
+       ev.severity AS severity, l.lat AS lat, l.lon AS lon
+"""
+
+_GEO_CAP = 200
+
+
+async def _histogram_geo(t_start: str, t_end: str, box: BBox | None):
+    params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
+    rows = await read_query(_GEO_EVENTS_QUERY, params)
+    total = len(rows)
+    ranked = sorted(
+        rows,
+        key=lambda r: (-severity_rank(r.get("severity")), _neg_time_key(r.get("time"))),
+    )
+    out = [
+        GeoEvent(
+            id=str(r["id"]), time=str(r.get("time") or ""),
+            codebook_type=r.get("codebook_type"),
+            severity=normalize_severity(r.get("severity")),
+            lat=float(r["lat"]), lon=float(r["lon"]),
+            is_incident=False,
+        )
+        for r in ranked[:_GEO_CAP]
+    ]
+    return out, total, total > _GEO_CAP
+
+
+_EVENT_DETAIL_QUERY = """
+MATCH (ev:Event)
+WHERE coalesce(ev.id, ev.event_id, toString(elementId(ev))) = $id
+OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+OPTIONAL MATCH (d:Document)-[:DESCRIBES]->(ev)
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       ev.title AS title, ev.codebook_type AS codebook_type, ev.severity AS severity,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       coalesce(d.source, ev.source) AS source, coalesce(d.url, ev.source_url) AS url,
+       l.name AS location_name, l.country AS country, l.lat AS lat, l.lon AS lon
+LIMIT 1
+"""
+
+
+@router.get("/events/{event_id}", response_model=EventDetail)
+async def get_event_detail(event_id: str) -> EventDetail:
+    try:
+        rows = await read_query(_EVENT_DETAIL_QUERY, {"id": event_id})
+    except Exception as exc:
+        log.error("timeline_event_detail_neo4j_query_failed", error=str(exc))
+        raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
+    if not rows:
+        raise HTTPException(status_code=404, detail="event not found")
+    r = rows[0]
+    return EventDetail(
+        id=str(r.get("id") or event_id),
+        time=str(r.get("time") or ""), time_basis=str(r.get("time_basis") or "indexed"),
+        title=r.get("title"), codebook_type=r.get("codebook_type"),
+        severity=r.get("severity"), source=r.get("source"), url=r.get("url"),
+        location_name=r.get("location_name"), country=r.get("country"),
+        lat=float(r["lat"]) if r.get("lat") is not None else None,
+        lon=float(r["lon"]) if r.get("lon") is not None else None,
     )

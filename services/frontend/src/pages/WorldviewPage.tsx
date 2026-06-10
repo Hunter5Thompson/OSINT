@@ -10,6 +10,7 @@ import { EarthquakeLayer } from "../components/layers/EarthquakeLayer";
 import { ShipLayer } from "../components/layers/ShipLayer";
 import { CCTVLayer } from "../components/layers/CCTVLayer";
 import { EventLayer } from "../components/layers/EventLayer";
+import { EventCallout } from "../components/time/EventCallout";
 import { CableLayer } from "../components/layers/CableLayer";
 import { PipelineLayer } from "../components/layers/PipelineLayer";
 import { FIRMSLayer } from "../components/layers/FIRMSLayer";
@@ -38,7 +39,6 @@ import { CountryBorders } from "../components/globe/visual-layers/CountryBorders
 import { useFlights } from "../hooks/useFlights";
 import { useSatellites } from "../hooks/useSatellites";
 import { useEarthquakes } from "../hooks/useEarthquakes";
-import { useEvents } from "../hooks/useEvents";
 import { useCables } from "../hooks/useCables";
 import { useVessels } from "../hooks/useVessels";
 import { usePipelines } from "../hooks/usePipelines";
@@ -66,7 +66,10 @@ import type {
   RefineryGeoJSON,
   EONETEvent,
   GDACSEvent,
+  IntelEvent,
   TimeWindowQuery,
+  TimelineEventDetail,
+  TimelineGeoEvent,
   WindowTrackSample,
 } from "../types";
 
@@ -132,6 +135,7 @@ interface GlobeChildrenProps {
   viewer: Cesium.Viewer | null;
   layers: LayerVisibility;
   setSelected: Dispatch<SetStateAction<Selected | null>>;
+  onSelectEvent: (id: string) => void;
   firmsHotspots: FIRMSHotspot[];
   selectedWindow: { tStart: string; tEnd: string };
   datacenterData: DatacenterGeoJSON | null;
@@ -144,6 +148,7 @@ function GlobeChildren({
   viewer,
   layers,
   setSelected,
+  onSelectEvent,
   firmsHotspots,
   selectedWindow,
   datacenterData,
@@ -267,7 +272,11 @@ function GlobeChildren({
           });
         }}
       />
-      <EntityClickHandler viewer={viewer} onCountrySelect={setSelected} />
+      <EventClickBridge
+        viewer={viewer}
+        onCountrySelect={setSelected}
+        onSelectEvent={onSelectEvent}
+      />
     </>
   );
 }
@@ -344,6 +353,67 @@ function MilTrackSource({
           });
         }
       }}
+    />
+  );
+}
+
+// ── EventLayerBridge ────────────────────────────────────────────────────────────
+// Tiny useTime() consumer so EventLayer gets the live clock (getTimeMs) for the §7
+// temporal fade without making WorldviewPage a 4Hz consumer.
+function EventLayerBridge({
+  viewer,
+  events,
+  visible,
+  window,
+}: {
+  viewer: Cesium.Viewer | null;
+  events: IntelEvent[];
+  visible: boolean;
+  window: { startMs: number; endMs: number } | null;
+}) {
+  const { getTimeMs } = useTime();
+  return (
+    <EventLayer
+      viewer={viewer}
+      events={events}
+      visible={visible}
+      getTimeMs={getTimeMs}
+      window={window}
+    />
+  );
+}
+
+// ── EventClickBridge ────────────────────────────────────────────────────────────
+// useTime() consumer wrapping EntityClickHandler so an event-dot click opens the callout
+// AND seeks to that event's time (pause+seek), per spec §5/§7.
+function EventClickBridge({
+  viewer,
+  onCountrySelect,
+  onSelectEvent,
+}: {
+  viewer: Cesium.Viewer | null;
+  onCountrySelect: Dispatch<SetStateAction<Selected | null>>;
+  onSelectEvent: (id: string) => void;
+}) {
+  const { pause, seek } = useTime();
+  const handleEventSelect = useCallback(
+    (id: string, timeIso?: string) => {
+      onSelectEvent(id);
+      if (timeIso) {
+        const t = Date.parse(timeIso);
+        if (Number.isFinite(t)) {
+          pause();
+          seek(t);
+        }
+      }
+    },
+    [onSelectEvent, pause, seek],
+  );
+  return (
+    <EntityClickHandler
+      viewer={viewer}
+      onCountrySelect={onCountrySelect}
+      onEventSelect={handleEventSelect}
     />
   );
 }
@@ -431,10 +501,48 @@ export function WorldviewPage() {
     };
   });
 
+  // § CHRONIK timeline state (lifted from ScrubberMount; see EventClickBridge/EventLayerBridge).
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [timelineGeo, setTimelineGeo] = useState<TimelineGeoEvent[]>([]);
+  const [timelineWindow, setTimelineWindow] = useState<{ startMs: number; endMs: number } | null>(
+    null,
+  );
+  const handleTimelineData = useCallback(
+    (d: { geoEvents: TimelineGeoEvent[]; window: { startMs: number; endMs: number } | null }) => {
+      setTimelineGeo(d.geoEvents);
+      setTimelineWindow(d.window);
+      // Keep the mil-track replay fetch window in sync with the brush (ignored by live
+      // mil tracks, which fetch live; consumed by the replay-windowed fetch).
+      if (d.window) {
+        setSelectedWindow({
+          tStart: new Date(d.window.startMs).toISOString(),
+          tEnd: new Date(d.window.endMs).toISOString(),
+        });
+      }
+    },
+    [],
+  );
+  // geo_events -> IntelEvent shape (EventLayer requires a non-empty title; title drives
+  // _eventData + the label). title = codebook_type ?? id keeps it non-empty (review #2).
+  const eventLayerEvents = useMemo<IntelEvent[]>(
+    () =>
+      timelineGeo.map((g) => ({
+        id: g.id,
+        title: g.codebook_type ?? g.id,
+        codebook_type: g.codebook_type ?? "other",
+        severity: g.severity,
+        timestamp: g.time,
+        location_name: null,
+        country: null,
+        lat: g.lat,
+        lon: g.lon,
+      })),
+    [timelineGeo],
+  );
+
   const { flights } = useFlights(layers.flights);
   const { satellites } = useSatellites(layers.satellites);
   const { earthquakes } = useEarthquakes(layers.earthquakes);
-  const { events } = useEvents(layers.events);
   const { cables, landingPoints } = useCables(layers.cables);
   const { vessels } = useVessels(layers.vessels);
   const { pipelines: pipelineData } = usePipelines(layers.pipelines);
@@ -547,7 +655,12 @@ export function WorldviewPage() {
         <EarthquakeLayer viewer={viewer} earthquakes={earthquakes} visible={layers.earthquakes} />
         <ShipLayer viewer={viewer} vessels={vessels} visible={layers.vessels} />
         <CCTVLayer viewer={viewer} visible={layers.cctv} />
-        <EventLayer viewer={viewer} events={events} visible={layers.events} />
+        <EventLayerBridge
+          viewer={viewer}
+          events={eventLayerEvents}
+          visible={layers.events}
+          window={timelineWindow}
+        />
         <CableLayer viewer={viewer} cables={cables} landingPoints={landingPoints} visible={layers.cables} />
         <PipelineLayer viewer={viewer} pipelines={pipelineData} visible={layers.pipelines} />
         <ReconLayer
@@ -560,6 +673,7 @@ export function WorldviewPage() {
           viewer={viewer}
           layers={layers}
           setSelected={setSelected}
+          onSelectEvent={setSelectedEventId}
           firmsHotspots={firmsHotspots}
           selectedWindow={selectedWindow}
           datacenterData={datacenterData}
@@ -631,7 +745,8 @@ export function WorldviewPage() {
           <InspectorPanel selected={selected} onClose={() => setSelected(null)} viewer={viewer} />
         </div>
 
-        <div style={{ position: "absolute", left: 16, bottom: 16, zIndex: 10 }}>
+        {/* raised above the full-width § CHRONIK strip (height 90) docked at the bottom */}
+        <div style={{ position: "absolute", left: 16, bottom: 106, zIndex: 10 }}>
           <TickerPanel
             variant={expandedPanels.ticker ? "expanded" : "collapsed"}
             onClose={() => setExpandedPanels((prev) => ({ ...prev, ticker: false }))}
@@ -639,7 +754,23 @@ export function WorldviewPage() {
           />
         </div>
 
-        <ScrubberMount onSelectWindow={setSelectedWindow} />
+        <EventCallout
+          eventId={selectedEventId}
+          onClose={() => setSelectedEventId(null)}
+          onInspect={(d: TimelineEventDetail) => {
+            if (viewer && !viewer.isDestroyed() && d.lat != null && d.lon != null) {
+              viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(d.lon, d.lat, 600_000),
+                duration: 1.2,
+              });
+            }
+          }}
+        />
+
+        <ScrubberMount
+          onSelectEvent={setSelectedEventId}
+          onTimelineData={handleTimelineData}
+        />
       </div>
     </TimeProvider>
     </PerformanceGuard>
