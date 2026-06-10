@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import type { Selected } from "../worldview/InspectorPanel";
 import { useSpotlight } from "./spotlight/SpotlightContext";
@@ -20,6 +20,8 @@ function shipTypeLabel(code: number): string {
 interface EntityClickHandlerProps {
   viewer: Cesium.Viewer | null;
   onCountrySelect: (sel: Selected | null) => void;
+  // Event-billboard click → open the new EventCallout (and seek if a time is known).
+  onEventSelect?: (id: string, timeIso?: string) => void;
 }
 
 interface SelectedEntity {
@@ -30,10 +32,18 @@ interface SelectedEntity {
   properties: Record<string, string>;
 }
 
-export function EntityClickHandler({ viewer, onCountrySelect }: EntityClickHandlerProps) {
+export function EntityClickHandler({
+  viewer,
+  onCountrySelect,
+  onEventSelect,
+}: EntityClickHandlerProps) {
   const [selected, setSelected] = useState<SelectedEntity | null>(null);
   const { dispatch: dispatchSpotlight } = useSpotlight();
   const country = useCountryHitTest();
+  // Ref so the [viewer]-keyed pick handler always calls the latest callback without
+  // re-subscribing (the parent useTime() bridge re-renders at the ~4 Hz cursor cadence).
+  const onEventSelectRef = useRef(onEventSelect);
+  onEventSelectRef.current = onEventSelect;
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -45,20 +55,13 @@ export function EntityClickHandler({ viewer, onCountrySelect }: EntityClickHandl
 
       // Guard 1: Event billboard (custom _eventData property)
       const eventData = (picked?.primitive as Record<string, unknown>)?._eventData as
-        | { id: string; title: string; codebook_type: string; lat: number; lon: number; severity: string; location_name?: string }
+        | { id: string; title: string; codebook_type: string; lat: number; lon: number;
+            severity: string; location_name?: string; time?: string }
         | undefined;
 
       if (eventData) {
-        setSelected({
-          id: eventData.id,
-          name: eventData.title,
-          type: eventData.codebook_type,
-          position: { lat: eventData.lat, lon: eventData.lon },
-          properties: {
-            severity: eventData.severity,
-            location: eventData.location_name ?? "",
-          },
-        });
+        // Open the new EventCallout (+ seek) instead of the old local bottom-popup.
+        onEventSelectRef.current?.(eventData.id, eventData.time);
         dispatchSpotlight({
           type: "set",
           target: {
