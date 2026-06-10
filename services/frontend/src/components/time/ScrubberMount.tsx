@@ -12,7 +12,6 @@ const PRESET_SPAN_MS: Record<Preset, number> = {
   "30d": 30 * 86_400_000,
 };
 const COARSE_ROLL_MS = 60_000; // advance the rolling window every 60s
-const LIVE_BAND_MS = 6 * 3600_000; // live fade band: trailing 6h ending at the cursor
 
 function rollingWindow(spanMs: number): { tStart: string; tEnd: string } {
   const now = Date.now();
@@ -51,10 +50,16 @@ export function ScrubberMount({ onSelectEvent, onTimelineData }: ScrubberMountPr
     30_000,
   );
 
-  // Active fade window: the brush in replay, else a trailing live band ending at the cursor.
+  // Active fade window: the static brush in replay, else the coarse bounds in live (so all
+  // coarse-range dots stay visible and fade by recency to the live cursor). Using coarse
+  // bounds — which change on the 60s roll, NOT every cursor tick — keeps the 4Hz cursor OUT
+  // of this lifted state, so WorldviewPage isn't re-rendered every tick.
   const activeWindow = useMemo<{ startMs: number; endMs: number } | null>(
-    () => (mode === "replay" ? brush : { startMs: cursorMs - LIVE_BAND_MS, endMs: cursorMs }),
-    [mode, brush, cursorMs],
+    () =>
+      mode === "replay"
+        ? brush
+        : { startMs: Date.parse(coarse.tStart), endMs: Date.parse(coarse.tEnd) },
+    [mode, brush, coarse.tStart, coarse.tEnd],
   );
 
   useEffect(() => {
