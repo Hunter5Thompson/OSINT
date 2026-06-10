@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import * as Cesium from "cesium";
 import * as api from "../../../services/api";
 import { ScrubberMount } from "../ScrubberMount";
@@ -10,9 +10,12 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const EMPTY = {
-  domain: "events", tier: "coarse", t_start: "", t_end: "", bbox: null,
-  samples: [], total_count: 0, truncated: false,
+const HIST = {
+  t_start: "a", t_end: "b", bucket_ms: 1,
+  buckets: [{ ts: "2026-06-01T00:00:00Z", count: 1, dominant_category: "civil", by_category: {}, by_severity: {} }],
+  notables: [],
+  geo_events: [{ id: "g1", time: "2026-06-01T00:00:00Z", severity: "high", lat: 1, lon: 2, is_incident: false }],
+  total_count: 1, geo_located_count: 1, geo_truncated: false,
 } as const;
 
 function fakeClockViewer() {
@@ -31,59 +34,53 @@ function fakeClockViewer() {
 }
 
 const wrap =
-  (viewer: Cesium.Viewer | null, onSelectWindow: (w: { tStart: string; tEnd: string }) => void) =>
+  (viewer: Cesium.Viewer | null, props: Parameters<typeof ScrubberMount>[0]) =>
   () => (
     <TimeProvider viewer={viewer}>
-      <ScrubberMount onSelectWindow={onSelectWindow} />
+      <ScrubberMount {...props} />
     </TimeProvider>
   );
 
 describe("ScrubberMount", () => {
-  it("toggling to replay clamps the Cesium clock to a window (P1)", () => {
-    vi.spyOn(api, "getTimeWindow").mockResolvedValue(EMPTY as never);
+  it("renders the ChronikTimeline strip", () => {
+    vi.spyOn(api, "getTimeHistogram").mockResolvedValue(HIST as never);
+    const Comp = wrap(null, { onSelectEvent: vi.fn(), onTimelineData: vi.fn() });
+    render(<Comp />);
+    expect(screen.getByTestId("chronik-strip")).toBeInTheDocument();
+  });
+
+  it("lifts geo_events up via onTimelineData", async () => {
+    vi.spyOn(api, "getTimeHistogram").mockResolvedValue(HIST as never);
+    const onTimelineData = vi.fn();
+    const Comp = wrap(null, { onSelectEvent: vi.fn(), onTimelineData });
+    render(<Comp />);
+    await waitFor(() =>
+      expect(onTimelineData).toHaveBeenCalledWith(
+        expect.objectContaining({
+          geoEvents: expect.arrayContaining([expect.objectContaining({ id: "g1" })]),
+        }),
+      ),
+    );
+  });
+
+  it("click pauses the live clock, then NOW re-pins to now + resumes (HARD gates)", () => {
+    vi.spyOn(api, "getTimeHistogram").mockResolvedValue(HIST as never);
     const { viewer, clock } = fakeClockViewer();
-    const Comp = wrap(viewer, () => {});
+    const Comp = wrap(viewer, { onSelectEvent: vi.fn(), onTimelineData: vi.fn() });
     render(<Comp />);
 
-    expect(clock.clockRange).toBe(Cesium.ClockRange.UNBOUNDED); // live on mount
     act(() => {
-      fireEvent.click(screen.getByLabelText("toggle mode"));
+      const strip = screen.getByTestId("chronik-strip");
+      fireEvent.mouseDown(strip, { clientX: 5 });
+      fireEvent.mouseUp(strip, { clientX: 5 });
     });
+    expect(clock.shouldAnimate).toBe(false); // paused on click
 
-    expect(clock.clockRange).toBe(Cesium.ClockRange.CLAMPED);
-    expect(clock.clockStep).toBe(Cesium.ClockStep.SYSTEM_CLOCK_MULTIPLIER);
-    const span =
-      Cesium.JulianDate.toDate(clock.stopTime).getTime() -
-      Cesium.JulianDate.toDate(clock.startTime).getTime();
-    // ~6h window (JulianDate<->Date round-trips lose sub-ms precision)
-    expect(Math.abs(span - 6 * 3600_000)).toBeLessThan(5);
-  });
-
-  it("notifies the parent of the replay window on toggle (P1)", () => {
-    vi.spyOn(api, "getTimeWindow").mockResolvedValue(EMPTY as never);
-    const onSelectWindow = vi.fn();
-    const Comp = wrap(null, onSelectWindow);
-    render(<Comp />);
     act(() => {
-      fireEvent.click(screen.getByLabelText("toggle mode"));
+      fireEvent.click(screen.getByLabelText("now"));
     });
-    expect(onSelectWindow).toHaveBeenCalledTimes(1);
-    const w = onSelectWindow.mock.calls[0]![0];
-    expect(Date.parse(w.tEnd) - Date.parse(w.tStart)).toBe(6 * 3600_000);
-  });
-
-  it("rolls the coarse event window forward over time (P2)", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
-    const spy = vi.spyOn(api, "getTimeWindow").mockResolvedValue(EMPTY as never);
-    const Comp = wrap(null, () => {});
-    render(<Comp />);
-
-    const firstEnd = Date.parse(spy.mock.calls[0]![0].tEnd);
-    act(() => {
-      vi.advanceTimersByTime(61_000); // past the 60s roll interval
-    });
-    const ends = spy.mock.calls.map((c) => Date.parse(c[0].tEnd));
-    expect(Math.max(...ends)).toBeGreaterThan(firstEnd); // window advanced
+    expect(clock.shouldAnimate).toBe(true); // resumed by play()
+    const cursorMs = Cesium.JulianDate.toDate(clock.currentTime).getTime();
+    expect(Math.abs(cursorMs - Date.now())).toBeLessThan(3000); // re-pinned to now (gate)
   });
 });
