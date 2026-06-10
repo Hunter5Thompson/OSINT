@@ -228,7 +228,11 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
       };
       fadeListRef.current.push({ billboard, eventMs: Date.parse(event.timestamp ?? "") });
 
-      const shouldLabel = placement.stackIndex === 0;
+      // In time-aware (timeline) mode the §7 fade only governs billboard alpha; labels
+      // can't be alpha-faded per-event cheaply, and out-of-window labels would re-introduce
+      // the globe text-wall. The click→EventCallout replaces them, so suppress labels here
+      // (review finding #2). Non-time-aware (legacy) callers keep labels.
+      const shouldLabel = placement.stackIndex === 0 && getTimeMsRef.current == null;
       if (shouldLabel) {
         const baseLabel = event.title.length > 20 ? event.title.slice(0, 18) + "…" : event.title;
         const labelText = placement.stackSize > 1 ? `${baseLabel} (+${placement.stackSize - 1})` : baseLabel;

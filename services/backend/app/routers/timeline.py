@@ -346,8 +346,14 @@ async def get_histogram(
             by_severity=by_sev,
         ))
 
-    notables = await _histogram_notables(t_start, t_end, box)
-    geo_events, geo_count, geo_trunc = await _histogram_geo(t_start, t_end, box)
+    # The notable + geo reads hit Neo4j too — keep them inside a 503 guard so a failure
+    # there returns the promised 503, not an unhandled 500 (review finding #1).
+    try:
+        notables = await _histogram_notables(t_start, t_end, box)
+        geo_events, geo_count, geo_trunc = await _histogram_geo(t_start, t_end, box)
+    except Exception as exc:
+        log.error("timeline_histogram_aux_neo4j_query_failed", error=str(exc))
+        raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
 
     return HistogramResponse(
         t_start=t_start, t_end=t_end, bucket_ms=bucket_ms, buckets=bucket_list,
@@ -356,10 +362,14 @@ async def get_histogram(
     )
 
 
+# Pre-filter to high/critical synonyms IN Cypher (review finding #3): otherwise the
+# recency LIMIT could be filled by low/medium rows and starve older high/critical events
+# before Python ranks them. Keep in lockstep with normalize_severity's high/critical inputs.
 _NOTABLE_EVENTS_QUERY = """
 MATCH (ev:Event)
 WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
   AND ev.severity IS NOT NULL
+  AND toLower(trim(ev.severity)) IN ['high', 'elevated', 'critical', 'severe', 'extreme']
 OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
 WITH ev, l
 WHERE $bbox_off

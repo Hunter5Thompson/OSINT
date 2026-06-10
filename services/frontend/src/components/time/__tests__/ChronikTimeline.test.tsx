@@ -45,4 +45,20 @@ describe("ChronikTimeline", () => {
     expect(base.onSeek).toHaveBeenCalledTimes(1);
     expect(base.onBrush).not.toHaveBeenCalled();
   });
+  it("clicking a notable dot selects it WITHOUT seeking (no bubble to strip) (#4)", () => {
+    // fresh spies — `base.*` are module-level vi.fn()s shared (and called) by other tests
+    const onSeek = vi.fn();
+    const onBrush = vi.fn();
+    const onSelectNotable = vi.fn();
+    render(
+      <ChronikTimeline {...base} onSeek={onSeek} onBrush={onBrush} onSelectNotable={onSelectNotable} />,
+    );
+    const dot = screen.getByRole("button", { name: /Strike/i });
+    fireEvent.mouseDown(dot, { clientX: 50 });
+    fireEvent.mouseUp(dot, { clientX: 50 });
+    fireEvent.click(dot);
+    expect(onSelectNotable).toHaveBeenCalledWith("n1");
+    expect(onSeek).not.toHaveBeenCalled();
+    expect(onBrush).not.toHaveBeenCalled();
+  });
 });

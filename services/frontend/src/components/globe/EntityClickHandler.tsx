@@ -60,7 +60,9 @@ export function EntityClickHandler({
         | undefined;
 
       if (eventData) {
-        // Open the new EventCallout (+ seek) instead of the old local bottom-popup.
+        // Open the new EventCallout (+ seek) instead of the old local bottom-popup, and
+        // clear any stale popup from a prior cable/ship click (review finding #5).
+        setSelected(null);
         onEventSelectRef.current?.(eventData.id, eventData.time);
         dispatchSpotlight({
           type: "set",

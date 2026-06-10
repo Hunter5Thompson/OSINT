@@ -147,7 +147,13 @@ export function ChronikTimeline({
               type="button"
               className="chronik__dot"
               title={`${n.time} · ${n.severity}`}
-              onClick={() => onSelectNotable(n.id)}
+              // dot = select; stop the event reaching the strip's seek/brush handlers (#4)
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectNotable(n.id);
+              }}
               style={{
                 left: `${msToPct(Date.parse(n.time))}%`,
                 width: size,

@@ -99,3 +99,36 @@ def test_geo_events_capped_ranked_and_truncated(client):
     assert data["geo_truncated"] is True
     assert data["geo_located_count"] == 205
     assert data["geo_events"][0]["severity"] == "critical"   # severity-ranked
+
+
+def test_histogram_notable_events_failure_returns_503(client):
+    # finding #1: a failure in the SECOND read_query (notable-events) must be 503, not 500
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        mock.side_effect = [[], RuntimeError("boom")]  # hist ok, notable-events raises
+        resp = client.get(f"/api/timeline/histogram{W}")
+    assert resp.status_code == 503
+
+
+def test_histogram_incidents_failure_returns_503(client):
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        mock.side_effect = [[], [], RuntimeError("boom")]  # incidents (3rd read) raises
+        resp = client.get(f"/api/timeline/histogram{W}")
+    assert resp.status_code == 503
+
+
+def test_histogram_geo_failure_returns_503(client):
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        mock.side_effect = [[], [], [], RuntimeError("boom")]  # geo (4th) raises
+        resp = client.get(f"/api/timeline/histogram{W}")
+    assert resp.status_code == 503
+
+
+def test_notable_events_query_prefilters_high_critical_in_cypher():
+    # finding #3: high/critical synonyms must be filtered IN Cypher so the LIMIT can't be
+    # starved by low/medium rows before Python ranks.
+    from app.routers.timeline import _NOTABLE_EVENTS_QUERY
+
+    q = _NOTABLE_EVENTS_QUERY.lower()
+    assert "tolower" in q
+    for syn in ("high", "elevated", "critical", "severe", "extreme"):
+        assert f"'{syn}'" in q
