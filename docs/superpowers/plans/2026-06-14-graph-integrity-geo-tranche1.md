@@ -364,14 +364,20 @@ git commit -m "feat(graph-integrity): loc_key builders + ISO country-centroid ta
 
 **Files:**
 - Modify: `services/backend/app/cypher/incident_write.py`
-- Modify: `services/backend/app/services/incident_store.py:~110-135` (`_upsert_params`)
+- Modify: `services/backend/app/services/incident_store.py:75-95` (`_upsert_params`) + import
+- Create: `services/backend/app/services/_loc_key.py` (vendored `slug`/`incident_key`)
 - Test: `services/backend/tests/test_incident_write_geo.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # services/backend/tests/test_incident_write_geo.py
+from datetime import UTC, datetime
+
 from app.cypher.incident_write import INCIDENT_UPSERT
+from app.models.incident import Incident, IncidentStatus
+from app.services._loc_key import incident_key
+from app.services.incident_store import _upsert_params
 
 
 def test_incident_upsert_wires_location():
@@ -380,13 +386,36 @@ def test_incident_upsert_wires_location():
     assert ":Location" in INCIDENT_UPSERT
     assert "OCCURRED_AT" in INCIDENT_UPSERT
     assert "country_centroid" not in INCIDENT_UPSERT  # incidents are precise
-    assert 'geo_basis' in INCIDENT_UPSERT
+    assert "geo_basis" in INCIDENT_UPSERT
 
 
 def test_incident_upsert_location_is_conditional_on_coords():
-    # No lat/lon → no Location (FOREACH-guard pattern), never a null-coord node.
+    # Null lat/lon → no Location (FOREACH-guard pattern), never a null-coord node.
     assert "FOREACH" in INCIDENT_UPSERT
+
+
+def test_upsert_params_sets_loc_key():
+    # The actual runtime risk: the param the Cypher needs must be produced here.
+    rec = Incident(
+        id="inc1", kind="manual", title="t", severity="low",
+        coords=(48.0, 37.8), location="Donetsk", status=IncidentStatus.OPEN,
+        trigger_ts=datetime.now(UTC), sources=[], layer_hints=[], timeline=[],
+    )
+    params = _upsert_params(rec, 0)
+    assert params["loc_key"] == "incident:donetsk"
+    assert params["lat"] == 48.0 and params["lon"] == 37.8
+
+
+def test_vendored_loc_key_matches_canonical():
+    # Backend vendors incident_key (separate Docker build context) — keep in sync.
+    assert incident_key("Donetsk", 48.0, 37.8) == "incident:donetsk"
+    assert incident_key("", 48.0, 37.8) == "geo:48.000,37.800"
 ```
+
+> **Vendoring-Entscheidung (firm, nicht optional):** Der Backend-Build-Kontext kann
+> `graph_integrity` nicht importieren (eigenes Image, wie bei `nlm_ingest/write_templates.py`).
+> Daher wird `slug`/`incident_key` nach `services/backend/app/services/_loc_key.py`
+> **vendored**; `test_vendored_loc_key_matches_canonical` hält beide Kopien deckungsgleich.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -410,22 +439,40 @@ Append the Location wiring to `INCIDENT_UPSERT` (before the `RETURN`). The `FORE
     "RETURN "
 ```
 
-In `incident_store.py::_upsert_params`, add the `loc_key`:
+Create the vendored helper:
 
 ```python
-# top of file
-from graph_integrity.loc_key import incident_key  # if importable; else inline copy
-# inside _upsert_params(record, ordinal), after lat/lon are set:
-params["loc_key"] = (
-    incident_key(record.location, record.lat, record.lon)
-    if record.lat is not None and record.lon is not None else None
-)
+# services/backend/app/services/_loc_key.py
+"""Vendored from graph_integrity.loc_key — backend has a separate build context
+and cannot import data-ingestion. Kept in sync by test_vendored_loc_key_matches_canonical."""
+from __future__ import annotations
+
+import re
+import unicodedata
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def slug(s: str) -> str:
+    norm = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    return _SLUG_RE.sub("-", norm.lower()).strip("-")
+
+
+def incident_key(name: str | None, lat: float, lon: float) -> str:
+    if name and name.strip():
+        return f"incident:{slug(name)}"
+    return f"geo:{lat:.3f},{lon:.3f}"
 ```
 
-> If `graph_integrity` is not importable from the backend build context (separate
-> container, like `nlm_ingest/write_templates.py`), copy the 8-line `incident_key`/`slug`
-> helper into `backend/app/services/_loc_key.py` and import from there. Pin a test that
-> the two copies agree on `incident_key("Donetsk", 48.0, 37.8)`.
+In `incident_store.py`, import it and add `loc_key` to the returned dict of
+`_upsert_params` (lat/lon come from `record.coords`, which is always present):
+
+```python
+# top of incident_store.py
+from app.services._loc_key import incident_key
+# inside _upsert_params(...) — add to the returned dict:
+        "loc_key": incident_key(record.location, record.coords[0], record.coords[1]),
+```
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -437,6 +484,7 @@ Expected: PASS
 ```bash
 git add services/backend/app/cypher/incident_write.py \
         services/backend/app/services/incident_store.py \
+        services/backend/app/services/_loc_key.py \
         services/backend/tests/test_incident_write_geo.py
 git commit -m "feat(backend): incident writer wires Location + OCCURRED_AT (loc_key)"
 ```
@@ -824,13 +872,30 @@ git commit -m "feat(gdelt): writer MERGEs Location + OCCURRED_AT from action_geo
 
 ```python
 # tests/test_geo_gdelt.py
-from pathlib import Path
+import asyncio
+
+from graph_integrity import geo_gdelt
 from graph_integrity.geo_gdelt import (
-    slice_ids_from_parquet,
-    export_url_for,
     BACKFILL_OCCURRED_AT,
     build_geo_row,
+    export_url_for,
+    slice_ids_from_parquet,
 )
+
+
+class _FakeClient:
+    def __init__(self):
+        self.writes: list = []
+
+    async def run(self, cypher, params=None):
+        self.writes.append(params)
+        return []
+
+
+def _seed_one_slice(tmp_path):
+    d = tmp_path / "events" / "date=20260613"
+    d.mkdir(parents=True)
+    (d / "20260613221500.parquet").touch()
 
 
 def test_slice_ids_from_parquet(tmp_path):
@@ -866,6 +931,49 @@ def test_build_geo_row_from_raw():
     assert row["loc_key"] == "gdelt:loc:-1044367"
     assert row["lat"] == 48.0
     assert build_geo_row({"global_event_id": 9, "action_geo_lat": None}) is None
+
+
+def test_run_dry_run_counts_geo_rows_without_writing(tmp_path):
+    _seed_one_slice(tmp_path)
+    rows = [
+        {"global_event_id": 1, "action_geo_lat": 48.0, "action_geo_long": 37.8,
+         "action_geo_fullname": "Donetsk", "action_geo_country_code": "UP",
+         "action_geo_feature_id": "-1"},
+        {"global_event_id": 2, "action_geo_lat": None, "action_geo_long": None},  # dropped
+    ]
+    client = _FakeClient()
+    n = asyncio.run(geo_gdelt.run(
+        client, parquet_base=tmp_path, dry_run=True, fetch=lambda _slice: rows,
+    ))
+    assert n == 1            # only the geo-eligible row is counted
+    assert client.writes == []  # dry-run must never write
+
+
+def test_run_live_writes_each_geo_row(tmp_path):
+    _seed_one_slice(tmp_path)
+    rows = [{"global_event_id": 1, "action_geo_lat": 48.0, "action_geo_long": 37.8,
+             "action_geo_fullname": "Donetsk", "action_geo_country_code": "UP",
+             "action_geo_feature_id": "-1"}]
+    client = _FakeClient()
+    n = asyncio.run(geo_gdelt.run(
+        client, parquet_base=tmp_path, dry_run=False, fetch=lambda _slice: rows,
+    ))
+    assert n == 1
+    assert client.writes[0]["event_id"] == "gdelt:event:1"
+
+
+def test_run_skips_missing_slice_without_aborting(tmp_path):
+    _seed_one_slice(tmp_path)
+
+    def boom(_slice):
+        raise FileNotFoundError("410 gone")
+
+    client = _FakeClient()
+    n = asyncio.run(geo_gdelt.run(
+        client, parquet_base=tmp_path, dry_run=False, fetch=boom, skip_missing=True,
+    ))
+    assert n == 0            # slice skipped, loop survived
+    assert client.writes == []
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -926,12 +1034,62 @@ def build_geo_row(raw: dict[str, Any]) -> dict[str, Any] | None:
     }
 ```
 
-> The fetch+parse loop reuses `gdelt_raw`'s existing download (`run.py::download_slice`)
-> and `polars_schemas.EVENT_POLARS_SCHEMA` to read the raw `export.CSV`. Add an async
-> `run(client, parquet_base, dry_run, skip_missing=True)` that: enumerates slices, for
-> each downloads+parses the raw export, maps rows via `build_geo_row` (drops None),
-> and runs `BACKFILL_OCCURRED_AT` per row (skipped under `--dry-run`, which only counts).
-> Missing/410 slices are logged and skipped (no hard abort) — log the skipped count.
+Add the resumable, injectable-fetch loop. `fetch` is a seam so tests inject synthetic
+rows; the default `_fetch_and_parse` reuses `gdelt_raw`'s real download + parse:
+
+```python
+import structlog
+log = structlog.get_logger(__name__)
+
+
+def _fetch_and_parse(slice_id: str) -> list[dict]:
+    """Default fetch: download the raw export slice and parse action_geo columns.
+    Reuses gdelt_raw.run.download_slice + polars_schemas.EVENT_POLARS_SCHEMA.
+    Raises on missing/410 slice (caught by run() when skip_missing=True)."""
+    import polars as pl
+    from gdelt_raw.polars_schemas import EVENT_POLARS_SCHEMA  # raw col names + dtypes
+    # download_slice writes the unzipped CSV to a temp path; read with the raw schema,
+    # keep only the columns build_geo_row needs.
+    raise NotImplementedError  # implemented against gdelt_raw.run.download_slice
+
+
+async def run(
+    client,
+    parquet_base,
+    dry_run: bool = False,
+    *,
+    fetch=_fetch_and_parse,
+    skip_missing: bool = True,
+) -> int:
+    """Re-fetch each already-ingested slice, write OCCURRED_AT for geoless events.
+    Returns the number of geo-eligible rows (written, or counted under dry_run)."""
+    count = 0
+    skipped = 0
+    for slice_id in slice_ids_from_parquet(parquet_base):
+        try:
+            rows = fetch(slice_id)
+        except Exception as exc:  # noqa: BLE001 — missing/410 slice must not abort
+            if not skip_missing:
+                raise
+            skipped += 1
+            log.warning("gdelt_geo_slice_skipped", slice_id=slice_id, error=str(exc))
+            continue
+        for raw in rows:
+            geo = build_geo_row(raw)
+            if geo is None:
+                continue
+            count += 1
+            if not dry_run:
+                await client.run(BACKFILL_OCCURRED_AT, geo)
+    if skipped:
+        log.warning("gdelt_geo_slices_skipped_total", skipped=skipped)
+    return count
+```
+
+> `_fetch_and_parse`'s body is the only part touching the network and is left as a thin
+> wrapper around `gdelt_raw.run.download_slice` — it is **not** unit-tested (I/O seam);
+> the three `run(...)` tests above inject `fetch` and cover counting, writing, and
+> skip-on-missing. Verify the exact `download_slice` signature when implementing.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -958,28 +1116,31 @@ git commit -m "feat(graph-integrity): GDELT geo backfill via raw export re-fetch
 
 ```python
 # tests/test_pipeline_rss_geo.py
-from pipeline import build_event_geo_statement
+from pipeline import build_event_geo_fragment
 
 
-def test_event_geo_statement_for_known_country():
-    stmt = build_event_geo_statement(country="UA")
-    assert stmt is not None
-    assert "MERGE (l:Location {loc_key: $loc_key})" in stmt["statement"]
-    assert "MERGE (ev)-[:OCCURRED_AT]->(l)" in stmt["statement"]
-    assert stmt["parameters"]["loc_key"] == "centroid:ua"
-    assert stmt["parameters"]["geo_basis"] == "country_centroid"
-    assert stmt["parameters"]["geo_precision"] == "country"
+def test_event_geo_fragment_for_known_country():
+    frag = build_event_geo_fragment(country="UA")
+    assert frag is not None
+    # Fragment continues an existing `WITH ev` chain — NO standalone MATCH/id(ev).
+    assert "MATCH" not in frag["cypher"].upper()
+    assert "id(ev)" not in frag["cypher"]
+    assert "MERGE (l:Location {loc_key: $loc_key})" in frag["cypher"]
+    assert "MERGE (ev)-[:OCCURRED_AT]->(l)" in frag["cypher"]
+    assert frag["parameters"]["loc_key"] == "centroid:ua"
+    assert frag["parameters"]["geo_basis"] == "country_centroid"
+    assert frag["parameters"]["geo_precision"] == "country"
 
 
-def test_event_geo_statement_none_for_unknown_country():
-    assert build_event_geo_statement(country="ZZ") is None
-    assert build_event_geo_statement(country=None) is None
+def test_event_geo_fragment_none_for_unknown_country():
+    assert build_event_geo_fragment(country="ZZ") is None
+    assert build_event_geo_fragment(country=None) is None
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_pipeline_rss_geo.py -v`
-Expected: FAIL — `build_event_geo_statement` not defined.
+Expected: FAIL — `build_event_geo_fragment` not defined.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -990,9 +1151,10 @@ The event is created with `CREATE (ev:Event {...})` and the handle `ev` is in sc
 from graph_integrity.country_centroids import centroid_for  # or vendored copy
 from graph_integrity.loc_key import centroid_key
 
-def build_event_geo_statement(country: str | None) -> dict | None:
-    """Country-centroid OCCURRED_AT fragment for an event just CREATE-d as `ev`.
-    Returns None when country is unknown (honest empty)."""
+def build_event_geo_fragment(country: str | None) -> dict | None:
+    """Cypher FRAGMENT appended to an event-create statement where `ev` is
+    already bound (after `MERGE (d)-[:DESCRIBES]->(ev)`). It does NOT re-MATCH
+    the event — no node-id round-trip. Returns None when country is unknown."""
     if not country:
         return None
     cc = centroid_for(country)
@@ -1000,12 +1162,11 @@ def build_event_geo_statement(country: str | None) -> dict | None:
         return None
     lat, lon = cc
     return {
-        "statement": (
-            "MATCH (ev:Event) WHERE id(ev) = $ev_id "  # see integration note
-            "MERGE (l:Location {loc_key: $loc_key}) "
-            "  ON CREATE SET l.lat = $lat, l.lon = $lon, "
-            "                l.geo_basis = $geo_basis, l.geo_precision = $geo_precision "
-            "MERGE (ev)-[:OCCURRED_AT]->(l)"
+        "cypher": (
+            " MERGE (l:Location {loc_key: $loc_key}) "
+            "   ON CREATE SET l.lat = $lat, l.lon = $lon, "
+            "                 l.geo_basis = $geo_basis, l.geo_precision = $geo_precision "
+            " MERGE (ev)-[:OCCURRED_AT]->(l)"
         ),
         "parameters": {
             "loc_key": centroid_key(country), "lat": lat, "lon": lon,
@@ -1014,17 +1175,16 @@ def build_event_geo_statement(country: str | None) -> dict | None:
     }
 ```
 
-> **Integration note (no separate test, covered by the unit test above + acceptance):**
-> The cleanest wiring keeps `ev` in one statement. Extend the existing event-create
-> statement (pipeline.py:486-508) so its `WITH ev` tail also does the centroid MERGE when
-> the document country is known — derive `country` once before the events loop:
-> `doc_country = next((l["country"] for l in locations if l.get("country")), None)`.
-> Append the centroid fragment (Location MERGE + OCCURRED_AT) directly into that
-> statement's Cypher and merge its params, so no node-id round-trip is needed. The
-> `build_event_geo_statement` helper above is the unit-tested source of the fragment text
-> and params; the inline wiring reuses `centroid_for`/`centroid_key` identically.
-> Pass `locations` into `_write_to_neo4j` (add the parameter; caller `process_item`
-> already has `locations`).
+> **Integration (covered by the unit test above + acceptance Task 12):** `ev` stays
+> bound after `MERGE (d)-[:DESCRIBES]->(ev)`, so the fragment's `MERGE (ev)-[:OCCURRED_AT]`
+> resolves without a re-MATCH. Wiring:
+> 1. Add a `locations` parameter to `_write_to_neo4j` (caller `process_item` already has it).
+> 2. Before the events loop: `doc_country = next((l["country"] for l in locations if l.get("country")), None)`.
+> 3. Inside the events loop, for each event statement: `frag = build_event_geo_fragment(doc_country)`;
+>    if `frag` is not None, append `frag["cypher"]` to that statement's Cypher string and
+>    `statements[-1]["parameters"].update(frag["parameters"])`.
+> Result: one statement per event, no node-id round-trip, param keys (`loc_key`, `lat`,
+> `lon`, `geo_basis`, `geo_precision`) never collide with the event's own params.
 
 - [ ] **Step 4: Run test to verify it passes**
 
