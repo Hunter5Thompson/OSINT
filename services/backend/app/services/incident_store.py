@@ -17,6 +17,7 @@ from app.models.incident import (
     IncidentStatus,
     IncidentTimelineEvent,
 )
+from app.services._loc_key import incident_key
 from app.services.neo4j_client import read_query, write_query
 
 _REHYDRATE_LIMIT = 500
@@ -91,6 +92,7 @@ def _upsert_params(record: Incident, ordinal: int) -> dict:
             [e.model_dump() for e in record.timeline],
             ensure_ascii=True,
         ),
+        "loc_key": incident_key(record.location, record.coords[0], record.coords[1]),
         "now": datetime.now(UTC).isoformat(),
     }
 
