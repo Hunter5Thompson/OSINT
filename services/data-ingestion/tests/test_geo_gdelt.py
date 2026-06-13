@@ -42,6 +42,8 @@ def test_export_url_for():
 def test_backfill_template_scoped_to_existing_geoless_events():
     q = BACKFILL_OCCURRED_AT
     assert "MATCH (ev:GDELTEvent {event_id: $event_id})" in q
+    # idempotency guard: only backfill events that lack the edge
+    assert "WHERE NOT (ev)-[:OCCURRED_AT]->(:Location)" in q
     assert "MERGE (l:Location {loc_key: $loc_key})" in q
     assert "MERGE (ev)-[:OCCURRED_AT]->(l)" in q
     assert "gdelt_actiongeo" in q
