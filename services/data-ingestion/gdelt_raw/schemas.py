@@ -34,6 +34,11 @@ class GDELTEventWrite(BaseModel):
     source_url: str
     codebook_type: str
     filter_reason: Literal["tactical", "nuclear_override"]
+    action_geo_lat: float | None = None
+    action_geo_long: float | None = None
+    action_geo_fullname: str | None = None
+    action_geo_country_code: str | None = None
+    action_geo_feature_id: str | None = None
 
 
 class GDELTDocumentWrite(BaseModel):

@@ -59,6 +59,11 @@ def canonicalize_events(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("source_url"),
         pl.col("codebook_type"),
         pl.col("filter_reason"),
+        pl.col("action_geo_lat"),
+        pl.col("action_geo_long"),
+        pl.col("action_geo_fullname"),
+        pl.col("action_geo_country_code"),
+        pl.col("action_geo_feature_id"),
     ])
 
 
