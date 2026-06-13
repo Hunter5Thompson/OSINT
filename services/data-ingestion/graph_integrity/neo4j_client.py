@@ -10,10 +10,10 @@ class Neo4jClient:
     def __init__(self, uri: str, user: str, password: str):
         self._driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
 
-    async def run(self, cypher: str, params: dict[str, Any] | None = None) -> list[dict]:
+    async def run(self, cypher: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         async with self._driver.session() as session:
             result = await session.run(cypher, params or {})
-            return [r.data() async for r in result]
+            return await result.data()
 
     async def close(self) -> None:
         await self._driver.close()
