@@ -19,9 +19,35 @@ import yaml
 
 from canonicalize import canonicalize_entity
 from config import Settings, settings
+from graph_integrity.country_centroids import centroid_for
+from graph_integrity.loc_key import centroid_key
 from nlm_ingest.schemas import normalize_entity_type
 
 log = structlog.get_logger(__name__)
+
+
+def build_event_geo_fragment(country: str | None) -> dict | None:
+    """Cypher FRAGMENT appended to an event-create statement where `ev` is
+    already bound (after `MERGE (d)-[:DESCRIBES]->(ev)`). It does NOT re-MATCH
+    the event — no node-id round-trip. Returns None when country is unknown."""
+    if not country:
+        return None
+    cc = centroid_for(country)
+    if cc is None:
+        return None
+    lat, lon = cc
+    return {
+        "cypher": (
+            " MERGE (l:Location {loc_key: $loc_key}) "
+            "   ON CREATE SET l.lat = $lat, l.lon = $lon, "
+            "                 l.geo_basis = $geo_basis, l.geo_precision = $geo_precision "
+            " MERGE (ev)-[:OCCURRED_AT]->(l)"
+        ),
+        "parameters": {
+            "loc_key": centroid_key(country), "lat": lat, "lon": lon,
+            "geo_basis": "country_centroid", "geo_precision": "country",
+        },
+    }
 
 
 def _normalize_iso(value: str | None) -> str | None:
@@ -294,6 +320,7 @@ async def process_item(
                 events, entities, url, title, source, settings,
                 occurred_at=occurred_at, observed_at=observed_at,
                 published_at=published_at, ingested_at=ingested_at,
+                locations=locations,
             )
         except Exception as e:
             log.error("pipeline_neo4j_failed", url=url, error=str(e))
@@ -407,6 +434,7 @@ async def _write_to_neo4j(
     observed_at: str | None = None,
     published_at: str | None = None,
     ingested_at: str | None = None,
+    locations: list[dict] | None = None,
 ) -> None:
     """Write extraction results to Neo4j via HTTP transactional API."""
     statements = []
@@ -477,6 +505,8 @@ async def _write_to_neo4j(
     # beats the optional LLM 'timestamp' hint; a malformed hint is dropped, never
     # turned into a fabricated occurred_at.
     effective_ingested = ingested_at or datetime.now(UTC).isoformat()
+    # Derive coarse document country for geo-tagging events (country-centroid).
+    doc_country = next((loc["country"] for loc in (locations or []) if loc.get("country")), None)
     for event in events:
         ev_occurred = occurred_at or event.get("timestamp")
         timeline_at, time_basis = _resolve_timeline(
@@ -506,6 +536,12 @@ async def _write_to_neo4j(
                 "url": doc_url,
             },
         })
+        # Append country-centroid geo fragment to the event statement.
+        # `ev` is still in scope from the preceding `MERGE (d)-[:DESCRIBES]->(ev)`.
+        frag = build_event_geo_fragment(doc_country)
+        if frag is not None:
+            statements[-1]["statement"] += frag["cypher"]
+            statements[-1]["parameters"].update(frag["parameters"])
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
