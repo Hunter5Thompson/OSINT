@@ -1,7 +1,8 @@
 from graph_integrity.report import (
+    ACTOR_RELS,
+    DUP_ACTOR_EDGES,
     GEO_COVERAGE,
     ORPHAN_BY_LABEL,
-    DUP_ACTOR_EDGES,
     shape_report,
 )
 
@@ -16,10 +17,17 @@ def test_queries_are_read_only():
 
 
 def test_dup_actor_edges_is_allowlist_scoped():
-    assert "ALLIED_WITH" in DUP_ACTOR_EDGES
-    assert "SUPPLIES_TO" in DUP_ACTOR_EDGES
-    assert "SPOTTED_AT" not in DUP_ACTOR_EDGES
-    assert "OCCURRED_AT" not in DUP_ACTOR_EDGES
+    assert "ALLIED_WITH" in ACTOR_RELS
+    assert "SUPPLIES_TO" in ACTOR_RELS
+    assert "SPOTTED_AT" not in ACTOR_RELS   # observation edge, never deduped
+    assert "OCCURRED_AT" not in ACTOR_RELS
+    assert "$actor_rels" in DUP_ACTOR_EDGES  # parameter-bound, not interpolated
+
+
+def test_all_actor_rels_are_real_relation_types():
+    expected = {"ALLIED_WITH", "SUPPLIES_TO", "COMPETES_WITH", "MEMBER_OF",
+                "OPERATES_IN", "TARGETS", "COMMANDS", "NEGOTIATES_WITH", "SANCTIONS"}
+    assert set(ACTOR_RELS) == expected
 
 
 def test_shape_report_combines_sections():

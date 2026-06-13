@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 # Actor-relation allowlist — the ONLY rel types eligible for dedup.
-_ACTOR_RELS = [
+ACTOR_RELS = [
     "ALLIED_WITH",
     "SUPPLIES_TO",
     "COMPETES_WITH",
@@ -26,6 +26,7 @@ CALL (lbl) {
 RETURN lbl AS label, orphan, total
 """
 
+# Labels are intentionally hardcoded to the geo-semantic labels (Event, Incident).
 GEO_COVERAGE = """
 UNWIND ['Event', 'Incident'] AS lbl
 CALL (lbl) {
@@ -36,9 +37,9 @@ CALL (lbl) {
 RETURN lbl AS label, located, total
 """
 
-DUP_ACTOR_EDGES = f"""
+DUP_ACTOR_EDGES = """
 MATCH (a)-[r]->(b)
-WHERE type(r) IN {_ACTOR_RELS!r}
+WHERE type(r) IN $actor_rels
 WITH type(r) AS rel, startNode(r) AS s, endNode(r) AS e, count(r) AS c
 WHERE c > 1
 RETURN rel, count(*) AS groups, sum(c - 1) AS extra
