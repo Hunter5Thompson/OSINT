@@ -13,6 +13,7 @@ import polars as pl
 import structlog
 from neo4j import AsyncGraphDatabase
 
+from gdelt_raw.ids import build_location_id
 from gdelt_raw.schemas import GDELTDocumentWrite, GDELTEventWrite
 
 log = structlog.get_logger(__name__)
@@ -94,6 +95,31 @@ MERGE (d)-[r:MENTIONS]->(e)
 """
 # ON MATCH also SETs — last-write-wins on properties, but edge count stays 1.
 
+MERGE_LOCATION = """
+MATCH (ev:GDELTEvent {event_id: $event_id})
+MERGE (l:Location {loc_key: $loc_key})
+  ON CREATE SET l.name = $name, l.country = $country,
+                l.lat = $lat, l.lon = $lon, l.geo_basis = 'gdelt_actiongeo'
+MERGE (ev)-[:OCCURRED_AT]->(l)
+"""
+
+
+def location_params_for(ev: GDELTEventWrite) -> dict[str, Any] | None:
+    if ev.action_geo_lat is None or ev.action_geo_long is None:
+        return None
+    return {
+        "event_id": ev.event_id,
+        "loc_key": build_location_id(
+            ev.action_geo_feature_id or "",
+            ev.action_geo_country_code or "",
+            ev.action_geo_fullname or "",
+        ),
+        "name": ev.action_geo_fullname,
+        "country": ev.action_geo_country_code,
+        "lat": ev.action_geo_lat,
+        "lon": ev.action_geo_long,
+    }
+
 
 def render_event_params(ev: GDELTEventWrite) -> dict[str, Any]:
     d = ev.model_dump(mode="json")  # datetime → iso
@@ -120,6 +146,9 @@ class Neo4jWriter:
             async with await session.begin_transaction() as tx:
                 for ev in events:
                     await tx.run(MERGE_EVENT, render_event_params(ev))
+                    loc = location_params_for(ev)
+                    if loc is not None:
+                        await tx.run(MERGE_LOCATION, loc)
                 await tx.commit()
 
     async def write_docs(self, docs: list[GDELTDocumentWrite]):
