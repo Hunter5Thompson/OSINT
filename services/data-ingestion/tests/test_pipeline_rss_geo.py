@@ -19,3 +19,13 @@ def test_event_geo_fragment_for_known_country():
 def test_event_geo_fragment_none_for_unknown_country():
     assert build_event_geo_fragment(country="ZZ") is None
     assert build_event_geo_fragment(country=None) is None
+
+
+def test_event_geo_fragment_accepts_country_name():
+    frag = build_event_geo_fragment(country="Ukraine")
+    assert frag is not None
+    assert frag["parameters"]["loc_key"] == "centroid:ua"
+
+
+def test_event_geo_fragment_accepts_lowercase_name():
+    assert build_event_geo_fragment(country="ukraine")["parameters"]["loc_key"] == "centroid:ua"

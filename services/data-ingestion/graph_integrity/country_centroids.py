@@ -6,6 +6,8 @@ longitude). Approximate country centers; not city precision.
 """
 from __future__ import annotations
 
+import re
+
 _CENTROIDS: dict[str, tuple[float, float]] = {
     "AD": (42.546245, 1.601554),
     "AE": (23.424076, 53.847818),
@@ -257,3 +259,616 @@ _CENTROIDS: dict[str, tuple[float, float]] = {
 
 def centroid_for(iso2: str) -> tuple[float, float] | None:
     return _CENTROIDS.get((iso2 or "").upper())
+
+
+# ---------------------------------------------------------------------------
+# Country-name → ISO-2 resolver
+# ---------------------------------------------------------------------------
+
+def _norm_name(s: str) -> str:
+    """Normalize a country name for lookup: lowercase, strip, collapse whitespace,
+    drop dots and apostrophes."""
+    s = s.lower().strip()
+    s = re.sub(r"\s+", " ", s)
+    s = s.replace(".", "").replace("'", "")
+    return s
+
+
+# Maps NORMALIZED country names (and common aliases) to ISO-2 codes.
+# Every value MUST exist as a key in _CENTROIDS (enforced by assertion below).
+_NAME_TO_ISO2: dict[str, str] = {
+    # AD — Andorra
+    "andorra": "AD",
+    # AE — United Arab Emirates
+    "united arab emirates": "AE",
+    "uae": "AE",
+    # AF — Afghanistan
+    "afghanistan": "AF",
+    # AG — Antigua and Barbuda
+    "antigua and barbuda": "AG",
+    "antigua": "AG",
+    # AI — Anguilla
+    "anguilla": "AI",
+    # AL — Albania
+    "albania": "AL",
+    # AM — Armenia
+    "armenia": "AM",
+    # AN — Netherlands Antilles
+    "netherlands antilles": "AN",
+    # AO — Angola
+    "angola": "AO",
+    # AQ — Antarctica
+    "antarctica": "AQ",
+    # AR — Argentina
+    "argentina": "AR",
+    # AS — American Samoa
+    "american samoa": "AS",
+    # AT — Austria
+    "austria": "AT",
+    # AU — Australia
+    "australia": "AU",
+    # AW — Aruba
+    "aruba": "AW",
+    # AZ — Azerbaijan
+    "azerbaijan": "AZ",
+    # BA — Bosnia and Herzegovina
+    "bosnia and herzegovina": "BA",
+    "bosnia": "BA",
+    "herzegovina": "BA",
+    # BB — Barbados
+    "barbados": "BB",
+    # BD — Bangladesh
+    "bangladesh": "BD",
+    # BE — Belgium
+    "belgium": "BE",
+    # BF — Burkina Faso
+    "burkina faso": "BF",
+    # BG — Bulgaria
+    "bulgaria": "BG",
+    # BH — Bahrain
+    "bahrain": "BH",
+    # BI — Burundi
+    "burundi": "BI",
+    # BJ — Benin
+    "benin": "BJ",
+    # BM — Bermuda
+    "bermuda": "BM",
+    # BN — Brunei
+    "brunei": "BN",
+    "brunei darussalam": "BN",
+    # BO — Bolivia
+    "bolivia": "BO",
+    "plurinational state of bolivia": "BO",
+    # BR — Brazil
+    "brazil": "BR",
+    "brasil": "BR",
+    # BS — Bahamas
+    "bahamas": "BS",
+    "the bahamas": "BS",
+    # BT — Bhutan
+    "bhutan": "BT",
+    # BV — Bouvet Island
+    "bouvet island": "BV",
+    # BW — Botswana
+    "botswana": "BW",
+    # BY — Belarus
+    "belarus": "BY",
+    "byelorussia": "BY",
+    # BZ — Belize
+    "belize": "BZ",
+    # CA — Canada
+    "canada": "CA",
+    # CC — Cocos Islands
+    "cocos islands": "CC",
+    "cocos keeling islands": "CC",
+    # CD — Democratic Republic of the Congo
+    "democratic republic of the congo": "CD",
+    "dr congo": "CD",
+    "drc": "CD",
+    "congo kinshasa": "CD",
+    "zaire": "CD",
+    # CF — Central African Republic
+    "central african republic": "CF",
+    # CG — Republic of the Congo
+    "republic of the congo": "CG",
+    "congo brazzaville": "CG",
+    "congo": "CG",
+    # CH — Switzerland
+    "switzerland": "CH",
+    # CI — Ivory Coast / Côte d'Ivoire
+    "ivory coast": "CI",
+    "cote divoire": "CI",
+    "cote d ivoire": "CI",
+    # CK — Cook Islands
+    "cook islands": "CK",
+    # CL — Chile
+    "chile": "CL",
+    # CM — Cameroon
+    "cameroon": "CM",
+    # CN — China
+    "china": "CN",
+    "peoples republic of china": "CN",
+    "prc": "CN",
+    # CO — Colombia
+    "colombia": "CO",
+    # CR — Costa Rica
+    "costa rica": "CR",
+    # CU — Cuba
+    "cuba": "CU",
+    # CV — Cape Verde
+    "cape verde": "CV",
+    "cabo verde": "CV",
+    # CX — Christmas Island
+    "christmas island": "CX",
+    # CY — Cyprus
+    "cyprus": "CY",
+    # CZ — Czech Republic / Czechia
+    "czech republic": "CZ",
+    "czechia": "CZ",
+    # DE — Germany
+    "germany": "DE",
+    "deutschland": "DE",
+    # DJ — Djibouti
+    "djibouti": "DJ",
+    # DK — Denmark
+    "denmark": "DK",
+    # DM — Dominica
+    "dominica": "DM",
+    # DO — Dominican Republic
+    "dominican republic": "DO",
+    # DZ — Algeria
+    "algeria": "DZ",
+    # EC — Ecuador
+    "ecuador": "EC",
+    # EE — Estonia
+    "estonia": "EE",
+    # EG — Egypt
+    "egypt": "EG",
+    # EH — Western Sahara
+    "western sahara": "EH",
+    # ER — Eritrea
+    "eritrea": "ER",
+    # ES — Spain
+    "spain": "ES",
+    "espana": "ES",
+    # ET — Ethiopia
+    "ethiopia": "ET",
+    # FI — Finland
+    "finland": "FI",
+    # FJ — Fiji
+    "fiji": "FJ",
+    # FK — Falkland Islands
+    "falkland islands": "FK",
+    "malvinas": "FK",
+    # FM — Micronesia
+    "micronesia": "FM",
+    "federated states of micronesia": "FM",
+    # FO — Faroe Islands
+    "faroe islands": "FO",
+    # FR — France
+    "france": "FR",
+    # GA — Gabon
+    "gabon": "GA",
+    # GB — United Kingdom
+    "united kingdom": "GB",
+    "uk": "GB",
+    "u k": "GB",
+    "britain": "GB",
+    "great britain": "GB",
+    # GD — Grenada
+    "grenada": "GD",
+    # GE — Georgia
+    "georgia": "GE",
+    # GF — French Guiana
+    "french guiana": "GF",
+    # GG — Guernsey
+    "guernsey": "GG",
+    # GH — Ghana
+    "ghana": "GH",
+    # GI — Gibraltar
+    "gibraltar": "GI",
+    # GL — Greenland
+    "greenland": "GL",
+    # GM — Gambia
+    "gambia": "GM",
+    "the gambia": "GM",
+    # GN — Guinea
+    "guinea": "GN",
+    # GP — Guadeloupe
+    "guadeloupe": "GP",
+    # GQ — Equatorial Guinea
+    "equatorial guinea": "GQ",
+    # GR — Greece
+    "greece": "GR",
+    # GS — South Georgia
+    "south georgia": "GS",
+    "south georgia and the south sandwich islands": "GS",
+    # GT — Guatemala
+    "guatemala": "GT",
+    # GU — Guam
+    "guam": "GU",
+    # GW — Guinea-Bissau
+    "guinea bissau": "GW",
+    "guinea-bissau": "GW",
+    # GY — Guyana
+    "guyana": "GY",
+    # HK — Hong Kong
+    "hong kong": "HK",
+    # HM — Heard Island
+    "heard island": "HM",
+    "heard island and mcdonald islands": "HM",
+    # HN — Honduras
+    "honduras": "HN",
+    # HR — Croatia
+    "croatia": "HR",
+    "hrvatska": "HR",
+    # HT — Haiti
+    "haiti": "HT",
+    # HU — Hungary
+    "hungary": "HU",
+    # ID — Indonesia
+    "indonesia": "ID",
+    # IE — Ireland
+    "ireland": "IE",
+    # IL — Israel
+    "israel": "IL",
+    # IM — Isle of Man
+    "isle of man": "IM",
+    # IN — India
+    "india": "IN",
+    # IO — British Indian Ocean Territory
+    "british indian ocean territory": "IO",
+    # IQ — Iraq
+    "iraq": "IQ",
+    # IR — Iran
+    "iran": "IR",
+    "islamic republic of iran": "IR",
+    # IS — Iceland
+    "iceland": "IS",
+    # IT — Italy
+    "italy": "IT",
+    # JE — Jersey
+    "jersey": "JE",
+    # JM — Jamaica
+    "jamaica": "JM",
+    # JO — Jordan
+    "jordan": "JO",
+    # JP — Japan
+    "japan": "JP",
+    # KE — Kenya
+    "kenya": "KE",
+    # KG — Kyrgyzstan
+    "kyrgyzstan": "KG",
+    "kyrgyz republic": "KG",
+    # KH — Cambodia
+    "cambodia": "KH",
+    "kampuchea": "KH",
+    # KI — Kiribati
+    "kiribati": "KI",
+    # KM — Comoros
+    "comoros": "KM",
+    # KN — Saint Kitts and Nevis
+    "saint kitts and nevis": "KN",
+    "st kitts and nevis": "KN",
+    # KP — North Korea
+    "north korea": "KP",
+    "dprk": "KP",
+    "democratic peoples republic of korea": "KP",
+    # KR — South Korea
+    "south korea": "KR",
+    "republic of korea": "KR",
+    "korea": "KR",
+    # KW — Kuwait
+    "kuwait": "KW",
+    # KY — Cayman Islands
+    "cayman islands": "KY",
+    # KZ — Kazakhstan
+    "kazakhstan": "KZ",
+    # LA — Laos
+    "laos": "LA",
+    "lao pdr": "LA",
+    "lao peoples democratic republic": "LA",
+    # LB — Lebanon
+    "lebanon": "LB",
+    # LC — Saint Lucia
+    "saint lucia": "LC",
+    "st lucia": "LC",
+    # LI — Liechtenstein
+    "liechtenstein": "LI",
+    # LK — Sri Lanka
+    "sri lanka": "LK",
+    # LR — Liberia
+    "liberia": "LR",
+    # LS — Lesotho
+    "lesotho": "LS",
+    # LT — Lithuania
+    "lithuania": "LT",
+    # LU — Luxembourg
+    "luxembourg": "LU",
+    # LV — Latvia
+    "latvia": "LV",
+    # LY — Libya
+    "libya": "LY",
+    # MA — Morocco
+    "morocco": "MA",
+    # MC — Monaco
+    "monaco": "MC",
+    # MD — Moldova
+    "moldova": "MD",
+    "republic of moldova": "MD",
+    # ME — Montenegro
+    "montenegro": "ME",
+    # MG — Madagascar
+    "madagascar": "MG",
+    # MH — Marshall Islands
+    "marshall islands": "MH",
+    # MK — North Macedonia
+    "north macedonia": "MK",
+    "macedonia": "MK",
+    # ML — Mali
+    "mali": "ML",
+    # MM — Myanmar / Burma
+    "myanmar": "MM",
+    "burma": "MM",
+    # MN — Mongolia
+    "mongolia": "MN",
+    # MO — Macau
+    "macau": "MO",
+    "macao": "MO",
+    # MP — Northern Mariana Islands
+    "northern mariana islands": "MP",
+    # MQ — Martinique
+    "martinique": "MQ",
+    # MR — Mauritania
+    "mauritania": "MR",
+    # MS — Montserrat
+    "montserrat": "MS",
+    # MT — Malta
+    "malta": "MT",
+    # MU — Mauritius
+    "mauritius": "MU",
+    # MV — Maldives
+    "maldives": "MV",
+    # MW — Malawi
+    "malawi": "MW",
+    # MX — Mexico
+    "mexico": "MX",
+    # MY — Malaysia
+    "malaysia": "MY",
+    # MZ — Mozambique
+    "mozambique": "MZ",
+    # NA — Namibia
+    "namibia": "NA",
+    # NC — New Caledonia
+    "new caledonia": "NC",
+    # NE — Niger
+    "niger": "NE",
+    # NF — Norfolk Island
+    "norfolk island": "NF",
+    # NG — Nigeria
+    "nigeria": "NG",
+    # NI — Nicaragua
+    "nicaragua": "NI",
+    # NL — Netherlands / Holland
+    "netherlands": "NL",
+    "holland": "NL",
+    # NO — Norway
+    "norway": "NO",
+    # NP — Nepal
+    "nepal": "NP",
+    # NR — Nauru
+    "nauru": "NR",
+    # NU — Niue
+    "niue": "NU",
+    # NZ — New Zealand
+    "new zealand": "NZ",
+    # OM — Oman
+    "oman": "OM",
+    # PA — Panama
+    "panama": "PA",
+    # PE — Peru
+    "peru": "PE",
+    # PF — French Polynesia
+    "french polynesia": "PF",
+    # PG — Papua New Guinea
+    "papua new guinea": "PG",
+    "png": "PG",
+    # PH — Philippines
+    "philippines": "PH",
+    # PK — Pakistan
+    "pakistan": "PK",
+    # PL — Poland
+    "poland": "PL",
+    # PM — Saint Pierre and Miquelon
+    "saint pierre and miquelon": "PM",
+    # PN — Pitcairn
+    "pitcairn": "PN",
+    # PR — Puerto Rico
+    "puerto rico": "PR",
+    # PS — Palestine
+    "palestine": "PS",
+    "state of palestine": "PS",
+    "palestinian territories": "PS",
+    "west bank": "PS",
+    "gaza": "PS",
+    "gaza strip": "PS",
+    # PT — Portugal
+    "portugal": "PT",
+    # PW — Palau
+    "palau": "PW",
+    # PY — Paraguay
+    "paraguay": "PY",
+    # QA — Qatar
+    "qatar": "QA",
+    # RE — Réunion
+    "reunion": "RE",
+    "la reunion": "RE",
+    # RO — Romania
+    "romania": "RO",
+    # RS — Serbia
+    "serbia": "RS",
+    # RU — Russia
+    "russia": "RU",
+    "russian federation": "RU",
+    # RW — Rwanda
+    "rwanda": "RW",
+    # SA — Saudi Arabia
+    "saudi arabia": "SA",
+    "ksa": "SA",
+    # SB — Solomon Islands
+    "solomon islands": "SB",
+    # SC — Seychelles
+    "seychelles": "SC",
+    # SD — Sudan
+    "sudan": "SD",
+    # SE — Sweden
+    "sweden": "SE",
+    # SG — Singapore
+    "singapore": "SG",
+    # SH — Saint Helena
+    "saint helena": "SH",
+    "st helena": "SH",
+    # SI — Slovenia
+    "slovenia": "SI",
+    # SJ — Svalbard and Jan Mayen
+    "svalbard and jan mayen": "SJ",
+    "svalbard": "SJ",
+    # SK — Slovakia
+    "slovakia": "SK",
+    # SL — Sierra Leone
+    "sierra leone": "SL",
+    # SM — San Marino
+    "san marino": "SM",
+    # SN — Senegal
+    "senegal": "SN",
+    # SO — Somalia
+    "somalia": "SO",
+    # SR — Suriname
+    "suriname": "SR",
+    "surinam": "SR",
+    # SS — South Sudan
+    "south sudan": "SS",
+    # ST — São Tomé and Príncipe
+    "sao tome and principe": "ST",
+    "sao tome": "ST",
+    # SV — El Salvador
+    "el salvador": "SV",
+    # SY — Syria
+    "syria": "SY",
+    "syrian arab republic": "SY",
+    # SZ — Eswatini / Swaziland
+    "eswatini": "SZ",
+    "swaziland": "SZ",
+    # TC — Turks and Caicos Islands
+    "turks and caicos islands": "TC",
+    "turks and caicos": "TC",
+    # TD — Chad
+    "chad": "TD",
+    # TF — French Southern Territories
+    "french southern territories": "TF",
+    # TG — Togo
+    "togo": "TG",
+    # TH — Thailand
+    "thailand": "TH",
+    # TJ — Tajikistan
+    "tajikistan": "TJ",
+    # TK — Tokelau
+    "tokelau": "TK",
+    # TL — Timor-Leste
+    "timor leste": "TL",
+    "east timor": "TL",
+    # TM — Turkmenistan
+    "turkmenistan": "TM",
+    # TN — Tunisia
+    "tunisia": "TN",
+    # TO — Tonga
+    "tonga": "TO",
+    # TR — Turkey / Türkiye
+    "turkey": "TR",
+    "turkiye": "TR",
+    # TT — Trinidad and Tobago
+    "trinidad and tobago": "TT",
+    "trinidad": "TT",
+    # TV — Tuvalu
+    "tuvalu": "TV",
+    # TW — Taiwan
+    "taiwan": "TW",
+    "republic of china": "TW",
+    # TZ — Tanzania
+    "tanzania": "TZ",
+    "united republic of tanzania": "TZ",
+    # UA — Ukraine
+    "ukraine": "UA",
+    # UG — Uganda
+    "uganda": "UG",
+    # UM — U.S. Minor Outlying Islands
+    "us minor outlying islands": "UM",
+    "united states minor outlying islands": "UM",
+    # US — United States
+    "united states": "US",
+    "usa": "US",
+    "us": "US",
+    "u s": "US",
+    "united states of america": "US",
+    # UY — Uruguay
+    "uruguay": "UY",
+    # UZ — Uzbekistan
+    "uzbekistan": "UZ",
+    # VA — Vatican City
+    "vatican city": "VA",
+    "holy see": "VA",
+    # VC — Saint Vincent and the Grenadines
+    "saint vincent and the grenadines": "VC",
+    "st vincent and the grenadines": "VC",
+    # VE — Venezuela
+    "venezuela": "VE",
+    "bolivarian republic of venezuela": "VE",
+    # VG — British Virgin Islands
+    "british virgin islands": "VG",
+    # VI — U.S. Virgin Islands
+    "us virgin islands": "VI",
+    "united states virgin islands": "VI",
+    # VN — Vietnam
+    "vietnam": "VN",
+    "viet nam": "VN",
+    # VU — Vanuatu
+    "vanuatu": "VU",
+    # WF — Wallis and Futuna
+    "wallis and futuna": "WF",
+    # WS — Samoa
+    "samoa": "WS",
+    # XK — Kosovo
+    "kosovo": "XK",
+    # YE — Yemen
+    "yemen": "YE",
+    # YT — Mayotte
+    "mayotte": "YT",
+    # ZA — South Africa
+    "south africa": "ZA",
+    # ZM — Zambia
+    "zambia": "ZM",
+    # ZW — Zimbabwe
+    "zimbabwe": "ZW",
+}
+
+# Invariant: every ISO-2 value in _NAME_TO_ISO2 must exist in _CENTROIDS.
+assert all(iso2 in _CENTROIDS for iso2 in _NAME_TO_ISO2.values()), (
+    "BUG: _NAME_TO_ISO2 contains ISO-2 code(s) missing from _CENTROIDS"
+)
+
+
+def resolve_iso2(value: str | None) -> str | None:
+    """Resolve a country name or ISO-2 code to a canonical ISO-2 code.
+
+    Accepts:
+    - A valid ISO-2 code (case-insensitive, must be present in _CENTROIDS)
+    - A known country name or alias (full names, common abbreviations)
+
+    Returns the uppercase ISO-2 string, or None if unrecognized.
+    """
+    if not value:
+        return None
+    up = value.strip().upper()
+    if len(up) == 2 and up in _CENTROIDS:
+        return up
+    return _NAME_TO_ISO2.get(_norm_name(value))

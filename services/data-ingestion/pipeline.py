@@ -19,7 +19,7 @@ import yaml
 
 from canonicalize import canonicalize_entity
 from config import Settings, settings
-from graph_integrity.country_centroids import centroid_for
+from graph_integrity.country_centroids import centroid_for, resolve_iso2
 from graph_integrity.loc_key import centroid_key
 from nlm_ingest.schemas import normalize_entity_type
 
@@ -30,9 +30,10 @@ def build_event_geo_fragment(country: str | None) -> dict | None:
     """Cypher FRAGMENT appended to an event-create statement where `ev` is
     already bound (after `MERGE (d)-[:DESCRIBES]->(ev)`). It does NOT re-MATCH
     the event — no node-id round-trip. Returns None when country is unknown."""
-    if not country:
+    iso2 = resolve_iso2(country)
+    if iso2 is None:
         return None
-    cc = centroid_for(country)
+    cc = centroid_for(iso2)
     if cc is None:
         return None
     lat, lon = cc
@@ -44,7 +45,7 @@ def build_event_geo_fragment(country: str | None) -> dict | None:
             " MERGE (ev)-[:OCCURRED_AT]->(l)"
         ),
         "parameters": {
-            "loc_key": centroid_key(country), "lat": lat, "lon": lon,
+            "loc_key": centroid_key(iso2), "lat": lat, "lon": lon,
             "geo_basis": "country_centroid", "geo_precision": "country",
         },
     }
