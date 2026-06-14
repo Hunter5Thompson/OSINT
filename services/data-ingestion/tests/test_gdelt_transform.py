@@ -29,6 +29,11 @@ def _raw_filtered_events() -> pl.DataFrame:
         "source_url": ["https://ex.com/a"],
         "codebook_type": ["conflict.armed"],
         "filter_reason": ["tactical"],
+        "action_geo_lat": [48.5],
+        "action_geo_long": [37.9],
+        "action_geo_fullname": ["Donetsk, Ukraine"],
+        "action_geo_country_code": ["UP"],
+        "action_geo_feature_id": ["-1044367"],
     })
 
 
