@@ -18,13 +18,22 @@ log = structlog.get_logger(__name__)
 
 _BASE = "http://data.gdeltproject.org/gdeltv2"
 
-BACKFILL_OCCURRED_AT = """
-MATCH (ev:GDELTEvent {event_id: $event_id})
+COUNT_EXISTING_GEOLESS = """
+UNWIND $rows AS row
+MATCH (ev:GDELTEvent {event_id: row.event_id})
 WHERE NOT (ev)-[:OCCURRED_AT]->(:Location)
-MERGE (l:Location {loc_key: $loc_key})
-  ON CREATE SET l.name = $name, l.country = $country,
-                l.lat = $lat, l.lon = $lon, l.geo_basis = 'gdelt_actiongeo'
+RETURN count(ev) AS count
+"""
+
+BACKFILL_OCCURRED_AT = """
+UNWIND $rows AS row
+MATCH (ev:GDELTEvent {event_id: row.event_id})
+WHERE NOT (ev)-[:OCCURRED_AT]->(:Location)
+MERGE (l:Location {loc_key: row.loc_key})
+  ON CREATE SET l.name = row.name, l.country = row.country,
+                l.lat = row.lat, l.lon = row.lon, l.geo_basis = 'gdelt_actiongeo'
 MERGE (ev)-[:OCCURRED_AT]->(l)
+RETURN count(ev) AS count
 """
 
 
@@ -90,8 +99,11 @@ async def run(
     fetch=_fetch_and_parse,
     skip_missing: bool = True,
 ) -> int:
-    """Re-fetch each already-ingested slice, write OCCURRED_AT for geoless events.
-    Returns the number of geo-eligible rows (written, or counted under dry_run)."""
+    """Re-fetch each already-ingested slice and wire geoless existing GDELTEvents.
+
+    Returns the number of matching Neo4j events counted or written, not the
+    number of geo-bearing rows in the raw export slice.
+    """
     count = 0
     skipped = 0
     for slice_id in slice_ids_from_parquet(parquet_base):
@@ -103,13 +115,13 @@ async def run(
             skipped += 1
             log.warning("gdelt_geo_slice_skipped", slice_id=slice_id, error=str(exc))
             continue
-        for raw in rows:
-            geo = build_geo_row(raw)
-            if geo is None:
-                continue
-            count += 1
-            if not dry_run:
-                await client.run(BACKFILL_OCCURRED_AT, geo)
+        geo_rows = [geo for raw in rows if (geo := build_geo_row(raw)) is not None]
+        if not geo_rows:
+            continue
+        query = COUNT_EXISTING_GEOLESS if dry_run else BACKFILL_OCCURRED_AT
+        result = await client.run(query, {"rows": geo_rows})
+        if result:
+            count += int(result[0].get("count", 0))
     if skipped:
         log.warning("gdelt_geo_slices_skipped_total", skipped=skipped)
     return count
