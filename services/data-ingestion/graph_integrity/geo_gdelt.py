@@ -3,12 +3,16 @@ re-fetch the RAW export slices, parse action_geo, and write OCCURRED_AT for
 events that already exist in Neo4j. Idempotent + resumable (per-slice)."""
 from __future__ import annotations
 
+import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 
+import httpx
 import structlog
 
 from gdelt_raw.ids import build_event_id, build_location_id
+from gdelt_raw.parser import parse_events
 
 log = structlog.get_logger(__name__)
 
@@ -50,14 +54,32 @@ def build_geo_row(raw: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _download_export(slice_id: str, dest_dir: Path) -> Path:
+    """Download + unzip the raw GDELT export slice; return the extracted CSV path.
+
+    Raises httpx.HTTPStatusError on 404/410 (missing slice) — run() skips it."""
+    url = export_url_for(slice_id)
+    zpath = dest_dir / f"{slice_id}.export.CSV.zip"
+    resp = httpx.get(url, timeout=60.0, follow_redirects=True)
+    resp.raise_for_status()
+    zpath.write_bytes(resp.content)
+    with zipfile.ZipFile(zpath) as z:
+        z.extractall(dest_dir)
+        return dest_dir / z.namelist()[0]
+
+
 def _fetch_and_parse(slice_id: str) -> list[dict]:
-    """Default fetch: download the raw export slice and parse action_geo columns.
-    Reuses gdelt_raw download + polars_schemas.EVENT_POLARS_SCHEMA. Raises on
-    missing/410 slice (caught by run() when skip_missing=True). I/O seam — not
-    unit-tested; the run() tests inject `fetch`."""
-    raise NotImplementedError(
-        "wire to gdelt_raw.run.download_slice + polars_schemas parsing at deploy time"
-    )
+    """Download the raw export slice and parse it into raw row dicts (with
+    action_geo_* columns) via the existing gdelt_raw parser.
+
+    Raises on missing/410 slice (httpx.HTTPStatusError) — caught by run()
+    when skip_missing=True. I/O seam: the parse logic is covered by gdelt_raw
+    parser tests; the run() loop is covered by injected-fetch tests."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpd = Path(tmp)
+        csv_path = _download_export(slice_id, tmpd)
+        res = parse_events(csv_path, quarantine_dir=tmpd / "quarantine")
+        return res.df.to_dicts()
 
 
 async def run(

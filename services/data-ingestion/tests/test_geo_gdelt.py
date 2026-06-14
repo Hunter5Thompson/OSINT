@@ -103,3 +103,25 @@ def test_run_skips_missing_slice_without_aborting(tmp_path):
     ))
     assert n == 0
     assert client.writes == []
+
+
+def test_fetch_and_parse_orchestrates_download_and_parse(tmp_path, monkeypatch):
+    from graph_integrity import geo_gdelt
+
+    fake_rows = [{"global_event_id": 1, "action_geo_lat": 48.0, "action_geo_long": 37.8,
+                  "action_geo_fullname": "Donetsk", "action_geo_country_code": "UP",
+                  "action_geo_feature_id": "-1"}]
+
+    class _DF:
+        def to_dicts(self):
+            return fake_rows
+
+    class _Res:
+        df = _DF()
+
+    monkeypatch.setattr(geo_gdelt, "_download_export",
+                        lambda slice_id, dest: tmp_path / "x.csv")
+    monkeypatch.setattr(geo_gdelt, "parse_events", lambda path, quarantine_dir: _Res())
+
+    rows = geo_gdelt._fetch_and_parse("20260613221500")
+    assert rows == fake_rows
