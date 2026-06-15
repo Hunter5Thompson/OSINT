@@ -8,7 +8,9 @@ Called between feed-fetch and Qdrant-embed to:
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -279,6 +281,33 @@ _RESPONSE_SCHEMA = {
     },
     "required": ["events", "entities", "locations"],
 }
+
+
+_EVENT_TITLE_MAXLEN = 200
+
+
+def content_hash(title: str, url: str) -> str:
+    """Canonical content hash shared by the Qdrant dedup point-id and the Event key,
+    so the graph Event identity and the vector dedup identity share one root.
+    MUST stay byte-identical to the value the collectors derive for their Qdrant point.
+    """
+    raw = f"{title.strip().lower()}|{url.strip().lower()}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _normalize_event_title(title: str) -> str:
+    """trim -> whitespace-collapse -> lowercase -> cap length, so minor LLM title
+    variations do not fork a new Event under the MERGE key."""
+    collapsed = re.sub(r"\s+", " ", title.strip()).lower()
+    return collapsed[:_EVENT_TITLE_MAXLEN]
+
+
+def _event_key(doc_content_hash: str, codebook_type: str, event_title: str) -> str:
+    """Deterministic per-event identity for idempotent MERGE. One article can yield
+    several events, so the doc hash alone is not unique — fold in codebook_type and
+    the normalized event title."""
+    raw = f"{doc_content_hash}|{codebook_type}|{_normalize_event_title(event_title)}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:24]
 
 
 async def process_item(
