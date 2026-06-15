@@ -6,7 +6,20 @@ recomputes the expected key in Python, (re)sets it, and merges any duplicate gro
 computed key. So a crash after a partial apply self-heals on re-run — an `IS NULL` filter
 would go blind to already-keyed survivors and leave duplicate groups unmerged.
 
-Run with --dry-run first; it prints counts and writes nothing.
+Runs DRY BY DEFAULT (prints counts, writes nothing). Pass --apply to write.
+Operational order: run dry (review counts) -> run --apply (self-verifies via the
+duplicate-key preflight) -> only when 0 duplicate keys remain, apply event_key_unique.cypher.
+
+DATA-LOSS SIGN-OFF (properties:'discard'): the losers in a group are EXACT duplicates by
+event_key — re-extractions of the SAME event from the SAME source Document (the duplicates
+exist only because the old write path used CREATE instead of MERGE). mergeRels=true preserves
+ALL relationships/provenance (DESCRIBES, INVOLVES, OCCURRED_AT, MENTIONS); only the losers'
+scalar extraction-variance (summary/severity/confidence) is dropped, and the survivor is the
+lowest (oldest) node_id. The forward write path's MERGE uses `ON MATCH SET ev.updated_at` only,
+so these scalars are not refreshed on later re-ingest — the loss is accepted as a one-time,
+low-stakes consequence of de-duplicating identical re-extractions. (If richer preservation is
+ever wanted, mirror neo4j_duplicate_merge.cypher: pre-merge max(confidence)/max(severity)/
+longest summary before the discard.)
 """
 from __future__ import annotations
 
