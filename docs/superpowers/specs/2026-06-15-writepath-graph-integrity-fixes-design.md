@@ -58,9 +58,14 @@ blocks the retry forever (WP-01).
    - wrap the httpx call so connect/timeout/5xx raise `Neo4jWriteError` (not raw httpx);
    - **also raise `Neo4jWriteError(errors)` when `errors != []`** (`pipeline.py:555`) instead of only warning — Neo4j
      tx errors are HTTP-200 bodies, this is the load-bearing correction.
-2. **Stop swallowing in `process_item`.** Remove the catch-all around `_write_to_neo4j` (`pipeline.py:319-327`); let
-   `Neo4jWriteError` propagate to the collector. Move the Redis xadd to run **only after** a successful Neo4j write
-   (no phantom live event).
+2. **Stop swallowing in `process_item` — for the T1 paths.** `process_item` re-raises `Neo4jWriteError` to the caller
+   and skips the Redis xadd (no phantom live event) **when called with `raise_on_write_error=True`**.
+   > **Compatibility decision (explicit).** `process_item` has 14 callers; only `gdelt_collector` and `rss_collector`
+   > are in T1 scope. To avoid changing the error behavior of the other 12 collectors in this tranche, `process_item`'s
+   > **default stays legacy fail-soft** (`raise_on_write_error=False` → log + swallow, as today). The **T1 collectors
+   > MUST pass `raise_on_write_error=True`**, and **only those paths satisfy the dual-write guarantee** of this tranche.
+   > Migrating the remaining collectors to propagate-by-default is explicit future work, not part of T1. (Non-T1
+   > callers are unaffected; a non-`Neo4jWriteError` exception is still logged-and-swallowed for every caller.)
 3. **Collector skips Qdrant on Neo4j failure.** In both `gdelt_collector` and `rss_collector`, catch `Neo4jWriteError`
    in the same place as the existing transient handlers and `continue` **without appending the `PointStruct`** — so the
    Qdrant-point dedup key is never minted and the next tick retries cleanly (mirrors the existing embed-`HTTPError`
