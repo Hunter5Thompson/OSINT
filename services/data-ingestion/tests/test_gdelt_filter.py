@@ -100,3 +100,23 @@ def test_gkg_alpha_doc_without_mentions_yields_empty_lists():
     assert row["cameo_roots_linked"] == []
     assert row["codebook_types_linked"] == []
     # goldstein_min / goldstein_avg may legitimately be None
+
+
+def test_filter_drops_null_gkg_record_id():
+    """A GKG row with a null gkg_record_id (e.g. it slipped past a caller that
+    didn't run the parser gate) must be dropped before unique(), and the
+    post-join frame must carry no null doc_id."""
+    gkg = pl.DataFrame({
+        "gkg_record_id": ["r1", None],
+        "v21_date": [20260425120000, 20260425120000],
+        "v2_document_identifier": ["https://nuc.com/a", "https://ex.com/x"],
+        "v1_themes": ["NUCLEAR;WMD", "MILITARY"],
+        "v2_source_common_name": ["nuc.com", "ex.com"],
+    })
+    res = apply_filters(_events_df(), _mentions_df(), gkg,
+                        cameo_roots=[15, 18, 19, 20],
+                        theme_alpha=["ARMEDCONFLICT", "KILL", "MILITARY"],
+                        theme_nuclear_override=["NUCLEAR", "WMD"])
+    ids = res.gkg.get_column("gkg_record_id").to_list()
+    assert None not in ids
+    assert res.gkg.get_column("doc_id").null_count() == 0

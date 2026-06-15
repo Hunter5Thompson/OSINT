@@ -89,8 +89,13 @@ def apply_filters(
         ])
     )
 
-    # 7. gkg union and materialized join
-    gkg_union = pl.concat([gkg_alpha, gkg_nuclear]).unique(subset=["gkg_record_id"])
+    # 7. gkg union and materialized join — drop null keys before unique() so a
+    # null gkg_record_id can never reach build_doc_id (WP-02 defense-in-depth).
+    gkg_union = (
+        pl.concat([gkg_alpha, gkg_nuclear])
+        .drop_nulls(subset=["gkg_record_id"])
+        .unique(subset=["gkg_record_id"])
+    )
 
     # Aggregate mentions+events per mention_url to avoid N:N duplicate explosion
     events_for_join = events_filtered.select([
@@ -131,9 +136,15 @@ def apply_filters(
           .alias("codebook_types_linked"),
     ])
 
-    # Invariant: doc_id unique (real correctness check, not a debug assert)
+    # Invariant: doc_id non-null AND unique (real correctness checks, not debug asserts)
+    null_doc_ids = gkg_with_join.get_column("doc_id").null_count()
+    if null_doc_ids:
+        raise RuntimeError(
+            f"filter invariant: doc_id must be non-null after materialized join "
+            f"(found {null_doc_ids})"
+        )
     if gkg_with_join.n_unique("gkg_record_id") != gkg_with_join.height:
-        raise RuntimeError("filter invariant: doc_id must be unique after materialized join")
+        raise RuntimeError("filter invariant: gkg_record_id must be unique after materialized join")
 
     # 8. mentions
     mentions_filtered = mentions_scoped
