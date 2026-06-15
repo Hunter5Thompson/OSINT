@@ -84,3 +84,122 @@ def test_merge_mention_sets_properties_on_match_too():
     from gdelt_raw.writers.neo4j_writer import MERGE_MENTION
     assert "ON MATCH" in MERGE_MENTION
     assert "r.tone = $tone" in MERGE_MENTION
+
+
+# ---------------------------------------------------------------------------
+# WP-02: skip-and-log invalid rows
+# ---------------------------------------------------------------------------
+from unittest.mock import AsyncMock  # noqa: E402
+
+import polars as pl  # noqa: E402
+
+
+def test_validate_rows_skips_invalid_keeps_valid():
+    from gdelt_raw.writers.neo4j_writer import _validate_rows
+
+    rows = [
+        {  # valid
+            "event_id": "gdelt:event:1", "cameo_code": "193", "cameo_root": 19,
+            "quad_class": 4, "goldstein": -6.5, "avg_tone": -4.2,
+            "num_mentions": 1, "num_sources": 1, "num_articles": 1,
+            "date_added": "2026-04-25T12:15:00Z", "fraction_date": 2026.3164,
+            "source_url": "https://ex.com", "codebook_type": "conflict.armed",
+            "filter_reason": "tactical",
+        },
+        {  # invalid: missing event_id
+            "cameo_code": "193", "cameo_root": 19, "quad_class": 4,
+            "goldstein": -6.5, "avg_tone": -4.2, "num_mentions": 1,
+            "num_sources": 1, "num_articles": 1, "date_added": "2026-04-25T12:15:00Z",
+            "fraction_date": 2026.3164, "source_url": "https://ex.com",
+            "codebook_type": "conflict.armed", "filter_reason": "tactical",
+        },
+    ]
+    valid = _validate_rows(rows, GDELTEventWrite, "events")
+    assert len(valid) == 1
+    assert valid[0].event_id == "gdelt:event:1"
+
+
+def test_validate_rows_skips_null_doc_id():
+    from gdelt_raw.writers.neo4j_writer import _validate_rows
+
+    rows = [
+        {"doc_id": "gdelt:gkg:r1", "url": "https://ex.com", "source_name": "ex.com",
+         "gdelt_date": "2026-04-25T12:15:00Z"},
+        {"doc_id": None, "url": "https://ex.com", "source_name": "ex.com",
+         "gdelt_date": "2026-04-25T12:15:00Z"},
+    ]
+    valid = _validate_rows(rows, GDELTDocumentWrite, "gkg")
+    assert len(valid) == 1
+    assert valid[0].doc_id == "gdelt:gkg:r1"
+
+
+@pytest.mark.asyncio
+async def test_write_from_parquet_skips_bad_gkg_row(tmp_path):
+    """One null-doc_id row in the gkg parquet must not block the valid docs."""
+    from gdelt_raw.writers.neo4j_writer import Neo4jWriter
+
+    gkg_dir = tmp_path / "gkg" / "date=2026-04-25"
+    gkg_dir.mkdir(parents=True)
+    pl.DataFrame({
+        "doc_id": ["gdelt:gkg:g1", None],
+        "source": ["gdelt_gkg", "gdelt_gkg"],
+        "url": ["https://ex.com/1", "https://ex.com/2"],
+        "source_name": ["ex.com", "ex.com"],
+        "gdelt_date": ["2026-04-25T12:00:00", "2026-04-25T12:00:00"],
+        "themes": [["MILITARY"], ["MILITARY"]],
+        "persons": [[], []], "organizations": [[], []],
+        "tone_positive": [0.0, 0.0], "tone_negative": [0.0, 0.0],
+        "tone_polarity": [0.0, 0.0], "tone_activity": [0.0, 0.0],
+        "tone_self_group": [0.0, 0.0], "word_count": [0, 0],
+        "sharp_image_url": [None, None], "quotations": [[], []],
+        "linked_event_ids": [[], []], "goldstein_min": [None, None],
+        "goldstein_avg": [None, None], "cameo_roots_linked": [[], []],
+        "codebook_types_linked": [[], []],
+    }).write_parquet(gkg_dir / "20260425120000.parquet")
+
+    writer = Neo4jWriter("bolt://localhost:7687", "neo4j", "x")
+    writer.write_docs = AsyncMock()           # capture validated docs; no real Neo4j
+    writer.write_events = AsyncMock()
+    writer.write_mentions = AsyncMock()
+
+    await writer.write_from_parquet(tmp_path, "20260425120000", "2026-04-25")
+
+    writer.write_docs.assert_awaited_once()
+    (docs,) = writer.write_docs.await_args.args
+    assert len(docs) == 1
+    assert docs[0].doc_id == "gdelt:gkg:g1"
+
+
+@pytest.mark.asyncio
+async def test_write_from_parquet_all_invalid_gkg_is_noop(tmp_path):
+    """A gkg parquet where every row is invalid (all null doc_id) must leave
+    write_docs uncalled (the `if docs:` guard) — not an empty-list write."""
+    from gdelt_raw.writers.neo4j_writer import Neo4jWriter
+
+    gkg_dir = tmp_path / "gkg" / "date=2026-04-25"
+    gkg_dir.mkdir(parents=True)
+    pl.DataFrame({
+        "doc_id": [None, None],
+        "source": ["gdelt_gkg", "gdelt_gkg"],
+        "url": ["https://ex.com/1", "https://ex.com/2"],
+        "source_name": ["ex.com", "ex.com"],
+        "gdelt_date": ["2026-04-25T12:00:00", "2026-04-25T12:00:00"],
+        "themes": [["MILITARY"], ["MILITARY"]],
+        "persons": [[], []], "organizations": [[], []],
+        "tone_positive": [0.0, 0.0], "tone_negative": [0.0, 0.0],
+        "tone_polarity": [0.0, 0.0], "tone_activity": [0.0, 0.0],
+        "tone_self_group": [0.0, 0.0], "word_count": [0, 0],
+        "sharp_image_url": [None, None], "quotations": [[], []],
+        "linked_event_ids": [[], []], "goldstein_min": [None, None],
+        "goldstein_avg": [None, None], "cameo_roots_linked": [[], []],
+        "codebook_types_linked": [[], []],
+    }).write_parquet(gkg_dir / "20260425120000.parquet")
+
+    writer = Neo4jWriter("bolt://localhost:7687", "neo4j", "x")
+    writer.write_docs = AsyncMock()
+    writer.write_events = AsyncMock()
+    writer.write_mentions = AsyncMock()
+
+    await writer.write_from_parquet(tmp_path, "20260425120000", "2026-04-25")
+
+    writer.write_docs.assert_not_awaited()
