@@ -25,11 +25,32 @@ class OrphanCandidate:
     url: str
 
 
+# Only live-pipeline article points are reconcilable; other URL-bearing payload classes
+# in odin_intel (rss_fulltext chunks, NLM per-claim points, etc.) must NOT be re-ingested.
+RECONCILE_SOURCES = frozenset({"rss", "gdelt"})
+
+
+def candidate_from_payload(point_id: int, payload: dict | None) -> OrphanCandidate | None:
+    """An OrphanCandidate only for a live RSS/GDELT point carrying url+title; else None."""
+    pl = payload or {}
+    if pl.get("source") in RECONCILE_SOURCES and pl.get("url") and pl.get("title"):
+        return OrphanCandidate(point_id, pl["title"], pl["url"])
+    return None
+
+
 def find_orphans(
     points: list[OrphanCandidate], existing_doc_urls: set[str]
 ) -> list[OrphanCandidate]:
-    """Pure: points whose url is absent from the set of Document urls in Neo4j."""
-    return [p for p in points if p.url and p.url not in existing_doc_urls]
+    """Points whose url has no Neo4j Document, deduped by url (one article may have several
+    Qdrant points — re-ingest it once, not per chunk)."""
+    seen: set[str] = set()
+    out: list[OrphanCandidate] = []
+    for p in points:
+        if not p.url or p.url in existing_doc_urls or p.url in seen:
+            continue
+        seen.add(p.url)
+        out.append(p)
+    return out
 
 
 async def _scroll_points(qdrant) -> list[OrphanCandidate]:
@@ -42,9 +63,9 @@ async def _scroll_points(qdrant) -> list[OrphanCandidate]:
             with_payload=True, limit=512, offset=offset,
         )
         for p in batch:
-            pl = p.payload or {}
-            if pl.get("url") and pl.get("title"):
-                out.append(OrphanCandidate(p.id, pl["title"], pl["url"]))
+            cand = candidate_from_payload(p.id, p.payload)
+            if cand is not None:
+                out.append(cand)
         if offset is None:
             break
     return out
