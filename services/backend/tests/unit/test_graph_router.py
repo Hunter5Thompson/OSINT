@@ -149,6 +149,33 @@ class TestGraphEndpoints:
             assert "elementId(ev) AS id" in cypher
             assert "ev.id AS id" not in cypher
 
+    def test_events_query_coalesces_timestamp_and_sorts_on_alias(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = []
+            resp = client.get("/api/graph/events")
+            assert resp.status_code == 200
+            cypher = mock.call_args.args[0]
+            assert (
+                "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp"
+                in cypher
+            )
+            assert "ORDER BY timestamp DESC" in cypher
+            assert "ORDER BY ev.timestamp" not in cypher
+
+    def test_events_entity_branch_coalesces_timestamp_and_sorts_on_alias(self, client):
+        """The ?entity= branch builds a different query string — lock it too."""
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = []
+            resp = client.get("/api/graph/events?entity=NorthKorea")
+            assert resp.status_code == 200
+            cypher = mock.call_args.args[0]
+            assert (
+                "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp"
+                in cypher
+            )
+            assert "ORDER BY timestamp DESC" in cypher
+            assert "ORDER BY ev.timestamp" not in cypher
+
 
 class TestGeoEventsEndpoint:
     @pytest.fixture
@@ -235,6 +262,19 @@ class TestGeoEventsEndpoint:
             cypher = mock.call_args.args[0]
             assert "elementId(ev) AS id" in cypher
             assert "ev.id AS id" not in cypher
+
+    def test_geo_events_query_coalesces_timestamp_and_sorts_on_alias(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = []
+            resp = client.get("/api/graph/events/geo")
+            assert resp.status_code == 200
+            cypher = mock.call_args.args[0]
+            assert (
+                "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp"
+                in cypher
+            )
+            assert "ORDER BY timestamp DESC" in cypher
+            assert "ORDER BY ev.timestamp" not in cypher
 
 
 class TestConfigEndpoint:

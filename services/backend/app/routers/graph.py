@@ -132,16 +132,18 @@ async def get_events(
         rows = await _read_query(
             "MATCH (e:Entity {name: $entity})<-[:INVOLVES]-(ev:Event) "
             "RETURN elementId(ev) AS id, ev.title AS name, ev.codebook_type AS type, "
-            "ev.severity AS severity, ev.timestamp AS timestamp "
-            "ORDER BY ev.timestamp DESC LIMIT $limit",
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp "
+            "ORDER BY timestamp DESC LIMIT $limit",
             {"entity": entity, "limit": limit},
         )
     else:
         rows = await _read_query(
             "MATCH (ev:Event) "
             "RETURN elementId(ev) AS id, ev.title AS name, ev.codebook_type AS type, "
-            "ev.severity AS severity, ev.timestamp AS timestamp "
-            "ORDER BY ev.timestamp DESC LIMIT $limit",
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp "
+            "ORDER BY timestamp DESC LIMIT $limit",
             {"limit": limit},
         )
     nodes = [
@@ -186,10 +188,11 @@ async def get_geo_events(
         f"OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location) "
         f"{type_filter}"
         f"RETURN elementId(ev) AS id, ev.title AS title, ev.codebook_type AS codebook_type, "
-        f"ev.severity AS severity, ev.timestamp AS timestamp, "
+        f"ev.severity AS severity, "
+        f"coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
         f"l.name AS location_name, l.country AS country, "
         f"l.lat AS lat, l.lon AS lon "
-        f"ORDER BY ev.timestamp DESC LIMIT $limit"
+        f"ORDER BY timestamp DESC LIMIT $limit"
     )
 
     rows = await _read_query(cypher, params)
