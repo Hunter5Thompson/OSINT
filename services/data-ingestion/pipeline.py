@@ -98,6 +98,16 @@ class ExtractionConfigError(Exception):
     """
 
 
+class Neo4jWriteError(Exception):
+    """The Neo4j write failed — either an httpx transport error, or the tx/commit
+    endpoint returned HTTP 200 with a non-empty errors[] (the Cypher/tx itself failed).
+
+    process_item re-raises this to the caller only when raise_on_write_error=True, so a
+    partial-success tick (graph failed, vector would still commit) can skip the Qdrant
+    upsert and retry cleanly instead of orphaning a vector.
+    """
+
+
 class CodebookConfigError(RuntimeError):
     """Canonical event codebook is missing or invalid."""
 
@@ -544,13 +554,20 @@ async def _write_to_neo4j(
             statements[-1]["statement"] += frag["cypher"]
             statements[-1]["parameters"].update(frag["parameters"])
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            f"{settings.neo4j_http_url}/db/neo4j/tx/commit",
-            json={"statements": statements},
-            auth=(settings.neo4j_user, settings.neo4j_password),
-        )
-        resp.raise_for_status()
-        errors = resp.json().get("errors", [])
-        if errors:
-            log.warning("neo4j_write_errors", errors=errors)
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{settings.neo4j_http_url}/db/neo4j/tx/commit",
+                json={"statements": statements},
+                auth=(settings.neo4j_user, settings.neo4j_password),
+            )
+            resp.raise_for_status()
+            errors = resp.json().get("errors", [])
+    except httpx.HTTPError as exc:
+        # Connect/timeout/5xx — the graph write did not land.
+        raise Neo4jWriteError(f"neo4j http error: {exc}") from exc
+    if errors:
+        # The tx/commit endpoint returns HTTP 200 with a populated errors[] when the
+        # Cypher/transaction itself failed. Must NOT be swallowed — it is a real failure.
+        log.warning("neo4j_write_errors", errors=errors)
+        raise Neo4jWriteError(f"neo4j tx errors: {errors}")
