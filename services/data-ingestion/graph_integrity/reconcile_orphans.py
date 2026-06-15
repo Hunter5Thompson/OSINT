@@ -36,7 +36,8 @@ async def _scroll_points(qdrant) -> list[OrphanCandidate]:
     out: list[OrphanCandidate] = []
     offset = None
     while True:
-        batch, offset = qdrant.scroll(
+        batch, offset = await asyncio.to_thread(
+            qdrant.scroll,
             collection_name=settings.qdrant_collection,
             with_payload=True, limit=512, offset=offset,
         )
@@ -49,11 +50,24 @@ async def _scroll_points(qdrant) -> list[OrphanCandidate]:
     return out
 
 
+_EXISTING_DOC = "MATCH (d:Document) WHERE d.url IN $urls RETURN d.url AS url"
+_EXISTING_GDELTDOC = "MATCH (d:GDELTDocument) WHERE d.url IN $urls RETURN d.url AS url"
+_URL_BATCH = 5000
+
+
 async def _existing_doc_urls(driver, urls: list[str]) -> set[str]:
+    """URLs already backed by a :Document OR :GDELTDocument node. Both labels are
+    checked so GDELT-raw points (which carry :GDELTDocument, not :Document) are not
+    mistaken for orphans and re-ingested under source='reconcile'. Chunked so a large
+    corpus does not blow up the Bolt message / server-side IN list."""
+    found: set[str] = set()
     async with driver.session() as s:
-        res = await s.run(
-            "MATCH (d:Document) WHERE d.url IN $urls RETURN d.url AS url", urls=urls)
-        return {r["url"] async for r in res}
+        for i in range(0, len(urls), _URL_BATCH):
+            chunk = urls[i:i + _URL_BATCH]
+            for query in (_EXISTING_DOC, _EXISTING_GDELTDOC):
+                res = await s.run(query, urls=chunk)
+                found |= {r["url"] async for r in res}
+    return found
 
 
 async def run(qdrant, driver, *, dry_run: bool) -> list[OrphanCandidate]:
@@ -63,6 +77,8 @@ async def run(qdrant, driver, *, dry_run: bool) -> list[OrphanCandidate]:
     log.info("reconcile_orphans_plan", total=len(points), orphans=len(orphans), dry_run=dry_run)
     if dry_run:
         return orphans
+    healed = 0
+    failed = 0
     for o in orphans:
         try:
             await process_item(
@@ -70,8 +86,11 @@ async def run(qdrant, driver, *, dry_run: bool) -> list[OrphanCandidate]:
                 settings=settings, content_hash=content_hash(o.title, o.url),
                 raise_on_write_error=True,
             )
+            healed += 1
         except Exception as exc:  # noqa: BLE001 — keep healing the rest
+            failed += 1
             log.warning("reconcile_item_failed", url=o.url, error=str(exc))
+    log.info("reconcile_orphans_done", orphans=len(orphans), healed=healed, failed=failed)
     return orphans
 
 

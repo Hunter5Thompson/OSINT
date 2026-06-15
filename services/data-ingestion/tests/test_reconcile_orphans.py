@@ -14,3 +14,9 @@ def test_find_orphans_returns_points_whose_url_has_no_document():
 def test_find_orphans_empty_when_all_present():
     points = [OrphanCandidate(1, "a", "http://have")]
     assert find_orphans(points, {"http://have"}) == []
+
+
+def test_find_orphans_excludes_empty_url():
+    """A point with an empty url is not a healable orphan (no source to re-key on)."""
+    points = [OrphanCandidate(point_id=3, title="c", url="")]
+    assert find_orphans(points, set()) == []
