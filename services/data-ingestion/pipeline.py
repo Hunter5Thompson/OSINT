@@ -101,8 +101,9 @@ class ExtractionConfigError(Exception):
 
 
 class Neo4jWriteError(Exception):
-    """The Neo4j write failed — either an httpx transport error, or the tx/commit
-    endpoint returned HTTP 200 with a non-empty errors[] (the Cypher/tx itself failed).
+    """The Neo4j write failed — an httpx transport error, a non-JSON HTTP-200 body, or
+    the tx/commit endpoint returning HTTP 200 with a non-empty errors[] (the Cypher/tx
+    itself failed).
 
     process_item re-raises this to the caller only when raise_on_write_error=True, so a
     partial-success tick (graph failed, vector would still commit) can skip the Qdrant
@@ -307,6 +308,7 @@ def _event_key(doc_content_hash: str, codebook_type: str, event_title: str) -> s
     several events, so the doc hash alone is not unique — fold in codebook_type and
     the normalized event title."""
     raw = f"{doc_content_hash}|{codebook_type}|{_normalize_event_title(event_title)}"
+    # 96 bits — ample for per-document event identity
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
 
 
@@ -566,6 +568,9 @@ async def _write_to_neo4j(
         )
         ev_codebook_type = event.get("codebook_type", "other.unclassified")
         ev_key = _event_key(doc_hash, ev_codebook_type, event.get("title", ""))
+        # event_key identifies the same event (doc hash + codebook_type + normalized title), so a
+        # re-MERGE is the SAME event: freeze the create-time fields (ON CREATE SET) and only stamp
+        # updated_at on re-match — do not overwrite with a later re-extraction.
         statements.append({
             "statement": (
                 "MERGE (ev:Event {event_key: $event_key}) "

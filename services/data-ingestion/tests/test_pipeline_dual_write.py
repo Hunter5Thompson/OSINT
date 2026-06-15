@@ -91,6 +91,12 @@ def test_event_key_differs_by_codebook_type_and_title():
     assert _event_key(h, "a.b", "t1") != _event_key(h, "a.b", "t2")
 
 
+def test_event_key_stable_for_empty_title():
+    h = content_hash("doc", "http://u")
+    assert _event_key(h, "a.b", "") == _event_key(h, "a.b", "   ")
+    assert _event_key(h, "a.b", "") != _event_key(h, "c.d", "")
+
+
 async def _captured_statements(events):
     """Run _write_to_neo4j with a mock client and return the posted statements list."""
     captured = {}

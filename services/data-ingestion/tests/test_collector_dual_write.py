@@ -57,8 +57,9 @@ async def test_gdelt_skips_item_on_dedup_retrieve_failure():
 
 
 def _rss_collector_with_one_entry():
-    """An RSSCollector instance (bypassing __init__) whose feed fetch + feedparser are
-    mocked to yield exactly one entry; returns (col, patches_contextmanager_factory)."""
+    """A bare RSSCollector instance (bypassing __init__) with mock qdrant/embed wired up;
+    returns just the collector. The feed fetch + feedparser patches come from the separate
+    _mock_feed_fetch() helper."""
     from feeds import rss_collector
 
     col = rss_collector.RSSCollector.__new__(rss_collector.RSSCollector)
@@ -74,7 +75,7 @@ def _mock_feed_fetch():
     """patch() contexts for the httpx fetch + feedparser yielding one entry."""
     resp = MagicMock()
     resp.raise_for_status = MagicMock()
-    resp.text = "<rss/>"
+    resp.text = "<rss/>"  # (unused: feedparser.parse is patched)
     client = AsyncMock()
     client.get = AsyncMock(return_value=resp)
     cm = MagicMock()
