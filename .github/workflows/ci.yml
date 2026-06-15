@@ -116,3 +116,24 @@ jobs:
             services/data-ingestion \
             services/backend \
             services/vision-enrichment
+
+  guard-read-templates:
+    name: guard · read templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Forbid ORDER BY ev.timestamp on read templates (WP-08)
+        run: |
+          set -euo pipefail
+          # ev.timestamp is never written by any write-path; read templates must
+          # use coalesce(ev.timeline_at, ev.timestamp, ev.date_added) and ORDER BY
+          # the projected alias. These two files are the complete read-template
+          # surface that orders by event time (timeline.py uses ev.timeline_at);
+          # add new paths here if more event-time read templates are introduced.
+          if grep -n "ORDER BY ev.timestamp" \
+              services/backend/app/routers/graph.py \
+              services/intelligence/agents/tools/graph_templates.py; then
+            echo "::error::Found 'ORDER BY ev.timestamp' in a read template — sort on the coalesced timestamp alias (WP-08)."
+            exit 1
+          fi
+          echo "OK: no 'ORDER BY ev.timestamp' in read templates"
