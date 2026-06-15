@@ -10,6 +10,7 @@ from pipeline import (
     _normalize_event_title,
     _write_to_neo4j,
     content_hash,
+    process_item,
 )
 
 
@@ -128,3 +129,58 @@ async def test_same_event_yields_same_event_key():
     k1 = next(s["parameters"]["event_key"] for s in s1 if "Event" in s["statement"])
     k2 = next(s["parameters"]["event_key"] for s in s2 if "Event" in s["statement"])
     assert k1 == k2
+
+
+@pytest.mark.asyncio
+async def test_write_raises_on_non_json_200_body():
+    """A 200 with a non-JSON body must surface as Neo4jWriteError, not a raw decode error."""
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock(return_value=None)
+    resp.json = MagicMock(side_effect=ValueError("Expecting value"))
+    with _patched_client(resp), pytest.raises(Neo4jWriteError):
+        await _write_to_neo4j(
+            [{"title": "x", "codebook_type": "other.unclassified"}], [],
+            "http://u", "t", "rss", settings,
+        )
+
+
+def _vllm_patch(events):
+    return patch("pipeline._call_vllm", AsyncMock(return_value={
+        "events": events, "entities": [], "locations": [],
+    }))
+
+
+def _failing_neo4j_patch():
+    # tx/commit returns errors[] -> _write_to_neo4j raises Neo4jWriteError.
+    return _patched_client(_resp({"results": [], "errors": [{"code": "X"}]}))
+
+
+@pytest.mark.asyncio
+async def test_process_item_swallows_by_default():
+    ev = [{"title": "t", "codebook_type": "other.unclassified"}]
+    with _vllm_patch(ev), _failing_neo4j_patch():
+        # default raise_on_write_error=False -> no raise, returns enrichment
+        result = await process_item("t", "body", "http://u", "rss", settings=settings)
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_process_item_propagates_when_flag_set():
+    ev = [{"title": "t", "codebook_type": "other.unclassified"}]
+    with _vllm_patch(ev), _failing_neo4j_patch(), pytest.raises(Neo4jWriteError):
+        await process_item(
+            "t", "body", "http://u", "rss",
+            settings=settings, raise_on_write_error=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_process_item_no_redis_publish_on_write_failure():
+    ev = [{"title": "t", "codebook_type": "other.unclassified"}]
+    redis = AsyncMock()
+    with _vllm_patch(ev), _failing_neo4j_patch(), pytest.raises(Neo4jWriteError):
+        await process_item(
+            "t", "body", "http://u", "rss",
+            settings=settings, redis_client=redis, raise_on_write_error=True,
+        )
+    redis.xadd.assert_not_called()

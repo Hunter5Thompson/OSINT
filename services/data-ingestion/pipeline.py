@@ -321,6 +321,8 @@ async def process_item(
     occurred_at: str | None = None,
     observed_at: str | None = None,
     published_at: str | None = None,
+    content_hash: str | None = None,
+    raise_on_write_error: bool = False,
 ) -> dict | None:
     """Extract intelligence from a feed item, write to Neo4j, publish to Redis.
 
@@ -360,9 +362,16 @@ async def process_item(
                 events, entities, url, title, source, settings,
                 occurred_at=occurred_at, observed_at=observed_at,
                 published_at=published_at, ingested_at=ingested_at,
-                locations=locations,
+                locations=locations, doc_content_hash=content_hash,
             )
-        except Exception as e:
+        except Neo4jWriteError as e:
+            log.error("pipeline_neo4j_failed", url=url, error=str(e))
+            # T1 collectors pass raise_on_write_error=True so they can skip the Qdrant
+            # upsert (no orphan vector, no phantom Redis event). Other callers keep the
+            # historical swallow-and-continue behavior.
+            if raise_on_write_error:
+                raise
+        except Exception as e:  # noqa: BLE001 — preserve resilience for non-T1 callers
             log.error("pipeline_neo4j_failed", url=url, error=str(e))
 
     # Step 3: Publish to Redis Stream
@@ -601,6 +610,9 @@ async def _write_to_neo4j(
     except httpx.HTTPError as exc:
         # Connect/timeout/5xx — the graph write did not land.
         raise Neo4jWriteError(f"neo4j http error: {exc}") from exc
+    except ValueError as exc:
+        # HTTP 200 with a non-JSON body (e.g. a proxy/error page) — treat as a write failure.
+        raise Neo4jWriteError(f"neo4j non-json response: {exc}") from exc
     if errors:
         # The tx/commit endpoint returns HTTP 200 with a populated errors[] when the
         # Cypher/transaction itself failed. Must NOT be swallowed — it is a real failure.
