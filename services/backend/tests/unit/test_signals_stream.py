@@ -571,7 +571,12 @@ def test_stream_endpoint_declares_last_event_id_query_param() -> None:
 
 
 def test_signals_router_registered_under_api_prefix() -> None:
-    paths = {getattr(r, "path", None) for r in app.router.routes}
+    # Introspect via the OpenAPI schema (canonical full paths) rather than iterating
+    # app.router.routes: Starlette >=1.3 / FastAPI >=0.137 changed include_router to
+    # nest a sub-router's routes under an _IncludedRouter wrapper instead of flattening
+    # them into app.router.routes, so getattr(r, "path", ...) no longer sees them.
+    # The OpenAPI paths are stable across both representations.
+    paths = set(app.openapi()["paths"])
     assert "/api/signals/stream" in paths
     assert "/api/signals/latest" in paths
     # And NOT under /api/v1
