@@ -131,8 +131,8 @@ class TestCodebookDriftGuard:
         neo4j_call = mock_client.post.call_args_list[1]
         body = neo4j_call.kwargs["json"]
         # Find the statement that creates the Event node
-        event_statements = [s for s in body["statements"] if "CREATE (ev:Event" in s["statement"]]
-        assert event_statements, "Expected an Event CREATE statement"
+        event_statements = [s for s in body["statements"] if "MERGE (ev:Event" in s["statement"]]
+        assert event_statements, "Expected an Event MERGE statement"
         for stmt in event_statements:
             assert stmt["parameters"]["codebook_type"] == "other.unclassified"
             assert "nonsense.invalid" not in str(stmt["parameters"])

@@ -475,6 +475,7 @@ async def _write_to_neo4j(
     published_at: str | None = None,
     ingested_at: str | None = None,
     locations: list[dict] | None = None,
+    doc_content_hash: str | None = None,
 ) -> None:
     """Write extraction results to Neo4j via HTTP transactional API."""
     statements = []
@@ -547,28 +548,33 @@ async def _write_to_neo4j(
     effective_ingested = ingested_at or datetime.now(UTC).isoformat()
     # Derive coarse document country for geo-tagging events (country-centroid).
     doc_country = next((loc["country"] for loc in (locations or []) if loc.get("country")), None)
+    doc_hash = doc_content_hash or content_hash(doc_title, doc_url)
     for event in events:
         ev_occurred = occurred_at or event.get("timestamp")
         timeline_at, time_basis = _resolve_timeline(
             occurred_at=ev_occurred, observed_at=observed_at,
             published_at=published_at, ingested_at=effective_ingested,
         )
+        ev_codebook_type = event.get("codebook_type", "other.unclassified")
+        ev_key = _event_key(doc_hash, ev_codebook_type, event.get("title", ""))
         statements.append({
             "statement": (
-                "CREATE (ev:Event {"
-                "  title: $title, summary: $summary,"
-                "  codebook_type: $codebook_type,"
-                "  severity: $severity, confidence: $confidence,"
-                "  timeline_at: datetime($timeline_at), time_basis: $time_basis"
-                "}) "
+                "MERGE (ev:Event {event_key: $event_key}) "
+                "ON CREATE SET "
+                "  ev.title = $title, ev.summary = $summary,"
+                "  ev.codebook_type = $codebook_type,"
+                "  ev.severity = $severity, ev.confidence = $confidence,"
+                "  ev.timeline_at = datetime($timeline_at), ev.time_basis = $time_basis "
+                "ON MATCH SET ev.updated_at = datetime() "
                 "WITH ev "
                 "MATCH (d:Document {url: $url}) "
                 "MERGE (d)-[:DESCRIBES]->(ev)"
             ),
             "parameters": {
+                "event_key": ev_key,
                 "title": event.get("title", ""),
                 "summary": event.get("summary", ""),
-                "codebook_type": event.get("codebook_type", "other.unclassified"),
+                "codebook_type": ev_codebook_type,
                 "severity": event.get("severity", "low"),
                 "confidence": event.get("confidence", 0.5),
                 "timeline_at": timeline_at,

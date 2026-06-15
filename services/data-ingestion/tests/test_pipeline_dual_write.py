@@ -88,3 +88,43 @@ def test_event_key_differs_by_codebook_type_and_title():
     h = content_hash("doc", "http://u")
     assert _event_key(h, "a.b", "t") != _event_key(h, "c.d", "t")
     assert _event_key(h, "a.b", "t1") != _event_key(h, "a.b", "t2")
+
+
+async def _captured_statements(events):
+    """Run _write_to_neo4j with a mock client and return the posted statements list."""
+    captured = {}
+    client = AsyncMock()
+
+    async def _post(url, json, auth):  # noqa: A002
+        captured["statements"] = json["statements"]
+        return _resp({"results": [], "errors": []})
+
+    client.post = _post
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=client)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    with patch("pipeline.httpx.AsyncClient", return_value=cm):
+        await _write_to_neo4j(events, [], "http://u", "doc title", "rss", settings)
+    return captured["statements"]
+
+
+@pytest.mark.asyncio
+async def test_event_written_with_merge_not_create():
+    stmts = await _captured_statements(
+        [{"title": "Strike on Kyiv", "codebook_type": "conflict.armed_clash"}]
+    )
+    ev_stmts = [s for s in stmts if "Event" in s["statement"]]
+    assert ev_stmts, "expected an Event statement"
+    assert all("MERGE (ev:Event {event_key:" in s["statement"] for s in ev_stmts)
+    assert all("CREATE (ev:Event" not in s["statement"] for s in ev_stmts)
+    assert all("event_key" in s["parameters"] for s in ev_stmts)
+
+
+@pytest.mark.asyncio
+async def test_same_event_yields_same_event_key():
+    e = {"title": "Strike on Kyiv", "codebook_type": "conflict.armed_clash"}
+    s1 = await _captured_statements([e])
+    s2 = await _captured_statements([dict(e, title="  strike on  KYIV ")])
+    k1 = next(s["parameters"]["event_key"] for s in s1 if "Event" in s["statement"])
+    k2 = next(s["parameters"]["event_key"] for s in s2 if "Event" in s["statement"])
+    assert k1 == k2
