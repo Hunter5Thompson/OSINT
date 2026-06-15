@@ -150,6 +150,20 @@ async def test_write_raises_on_non_json_200_body():
         )
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", [None, [], "ok", 3])
+async def test_write_raises_on_non_dict_json_body(body):
+    """A 200 whose JSON parses but isn't an object (null/array/etc.) must be Neo4jWriteError."""
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock(return_value=None)
+    resp.json = MagicMock(return_value=body)
+    with _patched_client(resp), pytest.raises(Neo4jWriteError):
+        await _write_to_neo4j(
+            [{"title": "x", "codebook_type": "other.unclassified"}], [],
+            "http://u", "t", "rss", settings,
+        )
+
+
 def _vllm_patch(events):
     return patch("pipeline._call_vllm", AsyncMock(return_value={
         "events": events, "entities": [], "locations": [],
@@ -190,3 +204,30 @@ async def test_process_item_no_redis_publish_on_write_failure():
             settings=settings, redis_client=redis, raise_on_write_error=True,
         )
     redis.xadd.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_item_propagates_unexpected_write_error_when_flag_set():
+    """An unexpected (non-Neo4jWriteError) failure inside the write must still propagate
+    as Neo4jWriteError under the flag, and Redis must not be published."""
+    ev = [{"title": "t", "codebook_type": "other.unclassified"}]
+    redis = AsyncMock()
+    with _vllm_patch(ev), patch(
+        "pipeline._write_to_neo4j", AsyncMock(side_effect=RuntimeError("boom"))
+    ), pytest.raises(Neo4jWriteError):
+        await process_item(
+            "t", "body", "http://u", "rss",
+            settings=settings, redis_client=redis, raise_on_write_error=True,
+        )
+    redis.xadd.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_item_swallows_unexpected_write_error_by_default():
+    """Without the flag, the historical fail-soft (log + continue) is preserved."""
+    ev = [{"title": "t", "codebook_type": "other.unclassified"}]
+    with _vllm_patch(ev), patch(
+        "pipeline._write_to_neo4j", AsyncMock(side_effect=RuntimeError("boom"))
+    ):
+        result = await process_item("t", "body", "http://u", "rss", settings=settings)
+    assert result is not None

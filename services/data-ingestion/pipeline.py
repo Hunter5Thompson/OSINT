@@ -375,6 +375,10 @@ async def process_item(
                 raise
         except Exception as e:  # noqa: BLE001 — preserve resilience for non-T1 callers
             log.error("pipeline_neo4j_failed", url=url, error=str(e))
+            if raise_on_write_error:
+                # T1 contract: ANY graph-write failure must exit before Redis/Qdrant.
+                # Normalize to Neo4jWriteError so the collectors' handler skips the point.
+                raise Neo4jWriteError(f"unexpected neo4j write failure: {e}") from e
 
     # Step 3: Publish to Redis Stream
     if redis_client and events:
@@ -611,13 +615,19 @@ async def _write_to_neo4j(
                 auth=(settings.neo4j_user, settings.neo4j_password),
             )
             resp.raise_for_status()
-            errors = resp.json().get("errors", [])
+            body = resp.json()
     except httpx.HTTPError as exc:
         # Connect/timeout/5xx — the graph write did not land.
         raise Neo4jWriteError(f"neo4j http error: {exc}") from exc
     except ValueError as exc:
         # HTTP 200 with a non-JSON body (e.g. a proxy/error page) — treat as a write failure.
         raise Neo4jWriteError(f"neo4j non-json response: {exc}") from exc
+    if not isinstance(body, dict):
+        # HTTP 200 with valid JSON that isn't an object (null/array/scalar) — the
+        # tx/commit contract is a {"results", "errors"} object; anything else means
+        # the write outcome is unknown, so treat it as a failure (no silent .get()).
+        raise Neo4jWriteError(f"neo4j non-dict response body: {type(body).__name__}")
+    errors = body.get("errors", [])
     if errors:
         # The tx/commit endpoint returns HTTP 200 with a populated errors[] when the
         # Cypher/transaction itself failed. Must NOT be swallowed — it is a real failure.
