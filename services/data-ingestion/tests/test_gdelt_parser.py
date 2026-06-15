@@ -78,6 +78,7 @@ def test_gkg_empty_record_id_is_quarantined_valid_rows_survive(tmp_path):
     assert set(res.df.get_column("gkg_record_id").to_list()) == {"g1", "g2"}
     assert res.quarantine_count == 1                           # poison counted
     assert res.parse_error_pct > 30.0                          # 1 of 3
+    assert res.type_coerced_count == 0                         # gkg has no watched typed columns
     qfile = q / "gkg.jsonl"
     assert qfile.exists()
     assert "null_key" in qfile.read_text()
@@ -114,3 +115,23 @@ def test_mentions_null_global_event_id_is_quarantined(tmp_path):
     assert res.df.get_column("global_event_id").null_count() == 0
     assert res.quarantine_count == 1
     assert (q / "mentions.jsonl").read_text().count("null_key") == 1
+
+
+def test_fallback_type_coerced_event_root_code_is_counted(tmp_path):
+    """A row with the correct tab count but a non-integer event_root_code forces
+    the strict parse to fail; the fallback null-coerces that cell. The row keeps
+    a valid global_event_id (survives the null-key gate) but must be COUNTED so
+    parse_error_pct reflects it (WP-12)."""
+    good = (FIXTURES / "slice_20260425_full.export.CSV").read_text().splitlines()[0]
+    parts = good.split("\t")
+    parts[0] = "999999999"            # distinct, valid global_event_id
+    parts[28] = "NOTANUMBER"          # event_root_code (Int32) => strict fail, fallback null-coerce
+    bad = "\t".join(parts)
+    csv = tmp_path / "s.export.CSV"
+    csv.write_text(good + "\n" + bad + "\n")
+    res = parse_events(csv, quarantine_dir=tmp_path / "q")
+
+    assert res.df.height == 2                 # both rows survive (valid global_event_id)
+    assert res.df.get_column("event_root_code").null_count() == 1
+    assert res.type_coerced_count == 1        # the coerced cell is visible
+    assert 49.0 < res.parse_error_pct < 51.0  # 1 coerced of 2 rows
