@@ -130,3 +130,38 @@ async def test_qdrant_writer_close_releases_client():
     await writer.close()
 
     client.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_qdrant_skips_row_with_null_doc_id(tmp_path):
+    """A null doc_id must be skipped+logged, not crash uuid5(NAMESPACE_URL, None)."""
+    df = pl.DataFrame({
+        "doc_id": ["gdelt:gkg:g1", None],
+        "url": ["https://ex.com/1", "https://ex.com/2"],
+        "source_name": ["ex.com", "ex.com"],
+        "gdelt_date": ["2026-04-25T12:00:00", "2026-04-25T12:00:00"],
+        "themes": [["MILITARY"], ["MILITARY"]],
+        "persons": [[], []], "organizations": [[], []],
+        "linked_event_ids": [[], []], "goldstein_min": [None, None],
+        "goldstein_avg": [None, None], "cameo_roots_linked": [[], []],
+        "codebook_types_linked": [[], []],
+        "tone_polarity": [0.0, 0.0], "word_count": [0, 0],
+    })
+    gkg_dir = tmp_path / "gkg" / "date=2026-04-25"
+    gkg_dir.mkdir(parents=True)
+    df.write_parquet(gkg_dir / "20260425120000.parquet")
+
+    mock_client = MagicMock()
+    mock_client.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
+    mock_client.create_collection = AsyncMock()
+    mock_client.upsert = AsyncMock()
+    embedder = AsyncMock(return_value=[0.1] * 1024)
+
+    w = QdrantWriter(client=mock_client, embed=embedder, collection="test")
+    n = await w.upsert_from_parquet(tmp_path, "20260425120000", "2026-04-25")
+
+    assert n == 1                                  # only the valid row upserted
+    mock_client.upsert.assert_called_once()
+    (_, kwargs) = mock_client.upsert.call_args
+    assert len(kwargs["points"]) == 1
+    assert embedder.call_count == 1  # skipped row must not burn a TEI call
