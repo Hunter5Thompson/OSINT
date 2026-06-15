@@ -515,10 +515,10 @@ async def _write_to_neo4j(
         canon = canonicalize_entity(entity["name"], entity["type"])
         entity_name = canon.name
         entity_type = canon.type
-        # Patch C Phase 5: optional canonicalisation of legacy lowercase
-        # entity-type emissions onto the uppercase EntityType set. Default
-        # OFF — when settings.entity_type_normalize is False this is a no-op
-        # for names the alias map did not already resolve to a canonical type.
+        # WP-04: canonicalise legacy lowercase entity-type emissions onto the
+        # uppercase EntityType set so RSS and NLM writes converge on one
+        # (name, type) node. Default ON (settings.entity_type_normalize, config.py);
+        # set False to reproduce the pre-WP-04 lowercase-passthrough behaviour.
         if settings.entity_type_normalize:
             try:
                 entity_type = normalize_entity_type(entity_type)

@@ -184,3 +184,10 @@ def test_settings_has_enable_hybrid_default_false():
     # hermetic: no .env / no env vars
     with patch.dict(os.environ, {}, clear=True):
         assert Settings(_env_file=None).enable_hybrid is False
+
+
+def test_entity_type_normalize_defaults_on():
+    """WP-04: the RSS write-path must canonicalize lowercase types by default so
+    it converges with the NLM UPPERCASE path on one (name, type) Entity node."""
+    from config import Settings
+    assert Settings.model_fields["entity_type_normalize"].default is True

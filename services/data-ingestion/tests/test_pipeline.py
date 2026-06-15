@@ -26,6 +26,8 @@ def _make_settings(**overrides) -> Settings:
         "neo4j_user": "neo4j",
         "neo4j_password": "test",
         "redis_stream_events": "events:new",
+        # pinned False for fixture determinism; prod default is True (config.py).
+        # Normalization tests set this explicitly.
         "entity_type_normalize": False,
     }
     defaults.update(overrides)
@@ -240,11 +242,13 @@ class TestProcessItem:
 
 
 class TestEntityTypeNormalization:
-    """Patch C Phase 5: default-OFF entity-type normalizer.
+    """Entity-type normalizer tests (WP-04).
 
-    Operator guardrail: when ``entity_type_normalize=False`` (the default)
-    pipeline behaviour must be bit-for-bit identical to pre-Phase-5 main —
-    the entity ``type`` field flows through unchanged.
+    The normalizer is **default ON in prod** (config.py ``entity_type_normalize=True``).
+    These tests pin the flag explicitly to cover both paths:
+    - opt-out (False): the legacy lowercase value flows through unchanged (pre-WP-04 behaviour).
+    - normalize (True): the canonical UPPERCASE EntityType is written to Neo4j so RSS and NLM
+      writes converge on a single (name, type) Entity node.
     """
 
     def _extract_entity_param(self, mock_client) -> dict:
@@ -259,10 +263,10 @@ class TestEntityTypeNormalization:
         raise AssertionError("no Entity MERGE statement found")
 
     async def test_pipeline_passes_through_when_flag_off(self):
-        """Flag OFF (default): vLLM 'organization' lands in Cypher unchanged.
+        """Flag OFF (opt-out): vLLM 'organization' lands in Cypher unchanged.
 
-        This is the bit-for-bit-identical guarantee — the legacy lowercase
-        value must still reach Neo4j when the operator has not opted in.
+        Covers the pre-WP-04 opt-out path — legacy lowercase value reaches
+        Neo4j unchanged when the operator explicitly sets entity_type_normalize=False.
         """
         vllm_resp = _mock_vllm_response(
             entities=[{"name": "NATO", "type": "organization", "confidence": 0.8}],
@@ -280,8 +284,8 @@ class TestEntityTypeNormalization:
                 text="x",
                 url="http://example.com/a",
                 source="rss",
-                # Default flag value is False — pass nothing.
-                settings=_make_settings(),
+                # Explicitly opt out to exercise the legacy lowercase-passthrough path.
+                settings=_make_settings(entity_type_normalize=False),
             )
 
         params = self._extract_entity_param(mock_client)
@@ -396,7 +400,8 @@ class TestEntityCanonicalization:
 
     async def test_generic_name_is_not_folded(self):
         params = await self._run(
-            {"name": "Navy", "type": "organization", "confidence": 0.8}
+            {"name": "Navy", "type": "organization", "confidence": 0.8},
+            entity_type_normalize=False,
         )
         assert params["name"] == "Navy"
         assert params["type"] == "organization"
