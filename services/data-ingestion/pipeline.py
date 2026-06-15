@@ -101,9 +101,11 @@ class ExtractionConfigError(Exception):
 
 
 class Neo4jWriteError(Exception):
-    """The Neo4j write failed — an httpx transport error, a non-JSON HTTP-200 body, or
-    the tx/commit endpoint returning HTTP 200 with a non-empty errors[] (the Cypher/tx
-    itself failed).
+    """The Neo4j write failed — an httpx transport error, a non-JSON HTTP-200 body, a
+    non-dict response body, or the tx/commit endpoint returning HTTP 200 with a non-empty
+    errors[] (the Cypher/tx itself failed). Under raise_on_write_error=True, process_item
+    also normalizes ANY other unexpected write failure into this type, so the T1 collectors
+    handle every graph-write failure uniformly.
 
     process_item re-raises this to the caller only when raise_on_write_error=True, so a
     partial-success tick (graph failed, vector would still commit) can skip the Qdrant

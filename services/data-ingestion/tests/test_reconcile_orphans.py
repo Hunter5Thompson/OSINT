@@ -43,7 +43,6 @@ def test_candidate_from_payload_rejects_other_sources_and_missing_fields():
 
 
 def test_find_orphans_dedupes_by_url():
-    from graph_integrity.reconcile_orphans import OrphanCandidate, find_orphans
     pts = [
         OrphanCandidate(1, "t", "http://dup"),
         OrphanCandidate(2, "t", "http://dup"),   # same url, different chunk/point
