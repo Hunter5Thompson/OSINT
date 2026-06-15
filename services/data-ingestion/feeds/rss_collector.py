@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import time
 from datetime import UTC, datetime
 
@@ -15,7 +14,13 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
 from feeds.provenance import provenance_fields
-from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
+from pipeline import (
+    ExtractionConfigError,
+    ExtractionTransientError,
+    Neo4jWriteError,
+    content_hash,
+    process_item,
+)
 from qdrant_doctor.schema import validate_collection_schema
 
 log = structlog.get_logger(__name__)
@@ -153,12 +158,6 @@ def build_rss_payload(
     }
 
 
-def _content_hash(title: str, url: str) -> str:
-    """Generate a deterministic hash for deduplication."""
-    raw = f"{title.strip().lower()}|{url.strip().lower()}"
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
 def _point_id_from_hash(content_hash: str) -> int:
     """Convert a hex hash into a 64-bit positive integer suitable for Qdrant point IDs."""
     return int(content_hash[:16], 16)
@@ -264,15 +263,19 @@ class RSSCollector:
             if not title or not link:
                 continue
 
-            chash = _content_hash(title, link)
+            chash = content_hash(title, link)
             point_id = _point_id_from_hash(chash)
 
-            # Deduplicate — skip if already stored
-            existing = await asyncio.to_thread(
-                self.qdrant.retrieve,
-                collection_name=settings.qdrant_collection,
-                ids=[point_id],
-            )
+            # Deduplicate — a transient Qdrant fault must not abandon the accumulated batch.
+            try:
+                existing = await asyncio.to_thread(
+                    self.qdrant.retrieve,
+                    collection_name=settings.qdrant_collection,
+                    ids=[point_id],
+                )
+            except Exception as exc:  # noqa: BLE001 — skip this item, keep the batch
+                log.warning("rss_dedup_retrieve_failed", url=link, error=str(exc))
+                continue
             if existing:
                 continue
 
@@ -301,12 +304,17 @@ class RSSCollector:
                     settings=settings,
                     redis_client=self._redis,
                     published_at=published_dt,
+                    content_hash=chash,
+                    raise_on_write_error=True,
                 )
             except ExtractionTransientError as exc:
                 log.warning("extraction_skipped_transient", url=link, error=str(exc))
                 continue
             except ExtractionConfigError as exc:
                 log.error("extraction_skipped_config", url=link, error=str(exc))
+                continue
+            except Neo4jWriteError as exc:
+                log.warning("rss_neo4j_write_skipped", url=link, error=str(exc))
                 continue
 
             try:

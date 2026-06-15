@@ -6,8 +6,9 @@ from unittest.mock import MagicMock, patch
 
 from feeds.gdelt_collector import GDELT_QUERIES, GDELTCollector
 from feeds.hotspot_updater import HOTSPOTS, HotspotUpdater
-from feeds.rss_collector import RSS_FEEDS, RSSCollector, _content_hash, _point_id_from_hash
+from feeds.rss_collector import RSS_FEEDS, RSSCollector, _point_id_from_hash
 from feeds.tle_updater import TLE_GROUPS, TLEUpdater, parse_tle_text
+from pipeline import content_hash as _content_hash
 
 
 # ---------------------------------------------------------------------------
