@@ -9,6 +9,6 @@ CREATE INDEX doc_source_gdelt_date IF NOT EXISTS
 CREATE INDEX doc_url IF NOT EXISTS
   FOR (d:Document) ON (d.url);
 CREATE INDEX entity_name_type IF NOT EXISTS
-  FOR (e:Entity) ON (e.normalized_name, e.type);
+  FOR (e:Entity) ON (e.name, e.type);
 CREATE POINT INDEX location_geo IF NOT EXISTS
   FOR (l:Location) ON (l.geo);
