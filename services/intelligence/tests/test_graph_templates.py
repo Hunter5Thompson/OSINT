@@ -82,3 +82,15 @@ class TestBuildCypherFromTemplate:
     def test_invalid_template_raises(self):
         with pytest.raises(KeyError):
             build_cypher_from_template("does_not_exist", {})
+
+
+class TestTimestampCoalesce:
+    def test_time_ordered_templates_coalesce_and_sort_on_alias(self):
+        for tid in ("events_by_entity", "event_timeline", "source_backed"):
+            cypher = TEMPLATES[tid]["cypher"]
+            assert (
+                "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp"
+                in cypher
+            ), f"{tid} must return the coalesced timestamp"
+            assert "ORDER BY timestamp DESC" in cypher, f"{tid} must sort on the alias"
+            assert "ORDER BY ev.timestamp" not in cypher, f"{tid} must not sort on ev.timestamp"

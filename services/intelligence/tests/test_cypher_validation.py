@@ -21,7 +21,7 @@ class TestCypherReadonlyAllowsReads:
 
     def test_match_with_order_limit(self):
         assert validate_cypher_readonly(
-            "MATCH (ev:Event) RETURN ev ORDER BY ev.timestamp DESC LIMIT 10"
+            "MATCH (ev:Event) RETURN ev ORDER BY ev.timeline_at DESC LIMIT 10"
         ) is True
 
     def test_match_with_with_clause(self):
