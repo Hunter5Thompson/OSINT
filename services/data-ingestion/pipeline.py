@@ -8,7 +8,9 @@ Called between feed-fetch and Qdrant-embed to:
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -95,6 +97,19 @@ class ExtractionConfigError(Exception):
     """vLLM extraction failed due to misconfiguration (404 model, 401/403 auth).
 
     Caller MUST skip Qdrant upsert. Recovery requires fixing config — no auto-retry.
+    """
+
+
+class Neo4jWriteError(Exception):
+    """The Neo4j write failed — an httpx transport error, a non-JSON HTTP-200 body, a
+    non-dict response body, or the tx/commit endpoint returning HTTP 200 with a non-empty
+    errors[] (the Cypher/tx itself failed). Under raise_on_write_error=True, process_item
+    also normalizes ANY other unexpected write failure into this type, so the T1 collectors
+    handle every graph-write failure uniformly.
+
+    process_item re-raises this to the caller only when raise_on_write_error=True, so a
+    partial-success tick (graph failed, vector would still commit) can skip the Qdrant
+    upsert and retry cleanly instead of orphaning a vector.
     """
 
 
@@ -271,6 +286,34 @@ _RESPONSE_SCHEMA = {
 }
 
 
+_EVENT_TITLE_MAXLEN = 200
+
+
+def content_hash(title: str, url: str) -> str:
+    """Canonical content hash shared by the Qdrant dedup point-id and the Event key,
+    so the graph Event identity and the vector dedup identity share one root.
+    MUST stay byte-identical to the value the collectors derive for their Qdrant point.
+    """
+    raw = f"{title.strip().lower()}|{url.strip().lower()}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _normalize_event_title(title: str) -> str:
+    """trim -> whitespace-collapse -> lowercase -> cap length, so minor LLM title
+    variations do not fork a new Event under the MERGE key."""
+    collapsed = re.sub(r"\s+", " ", title.strip()).lower()
+    return collapsed[:_EVENT_TITLE_MAXLEN]
+
+
+def _event_key(doc_content_hash: str, codebook_type: str, event_title: str) -> str:
+    """Deterministic per-event identity for idempotent MERGE. One article can yield
+    several events, so the doc hash alone is not unique — fold in codebook_type and
+    the normalized event title."""
+    raw = f"{doc_content_hash}|{codebook_type}|{_normalize_event_title(event_title)}"
+    # 96 bits — ample for per-document event identity
+    return hashlib.sha256(raw.encode()).hexdigest()[:24]
+
+
 async def process_item(
     title: str,
     text: str,
@@ -282,6 +325,8 @@ async def process_item(
     occurred_at: str | None = None,
     observed_at: str | None = None,
     published_at: str | None = None,
+    content_hash: str | None = None,
+    raise_on_write_error: bool = False,
 ) -> dict | None:
     """Extract intelligence from a feed item, write to Neo4j, publish to Redis.
 
@@ -321,10 +366,21 @@ async def process_item(
                 events, entities, url, title, source, settings,
                 occurred_at=occurred_at, observed_at=observed_at,
                 published_at=published_at, ingested_at=ingested_at,
-                locations=locations,
+                locations=locations, doc_content_hash=content_hash,
             )
-        except Exception as e:
+        except Neo4jWriteError as e:
             log.error("pipeline_neo4j_failed", url=url, error=str(e))
+            # T1 collectors pass raise_on_write_error=True so they can skip the Qdrant
+            # upsert (no orphan vector, no phantom Redis event). Other callers keep the
+            # historical swallow-and-continue behavior.
+            if raise_on_write_error:
+                raise
+        except Exception as e:  # noqa: BLE001 — preserve resilience for non-T1 callers
+            log.error("pipeline_neo4j_failed", url=url, error=str(e))
+            if raise_on_write_error:
+                # T1 contract: ANY graph-write failure must exit before Redis/Qdrant.
+                # Normalize to Neo4jWriteError so the collectors' handler skips the point.
+                raise Neo4jWriteError(f"unexpected neo4j write failure: {e}") from e
 
     # Step 3: Publish to Redis Stream
     if redis_client and events:
@@ -436,6 +492,7 @@ async def _write_to_neo4j(
     published_at: str | None = None,
     ingested_at: str | None = None,
     locations: list[dict] | None = None,
+    doc_content_hash: str | None = None,
 ) -> None:
     """Write extraction results to Neo4j via HTTP transactional API."""
     statements = []
@@ -508,28 +565,36 @@ async def _write_to_neo4j(
     effective_ingested = ingested_at or datetime.now(UTC).isoformat()
     # Derive coarse document country for geo-tagging events (country-centroid).
     doc_country = next((loc["country"] for loc in (locations or []) if loc.get("country")), None)
+    doc_hash = doc_content_hash or content_hash(doc_title, doc_url)
     for event in events:
         ev_occurred = occurred_at or event.get("timestamp")
         timeline_at, time_basis = _resolve_timeline(
             occurred_at=ev_occurred, observed_at=observed_at,
             published_at=published_at, ingested_at=effective_ingested,
         )
+        ev_codebook_type = event.get("codebook_type", "other.unclassified")
+        ev_key = _event_key(doc_hash, ev_codebook_type, event.get("title", ""))
+        # event_key identifies the same event (doc hash + codebook_type + normalized title), so a
+        # re-MERGE is the SAME event: freeze the create-time fields (ON CREATE SET) and only stamp
+        # updated_at on re-match — do not overwrite with a later re-extraction.
         statements.append({
             "statement": (
-                "CREATE (ev:Event {"
-                "  title: $title, summary: $summary,"
-                "  codebook_type: $codebook_type,"
-                "  severity: $severity, confidence: $confidence,"
-                "  timeline_at: datetime($timeline_at), time_basis: $time_basis"
-                "}) "
+                "MERGE (ev:Event {event_key: $event_key}) "
+                "ON CREATE SET "
+                "  ev.title = $title, ev.summary = $summary,"
+                "  ev.codebook_type = $codebook_type,"
+                "  ev.severity = $severity, ev.confidence = $confidence,"
+                "  ev.timeline_at = datetime($timeline_at), ev.time_basis = $time_basis "
+                "ON MATCH SET ev.updated_at = datetime() "
                 "WITH ev "
                 "MATCH (d:Document {url: $url}) "
                 "MERGE (d)-[:DESCRIBES]->(ev)"
             ),
             "parameters": {
+                "event_key": ev_key,
                 "title": event.get("title", ""),
                 "summary": event.get("summary", ""),
-                "codebook_type": event.get("codebook_type", "other.unclassified"),
+                "codebook_type": ev_codebook_type,
                 "severity": event.get("severity", "low"),
                 "confidence": event.get("confidence", 0.5),
                 "timeline_at": timeline_at,
@@ -544,13 +609,29 @@ async def _write_to_neo4j(
             statements[-1]["statement"] += frag["cypher"]
             statements[-1]["parameters"].update(frag["parameters"])
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            f"{settings.neo4j_http_url}/db/neo4j/tx/commit",
-            json={"statements": statements},
-            auth=(settings.neo4j_user, settings.neo4j_password),
-        )
-        resp.raise_for_status()
-        errors = resp.json().get("errors", [])
-        if errors:
-            log.warning("neo4j_write_errors", errors=errors)
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{settings.neo4j_http_url}/db/neo4j/tx/commit",
+                json={"statements": statements},
+                auth=(settings.neo4j_user, settings.neo4j_password),
+            )
+            resp.raise_for_status()
+            body = resp.json()
+    except httpx.HTTPError as exc:
+        # Connect/timeout/5xx — the graph write did not land.
+        raise Neo4jWriteError(f"neo4j http error: {exc}") from exc
+    except ValueError as exc:
+        # HTTP 200 with a non-JSON body (e.g. a proxy/error page) — treat as a write failure.
+        raise Neo4jWriteError(f"neo4j non-json response: {exc}") from exc
+    if not isinstance(body, dict):
+        # HTTP 200 with valid JSON that isn't an object (null/array/scalar) — the
+        # tx/commit contract is a {"results", "errors"} object; anything else means
+        # the write outcome is unknown, so treat it as a failure (no silent .get()).
+        raise Neo4jWriteError(f"neo4j non-dict response body: {type(body).__name__}")
+    errors = body.get("errors", [])
+    if errors:
+        # The tx/commit endpoint returns HTTP 200 with a populated errors[] when the
+        # Cypher/transaction itself failed. Must NOT be swallowed — it is a real failure.
+        log.warning("neo4j_write_errors", errors=errors)
+        raise Neo4jWriteError(f"neo4j tx errors: {errors}")

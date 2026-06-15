@@ -65,7 +65,7 @@ async def _event_params(events, **kwargs) -> dict:
         neo_call = mc.post.call_args_list[1]
     stmts = neo_call.kwargs["json"]["statements"]
     ev_stmt = next(s for s in stmts if "ev:Event" in s["statement"])
-    assert "timeline_at: datetime($timeline_at)" in ev_stmt["statement"]
+    assert "ev.timeline_at = datetime($timeline_at)" in ev_stmt["statement"]
     return ev_stmt["parameters"]
 
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -13,7 +12,13 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
-from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
+from pipeline import (
+    ExtractionConfigError,
+    ExtractionTransientError,
+    Neo4jWriteError,
+    content_hash,
+    process_item,
+)
 from qdrant_doctor.schema import validate_collection_schema
 
 log = structlog.get_logger(__name__)
@@ -53,11 +58,6 @@ GDELT_QUERIES: list[dict[str, str]] = [
 ]
 
 GDELT_BASE_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
-
-
-def _content_hash(title: str, url: str) -> str:
-    raw = f"{title.strip().lower()}|{url.strip().lower()}"
-    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 def _point_id_from_hash(content_hash: str) -> int:
@@ -146,14 +146,18 @@ class GDELTCollector:
             if not title or not url:
                 continue
 
-            chash = _content_hash(title, url)
+            chash = content_hash(title, url)
             point_id = _point_id_from_hash(chash)
 
-            # Deduplicate
-            existing = self.qdrant.retrieve(
-                collection_name=settings.qdrant_collection,
-                ids=[point_id],
-            )
+            # Deduplicate — a transient Qdrant fault must not abandon the accumulated batch.
+            try:
+                existing = self.qdrant.retrieve(
+                    collection_name=settings.qdrant_collection,
+                    ids=[point_id],
+                )
+            except Exception as exc:  # noqa: BLE001 — skip this item, keep the batch
+                log.warning("gdelt_dedup_retrieve_failed", url=url, error=str(exc))
+                continue
             if existing:
                 continue
 
@@ -174,12 +178,19 @@ class GDELTCollector:
                     source="gdelt",
                     settings=settings,
                     redis_client=self._redis,
+                    content_hash=chash,
+                    raise_on_write_error=True,
                 )
             except ExtractionTransientError as exc:
                 log.warning("extraction_skipped_transient", url=url, error=str(exc))
                 continue
             except ExtractionConfigError as exc:
                 log.error("extraction_skipped_config", url=url, error=str(exc))
+                continue
+            except Neo4jWriteError as exc:
+                # Graph write failed — skip the Qdrant upsert so the dedup point is not
+                # minted; the still-fresh article is retried on the next fetch.
+                log.warning("gdelt_neo4j_write_skipped", url=url, error=str(exc))
                 continue
 
             try:
