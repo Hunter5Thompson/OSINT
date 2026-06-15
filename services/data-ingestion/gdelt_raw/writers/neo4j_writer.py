@@ -12,6 +12,7 @@ from typing import Any
 import polars as pl
 import structlog
 from neo4j import AsyncGraphDatabase
+from pydantic import BaseModel, ValidationError
 
 from gdelt_raw.ids import build_location_id
 from gdelt_raw.schemas import GDELTDocumentWrite, GDELTEventWrite
@@ -131,6 +132,32 @@ def render_doc_params(doc: GDELTDocumentWrite) -> dict[str, Any]:
     return d
 
 
+def _validate_rows(rows: list[dict], model: type[BaseModel], stream: str) -> list:
+    """Validate each row against ``model``; skip-and-log rejects instead of
+    fail-fast. One malformed row (e.g. a null doc_id that slipped past the
+    parser gate) must not block the whole slice's batch write (WP-02)."""
+    valid = []
+    rejected = 0
+    for r in rows:
+        try:
+            valid.append(model.model_validate(r))
+        except ValidationError as e:
+            rejected += 1
+            log.warning(
+                "gdelt_writer_row_rejected",
+                stream=stream,
+                doc_id=r.get("doc_id"),
+                event_id=r.get("event_id"),
+                error=str(e).splitlines()[0],
+            )
+    if rejected:
+        log.warning(
+            "gdelt_writer_rows_rejected",
+            stream=stream, rejected=rejected, accepted=len(valid),
+        )
+    return valid
+
+
 class Neo4jWriter:
     def __init__(self, uri: str, user: str, password: str):
         self._driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
@@ -194,13 +221,15 @@ class Neo4jWriter:
 
         if ev_path.exists():
             ev_df = pl.read_parquet(ev_path)
-            events = [GDELTEventWrite.model_validate(r) for r in ev_df.to_dicts()]
-            await self.write_events(events)
+            events = _validate_rows(ev_df.to_dicts(), GDELTEventWrite, "events")
+            if events:
+                await self.write_events(events)
 
         if gkg_path.exists():
             gkg_df = pl.read_parquet(gkg_path)
-            docs = [GDELTDocumentWrite.model_validate(r) for r in gkg_df.to_dicts()]
-            await self.write_docs(docs)
+            docs = _validate_rows(gkg_df.to_dicts(), GDELTDocumentWrite, "gkg")
+            if docs:
+                await self.write_docs(docs)
 
         # Mentions require both Events and Docs to already exist — only write
         # if both parquet streams were present.

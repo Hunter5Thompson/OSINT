@@ -136,13 +136,20 @@ class QdrantWriter:
         df = pl.read_parquet(path)
         points: list[PointStruct] = []
         for row in df.to_dicts():
+            doc_id = row.get("doc_id")
+            if not doc_id:
+                log.warning(
+                    "gdelt_writer_row_skipped_no_doc_id",
+                    writer="qdrant", url=row.get("url"),
+                )
+                continue
             text = build_embed_text(row)
             content_hash = hashlib.sha256(text.encode()).hexdigest()
             vector = await self._embed(text)
             payload = build_payload(row)
             payload["content_hash"] = content_hash
             points.append(PointStruct(
-                id=qdrant_point_id_for_doc(row["doc_id"]),
+                id=qdrant_point_id_for_doc(doc_id),
                 vector=vector,
                 payload=payload,
             ))
