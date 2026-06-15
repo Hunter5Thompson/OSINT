@@ -27,6 +27,38 @@ from gdelt_raw.polars_schemas import (
 log = structlog.get_logger(__name__)
 
 
+def _quarantine_null_keys(
+    df: pl.DataFrame,
+    id_column: str,
+    stream_name: str,
+    quarantine_dir: Path | None,
+) -> tuple[pl.DataFrame, int]:
+    """Divert rows whose primary-key column is null to the quarantine JSONL and
+    drop them from the frame. Runs on BOTH the strict and fallback paths — an
+    empty leading key is silently null-coerced by ``null_values=[""]`` on the
+    strict path (no error), so this gate, not the tab-count check, is what
+    catches it. Returns (clean_df, dropped_count)."""
+    if df.height == 0 or id_column not in df.columns:
+        return df, 0
+    bad = df.filter(pl.col(id_column).is_null())
+    if bad.height == 0:
+        return df, 0
+    if quarantine_dir is not None:
+        quarantine_dir.mkdir(parents=True, exist_ok=True)
+        qfile = quarantine_dir / f"{stream_name}.jsonl"
+        with qfile.open("a", encoding="utf-8") as fh:  # append: tab-count path may have written
+            for row in bad.to_dicts():
+                fh.write(json.dumps(
+                    {"reason": "null_key", "id_column": id_column, "row": row},
+                    default=str,
+                ) + "\n")
+    log.warning(
+        "gdelt_null_key_quarantined",
+        stream=stream_name, id_column=id_column, count=bad.height,
+    )
+    return df.filter(pl.col(id_column).is_not_null()), bad.height
+
+
 @dataclass
 class ParseResult:
     """Outcome of parsing a single GDELT slice file.
@@ -34,7 +66,8 @@ class ParseResult:
     Fields:
         df: parsed DataFrame (empty if no valid rows).
         total_lines: count of non-empty source lines (denominator for error pct).
-        quarantine_count: number of malformed lines diverted to quarantine.
+        quarantine_count: rows diverted to quarantine — wrong-tab-count lines
+            (fallback path) plus null/empty primary-key rows (null-key gate, WP-02).
     """
 
     df: pl.DataFrame
@@ -113,6 +146,7 @@ def _parse_stream(
     cols: list[str],
     schema: dict,
     stream_name: str,
+    id_column: str,
     quarantine_dir: Path | None,
 ) -> ParseResult:
     if not path.is_file():
@@ -128,16 +162,25 @@ def _parse_stream(
     )
     try:
         df = _parse_strict(path, cols, schema)
-        return ParseResult(
-            df=df, total_lines=non_empty_count, quarantine_count=0
-        )
+        tab_quarantine = 0
     except (
         pl.exceptions.ComputeError,
         pl.exceptions.SchemaFieldNotFoundError,
         pl.exceptions.NoDataError,
     ) as e:
         log.warning("gdelt_parser_fallback", stream=stream_name, error=str(e))
-        return _parse_with_fallback(path, cols, schema, stream_name, quarantine_dir)
+        fb = _parse_with_fallback(path, cols, schema, stream_name, quarantine_dir)
+        df = fb.df
+        tab_quarantine = fb.quarantine_count
+
+    # WP-02: divert null/empty primary-key rows on both paths.
+    df, null_quarantine = _quarantine_null_keys(df, id_column, stream_name, quarantine_dir)
+
+    return ParseResult(
+        df=df,
+        total_lines=non_empty_count,
+        quarantine_count=tab_quarantine + null_quarantine,
+    )
 
 
 def parse_events(path: Path, quarantine_dir: Path | None = None) -> ParseResult:
@@ -150,7 +193,8 @@ def parse_events(path: Path, quarantine_dir: Path | None = None) -> ParseResult:
         FileNotFoundError: if ``path`` does not exist.
     """
     return _parse_stream(
-        path, EVENT_COLUMNS, EVENT_POLARS_SCHEMA, "events", quarantine_dir
+        path, EVENT_COLUMNS, EVENT_POLARS_SCHEMA, "events",
+        "global_event_id", quarantine_dir,
     )
 
 
@@ -164,7 +208,8 @@ def parse_mentions(path: Path, quarantine_dir: Path | None = None) -> ParseResul
         FileNotFoundError: if ``path`` does not exist.
     """
     return _parse_stream(
-        path, MENTION_COLUMNS, MENTION_POLARS_SCHEMA, "mentions", quarantine_dir
+        path, MENTION_COLUMNS, MENTION_POLARS_SCHEMA, "mentions",
+        "global_event_id", quarantine_dir,
     )
 
 
@@ -178,5 +223,6 @@ def parse_gkg(path: Path, quarantine_dir: Path | None = None) -> ParseResult:
         FileNotFoundError: if ``path`` does not exist.
     """
     return _parse_stream(
-        path, GKG_COLUMNS, GKG_POLARS_SCHEMA, "gkg", quarantine_dir
+        path, GKG_COLUMNS, GKG_POLARS_SCHEMA, "gkg",
+        "gkg_record_id", quarantine_dir,
     )
