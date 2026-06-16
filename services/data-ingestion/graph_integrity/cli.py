@@ -4,7 +4,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from graph_integrity import geo_gdelt, geo_incident, rekey_incident_locations, report
+from graph_integrity import (
+    cleanup_null_island,
+    geo_gdelt,
+    geo_incident,
+    rekey_incident_locations,
+    report,
+)
 from graph_integrity.neo4j_client import Neo4jClient
 
 
@@ -18,6 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
     gd.add_argument("--dry-run", action="store_true")
     rk = sub.add_parser("rekey-incident-locations")
     rk.add_argument("--dry-run", action="store_true")
+    cn = sub.add_parser("cleanup-null-island")
+    cn.add_argument("--dry-run", action="store_true")
     return p
 
 
@@ -59,6 +67,10 @@ async def _amain(args: argparse.Namespace) -> None:
                         "  preflight: 0 duplicate loc_keys"
                         " -- safe to apply migrations/location_loc_key_unique.cypher"
                     )
+        elif args.command == "cleanup-null-island":
+            n = await cleanup_null_island.run(client, dry_run=args.dry_run)
+            suffix = "(dry-run)" if args.dry_run else "deleted"
+            print(f"cleanup-null-island: {n} (0,0) locations {suffix}")
     finally:
         await client.close()
 
