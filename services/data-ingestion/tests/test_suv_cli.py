@@ -54,6 +54,29 @@ async def test_lookup_existing_parses_results():
     assert out == {"rheinmetall ag": [("Rheinmetall", "ORGANIZATION", "e1")]}
 
 
+def test_gate_rejects_ghost_with_shared_directory_url(tmp_path):
+    # F1 regression: a ghost approved entry carrying the SAME shared directory suv_url
+    # as the seed must STILL be rejected (name is the authoritative key).
+    url = "https://suv.report/sicherheits-und-verteidigungsindustrie/"
+    seed = _seed(tmp_path, [Company(name="A", suv_url=url)])
+    report = tmp_path / "r.yaml"
+    report.write_text(yaml.safe_dump([
+        {"name": "GHOST", "suv_url": url, "decision": "new",
+         "existing_name": None, "candidates": [], "approved": True}]))
+    with pytest.raises(BuildGateError, match="diverge|unknown"):
+        resolve_build_inputs(seed_path=seed, approved_path=report)
+
+
+def test_build_errors_clearly_when_seed_missing(tmp_path, monkeypatch):
+    from click.testing import CliRunner  # noqa: I001
+
+    import suv_structured.cli as cli_mod
+    monkeypatch.setattr(cli_mod, "SEED_PATH", tmp_path / "nope.yaml")
+    result = CliRunner().invoke(cli_mod.cli, ["build", "--dry-run"])
+    assert result.exit_code != 0
+    assert "parse" in result.output.lower()
+
+
 @pytest.mark.asyncio
 async def test_lookup_existing_raises_on_neo4j_error_body():
     from suv_structured.cli import _lookup_existing

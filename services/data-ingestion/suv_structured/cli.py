@@ -21,7 +21,7 @@ from suv_structured.build_companies import (
     write_neo4j,
 )
 from suv_structured.fetch import fetch_directory_markdown
-from suv_structured.match_report import build_match_report, dump_report, load_approved
+from suv_structured.match_report import build_match_report, detect_drift, dump_report, load_approved
 from suv_structured.parse import parse_companies
 from suv_structured.schemas import Company, profile_text
 
@@ -47,11 +47,10 @@ def resolve_build_inputs(
             "(run `build --dry-run` first, curate + set approved: true)")
     companies = _load_seed(seed_path)
     approved = load_approved(approved_path)            # raises on approved+ambiguous
-    seed_urls = {c.suv_url for c in companies}
     seed_names = {c.name for c in companies}
-    # suv_url is the same directory URL for every company; name is the effective key
-    unknown = [e["name"] for e in approved
-               if e.get("suv_url") not in seed_urls and e["name"] not in seed_names]
+    # name is the authoritative join key: every company shares the directory suv_url,
+    # so a url-based check can never detect divergence (it always matches).
+    unknown = [e["name"] for e in approved if e["name"] not in seed_names]
     if unknown:
         raise BuildGateError(f"approved report diverges from seed (unknown: {unknown})")
     return companies, approved
@@ -102,6 +101,9 @@ def parse() -> None:
 def build(dry_run: bool, approved_path: Path | None, report_out: Path) -> None:
     """Dry-run produces the match report; real run requires --approved-matches."""
     async def _run() -> None:
+        if not SEED_PATH.exists():
+            raise click.ClickException(
+                f"no seed at {SEED_PATH} — run `odin-suv-structured parse` first")
         companies = _load_seed(SEED_PATH)
         auth_user, auth_pw = settings.neo4j_user, settings.neo4j_password
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -112,6 +114,15 @@ def build(dry_run: bool, approved_path: Path | None, report_out: Path) -> None:
                 click.echo(f"dry-run: wrote match report -> {report_out}")
                 return
             _, approved = resolve_build_inputs(seed_path=SEED_PATH, approved_path=approved_path)
+            # Re-derive matches against the CURRENT graph; a stale approved report
+            # (graph changed since dry-run) must not write wrong merges.
+            existing = await _lookup_existing(
+                companies, client, settings.neo4j_http_url, auth_user, auth_pw)
+            fresh = build_match_report(companies, existing)
+            drift = detect_drift(approved, fresh)
+            if drift:
+                raise BuildGateError(
+                    f"graph changed since dry-run — re-run `build --dry-run` + re-curate: {drift}")
             from datetime import UTC, datetime
             ts = datetime.now(UTC).isoformat()
             stmts = build_statements(companies, approved, extracted_at=ts)

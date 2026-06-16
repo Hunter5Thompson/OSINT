@@ -2,7 +2,12 @@
 import pytest
 import yaml
 
-from suv_structured.match_report import MatchDecision, build_match_report, load_approved
+from suv_structured.match_report import (
+    MatchDecision,
+    build_match_report,
+    detect_drift,
+    load_approved,
+)
 from suv_structured.schemas import Company
 
 
@@ -100,3 +105,28 @@ def test_load_approved_normalizes_decision_case(tmp_path):
          "candidates": [], "approved": True}]))
     approved = load_approved(p)
     assert approved[0]["decision"] == "new"
+
+
+def test_detect_drift_none_when_report_matches_fresh():
+    approved = [{"name": "A", "decision": "match", "existing_name": "X"},
+                {"name": "B", "decision": "new", "existing_name": None}]
+    fresh = [{"name": "A", "decision": "match", "existing_name": "X"},
+             {"name": "B", "decision": "new", "existing_name": None}]
+    assert detect_drift(approved, fresh) == []
+
+
+def test_detect_drift_flags_new_became_ambiguous():
+    approved = [{"name": "A", "decision": "new", "existing_name": None}]
+    fresh = [{"name": "A", "decision": "ambiguous", "existing_name": None}]
+    assert detect_drift(approved, fresh) == ["A"]
+
+
+def test_detect_drift_flags_match_target_moved():
+    approved = [{"name": "A", "decision": "match", "existing_name": "X"}]
+    fresh = [{"name": "A", "decision": "match", "existing_name": "Y"}]
+    assert detect_drift(approved, fresh) == ["A"]
+
+
+def test_detect_drift_flags_missing_from_fresh():
+    approved = [{"name": "A", "decision": "new", "existing_name": None}]
+    assert detect_drift(approved, []) == ["A"]

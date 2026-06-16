@@ -45,6 +45,30 @@ def build_match_report(
     return report
 
 
+def detect_drift(approved: list[dict], fresh_report: list[dict]) -> list[str]:
+    """Names of approved entries whose freshly re-derived decision/target no longer
+    matches the approved report — the graph changed since the dry-run, so writing
+    them could create a wrong merge. Caller must abort and re-curate.
+
+    Compares decision (case-insensitively) and, for matches, the existing_name target.
+    An approved name missing from the fresh report is also flagged."""
+    fresh_by_name = {r["name"]: r for r in fresh_report}
+    drifted: list[str] = []
+    for e in approved:
+        fr = fresh_by_name.get(e["name"])
+        if fr is None:
+            drifted.append(e["name"])
+            continue
+        decision = (e.get("decision") or "").lower()
+        target_moved = (
+            fr["decision"] == str(MatchDecision.MATCH)
+            and fr.get("existing_name") != e.get("existing_name")
+        )
+        if fr["decision"] != decision or target_moved:
+            drifted.append(e["name"])
+    return drifted
+
+
 def dump_report(report: list[dict], path: Path) -> None:
     path.write_text(yaml.safe_dump(report, allow_unicode=True, sort_keys=False))
 
