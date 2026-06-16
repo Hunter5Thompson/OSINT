@@ -6,6 +6,7 @@ from graph_integrity.rekey_incident_locations import (
     IncidentLoc,
     plan_rekey,
     run,
+    verify_no_duplicate_loc_keys,
 )
 
 
@@ -64,3 +65,28 @@ def test_apply_rewires_and_cleans_orphans():
     assert cyphers[0] == FETCH_INCIDENT_LOCATIONS
     assert sum("MERGE (i)-[:OCCURRED_AT]->(l)" in c for c in cyphers) == 2
     assert any("NOT ()-[:OCCURRED_AT]->(l)" in c for c in cyphers)
+
+
+def test_verify_no_duplicate_loc_keys_returns_pairs():
+    class _C:
+        async def run(self, cypher, params=None):
+            return [{"key": "incident:x@1.000,2.000", "c": 2}]
+    assert asyncio.run(verify_no_duplicate_loc_keys(_C())) == [("incident:x@1.000,2.000", 2)]
+
+
+def test_verify_no_duplicate_loc_keys_empty_when_clean():
+    class _C:
+        async def run(self, cypher, params=None):
+            return []
+    assert asyncio.run(verify_no_duplicate_loc_keys(_C())) == []
+
+
+def test_plan_rekey_handles_transient_double_edge():
+    # Task-3 transient: an incident temporarily has BOTH the stale old-key row
+    # and the correct new-key row. Only the stale row should trigger a rewire.
+    rows = [
+        _row("a", "Donetsk", 48.0, 37.8, "incident:donetsk"),
+        _row("a", "Donetsk", 48.0, 37.8, "incident:donetsk@48.000,37.800"),
+    ]
+    plan = plan_rekey(rows)
+    assert plan.rewire_count == 1

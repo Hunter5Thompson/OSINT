@@ -47,6 +47,18 @@ async def _amain(args: argparse.Namespace) -> None:
             n = await rekey_incident_locations.run(client, dry_run=args.dry_run)
             suffix = "(dry-run)" if args.dry_run else "rewired"
             print(f"rekey-incident-locations: {n} incidents {suffix}")
+            if not args.dry_run:
+                dups = await rekey_incident_locations.verify_no_duplicate_loc_keys(client)
+                if dups:
+                    print(
+                        f"  preflight: {len(dups)} duplicate loc_keys REMAIN"
+                        f" -- do NOT apply the constraint yet: {dups[:5]}"
+                    )
+                else:
+                    print(
+                        "  preflight: 0 duplicate loc_keys"
+                        " -- safe to apply migrations/location_loc_key_unique.cypher"
+                    )
     finally:
         await client.close()
 

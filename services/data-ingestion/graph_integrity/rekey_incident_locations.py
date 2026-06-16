@@ -44,7 +44,7 @@ DELETE r
 CLEANUP_ORPHAN_INCIDENT_LOCATIONS = """
 MATCH (l:Location)
 WHERE l.loc_key STARTS WITH 'incident:' AND NOT ()-[:OCCURRED_AT]->(l)
-DELETE l
+DETACH DELETE l
 RETURN count(l) AS deleted
 """
 
@@ -112,7 +112,10 @@ async def run(client, *, dry_run: bool = False) -> int:
             "incident_id": incident_id, "new_key": new_key,
             "lat": r.lat, "lon": r.lon, "location": r.location,
         })
-    await client.run(CLEANUP_ORPHAN_INCIDENT_LOCATIONS)
+    result = await client.run(CLEANUP_ORPHAN_INCIDENT_LOCATIONS)
+    orphans_deleted = int(result[0]["deleted"]) if result else 0
+    log.info("rekey_incident_locations_done",
+             rewires=plan.rewire_count, orphans_deleted=orphans_deleted)
     return plan.rewire_count
 
 
