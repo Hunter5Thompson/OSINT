@@ -9,6 +9,51 @@ from gdelt_raw.state import GDELTState
 
 
 @pytest.mark.asyncio
+async def test_reconcile_flags_store_lagging_parquet():
+    """parquet checkpoint is store-independent and advances first; a store whose
+    last_slice trails it is a candidate stranded slice (WP-10)."""
+    from gdelt_raw.recovery import reconcile_forward_state
+
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+
+    await state.set_last_slice("parquet", "20260425121500")
+    await state.set_last_slice("neo4j", "20260425120000")   # lags
+    await state.set_last_slice("qdrant", "20260425121500")  # in sync
+
+    report = await reconcile_forward_state(state)
+    assert report["parquet"] == "20260425121500"
+    assert report["lagging"] == ["neo4j"]
+    assert report["neo4j"] == "20260425120000"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_no_lag_when_all_in_sync():
+    from gdelt_raw.recovery import reconcile_forward_state
+
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+
+    for store in ("parquet", "neo4j", "qdrant"):
+        await state.set_last_slice(store, "20260425121500")
+    report = await reconcile_forward_state(state)
+    assert report["lagging"] == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_no_lag_when_parquet_not_yet_set():
+    """No parquet checkpoint yet → no reference point → nothing lags."""
+    from gdelt_raw.recovery import reconcile_forward_state
+
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+
+    report = await reconcile_forward_state(state)
+    assert report["parquet"] is None
+    assert report["lagging"] == []
+
+
+@pytest.mark.asyncio
 async def test_pending_store_replay_from_parquet(tmp_path):
     """Slice S was parquet-done but neo4j failed. Replay must succeed
     without re-downloading."""

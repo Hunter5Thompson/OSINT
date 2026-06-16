@@ -60,3 +60,30 @@ async def replay_pending(
             log.info("qdrant_recovery_done", slice=slice_id)
         except Exception as e:
             log.error("qdrant_recovery_retry_failed", slice=slice_id, error=str(e))
+
+
+async def reconcile_forward_state(state: GDELTState) -> dict:
+    """Flag stores whose last_slice trails the parquet checkpoint.
+
+    The parquet pointer is the store-independent download gate and advances
+    first; a store pointer that lags it indicates a slice whose parquet exists
+    but whose store write did not confirm (WP-10 — e.g. a hard crash mid-write).
+    Such slices should be in the pending set for replay_pending; this is the
+    detection half. Returns the three pointers plus the list of lagging stores."""
+    parquet = await state.get_last_slice("parquet")
+    report: dict = {"parquet": parquet, "lagging": []}
+    for store in ("neo4j", "qdrant"):
+        ptr = await state.get_last_slice(store)
+        report[store] = ptr
+        # slice_ids are zero-padded YYYYMMDDHHMMSS → lexicographic == chronological
+        if parquet is not None and (ptr is None or ptr < parquet):
+            report["lagging"].append(store)
+    if report["lagging"]:
+        log.warning(
+            "gdelt_forward_state_lag",
+            parquet=parquet,
+            lagging=report["lagging"],
+            neo4j=report.get("neo4j"),
+            qdrant=report.get("qdrant"),
+        )
+    return report
