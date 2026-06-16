@@ -32,3 +32,8 @@ def test_upsert_params_sets_loc_key():
 def test_vendored_loc_key_matches_canonical():
     assert incident_key("Donetsk", 48.0, 37.8) == "incident:donetsk@48.000,37.800"
     assert incident_key("", 48.0, 37.8) == "geo:48.000,37.800"
+
+
+def test_incident_upsert_skips_null_island():
+    # (0,0) is the non-spatial sentinel (ClusterStore map:no_pin) -> no Location
+    assert "($lat = 0.0 AND $lon = 0.0)" in INCIDENT_UPSERT

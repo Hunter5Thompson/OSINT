@@ -70,3 +70,21 @@ def test_run_empty_returns_zero():
     client = _FakeClient([])
     assert asyncio.run(geo_incident.run(client, dry_run=False)) == 0
     assert len(client.calls) == 1            # SELECT only
+
+
+def test_select_excludes_null_island():
+    q = SELECT_UNWIRED_INCIDENTS.upper()
+    assert "NOT (I.LAT = 0.0 AND I.LON = 0.0)" in q
+
+
+def test_build_wire_params_null_island_is_none():
+    assert build_wire_params({"id": "x", "location": None, "lat": 0.0, "lon": 0.0}) is None
+
+
+def test_run_skips_null_island_row():
+    from graph_integrity import geo_incident
+    rows = [{"id": "i1", "location": None, "lat": 0.0, "lon": 0.0}]
+    client = _FakeClient(rows)
+    n = asyncio.run(geo_incident.run(client, dry_run=False))
+    assert n == 0
+    assert len(client.calls) == 1   # SELECT only, no WIRE for the (0,0) row
