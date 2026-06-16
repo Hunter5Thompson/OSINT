@@ -51,7 +51,7 @@ Pure, unit-tested core + thin live orchestration:
 
 ### 4. CLI — `odin-suv-structured backfill-hq`
 - **`--dry-run` is the DEFAULT**; a real write requires explicit **`--apply`** (no accidental prod write).
-- Dry-run output: # SUV orgs found · # mapped vs skipped · target LOCATION-node count per distinct mapped country · # statements that would be written.
+- Dry-run output: # SUV orgs found · # mapped vs skipped · **per distinct mapped country, the concrete target node + count** (e.g. `Germany -> Entity{type:"LOCATION"} count=1`) so the operator check before `--apply` is unambiguous · # statements that would be written.
 - **Preflight (both modes):** per distinct mapped country, require **exactly one** `Entity{type:"LOCATION"}` target. If any country resolves to 0 or >1 LOCATION nodes → **abort** (a `toLower` MATCH against >1 node would silently create multiple edges). `--apply` runs the preflight, then writes.
 
 ## Safety
