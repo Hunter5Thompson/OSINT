@@ -82,6 +82,12 @@ _ALIAS_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
         ("DC National Guard", "D.C. National Guard"),
     ),
     "Alaska Army National Guard": ("MILITARY_UNIT", ()),
+    # SUV Track 2 curated company aliases (user-approved 2026-06-16): collapse the
+    # SUV legal-form spelling onto the canonical org name already in the graph, so the
+    # ingest enriches in-place (no duplicate) and future RSS/NLM runs canonicalize too.
+    "Rheinmetall": ("ORGANIZATION", ("Rheinmetall AG",)),
+    "Diehl Defence": ("ORGANIZATION", ("Diehl Defence GmbH & Co. KG",)),
+    "KNDS": ("ORGANIZATION", ("KNDS N.V.",)),
 }
 
 

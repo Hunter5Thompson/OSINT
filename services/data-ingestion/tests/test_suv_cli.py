@@ -1,4 +1,6 @@
 # tests/test_suv_cli.py
+import json
+
 import httpx
 import pytest
 import yaml
@@ -105,3 +107,20 @@ async def test_lookup_existing_raises_on_neo4j_error_body():
         with pytest.raises(RuntimeError, match="Auth failed"):
             await _lookup_existing([Company(name="X", suv_url="u")],
                                    client, "http://neo", "neo4j", "pw")
+
+
+@pytest.mark.asyncio
+async def test_lookup_existing_also_queries_canonical_names():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["names"] = json.loads(request.content)["statements"][0]["parameters"]["names"]
+        return httpx.Response(200, json={"results": [{"data": []}], "errors": []})
+
+    transport = httpx.MockTransport(handler)
+    from suv_structured.cli import _lookup_existing
+    async with httpx.AsyncClient(transport=transport) as client:
+        await _lookup_existing([Company(name="Rheinmetall AG", suv_url="u")],
+                               client, "http://neo", "neo4j", "pw")
+    assert "Rheinmetall AG" in captured["names"]
+    assert "Rheinmetall" in captured["names"]   # canonical form queried too

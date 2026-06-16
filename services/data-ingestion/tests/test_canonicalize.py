@@ -162,3 +162,16 @@ def test_whitespace_is_trimmed_for_unmapped_names():
 def test_canonical_names_are_idempotent(canon):
     r = canonicalize_entity(canon, "MILITARY_UNIT")
     assert r.name == canon
+
+
+# --- SUV Track 2 curated company aliases (user-approved 2026-06-16) ---
+
+
+def test_suv_curated_company_aliases_collapse_to_canonical():
+    assert canonicalize_entity("Rheinmetall AG", "ORGANIZATION").name == "Rheinmetall"
+    r2 = canonicalize_entity("Diehl Defence GmbH & Co. KG", "ORGANIZATION")
+    assert r2.name == "Diehl Defence"
+    assert canonicalize_entity("KNDS N.V.", "ORGANIZATION").name == "KNDS"
+    r = canonicalize_entity("Rheinmetall AG", "ORGANIZATION")
+    assert r.type == "ORGANIZATION"
+    assert "Rheinmetall AG" in r.aliases

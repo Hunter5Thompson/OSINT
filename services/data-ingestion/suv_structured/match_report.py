@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 
+from canonicalize import canonicalize_entity
 from suv_structured.schemas import Company
 
 
@@ -26,7 +27,12 @@ def build_match_report(
     """lookup maps lowercased company name -> [(existing_name, type, elementId), ...]."""
     report: list[dict] = []
     for c in companies:
-        rows = lookup.get(c.name.strip().lower(), [])
+        key = c.name.strip().lower()
+        rows = lookup.get(key, [])
+        if not rows:
+            canon = canonicalize_entity(c.name, "ORGANIZATION").name.strip().lower()
+            if canon != key:
+                rows = lookup.get(canon, [])
         orgs = [r for r in rows if r[1] == "ORGANIZATION"]
         if not rows:
             decision, existing = MatchDecision.NEW, None
