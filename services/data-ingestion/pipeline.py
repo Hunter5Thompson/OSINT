@@ -563,8 +563,14 @@ async def _write_to_neo4j(
     # beats the optional LLM 'timestamp' hint; a malformed hint is dropped, never
     # turned into a fabricated occurred_at.
     effective_ingested = ingested_at or datetime.now(UTC).isoformat()
-    # Derive coarse document country for geo-tagging events (country-centroid).
-    doc_country = next((loc["country"] for loc in (locations or []) if loc.get("country")), None)
+    # Geo-stamp events only when the document resolves to exactly ONE distinct
+    # country (WP-05). Multiple place names within the same country stay
+    # centroid-stampable, but a multi-country document is left geoless (honest
+    # located:0) instead of collapsing every event onto whichever country the
+    # LLM happened to emit first. resolve_iso2 maps name/code -> canonical
+    # ISO-2 (or None) and is idempotent on an ISO-2 code.
+    iso2s = {resolve_iso2(loc.get("country")) for loc in (locations or [])}
+    doc_country = next(iter(iso2s)) if len(iso2s) == 1 else None
     doc_hash = doc_content_hash or content_hash(doc_title, doc_url)
     for event in events:
         ev_occurred = occurred_at or event.get("timestamp")
