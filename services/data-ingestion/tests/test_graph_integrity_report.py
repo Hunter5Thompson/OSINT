@@ -54,7 +54,7 @@ def test_new_geo_queries_are_read_only():
 
 def test_geo_coverage_excludes_null_island():
     assert "0.0" in GEO_COVERAGE
-    assert "l.lat = 0.0 AND l.lon = 0.0" in GEO_COVERAGE
+    assert "WHERE NOT (l.lat = 0.0 AND l.lon = 0.0)" in GEO_COVERAGE
 
 
 def test_shape_report_includes_geo_health_sections():

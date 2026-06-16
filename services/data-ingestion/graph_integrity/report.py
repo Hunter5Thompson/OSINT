@@ -53,10 +53,12 @@ RETURN count(*) AS coord_disagreements
 """
 
 # (0,0) null-island Locations and how many nodes still hang off them (WP-11).
+# Counts neighbours via ANY relationship/direction so the cleanup dry-run is
+# not misled by non-OCCURRED_AT edges.
 NULL_ISLAND = """
 MATCH (l:Location) WHERE l.lat = 0.0 AND l.lon = 0.0
-OPTIONAL MATCH (n)-[:OCCURRED_AT]->(l)
-RETURN count(DISTINCT l) AS null_island_locations, count(n) AS attached_nodes
+OPTIONAL MATCH (l)--(n)
+RETURN count(DISTINCT l) AS null_island_locations, count(DISTINCT n) AS attached_nodes
 """
 
 DUP_ACTOR_EDGES = """
