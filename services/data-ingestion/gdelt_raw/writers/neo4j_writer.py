@@ -224,8 +224,10 @@ class Neo4jWriter:
                     # MERGE_MENTION always RETURNs exactly one row (OPTIONAL MATCH
                     # never reduces cardinality to zero), so single() is safe; it
                     # drains the stream, after which consume() returns the buffered
-                    # summary (relationships_created). Validated against live Neo4j
-                    # by the @pytest.mark.integration test (CI has no Neo4j).
+                    # summary (relationships_created). The @pytest.mark.integration
+                    # test runs this query + single()/consume() against a live Neo4j
+                    # (CI has no Neo4j); it does not yet assert the edge-creation
+                    # arm — see follow-up to remap the mentions sentinel event_id.
                     record = await result.single()
                     summary = await result.consume()
                     outcome = _classify_mention(
