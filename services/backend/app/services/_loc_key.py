@@ -14,6 +14,9 @@ def slug(s: str) -> str:
 
 
 def incident_key(name: str | None, lat: float, lon: float) -> str:
+    # Coordinates are ALWAYS part of the identity, even when a name is present
+    # (WP-07): two distinct incidents that share a location slug but sit at
+    # different coordinates must NOT collapse onto the same :Location node.
     if name and name.strip():
-        return f"incident:{slug(name)}"
+        return f"incident:{slug(name)}@{lat:.3f},{lon:.3f}"
     return f"geo:{lat:.3f},{lon:.3f}"

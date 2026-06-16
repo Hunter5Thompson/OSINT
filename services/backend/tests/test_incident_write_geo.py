@@ -25,10 +25,10 @@ def test_upsert_params_sets_loc_key():
         trigger_ts=datetime.now(UTC), sources=[], layer_hints=[], timeline=[],
     )
     params = _upsert_params(rec, 0)
-    assert params["loc_key"] == "incident:donetsk"
+    assert params["loc_key"] == "incident:donetsk@48.000,37.800"
     assert params["lat"] == 48.0 and params["lon"] == 37.8
 
 
 def test_vendored_loc_key_matches_canonical():
-    assert incident_key("Donetsk", 48.0, 37.8) == "incident:donetsk"
+    assert incident_key("Donetsk", 48.0, 37.8) == "incident:donetsk@48.000,37.800"
     assert incident_key("", 48.0, 37.8) == "geo:48.000,37.800"

@@ -12,8 +12,12 @@ def test_centroid_key_uses_lowercase_iso2():
     assert centroid_key("us") == "centroid:us"
 
 
-def test_incident_key_prefers_name_else_rounded_coords():
-    assert incident_key("Donetsk", 48.0159, 37.8028) == "incident:donetsk"
+def test_incident_key_is_coordinate_bearing():
+    # name + coords -> name AND coords (WP-07): distinct coords => distinct key
+    assert incident_key("Donetsk", 48.0159, 37.8028) == "incident:donetsk@48.016,37.803"
+    # same name, different coords must NOT collide (the bug this fixes)
+    assert incident_key("Donetsk", 48.0159, 37.8028) != incident_key("Donetsk", 49.0, 38.0)
+    # no name -> coord key (unchanged)
     assert incident_key("", 48.0159, 37.8028) == "geo:48.016,37.803"
     assert incident_key(None, 48.0159, 37.8028) == "geo:48.016,37.803"
 
