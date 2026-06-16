@@ -5,13 +5,20 @@ No LLM, no GPU. Writes only companies present (and approved) in the match report
 from __future__ import annotations
 
 import base64
+import hashlib
+import re
+import uuid
+from collections.abc import Callable
+from datetime import UTC, datetime
 
 import httpx
 import structlog
+from qdrant_client.models import PointStruct
 
 from canonicalize import canonicalize_entity
+from feeds.provenance import provenance_fields
 from suv_structured.countries import to_graph_country
-from suv_structured.schemas import Company
+from suv_structured.schemas import Company, profile_text
 from suv_structured.write_templates import LINK_COMPANY_COUNTRY, UPSERT_COMPANY
 
 log = structlog.get_logger(__name__)
@@ -88,3 +95,54 @@ async def write_neo4j(
     if errors:
         raise RuntimeError(f"Neo4j returned {len(errors)} error(s): {errors[0].get('message','')}")
     log.info("suv_neo4j_written", statements=len(statements))
+
+
+SUV_QDRANT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "odin/suv_structured/odin_intel")
+
+
+def _slug(name: str) -> str:
+    """Stable slug for point-id keying: lowercased, non-alphanumeric runs -> '-'."""
+    return re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+
+
+def _point_id(name: str) -> str:
+    """Deterministic Qdrant point id keyed on the company NAME (not suv_url).
+
+    The SUV parser assigns the same directory URL to every company, so keying on
+    suv_url would collide and overwrite 76 of 77 points. The name is unique."""
+    return str(uuid.uuid5(SUV_QDRANT_NAMESPACE, f"suv_structured|{_slug(name)}"))
+
+
+def build_qdrant_points(
+    companies: list[Company], approved: list[dict],
+    *, embed: Callable[[str], list[float]], now_iso: str | None = None,
+) -> list[PointStruct]:
+    """One Qdrant profile point per approved company. Joined by NAME (suv_url collides)."""
+    ts = now_iso or datetime.now(UTC).isoformat()
+    by_name = {c.name: c for c in companies}
+    points: list[PointStruct] = []
+    for entry in approved:
+        company = by_name.get(entry["name"])
+        if company is None:
+            continue
+        content = profile_text(company)
+        payload = {
+            "source": "suv_structured",
+            **provenance_fields(source_type="dataset", provider="suv.report"),
+            "ingested_at": ts,
+            "title": company.name,
+            "content": content,
+            "entities": [{"name": company.name}],
+            "url": company.suv_url,
+            "content_hash": hashlib.sha256(content.encode()).hexdigest()[:16],
+        }
+        points.append(PointStruct(
+            id=_point_id(company.name), vector=embed(content), payload=payload))
+    return points
+
+
+async def embed_text(text: str, *, client: httpx.AsyncClient, tei_embed_url: str) -> list[float]:
+    """TEI /embed returns a list of vectors; a single string input -> one vector."""
+    resp = await client.post(f"{tei_embed_url.rstrip('/')}/embed", json={"inputs": text})
+    resp.raise_for_status()
+    return resp.json()[0]
