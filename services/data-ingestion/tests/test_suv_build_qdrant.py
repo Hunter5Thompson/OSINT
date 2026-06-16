@@ -1,5 +1,8 @@
 # tests/test_suv_build_qdrant.py
-from suv_structured.build_companies import build_qdrant_points
+import httpx
+import pytest
+
+from suv_structured.build_companies import build_qdrant_points, embed_text
 from suv_structured.schemas import Company
 
 
@@ -48,3 +51,27 @@ def test_qdrant_point_id_keyed_on_name_not_url():
     points = build_qdrant_points(companies, approved, embed=lambda t: [0.0] * 1024, now_iso="t")
     assert len(points) == 2
     assert len({p.id for p in points}) == 2   # distinct ids despite identical suv_url
+
+
+def test_qdrant_point_id_distinguishes_punctuation_differences():
+    # "Rohde & Schwarz" and "Rohde Schwarz" slug-collide under the old lossy slug
+    # ("rohde-schwarz"); full-name keying must keep them as distinct point ids.
+    companies = [Company(name="Rohde & Schwarz", suv_url="u"),
+                 Company(name="Rohde Schwarz", suv_url="u")]
+    approved = [{"name": c.name, "suv_url": "u", "decision": "new", "existing_name": None}
+                for c in companies]
+    points = build_qdrant_points(companies, approved, embed=lambda t: [0.0] * 1024, now_iso="t")
+    assert len(points) == 2
+    assert len({p.id for p in points}) == 2
+
+
+@pytest.mark.asyncio
+async def test_embed_text_handles_nested_and_flat_tei_shapes():
+    nested = httpx.MockTransport(lambda r: httpx.Response(200, json=[[0.5] * 1024]))
+    async with httpx.AsyncClient(transport=nested) as client:
+        v = await embed_text("x", client=client, tei_embed_url="http://tei")
+    assert v == [0.5] * 1024
+    flat = httpx.MockTransport(lambda r: httpx.Response(200, json=[0.5] * 1024))
+    async with httpx.AsyncClient(transport=flat) as client:
+        v2 = await embed_text("x", client=client, tei_embed_url="http://tei")
+    assert v2 == [0.5] * 1024

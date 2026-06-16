@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import re
+import unicodedata
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -100,17 +100,17 @@ async def write_neo4j(
 SUV_QDRANT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "odin/suv_structured/odin_intel")
 
 
-def _slug(name: str) -> str:
-    """Stable slug for point-id keying: lowercased, non-alphanumeric runs -> '-'."""
-    return re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
-
-
 def _point_id(name: str) -> str:
-    """Deterministic Qdrant point id keyed on the company NAME (not suv_url).
+    """Deterministic Qdrant point id keyed on the full normalized company NAME.
 
-    The SUV parser assigns the same directory URL to every company, so keying on
-    suv_url would collide and overwrite 76 of 77 points. The name is unique."""
-    return str(uuid.uuid5(SUV_QDRANT_NAMESPACE, f"suv_structured|{_slug(name)}"))
+    Keyed on the name (not suv_url, which the SUV parser shares across all
+    companies). The NFC-normalized lowercased full name preserves every
+    distinguishing character (umlauts, '&', hyphens) — a lossy slug could
+    collide two distinct companies onto one id and silently overwrite a point."""
+    norm = unicodedata.normalize("NFC", name.strip().lower())
+    if not norm:
+        raise ValueError(f"company name normalized to empty string: {name!r}")
+    return str(uuid.uuid5(SUV_QDRANT_NAMESPACE, f"suv_structured|{norm}"))
 
 
 def build_qdrant_points(
@@ -134,7 +134,7 @@ def build_qdrant_points(
             "content": content,
             "entities": [{"name": company.name}],
             "url": company.suv_url,
-            "content_hash": hashlib.sha256(content.encode()).hexdigest()[:16],
+            "content_hash": hashlib.sha256(content.encode()).hexdigest()[:24],
         }
         points.append(PointStruct(
             id=_point_id(company.name), vector=embed(content), payload=payload))
@@ -142,7 +142,9 @@ def build_qdrant_points(
 
 
 async def embed_text(text: str, *, client: httpx.AsyncClient, tei_embed_url: str) -> list[float]:
-    """TEI /embed returns a list of vectors; a single string input -> one vector."""
+    """TEI /embed returns a list of vectors; a single string input -> one vector.
+    Guards both response shapes (nested [[...]] and flat [...]) like the RSS/fulltext embed."""
     resp = await client.post(f"{tei_embed_url.rstrip('/')}/embed", json={"inputs": text})
     resp.raise_for_status()
-    return resp.json()[0]
+    result = resp.json()
+    return result[0] if isinstance(result[0], list) else result
