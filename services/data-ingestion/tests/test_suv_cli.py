@@ -124,3 +124,79 @@ async def test_lookup_existing_also_queries_canonical_names():
                                client, "http://neo", "neo4j", "pw")
     assert "Rheinmetall AG" in captured["names"]
     assert "Rheinmetall" in captured["names"]   # canonical form queried too
+
+
+def test_backfill_hq_dry_run_default_does_not_write(monkeypatch):
+    from click.testing import CliRunner
+
+    import suv_structured.cli as cli_mod
+
+    async def fake_fetch(client, **kw):
+        return [("Rheinmetall", "Deutschland"), ("KNDS", "Niederlande")]
+
+    async def fake_counts(client, names, **kw):
+        return {n: 1 for n in names}
+
+    wrote = {"called": False}
+
+    async def fake_write(*a, **k):
+        wrote["called"] = True
+
+    monkeypatch.setattr(cli_mod, "fetch_suv_orgs", fake_fetch)
+    monkeypatch.setattr(cli_mod, "count_location_targets", fake_counts)
+    monkeypatch.setattr(cli_mod, "write_neo4j", fake_write)
+    result = CliRunner().invoke(cli_mod.cli, ["backfill-hq"])   # no --apply
+    assert result.exit_code == 0
+    assert wrote["called"] is False
+    assert "DRY-RUN" in result.output
+    assert 'Germany -> Entity{type:"LOCATION"} count=1' in result.output
+
+
+def test_backfill_hq_apply_writes_when_preflight_clean(monkeypatch):
+    from click.testing import CliRunner
+
+    import suv_structured.cli as cli_mod
+
+    async def fake_fetch(client, **kw):
+        return [("Rheinmetall", "Deutschland")]
+
+    async def fake_counts(client, names, **kw):
+        return {n: 1 for n in names}
+
+    wrote = {"n": 0}
+
+    async def fake_write(statements, **k):
+        wrote["n"] = len(statements)
+
+    monkeypatch.setattr(cli_mod, "fetch_suv_orgs", fake_fetch)
+    monkeypatch.setattr(cli_mod, "count_location_targets", fake_counts)
+    monkeypatch.setattr(cli_mod, "write_neo4j", fake_write)
+    result = CliRunner().invoke(cli_mod.cli, ["backfill-hq", "--apply"])
+    assert result.exit_code == 0
+    assert wrote["n"] == 1
+    assert "APPLIED" in result.output
+
+
+def test_backfill_hq_preflight_aborts_on_non_singleton_target(monkeypatch):
+    from click.testing import CliRunner
+
+    import suv_structured.cli as cli_mod
+
+    async def fake_fetch(client, **kw):
+        return [("Rheinmetall", "Deutschland")]
+
+    async def fake_counts(client, names, **kw):
+        return {n: 2 for n in names}     # 2 LOCATION nodes -> abort
+
+    wrote = {"called": False}
+
+    async def fake_write(*a, **k):
+        wrote["called"] = True
+
+    monkeypatch.setattr(cli_mod, "fetch_suv_orgs", fake_fetch)
+    monkeypatch.setattr(cli_mod, "count_location_targets", fake_counts)
+    monkeypatch.setattr(cli_mod, "write_neo4j", fake_write)
+    result = CliRunner().invoke(cli_mod.cli, ["backfill-hq", "--apply"])
+    assert result.exit_code != 0
+    assert wrote["called"] is False
+    assert "preflight" in result.output.lower()
