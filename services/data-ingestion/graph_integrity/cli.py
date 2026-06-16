@@ -31,7 +31,9 @@ async def _amain(args: argparse.Namespace) -> None:
             orphans = await client.run(report.ORPHAN_BY_LABEL, {"labels": report.REPORT_LABELS})
             geo = await client.run(report.GEO_COVERAGE)
             dup = await client.run(report.DUP_ACTOR_EDGES, {"actor_rels": report.ACTOR_RELS})
-            print(report.shape_report(orphans, geo, dup))
+            coord_dis = await client.run(report.COORD_DISAGREEMENT)
+            null_island = await client.run(report.NULL_ISLAND)
+            print(report.shape_report(orphans, geo, dup, coord_dis, null_island))
         elif args.command == "backfill-incident-geo":
             n = await geo_incident.run(client, dry_run=args.dry_run)
             print(f"incident-geo: {n} incidents {'(dry-run)' if args.dry_run else 'wired'}")
