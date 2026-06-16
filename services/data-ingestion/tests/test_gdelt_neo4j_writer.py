@@ -79,11 +79,18 @@ def test_merge_theme_template_is_idempotent():
     assert ":ABOUT" in MERGE_THEME
 
 
-def test_merge_mention_sets_properties_on_match_too():
-    """Replay must not leave stale tone/confidence; ON MATCH re-sets them."""
+def test_merge_mention_optional_match_and_returns_found_flags():
+    """WP-09: OPTIONAL MATCH so a missing Document/Event is detectable (not a
+    silent zero-row no-op); conditional MERGE only when both bound; RETURN the
+    found-flags so write_mentions can classify drops."""
     from gdelt_raw.writers.neo4j_writer import MERGE_MENTION
-    assert "ON MATCH" in MERGE_MENTION
-    assert "r.tone = $tone" in MERGE_MENTION
+    assert "OPTIONAL MATCH (d:Document {url: $doc_url})" in MERGE_MENTION
+    assert "OPTIONAL MATCH (e:GDELTEvent {event_id: $event_id})" in MERGE_MENTION
+    assert "FOREACH" in MERGE_MENTION
+    assert "r.tone = $tone" in MERGE_MENTION  # properties still set
+    assert "d_found" in MERGE_MENTION and "e_found" in MERGE_MENTION
+    # No stub-Document fallback (must not defeat the theme filter):
+    assert "MERGE (d:Document" not in MERGE_MENTION
 
 
 # ---------------------------------------------------------------------------
@@ -203,3 +210,81 @@ async def test_write_from_parquet_all_invalid_gkg_is_noop(tmp_path):
     await writer.write_from_parquet(tmp_path, "20260425120000", "2026-04-25")
 
     writer.write_docs.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# WP-09: observable MENTIONS writes — _classify_mention + write_mentions
+# ---------------------------------------------------------------------------
+from unittest.mock import MagicMock  # noqa: E402
+
+import structlog  # noqa: E402
+
+
+def test_classify_mention_outcomes():
+    from gdelt_raw.writers.neo4j_writer import _classify_mention
+    assert _classify_mention(d_found=False, e_found=True, rels_created=0) == "dropped_no_document"
+    assert _classify_mention(d_found=True, e_found=False, rels_created=0) == "dropped_no_event"
+    assert _classify_mention(d_found=True, e_found=True, rels_created=1) == "written"
+    assert _classify_mention(d_found=True, e_found=True, rels_created=0) == "existing"
+    assert _classify_mention(d_found=False, e_found=False, rels_created=0) == "dropped_no_document"
+
+
+def _mention_result(d_found: bool, e_found: bool, rels_created: int):
+    result = MagicMock()
+    result.single = AsyncMock(return_value={"d_found": d_found, "e_found": e_found})
+    summary = MagicMock()
+    summary.counters.relationships_created = rels_created
+    result.consume = AsyncMock(return_value=summary)
+    return result
+
+
+def _writer_with_tx(results: list):
+    from gdelt_raw.writers.neo4j_writer import Neo4jWriter
+    tx = MagicMock()
+    tx.run = AsyncMock(side_effect=results)
+    tx.commit = AsyncMock()
+    tx_cm = MagicMock()
+    tx_cm.__aenter__ = AsyncMock(return_value=tx)
+    tx_cm.__aexit__ = AsyncMock(return_value=False)
+    session = MagicMock()
+    session.begin_transaction = AsyncMock(return_value=tx_cm)
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session)
+    session_cm.__aexit__ = AsyncMock(return_value=False)
+    w = Neo4jWriter("bolt://localhost:7687", "neo4j", "x")
+    w._driver = MagicMock()
+    w._driver.session = MagicMock(return_value=session_cm)
+    return w
+
+
+@pytest.mark.asyncio
+async def test_write_mentions_counts_and_warns_on_drops():
+    w = _writer_with_tx([
+        _mention_result(True, True, 1),    # written
+        _mention_result(True, True, 0),    # existing
+        _mention_result(False, True, 0),   # dropped_no_document
+        _mention_result(True, False, 0),   # dropped_no_event
+    ])
+    mentions = [
+        {"mention_url": f"https://ex.com/{i}", "event_id": f"gdelt:event:{i}",
+         "tone": 0.0, "confidence": 100, "char_offset": 0}
+        for i in range(4)
+    ]
+    with structlog.testing.capture_logs() as logs:
+        counts = await w.write_mentions(mentions, "20260425120000")
+
+    assert counts == {"written": 1, "existing": 1,
+                      "dropped_no_document": 1, "dropped_no_event": 1}
+    metric = [e for e in logs if e["event"] == "gdelt_mentions_written_total"]
+    assert metric and metric[0]["written"] == 1 and metric[0]["dropped_no_document"] == 1
+    assert any(e["event"] == "gdelt_mentions_dropped_no_document_total"
+               and e["log_level"] == "warning" for e in logs)
+
+
+@pytest.mark.asyncio
+async def test_write_mentions_empty_is_noop():
+    """A slice with zero mentions returns all-zero counts and does not raise."""
+    w = _writer_with_tx([])
+    counts = await w.write_mentions([], "20260425120000")
+    assert counts == {"written": 0, "existing": 0,
+                      "dropped_no_document": 0, "dropped_no_event": 0}
