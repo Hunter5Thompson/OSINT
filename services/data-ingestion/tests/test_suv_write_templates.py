@@ -10,11 +10,14 @@ def test_upsert_company_is_org_typed_and_alias_append_dedup():
     assert 'c.sector = "defense"' in UPSERT_COMPANY
 
 
-def test_link_company_country_is_match_only_for_country():
+def test_link_company_country_is_match_only_for_location():
+    # Bridge: HQ-country endpoint MATCHes the existing Entity{type:"LOCATION"} node,
+    # never a COUNTRY node and never the separate :Location-label node.
     assert "[r:HEADQUARTERED_IN]" in LINK_COMPANY_COUNTRY
-    # country endpoint is MATCH-ed, never MERGE-d (no phantom countries)
-    assert 'MATCH (co:Entity {type: "COUNTRY"})' in LINK_COMPANY_COUNTRY
-    assert "MERGE (co" not in LINK_COMPANY_COUNTRY
+    assert 'MATCH (co:Entity {type: "LOCATION"})' in LINK_COMPANY_COUNTRY
+    assert 'type: "COUNTRY"' not in LINK_COMPANY_COUNTRY      # no longer targets COUNTRY
+    assert "(co:Location" not in LINK_COMPANY_COUNTRY          # never the :Location label node
+    assert "MERGE (co" not in LINK_COMPANY_COUNTRY             # MATCH-only endpoint
     assert "MERGE (c)-[r:HEADQUARTERED_IN]->(co)" in LINK_COMPANY_COUNTRY
 
 

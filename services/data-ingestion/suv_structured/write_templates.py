@@ -5,8 +5,12 @@ key-locked to nlm_ingest.schemas.RelationType by tests/test_nlm_relations.py. SU
 adds HEADQUARTERED_IN without touching the NLM RelationType contract.
 
 Rules (Two-Loop write path): no LLM-generated Cypher, all values parameter-bound,
-relationship labels hardcoded, country endpoint MATCH-ed (never MERGE-d), existing
-properties preserved on null (coalesce) and aliases append-deduplicated.
+relationship labels hardcoded, existing properties preserved on null (coalesce) and
+aliases append-deduplicated.
+
+HQ-country endpoint MATCH-ed against the existing Entity{type:"LOCATION"} node
+(never MERGE-d, never the :Location-label node) — a reversible tactical bridge,
+see docs/superpowers/specs/2026-06-16-suv-hq-location-bridge-backfill-design.md.
 """
 
 UPSERT_COMPANY = """
@@ -30,7 +34,7 @@ SET c.aliases = coalesce(c.aliases, []) +
 
 LINK_COMPANY_COUNTRY = """
 MATCH (c:Entity {name: $name, type: "ORGANIZATION"})
-MATCH (co:Entity {type: "COUNTRY"}) WHERE toLower(co.name) = toLower($country)
+MATCH (co:Entity {type: "LOCATION"}) WHERE toLower(co.name) = toLower($country)
 MERGE (c)-[r:HEADQUARTERED_IN]->(co)
 ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
 SET r.last_seen = datetime()
