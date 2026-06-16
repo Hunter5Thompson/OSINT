@@ -130,3 +130,21 @@ def test_detect_drift_flags_match_target_moved():
 def test_detect_drift_flags_missing_from_fresh():
     approved = [{"name": "A", "decision": "new", "existing_name": None}]
     assert detect_drift(approved, []) == ["A"]
+
+
+def test_build_match_report_canonicalizes_legal_form_to_existing():
+    # SUV legal-form name has no EXACT node, but its canonical form does -> MATCH in-place
+    companies = [Company(name="Rheinmetall AG", suv_url="u")]
+    lookup = {"rheinmetall": [("Rheinmetall", "ORGANIZATION", "e1")]}  # canonical-name key
+    rep = build_match_report(companies, lookup)
+    assert rep[0]["decision"] == "match"
+    assert rep[0]["existing_name"] == "Rheinmetall"
+
+
+def test_build_match_report_prefers_exact_over_canonical():
+    # an exact raw-name hit wins; canonical fallback only triggers when raw is empty
+    companies = [Company(name="Rheinmetall AG", suv_url="u")]
+    lookup = {"rheinmetall ag": [("Rheinmetall AG", "ORGANIZATION", "e9")],
+              "rheinmetall": [("Rheinmetall", "ORGANIZATION", "e1")]}
+    rep = build_match_report(companies, lookup)
+    assert rep[0]["existing_name"] == "Rheinmetall AG"

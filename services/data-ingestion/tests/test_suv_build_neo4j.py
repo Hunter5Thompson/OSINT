@@ -45,7 +45,12 @@ def test_only_approved_companies_are_written():
 def test_companies_sharing_suv_url_resolved_by_name():
     """REGRESSION: parse.py gives every company the same directory URL → join MUST
     be by unique name, not by colliding suv_url. With a url-join, both companies
-    would get the LAST company's fields."""
+    would get the LAST company's fields.
+
+    NOTE (2026-06-16): "Rheinmetall AG" with decision=new now canonicalizes to
+    "Rheinmetall" (curated alias). The regression guard is preserved — the test
+    still verifies that both companies carry their own distinct data (no url-join
+    collision), the write-key just reflects the canonical form."""
     url = "https://suv.report/sicherheits-und-verteidigungsindustrie/"
     companies = [
         _co(name="Rheinmetall AG", suv_url=url, employees=34000, products=["Leopard 2"]),
@@ -58,8 +63,9 @@ def test_companies_sharing_suv_url_resolved_by_name():
     upserts = [s for s in build_statements(companies, approved, extracted_at="t")
                if "MERGE (c:Entity" in s["statement"]]
     by = {s["parameters"]["name"]: s["parameters"] for s in upserts}
-    assert by["Rheinmetall AG"]["employees"] == 34000
-    assert by["Rheinmetall AG"]["products"] == ["Leopard 2"]
+    # "Rheinmetall AG" (new) canonicalizes to "Rheinmetall" via curated alias
+    assert by["Rheinmetall"]["employees"] == 34000
+    assert by["Rheinmetall"]["products"] == ["Leopard 2"]
     assert by["Hensoldt"]["employees"] == 6500
     assert by["Hensoldt"]["products"] == ["TRML-4D"]
 

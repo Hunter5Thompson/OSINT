@@ -13,6 +13,7 @@ import httpx
 import yaml
 from qdrant_client import QdrantClient
 
+from canonicalize import canonicalize_entity
 from config import settings
 from suv_structured.build_companies import (
     _write_name,
@@ -174,7 +175,13 @@ async def _lookup_existing(
     neo4j_http_url: str, user: str, password: str,
 ) -> dict[str, list[tuple[str, str, str]]]:
     import base64
-    names = [c.name for c in companies]
+    names: list[str] = []
+    for c in companies:
+        names.append(c.name)
+        canon = canonicalize_entity(c.name, "ORGANIZATION").name
+        if canon != c.name:
+            names.append(canon)
+    names = list(dict.fromkeys(names))  # dedup, preserve order
     cypher = ("UNWIND $names AS nm "
               "MATCH (e:Entity) WHERE toLower(e.name) = toLower(nm) "
               "RETURN nm AS query, e.name AS name, e.type AS type, elementId(e) AS id")
