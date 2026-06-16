@@ -15,6 +15,7 @@ from qdrant_client import QdrantClient
 
 from config import settings
 from suv_structured.build_companies import (
+    _write_name,
     build_qdrant_points,
     build_statements,
     embed_text,
@@ -53,6 +54,25 @@ def resolve_build_inputs(
     unknown = [e["name"] for e in approved if e["name"] not in seed_names]
     if unknown:
         raise BuildGateError(f"approved report diverges from seed (unknown: {unknown})")
+    # No two approved entries may resolve to the SAME canonical write-name — that
+    # would silently collapse two SUV companies into one graph node + Qdrant point
+    # (the second overwrites the first). Force the operator to resolve it.
+    by_name = {c.name: c for c in companies}
+    seen_write: dict[str, str] = {}
+    collisions: list[str] = []
+    for e in approved:
+        co = by_name.get(e["name"])
+        if co is None:
+            continue
+        wn = _write_name(co, e)
+        if wn in seen_write:
+            collisions.append(f"{seen_write[wn]!r} + {e['name']!r} -> {wn!r}")
+        else:
+            seen_write[wn] = e["name"]
+    if collisions:
+        raise BuildGateError(
+            "multiple approved entries resolve to the same canonical entity "
+            f"(would silently merge — resolve before building): {collisions}")
     return companies, approved
 
 

@@ -67,14 +67,33 @@ def test_gate_rejects_ghost_with_shared_directory_url(tmp_path):
         resolve_build_inputs(seed_path=seed, approved_path=report)
 
 
-def test_build_errors_clearly_when_seed_missing(tmp_path, monkeypatch):
-    from click.testing import CliRunner  # noqa: I001
+@pytest.mark.parametrize("args", [
+    ["build", "--dry-run"],
+    ["build", "--approved-matches", "x.yaml"],
+])
+def test_build_errors_clearly_when_seed_missing(tmp_path, monkeypatch, args):
+    from click.testing import CliRunner
 
     import suv_structured.cli as cli_mod
     monkeypatch.setattr(cli_mod, "SEED_PATH", tmp_path / "nope.yaml")
-    result = CliRunner().invoke(cli_mod.cli, ["build", "--dry-run"])
+    result = CliRunner().invoke(cli_mod.cli, args)
     assert result.exit_code != 0
     assert "parse" in result.output.lower()
+
+
+def test_gate_rejects_two_approved_resolving_to_same_canonical(tmp_path):
+    # two SUV rows both curated as match -> the SAME existing entity would silently
+    # collapse into one node/point; the gate must reject + force the operator to resolve.
+    seed = _seed(tmp_path, [Company(name="Rheinmetall AG", suv_url="u"),
+                            Company(name="Rheinmetall Defence GmbH", suv_url="u")])
+    report = tmp_path / "r.yaml"
+    report.write_text(yaml.safe_dump([
+        {"name": "Rheinmetall AG", "suv_url": "u", "decision": "match",
+         "existing_name": "Rheinmetall", "candidates": [], "approved": True},
+        {"name": "Rheinmetall Defence GmbH", "suv_url": "u", "decision": "match",
+         "existing_name": "Rheinmetall", "candidates": [], "approved": True}]))
+    with pytest.raises(BuildGateError, match="same canonical|silently merge|resolve"):
+        resolve_build_inputs(seed_path=seed, approved_path=report)
 
 
 @pytest.mark.asyncio
