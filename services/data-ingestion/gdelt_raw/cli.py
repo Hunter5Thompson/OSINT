@@ -17,7 +17,7 @@ from qdrant_client import AsyncQdrantClient
 
 from config import settings
 from gdelt_raw.config import get_settings
-from gdelt_raw.recovery import replay_pending
+from gdelt_raw.recovery import reconcile_forward_state, replay_pending
 from gdelt_raw.run import run_backfill, run_forward
 from gdelt_raw.state import GDELTState
 from gdelt_raw.writers.neo4j_writer import Neo4jWriter
@@ -88,6 +88,25 @@ def status():
             for store in ("neo4j", "qdrant"):
                 pending = await state.list_pending(store, limit=100)
                 click.echo(f"pending[{store:>6}]: {len(pending)}")
+        finally:
+            await _close_clients(state, neo4j, qdrant)
+    _run(_go())
+
+
+@main.command()
+def reconcile():
+    """Report stores whose last_slice trails the parquet checkpoint (WP-10)."""
+    async def _go():
+        state, neo4j, qdrant = await _get_clients()
+        try:
+            report = await reconcile_forward_state(state)
+            click.echo(f"parquet last_slice: {report['parquet']}")
+            for store in ("neo4j", "qdrant"):
+                flag = "  LAGS" if store in report["lagging"] else ""
+                click.echo(f"{store:>7} last_slice: {report[store]}{flag}")
+            if report["lagging"]:
+                click.echo(f"\nLagging: {report['lagging']} — run `forward` "
+                           f"or `resume <job>` to replay pending slices.")
         finally:
             await _close_clients(state, neo4j, qdrant)
     _run(_go())

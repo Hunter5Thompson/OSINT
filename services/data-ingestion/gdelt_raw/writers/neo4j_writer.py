@@ -86,15 +86,20 @@ MERGE (d)-[:ABOUT]->(t)
 # d.themes (list) and query with list functions.
 
 MERGE_MENTION = """
-// Intentional: :Document (unscoped) so GDELT mentions can bridge
-// to docs from other ingestion paths.
-MATCH (d:Document {url: $doc_url})
-MATCH (e:GDELTEvent {event_id: $event_id})
-MERGE (d)-[r:MENTIONS]->(e)
-  ON CREATE SET r.tone = $tone, r.confidence = $confidence, r.char_offset = $char_offset
-  ON MATCH  SET r.tone = $tone, r.confidence = $confidence, r.char_offset = $char_offset
+// Intentional: :Document (unscoped) so GDELT mentions can bridge to docs from
+// other ingestion paths. OPTIONAL MATCH (not MATCH) so a mention whose article
+// was not theme-matched is a DETECTABLE drop, not a silent zero-row no-op
+// (WP-09). The FOREACH performs the MERGE only when both nodes resolved.
+OPTIONAL MATCH (d:Document {url: $doc_url})
+OPTIONAL MATCH (e:GDELTEvent {event_id: $event_id})
+FOREACH (_ IN CASE WHEN d IS NOT NULL AND e IS NOT NULL THEN [1] ELSE [] END |
+  MERGE (d)-[r:MENTIONS]->(e)
+    SET r.tone = $tone, r.confidence = $confidence, r.char_offset = $char_offset
+)
+RETURN d IS NOT NULL AS d_found, e IS NOT NULL AS e_found
 """
-# ON MATCH also SETs — last-write-wins on properties, but edge count stays 1.
+# SET (not ON CREATE/ON MATCH) is unconditional last-write-wins — equivalent to
+# the prior template's identical ON CREATE/ON MATCH SET, but FOREACH-legal.
 
 MERGE_LOCATION = """
 MATCH (ev:GDELTEvent {event_id: $event_id})
@@ -130,6 +135,16 @@ def render_event_params(ev: GDELTEventWrite) -> dict[str, Any]:
 def render_doc_params(doc: GDELTDocumentWrite) -> dict[str, Any]:
     d = doc.model_dump(mode="json")
     return d
+
+
+def _classify_mention(*, d_found: bool, e_found: bool, rels_created: int) -> str:
+    """Classify one MERGE_MENTION outcome. A drop is a MATCH binding nothing —
+    NOT rels_created == 0 (that is also 0 on replay / existing edge)."""
+    if not d_found:
+        return "dropped_no_document"
+    if not e_found:
+        return "dropped_no_event"
+    return "written" if rels_created > 0 else "existing"
 
 
 def _validate_rows(rows: list[dict], model: type[BaseModel], stream: str) -> list:
@@ -189,21 +204,52 @@ class Neo4jWriter:
                         await tx.run(MERGE_THEME, {"themes": d.themes, "doc_id": d.doc_id})
                 await tx.commit()
 
-    async def write_mentions(self, mentions: list[dict]):
-        """mentions: list of canonical dicts with event_id, mention_url, tone,
-        confidence, char_offset. Requires corresponding Documents + GDELTEvents
-        to already exist in the graph."""
+    async def write_mentions(self, mentions: list[dict], slice_id: str) -> dict[str, int]:
+        """mentions: canonical dicts with event_id, mention_url, tone, confidence,
+        char_offset. A mention whose article was not theme-matched has no
+        Document and is counted as dropped_no_document (by-design filtering — see
+        WP-09), never silently lost. Returns per-slice outcome counts."""
+        counts = {"written": 0, "existing": 0,
+                  "dropped_no_document": 0, "dropped_no_event": 0}
         async with self._driver.session() as session:  # noqa: SIM117
             async with await session.begin_transaction() as tx:
                 for m in mentions:
-                    await tx.run(MERGE_MENTION, {
+                    result = await tx.run(MERGE_MENTION, {
                         "doc_url": m["mention_url"],
                         "event_id": m["event_id"],
                         "tone": m.get("tone"),
                         "confidence": m.get("confidence"),
                         "char_offset": m.get("char_offset"),
                     })
+                    # MERGE_MENTION always RETURNs exactly one row (OPTIONAL MATCH
+                    # never reduces cardinality to zero), so single() is safe; it
+                    # drains the stream, after which consume() returns the buffered
+                    # summary (relationships_created). The @pytest.mark.integration
+                    # test runs this query + single()/consume() against a live Neo4j
+                    # (CI has no Neo4j); it does not yet assert the edge-creation
+                    # arm — see follow-up to remap the mentions sentinel event_id.
+                    record = await result.single()
+                    summary = await result.consume()
+                    outcome = _classify_mention(
+                        d_found=bool(record["d_found"]),
+                        e_found=bool(record["e_found"]),
+                        rels_created=summary.counters.relationships_created,
+                    )
+                    counts[outcome] += 1
                 await tx.commit()
+
+        log.info("gdelt_mentions_written_total", slice=slice_id, **counts)
+        if counts["dropped_no_document"] or counts["dropped_no_event"]:
+            # Event name is the spec-mandated metric (dominant cause is a
+            # non-theme-matched article → no Document); the payload carries BOTH
+            # dropped_no_document and dropped_no_event so neither kind is lost.
+            log.warning(
+                "gdelt_mentions_dropped_no_document_total",
+                slice=slice_id,
+                dropped_no_document=counts["dropped_no_document"],
+                dropped_no_event=counts["dropped_no_event"],
+            )
+        return counts
 
     async def write_from_parquet(self, parquet_base: str | Path, slice_id: str, date: str):
         """Read the three canonical parquet streams and write in dependency order:
@@ -235,4 +281,4 @@ class Neo4jWriter:
         # if both parquet streams were present.
         if mentions_path.exists() and ev_path.exists() and gkg_path.exists():
             m_df = pl.read_parquet(mentions_path)
-            await self.write_mentions(m_df.to_dicts())
+            await self.write_mentions(m_df.to_dicts(), slice_id)

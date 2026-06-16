@@ -24,6 +24,21 @@ def _parquet_exists(parquet_base: Path, stream: str, slice_id: str) -> bool:
     return p.exists()
 
 
+async def _advance_last_slice_monotonic(
+    state: GDELTState, store: str, slice_id: str
+) -> None:
+    """Advance last_slice[store] to slice_id only if it is unset or older.
+
+    The forward path advances last_slice on every forward write; the replay
+    path must do the same so reconcile_forward_state (which keys on last_slice)
+    stops reporting a store as lagging after the replay it recommended. The
+    monotonic guard prevents a replay of an OLDER pending slice from regressing
+    a pointer the forward path already moved ahead (WP-10)."""
+    current = await state.get_last_slice(store)
+    if current is None or current < slice_id:
+        await state.set_last_slice(store, slice_id)
+
+
 async def replay_pending(
     state: GDELTState,
     *,
@@ -43,6 +58,7 @@ async def replay_pending(
                 parquet_base, slice_id, _slice_date(slice_id))
             await state.set_store_state(slice_id, "neo4j", "done")
             await state.remove_pending("neo4j", slice_id)
+            await _advance_last_slice_monotonic(state, "neo4j", slice_id)
             log.info("neo4j_recovery_done", slice=slice_id)
         except Exception as e:
             log.error("neo4j_recovery_retry_failed", slice=slice_id, error=str(e))
@@ -57,6 +73,34 @@ async def replay_pending(
                 parquet_base, slice_id, _slice_date(slice_id))
             await state.set_store_state(slice_id, "qdrant", "done")
             await state.remove_pending("qdrant", slice_id)
+            await _advance_last_slice_monotonic(state, "qdrant", slice_id)
             log.info("qdrant_recovery_done", slice=slice_id)
         except Exception as e:
             log.error("qdrant_recovery_retry_failed", slice=slice_id, error=str(e))
+
+
+async def reconcile_forward_state(state: GDELTState) -> dict:
+    """Flag stores whose last_slice trails the parquet checkpoint.
+
+    The parquet pointer is the store-independent download gate and advances
+    first; a store pointer that lags it indicates a slice whose parquet exists
+    but whose store write did not confirm (WP-10 — e.g. a hard crash mid-write).
+    Such slices should be in the pending set for replay_pending; this is the
+    detection half. Returns the three pointers plus the list of lagging stores."""
+    parquet = await state.get_last_slice("parquet")
+    report: dict = {"parquet": parquet, "lagging": []}
+    for store in ("neo4j", "qdrant"):
+        ptr = await state.get_last_slice(store)
+        report[store] = ptr
+        # slice_ids are zero-padded YYYYMMDDHHMMSS → lexicographic == chronological
+        if parquet is not None and (ptr is None or ptr < parquet):
+            report["lagging"].append(store)
+    if report["lagging"]:
+        log.warning(
+            "gdelt_forward_state_lag",
+            parquet=parquet,
+            lagging=report["lagging"],
+            neo4j=report.get("neo4j"),
+            qdrant=report.get("qdrant"),
+        )
+    return report
