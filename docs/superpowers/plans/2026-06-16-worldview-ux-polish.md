@@ -25,8 +25,11 @@
 ```ts
 // services/frontend/src/components/globe/__tests__/isPhotorealSurfacePick.test.ts
 import { describe, it, expect } from "vitest";
-import * as Cesium from "cesium";
+import type * as Cesium from "cesium";
 import { isPhotorealSurfacePick } from "../isPhotorealSurfacePick";
+
+// Plain objects stand in for picks/tilesets — no real Cesium viewer needed.
+const photoreal = { _odinPhotoreal: true } as unknown as Cesium.Cesium3DTileset;
 
 describe("isPhotorealSurfacePick", () => {
   it("returns false for empty-space picks (null/undefined)", () => {
@@ -35,21 +38,26 @@ describe("isPhotorealSurfacePick", () => {
   });
 
   it("returns true when the pick belongs to the photoreal tileset (by reference)", () => {
-    const tileset = { _odinPhotoreal: true } as unknown as Cesium.Cesium3DTileset;
-    expect(isPhotorealSurfacePick({ primitive: tileset }, tileset)).toBe(true);
-    expect(isPhotorealSurfacePick({ tileset }, tileset)).toBe(true);
-    expect(isPhotorealSurfacePick({ content: { tileset } }, tileset)).toBe(true);
+    expect(isPhotorealSurfacePick({ primitive: photoreal }, photoreal)).toBe(true);
+    expect(isPhotorealSurfacePick({ tileset: photoreal }, photoreal)).toBe(true);
+    expect(isPhotorealSurfacePick({ content: { tileset: photoreal } }, photoreal)).toBe(true);
   });
 
-  it("returns true via the _odinPhotoreal marker even if the reference is stale/null", () => {
-    const marked = { primitive: { _odinPhotoreal: true } };
-    expect(isPhotorealSurfacePick(marked, null)).toBe(true);
+  it("returns true via the _odinPhotoreal marker even when the reference is null", () => {
+    // A picked tile feature exposes its (marked) owning tileset via .tileset.
+    expect(isPhotorealSurfacePick({ tileset: { _odinPhotoreal: true } }, null)).toBe(true);
   });
 
   it("returns false for a real data-layer primitive (billboard/polyline)", () => {
-    const tileset = { _odinPhotoreal: true } as unknown as Cesium.Cesium3DTileset;
     const layerPick = { primitive: { id: "flight-billboard" }, id: { name: "Flight 123" } };
-    expect(isPhotorealSurfacePick(layerPick, tileset)).toBe(false);
+    expect(isPhotorealSurfacePick(layerPick, photoreal)).toBe(false);
+  });
+
+  it("returns false for an UNmarked, UNreferenced 3D-tileset-like pick (contract guard)", () => {
+    // Some other tileset that is neither the photoreal reference nor marked.
+    const otherTileset = { isCesium3DTileset: true };
+    expect(isPhotorealSurfacePick({ primitive: otherTileset }, photoreal)).toBe(false);
+    expect(isPhotorealSurfacePick({ tileset: otherTileset }, photoreal)).toBe(false);
   });
 });
 ```
@@ -63,24 +71,26 @@ Expected: FAIL — `Cannot find module '../isPhotorealSurfacePick'`.
 
 ```ts
 // services/frontend/src/components/globe/isPhotorealSurfacePick.ts
-import * as Cesium from "cesium";
+import type * as Cesium from "cesium";
 
 /**
- * True when a Cesium pick result is the photorealistic globe surface
- * (Google 3D Tiles, or the OSM-buildings fallback) rather than a real UI /
- * data-layer primitive.
+ * True when a Cesium pick result is THE photorealistic globe surface — the
+ * Google 3D Tiles tileset (or its OSM-buildings fallback) created by
+ * GlobeViewer — rather than a real UI / data-layer primitive.
  *
  * Used by EntityClickHandler so a click that lands on the 3D surface still
  * falls through to the country hit-test (almanac), instead of being swallowed
  * by the tileset (the "almanac only works on the political/flat map" bug).
  *
- * Duck-typed on purpose: Cesium picks are not reliably classifiable via
- * `instanceof` across providers/primitive kinds. We check, in order:
- *  - a known `Cesium3DTileFeature` (only the photoreal/buildings tileset uses
- *    3D tiles in this app),
- *  - reference-equality against the passed photoreal tileset,
- *  - an `_odinPhotoreal` marker set on the tileset at creation time
- *    (survives even if the passed reference is momentarily null).
+ * Contract: classification requires POSITIVE identification of OUR tileset —
+ * either reference-equality against the passed `photorealTileset`, OR the
+ * `_odinPhotoreal` marker that GlobeViewer stamps on the tileset at creation
+ * (the marker is reachable from a picked tile feature via `.tileset` /
+ * `.content.tileset`, so it works even before the reference has propagated).
+ * We deliberately do NOT treat an arbitrary 3D tileset/feature as photoreal —
+ * an unmarked, unreferenced tileset returns false. (No `instanceof` checks: the
+ * marker + reference are stronger and keep this helper Cesium-runtime-free and
+ * trivially testable.)
  */
 export function isPhotorealSurfacePick(
   picked: unknown,
@@ -88,20 +98,19 @@ export function isPhotorealSurfacePick(
 ): boolean {
   if (!picked) return false;
 
-  if (picked instanceof Cesium.Cesium3DTileFeature) return true;
-
   const p = picked as {
     primitive?: unknown;
     tileset?: unknown;
     content?: { tileset?: unknown };
   };
 
+  // A picked tile feature exposes its owning tileset via .tileset / .content;
+  // a non-feature surface pick exposes it via .primitive.
   const candidates = [p.primitive, p.tileset, p.content?.tileset];
   for (const c of candidates) {
     if (!c) continue;
     if (photorealTileset && c === photorealTileset) return true;
     if ((c as { _odinPhotoreal?: boolean })._odinPhotoreal === true) return true;
-    if (c instanceof Cesium.Cesium3DTileset) return true;
   }
   return false;
 }
@@ -523,13 +532,22 @@ const endo = JSON.parse(readFileSync(endoPath, "utf8"));
 const fetchJson = async (u) => (await fetch(u)).json();
 const [countries, places] = await Promise.all([fetchJson(COUNTRIES_URL), fetchJson(PLACES_URL)]);
 
-// M.49 (ISO_N3, zero-stripped to match topo f.id which is a plain number string) → ISO3
+// CRITICAL: topo f.id and _topoIndex keys are ZERO-PADDED 3-digit M.49 strings
+// ("032" Argentina, "004" Afghanistan, "124" Canada). Build the M.49->ISO3 map
+// with the SAME padded format or every <100 key misses. ISO_A3 is "-99" for a
+// few NE features (FRA, NOR, ...) whose real code lives in ADM0_A3 — pick the
+// first non-"-99" code.
+const pad3 = (v) => String(parseInt(String(v), 10)).padStart(3, "0");
+const pickA3 = (p) =>
+  [p.ISO_A3, p.iso_a3, p.ADM0_A3, p.adm0_a3].find((v) => v && v !== "-99");
 const iso3ByM49 = {};
 for (const f of countries.features) {
   const p = f.properties;
-  const n3 = String(parseInt(p.ISO_N3 ?? p.iso_n3 ?? "", 10)); // "004" -> "4"
-  const a3 = p.ISO_A3 ?? p.iso_a3 ?? p.ADM0_A3 ?? p.adm0_a3;
-  if (n3 !== "NaN" && a3 && a3 !== "-99") iso3ByM49[n3] = a3;
+  const raw = p.ISO_N3 ?? p.iso_n3;
+  const a3 = pickA3(p);
+  if (raw == null || !a3) continue;
+  const n3 = pad3(raw); // 32 / "32" / "032" -> "032"
+  if (n3 !== "NaN") iso3ByM49[n3] = a3;
 }
 
 // ISO3 → capital (prefer "Admin-0 capital", fall back to alt)
@@ -732,6 +750,7 @@ git commit -m "feat(time): pure transport helpers (signed speed + clamped step) 
 - Modify: `services/frontend/src/components/time/ChronikTimeline.css` (speed select style)
 - Modify: `services/frontend/src/components/time/ScrubberMount.tsx` (wire handlers to TimeContext)
 - Test: `services/frontend/src/components/time/__tests__/ScrubberMount.test.tsx` (extend)
+- Test: `services/frontend/src/components/time/__tests__/ChronikTimeline.test.tsx` (existing `base` must gain the new required props)
 
 - [ ] **Step 1: Extend ChronikTimeline props + render the transport cluster**
 
@@ -781,6 +800,22 @@ Replace the single play toggle button (lines 95–98) with the transport cluster
         </select>
         <button type="button" className="chronik__btn" aria-label="now" onClick={onNow}>⏭ NOW</button>
 ```
+
+- [ ] **Step 1b: Update the existing ChronikTimeline test so it still compiles**
+
+The new props are **required**, so the existing `base` object in `src/components/time/__tests__/ChronikTimeline.test.tsx` (it renders `<ChronikTimeline {...base} />` in several tests) must provide them. Add to the `base` object (after `onPreset: vi.fn(),`):
+
+```ts
+  speed: 1,
+  onStepBack: vi.fn(),
+  onStepForward: vi.fn(),
+  onReverse: vi.fn(),
+  onForward: vi.fn(),
+  onSetSpeedMagnitude: vi.fn(),
+```
+
+Run: `npm run test -- ChronikTimeline && npm run type-check`
+Expected: the existing ChronikTimeline tests still PASS and type-check is clean (no missing-prop errors).
 
 - [ ] **Step 2: Style the speed select**
 
@@ -907,103 +942,191 @@ git commit -m "feat(time): full timeslider transport — reverse/forward play, s
 
 ### Task 8: Delete briefings (P6)
 
-**Decision (from spec):** Remove from state only after `deleteReport(id)` succeeds; on failure keep the report. If the deleted report was selected, select the next one (or none). Also drop its cached chat messages.
+**Decision (from spec + review):** Remove from state only after `deleteReport(id)` succeeds; on failure keep the report. If the deleted report was selected, select the next one (or none). Drop its cached chat messages. The behaviour is extracted into two directly-testable units instead of mounting the whole BriefingPage (it depends on react-router `useNavigate` + the `useIntel()` SSE hook, so a full render test is brittle): a pure reducer `applyDelete` that returns BOTH the next reports AND the next selection (so we never nest a `setSelectedId` inside a `setReports` updater), and an async orchestrator `runDeleteDossier` (confirm gate → API → outcome). The orchestrator tests assert exactly what a render test would — confirm honoured, `deleteReport` called, report removed on success, report kept on failure.
 
 **Files:**
-- Modify: `services/frontend/src/pages/BriefingPage.tsx` (`deleteDossier` + button)
+- Create: `services/frontend/src/pages/briefingDelete.ts`
 - Test: `services/frontend/src/pages/__tests__/briefingDelete.test.ts`
+- Modify: `services/frontend/src/pages/BriefingPage.tsx` (`deleteDossier` wrapper + button)
+- Modify: `services/frontend/src/pages/briefingPage.css` (danger style)
 
-- [ ] **Step 1: Write the failing test (pure state-transition helper)**
-
-Extract the selection-after-delete decision so it is testable without rendering the whole page:
+- [ ] **Step 1: Write the failing tests (reducer + orchestrator)**
 
 ```ts
 // services/frontend/src/pages/__tests__/briefingDelete.test.ts
-import { describe, it, expect } from "vitest";
-import { nextSelectionAfterDelete } from "../briefingDelete";
+import { describe, it, expect, vi } from "vitest";
+import type { ReportRecord } from "../../types";
+import { applyDelete, runDeleteDossier } from "../briefingDelete";
 
-describe("nextSelectionAfterDelete", () => {
-  const ids = ["a", "b", "c"];
+const mk = (id: string, title = id.toUpperCase()) =>
+  ({ id, title }) as unknown as ReportRecord;
+const reports = [mk("a"), mk("b"), mk("c")];
 
+describe("applyDelete (reducer)", () => {
   it("keeps the current selection when a different report is deleted", () => {
-    expect(nextSelectionAfterDelete(ids, "a", "c")).toBe("a");
+    const r = applyDelete(reports, "a", "c");
+    expect(r.reports.map((x) => x.id)).toEqual(["a", "b"]);
+    expect(r.selectedId).toBe("a");
   });
 
   it("moves to the next report when the selected one is deleted", () => {
-    expect(nextSelectionAfterDelete(ids, "b", "b")).toBe("c");
+    expect(applyDelete(reports, "b", "b").selectedId).toBe("c");
   });
 
-  it("falls back to the previous when deleting the last", () => {
-    expect(nextSelectionAfterDelete(ids, "c", "c")).toBe("b");
+  it("falls back to the previous when deleting the last selected", () => {
+    expect(applyDelete(reports, "c", "c").selectedId).toBe("b");
   });
 
-  it("returns empty string when the only report is deleted", () => {
-    expect(nextSelectionAfterDelete(["a"], "a", "a")).toBe("");
+  it("returns empty selection when the only report is deleted", () => {
+    const r = applyDelete([mk("a")], "a", "a");
+    expect(r.reports).toEqual([]);
+    expect(r.selectedId).toBe("");
+  });
+});
+
+describe("runDeleteDossier (orchestrator)", () => {
+  it("does nothing when the confirm dialog is declined", async () => {
+    const deleteReportFn = vi.fn().mockResolvedValue(undefined);
+    const out = await runDeleteDossier({
+      reports, selectedId: "b", report: mk("b"),
+      confirm: () => false, deleteReportFn,
+    });
+    expect(out.status).toBe("cancelled");
+    expect(deleteReportFn).not.toHaveBeenCalled();
+  });
+
+  it("calls the API and removes the report on success", async () => {
+    const deleteReportFn = vi.fn().mockResolvedValue(undefined);
+    const out = await runDeleteDossier({
+      reports, selectedId: "b", report: mk("b"),
+      confirm: () => true, deleteReportFn,
+    });
+    expect(deleteReportFn).toHaveBeenCalledWith("b");
+    expect(out.status).toBe("deleted");
+    if (out.status === "deleted") {
+      expect(out.reports.map((x) => x.id)).toEqual(["a", "c"]);
+      expect(out.selectedId).toBe("c");
+      expect(out.droppedChatId).toBe("b");
+    }
+  });
+
+  it("keeps the report when the API call fails", async () => {
+    const deleteReportFn = vi.fn().mockRejectedValue(new Error("500"));
+    const out = await runDeleteDossier({
+      reports, selectedId: "b", report: mk("b"),
+      confirm: () => true, deleteReportFn,
+    });
+    expect(out.status).toBe("error");
+    // caller keeps existing state — the outcome carries no replacement reports
+    expect("reports" in out).toBe(false);
   });
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run tests to verify they fail**
 
 Run: `npm run test -- briefingDelete`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement the helper**
+- [ ] **Step 3: Implement the reducer + orchestrator**
 
 ```ts
 // services/frontend/src/pages/briefingDelete.ts
+import type { ReportRecord } from "../types";
 
-/** Pick the selection after `deletedId` is removed from `orderedIds`.
- *  If the deleted report wasn't selected, keep `selectedId`. Otherwise choose
- *  the next report, else the previous, else "" (nothing left). */
-export function nextSelectionAfterDelete(
-  orderedIds: string[],
+export interface DeleteState {
+  reports: ReportRecord[];
+  selectedId: string;
+}
+
+/** Pure reducer: remove `deletedId` and return BOTH the next reports list and
+ *  the next selection. If the deleted report wasn't selected, selection is
+ *  unchanged. Otherwise pick the next report, else the previous, else "". */
+export function applyDelete(
+  reports: ReportRecord[],
   selectedId: string,
   deletedId: string,
-): string {
-  if (selectedId !== deletedId) return selectedId;
-  const i = orderedIds.indexOf(deletedId);
-  const remaining = orderedIds.filter((id) => id !== deletedId);
-  if (remaining.length === 0) return "";
-  return remaining[Math.min(i, remaining.length - 1)] ?? "";
+): DeleteState {
+  const idx = reports.findIndex((r) => r.id === deletedId);
+  const remaining = reports.filter((r) => r.id !== deletedId);
+  let nextSelected = selectedId;
+  if (selectedId === deletedId) {
+    nextSelected =
+      remaining.length === 0 ? "" : (remaining[Math.min(idx, remaining.length - 1)]?.id ?? "");
+  }
+  return { reports: remaining, selectedId: nextSelected };
+}
+
+export interface DeleteDeps {
+  reports: ReportRecord[];
+  selectedId: string;
+  report: ReportRecord;
+  confirm: (message: string) => boolean;
+  deleteReportFn: (id: string) => Promise<void>;
+}
+
+export type DeleteOutcome =
+  | { status: "cancelled" }
+  | { status: "deleted"; reports: ReportRecord[]; selectedId: string; droppedChatId: string }
+  | { status: "error"; error: unknown };
+
+/** Confirm → delete via API → compute next state. Removes from state only on
+ *  success; on failure returns `error` and the caller keeps its existing state. */
+export async function runDeleteDossier(deps: DeleteDeps): Promise<DeleteOutcome> {
+  const { reports, selectedId, report, confirm, deleteReportFn } = deps;
+  if (!confirm(`Delete dossier "${report.title}"? This cannot be undone.`)) {
+    return { status: "cancelled" };
+  }
+  try {
+    await deleteReportFn(report.id); // remove from state only after success
+    const next = applyDelete(reports, selectedId, report.id);
+    return {
+      status: "deleted",
+      reports: next.reports,
+      selectedId: next.selectedId,
+      droppedChatId: report.id,
+    };
+  } catch (error) {
+    return { status: "error", error }; // report stays in state
+  }
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run tests to verify they pass**
 
 Run: `npm run test -- briefingDelete`
-Expected: PASS (4 tests).
+Expected: PASS (7 tests).
 
-- [ ] **Step 5: Wire the helper + API into BriefingPage with a confirmed delete button**
+- [ ] **Step 5: Wire into BriefingPage (no nested setState updaters)**
 
-In `BriefingPage.tsx`, import `deleteReport` (add to the existing `services/api` import that already pulls `createReport`/`updateReport`) and the helper:
+In `BriefingPage.tsx`, add `deleteReport` to the existing `services/api` import (it already imports `createReport`/`updateReport`), and import the orchestrator:
 
 ```ts
-import { nextSelectionAfterDelete } from "./briefingDelete";
+import { runDeleteDossier } from "./briefingDelete";
 ```
 
-Add the action after `promoteToWorldview` (line 277):
+Add the thin wrapper after `promoteToWorldview` (line 277). It reads the current `reports`/`selectedId` from scope and applies the two state updates SEPARATELY (no updater nesting):
 
 ```ts
   const deleteDossier = async (report: ReportRecord) => {
-    if (!window.confirm(`Delete dossier "${report.title}"? This cannot be undone.`)) return;
-    try {
-      await deleteReport(report.id); // remove from state only after success
-      setReports((prev) => {
-        const remaining = prev.filter((r) => r.id !== report.id);
-        setSelectedId((cur) =>
-          nextSelectionAfterDelete(prev.map((r) => r.id), cur, report.id),
-        );
-        return remaining;
-      });
+    const outcome = await runDeleteDossier({
+      reports,
+      selectedId,
+      report,
+      confirm: (m) => window.confirm(m),
+      deleteReportFn: deleteReport,
+    });
+    if (outcome.status === "deleted") {
+      setReports(outcome.reports);
+      setSelectedId(outcome.selectedId);
       setChatByReport((prev) => {
         const next = { ...prev };
-        delete next[report.id];
+        delete next[outcome.droppedChatId];
         return next;
       });
       setReportsError(null);
-    } catch (err) {
-      setReportsError(normalizeError(err)); // report stays in state on failure
+    } else if (outcome.status === "error") {
+      setReportsError(normalizeError(outcome.error));
     }
   };
 ```
@@ -1026,7 +1149,7 @@ Add a danger style to `services/frontend/src/pages/briefingPage.css`:
 .briefing-link--danger { color: var(--capital-red, #e63a26); }
 ```
 
-- [ ] **Step 6: Run tests + type-check + build**
+- [ ] **Step 6: Run tests + type-check**
 
 Run: `npm run test -- briefingDelete && npm run type-check`
 Expected: PASS; type-check clean.
@@ -1038,7 +1161,7 @@ git add services/frontend/src/pages/briefingDelete.ts \
         services/frontend/src/pages/__tests__/briefingDelete.test.ts \
         services/frontend/src/pages/BriefingPage.tsx \
         services/frontend/src/pages/briefingPage.css
-git commit -m "feat(briefing): delete dossiers (confirm, delete-on-success, reselect) (P6)"
+git commit -m "feat(briefing): delete dossiers — reducer + orchestrator, delete-on-success, reselect (P6)"
 ```
 
 ---
