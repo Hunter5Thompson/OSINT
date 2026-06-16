@@ -357,7 +357,7 @@ git commit -m "fix(globe): almanac click falls through 3D photoreal tiles to cou
 
 - [ ] **Step 1: Write the failing test**
 
-> **Mechanism note (verified against the installed Cesium 1.132 `Cesium.d.ts`):** a
+> **Mechanism note (verified against the installed Cesium `Cesium.d.ts`, v1.139.x):** a
 > `PolylineCollection`/`Polyline` has NO `disableDepthTestDistance` — that option is
 > a silent no-op there (it belongs to Billboard/Label/PointPrimitive). Flat
 > ellipsoid polylines stay depth-tested and are hidden behind the Google photoreal
@@ -463,7 +463,7 @@ Notes for the implementer:
 - Delete the old `Cesium.PolylineCollection` / `collection.add(...)` code and the now-stale `if (cancelled || viewer.isDestroyed()) { collection.destroy(); return; }` block — the re-check above replaces it (an empty `instances` array is harmless; a not-yet-added primitive needs no destroy).
 - The existing cleanup `viewer.scene.primitives.remove(collection)` works unchanged — `GroundPolylinePrimitive` is removed the same way.
 - `BORDER_WIDTH` is screen-space pixels (GroundPolylineGeometry semantics), same as before.
-- **Fallback (verify in manual smoke):** classification of Google Photorealistic 3D Tiles by `GroundPolylinePrimitive` is not guaranteed on every Cesium build. If the draped borders do NOT appear over the photoreal tiles (only over bare terrain), fall back to a draw-on-top primitive: a `Cesium.Primitive` with `PolylineColorAppearance`/`PolylineMaterialAppearance` whose `appearance.renderState.depthTest.enabled = false` (accepts minor far-side bleed-through) — still imperative primitives, no Entity API. Keep the width + bone-colour boost regardless, since that alone is most of the legibility win. Update the test to assert whichever mechanism is shipped.
+- **Fallback (verify in manual smoke):** classification of Google Photorealistic 3D Tiles by `GroundPolylinePrimitive` is not guaranteed on every Cesium build. If the draped borders do NOT appear over the photoreal tiles (only over bare terrain), fall back to a draw-on-top primitive: a `Cesium.Primitive` built from `PolylineGeometry`/`SimplePolylineGeometry` instances (NOT `GroundPolylineGeometry` — that only works with `GroundPolylinePrimitive`) and a `PolylineColorAppearance`/`PolylineMaterialAppearance` constructed with `renderState: { depthTest: { enabled: false } }` (pass it in the appearance constructor — `renderState` is read-only after construction; accepts minor far-side bleed-through). Still imperative primitives, no Entity API. Keep the width + bone-colour boost regardless, since that alone is most of the legibility win. Update the test to assert whichever mechanism is shipped.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -501,12 +501,12 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-// The three name-keyed (null f.id) features in countries-110m.json are
-// 'N. Cyprus', 'Somaliland', 'Kosovo'. Somaliland + N. Cyprus have no clean ISO3
-// / no Natural Earth admin-0 capital and are intentionally left unmapped.
+// Genuinely capital-less / unmappable features, intentionally left unmapped:
+//  - 'Somaliland', 'N. Cyprus' (name-keyed, no clean ISO3 / no NE admin-0 capital)
+//  - '010' Antarctica (resolves to ATA but has no capital — only research stations)
 // Kosovo is NOT excepted — it is covered via the generator's OVERRIDES['Kosovo']
 // (-> XKX/Pristina); the explicit assertion below enforces that coupling.
-const CAPITAL_EXCEPTIONS = new Set<string>(["Somaliland", "N. Cyprus"]);
+const CAPITAL_EXCEPTIONS = new Set<string>(["Somaliland", "N. Cyprus", "010"]);
 
 function load(rel: string) {
   const p = fileURLToPath(new URL(`../../../../public/${rel}`, import.meta.url));
@@ -574,7 +574,19 @@ const PLACES_URL = `${NE}/ne_10m_populated_places_simple.geojson`;
 // that Natural Earth keys differently. Kosovo has a de-facto capital + XKX code.
 const OVERRIDES = {
   // topoIndexKey: { iso3, capital: { name, lat, lon } }
+  // Name-keyed (no topo f.id):
   Kosovo: { iso3: "XKX", capital: { name: "Pristina", lat: 42.6727, lon: 21.1655 } },
+  // Numeric M.49 keys whose ISO3 resolves fine, but Natural Earth has NO
+  // "Admin-0 capital" row for it (EMPIRICALLY these 7 otherwise stay in `missing`;
+  // adding them to A3_TO_M49 is a no-op — the miss is at the capital-lookup stage).
+  // Sourced de-facto administrative centers:
+  "732": { iso3: "ESH", capital: { name: "Laâyoune", lat: 27.1536, lon: -13.2033 } },          // W. Sahara
+  "238": { iso3: "FLK", capital: { name: "Stanley", lat: -51.6938, lon: -57.8569 } },           // Falkland Is.
+  "304": { iso3: "GRL", capital: { name: "Nuuk", lat: 64.1836, lon: -51.6926 } },               // Greenland
+  "540": { iso3: "NCL", capital: { name: "Nouméa", lat: -22.2758, lon: 166.458 } },             // New Caledonia
+  "630": { iso3: "PRI", capital: { name: "San Juan", lat: 18.4655, lon: -66.1057 } },           // Puerto Rico
+  "275": { iso3: "PSE", capital: { name: "Ramallah", lat: 31.9038, lon: 35.2034 } },            // Palestine (de-facto seat)
+  "260": { iso3: "ATF", capital: { name: "Port-aux-Français", lat: -49.3492, lon: 70.2197 } },  // Fr. S. Antarctic Lands
 };
 
 const endoPath = new URL("../public/country-endonyms.json", import.meta.url);
@@ -705,11 +717,15 @@ Run:
 cd services/frontend && node scripts/gen-capitals.mjs
 npm run test -- capitalCoverage
 ```
-Expected: generator prints `filled ~167 ...`; test PASSES. France (`250`) and Norway (`578`) are filled via the `A3_TO_M49` fallback (their NE `ISO_N3` is `-99`), NOT via exceptions. If any key remains in `missing`:
-- A **numeric** key (e.g. `"250"`-style) almost always means another NE feature with `ISO_N3 == -99` → add `{ <ISO3>: <m49> }` to `A3_TO_M49` (so it inherits the NE capital), do **not** except it.
-- A **name** key (no topo `f.id`) with a real de-facto capital → add an `OVERRIDES` entry with a sourced capital.
-- A genuinely capital-less / disputed territory → add it to `CAPITAL_EXCEPTIONS` in the test.
-Decide per entry, do not blanket-skip. Re-run until green.
+Expected (**empirically verified against live Natural Earth**): generator prints `filled 166; total countries=174`, and the coverage test's `missing` array is `[]` (PASS). The non-obvious territories are already handled in the script above:
+- France(`250`)/Norway(`578`): NE `ISO_N3=-99` → mapped via `A3_TO_M49`, inherit NE's capital.
+- `732,238,304,540,630,275,260`: ISO3 resolves but NE has **no `Admin-0 capital` row** → sourced numeric `OVERRIDES` (W. Sahara, Falklands, Greenland, New Caledonia, Puerto Rico, Palestine, Fr. S. Antarctic).
+- `010` Antarctica: genuinely capital-less → `CAPITAL_EXCEPTIONS`. `Kosovo`: name-keyed → `OVERRIDES['Kosovo']`.
+
+If a future NE data refresh puts a NEW key in `missing`, classify by cause first — the two failure modes are at different stages:
+- NE `ISO_N3 == -99` (an upstream M.49→ISO3 mapping miss) → add `{ <ISO3>: <m49> }` to `A3_TO_M49`.
+- Key resolves to an ISO3 but `capByIso3[iso3]` is undefined (a capital-LOOKUP miss — the common case) → add a sourced numeric `OVERRIDES` entry; use `CAPITAL_EXCEPTIONS` **only** for genuinely capital-less territories. Do NOT reach for `A3_TO_M49` here — it is a verified no-op for lookup-stage misses.
+Re-run `node scripts/gen-capitals.mjs` + `npm run test -- capitalCoverage` until `missing` is `[]`.
 
 - [ ] **Step 5: Sanity-check a few capitals render correctly**
 
