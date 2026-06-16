@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from graph_integrity import geo_gdelt, geo_incident, report
+from graph_integrity import geo_gdelt, geo_incident, rekey_incident_locations, report
 from graph_integrity.neo4j_client import Neo4jClient
 
 
@@ -16,6 +16,8 @@ def build_parser() -> argparse.ArgumentParser:
     inc.add_argument("--dry-run", action="store_true")
     gd = sub.add_parser("backfill-gdelt-geo")
     gd.add_argument("--dry-run", action="store_true")
+    rk = sub.add_parser("rekey-incident-locations")
+    rk.add_argument("--dry-run", action="store_true")
     return p
 
 
@@ -41,6 +43,10 @@ async def _amain(args: argparse.Namespace) -> None:
             gdelt_cfg = get_gdelt_settings()
             n = await geo_gdelt.run(client, gdelt_cfg.parquet_path, dry_run=args.dry_run)
             print(f"gdelt-geo: {n} events {'(dry-run)' if args.dry_run else 'wired'}")
+        elif args.command == "rekey-incident-locations":
+            n = await rekey_incident_locations.run(client, dry_run=args.dry_run)
+            suffix = "(dry-run)" if args.dry_run else "rewired"
+            print(f"rekey-incident-locations: {n} incidents {suffix}")
     finally:
         await client.close()
 
