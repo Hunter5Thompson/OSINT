@@ -115,3 +115,60 @@ async def test_qdrant_recovery_independent_of_neo4j(tmp_path):
                         qdrant_writer=qdrant)
     qdrant.upsert_from_parquet.assert_awaited_once()
     assert await state.get_store_state(slice_id, "qdrant") == "done"
+
+
+def _make_parquet_streams(tmp_path, slice_id, date="2026-04-25"):
+    for stream in ("events", "gkg", "mentions"):
+        p = tmp_path / stream / f"date={date}"
+        p.mkdir(parents=True, exist_ok=True)
+        pl.DataFrame({"x": [1]}).write_parquet(p / f"{slice_id}.parquet")
+
+
+@pytest.mark.asyncio
+async def test_replay_advances_last_slice_and_clears_reconcile_lag(tmp_path):
+    """A successful replay must advance last_slice[store] so reconcile no longer
+    reports the store lagging — the detection signal has to track the repair it
+    recommends (WP-10)."""
+    from gdelt_raw.recovery import reconcile_forward_state
+
+    slice_id = "20260425121500"
+    _make_parquet_streams(tmp_path, slice_id)
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+    await state.set_last_slice("parquet", slice_id)   # parquet advanced
+    await state.add_pending("neo4j", slice_id)        # stores stranded
+    await state.add_pending("qdrant", slice_id)
+
+    neo4j = MagicMock()
+    neo4j.write_from_parquet = AsyncMock()
+    qdrant = MagicMock()
+    qdrant.upsert_from_parquet = AsyncMock(return_value=0)
+
+    assert (await reconcile_forward_state(state))["lagging"] == ["neo4j", "qdrant"]
+    await replay_pending(state, parquet_base=tmp_path, neo4j_writer=neo4j,
+                        qdrant_writer=qdrant)
+
+    assert await state.get_last_slice("neo4j") == slice_id
+    assert await state.get_last_slice("qdrant") == slice_id
+    assert (await reconcile_forward_state(state))["lagging"] == []
+
+
+@pytest.mark.asyncio
+async def test_replay_does_not_regress_newer_last_slice(tmp_path):
+    """Replaying an OLDER pending slice must not regress a newer store pointer."""
+    old_slice, new_slice = "20260425120000", "20260425121500"
+    _make_parquet_streams(tmp_path, old_slice)
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+    await state.set_last_slice("neo4j", new_slice)    # already ahead
+    await state.add_pending("neo4j", old_slice)
+
+    neo4j = MagicMock()
+    neo4j.write_from_parquet = AsyncMock()
+    qdrant = MagicMock()
+    qdrant.upsert_from_parquet = AsyncMock(return_value=0)
+
+    await replay_pending(state, parquet_base=tmp_path, neo4j_writer=neo4j,
+                        qdrant_writer=qdrant)
+
+    assert await state.get_last_slice("neo4j") == new_slice  # not regressed to old
