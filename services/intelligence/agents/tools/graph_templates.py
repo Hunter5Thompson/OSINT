@@ -48,9 +48,10 @@ TEMPLATES: dict[str, dict] = {
         "cypher": (
             "MATCH (e:Entity {name: $name})<-[:INVOLVES]-(ev:Event) "
             "RETURN ev.title AS title, ev.codebook_type AS type, "
-            "ev.severity AS severity, ev.timestamp AS timestamp, "
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
             "ev.confidence AS confidence "
-            "ORDER BY ev.timestamp DESC "
+            "ORDER BY timestamp DESC "
             "LIMIT $limit"
         ),
         "params": ["name"],
@@ -62,9 +63,10 @@ TEMPLATES: dict[str, dict] = {
             "MATCH (ev:Event)-[:OCCURRED_AT]->(l:Location) "
             "WHERE l.name CONTAINS $location OR l.country CONTAINS $location "
             "RETURN ev.title AS title, ev.codebook_type AS type, "
-            "ev.severity AS severity, ev.timestamp AS timestamp, "
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
             "l.name AS location, l.country AS country "
-            "ORDER BY ev.timestamp DESC "
+            "ORDER BY timestamp DESC "
             "LIMIT $limit"
         ),
         "params": ["location"],
@@ -88,8 +90,8 @@ TEMPLATES: dict[str, dict] = {
         "cypher": (
             "MATCH (e:Entity {name: $name})<-[:INVOLVES]-(ev:Event)-[:REPORTED_BY]->(s:Source) "
             "RETURN ev.title AS event, s.name AS source, s.url AS url, "
-            "ev.timestamp AS timestamp "
-            "ORDER BY ev.timestamp DESC "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp "
+            "ORDER BY timestamp DESC "
             "LIMIT $limit"
         ),
         "params": ["name"],

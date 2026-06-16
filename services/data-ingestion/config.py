@@ -117,11 +117,15 @@ class Settings(BaseSettings):
     # PortWatch (IMF Chokepoint Flows)
     portwatch_interval_hours: int = 6
 
-    # --- Patch C Phase 5: Entity-type normalizer ---
-    # Default OFF: pipeline produces bit-for-bit identical Cypher params to
-    # pre-Phase-5 main when this flag is False. Operators flip to True only
-    # after the canonical EntityType set has been validated end-to-end.
-    entity_type_normalize: bool = False
+    # --- Entity-type normalizer (WP-04: default ON) ---
+    # ON by default: the RSS write-path canonicalizes its lowercase enum types
+    # (person -> PERSON, ...) onto the canonical UPPERCASE EntityType set BEFORE
+    # the MERGE (e:Entity {name, type}), so RSS and NLM writes converge on ONE
+    # node per (name, type). The lowercase enum is fully covered by
+    # LEGACY_ENTITY_TYPE_MAP (nlm_ingest/schemas.py); unknown values fail-soft
+    # (pass through unchanged + a structlog warning). Set False only to
+    # reproduce the pre-WP-04 lowercase-passthrough behaviour.
+    entity_type_normalize: bool = True
 
     # Think-Tank Full-Text (Slice A) — opt-in (external crawls + Qdrant mutation)
     fulltext_enabled: bool = False

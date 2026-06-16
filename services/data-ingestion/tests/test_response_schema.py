@@ -30,3 +30,18 @@ def test_location_object_rejects_extra_fields():
     assert location_obj.get("additionalProperties") is False
     assert "name" in location_obj["required"]
     assert "country" in location_obj["required"]
+
+
+def test_entity_type_enum_is_fully_covered_by_legacy_map():
+    """WP-04 drift guard: every RSS-emittable entity type must have an UPPERCASE
+    mapping in LEGACY_ENTITY_TYPE_MAP. entity_type_normalize is ON by default, so
+    an unmapped enum value would hit the fail-soft lowercase-passthrough path and
+    silently re-open RSS/NLM Entity fragmentation. Adding a value to this enum
+    without a map entry MUST fail this test."""
+    from nlm_ingest.schemas import LEGACY_ENTITY_TYPE_MAP
+
+    enum = _RESPONSE_SCHEMA["properties"]["entities"]["items"]["properties"]["type"]["enum"]
+    missing = set(enum) - set(LEGACY_ENTITY_TYPE_MAP)
+    assert not missing, (
+        f"RSS entity-type enum values with no LEGACY_ENTITY_TYPE_MAP entry: {missing}"
+    )

@@ -149,6 +149,50 @@ class TestGraphEndpoints:
             assert "elementId(ev) AS id" in cypher
             assert "ev.id AS id" not in cypher
 
+    def test_events_query_coalesces_timestamp_and_sorts_on_alias(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = []
+            resp = client.get("/api/graph/events")
+            assert resp.status_code == 200
+            cypher = mock.call_args.args[0]
+            assert (
+                "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp"
+                in cypher
+            )
+            assert "ORDER BY timestamp DESC" in cypher
+            assert "ORDER BY ev.timestamp" not in cypher
+
+    def test_events_entity_branch_coalesces_timestamp_and_sorts_on_alias(self, client):
+        """The ?entity= branch builds a different query string — lock it too."""
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = []
+            resp = client.get("/api/graph/events?entity=NorthKorea")
+            assert resp.status_code == 200
+            cypher = mock.call_args.args[0]
+            assert (
+                "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp"
+                in cypher
+            )
+            assert "ORDER BY timestamp DESC" in cypher
+            assert "ORDER BY ev.timestamp" not in cypher
+
+    def test_events_endpoint_serializes_neo4j_datetime_timestamp(self, client):
+        """Regression (WP-08 follow-up): on real rows the coalesced timestamp is a
+        neo4j.time.DateTime, which is NOT JSON-serializable inside the untyped
+        GraphNode.properties dict — it must be stringified. Mocking with a string
+        timestamp (the prior tests) hid this; use a real DateTime here."""
+        from neo4j.time import DateTime
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = [{
+                "id": "ev-1", "name": "Airstrike", "type": "military.airstrike",
+                "severity": "high", "timestamp": DateTime(2026, 3, 30, 10, 0, 0),
+            }]
+            resp = client.get("/api/graph/events")
+            assert resp.status_code == 200
+            props = resp.json()["nodes"][0]["properties"]
+            assert isinstance(props["timestamp"], str)
+            assert "2026-03-30" in props["timestamp"]
+
 
 class TestGeoEventsEndpoint:
     @pytest.fixture
@@ -235,6 +279,35 @@ class TestGeoEventsEndpoint:
             cypher = mock.call_args.args[0]
             assert "elementId(ev) AS id" in cypher
             assert "ev.id AS id" not in cypher
+
+    def test_geo_events_query_coalesces_timestamp_and_sorts_on_alias(self, client):
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = []
+            resp = client.get("/api/graph/events/geo")
+            assert resp.status_code == 200
+            cypher = mock.call_args.args[0]
+            assert (
+                "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp"
+                in cypher
+            )
+            assert "ORDER BY timestamp DESC" in cypher
+            assert "ORDER BY ev.timestamp" not in cypher
+
+    def test_geo_events_serializes_neo4j_datetime_timestamp(self, client):
+        """Defense-in-depth: /events/geo already str()s its timestamp; lock that
+        against a real neo4j.time.DateTime (the prior tests used string mocks)."""
+        from neo4j.time import DateTime
+        with patch("app.routers.graph._read_query", new_callable=AsyncMock) as mock:
+            mock.return_value = [{
+                "id": "ev-1", "title": "Airstrike", "codebook_type": "military.airstrike",
+                "severity": "high", "timestamp": DateTime(2026, 3, 30, 10, 0, 0),
+                "location_name": None, "country": None, "lat": None, "lon": None,
+            }]
+            resp = client.get("/api/graph/events/geo")
+            assert resp.status_code == 200
+            ts = resp.json()["events"][0]["timestamp"]
+            assert isinstance(ts, str)
+            assert "2026-03-30" in ts
 
 
 class TestConfigEndpoint:

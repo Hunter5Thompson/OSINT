@@ -132,31 +132,40 @@ async def get_events(
         rows = await _read_query(
             "MATCH (e:Entity {name: $entity})<-[:INVOLVES]-(ev:Event) "
             "RETURN elementId(ev) AS id, ev.title AS name, ev.codebook_type AS type, "
-            "ev.severity AS severity, ev.timestamp AS timestamp "
-            "ORDER BY ev.timestamp DESC LIMIT $limit",
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp "
+            "ORDER BY timestamp DESC LIMIT $limit",
             {"entity": entity, "limit": limit},
         )
     else:
         rows = await _read_query(
             "MATCH (ev:Event) "
             "RETURN elementId(ev) AS id, ev.title AS name, ev.codebook_type AS type, "
-            "ev.severity AS severity, ev.timestamp AS timestamp "
-            "ORDER BY ev.timestamp DESC LIMIT $limit",
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp "
+            "ORDER BY timestamp DESC LIMIT $limit",
             {"limit": limit},
         )
-    nodes = [
-        GraphNode(
-            id=r.get("id", ""),
-            name=r.get("name", ""),
-            type=r.get("type", "event"),
-            properties={
-                k: v
-                for k, v in r.items()
-                if k not in ("id", "name", "type") and v is not None
-            },
+    nodes = []
+    for r in rows:
+        props = {
+            k: v
+            for k, v in r.items()
+            if k not in ("id", "name", "type") and v is not None
+        }
+        # The coalesced timestamp is a neo4j.time.DateTime on real rows, which is
+        # not JSON-serializable inside this untyped properties dict. Stringify it
+        # (parity with the /events/geo endpoint, which str()s its timestamp).
+        if props.get("timestamp") is not None:
+            props["timestamp"] = str(props["timestamp"])
+        nodes.append(
+            GraphNode(
+                id=r.get("id", ""),
+                name=r.get("name", ""),
+                type=r.get("type", "event"),
+                properties=props,
+            )
         )
-        for r in rows
-    ]
     return GraphResponse(nodes=nodes, total_count=len(nodes))
 
 
@@ -186,10 +195,11 @@ async def get_geo_events(
         f"OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location) "
         f"{type_filter}"
         f"RETURN elementId(ev) AS id, ev.title AS title, ev.codebook_type AS codebook_type, "
-        f"ev.severity AS severity, ev.timestamp AS timestamp, "
+        f"ev.severity AS severity, "
+        f"coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
         f"l.name AS location_name, l.country AS country, "
         f"l.lat AS lat, l.lon AS lon "
-        f"ORDER BY ev.timestamp DESC LIMIT $limit"
+        f"ORDER BY timestamp DESC LIMIT $limit"
     )
 
     rows = await _read_query(cypher, params)
