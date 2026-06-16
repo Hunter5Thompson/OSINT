@@ -1,4 +1,5 @@
 # tests/test_suv_cli.py
+import httpx
 import pytest
 import yaml
 
@@ -39,3 +40,26 @@ def test_build_returns_companies_and_approved_on_valid_gate(tmp_path):
     companies, approved = resolve_build_inputs(seed_path=seed, approved_path=report)
     assert {c.name for c in companies} == {"A", "B"}
     assert {a["name"] for a in approved} == {"A"}     # only approved+unambiguous
+
+
+@pytest.mark.asyncio
+async def test_lookup_existing_parses_results():
+    from suv_structured.cli import _lookup_existing
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json={
+        "results": [{"data": [{"row": ["rheinmetall ag", "Rheinmetall", "ORGANIZATION", "e1"]}]}],
+        "errors": []}))
+    async with httpx.AsyncClient(transport=transport) as client:
+        out = await _lookup_existing([Company(name="Rheinmetall AG", suv_url="u")],
+                                     client, "http://neo", "neo4j", "pw")
+    assert out == {"rheinmetall ag": [("Rheinmetall", "ORGANIZATION", "e1")]}
+
+
+@pytest.mark.asyncio
+async def test_lookup_existing_raises_on_neo4j_error_body():
+    from suv_structured.cli import _lookup_existing
+    transport = httpx.MockTransport(lambda r: httpx.Response(
+        200, json={"results": [], "errors": [{"message": "Auth failed"}]}))
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(RuntimeError, match="Auth failed"):
+            await _lookup_existing([Company(name="X", suv_url="u")],
+                                   client, "http://neo", "neo4j", "pw")

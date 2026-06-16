@@ -49,6 +49,7 @@ def resolve_build_inputs(
     approved = load_approved(approved_path)            # raises on approved+ambiguous
     seed_urls = {c.suv_url for c in companies}
     seed_names = {c.name for c in companies}
+    # suv_url is the same directory URL for every company; name is the effective key
     unknown = [e["name"] for e in approved
                if e.get("suv_url") not in seed_urls and e["name"] not in seed_names]
     if unknown:
@@ -80,6 +81,10 @@ def parse() -> None:
             md = await fetch_directory_markdown(
                 DIRECTORY_URL, crawl4ai_url=settings.crawl4ai_url, client=client)
         companies = parse_companies(md)
+        if len(companies) < 5:
+            raise click.ClickException(
+                f"parse yielded only {len(companies)} companies — likely a shell/error "
+                "page; seed NOT written")
         SEED_PATH.parent.mkdir(parents=True, exist_ok=True)
         dumped = yaml.safe_dump(
             [c.model_dump() for c in companies], allow_unicode=True, sort_keys=False)
@@ -114,8 +119,11 @@ def build(dry_run: bool, approved_path: Path | None, report_out: Path) -> None:
                               neo4j_user=auth_user, neo4j_password=auth_pw)
             # Pre-compute embeddings async, then pass a sync lookup as `embed` so
             # build_qdrant_points stays pure + as-tested.
+            approved_names = {e["name"] for e in approved}
             vec_by_content: dict[str, list[float]] = {}
             for c in companies:
+                if c.name not in approved_names:
+                    continue
                 content = profile_text(c)
                 vec_by_content[content] = await embed_text(
                     content, client=client, tei_embed_url=settings.tei_embed_url)
@@ -145,8 +153,12 @@ async def _lookup_existing(
         json={"statements": [{"statement": cypher, "parameters": {"names": names}}]},
         headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"})
     resp.raise_for_status()
+    data = resp.json()
+    if data.get("errors"):
+        raise RuntimeError(
+            f"Neo4j lookup error: {data['errors'][0].get('message', data['errors'])}")
     out: dict[str, list[tuple[str, str, str]]] = {}
-    for row in resp.json()["results"][0]["data"]:
+    for row in (data["results"][0]["data"] if data.get("results") else []):
         query, name, etype, eid = row["row"]
         out.setdefault(query.strip().lower(), []).append((name, etype, eid))
     return out
