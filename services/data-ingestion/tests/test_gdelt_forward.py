@@ -176,6 +176,81 @@ async def test_failed_parquet_stream_stops_external_store_writes(tmp_path, monke
     assert await state.get_last_slice("parquet") is None
     assert await state.get_store_state("20260425120000", "neo4j") is None
     assert await state.get_store_state("20260425120000", "qdrant") is None
+    # An incomplete-parquet slice raises before any store write is attempted, so
+    # write-ahead add_pending is never reached — no ghost pending entries.
+    assert await state.list_pending("neo4j") == []
+    assert await state.list_pending("qdrant") == []
+
+
+@pytest.mark.asyncio
+async def test_slice_is_pending_before_external_write(tmp_path, monkeypatch):
+    """WP-10 write-ahead: a SIGKILL mid-write must leave the slice recoverable.
+    Prove the pending entry exists DURING the writer call (enqueued before the
+    write, not only in the except handler), and is removed on success."""
+    import fakeredis.aioredis
+
+    from gdelt_raw.downloader import LastUpdateEntry
+    from gdelt_raw.run import run_forward_slice
+    from gdelt_raw.state import GDELTState
+
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+
+    # Stub download + parse + filter — mark parquet streams as done
+    async def fake_download(entry, out_dir, **kwargs):
+        f = out_dir / entry.url.rsplit("/", 1)[-1]
+        f.write_bytes(b"z")
+        return f
+
+    async def fake_extract(entries, work, *, verify_md5=True):
+        from gdelt_raw.run import ParsedSlice
+        return ParsedSlice(
+            events_df=pl.DataFrame({"global_event_id": []}),
+            mentions_df=pl.DataFrame({"global_event_id": []}),
+            gkg_df=pl.DataFrame({"gkg_record_id": []}),
+            stream_states={"events": "done", "mentions": "done", "gkg": "done"},
+        )
+
+    async def fake_filter_write(parsed, slice_id, *, state, parquet_base):
+        for st in ("events", "mentions", "gkg"):
+            await state.set_stream_parquet(slice_id, st, "done")
+        return None
+
+    monkeypatch.setattr("gdelt_raw.run.download_slice", fake_download)
+    monkeypatch.setattr("gdelt_raw.run._extract_and_parse", fake_extract)
+    monkeypatch.setattr("gdelt_raw.run._filter_and_write_parquet", fake_filter_write)
+
+    seen_pending: dict[str, list[str]] = {}
+
+    async def _neo4j_write(parquet_base, slice_id, date):
+        # Capture the pending set DURING the write (before it returns)
+        seen_pending["neo4j"] = await state.list_pending("neo4j")
+
+    async def _qdrant_write(parquet_base, slice_id, date):
+        seen_pending["qdrant"] = await state.list_pending("qdrant")
+        return 0
+
+    neo4j = MagicMock()
+    neo4j.write_from_parquet = AsyncMock(side_effect=_neo4j_write)
+    qdrant = MagicMock()
+    qdrant.upsert_from_parquet = AsyncMock(side_effect=_qdrant_write)
+
+    entries = [
+        LastUpdateEntry(0, "m", "http://x/y.export.CSV.zip", "events", "20260425120000"),
+        LastUpdateEntry(0, "m", "http://x/y.mentions.CSV.zip", "mentions", "20260425120000"),
+        LastUpdateEntry(0, "m", "http://x/y.gkg.csv.zip", "gkg", "20260425120000"),
+    ]
+    await run_forward_slice(
+        entries, state=state, parquet_base=tmp_path,
+        neo4j_writer=neo4j, qdrant_writer=qdrant, tmp_dir=tmp_path / "work",
+    )
+
+    # Enqueued BEFORE the write (captured mid-call), both stores
+    assert "20260425120000" in seen_pending["neo4j"]
+    assert "20260425120000" in seen_pending["qdrant"]
+    # Removed on success (after run completes)
+    assert "20260425120000" not in await state.list_pending("neo4j")
+    assert "20260425120000" not in await state.list_pending("qdrant")
 
 
 @pytest.mark.asyncio

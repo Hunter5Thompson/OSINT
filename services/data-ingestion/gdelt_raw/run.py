@@ -149,25 +149,31 @@ async def run_forward_slice(
             f"incomplete GDELT slice {slice_id}: parquet stream states={stream_state}"
         )
 
-    # Neo4j
+    # Neo4j — write-ahead intent: enqueue BEFORE the write so a hard kill
+    # (SIGKILL/OOM) mid-write still leaves the slice in pending for
+    # replay_pending. remove_pending only on confirmed success (WP-10).
+    await state.add_pending("neo4j", slice_id)
     try:
         await neo4j_writer.write_from_parquet(parquet_base, slice_id, date)
         await state.set_store_state(slice_id, "neo4j", "done")
         await state.set_last_slice("neo4j", slice_id)
+        await state.remove_pending("neo4j", slice_id)
     except Exception as e:
         log.error("gdelt_neo4j_write_failed", slice=slice_id, error=str(e))
         await state.set_store_state(slice_id, "neo4j", f"failed:{e}")
-        await state.add_pending("neo4j", slice_id)
+        # slice stays in pending (already enqueued) for replay_pending
 
-    # Qdrant — INDEPENDENT of Neo4j outcome
+    # Qdrant — INDEPENDENT of Neo4j outcome; same write-ahead intent.
+    await state.add_pending("qdrant", slice_id)
     try:
         await qdrant_writer.upsert_from_parquet(parquet_base, slice_id, date)
         await state.set_store_state(slice_id, "qdrant", "done")
         await state.set_last_slice("qdrant", slice_id)
+        await state.remove_pending("qdrant", slice_id)
     except Exception as e:
         log.error("gdelt_qdrant_write_failed", slice=slice_id, error=str(e))
         await state.set_store_state(slice_id, "qdrant", "pending_embed")
-        await state.add_pending("qdrant", slice_id)
+        # slice stays in pending (already enqueued) for replay_pending
 
     log.info("gdelt_forward_done", slice=slice_id)
 
