@@ -24,6 +24,7 @@ COPY services/data-ingestion/gdelt_raw/ gdelt_raw/
 COPY services/data-ingestion/graph_integrity/ graph_integrity/
 COPY services/data-ingestion/nlm_ingest/ nlm_ingest/
 COPY services/data-ingestion/infra_atlas/ infra_atlas/
+COPY services/data-ingestion/suv_structured/ suv_structured/
 COPY services/data-ingestion/qdrant_doctor/ qdrant_doctor/
 COPY services/intelligence/codebook/event_codebook.yaml runtime_contracts/event_codebook.yaml
 

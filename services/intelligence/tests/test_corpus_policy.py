@@ -145,7 +145,8 @@ class TestGuardAndMerge:
 
 class TestFulltextReadPath:
     def test_analysis_sources_includes_fulltext(self):
-        assert frozenset({"rss", "rss_fulltext"}) == cp.ANALYSIS_SOURCES
+        # exact membership guard: unauthorized additions to the analysis lane must be caught
+        assert frozenset({"rss", "rss_fulltext", "suv_structured"}) == cp.ANALYSIS_SOURCES
 
     def test_analysis_filter_allows_fulltext_and_excludes_superseded(self):
         f = cp.analysis_filter()

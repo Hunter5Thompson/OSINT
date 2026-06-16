@@ -15,7 +15,7 @@ from config import settings
 log = structlog.get_logger(__name__)
 
 # Analysis lane: prose analysis.
-ANALYSIS_SOURCES: frozenset[str] = frozenset({"rss", "rss_fulltext"})
+ANALYSIS_SOURCES: frozenset[str] = frozenset({"rss", "rss_fulltext", "suv_structured"})
 
 # Realtime lane: vetted Telegram leads. rybar (state-aligned) deliberately excluded.
 TELEGRAM_ALLOWLIST: frozenset[str] = frozenset({
@@ -90,9 +90,20 @@ def apply_tier_boost(results: list[dict], *, lam: float = TIER_BOOST_LAMBDA) -> 
     return out
 
 
-# Canonical source_types consistent with each lane (when the contract field
-# is present on a payload).
-_ANALYSIS_TYPES: frozenset[str] = frozenset({"rss", "notebooklm"})
+# Canonical source -> expected source_type for the analysis lane (PAIR validation).
+# Independent identity/type checks would let {source:"rss", source_type:"dataset"} leak,
+# and many dataset collectors (firms/usgs/…) stamp source_type="dataset".
+# NLM points carry no analysis `source`; identified by notebook_id, expected "notebooklm".
+_ANALYSIS_SOURCE_TYPE: dict[str, str] = {
+    "rss": "rss",
+    "rss_fulltext": "rss",
+    "suv_structured": "dataset",
+}
+if set(_ANALYSIS_SOURCE_TYPE) != ANALYSIS_SOURCES:  # keep in lock-step; assert stripped under -O
+    raise RuntimeError(
+        f"_ANALYSIS_SOURCE_TYPE keys {set(_ANALYSIS_SOURCE_TYPE)} "
+        f"!= ANALYSIS_SOURCES {set(ANALYSIS_SOURCES)}; update both together"
+    )
 
 
 def validate_lane(results: list[dict], lane: str) -> list[dict]:
@@ -110,9 +121,14 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
             continue
         st = r.get("source_type")  # canonical contract field, if present
         if lane == "analysis":
-            identity = r.get("source") in ANALYSIS_SOURCES or bool(r.get("notebook_id"))
-            type_ok = st is None or st in _ANALYSIS_TYPES
-            ok = identity and type_ok
+            src = r.get("source")
+            if src in ANALYSIS_SOURCES:
+                expected = _ANALYSIS_SOURCE_TYPE[src]
+                ok = st is None or st == expected
+            elif r.get("notebook_id"):
+                ok = st is None or st == "notebooklm"
+            else:
+                ok = False
         elif lane == "realtime":
             identity = (r.get("source") == "telegram"
                         and r.get("telegram_channel") in TELEGRAM_ALLOWLIST)

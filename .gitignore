@@ -36,3 +36,6 @@ Thumbs.db
 # Skyfall Recon Phase 0 harness — large PLY + isolated workspace deps
 /scripts/recon/phase0/public/*.ply
 /scripts/recon/phase0/node_modules
+
+# SUV Track 2 walking-skeleton scratch (paid-source raw crawl, throwaway)
+scratch/
