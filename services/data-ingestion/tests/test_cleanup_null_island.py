@@ -22,20 +22,28 @@ class _FakeClient:
 
 
 def test_dry_run_counts_without_deleting():
-    client = _FakeClient(locations=2, attached=5)
+    client = _FakeClient(locations=3, attached=5)
     n = asyncio.run(run(client, dry_run=True))
-    assert n == 2
+    assert n == 3
     assert [c[0] for c in client.calls] == [COUNT_NULL_ISLAND]
 
 
 def test_apply_detach_deletes_null_island_nodes():
-    client = _FakeClient(locations=2, deleted=2)
+    # COUNT sees 3, DELETE removes 2 -> apply must return the DELETED count, not found
+    client = _FakeClient(locations=3, deleted=2)
     n = asyncio.run(run(client, dry_run=False))
     assert n == 2
     cyphers = [c[0] for c in client.calls]
     assert COUNT_NULL_ISLAND in cyphers
     assert DELETE_NULL_ISLAND in cyphers
     assert "DETACH DELETE" in DELETE_NULL_ISLAND
+
+
+def test_apply_is_noop_when_no_null_island():
+    # second run / clean graph: COUNT returns 0 -> DELETE removes 0
+    client = _FakeClient(locations=0, deleted=0)
+    n = asyncio.run(run(client, dry_run=False))
+    assert n == 0
 
 
 def test_delete_query_is_scoped_to_zero_zero():
