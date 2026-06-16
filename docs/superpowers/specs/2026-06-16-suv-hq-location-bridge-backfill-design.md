@@ -35,6 +35,7 @@ ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
 SET r.last_seen = datetime()
 ```
 Because we MATCH `:Entity` (with `type:"LOCATION"`), the separate `:Location`-label node is **never** matched. This also makes **future `build` runs** create the edge automatically. Tests: assert `type: "LOCATION"`, assert no `type: "COUNTRY"`, assert no `:Location` label in the template.
+The template also carries a `WITH c, co LIMIT 1` fan-out guard so a duplicate LOCATION node can never produce multiple edges — protecting future `build` runs that invoke the template without the backfill preflight.
 
 ### 2. `countries.py`
 No logic change — `to_graph_country` already maps `Deutschland→Germany`, `Niederlande→Netherlands` (= the LOCATION node names). Update the module/function docstring: target is now `Entity{type:"LOCATION"}` as a tactical bridge (reference this spec).

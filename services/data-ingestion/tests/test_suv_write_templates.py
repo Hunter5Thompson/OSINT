@@ -19,6 +19,7 @@ def test_link_company_country_is_match_only_for_location():
     assert "(co:Location" not in LINK_COMPANY_COUNTRY          # never the :Location label node
     assert "MERGE (co" not in LINK_COMPANY_COUNTRY             # MATCH-only endpoint
     assert "MERGE (c)-[r:HEADQUARTERED_IN]->(co)" in LINK_COMPANY_COUNTRY
+    assert "WITH c, co LIMIT 1" in LINK_COMPANY_COUNTRY   # fan-out guard (>1 LOCATION -> one edge)
 
 
 def test_upsert_products_uses_case_preservation():
