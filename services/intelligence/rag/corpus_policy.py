@@ -99,7 +99,11 @@ _ANALYSIS_SOURCE_TYPE: dict[str, str] = {
     "rss_fulltext": "rss",
     "suv_structured": "dataset",
 }
-assert set(_ANALYSIS_SOURCE_TYPE) == ANALYSIS_SOURCES  # keep in lock-step
+if set(_ANALYSIS_SOURCE_TYPE) != ANALYSIS_SOURCES:  # keep in lock-step; assert stripped under -O
+    raise RuntimeError(
+        f"_ANALYSIS_SOURCE_TYPE keys {set(_ANALYSIS_SOURCE_TYPE)} "
+        f"!= ANALYSIS_SOURCES {set(ANALYSIS_SOURCES)}; update both together"
+    )
 
 
 def validate_lane(results: list[dict], lane: str) -> list[dict]:

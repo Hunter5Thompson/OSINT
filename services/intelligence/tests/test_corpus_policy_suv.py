@@ -37,3 +37,12 @@ def test_drops_mismatched_pairs():
         _r(source="firms", source_type="dataset"),       # not an analysis source -> drop
     ]
     assert validate_lane(rows, "analysis") == []
+
+
+def test_analysis_source_branch_wins_over_notebook_id():
+    # when a row has BOTH an analysis `source` and a `notebook_id`, the stricter
+    # pair-validation (source branch) must apply, not the looser notebook check.
+    row_ok = _r(source="suv_structured", source_type="dataset", notebook_id="nb1")
+    row_bad = _r(source="suv_structured", source_type="rss", notebook_id="nb1")
+    assert validate_lane([row_ok], "analysis") == [row_ok]
+    assert validate_lane([row_bad], "analysis") == []
