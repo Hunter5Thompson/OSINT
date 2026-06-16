@@ -9,6 +9,7 @@ from graph_integrity.neo4j_client import Neo4jClient
 SELECT_UNWIRED_INCIDENTS = """
 MATCH (i:Incident)
 WHERE i.lat IS NOT NULL AND i.lon IS NOT NULL
+  AND NOT (i.lat = 0.0 AND i.lon = 0.0)
   AND NOT (i)-[:OCCURRED_AT]->(:Location)
 RETURN i.id AS id, i.location AS location, i.lat AS lat, i.lon AS lon
 """
@@ -22,7 +23,9 @@ MERGE (i)-[:OCCURRED_AT]->(l)
 """
 
 
-def build_wire_params(row: dict[str, Any]) -> dict[str, Any]:
+def build_wire_params(row: dict[str, Any]) -> dict[str, Any] | None:
+    if row["lat"] == 0.0 and row["lon"] == 0.0:  # null-island sentinel -> no Location
+        return None
     return {
         "incident_id": row["id"],
         "loc_key": incident_key(row.get("location"), row["lat"], row["lon"]),
@@ -34,6 +37,11 @@ async def run(client: Neo4jClient, dry_run: bool = False) -> int:
     rows = await client.run(SELECT_UNWIRED_INCIDENTS)
     if dry_run:
         return len(rows)
+    wired = 0
     for row in rows:
-        await client.run(WIRE_INCIDENT_LOCATION, build_wire_params(row))
-    return len(rows)
+        params = build_wire_params(row)
+        if params is None:
+            continue
+        await client.run(WIRE_INCIDENT_LOCATION, params)
+        wired += 1
+    return wired

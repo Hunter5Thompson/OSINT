@@ -19,8 +19,9 @@ INCIDENT_UPSERT = (
     "  i.layer_hints = $layer_hints, "
     "  i.timeline_json = $timeline_json, "
     "  i.updated_at = datetime($now) "
-    # --- geo wiring: only when coordinates are present ---
-    "FOREACH (_ IN CASE WHEN $lat IS NULL OR $lon IS NULL THEN [] ELSE [1] END | "
+    # --- geo wiring: only when coordinates are present and not null-island ---
+    "FOREACH (_ IN CASE WHEN $lat IS NULL OR $lon IS NULL "
+    "OR ($lat = 0.0 AND $lon = 0.0) THEN [] ELSE [1] END | "
     "  MERGE (l:Location {loc_key: $loc_key}) "
     "    ON CREATE SET l.lat = $lat, l.lon = $lon, l.name = $location, "
     "                  l.geo_basis = 'incident_report' "

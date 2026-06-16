@@ -23,6 +23,22 @@ from qdrant_doctor.schema import validate_collection_schema
 
 log = structlog.get_logger(__name__)
 
+
+def _normalize_seendate(seendate: str | None) -> str | None:
+    """GDELT ArtList seendate ('20260610T120000Z' or '20260610') -> ISO-8601 UTC,
+    or None when empty/malformed. Never fabricates: an unparseable value returns
+    None so the pipeline's _resolve_timeline falls back to the ingested basis."""
+    if not seendate or not isinstance(seendate, str):
+        return None
+    s = seendate.strip()
+    for fmt in ("%Y%m%dT%H%M%SZ", "%Y%m%d"):
+        try:
+            return datetime.strptime(s, fmt).replace(tzinfo=UTC).isoformat()
+        except ValueError:
+            continue
+    return None
+
+
 # ---------------------------------------------------------------------------
 # GDELT query templates — each targets a different geopolitical theme
 # ---------------------------------------------------------------------------
@@ -178,6 +194,7 @@ class GDELTCollector:
                     source="gdelt",
                     settings=settings,
                     redis_client=self._redis,
+                    observed_at=_normalize_seendate(seendate),
                     content_hash=chash,
                     raise_on_write_error=True,
                 )

@@ -9,7 +9,7 @@ RSS assertion a false-green and stop proving the process_item wiring.
 import ast
 import inspect
 
-from feeds import firms_collector, rss_collector, usgs_collector
+from feeds import firms_collector, gdelt_collector, rss_collector, usgs_collector
 
 
 def _process_item_kwargs(module) -> set[str]:
@@ -53,3 +53,7 @@ def test_firms_observed_at_empty_time_is_none_not_fabricated_midnight():
 
 def test_firms_observed_at_no_date_is_none():
     assert firms_collector._firms_observed_at("", "1430") is None
+
+
+def test_gdelt_passes_observed_at():
+    assert "observed_at" in _process_item_kwargs(gdelt_collector)

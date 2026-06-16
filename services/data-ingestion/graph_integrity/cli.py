@@ -4,7 +4,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from graph_integrity import geo_gdelt, geo_incident, report
+from graph_integrity import (
+    cleanup_null_island,
+    geo_gdelt,
+    geo_incident,
+    rekey_incident_locations,
+    report,
+)
 from graph_integrity.neo4j_client import Neo4jClient
 
 
@@ -16,6 +22,10 @@ def build_parser() -> argparse.ArgumentParser:
     inc.add_argument("--dry-run", action="store_true")
     gd = sub.add_parser("backfill-gdelt-geo")
     gd.add_argument("--dry-run", action="store_true")
+    rk = sub.add_parser("rekey-incident-locations")
+    rk.add_argument("--dry-run", action="store_true")
+    cn = sub.add_parser("cleanup-null-island")
+    cn.add_argument("--dry-run", action="store_true")
     return p
 
 
@@ -31,7 +41,9 @@ async def _amain(args: argparse.Namespace) -> None:
             orphans = await client.run(report.ORPHAN_BY_LABEL, {"labels": report.REPORT_LABELS})
             geo = await client.run(report.GEO_COVERAGE)
             dup = await client.run(report.DUP_ACTOR_EDGES, {"actor_rels": report.ACTOR_RELS})
-            print(report.shape_report(orphans, geo, dup))
+            coord_dis = await client.run(report.COORD_DISAGREEMENT)
+            null_island = await client.run(report.NULL_ISLAND)
+            print(report.shape_report(orphans, geo, dup, coord_dis, null_island))
         elif args.command == "backfill-incident-geo":
             n = await geo_incident.run(client, dry_run=args.dry_run)
             print(f"incident-geo: {n} incidents {'(dry-run)' if args.dry_run else 'wired'}")
@@ -39,6 +51,26 @@ async def _amain(args: argparse.Namespace) -> None:
             gdelt_cfg = get_gdelt_settings()
             n = await geo_gdelt.run(client, gdelt_cfg.parquet_path, dry_run=args.dry_run)
             print(f"gdelt-geo: {n} events {'(dry-run)' if args.dry_run else 'wired'}")
+        elif args.command == "rekey-incident-locations":
+            n = await rekey_incident_locations.run(client, dry_run=args.dry_run)
+            suffix = "(dry-run)" if args.dry_run else "rewired"
+            print(f"rekey-incident-locations: {n} incidents {suffix}")
+            if not args.dry_run:
+                dups = await rekey_incident_locations.verify_no_duplicate_loc_keys(client)
+                if dups:
+                    print(
+                        f"  preflight: {len(dups)} duplicate loc_keys REMAIN"
+                        f" -- do NOT apply the constraint yet: {dups[:5]}"
+                    )
+                else:
+                    print(
+                        "  preflight: 0 duplicate loc_keys"
+                        " -- safe to apply migrations/location_loc_key_unique.cypher"
+                    )
+        elif args.command == "cleanup-null-island":
+            n = await cleanup_null_island.run(client, dry_run=args.dry_run)
+            suffix = "(dry-run)" if args.dry_run else "deleted"
+            print(f"cleanup-null-island: {n} (0,0) locations {suffix}")
     finally:
         await client.close()
 

@@ -118,6 +118,18 @@ def test_run_skips_missing_slice_without_aborting(tmp_path):
     assert client.calls == []
 
 
+def test_build_geo_row_null_island_is_none():
+    raw = {"global_event_id": 7, "action_geo_lat": 0.0, "action_geo_long": 0.0,
+           "action_geo_feature_id": "", "action_geo_country_code": "", "action_geo_fullname": ""}
+    assert build_geo_row(raw) is None
+
+
+def test_build_geo_row_valid_coords_but_empty_ids_is_none():
+    raw = {"global_event_id": 8, "action_geo_lat": 12.3, "action_geo_long": 45.6,
+           "action_geo_feature_id": "", "action_geo_country_code": "", "action_geo_fullname": ""}
+    assert build_geo_row(raw) is None
+
+
 def test_fetch_and_parse_orchestrates_download_and_parse(tmp_path, monkeypatch):
     from graph_integrity import geo_gdelt
 
