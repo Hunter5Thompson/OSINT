@@ -35,6 +35,165 @@
 
 ---
 
+## REFRESH 2026-06-16 (walking-skeleton GO → deterministic parse) — READ FIRST
+
+The walking-skeleton (Task 0) is **DONE = GO** (findings: `docs/superpowers/specs/2026-06-16-suv-track2-walking-skeleton-findings.md`). It changed the approach; these deltas SUPERSEDE the original tasks below where they conflict:
+
+1. **Task 0 — DONE.** crawl4ai renders the full directory anonymously (no paywall, 85k chars), **77 `### Company` headings, all detail on ONE page**, `**Label:** value` structure, deterministic parse = 77/77 field coverage. No re-verification needed.
+2. **Task 3 is REPLACED** — `extract.py` (vLLM) → **`parse.py` (DETERMINISTIC, no LLM, GPU-free)**. See the replacement task spec immediately below ("### Task 3 (REVISED)"). This removes the vLLM dependency, batching, and JSON-parsing; the committed YAML seed stays (reproducibility + human-review gate; producer = parser). Messy German numeric values are normalized by explicit best-effort helpers with raw-string fallback (the YAML review corrects edge cases).
+3. **Task 1 schema** — keep as written, but `website` is **absent** on the directory page → stays `None` (unpopulated, not dropped). Numeric coercion validators stay; the parser feeds them already-normalized values (see Task 3 REVISED helpers).
+4. **Task 2 fetch** — unchanged (one `fetch_directory_markdown` call gets everything; no per-company detail-page crawl).
+5. **Task 4 countries** — the real parsing task. `Hauptsitz` is a FULL street address ("Aaronia Weg 1, 54597 Strickscheid, Rheinland-Pfalz"); the country must be derived from its tail. Skeleton: 76 DE (German ZIP/city/state) + 1 NL (KNDS). `countries.py` must map German federal states + a German-city/ZIP heuristic → "Deutschland", and recognize explicit foreign countries; unmatched → `HEADQUARTERED_IN` skipped+logged.
+6. **Verified against current main** (Explore 2026-06-16): all integration points hold — `canonicalize_entity`→CanonicalEntity (canonicalize.py:110, alias dedup :127), `provenance_fields(source_type="dataset")` (provenance.py:26, WRITE_SOURCE_TYPES includes "dataset"), `credibility.py:63 "suv.report":0.78` (no change needed), `corpus_policy` ANALYSIS_SOURCES (:18)/`_ANALYSIS_TYPES` (:95)/`validate_lane` (:98-127) as cited (Task 10 pair-validation precise), packaging slots (pyproject scripts :38-42 + wheel include :48-61, Dockerfile COPY :18-27). Point-id: uint64 `int(sha256("suv_structured|"+suv_url)[:16],16)` (fulltext pattern). TEI embed `POST {tei_embed_url}/embed {"inputs":text}` → 1024-dim. Neo4j: HTTP tx API (`POST {neo4j_url}/db/neo4j/tx/commit`, statements+$params) like nlm_ingest. data-ingestion has NO `.vscode` → pytest.ini auto-discovers tests/, no .vscode change needed.
+
+### Task 3 (REVISED): `parse.py` — markdown → `list[Company]` (DETERMINISTIC, no LLM)
+
+**Files:** Create `suv_structured/parse.py`; Test `tests/test_suv_parse.py`. (Supersedes the `extract.py` task below.)
+
+**Approach:** split the rendered markdown on `^### ` headers → company blocks; per block extract `**Label:** value` via a tolerant regex (handles `**Label:**`, `**Label** :`, trailing colon variants); normalize the German numeric fields with dedicated, separately-tested helpers; keep raw strings for products/management/description/HQ. Drop only rows with an empty name (logged). The skeleton proved 77/77 field coverage with exactly this structure.
+
+```python
+# suv_structured/parse.py
+"""Deterministic parser: rendered SUV directory markdown -> list[Company].
+No LLM, no GPU, fully reproducible. The committed YAML seed (human-reviewed) is
+the quality gate; this parser is its producer. Numeric German formats are
+best-effort normalized with raw-string fallback (None when ambiguous)."""
+from __future__ import annotations
+
+import re
+
+import structlog
+
+from suv_structured.schemas import Company
+
+log = structlog.get_logger(__name__)
+
+_BLOCK_RE = re.compile(r"(?m)^### ")
+_FIELDS = ("Gründung", "Hauptsitz", "Geschäftsführung", "Mitarbeiterzahl",
+           "Umsatz", "Beschreibung", "Produktportfolio")
+_DIRECTORY_URL = "https://suv.report/sicherheits-und-verteidigungsindustrie/"
+
+# German federal states -> Germany (HQ tail is often a Bundesland or a city/ZIP)
+_DE_STATES = {"Bayern", "Rheinland-Pfalz", "Baden-Württemberg", "Hessen",
+              "Nordrhein-Westfalen", "Niedersachsen", "Sachsen", "Sachsen-Anhalt",
+              "Berlin", "Brandenburg", "Schleswig-Holstein", "Bremen", "Hamburg",
+              "Thüringen", "Mecklenburg-Vorpommern", "Saarland"}
+
+
+def _field(block: str, label: str) -> str | None:
+    m = re.search(rf"\*\*{re.escape(label)}\s*:?\s*\*\*\s*:?\s*(.+)", block)
+    return m.group(1).strip() if m else None
+
+
+def parse_employees(raw: str | None) -> int | None:
+    """'>75' -> 75 ; '34000' -> 34000 ; '32.000 Weltweit ...' -> 32000.
+    German thousands-dot; takes the FIRST integer found. None if none."""
+    if not raw:
+        return None
+    m = re.search(r"\d[\d.]*", raw)
+    if not m:
+        return None
+    try:
+        return int(m.group(0).replace(".", ""))
+    except ValueError:
+        return None
+
+
+def parse_revenue_eur(raw: str | None) -> float | None:
+    """'4,4 Milliarden Euro (2025)' -> 4.4e9 ; '35,3 Millionen Euro (2023), 50+ ...'
+    -> 35.3e6 (first figure). German comma-decimal + Millionen/Milliarden scale."""
+    if not raw:
+        return None
+    m = re.search(r"([\d.]+(?:,\d+)?)\s*(Milliarde|Million)", raw, re.IGNORECASE)
+    if not m:
+        return None
+    num = float(m.group(1).replace(".", "").replace(",", "."))
+    scale = 1_000_000_000 if m.group(2).lower().startswith("milliard") else 1_000_000
+    return num * scale
+
+
+def parse_founded(raw: str | None) -> int | None:
+    """'2003' / '2015 durch die Fusion ...' -> first 4-digit year."""
+    if not raw:
+        return None
+    m = re.search(r"\b(1[89]\d{2}|20\d{2})\b", raw)
+    return int(m.group(1)) if m else None
+
+
+def parse_products(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    # split on commas/semicolons; trim; drop empties and trailing parenthetical notes-only
+    items = [p.strip(" .") for p in re.split(r"[;,]", raw)]
+    return [p for p in items if p]
+
+
+def derive_hq(hauptsitz: str | None) -> tuple[str | None, str | None]:
+    """(hq_city, hq_country) from a full German/foreign address tail.
+    Heuristic: take the segment before the first '/'; its last comma-part is a
+    Bundesland (=> Deutschland) or 'ZIP City' / a foreign country. City = the
+    second-to-last comma part when present."""
+    if not hauptsitz:
+        return None, None
+    head = hauptsitz.split("/")[0].strip()
+    parts = [p.strip() for p in head.split(",") if p.strip()]
+    tail = parts[-1] if parts else ""
+    city = None
+    country = None
+    if tail in _DE_STATES:
+        country = "Deutschland"
+        # 'ZIP City' usually the prior part
+        if len(parts) >= 2:
+            city = re.sub(r"^\d{4,5}\s*", "", parts[-2]).strip() or None
+    elif re.match(r"^\d{4,5}\s+\S", tail):  # 'ZIP City' as the last part -> German
+        country = "Deutschland"
+        city = re.sub(r"^\d{4,5}\s*", "", tail).strip() or None
+    else:
+        country = tail or None  # explicit foreign country, e.g. 'Niederlande'
+        if len(parts) >= 2:
+            city = re.sub(r"^\d{4,5}\s*", "", parts[-2]).strip() or None
+    return city, country
+
+
+def parse_companies(markdown: str, *, directory_url: str = _DIRECTORY_URL) -> list[Company]:
+    blocks = _BLOCK_RE.split(markdown)[1:]
+    out: list[Company] = []
+    for b in blocks:
+        name = b.split("\n", 1)[0].strip()
+        if not name:
+            log.warning("suv_parse_empty_name_skipped")
+            continue
+        hauptsitz = _field(b, "Hauptsitz")
+        city, country = derive_hq(hauptsitz)
+        out.append(Company(
+            name=name,
+            suv_url=directory_url,  # all rows on one page; anchor not exposed in fit-md
+            hq_country=country,
+            hq_city=city,
+            employees=parse_employees(_field(b, "Mitarbeiterzahl")),
+            revenue_eur=parse_revenue_eur(_field(b, "Umsatz")),
+            founded=parse_founded(_field(b, "Gründung")),
+            products=parse_products(_field(b, "Produktportfolio")),
+            description=_field(b, "Beschreibung"),
+        ))
+    log.info("suv_parse_done", count=len(out))
+    return out
+```
+
+**Tests (`tests/test_suv_parse.py`)** — TDD red→green, use a small fixture markdown (2-3 `### ` blocks mirroring the real shape; the real crawl is in the skeleton's `scratch/suv_dir.json` for an optional integration check):
+- `parse_companies` splits on `### ` and returns one Company per block; empty-name block skipped.
+- `parse_employees`: `">75"→75`, `"34000"→34000`, `"32.000 Weltweit davon 14.100"→32000`, `""→None`, gibberish→None.
+- `parse_revenue_eur`: `"4,4 Milliarden Euro (2025)"→4.4e9`, `"35,3 Millionen Euro (2023), 50+ ..."→35_300_000.0`, `"k.A."→None`.
+- `parse_founded`: `"2003"→2003`, `"2015 durch die Fusion ..."→2015`, `"—"→None`.
+- `derive_hq`: `"... , Rheinland-Pfalz"→(city, "Deutschland")`; `"... , 13055 Berlin"→("Berlin","Deutschland")`; `"... Amsterdam, Niederlande / Deutscher Sitz: ..."→(city,"Niederlande")`.
+- A fixture-block roundtrip: full block → Company with all fields populated.
+
+**SUV_URL note (open item for the build):** the fit-markdown does not expose per-company anchor URLs reliably, so `suv_url` defaults to the directory URL for all rows → the deterministic point-id would collide. **Resolve in Task 8/point-id:** derive the point-id and a stable per-company `suv_url` from `directory_url + "#" + slug(name)` (or key the point-id on `slug(name)`), so each company gets a unique idempotent id. The ToC links (61 of them) DO carry per-company hrefs — Task 2/3 may optionally parse the ToC to map name→href; otherwise the slug fallback is sufficient and deterministic.
+
+**Commit:** `feat(suv): deterministic directory parser (markdown -> Company, German-value normalizers)`
+
+---
+
 ## Task 0: Walking skeleton — verify crawl4ai renders the companies (GATE)
 
 This is a spike, **not** TDD. Everything else depends on its outcome. Do not proceed to Task 1 until the rendered markdown demonstrably contains real company rows.
