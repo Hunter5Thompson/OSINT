@@ -1,0 +1,31 @@
+# services/intelligence/tests/test_corpus_policy_suv.py
+from rag.corpus_policy import ANALYSIS_SOURCES, validate_lane
+
+
+def _r(**kw):
+    return kw
+
+
+def test_suv_structured_in_analysis_sources():
+    assert "suv_structured" in ANALYSIS_SOURCES
+
+
+def test_keeps_valid_analysis_pairs():
+    rows = [
+        _r(source="rss", source_type="rss"),
+        _r(source="rss_fulltext", source_type="rss"),
+        _r(source="suv_structured", source_type="dataset"),
+        _r(notebook_id="nb1", source_type="notebooklm"),
+        _r(source="rss"),                       # legacy None source_type
+    ]
+    assert validate_lane(rows, "analysis") == rows
+
+
+def test_drops_mismatched_pairs():
+    rows = [
+        _r(source="rss", source_type="dataset"),         # leak attempt -> drop
+        _r(source="suv_structured", source_type="rss"),  # wrong type -> drop
+        _r(source="rss", source_type="gdelt"),           # existing AC-2 -> still drop
+        _r(source="firms", source_type="dataset"),       # not an analysis source -> drop
+    ]
+    assert validate_lane(rows, "analysis") == []
