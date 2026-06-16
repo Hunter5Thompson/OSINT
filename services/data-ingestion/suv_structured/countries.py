@@ -1,7 +1,9 @@
 # suv_structured/countries.py
 """Map SUV's German HQ-country strings onto the English country names used as
-Entity{type:"COUNTRY"} in the graph. Unknown -> None (relation skipped + reported)."""
+Entity{type:"COUNTRY"} in the graph. Unknown/empty/None -> None (relation skipped + reported)."""
 from __future__ import annotations
+
+import unicodedata
 
 _DE_EN: dict[str, str] = {
     "deutschland": "Germany",
@@ -29,4 +31,4 @@ _DE_EN: dict[str, str] = {
 def to_graph_country(name: str | None) -> str | None:
     if not name:
         return None
-    return _DE_EN.get(name.strip().lower())
+    return _DE_EN.get(unicodedata.normalize("NFC", name).strip().lower())

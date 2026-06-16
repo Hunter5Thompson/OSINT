@@ -33,4 +33,5 @@ MATCH (c:Entity {name: $name, type: "ORGANIZATION"})
 MATCH (co:Entity {type: "COUNTRY"}) WHERE toLower(co.name) = toLower($country)
 MERGE (c)-[r:HEADQUARTERED_IN]->(co)
 ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
+SET r.last_seen = datetime()
 """
