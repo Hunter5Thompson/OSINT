@@ -30,6 +30,7 @@ Change the country endpoint from COUNTRY to LOCATION (MATCH-only, never MERGE):
 ```
 MATCH (c:Entity {name: $name, type: "ORGANIZATION"})
 MATCH (co:Entity {type: "LOCATION"}) WHERE toLower(co.name) = toLower($country)
+WITH c, co LIMIT 1
 MERGE (c)-[r:HEADQUARTERED_IN]->(co)
 ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
 SET r.last_seen = datetime()
