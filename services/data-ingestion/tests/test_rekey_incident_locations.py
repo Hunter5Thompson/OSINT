@@ -90,3 +90,8 @@ def test_plan_rekey_handles_transient_double_edge():
     ]
     plan = plan_rekey(rows)
     assert plan.rewire_count == 1
+
+
+def test_plan_rekey_skips_null_island_incidents():
+    rows = [_row("a", "Unknown", 0.0, 0.0, "incident:unknown")]
+    assert plan_rekey(rows).rewire_count == 0

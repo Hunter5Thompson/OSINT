@@ -81,6 +81,8 @@ def plan_rekey(rows: list[IncidentLoc]) -> RekeyPlan:
     """Pure: which incidents need their Location re-keyed (current != desired)."""
     plan = RekeyPlan()
     for r in rows:
+        if r.lat == 0.0 and r.lon == 0.0:
+            continue
         new = r.desired_loc_key()
         if new != r.current_loc_key:
             plan.rewires.append((r.incident_id, r.current_loc_key, new))
