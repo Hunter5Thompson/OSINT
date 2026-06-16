@@ -13,10 +13,12 @@ import structlog
 
 log = structlog.get_logger(__name__)
 
+# attached_nodes matches report.py NULL_ISLAND exactly (any relationship/direction,
+# DISTINCT) so the cleanup dry-run and the integrity report agree on the number.
 COUNT_NULL_ISLAND = """
 MATCH (l:Location) WHERE l.lat = 0.0 AND l.lon = 0.0
-OPTIONAL MATCH (n)-[:OCCURRED_AT]->(l)
-RETURN count(DISTINCT l) AS null_island_locations, count(n) AS attached_nodes
+OPTIONAL MATCH (l)--(n)
+RETURN count(DISTINCT l) AS null_island_locations, count(DISTINCT n) AS attached_nodes
 """
 
 DELETE_NULL_ISLAND = """
