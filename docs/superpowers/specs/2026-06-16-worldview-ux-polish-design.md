@@ -41,7 +41,7 @@ Duck-Typing, nicht nur `instanceof` (Cesium-Picks sind je nach Provider/Primitiv
 
 `EntityClickHandler` ändert dann den Frühabbruch in Z. 349–351: **nur** bei echten UI-/Layer-Picks (die 6 onSelect-Layer + Cesium-Entities) `return`; bei `isPhotorealSurfacePick(...) === true` in den Country-Hit-Test (Z. 354 ff.) **durchfallen**. Der Hit-Test nutzt bereits `scene.pickPosition` → funktioniert über Tiles.
 
-Die Photoreal-Tileset-Referenz wird vom Mount-Punkt (`GlobeViewer`/`GoogleTiles`) bis zum `EntityClickHandler` durchgereicht (Prop/Ref oder ein gesetzter Marker am Tileset-Objekt).
+**Referenz-Hochreichung (explizit):** `buildingsTilesetRef.current` lebt aktuell **nur lokal** in `GlobeViewer` (`GlobeViewer.tsx:26,80`) — `EntityClickHandler` kann sie sonst nicht robust kennen. `GlobeViewer` reicht das Tileset per Callback nach `WorldviewPage` hoch, z.B. `onPhotorealTilesetReady(tileset | null)`: gesetzt nach `addBuildingsTileset` (Z. 80), beim Cleanup/Unmount wieder `null`. `WorldviewPage` reicht die Referenz an `EntityClickHandler` durch.
 
 **Test:** Reiner Unit-Test der Helper-Funktion mit konstruierten Pick-Objekten (Cesium3DTileFeature-artig, Layer-Primitive-artig, null) — kein voller Cesium-Viewer nötig. Plus ein Test, der bestätigt: Photoreal-Pick → Hit-Test-Pfad; Layer-Pick → kein Hit-Test.
 
@@ -68,7 +68,7 @@ Die Photoreal-Tileset-Referenz wird vom Mount-Punkt (`GlobeViewer`/`GoogleTiles`
 
 **Entscheidung:** **Kartusche verschieben, Panel bleibt rechts.** Das InspectorPanel ist stabile App-Chrome; die Kartusche ist kontextuelle Globe-UI.
 
-**Fix (`SpotlightCartouche` Positionierung):** Kartusche nach **links / links-mittig** clampen, sodass sie nicht in die rechte Panel-Zone (~390px) ragt, wenn das InspectorPanel offen ist. Auf Mobile separat positionieren (Panel-Layout unterscheidet sich dort).
+**Fix (CSS, nicht TSX):** Die Cartouche-Positionierung sitzt in `services/frontend/src/components/worldview/worldviewHudLoader.css` — konkret `.cartouche-country { right: 36px; … text-align: right }` (Z. 230) und `.cartouche-title` (Z. 232). Diese nach **links / links-mittig** umstellen (z.B. `left`-basiert + `text-align: left`), sodass sie nicht in die rechte Panel-Zone (~390px) ragt, wenn das InspectorPanel offen ist. Auf Mobile separat positionieren (Panel-Layout unterscheidet sich dort).
 
 **Test:** Positions-/Style-Assertion (Kartusche liegt links der Panel-Zone bei offenem Panel) + visuelle Verifikation.
 
@@ -78,7 +78,9 @@ Die Photoreal-Tileset-Referenz wird vom Mount-Punkt (`GlobeViewer`/`GoogleTiles`
 
 **Fix (`ChronikTimeline.tsx` Button-Row + `ScrubberMount` + `TimeContext`):**
 
-Volle Transport-Steuerung. **Speed-Magnitude und Richtung getrennt** denken (klarere UI + Tests):
+Volle Transport-Steuerung. **Speed-Magnitude und Richtung getrennt** — **minimaler Weg (entschieden):** `TimeContext.speed` bleibt **signiert** (kein neues API), `ScrubberMount`/`ChronikTimeline` behandeln `Math.abs(speed)` als UI-Magnitude und das **Vorzeichen** als Richtung. Kein Erweitern der TimeContext-Schnittstelle.
+
+Buttons:
 - `⏮ Step-back` = `pause()` + `seek(−1 Bucket)`
 - `◀ Reverse-Play` = Richtung rückwärts, `play()` mit negativer Effektiv-Geschwindigkeit
 - `⏸/▶ Play/Pause`
@@ -117,6 +119,8 @@ Bucket-Größe = Fenster-Span / Bucket-Anzahl (aus dem Histogram-State ableitbar
 - `font-style: italic → normal` (aufrecht)
 - Größe `≥ 15px` (War Room `MuninStreamQuadrant.tsx` von 12px; Briefing-Munin-Messages von `0.95rem`)
 - `line-height` leicht erhöhen für Lesbarkeit.
+
+**Scope-Guard (wichtig):** **Nicht** die globale `.serif`-Utility (`hlidskjalf.css`) ändern — das würde Titel/Branding quer durch die App treffen. Nur Munin-spezifische Selektoren überschreiben: War Room via `MuninStreamQuadrant.tsx` (inline/eigene Klasse), Briefing via munin-spezifischem Selektor wie `.briefing-chat-item.is-munin p` (statt `.briefing-chat-item p.serif`, `briefingPage.css:422`).
 
 **Test:** Gezielter Regressions-Style-Test: `font-style !== "italic"` und `font-size >= 15px` für den Munin-Textknoten. (Bewusst schmal gehalten — Style-Tests sind brittle, aber als Regressionsanker ok.)
 
