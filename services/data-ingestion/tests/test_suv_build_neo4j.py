@@ -1,5 +1,10 @@
 # tests/test_suv_build_neo4j.py
-from suv_structured.build_companies import build_statements
+import json
+
+import httpx
+import pytest
+
+from suv_structured.build_companies import build_statements, write_neo4j
 from suv_structured.schemas import Company
 
 
@@ -57,3 +62,43 @@ def test_companies_sharing_suv_url_resolved_by_name():
     assert by["Rheinmetall AG"]["products"] == ["Leopard 2"]
     assert by["Hensoldt"]["employees"] == 6500
     assert by["Hensoldt"]["products"] == ["TRML-4D"]
+
+
+@pytest.mark.asyncio
+async def test_write_neo4j_posts_statements_and_succeeds():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"results": [], "errors": []})
+
+    stmts = [{"statement": "MERGE (c:Entity {name: $name})", "parameters": {"name": "A"}}]
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        await write_neo4j(stmts, client=client, neo4j_http_url="http://neo",
+                          neo4j_user="neo4j", neo4j_password="pw")
+    assert captured["path"] == "/db/neo4j/tx/commit"
+    assert captured["body"]["statements"] == stmts
+
+
+@pytest.mark.asyncio
+async def test_write_neo4j_raises_on_neo4j_errors():
+    transport = httpx.MockTransport(lambda r: httpx.Response(
+        200, json={"results": [], "errors": [{"message": "Constraint violation"}]}))
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(RuntimeError, match="Constraint violation"):
+            await write_neo4j([{"statement": "x", "parameters": {}}],
+                              client=client, neo4j_http_url="http://neo",
+                              neo4j_user="neo4j", neo4j_password="pw")
+
+
+@pytest.mark.asyncio
+async def test_write_neo4j_noop_on_empty():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("write_neo4j must not POST when there are no statements")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        await write_neo4j([], client=client, neo4j_http_url="http://neo",
+                          neo4j_user="neo4j", neo4j_password="pw")

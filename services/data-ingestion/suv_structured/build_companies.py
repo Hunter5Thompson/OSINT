@@ -21,6 +21,8 @@ def _write_name(company: Company, approved_entry: dict) -> str:
     """Match -> approved existing canonical name; new -> canonicalized SUV name."""
     if approved_entry.get("decision") == "match" and approved_entry.get("existing_name"):
         return approved_entry["existing_name"]
+    # surface-form normalization only; node type is always overridden to ORGANIZATION
+    # by UPSERT_COMPANY's MERGE key
     return canonicalize_entity(company.name, "ORGANIZATION").name
 
 
@@ -79,7 +81,7 @@ async def write_neo4j(
         f"{neo4j_http_url}/db/neo4j/tx/commit",
         json={"statements": statements},
         headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"},
-        timeout=60.0,
+        timeout=60.0,  # a full SUV batch is ~150 statements in one tx
     )
     resp.raise_for_status()
     errors = resp.json().get("errors", [])
