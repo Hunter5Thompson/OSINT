@@ -65,6 +65,17 @@ def test_qdrant_point_id_distinguishes_punctuation_differences():
     assert len({p.id for p in points}) == 2
 
 
+def test_qdrant_match_uses_resolved_canonical_write_name():
+    from suv_structured.build_companies import _point_id
+    companies = [Company(name="Rheinmetall AG", suv_url="u", products=["Leopard 2"])]
+    approved = [{"name": "Rheinmetall AG", "decision": "match", "existing_name": "Rheinmetall"}]
+    p = build_qdrant_points(companies, approved, embed=lambda t: [0.0] * 1024, now_iso="t")[0]
+    assert p.payload["entities"] == [{"name": "Rheinmetall"}]   # canonical (graph_context match)
+    assert p.payload["title"] == "Rheinmetall"
+    assert "Rheinmetall AG" in p.payload["aliases"]  # SUV surface name kept
+    assert p.id == _point_id("Rheinmetall")                     # point-id on resolved name
+
+
 @pytest.mark.asyncio
 async def test_embed_text_handles_nested_and_flat_tei_shapes():
     nested = httpx.MockTransport(lambda r: httpx.Response(200, json=[[0.5] * 1024]))

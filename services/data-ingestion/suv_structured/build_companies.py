@@ -126,19 +126,22 @@ def build_qdrant_points(
         company = by_name.get(entry["name"])
         if company is None:
             continue
+        # canonical graph name for matches; canonicalized SUV name for new entries
+        write_name = _write_name(company, entry)
         content = profile_text(company)
         payload = {
             "source": "suv_structured",
             **provenance_fields(source_type="dataset", provider="suv.report"),
             "ingested_at": ts,
-            "title": company.name,
+            "title": write_name,
             "content": content,
-            "entities": [{"name": company.name}],
+            "entities": [{"name": write_name}],
+            "aliases": sorted({company.name, write_name}),
             "url": company.suv_url,
             "content_hash": hashlib.sha256(content.encode()).hexdigest()[:24],
         }
         points.append(PointStruct(
-            id=_point_id(company.name), vector=embed(content), payload=payload))
+            id=_point_id(write_name), vector=embed(content), payload=payload))
     return points
 
 
