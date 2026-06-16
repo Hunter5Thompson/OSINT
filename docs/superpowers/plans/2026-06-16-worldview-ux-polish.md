@@ -357,20 +357,35 @@ git commit -m "fix(globe): almanac click falls through 3D photoreal tiles to cou
 
 - [ ] **Step 1: Write the failing test**
 
+> **Mechanism note (verified against the installed Cesium 1.132 `Cesium.d.ts`):** a
+> `PolylineCollection`/`Polyline` has NO `disableDepthTestDistance` — that option is
+> a silent no-op there (it belongs to Billboard/Label/PointPrimitive). Flat
+> ellipsoid polylines stay depth-tested and are hidden behind the Google photoreal
+> 3D tiles. The correct fix is to drape the borders onto the surface with a
+> **`GroundPolylinePrimitive`** (`geometryInstances` of `GroundPolylineGeometry`,
+> `PolylineMaterialAppearance`, `classificationType: ClassificationType.BOTH` →
+> terrain **and** 3D tiles). `GroundPolylinePrimitive` initializes terrain heights
+> internally (no public `ApproximateTerrainHeights` call needed). This keeps us on
+> imperative primitives (CLAUDE.md forbids the Entity API for bulk rendering). The
+> depth/draping behaviour cannot be asserted in jsdom (no GL); the unit test covers
+> the pure pieces (width + position conversion), and the over-tiles result is
+> verified in the manual smoke (final checklist).
+
 ```ts
 // services/frontend/src/components/globe/visual-layers/__tests__/CountryBorders.style.test.ts
 import { describe, it, expect } from "vitest";
-import { BORDER_WIDTH, borderPolylineOptions } from "../CountryBorders";
+import * as Cesium from "cesium";
+import { BORDER_WIDTH, ringToPositions } from "../CountryBorders";
 
 describe("CountryBorders styling", () => {
   it("uses a thicker line so borders read over photoreal terrain", () => {
     expect(BORDER_WIDTH).toBeGreaterThanOrEqual(1.5);
   });
 
-  it("disables depth-test so borders are not occluded by 3D tiles/terrain", () => {
-    const opts = borderPolylineOptions([], {} as never);
-    expect(opts.width).toBe(BORDER_WIDTH);
-    expect(opts.disableDepthTestDistance).toBe(Number.POSITIVE_INFINITY);
+  it("converts a [lon,lat] ring to Cartesian3 positions", () => {
+    const positions = ringToPositions([[0, 0], [10, 10], [20, 20]]);
+    expect(positions).toHaveLength(3);
+    expect(positions[0]).toBeInstanceOf(Cesium.Cartesian3);
   });
 });
 ```
@@ -378,60 +393,77 @@ describe("CountryBorders styling", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npm run test -- CountryBorders.style`
-Expected: FAIL — `BORDER_WIDTH`/`borderPolylineOptions` not exported.
+Expected: FAIL — `BORDER_WIDTH`/`ringToPositions` not exported.
 
-- [ ] **Step 3: Implement — export constants + options builder, use them in the loop**
+- [ ] **Step 3: Implement — export the pure pieces + drape borders with GroundPolylinePrimitive**
 
 In `CountryBorders.tsx`, add near the top (after the imports, before `interface Props`):
 
 ```ts
-/** Wider than the old 0.6 so the line reads over Google photoreal terrain. */
-export const BORDER_WIDTH = 1.8;
+/** Wider than the old 0.6 (screen-space px) so the line reads over photoreal terrain. */
+export const BORDER_WIDTH = 2.0;
 
-/** Per-polyline options. disableDepthTestDistance=Infinity draws the border on
- *  top of the 3D tiles/terrain instead of being occluded by it. */
-export function borderPolylineOptions(
-  positions: Cesium.Cartesian3[],
-  material: Cesium.Material,
-) {
-  return {
-    positions,
-    width: BORDER_WIDTH,
-    material,
-    disableDepthTestDistance: Number.POSITIVE_INFINITY,
-  };
+/** Pure: a GeoJSON ring of [lon,lat] pairs -> Cartesian3 positions. */
+export function ringToPositions(ring: number[][]): Cesium.Cartesian3[] {
+  return ring.map((coord) => Cesium.Cartesian3.fromDegrees(coord[0]!, coord[1]!));
 }
 ```
 
-Change the colour to a brighter neutral (not an accent), and use the options builder. Replace lines 28–47 (the `cssVar`/`stoneColor`/`material` block through the `collection.add(...)` call):
+Change the ref type so it holds the draped primitive (was `Cesium.PolylineCollection | null`):
+
+```ts
+  const collectionRef = useRef<Cesium.GroundPolylinePrimitive | null>(null);
+```
+
+Replace the build block (the `cssVar`/`stoneColor`/`material` setup through the `PolylineCollection` loop, and the `viewer.scene.primitives.add(collection)` line) with a `GroundPolylinePrimitive` that drapes onto terrain AND 3D tiles:
 
 ```ts
       const cssVar = getComputedStyle(document.documentElement)
         .getPropertyValue("--bone")
         .trim();
-      // Bright neutral (bone), not an accent colour — an accent would read like
-      // a data layer. Higher alpha than the old stone@0.7 for legibility.
-      const lineColor = Cesium.Color.fromCssColorString(cssVar || "#d4cdc0").withAlpha(0.85);
-      const material = Cesium.Material.fromType("Color", { color: lineColor });
+      // Bright neutral (bone), not an accent colour — an accent would read like a
+      // data layer. Higher alpha than the old stone@0.7 for legibility.
+      const lineColor = Cesium.Color.fromCssColorString(cssVar || "#d4cdc0").withAlpha(0.9);
 
-      const collection = new Cesium.PolylineCollection();
+      const instances: Cesium.GeometryInstance[] = [];
       for (const f of fc.features) {
         const geom = f.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
         if (!geom) continue;
-
         const polygons = geom.type === "Polygon" ? [geom.coordinates] : geom.coordinates;
         for (const poly of polygons) {
           for (const ring of poly as number[][][]) {
-            const positions = ring.map((coord) => {
-              const lon = coord[0]!;
-              const lat = coord[1]!;
-              return Cesium.Cartesian3.fromDegrees(lon, lat);
-            });
-            collection.add(borderPolylineOptions(positions, material));
+            const positions = ringToPositions(ring);
+            if (positions.length < 2) continue; // GroundPolylineGeometry needs >= 2
+            instances.push(
+              new Cesium.GeometryInstance({
+                geometry: new Cesium.GroundPolylineGeometry({ positions, width: BORDER_WIDTH }),
+              }),
+            );
           }
         }
       }
+
+      // Re-check after the synchronous build (React 19 StrictMode cleanup race).
+      if (cancelled || viewer.isDestroyed()) return;
+
+      const primitive = new Cesium.GroundPolylinePrimitive({
+        geometryInstances: instances,
+        appearance: new Cesium.PolylineMaterialAppearance({
+          material: Cesium.Material.fromType("Color", { color: lineColor }),
+        }),
+        // Drape over BOTH world terrain and the Google photoreal 3D tiles, so the
+        // border is never occluded by the surface in front of it (the P2 bug).
+        classificationType: Cesium.ClassificationType.BOTH,
+      });
+      viewer.scene.primitives.add(primitive);
+      collectionRef.current = primitive;
 ```
+
+Notes for the implementer:
+- Delete the old `Cesium.PolylineCollection` / `collection.add(...)` code and the now-stale `if (cancelled || viewer.isDestroyed()) { collection.destroy(); return; }` block — the re-check above replaces it (an empty `instances` array is harmless; a not-yet-added primitive needs no destroy).
+- The existing cleanup `viewer.scene.primitives.remove(collection)` works unchanged — `GroundPolylinePrimitive` is removed the same way.
+- `BORDER_WIDTH` is screen-space pixels (GroundPolylineGeometry semantics), same as before.
+- **Fallback (verify in manual smoke):** classification of Google Photorealistic 3D Tiles by `GroundPolylinePrimitive` is not guaranteed on every Cesium build. If the draped borders do NOT appear over the photoreal tiles (only over bare terrain), fall back to a draw-on-top primitive: a `Cesium.Primitive` with `PolylineColorAppearance`/`PolylineMaterialAppearance` whose `appearance.renderState.depthTest.enabled = false` (accepts minor far-side bleed-through) — still imperative primitives, no Entity API. Keep the width + bone-colour boost regardless, since that alone is most of the legibility win. Update the test to assert whichever mechanism is shipped.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -443,7 +475,7 @@ Expected: PASS (2 tests).
 ```bash
 git add services/frontend/src/components/globe/visual-layers/CountryBorders.tsx \
         services/frontend/src/components/globe/visual-layers/__tests__/CountryBorders.style.test.ts
-git commit -m "fix(globe): brighter, depth-test-off country borders readable over 3D tiles (P2)"
+git commit -m "fix(globe): drape country borders over 3D tiles via GroundPolylinePrimitive (P2)"
 ```
 
 ---
@@ -456,6 +488,10 @@ git commit -m "fix(globe): brighter, depth-test-off country borders readable ove
 - Create: `services/frontend/scripts/gen-capitals.mjs`
 - Modify: `services/frontend/public/country-endonyms.json` (generated)
 - Test: `services/frontend/src/components/globe/__tests__/capitalCoverage.test.ts`
+- Modify: `services/frontend/src/components/globe/spotlight/SpotlightCartouche.tsx` (crash-harden the endonym lookup — generated entries have no full `names`)
+- Test: `services/frontend/src/components/globe/spotlight/__tests__/SpotlightCartouche.crash.test.tsx`
+
+**Critical consumer note:** `SpotlightCartouche.tsx:24-25` does `const datum = endo.countries[t.iso3]; const endonyms = datum?.names.endonyms ?? {}`. The `?.` guards only `datum`, NOT `.names` — so any country whose endonym datum exists but lacks a `names` object throws `TypeError: Cannot read properties of undefined (reading 'endonyms')`. The generator below emits a minimal `names` object AND we harden the consumer (Step 3b) so a click on any of the ~167 newly-added countries cannot crash the cartouche (the same cartouche P5 repositions).
 
 - [ ] **Step 1: Write the failing completeness test (against real TopoJSON keys)**
 
@@ -465,8 +501,11 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-// Disputed/de-facto territories in countries-110m.json that have no clean ISO3
-// and/or no Natural Earth admin-0 capital. Each is intentionally left unmapped.
+// The three name-keyed (null f.id) features in countries-110m.json are
+// 'N. Cyprus', 'Somaliland', 'Kosovo'. Somaliland + N. Cyprus have no clean ISO3
+// / no Natural Earth admin-0 capital and are intentionally left unmapped.
+// Kosovo is NOT excepted — it is covered via the generator's OVERRIDES['Kosovo']
+// (-> XKX/Pristina); the explicit assertion below enforces that coupling.
 const CAPITAL_EXCEPTIONS = new Set<string>(["Somaliland", "N. Cyprus"]);
 
 function load(rel: string) {
@@ -507,6 +546,8 @@ describe("capital coverage", () => {
       if (!ok) missing.push(key);
     }
     expect(missing).toEqual([]);
+    // Enforce the Kosovo coupling explicitly so it can't silently regress.
+    expect(topoIndex["Kosovo"]).toBe("XKX");
   });
 });
 ```
@@ -550,14 +591,25 @@ const [countries, places] = await Promise.all([fetchJson(COUNTRIES_URL), fetchJs
 const pad3 = (v) => String(parseInt(String(v), 10)).padStart(3, "0");
 const pickA3 = (p) =>
   [p.ISO_A3, p.iso_a3, p.ADM0_A3, p.adm0_a3].find((v) => v && v !== "-99");
+
+// Some NE features carry ISO_N3 == -99 (their numeric M.49 is absent), so pad3
+// yields "-99" and the numeric key would never be built — silently dropping major
+// countries. France/Norway are the two such features that DO have a numeric topo
+// id ("250"/"578"); map them back by ISO3. (Kosovo/N.Cyprus/Somaliland are the
+// null-id name-keyed features, handled via OVERRIDES / CAPITAL_EXCEPTIONS.) Step 4
+// audits any other numeric key still left in `missing`.
+const A3_TO_M49 = { FRA: "250", NOR: "578" };
+
 const iso3ByM49 = {};
+const nameByIso3 = {};
 for (const f of countries.features) {
   const p = f.properties;
-  const raw = p.ISO_N3 ?? p.iso_n3;
   const a3 = pickA3(p);
-  if (raw == null || !a3) continue;
-  const n3 = pad3(raw); // 32 / "32" / "032" -> "032"
-  if (n3 !== "NaN") iso3ByM49[n3] = a3;
+  if (!a3) continue;
+  nameByIso3[a3] = p.NAME ?? p.name ?? p.ADMIN ?? p.admin ?? a3;
+  let n3 = pad3(p.ISO_N3 ?? p.iso_n3); // "032"; or "-99"/"NaN" when ISO_N3 is bad
+  if (n3 === "-99" || n3 === "NaN") n3 = A3_TO_M49[a3] ?? null;
+  if (n3) iso3ByM49[n3] = a3; // skip unknown -99 features instead of polluting "-99"
 }
 
 // ISO3 → capital (prefer "Admin-0 capital", fall back to alt)
@@ -586,9 +638,13 @@ for (const [m49, existing] of Object.entries(endo._topoIndex)) {
   }
   if (iso3 && capital && Number.isFinite(capital.lat) && Number.isFinite(capital.lon)) {
     endo._topoIndex[m49] = iso3;
+    const nm = nameByIso3[iso3] ?? capital.name ?? iso3;
     endo.countries[iso3] = {
       iso3,
       m49: /^\d+$/.test(m49) ? m49 : (endo.countries[iso3]?.m49 ?? ""),
+      // Minimal names so SpotlightCartouche's `datum.names.endonyms` lookup never
+      // throws for a generated country; endonyms empty (NE only gives English).
+      names: { en: nm, official: nm, native: nm, endonyms: {} },
       capital: { name: capital.name, lat: capital.lat, lon: capital.lon },
     };
     filled++;
@@ -599,6 +655,49 @@ writeFileSync(endoPath, JSON.stringify(endo, null, 2) + "\n");
 console.log(`filled ${filled} countries; total countries=${Object.keys(endo.countries).length}`);
 ```
 
+- [ ] **Step 3b: Crash-harden SpotlightCartouche (TDD) — generated countries have no full `names`**
+
+First the failing test:
+
+```tsx
+// services/frontend/src/components/globe/spotlight/__tests__/SpotlightCartouche.crash.test.tsx
+import { describe, it, expect } from "vitest";
+import { render } from "@testing-library/react";
+import { renderCartouche } from "../SpotlightCartouche";
+
+describe("renderCartouche for a generated country", () => {
+  it("does not throw when the endonym datum has no full `names` object", () => {
+    const target = {
+      kind: "country", trigger: "country", m49: "250", iso3: "FRA",
+      polygon: { type: "Polygon", coordinates: [] }, name: "France", capital: null,
+    } as unknown as Parameters<typeof renderCartouche>[0];
+    // FRA exists in the endonym map but has NO `names` (as a generated entry could,
+    // and as the consumer must tolerate). The OLD `datum?.names.endonyms` throws here.
+    const endo = { countries: { FRA: { iso3: "FRA", m49: "250" } } } as never;
+    expect(() => render(<>{renderCartouche(target, endo)}</>)).not.toThrow();
+  });
+});
+```
+
+Run: `npm run test -- SpotlightCartouche.crash`
+Expected: FAIL — `TypeError: Cannot read properties of undefined (reading 'endonyms')`.
+
+Then harden `SpotlightCartouche.tsx`:
+- Make `names` optional in the local `EndonymJson` interface (line 7) to match runtime reality:
+
+```ts
+    names?: { en: string; official: string; native: string; endonyms: Record<string, string> };
+```
+
+- Guard the `.names` deref (line 25):
+
+```ts
+  const endonyms = datum?.names?.endonyms ?? {};
+```
+
+Run: `npm run test -- SpotlightCartouche.crash`
+Expected: PASS. (The generator's `names` emission makes this defensive in prod; the guard makes it safe even for incomplete data.)
+
 - [ ] **Step 4: Run the generator + verify coverage**
 
 Run:
@@ -606,7 +705,11 @@ Run:
 cd services/frontend && node scripts/gen-capitals.mjs
 npm run test -- capitalCoverage
 ```
-Expected: generator prints `filled ~167 ...`; test PASSES. If a handful of M.49 keys remain in `missing` because Natural Earth lacks a clean ISO3/capital for them (e.g. tiny states, disputed areas), add each to `CAPITAL_EXCEPTIONS` in the test **or** add an `OVERRIDES` entry with a sourced capital — decide per entry, do not blanket-skip. Re-run until green.
+Expected: generator prints `filled ~167 ...`; test PASSES. France (`250`) and Norway (`578`) are filled via the `A3_TO_M49` fallback (their NE `ISO_N3` is `-99`), NOT via exceptions. If any key remains in `missing`:
+- A **numeric** key (e.g. `"250"`-style) almost always means another NE feature with `ISO_N3 == -99` → add `{ <ISO3>: <m49> }` to `A3_TO_M49` (so it inherits the NE capital), do **not** except it.
+- A **name** key (no topo `f.id`) with a real de-facto capital → add an `OVERRIDES` entry with a sourced capital.
+- A genuinely capital-less / disputed territory → add it to `CAPITAL_EXCEPTIONS` in the test.
+Decide per entry, do not blanket-skip. Re-run until green.
 
 - [ ] **Step 5: Sanity-check a few capitals render correctly**
 
@@ -618,8 +721,10 @@ Spot-check the JSON: confirm e.g. `FRA`/`BRA`/`AUS` now have a `capital` with pl
 ```bash
 git add services/frontend/scripts/gen-capitals.mjs \
         services/frontend/public/country-endonyms.json \
-        services/frontend/src/components/globe/__tests__/capitalCoverage.test.ts
-git commit -m "feat(globe): full country-capital dataset from Natural Earth (P4)"
+        services/frontend/src/components/globe/__tests__/capitalCoverage.test.ts \
+        services/frontend/src/components/globe/spotlight/SpotlightCartouche.tsx \
+        services/frontend/src/components/globe/spotlight/__tests__/SpotlightCartouche.crash.test.tsx
+git commit -m "feat(globe): full country-capital dataset + crash-harden cartouche (P4)"
 ```
 
 ---
@@ -836,7 +941,7 @@ Append to `ChronikTimeline.css`:
   height: 22px;
   background: transparent;
   color: var(--bone, #d4cdc0);
-  border: 1px solid var(--briefing-hair, rgba(212, 205, 192, 0.25));
+  border: 1px solid var(--granite, #2a2720);
   border-radius: 3px;
   font-family: "Martian Mono", ui-monospace, monospace;
   font-size: 10px;
@@ -948,16 +1053,25 @@ Add these cases to `src/components/time/__tests__/ScrubberMount.test.tsx` (insid
     expect(clock.multiplier).toBeGreaterThan(0);
   });
 
-  it("step forward pauses and advances the cursor", () => {
+  it("step forward pauses and advances the cursor (deterministic, no wall-clock)", () => {
     vi.spyOn(api, "getTimeHistogram").mockResolvedValue(HIST as never);
     const { viewer, clock } = fakeClockViewer();
-    const before = Cesium.JulianDate.toDate(clock.currentTime).getTime();
     const Comp = wrap(viewer, { onSelectEvent: vi.fn(), onTimelineData: vi.fn() });
     render(<Comp />);
+    // Seek to the window START first by clicking the far-left of the strip (jsdom
+    // rect width is ~0 -> fraction 0 -> rangeStartMs). This makes the forward step
+    // land a bucket ahead, INSIDE the window, with NO dependence on Date.now()
+    // (the old `before = clock.now()` vs render-time `coarseEnd` collided ~1-in-5).
+    act(() => {
+      const strip = screen.getByTestId("chronik-strip");
+      fireEvent.mouseDown(strip, { clientX: 0 });
+      fireEvent.mouseUp(strip, { clientX: 0 });
+    });
+    const atStart = Cesium.JulianDate.toDate(clock.currentTime).getTime();
     act(() => { fireEvent.click(screen.getByLabelText("step forward")); });
     expect(clock.shouldAnimate).toBe(false);
     const after = Cesium.JulianDate.toDate(clock.currentTime).getTime();
-    expect(after).toBeGreaterThan(before);
+    expect(after).toBeGreaterThan(atStart); // stepped forward, unclamped
   });
 
   it("NOW after reverse clears the reverse direction (speed back to positive)", () => {
@@ -1306,7 +1420,7 @@ git commit -m "fix(warroom): Munin text upright + >=15px for readability (P7)"
 - [ ] **Types:** `npm run type-check` → clean.
 - [ ] **Build:** `npm run build` → succeeds.
 - [ ] **Manual smoke (`npm run dev`):**
-  - Toggle City Buildings ON → click a country → almanac opens (P3); borders are clearly visible over the 3D tiles (P2); the capital pulses with a red dot + city name for arbitrary countries, not just 8 (P4); the country name is fully visible left of the Inspector Panel (P5).
+  - Toggle City Buildings ON → click a country → almanac opens (P3); borders **drape over** the 3D photoreal tiles and read clearly (P2 — verify the GroundPolylinePrimitive actually classifies the Google tiles, not just terrain); click several arbitrary countries (e.g. France, Brazil, Nigeria) → each opens WITHOUT crashing the cartouche AND pulses its capital with a red dot + city name, not just the original 8 (P4); the country name is fully visible left of the Inspector Panel (P5).
   - CHRONIK: reverse/forward play run the clock both directions and clamp at the window edges; step buttons nudge one bucket; speed select changes pace (P1).
   - Briefing Room: create a dossier, delete it (confirm dialog), selection moves sensibly (P6).
   - War Room: Munin hypothesis text is upright and clearly larger (P7).
