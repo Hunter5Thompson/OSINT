@@ -1,4 +1,7 @@
 # tests/test_suv_match_report.py
+import pytest
+import yaml
+
 from suv_structured.match_report import MatchDecision, build_match_report, load_approved
 from suv_structured.schemas import Company
 
@@ -31,7 +34,6 @@ def test_type_mismatch_single_nonorg_is_ambiguous():
 
 
 def test_load_approved_keeps_only_approved_match_and_new(tmp_path):
-    import yaml
     report = [
         {"name": "A", "suv_url": "ua", "decision": "match", "existing_name": "A0",
          "candidates": [], "approved": True},
@@ -47,11 +49,54 @@ def test_load_approved_keeps_only_approved_match_and_new(tmp_path):
 
 
 def test_load_approved_rejects_approved_but_ambiguous(tmp_path):
-    import pytest
-    import yaml
     p = tmp_path / "r.yaml"
     p.write_text(yaml.safe_dump([
         {"name": "C", "suv_url": "uc", "decision": "ambiguous", "existing_name": None,
          "candidates": [], "approved": True}]))
     with pytest.raises(ValueError):
         load_approved(p)
+
+
+def test_load_approved_rejects_uppercase_ambiguous(tmp_path):
+    p = tmp_path / "r.yaml"
+    p.write_text(yaml.safe_dump([
+        {"name": "C", "suv_url": "uc", "decision": "AMBIGUOUS", "existing_name": None,
+         "candidates": [], "approved": True}]))
+    with pytest.raises(ValueError):
+        load_approved(p)
+
+
+def test_load_approved_rejects_match_without_existing_name(tmp_path):
+    p = tmp_path / "r.yaml"
+    p.write_text(yaml.safe_dump([
+        {"name": "M", "suv_url": "um", "decision": "match", "existing_name": None,
+         "candidates": [], "approved": True}]))
+    with pytest.raises(ValueError):
+        load_approved(p)
+
+
+def test_load_approved_rejects_unknown_decision(tmp_path):
+    p = tmp_path / "r.yaml"
+    p.write_text(yaml.safe_dump([
+        {"name": "X", "suv_url": "ux", "decision": "maybe", "existing_name": None,
+         "candidates": [], "approved": True}]))
+    with pytest.raises(ValueError):
+        load_approved(p)
+
+
+def test_load_approved_rejects_missing_decision_key(tmp_path):
+    p = tmp_path / "r.yaml"
+    p.write_text(yaml.safe_dump([
+        {"name": "Y", "suv_url": "uy", "existing_name": None,
+         "candidates": [], "approved": True}]))
+    with pytest.raises(ValueError):
+        load_approved(p)
+
+
+def test_load_approved_normalizes_decision_case(tmp_path):
+    p = tmp_path / "r.yaml"
+    p.write_text(yaml.safe_dump([
+        {"name": "N", "suv_url": "un", "decision": "NEW", "existing_name": None,
+         "candidates": [], "approved": True}]))
+    approved = load_approved(p)
+    assert approved[0]["decision"] == "new"

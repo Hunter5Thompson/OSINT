@@ -50,11 +50,37 @@ def dump_report(report: list[dict], path: Path) -> None:
 
 
 def load_approved(path: Path) -> list[dict]:
-    """Load report; return only approved entries. Raises if an approved entry is
-    still ambiguous (a human must resolve ambiguity before approving)."""
+    """Load report; return only entries with ``approved is True``.
+
+    The report is HUMAN-EDITED YAML, so the gate validates each approved entry
+    defensively and raises ValueError (listing every offender) if any approved
+    entry is unsafe to write:
+      - missing a 'name' or 'decision' key,
+      - has a 'decision' (case-insensitive) not in MatchDecision (operator typo),
+      - is still 'ambiguous' — must be resolved (re-run dry-run) before approval,
+      - is a 'match' without 'existing_name' (no merge target).
+    The returned entries have their 'decision' normalized to the canonical
+    lowercase value so downstream comparisons are case-robust.
+    """
     entries = yaml.safe_load(path.read_text()) or []
     approved = [e for e in entries if e.get("approved") is True]
-    bad = [e["name"] for e in approved if e.get("decision") == str(MatchDecision.AMBIGUOUS)]
-    if bad:
-        raise ValueError(f"approved but still ambiguous (resolve first): {bad}")
+    valid = {str(d) for d in MatchDecision}
+    errors: list[str] = []
+    for e in approved:
+        name = e.get("name", "<unnamed>")
+        decision = e.get("decision")
+        norm = decision.lower() if isinstance(decision, str) else None
+        if "name" not in e or decision is None:
+            errors.append(f"{name}: missing 'name'/'decision' key")
+            continue
+        if norm not in valid:
+            errors.append(f"{name}: unrecognized decision {decision!r}")
+            continue
+        e["decision"] = norm  # canonicalize for case-robust downstream use
+        if norm == str(MatchDecision.AMBIGUOUS):
+            errors.append(f"{name}: approved but still ambiguous (resolve first)")
+        elif norm == str(MatchDecision.MATCH) and not e.get("existing_name"):
+            errors.append(f"{name}: approved match missing existing_name")
+    if errors:
+        raise ValueError("unsafe approved entries: " + "; ".join(errors))
     return approved
