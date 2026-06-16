@@ -37,7 +37,7 @@ def build_location_id(
     'gdelt:loc::' key would collapse every such location onto one node."""
     if feature_id:
         return f"gdelt:loc:{feature_id}"
-    if not country_code and not name:
+    if not country_code and not (name or "").strip():
         return None
     return f"gdelt:loc:{country_code.lower()}:{_slug(name)}"
 

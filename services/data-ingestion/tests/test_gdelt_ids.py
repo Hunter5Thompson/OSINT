@@ -41,3 +41,9 @@ def test_location_id_all_empty_tuple_is_none():
     # no feature_id, no country, no name -> no usable identity (WP-11);
     # must NOT return a shared 'gdelt:loc::' key.
     assert build_location_id(feature_id="", country_code="", name="") is None
+
+
+def test_location_id_whitespace_only_name_is_none():
+    # a whitespace-only name slugs to '' -> would build the shared 'gdelt:loc::'
+    # key; treat it as no identity (WP-11).
+    assert build_location_id(feature_id="", country_code="", name="   ") is None
