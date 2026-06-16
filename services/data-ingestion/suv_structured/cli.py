@@ -15,6 +15,12 @@ from qdrant_client import QdrantClient
 
 from canonicalize import canonicalize_entity
 from config import settings
+from suv_structured.backfill_hq import (
+    build_hq_link_statements,
+    count_location_targets,
+    fetch_suv_orgs,
+    unmapped_or_ambiguous_targets,
+)
 from suv_structured.build_companies import (
     _write_name,
     build_qdrant_points,
@@ -167,6 +173,44 @@ def build(dry_run: bool, approved_path: Path | None, report_out: Path) -> None:
             click.echo(
                 f"built {len(approved)} companies "
                 f"(neo4j stmts={len(stmts)}, qdrant={len(points)})")
+    asyncio.run(_run())
+
+
+@cli.command(name="backfill-hq")
+@click.option("--apply", "do_apply", is_flag=True,
+              help="Actually write the edges (default is dry-run, no write).")
+def backfill_hq(do_apply: bool) -> None:
+    """Backfill HEADQUARTERED_IN edges from existing suv.report orgs to Entity{LOCATION}.
+
+    Dry-run by default (prints a summary, no write). Pass --apply to write. A preflight
+    requires each mapped country to resolve to exactly one Entity{type:"LOCATION"}."""
+    async def _run() -> None:
+        kw = dict(neo4j_http_url=settings.neo4j_http_url, neo4j_user=settings.neo4j_user,
+                  neo4j_password=settings.neo4j_password)
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            orgs = await fetch_suv_orgs(client, **kw)
+            statements, skipped = build_hq_link_statements(orgs)
+            mapped_countries = sorted({s["parameters"]["country"] for s in statements})
+            counts = await count_location_targets(client, mapped_countries, **kw)
+            offenders = unmapped_or_ambiguous_targets(counts)
+
+            click.echo(f"SUV orgs with hq_country: {len(orgs)}")
+            click.echo(f"mapped: {len(statements)}   skipped (unmapped): {len(skipped)}")
+            for c in mapped_countries:
+                click.echo(f'  {c} -> Entity{{type:"LOCATION"}} count={counts.get(c, 0)}')
+            if skipped:
+                click.echo(f"  skipped countries: {sorted({hc for _, hc in skipped})}")
+            click.echo(f"statements to write: {len(statements)}")
+
+            if offenders:
+                raise click.ClickException(
+                    "preflight failed — these countries do not resolve to exactly one "
+                    f'Entity{{type:"LOCATION"}} node: {offenders}. Aborting (no write).')
+            if not do_apply:
+                click.echo("DRY-RUN (no write). Re-run with --apply to write the edges.")
+                return
+            await write_neo4j(statements, client=client, **kw)
+            click.echo(f"APPLIED: wrote {len(statements)} HEADQUARTERED_IN edges.")
     asyncio.run(_run())
 
 
