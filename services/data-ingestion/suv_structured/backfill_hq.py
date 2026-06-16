@@ -77,6 +77,7 @@ async def count_location_targets(
 ) -> dict[str, int]:
     """Per requested name, how many Entity{type:"LOCATION"} nodes match (case-insensitive).
     OPTIONAL MATCH guarantees a row per requested name (count 0 when none)."""
+    country_names = list(dict.fromkeys(country_names))  # dedup, preserve order
     cypher = ('UNWIND $names AS nm '
               'OPTIONAL MATCH (l:Entity {type:"LOCATION"}) WHERE toLower(l.name) = toLower(nm) '
               'RETURN nm AS name, count(l) AS n')

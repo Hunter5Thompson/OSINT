@@ -63,3 +63,23 @@ async def test_read_raises_on_neo4j_error_body():
         with pytest.raises(RuntimeError, match="boom"):
             await fetch_suv_orgs(client, neo4j_http_url="http://neo",
                                  neo4j_user="neo4j", neo4j_password="pw")
+
+
+@pytest.mark.asyncio
+async def test_count_location_targets_empty_list_returns_empty():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"results": [{"data": []}], "errors": []})
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        counts = await count_location_targets(client, [], neo4j_http_url="http://neo",
+                                              neo4j_user="neo4j", neo4j_password="pw")
+    assert counts == {}
+
+
+@pytest.mark.asyncio
+async def test_run_read_raises_on_http_error_status():
+    transport = httpx.MockTransport(lambda r: httpx.Response(503, text="unavailable"))
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await fetch_suv_orgs(client, neo4j_http_url="http://neo",
+                                 neo4j_user="neo4j", neo4j_password="pw")
