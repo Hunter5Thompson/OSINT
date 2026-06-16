@@ -102,3 +102,13 @@ async def test_write_neo4j_noop_on_empty():
     async with httpx.AsyncClient(transport=transport) as client:
         await write_neo4j([], client=client, neo4j_http_url="http://neo",
                           neo4j_user="neo4j", neo4j_password="pw")
+
+
+def test_build_statements_decision_match_is_case_insensitive():
+    # defense-in-depth: an approved entry whose decision was NOT lowercased
+    # (a caller that bypassed load_approved) must still resolve "MATCH" to a match.
+    companies = [_co(name="Rheinmetall AG")]
+    approved = [{"name": "Rheinmetall AG", "decision": "MATCH", "existing_name": "Rheinmetall"}]
+    upserts = [s for s in build_statements(companies, approved, extracted_at="t")
+               if "MERGE (c:Entity" in s["statement"]]
+    assert upserts[0]["parameters"]["name"] == "Rheinmetall"

@@ -1683,3 +1683,15 @@ Then ask the ReAct agent a company question (e.g. *"Standort und Umsatz von Hens
 ## Execution Handoff
 
 (Filled in by the writing-plans skill after save.)
+
+---
+
+## AS-BUILT 2026-06-16 (supersedes earlier prose where they differ)
+
+The implementation shipped with these deviations from the original spec/plan text (all deliberate, reviewed, and tested):
+1. **Extraction is deterministic** — `parse.py` (regex over `**Label:** value`), NOT a vLLM extractor. There is no `extract.py`. Proven 77/77 on the real crawl.
+2. **CLI subcommands are `fetch | parse | build`** (not `fetch | extract | build`); `parse` renders + deterministically parses + writes the seed.
+3. **Qdrant point-id is a name-keyed UUID5** — `uuid.uuid5(SUV_QDRANT_NAMESPACE, "suv_structured|" + unicodedata.normalize("NFC", name).strip().lower())` — NOT a `suv_url`-derived uint64. Rationale: the parser assigns the same directory URL to every company, so any `suv_url`-keyed id collides; a lossy slug also collides on punctuation/diacritics. The full normalized name is unique + idempotent.
+4. **`build_statements` and `build_qdrant_points` join companies↔approved entries by NAME**, not by `suv_url` (same collision reason).
+5. **`HEADQUARTERED_IN`** stamps `r.last_seen = datetime()` on every run (staleness signal), in addition to `ON CREATE` first_seen/data_source.
+6. **`corpus_policy` analysis lane** uses a `source→expected source_type` PAIR map with a `raise` (not `assert`) lock-step guard.

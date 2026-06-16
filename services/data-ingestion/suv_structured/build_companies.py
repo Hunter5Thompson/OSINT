@@ -26,7 +26,8 @@ log = structlog.get_logger(__name__)
 
 def _write_name(company: Company, approved_entry: dict) -> str:
     """Match -> approved existing canonical name; new -> canonicalized SUV name."""
-    if approved_entry.get("decision") == "match" and approved_entry.get("existing_name"):
+    decision_lc = (approved_entry.get("decision") or "").lower()
+    if decision_lc == "match" and approved_entry.get("existing_name"):
         return approved_entry["existing_name"]
     # surface-form normalization only; node type is always overridden to ORGANIZATION
     # by UPSERT_COMPANY's MERGE key
