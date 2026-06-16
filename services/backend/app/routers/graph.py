@@ -146,19 +146,26 @@ async def get_events(
             "ORDER BY timestamp DESC LIMIT $limit",
             {"limit": limit},
         )
-    nodes = [
-        GraphNode(
-            id=r.get("id", ""),
-            name=r.get("name", ""),
-            type=r.get("type", "event"),
-            properties={
-                k: v
-                for k, v in r.items()
-                if k not in ("id", "name", "type") and v is not None
-            },
+    nodes = []
+    for r in rows:
+        props = {
+            k: v
+            for k, v in r.items()
+            if k not in ("id", "name", "type") and v is not None
+        }
+        # The coalesced timestamp is a neo4j.time.DateTime on real rows, which is
+        # not JSON-serializable inside this untyped properties dict. Stringify it
+        # (parity with the /events/geo endpoint, which str()s its timestamp).
+        if props.get("timestamp") is not None:
+            props["timestamp"] = str(props["timestamp"])
+        nodes.append(
+            GraphNode(
+                id=r.get("id", ""),
+                name=r.get("name", ""),
+                type=r.get("type", "event"),
+                properties=props,
+            )
         )
-        for r in rows
-    ]
     return GraphResponse(nodes=nodes, total_count=len(nodes))
 
 
