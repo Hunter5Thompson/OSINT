@@ -113,13 +113,18 @@ MERGE (ev)-[:OCCURRED_AT]->(l)
 def location_params_for(ev: GDELTEventWrite) -> dict[str, Any] | None:
     if ev.action_geo_lat is None or ev.action_geo_long is None:
         return None
+    if ev.action_geo_lat == 0.0 and ev.action_geo_long == 0.0:  # null-island (WP-11)
+        return None
+    loc_key = build_location_id(
+        ev.action_geo_feature_id or "",
+        ev.action_geo_country_code or "",
+        ev.action_geo_fullname or "",
+    )
+    if loc_key is None:
+        return None
     return {
         "event_id": ev.event_id,
-        "loc_key": build_location_id(
-            ev.action_geo_feature_id or "",
-            ev.action_geo_country_code or "",
-            ev.action_geo_fullname or "",
-        ),
+        "loc_key": loc_key,
         "name": ev.action_geo_fullname,
         "country": ev.action_geo_country_code,
         "lat": ev.action_geo_lat,

@@ -29,10 +29,16 @@ def build_location_id(
     feature_id: str = "",
     country_code: str = "",
     name: str = "",
-) -> str:
-    """gdelt:loc:<feature_id>  OR  gdelt:loc:<cc>:<slugged_name> as fallback."""
+) -> str | None:
+    """gdelt:loc:<feature_id>  OR  gdelt:loc:<cc>:<slugged_name> as fallback.
+
+    Returns None for an all-empty id tuple (WP-11): without any of feature_id,
+    country_code or name there is no meaningful identity, and a shared
+    'gdelt:loc::' key would collapse every such location onto one node."""
     if feature_id:
         return f"gdelt:loc:{feature_id}"
+    if not country_code and not name:
+        return None
     return f"gdelt:loc:{country_code.lower()}:{_slug(name)}"
 
 

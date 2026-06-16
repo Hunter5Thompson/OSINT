@@ -35,3 +35,9 @@ def test_qdrant_point_id_is_deterministic_uuid5():
     # RFC-4122 Version 5
     parsed = UUID(pid_a)
     assert parsed.version == 5
+
+
+def test_location_id_all_empty_tuple_is_none():
+    # no feature_id, no country, no name -> no usable identity (WP-11);
+    # must NOT return a shared 'gdelt:loc::' key.
+    assert build_location_id(feature_id="", country_code="", name="") is None

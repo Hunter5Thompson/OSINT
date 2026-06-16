@@ -1,6 +1,7 @@
-"""GDELT-Event-Geo backfill. The stored canonical parquet is geo-stripped, so
-re-fetch the RAW export slices, parse action_geo, and write OCCURRED_AT for
-events that already exist in Neo4j. Idempotent + resumable (per-slice)."""
+"""GDELT-Event-Geo backfill. Events ingested before the geo-carrying transform
+landed (2026-06-14) are geoless in Neo4j even though the RAW export carries valid
+action_geo, so re-fetch the RAW export slices, parse action_geo, and write
+OCCURRED_AT for those pre-existing events. Idempotent + resumable (per-slice)."""
 from __future__ import annotations
 
 import tempfile
@@ -47,19 +48,26 @@ def export_url_for(slice_id: str) -> str:
 
 
 def build_geo_row(raw: dict[str, Any]) -> dict[str, Any] | None:
-    if raw.get("action_geo_lat") is None or raw.get("action_geo_long") is None:
+    lat = raw.get("action_geo_lat")
+    lon = raw.get("action_geo_long")
+    if lat is None or lon is None:
+        return None
+    if lat == 0.0 and lon == 0.0:  # GDELT null-island sentinel (WP-11) — not a real place
+        return None
+    loc_key = build_location_id(
+        str(raw.get("action_geo_feature_id") or ""),
+        raw.get("action_geo_country_code") or "",
+        raw.get("action_geo_fullname") or "",
+    )
+    if loc_key is None:  # no usable identity -> geoless rather than a shared empty key
         return None
     return {
         "event_id": build_event_id(raw["global_event_id"]),
-        "loc_key": build_location_id(
-            str(raw.get("action_geo_feature_id") or ""),
-            raw.get("action_geo_country_code") or "",
-            raw.get("action_geo_fullname") or "",
-        ),
+        "loc_key": loc_key,
         "name": raw.get("action_geo_fullname"),
         "country": raw.get("action_geo_country_code"),
-        "lat": raw["action_geo_lat"],
-        "lon": raw["action_geo_long"],
+        "lat": lat,
+        "lon": lon,
     }
 
 
