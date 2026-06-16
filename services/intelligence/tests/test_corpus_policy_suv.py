@@ -21,6 +21,14 @@ def test_keeps_valid_analysis_pairs():
     assert validate_lane(rows, "analysis") == rows
 
 
+def test_drops_notebook_with_wrong_source_type():
+    rows = [
+        _r(notebook_id="nb1", source_type="notebooklm"),  # valid -> keep
+        _r(notebook_id="nb2", source_type="rss"),         # wrong type -> drop
+    ]
+    assert validate_lane(rows, "analysis") == [rows[0]]
+
+
 def test_drops_mismatched_pairs():
     rows = [
         _r(source="rss", source_type="dataset"),         # leak attempt -> drop
