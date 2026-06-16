@@ -119,7 +119,7 @@ export function isPhotorealSurfacePick(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npm run test -- isPhotorealSurfacePick`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -475,17 +475,27 @@ function load(rel: string) {
 }
 
 describe("capital coverage", () => {
-  it("every countries-110m feature resolves to a capital or is an explicit exception", () => {
+  it("every real countries-110m feature resolves to a capital or is an explicit exception", () => {
+    const topo = load("countries-110m.json");
     const endo = load("country-endonyms.json");
     const topoIndex: Record<string, string | null> = endo._topoIndex;
     const countries: Record<string, { capital: { name: string; lat: number; lon: number } | null }> =
       endo.countries;
 
+    // Derive each feature's lookup key EXACTLY like useCountryHitTest does at
+    // runtime — f.id ?? properties.name — so this asserts real topo coverage
+    // (and catches a missing _topoIndex entry), not the index against itself.
+    const geometries: Array<{ id?: string | number; properties?: { name?: string } }> =
+      topo.objects.countries.geometries;
+    const keys = geometries.map((g) =>
+      g.id != null ? String(g.id) : (g.properties?.name ?? ""),
+    );
+
     const missing: string[] = [];
-    for (const [m49, iso3] of Object.entries(topoIndex)) {
-      if (CAPITAL_EXCEPTIONS.has(m49)) continue;
-      const datum = iso3 ? countries[iso3] : undefined;
-      const cap = datum?.capital;
+    for (const key of keys) {
+      if (CAPITAL_EXCEPTIONS.has(key)) continue;
+      const iso3 = topoIndex[key] ?? null; // must be in the index AND mapped to ISO3
+      const cap = iso3 ? countries[iso3]?.capital : null;
       const ok =
         !!cap &&
         typeof cap.name === "string" &&
@@ -494,7 +504,7 @@ describe("capital coverage", () => {
         Math.abs(cap.lat) <= 90 &&
         Number.isFinite(cap.lon) &&
         Math.abs(cap.lon) <= 180;
-      if (!ok) missing.push(m49);
+      if (!ok) missing.push(key);
     }
     expect(missing).toEqual([]);
   });
@@ -879,8 +889,38 @@ Add the new props to the `<ChronikTimeline ... />` element (alongside the existi
       onStepBack={() => stepBy(-1)}
       onStepForward={() => stepBy(1)}
       onReverse={() => { ensureReplay(); setSpeed(signedSpeed(magnitude, -1)); play(); }}
-      onForward={() => { if (mode === "replay") setSpeed(signedSpeed(magnitude, 1)); play(); }}
+      onForward={() => { setSpeed(signedSpeed(magnitude, 1)); play(); }}
       onSetSpeedMagnitude={(m) => setSpeed(signedSpeed(m, speed < 0 ? -1 : 1))}
+```
+
+`onForward` ALWAYS sets a positive speed (not just in replay), so a prior Reverse
+can never leave `speed < 0` behind — in live the clock ignores the multiplier, but
+the `speed` STATE must not stay negative or the UI would keep showing reverse and a
+later replay window would inherit a backward multiplier.
+
+Also reset direction to forward wherever forward/live intent is implied. In the
+EXISTING `enterReplay` helper (brush-created window plays forward by default):
+
+```tsx
+  const enterReplay = (startMs: number, endMs: number, cursorTarget: number) => {
+    setBrush({ startMs, endMs });
+    setReplayWindow(startMs, endMs);
+    setMode("replay");
+    setSpeed(Math.abs(speed) || 1); // fresh brush window plays forward
+    seek(cursorTarget);
+  };
+```
+
+And in the EXISTING `onNow` handler (NOW = live + forward), add the reset before `play()`:
+
+```tsx
+      onNow={() => {
+        setBrush(null);
+        seek(Date.now());
+        setMode("live");
+        setSpeed(Math.abs(speed) || 1); // clear any leftover reverse direction
+        play();
+      }}
 ```
 
 - [ ] **Step 4: Extend the ScrubberMount test**
@@ -919,6 +959,16 @@ Add these cases to `src/components/time/__tests__/ScrubberMount.test.tsx` (insid
     const after = Cesium.JulianDate.toDate(clock.currentTime).getTime();
     expect(after).toBeGreaterThan(before);
   });
+
+  it("NOW after reverse clears the reverse direction (speed back to positive)", () => {
+    vi.spyOn(api, "getTimeHistogram").mockResolvedValue(HIST as never);
+    const { viewer, clock } = fakeClockViewer();
+    const Comp = wrap(viewer, { onSelectEvent: vi.fn(), onTimelineData: vi.fn() });
+    render(<Comp />);
+    act(() => { fireEvent.click(screen.getByLabelText("reverse play")); });
+    act(() => { fireEvent.click(screen.getByLabelText("now")); });
+    expect(clock.multiplier).toBeGreaterThan(0); // no stale negative multiplier
+  });
 ```
 
 - [ ] **Step 5: Run tests + type-check**
@@ -932,7 +982,8 @@ Expected: PASS; type-check clean.
 git add services/frontend/src/components/time/ChronikTimeline.tsx \
         services/frontend/src/components/time/ChronikTimeline.css \
         services/frontend/src/components/time/ScrubberMount.tsx \
-        services/frontend/src/components/time/__tests__/ScrubberMount.test.tsx
+        services/frontend/src/components/time/__tests__/ScrubberMount.test.tsx \
+        services/frontend/src/components/time/__tests__/ChronikTimeline.test.tsx
 git commit -m "feat(time): full timeslider transport — reverse/forward play, steps, speed (P1)"
 ```
 
