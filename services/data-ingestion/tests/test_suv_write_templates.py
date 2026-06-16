@@ -1,0 +1,18 @@
+from suv_structured.write_templates import LINK_COMPANY_COUNTRY, UPSERT_COMPANY
+
+
+def test_upsert_company_is_org_typed_and_alias_append_dedup():
+    assert 'MERGE (c:Entity {name: $name, type: "ORGANIZATION"})' in UPSERT_COMPANY
+    # aliases appended + de-duplicated, never overwritten
+    assert "coalesce(c.aliases, [])" in UPSERT_COMPANY
+    # nullable scalars preserved on null param (no blind clobber)
+    assert "c.hq_country = coalesce($hq_country, c.hq_country)" in UPSERT_COMPANY
+    assert 'c.sector = "defense"' in UPSERT_COMPANY
+
+
+def test_link_company_country_is_match_only_for_country():
+    assert "[r:HEADQUARTERED_IN]" in LINK_COMPANY_COUNTRY
+    # country endpoint is MATCH-ed, never MERGE-d (no phantom countries)
+    assert 'MATCH (co:Entity {type: "COUNTRY"})' in LINK_COMPANY_COUNTRY
+    assert "MERGE (co" not in LINK_COMPANY_COUNTRY
+    assert "MERGE (c)-[r:HEADQUARTERED_IN]->(co)" in LINK_COMPANY_COUNTRY
