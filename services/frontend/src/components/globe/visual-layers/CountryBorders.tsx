@@ -5,6 +5,13 @@ import { feature as topojsonFeature } from "topojson-client";
 /** Wider than the old 0.6 (screen-space px) so the line reads over photoreal terrain. */
 export const BORDER_WIDTH = 2.0;
 
+/** Border primitive render options. allowPicking:false so a click on a border line
+ *  never swallows the country hit-test (P3 pick-through); BOTH drapes over terrain + 3D tiles. */
+export const BORDER_PRIMITIVE_OPTIONS = {
+  classificationType: Cesium.ClassificationType.BOTH,
+  allowPicking: false,
+} as const;
+
 /** Pure: a GeoJSON ring of [lon,lat] pairs -> Cartesian3 positions. */
 export function ringToPositions(ring: number[][]): Cesium.Cartesian3[] {
   return ring.map((coord) => Cesium.Cartesian3.fromDegrees(coord[0]!, coord[1]!));
@@ -61,16 +68,16 @@ export function CountryBorders({ viewer, visible }: Props) {
       // Re-check after the synchronous build (React 19 StrictMode cleanup race).
       if (cancelled || viewer.isDestroyed()) return;
 
+      // Drape over BOTH world terrain and the Google photoreal 3D tiles, so the
+      // border is never occluded by the surface in front of it (the P2 bug).
       const primitive = new Cesium.GroundPolylinePrimitive({
         geometryInstances: instances,
         appearance: new Cesium.PolylineMaterialAppearance({
           material: Cesium.Material.fromType("Color", { color: lineColor }),
         }),
-        // Drape over BOTH world terrain and the Google photoreal 3D tiles, so the
-        // border is never occluded by the surface in front of it (the P2 bug).
-        classificationType: Cesium.ClassificationType.BOTH,
+        ...BORDER_PRIMITIVE_OPTIONS,
       });
-      viewer.scene.primitives.add(primitive);
+      viewer.scene.groundPrimitives.add(primitive);
       primitiveRef.current = primitive;
     })().catch((e) => console.error("CountryBorders load failed:", e));
 
@@ -80,7 +87,7 @@ export function CountryBorders({ viewer, visible }: Props) {
       primitiveRef.current = null;
       if (!primitive || viewer.isDestroyed()) return;
       try {
-        viewer.scene.primitives.remove(primitive);
+        viewer.scene.groundPrimitives.remove(primitive);
       } catch {
         /* primitive already destroyed via viewer teardown */
       }
