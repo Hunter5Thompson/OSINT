@@ -44,8 +44,9 @@ const callsStyle: CSSProperties = {
 
 const hypothesisStyle: CSSProperties = {
   fontFamily: '"Instrument Serif", serif',
-  fontStyle: "italic",
-  fontSize: "12px",
+  fontStyle: "normal",
+  fontSize: "15px",
+  lineHeight: 1.5,
   color: "var(--bone)",
   borderTop: "1px solid var(--granite)",
   paddingTop: "0.5rem",

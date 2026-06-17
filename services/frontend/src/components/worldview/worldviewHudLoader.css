@@ -227,11 +227,16 @@
 .cartouche-circle { right: 30%; top: 40%; text-align: right; color: var(--bone); font-family: "Hanken Grotesk", sans-serif; }
 .cartouche-headline { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: 20px; }
 .cartouche-sub { font-family: "Martian Mono", monospace; font-size: 9px; color: var(--ash); letter-spacing: .14em; }
-.cartouche-country { right: 36px; top: 46%; transform: translateY(-50%); text-align: right; color: var(--bone); font-family: "Hanken Grotesk", sans-serif; }
+.cartouche-country { left: 48px; top: 46%; transform: translateY(-50%); text-align: left; color: var(--bone); font-family: "Hanken Grotesk", sans-serif; max-width: calc(100vw - 430px); }
 .cartouche-endonyms { font-size: 11px; line-height: 1.35; color: rgba(212,205,192,0.8); margin-bottom: 6px; }
 .cartouche-title { margin: 0; font-weight: 300; font-size: 96px; line-height: .95; letter-spacing: -.02em; color: #fafafa; text-shadow: 0 0 24px rgba(0,0,0,.4); }
 .cartouche-cyrillic { font-weight: 300; font-size: 34px; color: var(--amber); margin-top: 4px; }
 .cartouche-endo { font-family: "Hanken Grotesk", sans-serif; font-weight: 300; font-size: 11px; opacity: 0.7; line-height: 1.3; }
+
+@media (max-width: 768px) {
+  .cartouche-country { left: 16px; top: 38%; max-width: calc(100vw - 32px); }
+  .cartouche-title { font-size: 56px; }
+}
 
 .country-header { padding: 14px 18px; font-family: "Hanken Grotesk", sans-serif; }
 .country-title { margin: 4px 0 12px; font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: 22px; color: var(--bone); }

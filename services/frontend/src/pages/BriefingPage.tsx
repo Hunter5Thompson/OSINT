@@ -4,6 +4,7 @@ import { MuninLoader } from "../components/worldview/MuninLoader";
 import { useIntel } from "../hooks/useIntel";
 import {
   createReport,
+  deleteReport,
   getReportMessages,
   getReports,
   updateReport,
@@ -14,6 +15,7 @@ import type {
   ReportMessage,
   ReportRecord,
 } from "../types";
+import { applyDelete, runDeleteDossier } from "./briefingDelete";
 import "./briefingPage.css";
 
 type AccentTone = DossierMetric["tone"];
@@ -66,6 +68,10 @@ export function BriefingPage() {
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string>("");
+  const reportsRef = useRef(reports);
+  reportsRef.current = reports;
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   const [filter, setFilter] = useState("");
   const [expandedBody, setExpandedBody] = useState(false);
 
@@ -276,6 +282,28 @@ export function BriefingPage() {
     navigate(`/worldview?${params.toString()}`);
   };
 
+  const deleteDossier = async (report: ReportRecord) => {
+    const outcome = await runDeleteDossier({
+      report,
+      confirm: (m) => window.confirm(m),
+      deleteReportFn: deleteReport,
+    });
+    if (outcome.status === "deleted") {
+      // apply against the LATEST state (the await may have raced with other updates)
+      const next = applyDelete(reportsRef.current, selectedIdRef.current, outcome.droppedId);
+      setReports(next.reports);
+      setSelectedId(next.selectedId);
+      setChatByReport((prev) => {
+        const copy = { ...prev };
+        delete copy[outcome.droppedId];
+        return copy;
+      });
+      setReportsError(null);
+    } else if (outcome.status === "error") {
+      setReportsError(normalizeError(outcome.error));
+    }
+  };
+
   const askMunin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedReport || muninOffline || muninLoading) return;
@@ -437,7 +465,17 @@ export function BriefingPage() {
                 >
                   ▸ Promote to Worldview
                 </button>
+                <button
+                  type="button"
+                  className="briefing-link briefing-link--danger"
+                  onClick={() => void deleteDossier(selectedReport)}
+                >
+                  ▸ Delete dossier
+                </button>
               </div>
+              {reportsError ? (
+                <div className="mono briefing-action-error" role="alert">{reportsError}</div>
+              ) : null}
             </section>
 
             {expandedBody ? (

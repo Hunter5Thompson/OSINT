@@ -3,6 +3,7 @@ import type { TimelineGeoEvent } from "../../types";
 import { useTime } from "../../state/TimeContext";
 import { useTimeHistogram } from "../../hooks/useTimeHistogram";
 import { ChronikTimeline } from "./ChronikTimeline";
+import { signedSpeed, stepTargetMs, stepWindow, type Direction } from "./transport";
 
 type Preset = "24h" | "7d" | "30d";
 
@@ -30,7 +31,7 @@ interface ScrubberMountProps {
 // rolling preset window, click=pause+seek vs drag=brush, and lifts geo_events + the active
 // fade window up to WorldviewPage.
 export function ScrubberMount({ onSelectEvent, onTimelineData }: ScrubberMountProps) {
-  const { mode, cursorMs, playing, seek, pause, play, setMode, setReplayWindow } = useTime();
+  const { mode, cursorMs, playing, speed, seek, pause, play, setMode, setReplayWindow, setSpeed } = useTime();
 
   const [preset, setPreset] = useState<Preset>("7d");
   const [coarse, setCoarse] = useState(() => rollingWindow(PRESET_SPAN_MS["7d"]));
@@ -70,7 +71,27 @@ export function ScrubberMount({ onSelectEvent, onTimelineData }: ScrubberMountPr
     setBrush({ startMs, endMs });
     setReplayWindow(startMs, endMs);
     setMode("replay");
+    setSpeed(Math.abs(speed) || 1); // fresh brush window plays forward
     seek(cursorTarget);
+  };
+
+  const coarseStartMs = Date.parse(coarse.tStart);
+  const coarseEndMs = Date.parse(coarse.tEnd);
+  const bucketCount = data?.buckets?.length ?? 120;
+  const magnitude = Math.abs(speed) || 1;
+
+  const ensureReplay = () => {
+    if (mode !== "replay") {
+      setBrush({ startMs: coarseStartMs, endMs: coarseEndMs });
+      setReplayWindow(coarseStartMs, coarseEndMs);
+      setMode("replay");
+    }
+  };
+
+  const stepBy = (dir: Direction) => {
+    const win = stepWindow(mode === "replay", brush, coarseStartMs, coarseEndMs);
+    pause();
+    seek(stepTargetMs(cursorMs, win.startMs, win.endMs, bucketCount, dir));
   };
 
   return (
@@ -97,9 +118,16 @@ export function ScrubberMount({ onSelectEvent, onTimelineData }: ScrubberMountPr
         setBrush(null);
         seek(Date.now());
         setMode("live");
+        setSpeed(Math.abs(speed) || 1); // clear any leftover reverse direction
         play();
       }}
       onPreset={setPreset}
+      speed={speed}
+      onStepBack={() => stepBy(-1)}
+      onStepForward={() => stepBy(1)}
+      onReverse={() => { ensureReplay(); setSpeed(signedSpeed(magnitude, -1)); play(); }}
+      onForward={() => { setSpeed(signedSpeed(magnitude, 1)); play(); }}
+      onSetSpeedMagnitude={(m) => setSpeed(signedSpeed(m, speed < 0 ? -1 : 1))}
     />
   );
 }

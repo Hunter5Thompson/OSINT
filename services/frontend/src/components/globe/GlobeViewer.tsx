@@ -10,6 +10,7 @@ interface GlobeViewerProps {
   activeShader: ShaderType;
   showCountryBorders: boolean;
   showCityBuildings: boolean;
+  onPhotorealTilesetReady?: (tileset: Cesium.Cesium3DTileset | null) => void;
 }
 
 export function GlobeViewer({
@@ -18,6 +19,7 @@ export function GlobeViewer({
   activeShader,
   showCountryBorders,
   showCityBuildings,
+  onPhotorealTilesetReady,
 }: GlobeViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
@@ -76,11 +78,19 @@ export function GlobeViewer({
       if (viewer.isDestroyed()) return;
       tileset.maximumScreenSpaceError = 2;
       tileset.show = showBuildingsRef.current;
+      (tileset as unknown as { _odinPhotoreal?: boolean })._odinPhotoreal = true;
       viewer.scene.primitives.add(tileset);
       buildingsTilesetRef.current = tileset;
+      onPhotorealTilesetReady?.(tileset);
     };
 
-    void Cesium.createGooglePhotorealistic3DTileset()
+    // Load Google Photorealistic 3D Tiles via the Cesium ion asset (2275207),
+    // NOT createGooglePhotorealistic3DTileset(): since Cesium 1.120 the no-arg
+    // helper requires a Google Maps API key (GoogleMaps.defaultApiKey) and
+    // rejects without one — we only have an ion token, so the helper silently
+    // fell back to OSM buildings. fromIonAssetId brokers the Google session
+    // through the ion token (verified working) and is stable across 1.13x.
+    void Cesium.Cesium3DTileset.fromIonAssetId(2275207)
       .then((tileset) => {
         tileset.customShader = new Cesium.CustomShader({
           fragmentShaderText: /* glsl */ `
@@ -96,8 +106,10 @@ export function GlobeViewer({
         });
         addBuildingsTileset(tileset);
       })
-      .catch(() => {
-        // Fallback: OpenStreetMap buildings if Google Photorealistic is unavailable.
+      .catch((e) => {
+        // Surface WHY (the old silent catch hid the Cesium-1.139 key regression),
+        // then fall back to OpenStreetMap buildings if Google is unavailable.
+        console.warn("[GlobeViewer] Google photoreal 3D tiles unavailable, falling back to OSM:", e);
         void Cesium.createOsmBuildingsAsync()
           .then((tileset) => {
             tileset.style = new Cesium.Cesium3DTileStyle({
@@ -163,6 +175,7 @@ export function GlobeViewer({
       if (buildingsTilesetRef.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
         viewerRef.current.scene.primitives.remove(buildingsTilesetRef.current);
         buildingsTilesetRef.current = null;
+        onPhotorealTilesetReady?.(null);
       }
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {
         // Cesium walks scene.primitives on destroy and re-destroys each child.
@@ -180,7 +193,7 @@ export function GlobeViewer({
         viewerRef.current = null;
       }
     };
-  }, [cesiumToken, onViewerReady]);
+  }, [cesiumToken, onViewerReady, onPhotorealTilesetReady]);
 
   useEffect(() => {
     if (borderLayerRef.current) {

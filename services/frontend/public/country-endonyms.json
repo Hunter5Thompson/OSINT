@@ -1,182 +1,182 @@
 {
   "_topoIndex": {
-    "100": null,
-    "104": null,
-    "108": null,
-    "112": null,
-    "116": null,
-    "120": null,
+    "100": "BGR",
+    "104": "MMR",
+    "108": "BDI",
+    "112": "BLR",
+    "116": "KHM",
+    "120": "CMR",
     "124": "CAN",
-    "140": null,
-    "144": null,
-    "148": null,
-    "152": null,
-    "156": null,
-    "158": null,
-    "170": null,
-    "178": null,
-    "180": null,
-    "188": null,
-    "191": null,
-    "192": null,
-    "196": null,
+    "140": "CAF",
+    "144": "LKA",
+    "148": "TCD",
+    "152": "CHL",
+    "156": "CHN",
+    "158": "TWN",
+    "170": "COL",
+    "178": "COG",
+    "180": "COD",
+    "188": "CRI",
+    "191": "HRV",
+    "192": "CUB",
+    "196": "CYP",
     "203": "CZE",
-    "204": null,
-    "208": null,
-    "214": null,
-    "218": null,
-    "222": null,
-    "226": null,
-    "231": null,
-    "232": null,
-    "233": null,
-    "238": null,
-    "242": null,
-    "246": null,
-    "250": null,
-    "260": null,
-    "262": null,
-    "266": null,
-    "268": null,
-    "270": null,
-    "275": null,
+    "204": "BEN",
+    "208": "DNK",
+    "214": "DOM",
+    "218": "ECU",
+    "222": "SLV",
+    "226": "GNQ",
+    "231": "ETH",
+    "232": "ERI",
+    "233": "EST",
+    "238": "FLK",
+    "242": "FJI",
+    "246": "FIN",
+    "250": "FRA",
+    "260": "ATF",
+    "262": "DJI",
+    "266": "GAB",
+    "268": "GEO",
+    "270": "GMB",
+    "275": "PSE",
     "276": "DEU",
-    "288": null,
+    "288": "GHA",
     "300": "GRC",
-    "304": null,
-    "320": null,
-    "324": null,
-    "328": null,
-    "332": null,
-    "340": null,
-    "348": null,
-    "352": null,
+    "304": "GRL",
+    "320": "GTM",
+    "324": "GIN",
+    "328": "GUY",
+    "332": "HTI",
+    "340": "HND",
+    "348": "HUN",
+    "352": "ISL",
     "356": "IND",
-    "360": null,
-    "364": null,
-    "368": null,
-    "372": null,
-    "376": null,
-    "380": null,
-    "384": null,
-    "388": null,
+    "360": "IDN",
+    "364": "IRN",
+    "368": "IRQ",
+    "372": "IRL",
+    "376": "ISR",
+    "380": "ITA",
+    "384": "CIV",
+    "388": "JAM",
     "392": "JPN",
-    "398": null,
-    "400": null,
-    "404": null,
-    "408": null,
-    "410": null,
-    "414": null,
-    "417": null,
-    "418": null,
-    "422": null,
-    "426": null,
-    "428": null,
-    "430": null,
-    "434": null,
-    "440": null,
-    "442": null,
-    "450": null,
-    "454": null,
-    "458": null,
-    "466": null,
-    "478": null,
-    "484": null,
-    "496": null,
-    "498": null,
-    "499": null,
-    "504": null,
-    "508": null,
-    "512": null,
-    "516": null,
-    "524": null,
-    "528": null,
-    "540": null,
-    "548": null,
-    "554": null,
-    "558": null,
-    "562": null,
-    "566": null,
-    "578": null,
-    "586": null,
-    "591": null,
-    "598": null,
-    "600": null,
-    "604": null,
-    "608": null,
-    "616": null,
-    "620": null,
-    "624": null,
-    "626": null,
-    "630": null,
-    "634": null,
-    "642": null,
+    "398": "KAZ",
+    "400": "JOR",
+    "404": "KEN",
+    "408": "PRK",
+    "410": "KOR",
+    "414": "KWT",
+    "417": "KGZ",
+    "418": "LAO",
+    "422": "LBN",
+    "426": "LSO",
+    "428": "LVA",
+    "430": "LBR",
+    "434": "LBY",
+    "440": "LTU",
+    "442": "LUX",
+    "450": "MDG",
+    "454": "MWI",
+    "458": "MYS",
+    "466": "MLI",
+    "478": "MRT",
+    "484": "MEX",
+    "496": "MNG",
+    "498": "MDA",
+    "499": "MNE",
+    "504": "MAR",
+    "508": "MOZ",
+    "512": "OMN",
+    "516": "NAM",
+    "524": "NPL",
+    "528": "NLD",
+    "540": "NCL",
+    "548": "VUT",
+    "554": "NZL",
+    "558": "NIC",
+    "562": "NER",
+    "566": "NGA",
+    "578": "NOR",
+    "586": "PAK",
+    "591": "PAN",
+    "598": "PNG",
+    "600": "PRY",
+    "604": "PER",
+    "608": "PHL",
+    "616": "POL",
+    "620": "PRT",
+    "624": "GNB",
+    "626": "TLS",
+    "630": "PRI",
+    "634": "QAT",
+    "642": "ROU",
     "643": "RUS",
-    "646": null,
-    "682": null,
-    "686": null,
-    "688": null,
-    "694": null,
-    "703": null,
-    "704": null,
-    "705": null,
-    "706": null,
-    "710": null,
-    "716": null,
-    "724": null,
-    "728": null,
-    "729": null,
-    "732": null,
-    "740": null,
-    "748": null,
-    "752": null,
-    "756": null,
-    "760": null,
-    "762": null,
-    "764": null,
-    "768": null,
-    "780": null,
-    "784": null,
-    "788": null,
-    "792": null,
-    "795": null,
-    "800": null,
-    "804": null,
-    "807": null,
-    "818": null,
-    "826": null,
-    "834": null,
+    "646": "RWA",
+    "682": "SAU",
+    "686": "SEN",
+    "688": "SRB",
+    "694": "SLE",
+    "703": "SVK",
+    "704": "VNM",
+    "705": "SVN",
+    "706": "SOM",
+    "710": "ZAF",
+    "716": "ZWE",
+    "724": "ESP",
+    "728": "SSD",
+    "729": "SDN",
+    "732": "ESH",
+    "740": "SUR",
+    "748": "SWZ",
+    "752": "SWE",
+    "756": "CHE",
+    "760": "SYR",
+    "762": "TJK",
+    "764": "THA",
+    "768": "TGO",
+    "780": "TTO",
+    "784": "ARE",
+    "788": "TUN",
+    "792": "TUR",
+    "795": "TKM",
+    "800": "UGA",
+    "804": "UKR",
+    "807": "MKD",
+    "818": "EGY",
+    "826": "GBR",
+    "834": "TZA",
     "840": "USA",
-    "854": null,
-    "858": null,
-    "860": null,
-    "862": null,
-    "887": null,
-    "894": null,
-    "032": null,
-    "044": null,
-    "076": null,
-    "068": null,
-    "084": null,
-    "072": null,
-    "024": null,
-    "012": null,
-    "050": null,
-    "064": null,
-    "004": null,
-    "051": null,
-    "040": null,
-    "008": null,
-    "056": null,
-    "090": null,
-    "036": null,
-    "031": null,
-    "096": null,
+    "854": "BFA",
+    "858": "URY",
+    "860": "UZB",
+    "862": "VEN",
+    "887": "YEM",
+    "894": "ZMB",
+    "032": "ARG",
+    "044": "BHS",
+    "076": "BRA",
+    "068": "BOL",
+    "084": "BLZ",
+    "072": "BWA",
+    "024": "AGO",
+    "012": "DZA",
+    "050": "BGD",
+    "064": "BTN",
+    "004": "AFG",
+    "051": "ARM",
+    "040": "AUT",
+    "008": "ALB",
+    "056": "BEL",
+    "090": "SLB",
+    "036": "AUS",
+    "031": "AZE",
+    "096": "BRN",
     "010": null,
     "N. Cyprus": null,
     "Somaliland": null,
-    "070": null,
-    "Kosovo": null
+    "070": "BIH",
+    "Kosovo": "XKX"
   },
   "countries": {
     "USA": {
@@ -354,6 +354,2496 @@
         "name": "Prague",
         "lat": 50.0755,
         "lon": 14.4378
+      }
+    },
+    "BGR": {
+      "iso3": "BGR",
+      "m49": "100",
+      "names": {
+        "en": "Bulgaria",
+        "official": "Bulgaria",
+        "native": "Bulgaria",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Sofia",
+        "lat": 42.685295,
+        "lon": 23.314708
+      }
+    },
+    "MMR": {
+      "iso3": "MMR",
+      "m49": "104",
+      "names": {
+        "en": "Myanmar",
+        "official": "Myanmar",
+        "native": "Myanmar",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Naypyidaw",
+        "lat": 19.768503,
+        "lon": 96.116673
+      }
+    },
+    "BDI": {
+      "iso3": "BDI",
+      "m49": "108",
+      "names": {
+        "en": "Burundi",
+        "official": "Burundi",
+        "native": "Burundi",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bujumbura",
+        "lat": -3.376087,
+        "lon": 29.360006
+      }
+    },
+    "BLR": {
+      "iso3": "BLR",
+      "m49": "112",
+      "names": {
+        "en": "Belarus",
+        "official": "Belarus",
+        "native": "Belarus",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Minsk",
+        "lat": 53.901923,
+        "lon": 27.564681
+      }
+    },
+    "KHM": {
+      "iso3": "KHM",
+      "m49": "116",
+      "names": {
+        "en": "Cambodia",
+        "official": "Cambodia",
+        "native": "Cambodia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Phnom Penh",
+        "lat": 11.551976,
+        "lon": 104.914689
+      }
+    },
+    "CMR": {
+      "iso3": "CMR",
+      "m49": "120",
+      "names": {
+        "en": "Cameroon",
+        "official": "Cameroon",
+        "native": "Cameroon",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Yaoundé",
+        "lat": 3.868647,
+        "lon": 11.514705
+      }
+    },
+    "CAF": {
+      "iso3": "CAF",
+      "m49": "140",
+      "names": {
+        "en": "Central African Rep.",
+        "official": "Central African Rep.",
+        "native": "Central African Rep.",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bangui",
+        "lat": 4.366644,
+        "lon": 18.558288
+      }
+    },
+    "LKA": {
+      "iso3": "LKA",
+      "m49": "144",
+      "names": {
+        "en": "Sri Lanka",
+        "official": "Sri Lanka",
+        "native": "Sri Lanka",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Colombo",
+        "lat": 6.931966,
+        "lon": 79.857751
+      }
+    },
+    "TCD": {
+      "iso3": "TCD",
+      "m49": "148",
+      "names": {
+        "en": "Chad",
+        "official": "Chad",
+        "native": "Chad",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "N'Djamena",
+        "lat": 12.115042,
+        "lon": 15.047203
+      }
+    },
+    "CHL": {
+      "iso3": "CHL",
+      "m49": "152",
+      "names": {
+        "en": "Chile",
+        "official": "Chile",
+        "native": "Chile",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Santiago",
+        "lat": -33.448068,
+        "lon": -70.668987
+      }
+    },
+    "CHN": {
+      "iso3": "CHN",
+      "m49": "156",
+      "names": {
+        "en": "China",
+        "official": "China",
+        "native": "China",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Beijing",
+        "lat": 39.930838,
+        "lon": 116.38634
+      }
+    },
+    "TWN": {
+      "iso3": "TWN",
+      "m49": "158",
+      "names": {
+        "en": "Taiwan",
+        "official": "Taiwan",
+        "native": "Taiwan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Taipei",
+        "lat": 25.035833,
+        "lon": 121.568333
+      }
+    },
+    "COL": {
+      "iso3": "COL",
+      "m49": "170",
+      "names": {
+        "en": "Colombia",
+        "official": "Colombia",
+        "native": "Colombia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bogota",
+        "lat": 4.598369,
+        "lon": -74.08529
+      }
+    },
+    "COG": {
+      "iso3": "COG",
+      "m49": "178",
+      "names": {
+        "en": "Congo",
+        "official": "Congo",
+        "native": "Congo",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Brazzaville",
+        "lat": -4.25724,
+        "lon": 15.282744
+      }
+    },
+    "COD": {
+      "iso3": "COD",
+      "m49": "180",
+      "names": {
+        "en": "Dem. Rep. Congo",
+        "official": "Dem. Rep. Congo",
+        "native": "Dem. Rep. Congo",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Kinshasa",
+        "lat": -4.327778,
+        "lon": 15.313026
+      }
+    },
+    "CRI": {
+      "iso3": "CRI",
+      "m49": "188",
+      "names": {
+        "en": "Costa Rica",
+        "official": "Costa Rica",
+        "native": "Costa Rica",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "San José",
+        "lat": 9.936958,
+        "lon": -84.085997
+      }
+    },
+    "HRV": {
+      "iso3": "HRV",
+      "m49": "191",
+      "names": {
+        "en": "Croatia",
+        "official": "Croatia",
+        "native": "Croatia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Zagreb",
+        "lat": 45.800007,
+        "lon": 15.999995
+      }
+    },
+    "CUB": {
+      "iso3": "CUB",
+      "m49": "192",
+      "names": {
+        "en": "Cuba",
+        "official": "Cuba",
+        "native": "Cuba",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Havana",
+        "lat": 23.133905,
+        "lon": -82.366128
+      }
+    },
+    "CYP": {
+      "iso3": "CYP",
+      "m49": "196",
+      "names": {
+        "en": "Cyprus",
+        "official": "Cyprus",
+        "native": "Cyprus",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Nicosia",
+        "lat": 35.166677,
+        "lon": 33.366635
+      }
+    },
+    "BEN": {
+      "iso3": "BEN",
+      "m49": "204",
+      "names": {
+        "en": "Benin",
+        "official": "Benin",
+        "native": "Benin",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Cotonou",
+        "lat": 6.401954,
+        "lon": 2.518045
+      }
+    },
+    "DNK": {
+      "iso3": "DNK",
+      "m49": "208",
+      "names": {
+        "en": "Denmark",
+        "official": "Denmark",
+        "native": "Denmark",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "København",
+        "lat": 55.68051,
+        "lon": 12.56154
+      }
+    },
+    "DOM": {
+      "iso3": "DOM",
+      "m49": "214",
+      "names": {
+        "en": "Dominican Rep.",
+        "official": "Dominican Rep.",
+        "native": "Dominican Rep.",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Santo Domingo",
+        "lat": 18.472019,
+        "lon": -69.902031
+      }
+    },
+    "ECU": {
+      "iso3": "ECU",
+      "m49": "218",
+      "names": {
+        "en": "Ecuador",
+        "official": "Ecuador",
+        "native": "Ecuador",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Quito",
+        "lat": -0.213042,
+        "lon": -78.501997
+      }
+    },
+    "SLV": {
+      "iso3": "SLV",
+      "m49": "222",
+      "names": {
+        "en": "El Salvador",
+        "official": "El Salvador",
+        "native": "El Salvador",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "San Salvador",
+        "lat": 13.711948,
+        "lon": -89.204987
+      }
+    },
+    "GNQ": {
+      "iso3": "GNQ",
+      "m49": "226",
+      "names": {
+        "en": "Eq. Guinea",
+        "official": "Eq. Guinea",
+        "native": "Eq. Guinea",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Malabo",
+        "lat": 3.750015,
+        "lon": 8.783278
+      }
+    },
+    "ETH": {
+      "iso3": "ETH",
+      "m49": "231",
+      "names": {
+        "en": "Ethiopia",
+        "official": "Ethiopia",
+        "native": "Ethiopia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Addis Ababa",
+        "lat": 9.035256,
+        "lon": 38.698059
+      }
+    },
+    "ERI": {
+      "iso3": "ERI",
+      "m49": "232",
+      "names": {
+        "en": "Eritrea",
+        "official": "Eritrea",
+        "native": "Eritrea",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Asmara",
+        "lat": 15.333339,
+        "lon": 38.933324
+      }
+    },
+    "EST": {
+      "iso3": "EST",
+      "m49": "233",
+      "names": {
+        "en": "Estonia",
+        "official": "Estonia",
+        "native": "Estonia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Tallinn",
+        "lat": 59.433877,
+        "lon": 24.728041
+      }
+    },
+    "FLK": {
+      "iso3": "FLK",
+      "m49": "238",
+      "names": {
+        "en": "Falkland Is.",
+        "official": "Falkland Is.",
+        "native": "Falkland Is.",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Stanley",
+        "lat": -51.6938,
+        "lon": -57.8569
+      }
+    },
+    "FJI": {
+      "iso3": "FJI",
+      "m49": "242",
+      "names": {
+        "en": "Fiji",
+        "official": "Fiji",
+        "native": "Fiji",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Suva",
+        "lat": -18.133016,
+        "lon": 178.441707
+      }
+    },
+    "FIN": {
+      "iso3": "FIN",
+      "m49": "246",
+      "names": {
+        "en": "Finland",
+        "official": "Finland",
+        "native": "Finland",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Helsinki",
+        "lat": 60.177509,
+        "lon": 24.932181
+      }
+    },
+    "FRA": {
+      "iso3": "FRA",
+      "m49": "250",
+      "names": {
+        "en": "France",
+        "official": "France",
+        "native": "France",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Paris",
+        "lat": 48.868639,
+        "lon": 2.33139
+      }
+    },
+    "ATF": {
+      "iso3": "ATF",
+      "m49": "260",
+      "names": {
+        "en": "Fr. S. Antarctic Lands",
+        "official": "Fr. S. Antarctic Lands",
+        "native": "Fr. S. Antarctic Lands",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Port-aux-Français",
+        "lat": -49.3492,
+        "lon": 70.2197
+      }
+    },
+    "DJI": {
+      "iso3": "DJI",
+      "m49": "262",
+      "names": {
+        "en": "Djibouti",
+        "official": "Djibouti",
+        "native": "Djibouti",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Djibouti",
+        "lat": 11.595015,
+        "lon": 43.148002
+      }
+    },
+    "GAB": {
+      "iso3": "GAB",
+      "m49": "266",
+      "names": {
+        "en": "Gabon",
+        "official": "Gabon",
+        "native": "Gabon",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Libreville",
+        "lat": 0.385389,
+        "lon": 9.457965
+      }
+    },
+    "GEO": {
+      "iso3": "GEO",
+      "m49": "268",
+      "names": {
+        "en": "Georgia",
+        "official": "Georgia",
+        "native": "Georgia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Tbilisi",
+        "lat": 41.726956,
+        "lon": 44.78885
+      }
+    },
+    "GMB": {
+      "iso3": "GMB",
+      "m49": "270",
+      "names": {
+        "en": "Gambia",
+        "official": "Gambia",
+        "native": "Gambia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Banjul",
+        "lat": 13.453877,
+        "lon": -16.591702
+      }
+    },
+    "PSE": {
+      "iso3": "PSE",
+      "m49": "275",
+      "names": {
+        "en": "Palestine",
+        "official": "Palestine",
+        "native": "Palestine",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Ramallah",
+        "lat": 31.9038,
+        "lon": 35.2034
+      }
+    },
+    "GHA": {
+      "iso3": "GHA",
+      "m49": "288",
+      "names": {
+        "en": "Ghana",
+        "official": "Ghana",
+        "native": "Ghana",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Accra",
+        "lat": 5.551981,
+        "lon": -0.218662
+      }
+    },
+    "GRL": {
+      "iso3": "GRL",
+      "m49": "304",
+      "names": {
+        "en": "Greenland",
+        "official": "Greenland",
+        "native": "Greenland",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Nuuk",
+        "lat": 64.1836,
+        "lon": -51.6926
+      }
+    },
+    "GTM": {
+      "iso3": "GTM",
+      "m49": "320",
+      "names": {
+        "en": "Guatemala",
+        "official": "Guatemala",
+        "native": "Guatemala",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Guatemala City",
+        "lat": 14.623081,
+        "lon": -90.528911
+      }
+    },
+    "GIN": {
+      "iso3": "GIN",
+      "m49": "324",
+      "names": {
+        "en": "Guinea",
+        "official": "Guinea",
+        "native": "Guinea",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Conakry",
+        "lat": 9.533469,
+        "lon": -13.682181
+      }
+    },
+    "GUY": {
+      "iso3": "GUY",
+      "m49": "328",
+      "names": {
+        "en": "Guyana",
+        "official": "Guyana",
+        "native": "Guyana",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Georgetown",
+        "lat": 6.801974,
+        "lon": -58.167029
+      }
+    },
+    "HTI": {
+      "iso3": "HTI",
+      "m49": "332",
+      "names": {
+        "en": "Haiti",
+        "official": "Haiti",
+        "native": "Haiti",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Port-au-Prince",
+        "lat": 18.542971,
+        "lon": -72.33798
+      }
+    },
+    "HND": {
+      "iso3": "HND",
+      "m49": "340",
+      "names": {
+        "en": "Honduras",
+        "official": "Honduras",
+        "native": "Honduras",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Tegucigalpa",
+        "lat": 14.103991,
+        "lon": -87.219475
+      }
+    },
+    "HUN": {
+      "iso3": "HUN",
+      "m49": "348",
+      "names": {
+        "en": "Hungary",
+        "official": "Hungary",
+        "native": "Hungary",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Budapest",
+        "lat": 47.501952,
+        "lon": 19.081375
+      }
+    },
+    "ISL": {
+      "iso3": "ISL",
+      "m49": "352",
+      "names": {
+        "en": "Iceland",
+        "official": "Iceland",
+        "native": "Iceland",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Reykjavík",
+        "lat": 64.150024,
+        "lon": -21.950015
+      }
+    },
+    "IDN": {
+      "iso3": "IDN",
+      "m49": "360",
+      "names": {
+        "en": "Indonesia",
+        "official": "Indonesia",
+        "native": "Indonesia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Jakarta",
+        "lat": -6.172472,
+        "lon": 106.827492
+      }
+    },
+    "IRN": {
+      "iso3": "IRN",
+      "m49": "364",
+      "names": {
+        "en": "Iran",
+        "official": "Iran",
+        "native": "Iran",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Tehran",
+        "lat": 35.673889,
+        "lon": 51.422398
+      }
+    },
+    "IRQ": {
+      "iso3": "IRQ",
+      "m49": "368",
+      "names": {
+        "en": "Iraq",
+        "official": "Iraq",
+        "native": "Iraq",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Baghdad",
+        "lat": 33.340594,
+        "lon": 44.391923
+      }
+    },
+    "IRL": {
+      "iso3": "IRL",
+      "m49": "372",
+      "names": {
+        "en": "Ireland",
+        "official": "Ireland",
+        "native": "Ireland",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Dublin",
+        "lat": 53.335007,
+        "lon": -6.250852
+      }
+    },
+    "ISR": {
+      "iso3": "ISR",
+      "m49": "376",
+      "names": {
+        "en": "Israel",
+        "official": "Israel",
+        "native": "Israel",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Jerusalem",
+        "lat": 31.778408,
+        "lon": 35.206626
+      }
+    },
+    "ITA": {
+      "iso3": "ITA",
+      "m49": "380",
+      "names": {
+        "en": "Italy",
+        "official": "Italy",
+        "native": "Italy",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Rome",
+        "lat": 41.897902,
+        "lon": 12.481313
+      }
+    },
+    "CIV": {
+      "iso3": "CIV",
+      "m49": "384",
+      "names": {
+        "en": "Côte d'Ivoire",
+        "official": "Côte d'Ivoire",
+        "native": "Côte d'Ivoire",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Yamoussoukro",
+        "lat": 6.818381,
+        "lon": -5.275503
+      }
+    },
+    "JAM": {
+      "iso3": "JAM",
+      "m49": "388",
+      "names": {
+        "en": "Jamaica",
+        "official": "Jamaica",
+        "native": "Jamaica",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Kingston",
+        "lat": 17.977077,
+        "lon": -76.767434
+      }
+    },
+    "KAZ": {
+      "iso3": "KAZ",
+      "m49": "398",
+      "names": {
+        "en": "Kazakhstan",
+        "official": "Kazakhstan",
+        "native": "Kazakhstan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Nur-Sultan",
+        "lat": 51.181125,
+        "lon": 71.427774
+      }
+    },
+    "JOR": {
+      "iso3": "JOR",
+      "m49": "400",
+      "names": {
+        "en": "Jordan",
+        "official": "Jordan",
+        "native": "Jordan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Amman",
+        "lat": 31.951971,
+        "lon": 35.931354
+      }
+    },
+    "KEN": {
+      "iso3": "KEN",
+      "m49": "404",
+      "names": {
+        "en": "Kenya",
+        "official": "Kenya",
+        "native": "Kenya",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Nairobi",
+        "lat": -1.281401,
+        "lon": 36.814711
+      }
+    },
+    "PRK": {
+      "iso3": "PRK",
+      "m49": "408",
+      "names": {
+        "en": "North Korea",
+        "official": "North Korea",
+        "native": "North Korea",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Pyongyang",
+        "lat": 39.021385,
+        "lon": 125.752745
+      }
+    },
+    "KOR": {
+      "iso3": "KOR",
+      "m49": "410",
+      "names": {
+        "en": "South Korea",
+        "official": "South Korea",
+        "native": "South Korea",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Seoul",
+        "lat": 37.568295,
+        "lon": 126.997785
+      }
+    },
+    "KWT": {
+      "iso3": "KWT",
+      "m49": "414",
+      "names": {
+        "en": "Kuwait",
+        "official": "Kuwait",
+        "native": "Kuwait",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Kuwait City",
+        "lat": 29.371664,
+        "lon": 47.976355
+      }
+    },
+    "KGZ": {
+      "iso3": "KGZ",
+      "m49": "417",
+      "names": {
+        "en": "Kyrgyzstan",
+        "official": "Kyrgyzstan",
+        "native": "Kyrgyzstan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bishkek",
+        "lat": 42.875025,
+        "lon": 74.583258
+      }
+    },
+    "LAO": {
+      "iso3": "LAO",
+      "m49": "418",
+      "names": {
+        "en": "Laos",
+        "official": "Laos",
+        "native": "Laos",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Vientiane",
+        "lat": 17.966693,
+        "lon": 102.59998
+      }
+    },
+    "LBN": {
+      "iso3": "LBN",
+      "m49": "422",
+      "names": {
+        "en": "Lebanon",
+        "official": "Lebanon",
+        "native": "Lebanon",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Beirut",
+        "lat": 33.873921,
+        "lon": 35.507762
+      }
+    },
+    "LSO": {
+      "iso3": "LSO",
+      "m49": "426",
+      "names": {
+        "en": "Lesotho",
+        "official": "Lesotho",
+        "native": "Lesotho",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Maseru",
+        "lat": -29.316674,
+        "lon": 27.483273
+      }
+    },
+    "LVA": {
+      "iso3": "LVA",
+      "m49": "428",
+      "names": {
+        "en": "Latvia",
+        "official": "Latvia",
+        "native": "Latvia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Riga",
+        "lat": 56.950024,
+        "lon": 24.099965
+      }
+    },
+    "LBR": {
+      "iso3": "LBR",
+      "m49": "430",
+      "names": {
+        "en": "Liberia",
+        "official": "Liberia",
+        "native": "Liberia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Monrovia",
+        "lat": 6.314582,
+        "lon": -10.79966
+      }
+    },
+    "LBY": {
+      "iso3": "LBY",
+      "m49": "434",
+      "names": {
+        "en": "Libya",
+        "official": "Libya",
+        "native": "Libya",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Tripoli",
+        "lat": 32.8925,
+        "lon": 13.180012
+      }
+    },
+    "LTU": {
+      "iso3": "LTU",
+      "m49": "440",
+      "names": {
+        "en": "Lithuania",
+        "official": "Lithuania",
+        "native": "Lithuania",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Vilnius",
+        "lat": 54.683366,
+        "lon": 25.316635
+      }
+    },
+    "LUX": {
+      "iso3": "LUX",
+      "m49": "442",
+      "names": {
+        "en": "Luxembourg",
+        "official": "Luxembourg",
+        "native": "Luxembourg",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Luxembourg",
+        "lat": 49.61166,
+        "lon": 6.130003
+      }
+    },
+    "MDG": {
+      "iso3": "MDG",
+      "m49": "450",
+      "names": {
+        "en": "Madagascar",
+        "official": "Madagascar",
+        "native": "Madagascar",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Antananarivo",
+        "lat": -18.914692,
+        "lon": 47.514678
+      }
+    },
+    "MWI": {
+      "iso3": "MWI",
+      "m49": "454",
+      "names": {
+        "en": "Malawi",
+        "official": "Malawi",
+        "native": "Malawi",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Lilongwe",
+        "lat": -13.983295,
+        "lon": 33.783302
+      }
+    },
+    "MYS": {
+      "iso3": "MYS",
+      "m49": "458",
+      "names": {
+        "en": "Malaysia",
+        "official": "Malaysia",
+        "native": "Malaysia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Kuala Lumpur",
+        "lat": 3.168612,
+        "lon": 101.698037
+      }
+    },
+    "MLI": {
+      "iso3": "MLI",
+      "m49": "466",
+      "names": {
+        "en": "Mali",
+        "official": "Mali",
+        "native": "Mali",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bamako",
+        "lat": 12.651961,
+        "lon": -8.001985
+      }
+    },
+    "MRT": {
+      "iso3": "MRT",
+      "m49": "478",
+      "names": {
+        "en": "Mauritania",
+        "official": "Mauritania",
+        "native": "Mauritania",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Nouakchott",
+        "lat": 18.086427,
+        "lon": -15.97534
+      }
+    },
+    "MEX": {
+      "iso3": "MEX",
+      "m49": "484",
+      "names": {
+        "en": "Mexico",
+        "official": "Mexico",
+        "native": "Mexico",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Mexico City",
+        "lat": 19.444388,
+        "lon": -99.132934
+      }
+    },
+    "MNG": {
+      "iso3": "MNG",
+      "m49": "496",
+      "names": {
+        "en": "Mongolia",
+        "official": "Mongolia",
+        "native": "Mongolia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Ulaanbaatar",
+        "lat": 47.918619,
+        "lon": 106.91467
+      }
+    },
+    "MDA": {
+      "iso3": "MDA",
+      "m49": "498",
+      "names": {
+        "en": "Moldova",
+        "official": "Moldova",
+        "native": "Moldova",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Chișinău",
+        "lat": 47.005024,
+        "lon": 28.857711
+      }
+    },
+    "MNE": {
+      "iso3": "MNE",
+      "m49": "499",
+      "names": {
+        "en": "Montenegro",
+        "official": "Montenegro",
+        "native": "Montenegro",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Podgorica",
+        "lat": 42.465973,
+        "lon": 19.266307
+      }
+    },
+    "MAR": {
+      "iso3": "MAR",
+      "m49": "504",
+      "names": {
+        "en": "Morocco",
+        "official": "Morocco",
+        "native": "Morocco",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Rabat",
+        "lat": 34.025307,
+        "lon": -6.836408
+      }
+    },
+    "MOZ": {
+      "iso3": "MOZ",
+      "m49": "508",
+      "names": {
+        "en": "Mozambique",
+        "official": "Mozambique",
+        "native": "Mozambique",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Maputo",
+        "lat": -25.953332,
+        "lon": 32.587217
+      }
+    },
+    "OMN": {
+      "iso3": "OMN",
+      "m49": "512",
+      "names": {
+        "en": "Oman",
+        "official": "Oman",
+        "native": "Oman",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Muscat",
+        "lat": 23.613325,
+        "lon": 58.593312
+      }
+    },
+    "NAM": {
+      "iso3": "NAM",
+      "m49": "516",
+      "names": {
+        "en": "Namibia",
+        "official": "Namibia",
+        "native": "Namibia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Windhoek",
+        "lat": -22.570006,
+        "lon": 17.083546
+      }
+    },
+    "NPL": {
+      "iso3": "NPL",
+      "m49": "524",
+      "names": {
+        "en": "Nepal",
+        "official": "Nepal",
+        "native": "Nepal",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Kathmandu",
+        "lat": 27.718638,
+        "lon": 85.314696
+      }
+    },
+    "NLD": {
+      "iso3": "NLD",
+      "m49": "528",
+      "names": {
+        "en": "Netherlands",
+        "official": "Netherlands",
+        "native": "Netherlands",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Amsterdam",
+        "lat": 52.351915,
+        "lon": 4.914694
+      }
+    },
+    "NCL": {
+      "iso3": "NCL",
+      "m49": "540",
+      "names": {
+        "en": "New Caledonia",
+        "official": "New Caledonia",
+        "native": "New Caledonia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Nouméa",
+        "lat": -22.2758,
+        "lon": 166.458
+      }
+    },
+    "VUT": {
+      "iso3": "VUT",
+      "m49": "548",
+      "names": {
+        "en": "Vanuatu",
+        "official": "Vanuatu",
+        "native": "Vanuatu",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Port Vila",
+        "lat": -17.73335,
+        "lon": 168.316641
+      }
+    },
+    "NZL": {
+      "iso3": "NZL",
+      "m49": "554",
+      "names": {
+        "en": "New Zealand",
+        "official": "New Zealand",
+        "native": "New Zealand",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Wellington",
+        "lat": -41.299988,
+        "lon": 174.783266
+      }
+    },
+    "NIC": {
+      "iso3": "NIC",
+      "m49": "558",
+      "names": {
+        "en": "Nicaragua",
+        "official": "Nicaragua",
+        "native": "Nicaragua",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Managua",
+        "lat": 12.154962,
+        "lon": -86.270438
+      }
+    },
+    "NER": {
+      "iso3": "NER",
+      "m49": "562",
+      "names": {
+        "en": "Niger",
+        "official": "Niger",
+        "native": "Niger",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Niamey",
+        "lat": 13.518652,
+        "lon": 2.11471
+      }
+    },
+    "NGA": {
+      "iso3": "NGA",
+      "m49": "566",
+      "names": {
+        "en": "Nigeria",
+        "official": "Nigeria",
+        "native": "Nigeria",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Abuja",
+        "lat": 9.085279,
+        "lon": 7.531382
+      }
+    },
+    "NOR": {
+      "iso3": "NOR",
+      "m49": "578",
+      "names": {
+        "en": "Norway",
+        "official": "Norway",
+        "native": "Norway",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Oslo",
+        "lat": 59.918636,
+        "lon": 10.748033
+      }
+    },
+    "PAK": {
+      "iso3": "PAK",
+      "m49": "586",
+      "names": {
+        "en": "Pakistan",
+        "official": "Pakistan",
+        "native": "Pakistan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Islamabad",
+        "lat": 33.701942,
+        "lon": 73.164689
+      }
+    },
+    "PAN": {
+      "iso3": "PAN",
+      "m49": "591",
+      "names": {
+        "en": "Panama",
+        "official": "Panama",
+        "native": "Panama",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Panama City",
+        "lat": 8.969963,
+        "lon": -79.534983
+      }
+    },
+    "PNG": {
+      "iso3": "PNG",
+      "m49": "598",
+      "names": {
+        "en": "Papua New Guinea",
+        "official": "Papua New Guinea",
+        "native": "Papua New Guinea",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Port Moresby",
+        "lat": -9.464708,
+        "lon": 147.192504
+      }
+    },
+    "PRY": {
+      "iso3": "PRY",
+      "m49": "600",
+      "names": {
+        "en": "Paraguay",
+        "official": "Paraguay",
+        "native": "Paraguay",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Asunción",
+        "lat": -25.294457,
+        "lon": -57.643451
+      }
+    },
+    "PER": {
+      "iso3": "PER",
+      "m49": "604",
+      "names": {
+        "en": "Peru",
+        "official": "Peru",
+        "native": "Peru",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Lima",
+        "lat": -12.046067,
+        "lon": -77.052008
+      }
+    },
+    "PHL": {
+      "iso3": "PHL",
+      "m49": "608",
+      "names": {
+        "en": "Philippines",
+        "official": "Philippines",
+        "native": "Philippines",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Manila",
+        "lat": 14.606105,
+        "lon": 120.980271
+      }
+    },
+    "POL": {
+      "iso3": "POL",
+      "m49": "616",
+      "names": {
+        "en": "Poland",
+        "official": "Poland",
+        "native": "Poland",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Warsaw",
+        "lat": 52.251947,
+        "lon": 20.998054
+      }
+    },
+    "PRT": {
+      "iso3": "PRT",
+      "m49": "620",
+      "names": {
+        "en": "Portugal",
+        "official": "Portugal",
+        "native": "Portugal",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Lisbon",
+        "lat": 38.724669,
+        "lon": -9.146812
+      }
+    },
+    "GNB": {
+      "iso3": "GNB",
+      "m49": "624",
+      "names": {
+        "en": "Guinea-Bissau",
+        "official": "Guinea-Bissau",
+        "native": "Guinea-Bissau",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bissau",
+        "lat": 11.865024,
+        "lon": -15.598361
+      }
+    },
+    "TLS": {
+      "iso3": "TLS",
+      "m49": "626",
+      "names": {
+        "en": "Timor-Leste",
+        "official": "Timor-Leste",
+        "native": "Timor-Leste",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Dili",
+        "lat": -8.559388,
+        "lon": 125.579456
+      }
+    },
+    "PRI": {
+      "iso3": "PRI",
+      "m49": "630",
+      "names": {
+        "en": "Puerto Rico",
+        "official": "Puerto Rico",
+        "native": "Puerto Rico",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "San Juan",
+        "lat": 18.4655,
+        "lon": -66.1057
+      }
+    },
+    "QAT": {
+      "iso3": "QAT",
+      "m49": "634",
+      "names": {
+        "en": "Qatar",
+        "official": "Qatar",
+        "native": "Qatar",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Doha",
+        "lat": 25.286556,
+        "lon": 51.532968
+      }
+    },
+    "ROU": {
+      "iso3": "ROU",
+      "m49": "642",
+      "names": {
+        "en": "Romania",
+        "official": "Romania",
+        "native": "Romania",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bucharest",
+        "lat": 44.435318,
+        "lon": 26.098001
+      }
+    },
+    "RWA": {
+      "iso3": "RWA",
+      "m49": "646",
+      "names": {
+        "en": "Rwanda",
+        "official": "Rwanda",
+        "native": "Rwanda",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Kigali",
+        "lat": -1.951644,
+        "lon": 30.058586
+      }
+    },
+    "SAU": {
+      "iso3": "SAU",
+      "m49": "682",
+      "names": {
+        "en": "Saudi Arabia",
+        "official": "Saudi Arabia",
+        "native": "Saudi Arabia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Riyadh",
+        "lat": 24.642779,
+        "lon": 46.770796
+      }
+    },
+    "SEN": {
+      "iso3": "SEN",
+      "m49": "686",
+      "names": {
+        "en": "Senegal",
+        "official": "Senegal",
+        "native": "Senegal",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Dakar",
+        "lat": 14.717778,
+        "lon": -17.475076
+      }
+    },
+    "SRB": {
+      "iso3": "SRB",
+      "m49": "688",
+      "names": {
+        "en": "Serbia",
+        "official": "Serbia",
+        "native": "Serbia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Belgrade",
+        "lat": 44.820591,
+        "lon": 20.466045
+      }
+    },
+    "SLE": {
+      "iso3": "SLE",
+      "m49": "694",
+      "names": {
+        "en": "Sierra Leone",
+        "official": "Sierra Leone",
+        "native": "Sierra Leone",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Freetown",
+        "lat": 8.471957,
+        "lon": -13.236162
+      }
+    },
+    "SVK": {
+      "iso3": "SVK",
+      "m49": "703",
+      "names": {
+        "en": "Slovakia",
+        "official": "Slovakia",
+        "native": "Slovakia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bratislava",
+        "lat": 48.150018,
+        "lon": 17.116981
+      }
+    },
+    "VNM": {
+      "iso3": "VNM",
+      "m49": "704",
+      "names": {
+        "en": "Vietnam",
+        "official": "Vietnam",
+        "native": "Vietnam",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Hanoi",
+        "lat": 21.035273,
+        "lon": 105.848068
+      }
+    },
+    "SVN": {
+      "iso3": "SVN",
+      "m49": "705",
+      "names": {
+        "en": "Slovenia",
+        "official": "Slovenia",
+        "native": "Slovenia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Ljubljana",
+        "lat": 46.055288,
+        "lon": 14.514969
+      }
+    },
+    "SOM": {
+      "iso3": "SOM",
+      "m49": "706",
+      "names": {
+        "en": "Somalia",
+        "official": "Somalia",
+        "native": "Somalia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Mogadishu",
+        "lat": 2.068627,
+        "lon": 45.364732
+      }
+    },
+    "ZAF": {
+      "iso3": "ZAF",
+      "m49": "710",
+      "names": {
+        "en": "South Africa",
+        "official": "South Africa",
+        "native": "South Africa",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bloemfontein",
+        "lat": -29.119994,
+        "lon": 26.229913
+      }
+    },
+    "ZWE": {
+      "iso3": "ZWE",
+      "m49": "716",
+      "names": {
+        "en": "Zimbabwe",
+        "official": "Zimbabwe",
+        "native": "Zimbabwe",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Harare",
+        "lat": -17.815844,
+        "lon": 31.042764
+      }
+    },
+    "ESP": {
+      "iso3": "ESP",
+      "m49": "724",
+      "names": {
+        "en": "Spain",
+        "official": "Spain",
+        "native": "Spain",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Madrid",
+        "lat": 40.401972,
+        "lon": -3.685298
+      }
+    },
+    "SSD": {
+      "iso3": "SSD",
+      "m49": "728",
+      "names": {
+        "en": "S. Sudan",
+        "official": "S. Sudan",
+        "native": "S. Sudan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Juba",
+        "lat": 4.829975,
+        "lon": 31.580026
+      }
+    },
+    "SDN": {
+      "iso3": "SDN",
+      "m49": "729",
+      "names": {
+        "en": "Sudan",
+        "official": "Sudan",
+        "native": "Sudan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Khartoum",
+        "lat": 15.590024,
+        "lon": 32.532233
+      }
+    },
+    "ESH": {
+      "iso3": "ESH",
+      "m49": "732",
+      "names": {
+        "en": "W. Sahara",
+        "official": "W. Sahara",
+        "native": "W. Sahara",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Laâyoune",
+        "lat": 27.1536,
+        "lon": -13.2033
+      }
+    },
+    "SUR": {
+      "iso3": "SUR",
+      "m49": "740",
+      "names": {
+        "en": "Suriname",
+        "official": "Suriname",
+        "native": "Suriname",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Paramaribo",
+        "lat": 5.83503,
+        "lon": -55.167031
+      }
+    },
+    "SWZ": {
+      "iso3": "SWZ",
+      "m49": "748",
+      "names": {
+        "en": "eSwatini",
+        "official": "eSwatini",
+        "native": "eSwatini",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Mbabane",
+        "lat": -26.316651,
+        "lon": 31.133335
+      }
+    },
+    "SWE": {
+      "iso3": "SWE",
+      "m49": "752",
+      "names": {
+        "en": "Sweden",
+        "official": "Sweden",
+        "native": "Sweden",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Stockholm",
+        "lat": 59.352706,
+        "lon": 18.095389
+      }
+    },
+    "CHE": {
+      "iso3": "CHE",
+      "m49": "756",
+      "names": {
+        "en": "Switzerland",
+        "official": "Switzerland",
+        "native": "Switzerland",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bern",
+        "lat": 46.916683,
+        "lon": 7.466976
+      }
+    },
+    "SYR": {
+      "iso3": "SYR",
+      "m49": "760",
+      "names": {
+        "en": "Syria",
+        "official": "Syria",
+        "native": "Syria",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Damascus",
+        "lat": 33.50198,
+        "lon": 36.29805
+      }
+    },
+    "TJK": {
+      "iso3": "TJK",
+      "m49": "762",
+      "names": {
+        "en": "Tajikistan",
+        "official": "Tajikistan",
+        "native": "Tajikistan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Dushanbe",
+        "lat": 38.560035,
+        "lon": 68.773879
+      }
+    },
+    "THA": {
+      "iso3": "THA",
+      "m49": "764",
+      "names": {
+        "en": "Thailand",
+        "official": "Thailand",
+        "native": "Thailand",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bangkok",
+        "lat": 13.751945,
+        "lon": 100.514699
+      }
+    },
+    "TGO": {
+      "iso3": "TGO",
+      "m49": "768",
+      "names": {
+        "en": "Togo",
+        "official": "Togo",
+        "native": "Togo",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Lomé",
+        "lat": 6.133883,
+        "lon": 1.220811
+      }
+    },
+    "TTO": {
+      "iso3": "TTO",
+      "m49": "780",
+      "names": {
+        "en": "Trinidad and Tobago",
+        "official": "Trinidad and Tobago",
+        "native": "Trinidad and Tobago",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Port-of-Spain",
+        "lat": 10.651997,
+        "lon": -61.517031
+      }
+    },
+    "ARE": {
+      "iso3": "ARE",
+      "m49": "784",
+      "names": {
+        "en": "United Arab Emirates",
+        "official": "United Arab Emirates",
+        "native": "United Arab Emirates",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Abu Dhabi",
+        "lat": 24.466684,
+        "lon": 54.366593
+      }
+    },
+    "TUN": {
+      "iso3": "TUN",
+      "m49": "788",
+      "names": {
+        "en": "Tunisia",
+        "official": "Tunisia",
+        "native": "Tunisia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Tunis",
+        "lat": 36.802778,
+        "lon": 10.179678
+      }
+    },
+    "TUR": {
+      "iso3": "TUR",
+      "m49": "792",
+      "names": {
+        "en": "Turkey",
+        "official": "Turkey",
+        "native": "Turkey",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Ankara",
+        "lat": 39.929184,
+        "lon": 32.862446
+      }
+    },
+    "TKM": {
+      "iso3": "TKM",
+      "m49": "795",
+      "names": {
+        "en": "Turkmenistan",
+        "official": "Turkmenistan",
+        "native": "Turkmenistan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Ashgabat",
+        "lat": 37.949995,
+        "lon": 58.383299
+      }
+    },
+    "UGA": {
+      "iso3": "UGA",
+      "m49": "800",
+      "names": {
+        "en": "Uganda",
+        "official": "Uganda",
+        "native": "Uganda",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Kampala",
+        "lat": 0.318605,
+        "lon": 32.581378
+      }
+    },
+    "UKR": {
+      "iso3": "UKR",
+      "m49": "804",
+      "names": {
+        "en": "Ukraine",
+        "official": "Ukraine",
+        "native": "Ukraine",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Kyiv",
+        "lat": 50.435313,
+        "lon": 30.514682
+      }
+    },
+    "MKD": {
+      "iso3": "MKD",
+      "m49": "807",
+      "names": {
+        "en": "North Macedonia",
+        "official": "North Macedonia",
+        "native": "North Macedonia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Skopje",
+        "lat": 42.000006,
+        "lon": 21.433462
+      }
+    },
+    "EGY": {
+      "iso3": "EGY",
+      "m49": "818",
+      "names": {
+        "en": "Egypt",
+        "official": "Egypt",
+        "native": "Egypt",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Cairo",
+        "lat": 30.051906,
+        "lon": 31.248022
+      }
+    },
+    "GBR": {
+      "iso3": "GBR",
+      "m49": "826",
+      "names": {
+        "en": "United Kingdom",
+        "official": "United Kingdom",
+        "native": "United Kingdom",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "London",
+        "lat": 51.501941,
+        "lon": -0.118668
+      }
+    },
+    "TZA": {
+      "iso3": "TZA",
+      "m49": "834",
+      "names": {
+        "en": "Tanzania",
+        "official": "Tanzania",
+        "native": "Tanzania",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Dar es Salaam",
+        "lat": -6.798067,
+        "lon": 39.266396
+      }
+    },
+    "BFA": {
+      "iso3": "BFA",
+      "m49": "854",
+      "names": {
+        "en": "Burkina Faso",
+        "official": "Burkina Faso",
+        "native": "Burkina Faso",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Ouagadougou",
+        "lat": 12.372262,
+        "lon": -1.52667
+      }
+    },
+    "URY": {
+      "iso3": "URY",
+      "m49": "858",
+      "names": {
+        "en": "Uruguay",
+        "official": "Uruguay",
+        "native": "Uruguay",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Montevideo",
+        "lat": -34.856096,
+        "lon": -56.172998
+      }
+    },
+    "UZB": {
+      "iso3": "UZB",
+      "m49": "860",
+      "names": {
+        "en": "Uzbekistan",
+        "official": "Uzbekistan",
+        "native": "Uzbekistan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Tashkent",
+        "lat": 41.313648,
+        "lon": 69.292987
+      }
+    },
+    "VEN": {
+      "iso3": "VEN",
+      "m49": "862",
+      "names": {
+        "en": "Venezuela",
+        "official": "Venezuela",
+        "native": "Venezuela",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Caracas",
+        "lat": 10.502944,
+        "lon": -66.918983
+      }
+    },
+    "YEM": {
+      "iso3": "YEM",
+      "m49": "887",
+      "names": {
+        "en": "Yemen",
+        "official": "Yemen",
+        "native": "Yemen",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Sanaa",
+        "lat": 15.356679,
+        "lon": 44.204648
+      }
+    },
+    "ZMB": {
+      "iso3": "ZMB",
+      "m49": "894",
+      "names": {
+        "en": "Zambia",
+        "official": "Zambia",
+        "native": "Zambia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Lusaka",
+        "lat": -15.414698,
+        "lon": 28.281382
+      }
+    },
+    "ARG": {
+      "iso3": "ARG",
+      "m49": "032",
+      "names": {
+        "en": "Argentina",
+        "official": "Argentina",
+        "native": "Argentina",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Buenos Aires",
+        "lat": -34.600556,
+        "lon": -58.399477
+      }
+    },
+    "BHS": {
+      "iso3": "BHS",
+      "m49": "044",
+      "names": {
+        "en": "Bahamas",
+        "official": "Bahamas",
+        "native": "Bahamas",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Nassau",
+        "lat": 25.08339,
+        "lon": -77.350044
+      }
+    },
+    "BRA": {
+      "iso3": "BRA",
+      "m49": "076",
+      "names": {
+        "en": "Brazil",
+        "official": "Brazil",
+        "native": "Brazil",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Brasília",
+        "lat": -15.781394,
+        "lon": -47.917998
+      }
+    },
+    "BOL": {
+      "iso3": "BOL",
+      "m49": "068",
+      "names": {
+        "en": "Bolivia",
+        "official": "Bolivia",
+        "native": "Bolivia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Sucre",
+        "lat": -19.040971,
+        "lon": -65.259516
+      }
+    },
+    "BLZ": {
+      "iso3": "BLZ",
+      "m49": "084",
+      "names": {
+        "en": "Belize",
+        "official": "Belize",
+        "native": "Belize",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Belmopan",
+        "lat": 17.252034,
+        "lon": -88.767073
+      }
+    },
+    "BWA": {
+      "iso3": "BWA",
+      "m49": "072",
+      "names": {
+        "en": "Botswana",
+        "official": "Botswana",
+        "native": "Botswana",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Gaborone",
+        "lat": -24.646314,
+        "lon": 25.911948
+      }
+    },
+    "AGO": {
+      "iso3": "AGO",
+      "m49": "024",
+      "names": {
+        "en": "Angola",
+        "official": "Angola",
+        "native": "Angola",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Luanda",
+        "lat": -8.83634,
+        "lon": 13.232481
+      }
+    },
+    "DZA": {
+      "iso3": "DZA",
+      "m49": "012",
+      "names": {
+        "en": "Algeria",
+        "official": "Algeria",
+        "native": "Algeria",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Algiers",
+        "lat": 36.765011,
+        "lon": 3.048607
+      }
+    },
+    "BGD": {
+      "iso3": "BGD",
+      "m49": "050",
+      "names": {
+        "en": "Bangladesh",
+        "official": "Bangladesh",
+        "native": "Bangladesh",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Dhaka",
+        "lat": 23.725006,
+        "lon": 90.406634
+      }
+    },
+    "BTN": {
+      "iso3": "BTN",
+      "m49": "064",
+      "names": {
+        "en": "Bhutan",
+        "official": "Bhutan",
+        "native": "Bhutan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Thimphu",
+        "lat": 27.472986,
+        "lon": 89.639014
+      }
+    },
+    "AFG": {
+      "iso3": "AFG",
+      "m49": "004",
+      "names": {
+        "en": "Afghanistan",
+        "official": "Afghanistan",
+        "native": "Afghanistan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Kabul",
+        "lat": 34.518636,
+        "lon": 69.181314
+      }
+    },
+    "ARM": {
+      "iso3": "ARM",
+      "m49": "051",
+      "names": {
+        "en": "Armenia",
+        "official": "Armenia",
+        "native": "Armenia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Yerevan",
+        "lat": 40.183097,
+        "lon": 44.511606
+      }
+    },
+    "AUT": {
+      "iso3": "AUT",
+      "m49": "040",
+      "names": {
+        "en": "Austria",
+        "official": "Austria",
+        "native": "Austria",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Vienna",
+        "lat": 48.201961,
+        "lon": 16.364693
+      }
+    },
+    "ALB": {
+      "iso3": "ALB",
+      "m49": "008",
+      "names": {
+        "en": "Albania",
+        "official": "Albania",
+        "native": "Albania",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Tirana",
+        "lat": 41.327541,
+        "lon": 19.818883
+      }
+    },
+    "BEL": {
+      "iso3": "BEL",
+      "m49": "056",
+      "names": {
+        "en": "Belgium",
+        "official": "Belgium",
+        "native": "Belgium",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Brussels",
+        "lat": 50.835263,
+        "lon": 4.331371
+      }
+    },
+    "SLB": {
+      "iso3": "SLB",
+      "m49": "090",
+      "names": {
+        "en": "Solomon Is.",
+        "official": "Solomon Is.",
+        "native": "Solomon Is.",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Honiara",
+        "lat": -9.437994,
+        "lon": 159.949766
+      }
+    },
+    "AUS": {
+      "iso3": "AUS",
+      "m49": "036",
+      "names": {
+        "en": "Australia",
+        "official": "Australia",
+        "native": "Australia",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Canberra",
+        "lat": -35.283029,
+        "lon": 149.129026
+      }
+    },
+    "AZE": {
+      "iso3": "AZE",
+      "m49": "031",
+      "names": {
+        "en": "Azerbaijan",
+        "official": "Azerbaijan",
+        "native": "Azerbaijan",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Baku",
+        "lat": 40.397218,
+        "lon": 49.860271
+      }
+    },
+    "BRN": {
+      "iso3": "BRN",
+      "m49": "096",
+      "names": {
+        "en": "Brunei",
+        "official": "Brunei",
+        "native": "Brunei",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Bandar Seri Begawan",
+        "lat": 4.883331,
+        "lon": 114.933284
+      }
+    },
+    "BIH": {
+      "iso3": "BIH",
+      "m49": "070",
+      "names": {
+        "en": "Bosnia and Herz.",
+        "official": "Bosnia and Herz.",
+        "native": "Bosnia and Herz.",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Sarajevo",
+        "lat": 43.850022,
+        "lon": 18.383002
+      }
+    },
+    "XKX": {
+      "iso3": "XKX",
+      "m49": "",
+      "names": {
+        "en": "Kosovo",
+        "official": "Kosovo",
+        "native": "Kosovo",
+        "endonyms": {}
+      },
+      "capital": {
+        "name": "Pristina",
+        "lat": 42.6727,
+        "lon": 21.1655
       }
     }
   }

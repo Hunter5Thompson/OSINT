@@ -133,6 +133,7 @@ function isLayerKey(value: string): value is keyof LayerVisibility {
 
 interface GlobeChildrenProps {
   viewer: Cesium.Viewer | null;
+  photorealTileset: Cesium.Cesium3DTileset | null;
   layers: LayerVisibility;
   setSelected: Dispatch<SetStateAction<Selected | null>>;
   onSelectEvent: (id: string) => void;
@@ -146,6 +147,7 @@ interface GlobeChildrenProps {
 
 function GlobeChildren({
   viewer,
+  photorealTileset,
   layers,
   setSelected,
   onSelectEvent,
@@ -274,6 +276,7 @@ function GlobeChildren({
       />
       <EventClickBridge
         viewer={viewer}
+        photorealTileset={photorealTileset}
         onCountrySelect={setSelected}
         onSelectEvent={onSelectEvent}
       />
@@ -388,10 +391,12 @@ function EventLayerBridge({
 // AND seeks to that event's time (pause+seek), per spec §5/§7.
 function EventClickBridge({
   viewer,
+  photorealTileset,
   onCountrySelect,
   onSelectEvent,
 }: {
   viewer: Cesium.Viewer | null;
+  photorealTileset: Cesium.Cesium3DTileset | null;
   onCountrySelect: Dispatch<SetStateAction<Selected | null>>;
   onSelectEvent: (id: string) => void;
 }) {
@@ -412,6 +417,7 @@ function EventClickBridge({
   return (
     <EntityClickHandler
       viewer={viewer}
+      photorealTileset={photorealTileset}
       onCountrySelect={onCountrySelect}
       onEventSelect={handleEventSelect}
     />
@@ -480,6 +486,7 @@ export function WorldviewPage() {
   const location = useLocation();
 
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
+  const [photorealTileset, setPhotorealTileset] = useState<Cesium.Cesium3DTileset | null>(null);
   const [config, setConfig] = useState<ClientConfig | null>(null);
   const [layers, setLayers] = useState<LayerVisibility>(DEFAULT_LAYERS);
   const [activeShader, setActiveShader] = useState<ShaderType>("none");
@@ -647,6 +654,7 @@ export function WorldviewPage() {
             activeShader={activeShader}
             showCountryBorders={layers.countryBorders}
             showCityBuildings={layers.cityBuildings}
+            onPhotorealTilesetReady={setPhotorealTileset}
           />
         </div>
 
@@ -671,6 +679,7 @@ export function WorldviewPage() {
         />
         <GlobeChildren
           viewer={viewer}
+          photorealTileset={photorealTileset}
           layers={layers}
           setSelected={setSelected}
           onSelectEvent={setSelectedEventId}

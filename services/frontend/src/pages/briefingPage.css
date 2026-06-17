@@ -320,6 +320,17 @@
   color: var(--amber);
 }
 
+.briefing-link--danger { color: var(--capital-red, #e63a26); }
+/* keep the danger colour on hover — the base .briefing-link:hover would amber-wash it */
+.briefing-link--danger:hover { color: var(--capital-red, #e63a26); }
+
+.briefing-action-error {
+  margin-top: 0.5rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: var(--capital-red, #e63a26);
+}
+
 .briefing-body-grid {
   margin-top: 0.95rem;
   display: grid;
@@ -421,6 +432,14 @@
 
 .briefing-chat-item p.serif {
   font-style: italic;
+}
+
+/* P7: Munin replies stay Instrument Serif (via .serif) but upright + larger.
+   Flat 15px (NOT 1rem — the root is 14px, so 1rem would miss the >=15px target). */
+.briefing-chat-item.is-munin p {
+  font-style: normal;
+  font-size: 15px;
+  line-height: 1.62;
 }
 
 .briefing-chat-refs {

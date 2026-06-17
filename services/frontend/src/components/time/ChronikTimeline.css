@@ -142,3 +142,14 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
+
+.chronik__speed {
+  height: 22px;
+  background: transparent;
+  color: var(--bone, #d4cdc0);
+  border: 1px solid var(--granite, #2a2720);
+  border-radius: 3px;
+  font-family: "Martian Mono", ui-monospace, monospace;
+  font-size: 10px;
+  padding: 0 4px;
+}

@@ -18,6 +18,12 @@ const base = {
   geoLocatedCount: 3, totalCount: 210,
   onSeek: vi.fn(), onBrush: vi.fn(), onSelectNotable: vi.fn(),
   onTogglePlay: vi.fn(), onNow: vi.fn(), onPreset: vi.fn(),
+  speed: 1,
+  onStepBack: vi.fn(),
+  onStepForward: vi.fn(),
+  onReverse: vi.fn(),
+  onForward: vi.fn(),
+  onSetSpeedMagnitude: vi.fn(),
 };
 
 describe("ChronikTimeline", () => {
