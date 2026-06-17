@@ -4,7 +4,7 @@ import { useSpotlight, type FocusTarget } from "./SpotlightContext";
 interface EndonymJson {
   countries: Record<string, {
     iso3: string;
-    names: { en: string; official: string; native: string; endonyms: Record<string, string> };
+    names?: { en: string; official: string; native: string; endonyms: Record<string, string> };
   }>;
 }
 
@@ -22,7 +22,7 @@ export function renderCartouche(t: FocusTarget, endo?: EndonymJson | null): Reac
   }
   // country
   const datum = t.iso3 && endo ? endo.countries[t.iso3] : null;
-  const endonyms = datum?.names.endonyms ?? {};
+  const endonyms = datum?.names?.endonyms ?? {};
   const cyrillic = endonyms.ru ?? endonyms.uk ?? null;
   return (
     <div className="cartouche cartouche-country">
