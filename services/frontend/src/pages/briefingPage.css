@@ -434,6 +434,14 @@
   font-style: italic;
 }
 
+/* P7: Munin replies stay Instrument Serif (via .serif) but upright + larger.
+   Flat 15px (NOT 1rem — the root is 14px, so 1rem would miss the >=15px target). */
+.briefing-chat-item.is-munin p {
+  font-style: normal;
+  font-size: 15px;
+  line-height: 1.62;
+}
+
 .briefing-chat-refs {
   margin-top: 0.38rem;
   display: flex;

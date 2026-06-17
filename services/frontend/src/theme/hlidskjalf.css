@@ -37,6 +37,16 @@
   src: url("/fonts/instrument-serif/InstrumentSerif-Italic-Bold.woff2") format("woff2");
 }
 
+/* Upright cut — used by the readability-tuned Munin text (P7). Without this,
+   `font-style: normal` on Instrument Serif would silently fall back to Times. */
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/instrument-serif/InstrumentSerif-Regular.woff2") format("woff2");
+}
+
 @font-face {
   font-family: "Hanken Grotesk";
   font-style: normal;
