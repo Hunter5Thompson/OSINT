@@ -3,7 +3,7 @@ import type { TimelineGeoEvent } from "../../types";
 import { useTime } from "../../state/TimeContext";
 import { useTimeHistogram } from "../../hooks/useTimeHistogram";
 import { ChronikTimeline } from "./ChronikTimeline";
-import { signedSpeed, stepTargetMs, type Direction } from "./transport";
+import { signedSpeed, stepTargetMs, stepWindow, type Direction } from "./transport";
 
 type Preset = "24h" | "7d" | "30d";
 
@@ -89,8 +89,9 @@ export function ScrubberMount({ onSelectEvent, onTimelineData }: ScrubberMountPr
   };
 
   const stepBy = (dir: Direction) => {
+    const win = stepWindow(mode === "replay", brush, coarseStartMs, coarseEndMs);
     pause();
-    seek(stepTargetMs(cursorMs, coarseStartMs, coarseEndMs, bucketCount, dir));
+    seek(stepTargetMs(cursorMs, win.startMs, win.endMs, bucketCount, dir));
   };
 
   return (

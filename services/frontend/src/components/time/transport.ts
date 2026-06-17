@@ -23,3 +23,14 @@ export function stepTargetMs(
   const next = currentMs + bucketMs * direction;
   return Math.min(rangeEndMs, Math.max(rangeStartMs, next));
 }
+
+/** The window a step should move within: the brushed replay window when one is
+ *  active, otherwise the coarse rolling range. Keeps steps inside the selection. */
+export function stepWindow(
+  inReplay: boolean,
+  brush: { startMs: number; endMs: number } | null,
+  coarseStartMs: number,
+  coarseEndMs: number,
+): { startMs: number; endMs: number } {
+  return inReplay && brush ? brush : { startMs: coarseStartMs, endMs: coarseEndMs };
+}
