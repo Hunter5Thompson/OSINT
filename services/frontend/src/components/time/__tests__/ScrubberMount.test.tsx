@@ -83,4 +83,51 @@ describe("ScrubberMount", () => {
     const cursorMs = Cesium.JulianDate.toDate(clock.currentTime).getTime();
     expect(Math.abs(cursorMs - Date.now())).toBeLessThan(3000); // re-pinned to now (gate)
   });
+
+  it("reverse-play sets a negative multiplier and animates", () => {
+    vi.spyOn(api, "getTimeHistogram").mockResolvedValue(HIST as never);
+    const { viewer, clock } = fakeClockViewer();
+    const Comp = wrap(viewer, { onSelectEvent: vi.fn(), onTimelineData: vi.fn() });
+    render(<Comp />);
+    act(() => { fireEvent.click(screen.getByLabelText("reverse play")); });
+    expect(clock.multiplier).toBeLessThan(0);
+    expect(clock.shouldAnimate).toBe(true);
+  });
+
+  it("forward-play after reverse restores a positive multiplier", () => {
+    vi.spyOn(api, "getTimeHistogram").mockResolvedValue(HIST as never);
+    const { viewer, clock } = fakeClockViewer();
+    const Comp = wrap(viewer, { onSelectEvent: vi.fn(), onTimelineData: vi.fn() });
+    render(<Comp />);
+    act(() => { fireEvent.click(screen.getByLabelText("reverse play")); });
+    act(() => { fireEvent.click(screen.getByLabelText("forward play")); });
+    expect(clock.multiplier).toBeGreaterThan(0);
+  });
+
+  it("step forward pauses and advances the cursor (deterministic, no wall-clock)", () => {
+    vi.spyOn(api, "getTimeHistogram").mockResolvedValue(HIST as never);
+    const { viewer, clock } = fakeClockViewer();
+    const Comp = wrap(viewer, { onSelectEvent: vi.fn(), onTimelineData: vi.fn() });
+    render(<Comp />);
+    act(() => {
+      const strip = screen.getByTestId("chronik-strip");
+      fireEvent.mouseDown(strip, { clientX: 0 });
+      fireEvent.mouseUp(strip, { clientX: 0 });
+    });
+    const atStart = Cesium.JulianDate.toDate(clock.currentTime).getTime();
+    act(() => { fireEvent.click(screen.getByLabelText("step forward")); });
+    expect(clock.shouldAnimate).toBe(false);
+    const after = Cesium.JulianDate.toDate(clock.currentTime).getTime();
+    expect(after).toBeGreaterThan(atStart);
+  });
+
+  it("NOW after reverse clears the reverse direction (speed back to positive)", () => {
+    vi.spyOn(api, "getTimeHistogram").mockResolvedValue(HIST as never);
+    const { viewer, clock } = fakeClockViewer();
+    const Comp = wrap(viewer, { onSelectEvent: vi.fn(), onTimelineData: vi.fn() });
+    render(<Comp />);
+    act(() => { fireEvent.click(screen.getByLabelText("reverse play")); });
+    act(() => { fireEvent.click(screen.getByLabelText("now")); });
+    expect(clock.multiplier).toBeGreaterThan(0);
+  });
 });

@@ -23,6 +23,12 @@ interface ChronikTimelineProps {
   onTogglePlay: () => void;
   onNow: () => void;
   onPreset: (p: Preset) => void;
+  speed: number; // signed clock speed (sign = direction, |value| = magnitude)
+  onStepBack: () => void;
+  onStepForward: () => void;
+  onReverse: () => void;
+  onForward: () => void;
+  onSetSpeedMagnitude: (magnitude: number) => void;
 }
 
 const DRAG_THRESHOLD_PX = 6;
@@ -37,6 +43,7 @@ function dotColor(rank: number): string {
 export function ChronikTimeline({
   buckets, notables, rangeStartMs, rangeEndMs, cursorMs, mode, playing, preset,
   geoLocatedCount, totalCount, onSeek, onBrush, onSelectNotable, onTogglePlay, onNow, onPreset,
+  speed, onStepBack, onStepForward, onReverse, onForward, onSetSpeedMagnitude,
 }: ChronikTimelineProps) {
   const stripRef = useRef<HTMLDivElement | null>(null);
   const dragStartXRef = useRef<number | null>(null);
@@ -92,9 +99,34 @@ export function ChronikTimeline({
     <section className="chronik" aria-label="chronik timeline">
       <div className="chronik__controls">
         <span className="chronik__mark"><b>§</b> CHRONIK</span>
+        <button type="button" className="chronik__btn" aria-label="step back" onClick={onStepBack}>«</button>
+        <button
+          type="button"
+          className={`chronik__btn${playing && speed < 0 ? " chronik__btn--on" : ""}`}
+          aria-label="reverse play"
+          onClick={onReverse}
+        >◀◀</button>
         <button type="button" className="chronik__btn" aria-label="toggle play" onClick={onTogglePlay}>
           {playing ? "⏸" : "▶"}
         </button>
+        <button
+          type="button"
+          className={`chronik__btn${playing && speed > 0 ? " chronik__btn--on" : ""}`}
+          aria-label="forward play"
+          onClick={onForward}
+        >▶▶</button>
+        <button type="button" className="chronik__btn" aria-label="step forward" onClick={onStepForward}>»</button>
+        <select
+          className="chronik__speed"
+          aria-label="speed"
+          value={Math.abs(speed)}
+          onChange={(e) => onSetSpeedMagnitude(Number(e.target.value))}
+        >
+          <option value={0.5}>0.5×</option>
+          <option value={1}>1×</option>
+          <option value={5}>5×</option>
+          <option value={20}>20×</option>
+        </select>
         <button type="button" className="chronik__btn" aria-label="now" onClick={onNow}>⏭ NOW</button>
         {PRESETS.map((p) => (
           <button
