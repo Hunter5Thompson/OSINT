@@ -24,8 +24,6 @@ export function applyDelete(
 }
 
 export interface DeleteDeps {
-  reports: ReportRecord[];
-  selectedId: string;
   report: ReportRecord;
   confirm: (message: string) => boolean;
   deleteReportFn: (id: string) => Promise<void>;
@@ -33,26 +31,21 @@ export interface DeleteDeps {
 
 export type DeleteOutcome =
   | { status: "cancelled" }
-  | { status: "deleted"; reports: ReportRecord[]; selectedId: string; droppedChatId: string }
+  | { status: "deleted"; droppedId: string }
   | { status: "error"; error: unknown };
 
-/** Confirm → delete via API → compute next state. Removes from state only on
- *  success; on failure returns `error` and the caller keeps its existing state. */
+/** Confirm → delete via API. Reports the dropped id on success; the caller
+ *  applies the deletion against the LATEST state. On failure returns `error`
+ *  and the caller keeps its existing state. */
 export async function runDeleteDossier(deps: DeleteDeps): Promise<DeleteOutcome> {
-  const { reports, selectedId, report, confirm, deleteReportFn } = deps;
+  const { report, confirm, deleteReportFn } = deps;
   if (!confirm(`Delete dossier "${report.title}"? This cannot be undone.`)) {
     return { status: "cancelled" };
   }
   try {
-    await deleteReportFn(report.id); // remove from state only after success
-    const next = applyDelete(reports, selectedId, report.id);
-    return {
-      status: "deleted",
-      reports: next.reports,
-      selectedId: next.selectedId,
-      droppedChatId: report.id,
-    };
+    await deleteReportFn(report.id);
+    return { status: "deleted", droppedId: report.id };
   } catch (error) {
-    return { status: "error", error }; // report stays in state
+    return { status: "error", error };
   }
 }

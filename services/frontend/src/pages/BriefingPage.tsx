@@ -15,7 +15,7 @@ import type {
   ReportMessage,
   ReportRecord,
 } from "../types";
-import { runDeleteDossier } from "./briefingDelete";
+import { applyDelete, runDeleteDossier } from "./briefingDelete";
 import "./briefingPage.css";
 
 type AccentTone = DossierMetric["tone"];
@@ -68,6 +68,10 @@ export function BriefingPage() {
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string>("");
+  const reportsRef = useRef(reports);
+  reportsRef.current = reports;
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   const [filter, setFilter] = useState("");
   const [expandedBody, setExpandedBody] = useState(false);
 
@@ -280,19 +284,19 @@ export function BriefingPage() {
 
   const deleteDossier = async (report: ReportRecord) => {
     const outcome = await runDeleteDossier({
-      reports,
-      selectedId,
       report,
       confirm: (m) => window.confirm(m),
       deleteReportFn: deleteReport,
     });
     if (outcome.status === "deleted") {
-      setReports(outcome.reports);
-      setSelectedId(outcome.selectedId);
+      // apply against the LATEST state (the await may have raced with other updates)
+      const next = applyDelete(reportsRef.current, selectedIdRef.current, outcome.droppedId);
+      setReports(next.reports);
+      setSelectedId(next.selectedId);
       setChatByReport((prev) => {
-        const next = { ...prev };
-        delete next[outcome.droppedChatId];
-        return next;
+        const copy = { ...prev };
+        delete copy[outcome.droppedId];
+        return copy;
       });
       setReportsError(null);
     } else if (outcome.status === "error") {

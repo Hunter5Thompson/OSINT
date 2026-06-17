@@ -28,34 +28,20 @@ describe("applyDelete (reducer)", () => {
 describe("runDeleteDossier (orchestrator)", () => {
   it("does nothing when the confirm dialog is declined", async () => {
     const deleteReportFn = vi.fn().mockResolvedValue(undefined);
-    const out = await runDeleteDossier({
-      reports, selectedId: "b", report: mk("b"),
-      confirm: () => false, deleteReportFn,
-    });
+    const out = await runDeleteDossier({ report: mk("b"), confirm: () => false, deleteReportFn });
     expect(out.status).toBe("cancelled");
     expect(deleteReportFn).not.toHaveBeenCalled();
   });
-  it("calls the API and removes the report on success", async () => {
+  it("calls the API and reports the dropped id on success", async () => {
     const deleteReportFn = vi.fn().mockResolvedValue(undefined);
-    const out = await runDeleteDossier({
-      reports, selectedId: "b", report: mk("b"),
-      confirm: () => true, deleteReportFn,
-    });
+    const out = await runDeleteDossier({ report: mk("b"), confirm: () => true, deleteReportFn });
     expect(deleteReportFn).toHaveBeenCalledWith("b");
     expect(out.status).toBe("deleted");
-    if (out.status === "deleted") {
-      expect(out.reports.map((x) => x.id)).toEqual(["a", "c"]);
-      expect(out.selectedId).toBe("c");
-      expect(out.droppedChatId).toBe("b");
-    }
+    if (out.status === "deleted") expect(out.droppedId).toBe("b");
   });
-  it("keeps the report when the API call fails", async () => {
+  it("keeps the report (no state change) when the API call fails", async () => {
     const deleteReportFn = vi.fn().mockRejectedValue(new Error("500"));
-    const out = await runDeleteDossier({
-      reports, selectedId: "b", report: mk("b"),
-      confirm: () => true, deleteReportFn,
-    });
+    const out = await runDeleteDossier({ report: mk("b"), confirm: () => true, deleteReportFn });
     expect(out.status).toBe("error");
-    expect("reports" in out).toBe(false);
   });
 });
