@@ -3,6 +3,7 @@ import * as Cesium from "cesium";
 import type { Selected } from "../worldview/InspectorPanel";
 import { useSpotlight } from "./spotlight/SpotlightContext";
 import { useCountryHitTest, hitTestCountry } from "./hooks/useCountryHitTest";
+import { isPhotorealSurfacePick } from "./isPhotorealSurfacePick";
 
 const SHIP_TYPES: Record<number, string> = {
   20: "Wing in ground", 30: "Fishing", 31: "Towing", 32: "Towing (large)",
@@ -19,6 +20,7 @@ function shipTypeLabel(code: number): string {
 
 interface EntityClickHandlerProps {
   viewer: Cesium.Viewer | null;
+  photorealTileset?: Cesium.Cesium3DTileset | null;
   onCountrySelect: (sel: Selected | null) => void;
   // Event-billboard click → open the new EventCallout (and seek if a time is known).
   onEventSelect?: (id: string, timeIso?: string) => void;
@@ -34,6 +36,7 @@ interface SelectedEntity {
 
 export function EntityClickHandler({
   viewer,
+  photorealTileset,
   onCountrySelect,
   onEventSelect,
 }: EntityClickHandlerProps) {
@@ -44,6 +47,8 @@ export function EntityClickHandler({
   // re-subscribing (the parent useTime() bridge re-renders at the ~4 Hz cursor cadence).
   const onEventSelectRef = useRef(onEventSelect);
   onEventSelectRef.current = onEventSelect;
+  const photorealTilesetRef = useRef(photorealTileset ?? null);
+  photorealTilesetRef.current = photorealTileset ?? null;
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -346,7 +351,10 @@ export function EntityClickHandler({
       // (FIRMS, MilAircraft, Datacenter, Refinery, EONET, GDACS) which feed
       // Spotlight via WorldviewPage's GlobeChildren wiring. Do NOT override
       // their dispatch with a country hit-test or a reset.
-      if (picked) {
+      // A picked primitive that isn't a known data-tag: if it's the photoreal
+      // 3D surface, fall through to the country hit-test (almanac works on the
+      // 3D/"geographic" map). Only a real UI/layer primitive aborts here.
+      if (picked && !isPhotorealSurfacePick(picked, photorealTilesetRef.current)) {
         return;
       }
 

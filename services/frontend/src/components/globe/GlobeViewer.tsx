@@ -10,6 +10,7 @@ interface GlobeViewerProps {
   activeShader: ShaderType;
   showCountryBorders: boolean;
   showCityBuildings: boolean;
+  onPhotorealTilesetReady?: (tileset: Cesium.Cesium3DTileset | null) => void;
 }
 
 export function GlobeViewer({
@@ -18,6 +19,7 @@ export function GlobeViewer({
   activeShader,
   showCountryBorders,
   showCityBuildings,
+  onPhotorealTilesetReady,
 }: GlobeViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
@@ -76,8 +78,10 @@ export function GlobeViewer({
       if (viewer.isDestroyed()) return;
       tileset.maximumScreenSpaceError = 2;
       tileset.show = showBuildingsRef.current;
+      (tileset as unknown as { _odinPhotoreal?: boolean })._odinPhotoreal = true;
       viewer.scene.primitives.add(tileset);
       buildingsTilesetRef.current = tileset;
+      onPhotorealTilesetReady?.(tileset);
     };
 
     void Cesium.createGooglePhotorealistic3DTileset()
@@ -163,6 +167,7 @@ export function GlobeViewer({
       if (buildingsTilesetRef.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
         viewerRef.current.scene.primitives.remove(buildingsTilesetRef.current);
         buildingsTilesetRef.current = null;
+        onPhotorealTilesetReady?.(null);
       }
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {
         // Cesium walks scene.primitives on destroy and re-destroys each child.
@@ -180,7 +185,7 @@ export function GlobeViewer({
         viewerRef.current = null;
       }
     };
-  }, [cesiumToken, onViewerReady]);
+  }, [cesiumToken, onViewerReady, onPhotorealTilesetReady]);
 
   useEffect(() => {
     if (borderLayerRef.current) {
