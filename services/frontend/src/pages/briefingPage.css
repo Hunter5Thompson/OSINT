@@ -320,6 +320,17 @@
   color: var(--amber);
 }
 
+.briefing-link--danger { color: var(--capital-red, #e63a26); }
+/* keep the danger colour on hover — the base .briefing-link:hover would amber-wash it */
+.briefing-link--danger:hover { color: var(--capital-red, #e63a26); }
+
+.briefing-action-error {
+  margin-top: 0.5rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: var(--capital-red, #e63a26);
+}
+
 .briefing-body-grid {
   margin-top: 0.95rem;
   display: grid;
