@@ -84,7 +84,13 @@ export function GlobeViewer({
       onPhotorealTilesetReady?.(tileset);
     };
 
-    void Cesium.createGooglePhotorealistic3DTileset()
+    // Load Google Photorealistic 3D Tiles via the Cesium ion asset (2275207),
+    // NOT createGooglePhotorealistic3DTileset(): since Cesium 1.120 the no-arg
+    // helper requires a Google Maps API key (GoogleMaps.defaultApiKey) and
+    // rejects without one — we only have an ion token, so the helper silently
+    // fell back to OSM buildings. fromIonAssetId brokers the Google session
+    // through the ion token (verified working) and is stable across 1.13x.
+    void Cesium.Cesium3DTileset.fromIonAssetId(2275207)
       .then((tileset) => {
         tileset.customShader = new Cesium.CustomShader({
           fragmentShaderText: /* glsl */ `
@@ -100,8 +106,10 @@ export function GlobeViewer({
         });
         addBuildingsTileset(tileset);
       })
-      .catch(() => {
-        // Fallback: OpenStreetMap buildings if Google Photorealistic is unavailable.
+      .catch((e) => {
+        // Surface WHY (the old silent catch hid the Cesium-1.139 key regression),
+        // then fall back to OpenStreetMap buildings if Google is unavailable.
+        console.warn("[GlobeViewer] Google photoreal 3D tiles unavailable, falling back to OSM:", e);
         void Cesium.createOsmBuildingsAsync()
           .then((tileset) => {
             tileset.style = new Cesium.Cesium3DTileStyle({
