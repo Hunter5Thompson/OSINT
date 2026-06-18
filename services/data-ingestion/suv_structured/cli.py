@@ -35,6 +35,15 @@ from suv_structured.build_equipment import (
     match_target_counts,
     resolve_equipment_build_inputs,
 )
+from suv_structured.build_procurements import (
+    ProcurementBuildGateError,
+    build_procurement_statements,
+    subject_candidate,
+)
+from suv_structured.build_procurements import (
+    build_qdrant_points as build_procurement_qdrant_points,
+)
+from suv_structured.contractors import split_contractors
 from suv_structured.equipment_parse import parse_weapon_systems
 from suv_structured.equipment_schemas import WeaponSystemRow
 from suv_structured.fetch import fetch_directory_markdown
@@ -45,6 +54,9 @@ from suv_structured.operators import (
     operators_by_slug,
 )
 from suv_structured.parse import parse_companies
+from suv_structured.procurement_parse import parse_procurements
+from suv_structured.procurement_schemas import ProcurementProgram
+from suv_structured.procurement_schemas import profile_text as program_profile
 from suv_structured.schemas import Company, profile_text
 from suv_structured.system_types import classify_system_type
 
@@ -62,6 +74,9 @@ EQUIPMENT_PAGES = {
 }
 EQUIPMENT_SEED = Path(__file__).parent / "seeds" / "suv_equipment.yaml"
 OPERATORS_SEED = Path(__file__).parent / "seeds" / "suv_operators.yaml"
+
+PROCUREMENTS_URL = "https://suv.report/modernisierungsvorhaben/"
+PROCUREMENTS_SEED = Path(__file__).parent / "seeds" / "suv_procurements.yaml"
 
 
 def _load_equipment_seed(path: Path) -> list[WeaponSystemRow]:
@@ -344,6 +359,206 @@ def equipment_build(dry_run: bool, approved_path: Path | None, report_out: Path)
             await write_neo4j(stmts, client=client, neo4j_http_url=settings.neo4j_http_url,
                               neo4j_user=u, neo4j_password=pw)
             click.echo(f"built {len(approved)} systems (neo4j stmts={len(stmts)}, qdrant=0)")
+    asyncio.run(_run())
+
+
+class _MatchItem:
+    """Minimal item for the procurement match surfaces. Exposes the attributes
+    build_match_report/_lookup_existing read (.name, .suv_url) plus the program
+    title it belongs to, so the dry-run report entries can be tagged per program."""
+
+    __slots__ = ("name", "suv_url", "program_title")
+
+    def __init__(self, name: str, suv_url: str, program_title: str) -> None:
+        self.name = name
+        self.suv_url = suv_url
+        self.program_title = program_title
+
+
+_SUBJECT_TYPES = ["WEAPON_SYSTEM", "AIRCRAFT", "VESSEL", "SATELLITE"]
+
+
+async def _fetch_equipment_node_names(
+    client: httpx.AsyncClient, neo4j_http_url: str, user: str, password: str,
+) -> tuple[set[str], dict[str, str]]:
+    """Fetch ALL existing equipment node names + their types from the graph.
+
+    Returns (names, type_by_name). Mirrors _lookup_existing's httpx/base64/tx-commit
+    plumbing. Used by `procurements build` to find subject candidates (the program's
+    title/typ mentioning an existing weapon system) and to type the CONCERNS_SYSTEM
+    edge correctly. Unlike _lookup_existing this is a full enumeration, not a name probe."""
+    import base64
+    cypher = ("MATCH (e:Entity) WHERE e.type IN $types "
+              "RETURN e.name AS name, e.type AS type")
+    auth = base64.b64encode(f"{user}:{password}".encode()).decode()
+    resp = await client.post(
+        f"{neo4j_http_url}/db/neo4j/tx/commit",
+        json={"statements": [{"statement": cypher, "parameters": {"types": _SUBJECT_TYPES}}]},
+        headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"})
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("errors"):
+        raise RuntimeError(
+            f"Neo4j equipment-name lookup error: "
+            f"{data['errors'][0].get('message', data['errors'])}")
+    names: set[str] = set()
+    type_by_name: dict[str, str] = {}
+    for row in (data["results"][0]["data"] if data.get("results") else []):
+        name, etype = row["row"]
+        names.add(name)
+        type_by_name[name] = etype
+    return names, type_by_name
+
+
+@cli.group()
+def procurements() -> None:
+    """SUV Modernisierungsvorhaben structured ingestion (Track 2b)."""
+
+
+@procurements.command("fetch")
+def procurements_fetch() -> None:
+    """Render the Modernisierungsvorhaben page and print its markdown."""
+    async def _run() -> None:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            md = await fetch_directory_markdown(
+                PROCUREMENTS_URL, crawl4ai_url=settings.crawl4ai_url, client=client)
+        click.echo(md)
+    asyncio.run(_run())
+
+
+@procurements.command("parse")
+def procurements_parse_cmd() -> None:
+    """Render + parse the Modernisierungsvorhaben page; write the seed for human review."""
+    async def _run() -> None:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            md = await fetch_directory_markdown(
+                PROCUREMENTS_URL, crawl4ai_url=settings.crawl4ai_url, client=client)
+        progs = parse_procurements(md, suv_url=PROCUREMENTS_URL)
+        if len(progs) < 10:
+            raise click.ClickException(
+                f"parse yielded only {len(progs)} programs — likely a shell/error page; "
+                "seed NOT written")
+        PROCUREMENTS_SEED.parent.mkdir(parents=True, exist_ok=True)
+        PROCUREMENTS_SEED.write_text(
+            yaml.safe_dump([p.model_dump() for p in progs], allow_unicode=True, sort_keys=False))
+        click.echo(f"wrote {len(progs)} procurement programs -> {PROCUREMENTS_SEED}")
+    asyncio.run(_run())
+
+
+@procurements.command("build")
+@click.option("--dry-run", is_flag=True, help="Write match_report.yaml; no graph/Qdrant writes.")
+@click.option("--approved-matches", "approved_path", type=click.Path(path_type=Path),
+              default=None, help="Curated, approved match report (required for real build).")
+@click.option("--report-out", type=click.Path(path_type=Path),
+              default=Path("procurements_match_report.yaml"),
+              help="Where --dry-run writes the report.")
+def procurements_build(dry_run: bool, approved_path: Path | None, report_out: Path) -> None:
+    """Dry-run produces the combined contractor+subject match report; real run requires
+    --approved-matches. Real build is Neo4j-FIRST: programs + PROCURES are always written,
+    CONTRACTED_TO/CONCERNS_SYSTEM for approved matches, then Qdrant profiles (all programs).
+
+    Drift-check decision: NONE. Every link template (PROCURES/CONTRACTED_TO/CONCERNS_SYSTEM)
+    is MATCH-only — a stale approved entry whose target vanished yields no edge, never a
+    wrong one. A per-program drift check would also have to be robust to the same contractor
+    name appearing under multiple programs; omitting it is the safe, simpler choice."""
+    async def _run() -> None:
+        if not PROCUREMENTS_SEED.exists():
+            raise click.ClickException(
+                f"no seed at {PROCUREMENTS_SEED} — run "
+                "`odin-suv-structured procurements parse` first")
+        programs = [
+            ProcurementProgram(**row)
+            for row in (yaml.safe_load(PROCUREMENTS_SEED.read_text()) or [])
+        ]
+        # Gate first: refuse a real build with no approved report BEFORE any network work,
+        # so the failure is the gate error (not a Neo4j auth error from the lookups below).
+        if not dry_run and approved_path is None:
+            raise ProcurementBuildGateError(
+                "refusing to build without --approved-matches <report.yaml> "
+                "(run `procurements build --dry-run` first, curate + set approved: true)")
+        u, pw = settings.neo4j_user, settings.neo4j_password
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            # Build the contractor match items (one per split party per program).
+            contractor_items: list[_MatchItem] = []
+            for p in programs:
+                for party in split_contractors(p.contractor_raw):
+                    contractor_items.append(_MatchItem(party, p.suv_url, p.title))
+
+            # Build the subject match items: probe each program title/typ against the full
+            # set of existing equipment node names; one item per program that hits a name.
+            equip_names, equip_type_by_name = await _fetch_equipment_node_names(
+                client, settings.neo4j_http_url, u, pw)
+            subject_items: list[_MatchItem] = []
+            for p in programs:
+                cand = subject_candidate(p, equip_names)
+                if cand:
+                    subject_items.append(_MatchItem(cand, p.suv_url, p.title))
+
+            if dry_run:
+                org_lookup = await _lookup_existing(
+                    contractor_items, client, settings.neo4j_http_url, u, pw)
+                equip_lookup = await _lookup_existing(
+                    subject_items, client, settings.neo4j_http_url, u, pw,
+                    entity_type="WEAPON_SYSTEM")
+                contractor_report = build_match_report(
+                    contractor_items, org_lookup, target_type="ORGANIZATION")
+                for i, entry in enumerate(contractor_report):
+                    entry["kind"] = "contractor"
+                    entry["program_title"] = contractor_items[i].program_title
+                subject_report = build_match_report(
+                    subject_items, equip_lookup,
+                    target_type_of=lambda it: equip_type_by_name[it.name])
+                for i, entry in enumerate(subject_report):
+                    entry["kind"] = "subject"
+                    entry["program_title"] = subject_items[i].program_title
+                dump_report(contractor_report + subject_report, report_out)
+                click.echo(
+                    f"dry-run: wrote match report -> {report_out} "
+                    f"(contractors={len(contractor_report)}, subjects={len(subject_report)})")
+                return
+
+            # Real build (gate already enforced above: approved_path is not None here).
+            approved = load_approved(approved_path, gate_new_creation=False)
+            approved_contractors = [e for e in approved if e.get("kind") == "contractor"]
+            approved_subjects = [e for e in approved if e.get("kind") == "subject"]
+
+            from datetime import UTC, datetime
+            ts = datetime.now(UTC).isoformat()
+            stmts = build_procurement_statements(
+                programs, load_operators(OPERATORS_SEED),
+                approved_contractors=approved_contractors,
+                approved_subjects=approved_subjects, extracted_at=ts)
+            # Neo4j FIRST — Qdrant strictly after a successful write_neo4j (no Qdrant
+            # in an except; if write_neo4j raises, the program never reaches the upsert).
+            await write_neo4j(stmts, client=client, neo4j_http_url=settings.neo4j_http_url,
+                              neo4j_user=u, neo4j_password=pw)
+            # Every program gets a Qdrant profile (not just matched ones). Pre-compute
+            # embeddings async, then pass a sync lookup as `embed` so build stays pure.
+            vec_by_content: dict[str, list[float]] = {}
+            for p in programs:
+                content = program_profile(p)
+                if content not in vec_by_content:
+                    vec_by_content[content] = await embed_text(
+                        content, client=client, tei_embed_url=settings.tei_embed_url)
+            contractor_links: dict[str, list[str]] = {}
+            for e in approved_contractors:
+                if (e.get("decision") or "").lower() == "match" and e.get("existing_name"):
+                    contractor_links.setdefault(e["program_title"], []).append(e["existing_name"])
+            system_links: dict[str, list[str]] = {}
+            for e in approved_subjects:
+                if (e.get("decision") or "").lower() == "match" and e.get("existing_name"):
+                    system_links.setdefault(e["program_title"], []).append(e["existing_name"])
+            points = build_procurement_qdrant_points(
+                programs, contractor_links=contractor_links, system_links=system_links,
+                embed=lambda content: vec_by_content[content], now_iso=ts)
+            if points:
+                QdrantClient(url=settings.qdrant_url).upsert(
+                    collection_name=settings.qdrant_collection, points=points)
+            click.echo(
+                f"built {len(programs)} programs "
+                f"(neo4j stmts={len(stmts)}, qdrant={len(points)}, "
+                f"contractor-links={sum(len(v) for v in contractor_links.values())}, "
+                f"system-links={sum(len(v) for v in system_links.values())})")
     asyncio.run(_run())
 
 
