@@ -42,3 +42,43 @@ MERGE (c)-[r:HEADQUARTERED_IN]->(co)
 ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
 SET r.last_seen = datetime()
 """
+
+# --- Track 2a: equipment / Hauptwaffensysteme ---
+#
+# OPERATES links an operator (MILITARY_UNIT|ORGANIZATION) to a WEAPON_SYSTEM it
+# operates/uses. Distinct from the geographic OPERATES_IN (actor active in a
+# region). The operator is matched on the seed's exact (name, type); the WHERE
+# enforces the allowed-source-type invariant so a malformed seed cannot link from
+# a non-actor (e.g. a LOCATION). Both endpoints are MATCH-ed, never MERGE-d.
+
+UPSERT_OPERATOR = """
+MERGE (o:Entity {name: $name, type: $type})
+ON CREATE SET o.first_seen = datetime(), o.data_source = "suv.report"
+SET o.aliases = coalesce(o.aliases, []) +
+        [a IN $aliases WHERE NOT a IN coalesce(o.aliases, [])],
+    o.suv_extracted_at = $extracted_at,
+    o.last_seen = datetime()
+"""
+
+UPSERT_WEAPON_SYSTEM = """
+MERGE (w:Entity {name: $name, type: "WEAPON_SYSTEM"})
+ON CREATE SET w.first_seen = datetime()
+SET w.aliases = coalesce(w.aliases, []) +
+        [a IN $aliases WHERE NOT a IN coalesce(w.aliases, [])],
+    w.weapon_type = coalesce(w.weapon_type, $weapon_type),
+    w.data_source = coalesce(w.data_source, $data_source),
+    w.suv_url = coalesce(w.suv_url, $suv_url),
+    w.suv_extracted_at = $extracted_at,
+    w.last_seen = datetime()
+"""
+
+LINK_OPERATES = """
+MATCH (op:Entity {name: $op_name, type: $op_type})
+WHERE op.type IN ["MILITARY_UNIT", "ORGANIZATION"]
+MATCH (ws:Entity {name: $ws_name, type: "WEAPON_SYSTEM"})
+WITH op, ws LIMIT 1
+MERGE (op)-[r:OPERATES]->(ws)
+ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
+SET r.count = $count, r.count_raw = $count_raw, r.service_end = $service_end,
+    r.note = $note, r.suv_url = $suv_url, r.last_seen = datetime()
+"""

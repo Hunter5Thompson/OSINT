@@ -1,0 +1,30 @@
+# Curated operator (Teilstreitkraft) resolution — one decision per row, human-reviewed.
+# match: target must resolve to exactly ONE Entity{name,type} (build-time preflight).
+# create: MERGE a new Entity{name,type} with create_properties.
+- page_slug: hauptwaffensysteme-des-heeres
+  page_label: Heer
+  decision: match
+  target_name: "Deutsches Heer"
+  target_type: MILITARY_UNIT
+- page_slug: hauptwaffensysteme-der-luftwaffe
+  page_label: Luftwaffe
+  decision: match
+  target_name: "Deutsche Luftwaffe"
+  target_type: MILITARY_UNIT
+- page_slug: hauptwaffensysteme-der-marine
+  page_label: Marine
+  decision: match
+  target_name: "Deutsche Marine"
+  target_type: MILITARY_UNIT
+- page_slug: hauptwaffensysteme-des-cyber-und-informationsraums
+  page_label: Cyber- und Informationsraum
+  decision: create
+  target_name: "Cyber- und Informationsraum"
+  target_type: MILITARY_UNIT
+  create_properties:
+    aliases: ["CIR"]
+- page_slug: hauptwaffensysteme-des-unterstuetzungsbereichs
+  page_label: Unterstützungsbereich
+  decision: match
+  target_name: "Unterstützungsbereich"
+  target_type: ORGANIZATION

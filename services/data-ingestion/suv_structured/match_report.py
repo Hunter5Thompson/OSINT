@@ -1,5 +1,5 @@
 # suv_structured/match_report.py
-"""Dry-run match report: classify each SUV company against existing graph entities.
+"""Dry-run match report: classify each SUV entity against existing graph entities.
 
 Pure classification (build_match_report) + YAML load/validate (load_approved).
 The report is the human review artifact and the machine-checkable merge gate."""
@@ -11,43 +11,54 @@ from pathlib import Path
 import yaml
 
 from canonicalize import canonicalize_entity
-from suv_structured.schemas import Company
 
 
 class MatchDecision(StrEnum):
-    MATCH = "match"        # exactly one existing ORGANIZATION with this name
+    MATCH = "match"        # exactly one existing entity of target_type with this name
     NEW = "new"           # no existing entity with this name
-    AMBIGUOUS = "ambiguous"  # multiple matches, or a single non-ORGANIZATION match
+    AMBIGUOUS = "ambiguous"  # multiple matches, or a single non-target_type match
 
 
 def build_match_report(
-    companies: list[Company],
+    items: list,
     lookup: dict[str, list[tuple[str, str, str]]],
+    *,
+    target_type: str = "ORGANIZATION",
+    gate_new_creation: bool = False,
 ) -> list[dict]:
-    """lookup maps lowercased company name -> [(existing_name, type, elementId), ...]."""
+    """Classify each item against existing graph entities of ``target_type``.
+
+    ``items`` is any object exposing ``.name`` and ``.suv_url`` (Company or
+    WeaponSystemRow). ``lookup`` maps lowercased name -> [(existing_name, type, id), ...].
+    When ``gate_new_creation`` is set, each entry also carries ``approved_new``/
+    ``evidence`` fields for the curator (used by the WEAPON_SYSTEM new-creation gate)."""
     report: list[dict] = []
-    for c in companies:
+    for c in items:
         key = c.name.strip().lower()
         rows = lookup.get(key, [])
         if not rows:
-            canon = canonicalize_entity(c.name, "ORGANIZATION").name.strip().lower()
+            canon = canonicalize_entity(c.name, target_type).name.strip().lower()
             if canon != key:
                 rows = lookup.get(canon, [])
-        orgs = [r for r in rows if r[1] == "ORGANIZATION"]
+        targets = [r for r in rows if r[1] == target_type]
         if not rows:
             decision, existing = MatchDecision.NEW, None
-        elif len(rows) == 1 and len(orgs) == 1:
-            decision, existing = MatchDecision.MATCH, orgs[0][0]
+        elif len(rows) == 1 and len(targets) == 1:
+            decision, existing = MatchDecision.MATCH, targets[0][0]
         else:
             decision, existing = MatchDecision.AMBIGUOUS, None
-        report.append({
+        entry = {
             "name": c.name,
             "suv_url": c.suv_url,
             "decision": str(decision),
             "existing_name": existing,
             "candidates": [{"name": n, "type": t, "id": i} for n, t, i in rows],
             "approved": False,
-        })
+        }
+        if gate_new_creation:
+            entry["approved_new"] = False
+            entry["evidence"] = ""
+        report.append(entry)
     return report
 
 
@@ -79,19 +90,13 @@ def dump_report(report: list[dict], path: Path) -> None:
     path.write_text(yaml.safe_dump(report, allow_unicode=True, sort_keys=False))
 
 
-def load_approved(path: Path) -> list[dict]:
+def load_approved(path: Path, *, gate_new_creation: bool = False) -> list[dict]:
     """Load report; return only entries with ``approved is True``.
 
-    The report is HUMAN-EDITED YAML, so the gate validates each approved entry
-    defensively and raises ValueError (listing every offender) if any approved
-    entry is unsafe to write:
-      - missing a 'name' or 'decision' key,
-      - has a 'decision' (case-insensitive) not in MatchDecision (operator typo),
-      - is still 'ambiguous' — must be resolved (re-run dry-run) before approval,
-      - is a 'match' without 'existing_name' (no merge target).
-    The returned entries have their 'decision' normalized to the canonical
-    lowercase value so downstream comparisons are case-robust.
-    """
+    Validates each approved entry defensively (see below) and raises ValueError
+    listing every offender. With ``gate_new_creation`` set, an approved ``new``
+    entry additionally requires ``approved_new is True`` + a non-empty ``evidence``
+    string — link-existing is the default; node creation is the deliberate exception."""
     entries = yaml.safe_load(path.read_text()) or []
     approved = [e for e in entries if e.get("approved") is True]
     valid = {str(d) for d in MatchDecision}
@@ -106,11 +111,20 @@ def load_approved(path: Path) -> list[dict]:
         if norm not in valid:
             errors.append(f"{name}: unrecognized decision {decision!r}")
             continue
-        e["decision"] = norm  # canonicalize for case-robust downstream use
+        e["decision"] = norm
         if norm == str(MatchDecision.AMBIGUOUS):
             errors.append(f"{name}: approved but still ambiguous (resolve first)")
         elif norm == str(MatchDecision.MATCH) and not e.get("existing_name"):
             errors.append(f"{name}: approved match missing existing_name")
+        elif (
+            norm == str(MatchDecision.NEW)
+            and gate_new_creation
+            and (e.get("approved_new") is not True or not (e.get("evidence") or "").strip())
+        ):
+            errors.append(
+                f"{name}: approved 'new' WEAPON_SYSTEM requires approved_new: true "
+                "+ non-empty evidence (prefer alias curation to creating a node)"
+            )
     if errors:
         raise ValueError("unsafe approved entries: " + "; ".join(errors))
     return approved
