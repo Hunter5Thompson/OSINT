@@ -115,7 +115,7 @@ Rules:
 | Luftwaffe | match | `Deutsche Luftwaffe` (MU) | avoids the `Luftwaffe`/`LUFTWAFFE` duplicates |
 | Marine | match | `Deutsche Marine` (MU) | |
 | Cyber- und Informationsraum | create | `Cyber- und Informationsraum` (MU) | no existing node |
-| Unterstützungsbereich | create | `Unterstützungsbereich` (MU) | **Curation decision — confirm at spec review.** Default follows the user's MU-uniform leaning: `create` a `MILITARY_UNIT`, knowingly duplicating the existing `ORGANIZATION` of the same name (a deliberate duplicate graph-integrity-geo merges later). Link-existing alternative: `match` the existing ORG (the OPERATES source-guard admits `ORGANIZATION`, so no duplicate is created). The seed ships exactly one decision — never a choice. |
+| Unterstützungsbereich | match | `Unterstützungsbereich` (ORGANIZATION) | Link-existing, no duplicate (decided at spec review). Live graph has exactly one `Unterstützungsbereich` ORG; the OPERATES source-guard admits `ORGANIZATION`, so the edge links it directly. No deliberate ORG/MU duplicate is created. |
 
 Linking to one canonical node leaves the other duplicates orphaned; that is **out of scope** —
 owned by the graph-integrity-geo / entity-resolution workstream. The OPERATES edge carries
@@ -156,8 +156,9 @@ Lives in `suv_structured/write_templates.py` (NOT nlm's key-locked `RELATION_TEM
 `$param`-bound, hardcoded label, endpoints **MATCH-only** (never MERGE — no phantom entities):
 
 ```cypher
--- OPERATES (type-guarded both endpoints, per user constraint)
-MATCH (op:Entity {name: $op_name}) WHERE op.type IN ["MILITARY_UNIT", "ORGANIZATION"]
+-- OPERATES (operator matched on the seed's exact (name, type); WHERE enforces
+-- the allowed-source-type invariant so a malformed seed can't link from a non-actor)
+MATCH (op:Entity {name: $op_name, type: $op_type}) WHERE op.type IN ["MILITARY_UNIT", "ORGANIZATION"]
 MATCH (ws:Entity {name: $ws_name, type: "WEAPON_SYSTEM"})
 WITH op, ws LIMIT 1
 MERGE (op)-[r:OPERATES]->(ws)
@@ -165,6 +166,10 @@ ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
 SET r.count = $count, r.count_raw = $count_raw, r.service_end = $service_end,
     r.note = $note, r.suv_url = $suv_url, r.last_seen = datetime()
 ```
+
+**`$op_type` is bound from the seed's resolved `target_type`** — binding only `$op_name` would let
+`WITH … LIMIT 1` pick arbitrarily when both a `MILITARY_UNIT` and an `ORGANIZATION` of the same name
+exist (confirmed live: `Deutsches Heer` exists as both). The build statements MUST pass `op_type`.
 
 Endpoint creation happens **before** the link, in the same transaction batch:
 - **Operators** are upserted from the seed (`match` → exists, no write; `create` → `MERGE` once).
@@ -309,8 +314,9 @@ real gate bypass slipped past two ordinary reviews). Final holistic opus review,
 6. The equipment build creates **0 Qdrant points** and instantiates **no QdrantClient** (regression test).
 7. `OPERATES` is in `schema_whitelist.RELATIONSHIPS`; a read-path test shows a "betreibt"-style
    question can surface OPERATES edges.
-8. After `--apply`, `OPERATES` edges exist from the operator nodes to weapon systems with
-   `count`/`service_end`, verifiable via Cypher; the companies path + full data-ingestion suite stay green.
+8. After a real build (`build --approved-matches <curated.yaml>`), `OPERATES` edges exist from the
+   operator nodes to weapon systems with `count`/`service_end`, verifiable via Cypher; the companies
+   path + full data-ingestion suite stay green.
 
 ## 17. Residual risks
 - Operator duplicate selection is curated, not algorithmic — the exactly-1 preflight is the safety net.
