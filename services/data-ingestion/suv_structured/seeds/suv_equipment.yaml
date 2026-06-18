@@ -1,0 +1,614 @@
+- muster: Leopard 2
+  type_raw: Kampfpanzer
+  count: 310
+  count_raw: '310'
+  service_end: 2050
+  note: 123 weitere Leopard 2 A8 bestellt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Puma
+  type_raw: Schützenpanzer
+  count: 350
+  count_raw: '350'
+  service_end: 2045
+  note: 250 weitere Puma S1 bestellt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Marder
+  type_raw: Schützenpanzer
+  count: 418
+  count_raw: '418'
+  service_end: 2030
+  note: Ersatz durch Puma und Schakal.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Schwerer Waffenträger Infanterie
+  type_raw: Schwerer Waffenträger
+  count: 1
+  count_raw: 1+
+  service_end: null
+  note: 122 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Wiesel 1 MK & MELLS
+  type_raw: Waffenträger
+  count: 181
+  count_raw: '181'
+  service_end: 2030
+  note: Ersatz durch Schwerer Waffenträger Infanterie und Luftbeweglicher Waffenträger.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Wiesel 2
+  type_raw: Führungs- und Transportfahrzeug
+  count: 64
+  count_raw: '64'
+  service_end: 2030
+  note: Ersatz durch Luftlandeplattform Caracal.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Fennek
+  type_raw: Spähwagen
+  count: 222
+  count_raw: '222'
+  service_end: 2028
+  note: Ersatz durch Luchs 2.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: GTK Boxer
+  type_raw: Transportpanzer
+  count: 331
+  count_raw: '331'
+  service_end: null
+  note: 256 Truppentransporter, 65 Führungsfahrzeuge und 10 Fahrschulfahrzeuge.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Fuchs
+  type_raw: Transportpanzer
+  count: 939
+  count_raw: 939 in über 30 verschiedenen Varianten
+  service_end: null
+  note: Ersatz durch Patria 6×6 (CAVS).
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Dingo
+  type_raw: Geschütztes Führungs- und Funktionsfahrzeug der Klasse 3
+  count: 549
+  count_raw: '549'
+  service_end: null
+  note: 115 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Eagle IV/V
+  type_raw: Geschütztes Führungs- und Funktionsfahrzeug der Klasse 2
+  count: 764
+  count_raw: '764'
+  service_end: null
+  note: 2.610 weitere Eagle V bestellt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Husky 3
+  type_raw: Überschneefahrzeug
+  count: 1
+  count_raw: '1'
+  service_end: 2046
+  note: 366 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: BV206S/D
+  type_raw: Überschneefahrzeug
+  count: 337
+  count_raw: 337 (189 Bv206S & 148 Bv206D)
+  service_end: 2030
+  note: Ersatz durch Husky 3.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: ESK Mungo
+  type_raw: Einsatzfahrzeug
+  count: 400
+  count_raw: '400'
+  service_end: 2030
+  note: Ersatz durch Luftlandeplattform Caracal.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: AFG Serval
+  type_raw: Aufklärungs- und Gefechtsfahrzeug
+  count: 21
+  count_raw: '21'
+  service_end: null
+  note: Ersatz durch Fahrzeugfamilie mittel Spezialkräfte.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: M113 Panzermörser 120mm
+  type_raw: Panzermörser
+  count: 48
+  count_raw: '48'
+  service_end: 2030
+  note: Ersatz durch Patria NEMO.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: PzH 2000
+  type_raw: Panzerhaubitze
+  count: 97
+  count_raw: '97'
+  service_end: null
+  note: 22 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: MARS II
+  type_raw: Raketenartilleriesystem
+  count: 36
+  count_raw: '36'
+  service_end: 2030
+  note: Ersatz durch EuroPULS.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: ABRA
+  type_raw: Artilleriebeobachtungsradar
+  count: 17
+  count_raw: '17'
+  service_end: 2027
+  note: Ersatz durch BARÜ.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Skyranger 30
+  type_raw: Flakpanzer
+  count: 1
+  count_raw: '1'
+  service_end: null
+  note: 18 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: GFB Leguan
+  type_raw: Brückenlegesystem
+  count: 7
+  count_raw: 7+
+  service_end: null
+  note: 24 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Amphibie M3
+  type_raw: Schwimmschnellbrücke
+  count: 30
+  count_raw: '30'
+  service_end: 2030
+  note: Ersatz durch M3 EVO.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Faltstraßengerät
+  type_raw: Faltstraßengerät
+  count: 134
+  count_raw: '134'
+  service_end: null
+  note: Ersatz durch Geländezugangssystem Trackway geplant.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Keiler
+  type_raw: Minenräumpanzer
+  count: 24
+  count_raw: '24'
+  service_end: 2030
+  note: Ersatz durch Zukünftiges Minenräumsystem geplant.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Minenverlegesystem 85
+  type_raw: Minenverlegesystem
+  count: 23
+  count_raw: '23'
+  service_end: null
+  note: Soll in den nächsten Jahren durch ein Nachfolgesystem ersetzt werden.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Dachs
+  type_raw: Pionierpanzer
+  count: 51
+  count_raw: '51'
+  service_end: 2030
+  note: Wird durch 44 AEV 3 Kodiak ersetzt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Bergepanzer 2
+  type_raw: Bergepanzer
+  count: 95
+  count_raw: '95'
+  service_end: 2030
+  note: Ersatz durch neuen Bergepanzer geplant.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: H145M LKH
+  type_raw: Leichter Kampfhubschrauber
+  count: 1
+  count_raw: 1+
+  service_end: null
+  note: Ersatz für KH Tiger & EC 135. Insgesamt 62 Stück bestellt.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: KH Tiger
+  type_raw: Kampfhubschrauber
+  count: 51
+  count_raw: '51'
+  service_end: 2032
+  note: Reduktion auf 33 Stück bis 2028 und min. 24 bis 2032 / Ersatz durch 24 H145M
+    LKH in der Rolle Kampf
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: EC 135
+  type_raw: Schulungshubschrauber
+  count: 13
+  count_raw: '13'
+  service_end: 2028
+  note: Ersatz durch H145M LKH.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: LUNA
+  type_raw: Aufklärungsdrohne
+  count: 87
+  count_raw: '87'
+  service_end: 2028
+  note: Ersatz durch HUSAR.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: KZO
+  type_raw: Aufklärungsdrohne
+  count: 39
+  count_raw: '39'
+  service_end: 2026
+  note: Ersatz durch HUSAR.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: ALADIN
+  type_raw: Aufklärungsdrohne
+  count: 290
+  count_raw: '290'
+  service_end: null
+  note: Ersatz durch Twister.
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: MIKADO
+  type_raw: Aufklärungsdrohne
+  count: 139
+  count_raw: '139'
+  service_end: null
+  note: 116 AR100-B / 23 AR100-B – KL
+  page_slug: hauptwaffensysteme-des-heeres
+  suv_url: https://suv.report/hauptwaffensysteme-des-heeres/
+- muster: Eurofighter
+  type_raw: Kampfflugzeug
+  count: 138
+  count_raw: '138'
+  service_end: 2050
+  note: 58 weitere Eurofighter bestellt (Tranche 4 & 5)
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: Tornado
+  type_raw: Kampfflugzeug
+  count: 93
+  count_raw: '93'
+  service_end: 2030
+  note: Ersatz durch 35 F-35A und 35 Eurofighter EK.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: German Heron TP
+  type_raw: Aufklärungsdrohne
+  count: 5
+  count_raw: '5'
+  service_end: 2034
+  note: geleast / drei weitere bestellt / ab 2030 soll die Eurodrohne übernehmen.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: A400M
+  type_raw: Transportflugzeug
+  count: 53
+  count_raw: '53'
+  service_end: null
+  note: 23 Maschinen werden mit dem DIRCM-Selbstschutzsystem nachgerüstet.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: C-130J-30 Super Hercules
+  type_raw: Transportflugzeug
+  count: 3
+  count_raw: '3'
+  service_end: null
+  note: Gemeinsamer Betrieb mit Frankreich.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: KC-130J Super Hercules
+  type_raw: Tankflugzeug
+  count: 3
+  count_raw: '3'
+  service_end: null
+  note: Gemeinsamer Betrieb mit Frankreich.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: A350
+  type_raw: Regierungsflieger
+  count: 3
+  count_raw: '3'
+  service_end: null
+  note: Nachrüstung mit DIRCM-Selbstschutzsystem.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: CH-53G
+  type_raw: Mittlerer Transporthubschrauber
+  count: 66
+  count_raw: '66'
+  service_end: 2030
+  note: Ersatz durch 60 CH-47F SR Block II.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: AS532 U2 Cougar
+  type_raw: VIP-Hubschrauber
+  count: 3
+  count_raw: '3'
+  service_end: 2026
+  note: Ersatz durch drei neue VIP-Hubschrauber geplant.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: H145M LUH SOF
+  type_raw: Leichter Mehrzweckhubschrauber
+  count: 15
+  count_raw: '15'
+  service_end: null
+  note: 10 weitere H145M LKH SOF bestellt.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: Arrow
+  type_raw: Raketenabwehrsystem
+  count: 1
+  count_raw: '1'
+  service_end: null
+  note: Zwei weitere Batterien bestellt.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: PATRIOT
+  type_raw: Flugabwehrsystem großer Reichweite
+  count: 7
+  count_raw: '7'
+  service_end: 2048
+  note: Fünf Systeme wurden an die Ukraine abgegeben/zugesagt. Acht weitere Systeme
+    sind bestellt.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: IRIS-T SLM
+  type_raw: Flugabwehrsystem mittlerer Reichweite
+  count: 1
+  count_raw: '1'
+  service_end: null
+  note: Fünf weitere Feuereinheiten bestellt.
+  page_slug: hauptwaffensysteme-der-luftwaffe
+  suv_url: https://suv.report/hauptwaffensysteme-der-luftwaffe/
+- muster: Klasse
+  type_raw: Typ
+  count: null
+  count_raw: Anzahl
+  service_end: null
+  note: Anmerkung
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: F125
+  type_raw: Stabilisierungsfregatte
+  count: 4
+  count_raw: '4'
+  service_end: 2045
+  note: Kampfwertsteigerungen geplant
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: F124
+  type_raw: Flugabwehrfregatte
+  count: 3
+  count_raw: '3'
+  service_end: 2034
+  note: Ersatz durch F127 ab 2034
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: F123
+  type_raw: U-Jagd-Fregatte
+  count: 4
+  count_raw: '4'
+  service_end: 2035
+  note: Ersatz durch F126 ab 2032
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: K130
+  type_raw: Korvette
+  count: 5
+  count_raw: '5'
+  service_end: 2038
+  note: Fünf weitere im Zulauf
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: U212A
+  type_raw: U-Boot
+  count: 6
+  count_raw: '6'
+  service_end: 2045
+  note: Werden für 800 Mio. Euro modernisiert
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: BlueWhale
+  type_raw: Large Unmanned Underwater Vehicle
+  count: 1
+  count_raw: '1'
+  service_end: null
+  note: Ergänzt U-Boote
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: MJ332C
+  type_raw: Minenjagdboot
+  count: 5
+  count_raw: '5'
+  service_end: 2027
+  note: Ersatz durch MJ334 (FVSma)
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: MJ332CL
+  type_raw: Minenjagdboot
+  count: 3
+  count_raw: '3'
+  service_end: 2027
+  note: Ersatz durch MJ334 (FVSma)
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: A423
+  type_raw: Flottendienstboot
+  count: 3
+  count_raw: '3'
+  service_end: 2029
+  note: Ersatz durch A424.
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: A704
+  type_raw: Flottentanker
+  count: 2
+  count_raw: '2'
+  service_end: 2026
+  note: Ersatz durch A707.
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: A404
+  type_raw: Tender
+  count: 6
+  count_raw: '6'
+  service_end: 2029
+  note: Ersatz durch Mittlere Unterstützungseinheit schwimmender Einheiten
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: 11M NSWRIB
+  type_raw: Einsatzboot
+  count: 4
+  count_raw: '4'
+  service_end: null
+  note: Übergangslösung für die veralteten RHIB 1010 des KSM
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: P-8A Poseidon
+  type_raw: Seefernaufklärer
+  count: 3
+  count_raw: '3'
+  service_end: null
+  note: 5 weitere bestellt.
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: P-3C Orion
+  type_raw: Seefernaufklärer
+  count: 8
+  count_raw: '8'
+  service_end: 2025
+  note: Ersatz durch P-8A Poseidon
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: NH90 MRFH Sea Tiger
+  type_raw: Bordhubschrauber
+  count: 1
+  count_raw: '1'
+  service_end: null
+  note: 30 weitere bestellt.
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: Mk88A Sea Lynx
+  type_raw: Bordhubschrauber
+  count: 22
+  count_raw: '22'
+  service_end: 2025
+  note: Ersatz durch NH90 MRFH Sea Tiger
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: LARUS
+  type_raw: Aufklärungsdrohne
+  count: 6
+  count_raw: '6'
+  service_end: null
+  note: 14 weitere Systeme bestellt
+  page_slug: hauptwaffensysteme-der-marine
+  suv_url: https://suv.report/hauptwaffensysteme-der-marine/
+- muster: COMSATBw
+  type_raw: Kommunikations-satelliten
+  count: 2
+  count_raw: '2'
+  service_end: 2028
+  note: Ersatz durch SATCOMBw Stufe 3
+  page_slug: hauptwaffensysteme-des-cyber-und-informationsraums
+  suv_url: https://suv.report/hauptwaffensysteme-des-cyber-und-informationsraums/
+- muster: SATCOMBw Bodensegment
+  type_raw: satellitengestützte Kommunikationssystem
+  count: 3
+  count_raw: – 3 Ankerstationen (Bodenstation groß, BSg)– 16 Stück Bodenstation mittel
+    Multiband handelsüblich (BSmM-hü) für C-, X- und Ku-Band– 7 Stück BSmC und 16
+    Stück BSmM, als Nachrüstung aus SATCOMBw-Stufe 1– 28 Stück Bodenstation klein
+    Multiband (BSkM)– 47 Stück BSk dynM mit dynamischem Zugriff– 400 Stück RBM mit
+    Antennendurchmesser 1,2 m und basierend auf dem DVB-RCS-Normenstandard
+  service_end: 2028
+  note: Ersatz durch SATCOMBw Stufe 3
+  page_slug: hauptwaffensysteme-des-cyber-und-informationsraums
+  suv_url: https://suv.report/hauptwaffensysteme-des-cyber-und-informationsraums/
+- muster: Elefant 2
+  type_raw: Schwerlasttransporter
+  count: 130
+  count_raw: '130'
+  service_end: null
+  note: Sieben weitere bestellt.
+  page_slug: hauptwaffensysteme-des-unterstuetzungsbereichs
+  suv_url: https://suv.report/hauptwaffensysteme-des-unterstuetzungsbereichs/
+- muster: GTF ZLK 15t
+  type_raw: geschütztes Transportfahrzeug der Zuladungsklasse 15t
+  count: 146
+  count_raw: 146+
+  service_end: null
+  note: 454 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-unterstuetzungsbereichs
+  suv_url: https://suv.report/hauptwaffensysteme-des-unterstuetzungsbereichs/
+- muster: GTF ZLK 5t
+  type_raw: geschütztes Transportfahrzeug der Zuladungsklasse 5t
+  count: 110
+  count_raw: '110'
+  service_end: null
+  note: Beschaffung von 3.500 weiteren ausgeschrieben.
+  page_slug: hauptwaffensysteme-des-unterstuetzungsbereichs
+  suv_url: https://suv.report/hauptwaffensysteme-des-unterstuetzungsbereichs/
+- muster: Wechselladersysteme
+  type_raw: Wechselladersysteme
+  count: 1008
+  count_raw: 1.008+
+  service_end: null
+  note: 2.793 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-unterstuetzungsbereichs
+  suv_url: https://suv.report/hauptwaffensysteme-des-unterstuetzungsbereichs/
+- muster: Ungeschützte Transportfahrzeuge
+  type_raw: ungeschütztes Transportfahrzeug
+  count: 3521
+  count_raw: 3.521+
+  service_end: null
+  note: 1.134 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-unterstuetzungsbereichs
+  suv_url: https://suv.report/hauptwaffensysteme-des-unterstuetzungsbereichs/
+- muster: Wolf 2
+  type_raw: Allzweckgeländewagen
+  count: 5
+  count_raw: '5'
+  service_end: 2045
+  note: 1.495 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-unterstuetzungsbereichs
+  suv_url: https://suv.report/hauptwaffensysteme-des-unterstuetzungsbereichs/
+- muster: BOXER San
+  type_raw: Schweres geschütztes Sanitäts-Kfz
+  count: 72
+  count_raw: '72'
+  service_end: null
+  note: Beschaffung eines 3. Loses geplant.
+  page_slug: hauptwaffensysteme-des-unterstuetzungsbereichs
+  suv_url: https://suv.report/hauptwaffensysteme-des-unterstuetzungsbereichs/
+- muster: EAGLE V 6×6
+  type_raw: Mittleres Geschütztes Sanitäts-Kraftfahrzeug
+  count: 1
+  count_raw: 1+
+  service_end: null
+  note: 79 weitere bestellt.
+  page_slug: hauptwaffensysteme-des-unterstuetzungsbereichs
+  suv_url: https://suv.report/hauptwaffensysteme-des-unterstuetzungsbereichs/
+- muster: Luftlanderettungszen-trum, leicht
+  type_raw: Luftlanderettungszen-trum, leicht
+  count: 8
+  count_raw: '8'
+  service_end: null
+  note: Beschaffung acht weiterer geplant.
+  page_slug: hauptwaffensysteme-des-unterstuetzungsbereichs
+  suv_url: https://suv.report/hauptwaffensysteme-des-unterstuetzungsbereichs/
