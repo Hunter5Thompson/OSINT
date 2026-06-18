@@ -127,7 +127,7 @@ def load_approved(path: Path, *, gate_new_creation: bool = False) -> list[dict]:
             and (e.get("approved_new") is not True or not (e.get("evidence") or "").strip())
         ):
             errors.append(
-                f"{name}: approved 'new' WEAPON_SYSTEM requires approved_new: true "
+                f"{name}: approved 'new' equipment system requires approved_new: true "
                 "+ non-empty evidence (prefer alias curation to creating a node)"
             )
     if errors:
