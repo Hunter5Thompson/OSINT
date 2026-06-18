@@ -14,7 +14,7 @@ dependencies = [
     "sse-starlette>=2.0",
     "neo4j>=5.0",
     "websockets>=13.0",
-    "qdrant-client>=1.13",
+    "qdrant-client>=1.13.0,<1.14.0",  # pin to Qdrant server v1.13.2 minor — avoid client/server version drift
 ]
 
 [project.optional-dependencies]
