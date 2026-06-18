@@ -9,6 +9,7 @@ LABELS = ("Entity", "Event", "Source", "Location", "Document")
 RELATIONSHIPS = (
     "INVOLVES", "REPORTED_BY", "OCCURRED_AT", "MENTIONS",
     "OPERATES", "HEADQUARTERED_IN",
+    "PROCURES", "CONTRACTED_TO", "CONCERNS_SYSTEM",
 )
 
 ENTITY_PROPERTIES = (
