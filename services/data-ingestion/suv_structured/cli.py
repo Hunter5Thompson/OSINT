@@ -46,6 +46,7 @@ from suv_structured.operators import (
 )
 from suv_structured.parse import parse_companies
 from suv_structured.schemas import Company, profile_text
+from suv_structured.system_types import classify_system_type
 
 DIRECTORY_URL = "https://suv.report/sicherheits-und-verteidigungsindustrie/"
 SEED_PATH = Path(__file__).parent / "seeds" / "suv_companies.yaml"
@@ -299,13 +300,17 @@ def equipment_build(dry_run: bool, approved_path: Path | None, report_out: Path)
         rows = _load_equipment_seed(EQUIPMENT_SEED)
         operators = operators_by_slug(load_operators(OPERATORS_SEED))
         unique = dedup_systems(rows)
+
+        def _ttype(item):
+            return classify_system_type(item.type_raw, item.muster)
+
         u, pw = settings.neo4j_user, settings.neo4j_password
         async with httpx.AsyncClient(timeout=60.0) as client:
             if dry_run:
                 lookup = await _lookup_existing(unique, client, settings.neo4j_http_url, u, pw,
                                                 entity_type="WEAPON_SYSTEM")
                 report = build_match_report(
-                    unique, lookup, target_type="WEAPON_SYSTEM", gate_new_creation=True)
+                    unique, lookup, gate_new_creation=True, target_type_of=_ttype)
                 dump_report(report, report_out)
                 click.echo(f"dry-run: wrote match report -> {report_out}")
                 return
@@ -319,7 +324,7 @@ def equipment_build(dry_run: bool, approved_path: Path | None, report_out: Path)
             lookup = await _lookup_existing(unique, client, settings.neo4j_http_url, u, pw,
                                             entity_type="WEAPON_SYSTEM")
             fresh = build_match_report(
-                unique, lookup, target_type="WEAPON_SYSTEM", gate_new_creation=True)
+                unique, lookup, gate_new_creation=True, target_type_of=_ttype)
             drift = detect_drift(approved, fresh)
             if drift:
                 raise EquipmentBuildGateError(

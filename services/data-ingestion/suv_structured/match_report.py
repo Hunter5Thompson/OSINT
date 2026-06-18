@@ -5,6 +5,7 @@ Pure classification (build_match_report) + YAML load/validate (load_approved).
 The report is the human review artifact and the machine-checkable merge gate."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 
@@ -25,22 +26,24 @@ def build_match_report(
     *,
     target_type: str = "ORGANIZATION",
     gate_new_creation: bool = False,
+    target_type_of: Callable[[object], str] | None = None,
 ) -> list[dict]:
-    """Classify each item against existing graph entities of ``target_type``.
+    """Classify each item against existing graph entities of its target type.
 
-    ``items`` is any object exposing ``.name`` and ``.suv_url`` (Company or
-    WeaponSystemRow). ``lookup`` maps lowercased name -> [(existing_name, type, id), ...].
-    When ``gate_new_creation`` is set, each entry also carries ``approved_new``/
-    ``evidence`` fields for the curator (used by the WEAPON_SYSTEM new-creation gate)."""
+    ``target_type_of`` overrides the single ``target_type`` per item (returns the
+    expected EntityType for that item) — used for type-aware equipment matching.
+    When it is None the single ``target_type`` str applies to all items (companies
+    path, byte-identical). ``items`` expose ``.name`` and ``.suv_url``."""
     report: list[dict] = []
     for c in items:
+        tt = target_type_of(c) if target_type_of is not None else target_type
         key = c.name.strip().lower()
         rows = lookup.get(key, [])
         if not rows:
-            canon = canonicalize_entity(c.name, target_type).name.strip().lower()
+            canon = canonicalize_entity(c.name, tt).name.strip().lower()
             if canon != key:
                 rows = lookup.get(canon, [])
-        targets = [r for r in rows if r[1] == target_type]
+        targets = [r for r in rows if r[1] == tt]
         if not rows:
             decision, existing = MatchDecision.NEW, None
         elif len(rows) == 1 and len(targets) == 1:
@@ -55,6 +58,8 @@ def build_match_report(
             "candidates": [{"name": n, "type": t, "id": i} for n, t, i in rows],
             "approved": False,
         }
+        if target_type_of is not None:
+            entry["target_type"] = tt
         if gate_new_creation:
             entry["approved_new"] = False
             entry["evidence"] = ""
@@ -122,7 +127,7 @@ def load_approved(path: Path, *, gate_new_creation: bool = False) -> list[dict]:
             and (e.get("approved_new") is not True or not (e.get("evidence") or "").strip())
         ):
             errors.append(
-                f"{name}: approved 'new' WEAPON_SYSTEM requires approved_new: true "
+                f"{name}: approved 'new' equipment system requires approved_new: true "
                 "+ non-empty evidence (prefer alias curation to creating a node)"
             )
     if errors:

@@ -69,6 +69,10 @@ def parse_weapon_systems(
             continue
         if set(first) <= {"-", ":"}:
             continue
+        # a leaked sub-section header row (e.g. the Marine table's "Klasse | Typ | …"):
+        # a real data row's Typ cell is never the literal header token "Typ".
+        if _clean(cells[1]) == "Typ":
+            continue
         try:
             rows.append(WeaponSystemRow(
                 muster=first,

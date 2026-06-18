@@ -13,10 +13,11 @@ import structlog
 from canonicalize import canonicalize_entity
 from suv_structured.equipment_schemas import WeaponSystemRow
 from suv_structured.operators import OperatorEntry
+from suv_structured.system_types import classify_system_type
 from suv_structured.write_templates import (
     LINK_OPERATES,
     UPSERT_OPERATOR,
-    UPSERT_WEAPON_SYSTEM,
+    UPSERT_SYSTEM,
 )
 
 log = structlog.get_logger(__name__)
@@ -55,7 +56,7 @@ def build_equipment_statements(
     approved_by_name = {e["name"]: e for e in approved}
     statements: list[dict] = []
     created_ops: set[tuple[str, str]] = set()
-    upserted_ws: set[str] = set()
+    upserted_ws: set[tuple[str, str]] = set()
     for row in rows:
         entry = approved_by_name.get(row.muster)
         if entry is None:
@@ -74,10 +75,12 @@ def build_equipment_statements(
                 "extracted_at": extracted_at,
             }})
         ws_name = ws_write_name(row, entry)
-        if ws_name not in upserted_ws:
-            upserted_ws.add(ws_name)
-            statements.append({"statement": UPSERT_WEAPON_SYSTEM, "parameters": {
+        ws_type = classify_system_type(row.type_raw, row.muster)
+        if (ws_name, ws_type) not in upserted_ws:
+            upserted_ws.add((ws_name, ws_type))
+            statements.append({"statement": UPSERT_SYSTEM, "parameters": {
                 "name": ws_name,
+                "type": ws_type,
                 "aliases": sorted({row.muster, ws_name}),
                 "weapon_type": row.type_raw,
                 "data_source": "suv.report",
@@ -86,7 +89,7 @@ def build_equipment_statements(
             }})
         statements.append({"statement": LINK_OPERATES, "parameters": {
             "op_name": op.target_name, "op_type": op.target_type,
-            "ws_name": ws_name,
+            "ws_name": ws_name, "ws_type": ws_type,
             "count": row.count, "count_raw": row.count_raw,
             "service_end": row.service_end, "note": row.note,
             "suv_url": row.suv_url,
@@ -114,17 +117,18 @@ def resolve_equipment_build_inputs(
     if missing_ops:
         raise EquipmentBuildGateError(f"no operator seed row for page(s): {missing_ops}")
     by_name = {r.muster: r for r in rows}
-    seen: dict[str, str] = {}
+    seen: dict[tuple[str, str], str] = {}
     collisions: list[str] = []
     for e in approved:
         row = by_name.get(e["name"])
         if row is None:
             continue
         wn = ws_write_name(row, e)
-        if wn in seen:
-            collisions.append(f"{seen[wn]!r} + {e['name']!r} -> {wn!r}")
+        key = (wn, classify_system_type(row.type_raw, row.muster))
+        if key in seen:
+            collisions.append(f"{seen[key]!r} + {e['name']!r} -> {key!r}")
         else:
-            seen[wn] = e["name"]
+            seen[key] = e["name"]
     if collisions:
         raise EquipmentBuildGateError(
             f"multiple approved entries resolve to the same canonical system: {collisions}")

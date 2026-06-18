@@ -6,6 +6,36 @@ from click.testing import CliRunner
 from suv_structured.cli import cli
 
 
+def test_equipment_build_aircraft_match_does_not_drift(tmp_path: Path, monkeypatch):
+    import suv_structured.cli as cli_mod
+    seed = tmp_path / "suv_equipment.yaml"
+    seed.write_text("- {muster: Eurofighter, type_raw: Kampfflugzeug, "
+                    "page_slug: hauptwaffensysteme-der-luftwaffe, suv_url: u}\n")
+    approved = tmp_path / "approved.yaml"
+    approved.write_text('- {name: "Eurofighter", decision: match, existing_name: "Eurofighter", '
+                        "approved: true, approved_new: false, evidence: \"\"}\n")
+    monkeypatch.setattr("suv_structured.cli.EQUIPMENT_SEED", seed)
+    monkeypatch.setattr(
+        cli_mod, "QdrantClient",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no qdrant")),
+        raising=False,
+    )
+    # Eurofighter exists as AIRCRAFT; the Luftwaffe operator matches its seed target
+    monkeypatch.setattr(cli_mod, "_lookup_existing", AsyncMock(
+        return_value={"eurofighter": [("Eurofighter", "AIRCRAFT", "idA")]}))
+    monkeypatch.setattr(cli_mod, "match_target_counts", AsyncMock(
+        return_value={("Deutsche Luftwaffe", "MILITARY_UNIT"): 1}))
+    captured = {}
+    async def _fake_write(statements, **kw):
+        captured["stmts"] = statements
+    monkeypatch.setattr(cli_mod, "write_neo4j", _fake_write)
+
+    res = CliRunner().invoke(cli, ["equipment", "build", "--approved-matches", str(approved)])
+    assert res.exit_code == 0, (res.output, res.exception)   # no drift abort
+    op = next(s for s in captured["stmts"] if "MERGE (op)-[r:OPERATES]" in s["statement"])
+    assert op["parameters"]["ws_type"] == "AIRCRAFT"
+
+
 def test_equipment_build_refuses_without_approved_matches(tmp_path: Path, monkeypatch):
     # point the seed at a tmp file so the command reaches the gate, not the missing-seed error
     seed = tmp_path / "suv_equipment.yaml"
