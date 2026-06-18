@@ -50,3 +50,18 @@ def test_parse_weapon_systems_fields():
     assert rows["Schwerer Waffenträger Infanterie"].count == 1
     assert rows["Husky 3"].service_end == 2046
     assert rows["BV206S/D"].note is None
+
+
+def test_parse_skips_leaked_secondary_header():
+    md = (
+        "| **Muster** | **Typ** | **Anzahl** | **Nutzungsdauerende** | **Notiz** |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        "| F123 | U-Jagd-Fregatte | 3 | 2030 | x |\n"
+        "| Klasse | Typ | Anzahl | Nutzungsdauerende | Notiz |\n"   # leaked sub-header
+        "| K130 | Korvette | 5 | 2040 | y |\n"
+    )
+    rows = parse_weapon_systems(md, page_slug="hauptwaffensysteme-der-marine",
+                                suv_url="https://suv.report/hauptwaffensysteme-der-marine/")
+    musters = [r.muster for r in rows]
+    assert musters == ["F123", "K130"]          # 'Klasse' sub-header dropped
+    assert "Klasse" not in musters
