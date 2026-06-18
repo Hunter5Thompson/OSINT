@@ -5,8 +5,10 @@ the branch operator. CONTRACTED_TO / CONCERNS_SYSTEM are emitted only for approv
 from __future__ import annotations
 
 import hashlib
+import re
 import unicodedata
 import uuid
+from collections.abc import Callable
 
 import structlog
 from qdrant_client.models import PointStruct
@@ -30,12 +32,17 @@ class ProcurementBuildGateError(RuntimeError):
 
 
 def subject_candidate(program: ProcurementProgram, equip_names: set[str]) -> str | None:
-    """Longest existing equipment node name (original case in equip_names) appearing
-    case-insensitively in the title/typ; None if no name of length >= 4 matches."""
-    text = f"{program.title} {program.typ or ''}".lower()
+    """Longest existing equipment node name (original case in equip_names) matching
+    on word boundaries (case-insensitive) in title+typ; None if no name of length >= 4 matches.
+    Word-boundary match prevents 'Tiger' matching inside 'Tigerente' or 'H145' inside 'H145M'."""
+    text = f"{program.title} {program.typ or ''}"
     best: str | None = None
     for name in equip_names:
-        if len(name) >= 4 and name.lower() in text and (best is None or len(name) > len(best)):
+        if len(name) < 4:
+            continue
+        if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text, re.IGNORECASE) and (
+            best is None or len(name) > len(best)
+        ):
             best = name
     return best
 
@@ -44,6 +51,8 @@ def _program_point_id(title: str) -> str:
     """uuid5 namespaced under SUV_QDRANT_NAMESPACE with a procurement-specific key prefix,
     so program IDs are always distinct from company point IDs (which use 'suv_structured|...')."""
     norm = unicodedata.normalize("NFC", title.strip().lower())
+    if not norm:
+        raise ValueError(f"program title normalized to empty string: {title!r}")
     return str(uuid.uuid5(SUV_QDRANT_NAMESPACE, f"suv_procurement_program|{norm}"))
 
 
@@ -77,6 +86,16 @@ def build_procurement_statements(
     for e in approved_subjects:
         if (e.get("decision") or "").lower() == "match" and e.get("existing_name"):
             subjects_by_prog.setdefault(e["program_title"], []).append(e)
+
+    # Warn on approved match entries whose program_title has no corresponding program
+    program_titles = {p.title for p in programs}
+    for prog_title in set(contractors_by_prog) | set(subjects_by_prog):
+        if prog_title not in program_titles:
+            log.warning(
+                "suv_procurement_approved_orphan",
+                program_title=prog_title,
+                msg="approved match entry references unknown program — no edge will be written",
+            )
 
     statements: list[dict] = []
     for p in programs:
@@ -148,7 +167,7 @@ def build_qdrant_points(
     *,
     contractor_links: dict[str, list[str]],
     system_links: dict[str, list[str]],
-    embed,
+    embed: Callable[[str], list[float]],
     now_iso: str,
 ) -> list[PointStruct]:
     """One profile point per program. Neo4j-first ordering is enforced by the CALLER (CLI).

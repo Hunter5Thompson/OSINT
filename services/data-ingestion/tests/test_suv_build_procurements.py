@@ -154,3 +154,30 @@ def test_build_statements_edge_ordering_within_program():
     # strict ordering: upsert < procures < contractor/subject edges
     assert upsert_idx < procures_idx < contracted_idx
     assert upsert_idx < procures_idx < concerns_idx
+
+
+# ---------------------------------------------------------------------------
+# Word-boundary subject_candidate tests (Fix 1)
+# ---------------------------------------------------------------------------
+
+def test_subject_candidate_no_bare_substring_tiger():
+    """'Tiger' must NOT match inside 'Tigerente' — bare substring old behaviour."""
+    assert subject_candidate(_p("Tigerente Programm"), {"Tiger"}) is None
+
+
+def test_subject_candidate_no_bare_substring_variant_suffix():
+    """'H145' must NOT match inside 'H145M' — variant-suffix false positive."""
+    assert subject_candidate(_p("H145M LUH SOF"), {"H145"}) is None
+
+
+def test_subject_candidate_word_boundary_positive():
+    """Clean word-boundary match still works: 'H145' in 'Beschaffung H145 LUH'."""
+    assert subject_candidate(_p("Beschaffung H145 LUH"), {"H145"}) == "H145"
+
+
+def test_subject_candidate_longest_match_still_passes():
+    """Regression: existing longest-match behaviour is preserved after word-boundary fix."""
+    equip = {"Puma", "Leopard 2", "Leopard"}
+    assert subject_candidate(_p("Konsolidierte Nachrüstung Puma 1. Los"), equip) == "Puma"
+    assert subject_candidate(_p("Leopard 2 A6A3 / A6A3M"), equip) == "Leopard 2"
+    assert subject_candidate(_p("Beobachtungsausstattung III"), equip) is None
