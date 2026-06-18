@@ -3,6 +3,7 @@ import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { ShaderType } from "../../types";
 import { applyCRTShader, applyNightVisionShader, applyFLIRShader, clearShaders } from "../shaders/shaderUtils";
+import { applyTilesetPerformanceConfig } from "./tilesetConfig";
 
 interface GlobeViewerProps {
   onViewerReady: (viewer: Cesium.Viewer) => void;
@@ -76,7 +77,7 @@ export function GlobeViewer({
     // Google Photorealistic 3D Tiles with night-side darkening
     const addBuildingsTileset = (tileset: Cesium.Cesium3DTileset) => {
       if (viewer.isDestroyed()) return;
-      tileset.maximumScreenSpaceError = 2;
+      applyTilesetPerformanceConfig(tileset);
       tileset.show = showBuildingsRef.current;
       (tileset as unknown as { _odinPhotoreal?: boolean })._odinPhotoreal = true;
       viewer.scene.primitives.add(tileset);
