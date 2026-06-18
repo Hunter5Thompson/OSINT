@@ -6,7 +6,10 @@ so it only references labels/relationships/properties that exist.
 
 LABELS = ("Entity", "Event", "Source", "Location", "Document")
 
-RELATIONSHIPS = ("INVOLVES", "REPORTED_BY", "OCCURRED_AT", "MENTIONS")
+RELATIONSHIPS = (
+    "INVOLVES", "REPORTED_BY", "OCCURRED_AT", "MENTIONS",
+    "OPERATES", "HEADQUARTERED_IN",
+)
 
 ENTITY_PROPERTIES = (
     "name", "type", "aliases", "confidence",
