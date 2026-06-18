@@ -20,18 +20,24 @@ OPERATES type-aware so equipment links to (and is created with) the correct enti
 
 ## 2. Type classifier (deterministic, calibrated to the real `Typ` vocabulary)
 
-New `classify_system_type(type_raw: str | None) -> str` (no LLM; pure; first-match keyword rules on
-the lowercased `Typ`). Order matters — **air before sea** so `Tankflugzeug` (air) isn't caught by the
-`tanker` sea keyword, and `Seefernaufklärer` (air) isn't caught by `see`/sea.
+New `classify_system_type(type_raw: str | None, muster: str = "") -> str` (no LLM; pure;
+**ordered** first-match rules). The four EntityTypes it can return — `WEAPON_SYSTEM`, `AIRCRAFT`,
+`VESSEL`, `SATELLITE` — match the target guard (§3). Rule order is load-bearing (ground-infra before
+satellite; air before sea):
 
-| Result | Keyword substrings (lowercased `Typ`) | Real examples it must catch |
-|---|---|---|
-| `AIRCRAFT` | `flugzeug`, `hubschrauber`, `drohne`, `flieger`, `seefernaufklärer` | Kampf-/Transport-/Tankflugzeug, alle *hubschrauber, Aufklärungsdrohne ×6, Regierungsflieger, Seefernaufklärer (P-3C/P-8A) |
-| `VESSEL` | `fregatte`, `korvette`, `u-boot`, `boot`, `tender`, `tanker`, `underwater` | 3× Fregatte, Korvette, U-Boot, Minenjagdboot, Flottendienstboot, Einsatzboot, Flottentanker, Tender, Large Unmanned Underwater Vehicle (BlueWhale) |
-| `WEAPON_SYSTEM` (default/else) | everything else | Kampfpanzer, Schützenpanzer, Panzerhaubitze, Raketenartillerie, Flakpanzer, Brücken/Pionier, transport vehicles, Flugabwehr*, satellites (see §7) |
+| # | Rule (checked in this order) | Match text | Result | Why first |
+|---|---|---|---|---|
+| 1 | `bodensegment`, `ground segment`, `terminal`, `station` | **muster + Typ** (combined, lowercased) | `WEAPON_SYSTEM` | Ground infra / system segment is not the platform — `SATCOMBw Bodensegment` is ground infra, not a satellite |
+| 2 | `satellit`, `satellite` | **muster + Typ** | `SATELLITE` | `COMSATBw` (`Kommunikations-satelliten`) is a real satellite |
+| 3 | `flugzeug`, `hubschrauber`, `drohne`, `flieger`, `seefernaufklärer` | `Typ` only | `AIRCRAFT` | Kampf-/Transport-/Tankflugzeug, all *hubschrauber, Aufklärungsdrohne ×6, Regierungsflieger, Seefernaufklärer (P-3C/P-8A). Air before sea so `Tankflugzeug`/`Seefernaufklärer` aren't caught by sea rules |
+| 4 | `fregatte`, `korvette`, `u-boot`, `boot`, `tender`, `tanker`, `underwater` | `Typ` only | `VESSEL` | 3× Fregatte, Korvette, U-Boot, Minenjagdboot, Flottendienstboot, Einsatzboot, Flottentanker, Tender, Large Unmanned Underwater Vehicle (BlueWhale) |
+| 5 | everything else (incl. `Typ`-absent) | — | `WEAPON_SYSTEM` | Kampf-/Schützenpanzer, Panzerhaubitze, Raketenartillerie, Flakpanzer, Brücken/Pionier, transport vehicles, Flugabwehr* |
 
-Classification is by `Typ` only (the page/operator does not determine the system kind — e.g. the
-Marine page lists Bordhubschrauber, which are AIRCRAFT). `Typ`-absent rows → `WEAPON_SYSTEM`.
+Rules 1–2 read **muster + Typ** combined (the satellite-vs-ground-segment distinction lives in the
+muster, e.g. `SATCOMBw Bodensegment`); rules 3–4 read `Typ` only (calibrated; avoids a stray muster
+word like "Boot" in an unrelated name flipping the type). Net: `COMSATBw` → `SATELLITE`,
+`SATCOMBw Bodensegment` → `WEAPON_SYSTEM`. Classification does not use the page/operator (the Marine
+page lists Bordhubschrauber, which are AIRCRAFT).
 
 ## 3. Widened OPERATES target guard (`write_templates.py`)
 
@@ -42,7 +48,7 @@ the system type per-row (mirroring the `$op_type` pattern) with a widened allowe
 MATCH (op:Entity {name: $op_name, type: $op_type})
 WHERE op.type IN ["MILITARY_UNIT", "ORGANIZATION"]
 MATCH (ws:Entity {name: $ws_name, type: $ws_type})
-WHERE ws.type IN ["WEAPON_SYSTEM", "AIRCRAFT", "VESSEL"]
+WHERE ws.type IN ["WEAPON_SYSTEM", "AIRCRAFT", "VESSEL", "SATELLITE"]
 WITH op, ws LIMIT 1
 MERGE (op)-[r:OPERATES]->(ws)
 ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
@@ -91,16 +97,15 @@ Skip leaked **secondary-header rows**: the Marine table has a sub-section header
 (76 → 75). The hyphen-linebreak artifact `Luftlanderettungszen-trum, leicht` is left for curation
 (cosmetic; a real entry).
 
-## 7. FLAGGED DECISION — satellites (the one open question)
+## 7. Satellites — RESOLVED (SATELLITE is the 4th type, ground-segment excluded)
 
-Two rows are satellites: `COMSATBw` (`Kommunikations-satelliten`) and `SATCOMBw Bodensegment`
-(`satellitengestützte Kommunikationssystem`, actually the ground segment). The graph's `EntityType`
-enum includes `SATELLITE`. The user's stated scope was the 3 types {WEAPON_SYSTEM, AIRCRAFT, VESSEL}.
-- **Default in this spec (honoring the 3-type scope):** no `satellit` rule → both fall to
-  `WEAPON_SYSTEM`. Slightly mis-typed (COMSATBw is really a satellite) but within the stated scope.
-- **Alternative (recommend if acceptable):** add `SATELLITE` as a 4th classifier result + target
-  type (keyword `satellit`), so COMSATBw is typed correctly. `SATCOMBw Bodensegment` is ground infra
-  and would also catch `satellit` — acceptable-ish. **Resolve at spec review.**
+Decision (spec review): add `SATELLITE` as a 4th classifier result + target-guard type, with the
+ground-segment exclusion taking precedence (classifier rules 1→2 in §2). Net effect on the 2 rows:
+- `COMSATBw` (`Kommunikations-satelliten`) → **SATELLITE** (rule 2).
+- `SATCOMBw Bodensegment` (ground infrastructure) → **WEAPON_SYSTEM** (rule 1, `bodensegment` in
+  muster, before the satellite rule) — the system segment is not the satellite itself.
+
+Target guard is therefore `{WEAPON_SYSTEM, AIRCRAFT, VESSEL, SATELLITE}`.
 
 ## 8. Read-path — no change
 
@@ -122,11 +127,14 @@ surface with no further change.
   generalized-gate adversarial pass (the gate now spans 3 types).
 
 ## 10. Acceptance criteria
-1. `classify_system_type` maps every distinct seed `Typ` correctly (air→AIRCRAFT, sea→VESSEL,
-   else→WEAPON_SYSTEM); table-driven test over the real vocabulary.
+1. `classify_system_type` maps every distinct seed `Typ`/muster correctly across all 5 ordered rules
+   (ground-infra→WEAPON_SYSTEM, satellit→SATELLITE, air→AIRCRAFT, sea→VESSEL, else→WEAPON_SYSTEM);
+   table-driven test over the real vocabulary, incl. `COMSATBw`→SATELLITE and
+   `SATCOMBw Bodensegment`→WEAPON_SYSTEM.
 2. Re-`parse` drops the `Klasse`/`Typ` secondary-header row (76 → 75 systems).
-3. `LINK_OPERATES` binds `$ws_type` and guards `ws.type IN ["WEAPON_SYSTEM","AIRCRAFT","VESSEL"]`,
-   endpoints MATCH-only; template test verifies.
+3. `LINK_OPERATES` binds `$ws_type` and guards
+   `ws.type IN ["WEAPON_SYSTEM","AIRCRAFT","VESSEL","SATELLITE"]`, endpoints MATCH-only; template
+   test verifies.
 4. A fresh `equipment build --dry-run` classifies Eurofighter/Tornado/A400M/P-8A as `match`→AIRCRAFT,
    F123 as `match`→VESSEL (no longer ambiguous/duplicated); PATRIOT still `ambiguous`.
 5. The new-creation gate still refuses an approved `new` (of any type) lacking `approved_new`+`evidence`.
