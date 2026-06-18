@@ -65,10 +65,14 @@ def test_type_aware_match_links_aircraft_and_vessel():
     }
     rep = build_match_report(rows, lookup, gate_new_creation=True, target_type_of=_classify)
     by = {r["name"]: r for r in rep}
-    assert by["Eurofighter"]["decision"] == "match" and by["Eurofighter"]["target_type"] == "AIRCRAFT"
-    assert by["F123"]["decision"] == "match" and by["F123"]["target_type"] == "VESSEL"
-    assert by["Leopard 2"]["decision"] == "match" and by["Leopard 2"]["target_type"] == "WEAPON_SYSTEM"
-    assert by["Newthing"]["decision"] == "new" and by["Newthing"]["target_type"] == "AIRCRAFT"
+    assert by["Eurofighter"]["decision"] == "match"
+    assert by["Eurofighter"]["target_type"] == "AIRCRAFT"
+    assert by["F123"]["decision"] == "match"
+    assert by["F123"]["target_type"] == "VESSEL"
+    assert by["Leopard 2"]["decision"] == "match"
+    assert by["Leopard 2"]["target_type"] == "WEAPON_SYSTEM"
+    assert by["Newthing"]["decision"] == "new"
+    assert by["Newthing"]["target_type"] == "AIRCRAFT"
 
 
 def test_wrong_type_existing_is_ambiguous():

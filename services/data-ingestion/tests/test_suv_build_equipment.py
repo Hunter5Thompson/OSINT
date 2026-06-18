@@ -41,7 +41,8 @@ def test_build_statements_typed_and_ordered():
     rows = [_row("Leopard 2", count=310, service_end=2050)]
     approved = [{"name": "Leopard 2", "decision": "match", "existing_name": "Leopard 2"}]
     stmts = build_equipment_statements(rows, approved, OPS, extracted_at="2026-06-18T00:00:00Z")
-    sys_idx = next(i for i, s in enumerate(stmts) if "MERGE (w:Entity {name: $name, type: $type})" in s["statement"])
+    upsert_merge = "MERGE (w:Entity {name: $name, type: $type})"
+    sys_idx = next(i for i, s in enumerate(stmts) if upsert_merge in s["statement"])
     op_idx = next(i for i, s in enumerate(stmts) if "MERGE (op)-[r:OPERATES]" in s["statement"])
     assert sys_idx < op_idx
     assert stmts[sys_idx]["parameters"]["type"] == "WEAPON_SYSTEM"
@@ -79,6 +80,18 @@ def test_build_skips_unapproved_rows():
     approved = [{"name": "Leopard 2", "decision": "match", "existing_name": "Leopard 2"}]
     stmts = build_equipment_statements(rows, approved, OPS, extracted_at="t")
     assert not any("UnapprovedThing" in str(s["parameters"]) for s in stmts)
+
+
+def test_same_name_different_type_upserts_both():
+    # two rows, same muster, different classified types -> two typed UPSERT_SYSTEM nodes
+    rows = [_row("Tiger", type_raw="Kampfhubschrauber"),   # AIRCRAFT
+            _row("Tiger", type_raw="Kampfpanzer")]          # WEAPON_SYSTEM
+    approved = [{"name": "Tiger", "decision": "new", "approved_new": True, "evidence": "x"}]
+    stmts = build_equipment_statements(rows, approved, OPS, extracted_at="t")
+    upsert_merge = "MERGE (w:Entity {name: $name, type: $type})"
+    upserts = [s["parameters"]["type"] for s in stmts if upsert_merge in s["statement"]]
+    # both types upserted, not deduped away
+    assert sorted(upserts) == ["AIRCRAFT", "WEAPON_SYSTEM"]
 
 
 def test_build_creates_operator_for_create_decision():

@@ -56,7 +56,7 @@ def build_equipment_statements(
     approved_by_name = {e["name"]: e for e in approved}
     statements: list[dict] = []
     created_ops: set[tuple[str, str]] = set()
-    upserted_ws: set[str] = set()
+    upserted_ws: set[tuple[str, str]] = set()
     for row in rows:
         entry = approved_by_name.get(row.muster)
         if entry is None:
@@ -76,8 +76,8 @@ def build_equipment_statements(
             }})
         ws_name = ws_write_name(row, entry)
         ws_type = classify_system_type(row.type_raw, row.muster)
-        if ws_name not in upserted_ws:
-            upserted_ws.add(ws_name)
+        if (ws_name, ws_type) not in upserted_ws:
+            upserted_ws.add((ws_name, ws_type))
             statements.append({"statement": UPSERT_SYSTEM, "parameters": {
                 "name": ws_name,
                 "type": ws_type,
