@@ -60,8 +60,8 @@ SET o.aliases = coalesce(o.aliases, []) +
     o.last_seen = datetime()
 """
 
-UPSERT_WEAPON_SYSTEM = """
-MERGE (w:Entity {name: $name, type: "WEAPON_SYSTEM"})
+UPSERT_SYSTEM = """
+MERGE (w:Entity {name: $name, type: $type})
 ON CREATE SET w.first_seen = datetime()
 SET w.aliases = coalesce(w.aliases, []) +
         [a IN $aliases WHERE NOT a IN coalesce(w.aliases, [])],
@@ -75,7 +75,8 @@ SET w.aliases = coalesce(w.aliases, []) +
 LINK_OPERATES = """
 MATCH (op:Entity {name: $op_name, type: $op_type})
 WHERE op.type IN ["MILITARY_UNIT", "ORGANIZATION"]
-MATCH (ws:Entity {name: $ws_name, type: "WEAPON_SYSTEM"})
+MATCH (ws:Entity {name: $ws_name, type: $ws_type})
+WHERE ws.type IN ["WEAPON_SYSTEM", "AIRCRAFT", "VESSEL", "SATELLITE"]
 WITH op, ws LIMIT 1
 MERGE (op)-[r:OPERATES]->(ws)
 ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"

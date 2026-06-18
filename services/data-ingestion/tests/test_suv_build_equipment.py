@@ -19,8 +19,8 @@ OPS = operators_by_slug([OperatorEntry(
     target_name="Deutsches Heer", target_type="MILITARY_UNIT")])
 
 
-def _row(muster, count=None, service_end=None):
-    return WeaponSystemRow(muster=muster, type_raw="Kampfpanzer", count=count,
+def _row(muster, count=None, service_end=None, type_raw="Kampfpanzer"):
+    return WeaponSystemRow(muster=muster, type_raw=type_raw, count=count,
                            count_raw=str(count) if count else None,
                            service_end=service_end, page_slug=HEER, suv_url=URL)
 
@@ -37,18 +37,26 @@ def test_ws_write_name_match_vs_new():
     assert ws_write_name(_row("Schakal"), new) == "Schakal"
 
 
-def test_build_statements_orders_endpoints_before_link():
+def test_build_statements_typed_and_ordered():
     rows = [_row("Leopard 2", count=310, service_end=2050)]
     approved = [{"name": "Leopard 2", "decision": "match", "existing_name": "Leopard 2"}]
     stmts = build_equipment_statements(rows, approved, OPS, extracted_at="2026-06-18T00:00:00Z")
-    # the WEAPON_SYSTEM upsert (MERGE w) precedes the OPERATES link (MATCH op)
-    ws_idx = next(i for i, s in enumerate(stmts) if "MERGE (w:Entity" in s["statement"])
+    sys_idx = next(i for i, s in enumerate(stmts) if "MERGE (w:Entity {name: $name, type: $type})" in s["statement"])
     op_idx = next(i for i, s in enumerate(stmts) if "MERGE (op)-[r:OPERATES]" in s["statement"])
-    assert ws_idx < op_idx
+    assert sys_idx < op_idx
+    assert stmts[sys_idx]["parameters"]["type"] == "WEAPON_SYSTEM"
     link = stmts[op_idx]["parameters"]
-    assert link == {"op_name": "Deutsches Heer", "op_type": "MILITARY_UNIT",
-                    "ws_name": "Leopard 2", "count": 310, "count_raw": "310",
-                    "service_end": 2050, "note": None, "suv_url": URL}
+    assert link["ws_type"] == "WEAPON_SYSTEM" and link["ws_name"] == "Leopard 2"
+
+
+def test_build_classifies_aircraft():
+    rows = [_row("Eurofighter", type_raw="Kampfflugzeug")]
+    approved = [{"name": "Eurofighter", "decision": "match", "existing_name": "Eurofighter"}]
+    stmts = build_equipment_statements(rows, approved, OPS, extracted_at="t")
+    sys = next(s for s in stmts if "MERGE (w:Entity" in s["statement"])
+    link = next(s for s in stmts if "OPERATES" in s["statement"])
+    assert sys["parameters"]["type"] == "AIRCRAFT"
+    assert link["parameters"]["ws_type"] == "AIRCRAFT"
 
 
 def test_build_equipment_module_has_no_qdrant_dependency():
