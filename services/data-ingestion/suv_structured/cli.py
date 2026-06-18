@@ -51,6 +51,7 @@ from suv_structured.match_report import build_match_report, detect_drift, dump_r
 from suv_structured.operators import (
     load_operators,
     match_preflight_offenders,
+    operator_for_branch,
     operators_by_slug,
 )
 from suv_structured.parse import parse_companies
@@ -410,6 +411,41 @@ async def _fetch_equipment_node_names(
     return names, type_by_name
 
 
+async def _procurement_operator_counts(
+    targets: list[tuple[str, str]], client: httpx.AsyncClient,
+    *, neo4j_http_url: str, neo4j_user: str, neo4j_password: str,
+) -> dict[tuple[str, str], int]:
+    """Live node-count per (name, type) for the operators the programs actually use.
+
+    Mirrors build_equipment.match_target_counts' Cypher, but counts EVERY passed target
+    (both `match` AND `create` operators) — 2b upserts NO operators, so a `create` operator
+    (e.g. CIR) must already exist exactly once for its PROCURES MATCH to bind. Returns
+    {(name, type): count} for every target (0 for absent), ready for match_preflight_offenders."""
+    import base64
+    targets = sorted(set(targets))
+    if not targets:
+        return {}
+    cypher = ("UNWIND $pairs AS p "
+              "MATCH (e:Entity {name: p.name, type: p.type}) "
+              "RETURN p.name AS name, p.type AS type, count(e) AS c")
+    pairs = [{"name": n, "type": t} for n, t in targets]
+    auth = base64.b64encode(f"{neo4j_user}:{neo4j_password}".encode()).decode()
+    resp = await client.post(
+        f"{neo4j_http_url}/db/neo4j/tx/commit",
+        json={"statements": [{"statement": cypher, "parameters": {"pairs": pairs}}]},
+        headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"})
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("errors"):
+        msg = data['errors'][0].get('message', data['errors'])
+        raise RuntimeError(f"Neo4j operator preflight error: {msg}")
+    counts = {(n, t): 0 for n, t in targets}
+    for row in (data["results"][0]["data"] if data.get("results") else []):
+        name, etype, c = row["row"]
+        counts[(name, etype)] = c
+    return counts
+
+
 @cli.group()
 def procurements() -> None:
     """SUV Modernisierungsvorhaben structured ingestion (Track 2b)."""
@@ -457,10 +493,18 @@ def procurements_build(dry_run: bool, approved_path: Path | None, report_out: Pa
     --approved-matches. Real build is Neo4j-FIRST: programs + PROCURES are always written,
     CONTRACTED_TO/CONCERNS_SYSTEM for approved matches, then Qdrant profiles (all programs).
 
-    Drift-check decision: NONE. Every link template (PROCURES/CONTRACTED_TO/CONCERNS_SYSTEM)
-    is MATCH-only — a stale approved entry whose target vanished yields no edge, never a
-    wrong one. A per-program drift check would also have to be robust to the same contractor
-    name appearing under multiple programs; omitting it is the safe, simpler choice."""
+    Two gates guard the real build, both BEFORE any write (drift first, then operator preflight):
+      1. Per-kind drift check (contractors + subjects separately, so a contractor and a subject
+         sharing a name can't cross-collide in detect_drift's name-keyed map). The fresh
+         match-reports are re-derived against the LIVE graph; if any approved entry's decision
+         or match target moved/vanished since the dry-run we abort and ask for a re-curate.
+         This keeps the Qdrant payload (built from the same approved entries) consistent with the
+         graph: after a passing drift check every approved match still resolves, so the MATCH-only
+         CONTRACTED_TO/CONCERNS_SYSTEM edge IS written for every entity the payload lists.
+      2. Exactly-1 operator preflight over EVERY operator the programs actually use (both `match`
+         and `create` — 2b upserts no operators, so a `create` operator must already exist exactly
+         once). LINK_PROCURES is MATCH-only, so this guarantees no program is silently
+         PROCURES-less."""
     async def _run() -> None:
         if not PROCUREMENTS_SEED.exists():
             raise click.ClickException(
@@ -494,23 +538,27 @@ def procurements_build(dry_run: bool, approved_path: Path | None, report_out: Pa
                 if cand:
                     subject_items.append(_MatchItem(cand, p.suv_url, p.title))
 
+            # Re-derive the CURRENT-graph match reports for BOTH kinds (shared by dry-run
+            # and the real-build drift check, so the real build compares the approved YAML
+            # against the live graph as it is RIGHT NOW, not as it was at the dry-run).
+            org_lookup = await _lookup_existing(
+                contractor_items, client, settings.neo4j_http_url, u, pw)
+            equip_lookup = await _lookup_existing(
+                subject_items, client, settings.neo4j_http_url, u, pw,
+                entity_type="WEAPON_SYSTEM")
+            contractor_report = build_match_report(
+                contractor_items, org_lookup, target_type="ORGANIZATION")
+            for i, entry in enumerate(contractor_report):
+                entry["kind"] = "contractor"
+                entry["program_title"] = contractor_items[i].program_title
+            subject_report = build_match_report(
+                subject_items, equip_lookup,
+                target_type_of=lambda it: equip_type_by_name[it.name])
+            for i, entry in enumerate(subject_report):
+                entry["kind"] = "subject"
+                entry["program_title"] = subject_items[i].program_title
+
             if dry_run:
-                org_lookup = await _lookup_existing(
-                    contractor_items, client, settings.neo4j_http_url, u, pw)
-                equip_lookup = await _lookup_existing(
-                    subject_items, client, settings.neo4j_http_url, u, pw,
-                    entity_type="WEAPON_SYSTEM")
-                contractor_report = build_match_report(
-                    contractor_items, org_lookup, target_type="ORGANIZATION")
-                for i, entry in enumerate(contractor_report):
-                    entry["kind"] = "contractor"
-                    entry["program_title"] = contractor_items[i].program_title
-                subject_report = build_match_report(
-                    subject_items, equip_lookup,
-                    target_type_of=lambda it: equip_type_by_name[it.name])
-                for i, entry in enumerate(subject_report):
-                    entry["kind"] = "subject"
-                    entry["program_title"] = subject_items[i].program_title
                 dump_report(contractor_report + subject_report, report_out)
                 click.echo(
                     f"dry-run: wrote match report -> {report_out} "
@@ -522,10 +570,44 @@ def procurements_build(dry_run: bool, approved_path: Path | None, report_out: Pa
             approved_contractors = [e for e in approved if e.get("kind") == "contractor"]
             approved_subjects = [e for e in approved if e.get("kind") == "subject"]
 
+            # GATE 1 — per-kind drift check (BEFORE any write). Contractors and subjects are
+            # drift-checked separately against their own fresh report so two entries sharing a
+            # name (one ORG contractor, one equipment subject) can't cross-collide in
+            # detect_drift's name-keyed map. A stale/retyped/now-ambiguous approved match aborts.
+            drift = (detect_drift(approved_contractors, contractor_report)
+                     + detect_drift(approved_subjects, subject_report))
+            if drift:
+                raise ProcurementBuildGateError(
+                    "graph changed since dry-run — re-run `procurements build --dry-run` "
+                    f"+ re-curate: {drift}")
+
+            operators_list = load_operators(OPERATORS_SEED)
+            # GATE 2 — exactly-1 operator preflight over EVERY operator the programs USE
+            # (BEFORE any write). Resolve each program's branch operator early (clean abort
+            # instead of failing deep inside build_procurement_statements), collect the distinct
+            # (name, type) targets, then count live nodes. match|create both must exist exactly
+            # once because LINK_PROCURES is MATCH-only and 2b upserts no operators.
+            used_targets: set[tuple[str, str]] = set()
+            for p in programs:
+                op = operator_for_branch(p.branch, operators_list)
+                if op is None:
+                    raise ProcurementBuildGateError(
+                        f"no operator for branch {p.branch!r} (program {p.title!r}) — "
+                        "add a matching page_label row to suv_operators.yaml")
+                used_targets.add((op.target_name, op.target_type))
+            op_counts = await _procurement_operator_counts(
+                sorted(used_targets), client, neo4j_http_url=settings.neo4j_http_url,
+                neo4j_user=u, neo4j_password=pw)
+            op_offenders = match_preflight_offenders(op_counts)
+            if op_offenders:
+                raise ProcurementBuildGateError(
+                    "operator preflight failed (not exactly-1 live node): "
+                    f"{op_offenders}")
+
             from datetime import UTC, datetime
             ts = datetime.now(UTC).isoformat()
             stmts = build_procurement_statements(
-                programs, load_operators(OPERATORS_SEED),
+                programs, operators_list,
                 approved_contractors=approved_contractors,
                 approved_subjects=approved_subjects, extracted_at=ts)
             # Neo4j FIRST — Qdrant strictly after a successful write_neo4j (no Qdrant

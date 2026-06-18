@@ -106,6 +106,12 @@ def test_procurements_build_neo4j_before_qdrant(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(cli_mod, "_fetch_equipment_node_names", AsyncMock(
         return_value=(set(), {})))
 
+    # drift passes (no approved entry drifted) + the Heer operator resolves to exactly one
+    # live node → both new gates are satisfied and the build proceeds to write.
+    monkeypatch.setattr(cli_mod, "detect_drift", lambda approved, fresh: [])
+    monkeypatch.setattr(cli_mod, "_procurement_operator_counts", AsyncMock(
+        return_value={("Deutsches Heer", "MILITARY_UNIT"): 1}))
+
     res = CliRunner().invoke(
         cli, ["procurements", "build", "--approved-matches", str(approved)])
     assert res.exit_code == 0, (res.output, res.exception)
@@ -113,3 +119,93 @@ def test_procurements_build_neo4j_before_qdrant(tmp_path: Path, monkeypatch):
     assert calls.index("neo4j") < calls.index("qdrant")
     titles = {p.payload["title"] for p in captured["points"]}
     assert "Leopard 2 Kampfwertsteigerung" in titles
+
+
+def test_procurements_build_aborts_on_contractor_drift(tmp_path: Path, monkeypatch):
+    """F-Q: an approved contractor whose target moved/vanished in the live graph since the
+    dry-run → the per-kind drift check aborts BEFORE any write (write_neo4j never called)."""
+    import suv_structured.cli as cli_mod
+
+    seed = tmp_path / "suv_procurements.yaml"
+    seed.write_text(
+        '- {title: "Leopard 2 Kampfwertsteigerung", branch: Heer, '
+        'contractor_raw: "Rheinmetall AG", typ: Kampfpanzer, suv_url: u}\n')
+    monkeypatch.setattr("suv_structured.cli.PROCUREMENTS_SEED", seed)
+
+    approved = tmp_path / "approved.yaml"
+    approved.write_text(
+        '- {name: "Rheinmetall AG", suv_url: u, decision: match, '
+        'existing_name: "Rheinmetall AG", approved: true, kind: contractor, '
+        'program_title: "Leopard 2 Kampfwertsteigerung"}\n')
+
+    calls: list[str] = []
+
+    async def _fake_write(statements, **kw):
+        calls.append("neo4j")
+
+    monkeypatch.setattr(cli_mod, "write_neo4j", _fake_write)
+    monkeypatch.setattr(
+        cli_mod, "QdrantClient",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no qdrant on abort")),
+        raising=False)
+    monkeypatch.setattr(cli_mod, "embed_text", AsyncMock(return_value=[0.1, 0.2, 0.3]))
+    # LIVE graph no longer has Rheinmetall AG as an ORGANIZATION → fresh report decision
+    # for the contractor becomes "new" → detect_drift flags it.
+    monkeypatch.setattr(cli_mod, "_lookup_existing", AsyncMock(return_value={}))
+    monkeypatch.setattr(cli_mod, "_fetch_equipment_node_names", AsyncMock(
+        return_value=(set(), {})))
+    # operator preflight is clean (so the abort is unambiguously the drift check)
+    monkeypatch.setattr(cli_mod, "_procurement_operator_counts", AsyncMock(
+        return_value={("Deutsches Heer", "MILITARY_UNIT"): 1}))
+
+    res = CliRunner().invoke(
+        cli, ["procurements", "build", "--approved-matches", str(approved)])
+    assert res.exit_code != 0
+    msg = (res.output + str(res.exception)).lower()
+    assert "re-run" in msg or "drift" in msg
+    assert "neo4j" not in calls  # NEVER written
+
+
+def test_procurements_build_aborts_on_operator_preflight(tmp_path: Path, monkeypatch):
+    """F-OP: a used operator that does NOT resolve to exactly one live node (here 0) →
+    the exactly-1 operator preflight aborts BEFORE any write (write_neo4j never called)."""
+    import suv_structured.cli as cli_mod
+
+    seed = tmp_path / "suv_procurements.yaml"
+    seed.write_text(
+        '- {title: "Leopard 2 Kampfwertsteigerung", branch: Heer, '
+        'contractor_raw: "Rheinmetall AG", typ: Kampfpanzer, suv_url: u}\n')
+    monkeypatch.setattr("suv_structured.cli.PROCUREMENTS_SEED", seed)
+
+    approved = tmp_path / "approved.yaml"
+    approved.write_text(
+        '- {name: "Rheinmetall AG", suv_url: u, decision: match, '
+        'existing_name: "Rheinmetall AG", approved: true, kind: contractor, '
+        'program_title: "Leopard 2 Kampfwertsteigerung"}\n')
+
+    calls: list[str] = []
+
+    async def _fake_write(statements, **kw):
+        calls.append("neo4j")
+
+    monkeypatch.setattr(cli_mod, "write_neo4j", _fake_write)
+    monkeypatch.setattr(
+        cli_mod, "QdrantClient",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no qdrant on abort")),
+        raising=False)
+    monkeypatch.setattr(cli_mod, "embed_text", AsyncMock(return_value=[0.1, 0.2, 0.3]))
+    # contractor drift passes (live graph still has Rheinmetall AG as ORGANIZATION)
+    monkeypatch.setattr(cli_mod, "_lookup_existing", AsyncMock(return_value={
+        "rheinmetall ag": [("Rheinmetall AG", "ORGANIZATION", "idR")]}))
+    monkeypatch.setattr(cli_mod, "_fetch_equipment_node_names", AsyncMock(
+        return_value=(set(), {})))
+    # the Heer operator resolves to ZERO live nodes → preflight offender → abort
+    monkeypatch.setattr(cli_mod, "_procurement_operator_counts", AsyncMock(
+        return_value={("Deutsches Heer", "MILITARY_UNIT"): 0}))
+
+    res = CliRunner().invoke(
+        cli, ["procurements", "build", "--approved-matches", str(approved)])
+    assert res.exit_code != 0
+    msg = (res.output + str(res.exception)).lower()
+    assert "preflight" in msg or "exactly-1" in msg
+    assert "neo4j" not in calls  # NEVER written
