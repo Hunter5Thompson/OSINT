@@ -56,6 +56,7 @@ MERGE (o:Entity {name: $name, type: $type})
 ON CREATE SET o.first_seen = datetime(), o.data_source = "suv.report"
 SET o.aliases = coalesce(o.aliases, []) +
         [a IN $aliases WHERE NOT a IN coalesce(o.aliases, [])],
+    o.suv_extracted_at = $extracted_at,
     o.last_seen = datetime()
 """
 
@@ -67,6 +68,7 @@ SET w.aliases = coalesce(w.aliases, []) +
     w.weapon_type = coalesce(w.weapon_type, $weapon_type),
     w.data_source = coalesce(w.data_source, $data_source),
     w.suv_url = coalesce(w.suv_url, $suv_url),
+    w.suv_extracted_at = $extracted_at,
     w.last_seen = datetime()
 """
 

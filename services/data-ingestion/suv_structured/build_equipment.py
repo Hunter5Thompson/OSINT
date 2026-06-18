@@ -6,7 +6,6 @@ template's MATCH-ed endpoints exist."""
 from __future__ import annotations
 
 import base64
-from pathlib import Path
 
 import httpx
 import structlog
@@ -15,7 +14,9 @@ from canonicalize import canonicalize_entity
 from suv_structured.equipment_schemas import WeaponSystemRow
 from suv_structured.operators import OperatorEntry
 from suv_structured.write_templates import (
-    LINK_OPERATES, UPSERT_OPERATOR, UPSERT_WEAPON_SYSTEM,
+    LINK_OPERATES,
+    UPSERT_OPERATOR,
+    UPSERT_WEAPON_SYSTEM,
 )
 
 log = structlog.get_logger(__name__)
@@ -70,6 +71,7 @@ def build_equipment_statements(
             statements.append({"statement": UPSERT_OPERATOR, "parameters": {
                 "name": op.target_name, "type": op.target_type,
                 "aliases": sorted(set(op.create_properties.get("aliases", []))),
+                "extracted_at": extracted_at,
             }})
         ws_name = ws_write_name(row, entry)
         if ws_name not in upserted_ws:
@@ -80,6 +82,7 @@ def build_equipment_statements(
                 "weapon_type": row.type_raw,
                 "data_source": "suv.report",
                 "suv_url": row.suv_url,
+                "extracted_at": extracted_at,
             }})
         statements.append({"statement": LINK_OPERATES, "parameters": {
             "op_name": op.target_name, "op_type": op.target_type,
@@ -149,7 +152,8 @@ async def match_target_counts(
     resp.raise_for_status()
     data = resp.json()
     if data.get("errors"):
-        raise RuntimeError(f"Neo4j preflight error: {data['errors'][0].get('message', data['errors'])}")
+        msg = data['errors'][0].get('message', data['errors'])
+        raise RuntimeError(f"Neo4j preflight error: {msg}")
     counts = {(n, t): 0 for n, t in targets}
     for row in (data["results"][0]["data"] if data.get("results") else []):
         name, etype, c = row["row"]

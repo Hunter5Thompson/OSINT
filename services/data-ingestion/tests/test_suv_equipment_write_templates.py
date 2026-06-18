@@ -29,6 +29,7 @@ def test_upsert_weapon_system_is_non_destructive():
     assert "coalesce(w.data_source, $data_source)" in t
     assert "coalesce(w.suv_url, $suv_url)" in t
     assert "ON CREATE SET w.first_seen" in t
+    assert "w.suv_extracted_at = $extracted_at" in t
 
 
 def test_upsert_operator_creates_typed_node():
@@ -36,3 +37,4 @@ def test_upsert_operator_creates_typed_node():
     assert "MERGE (o:Entity {name: $name, type: $type})" in t
     assert "coalesce(o.aliases, [])" in t
     assert "ON CREATE SET o.first_seen" in t
+    assert "o.suv_extracted_at = $extracted_at" in t
