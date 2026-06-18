@@ -446,6 +446,39 @@ async def _procurement_operator_counts(
     return counts
 
 
+def _procurement_drift(approved: list[dict], fresh: list[dict]) -> list[str]:
+    """Composite-key drift for the procurement build. Keyed by (kind, program_title, name) —
+    NOT by name alone — because the same contractor/subject recurs across programs; a per-name
+    check (the shared detect_drift) could validate a stale (program, target) pair against a
+    fresh entry for a DIFFERENT program with the same name. An approved entry must still appear
+    in the freshly re-derived report under the SAME composite key with the same decision,
+    existing_name, and (for subjects) target_type; a vanished pair is itself drift.
+
+    Subsumes the old per-kind detect_drift (decision + existing_name) AND the separate subject
+    target_type check, since target_type is the third write-bound field (LINK_CONCERNS_SYSTEM's
+    $sys_type)."""
+    def key(e: dict) -> tuple:
+        return (e.get("kind"), e.get("program_title"), e.get("name"))
+    fresh_by_key = {key(e): e for e in fresh}
+    drifted: list[str] = []
+    for e in approved:
+        tag = f"{e.get('kind')}:{e.get('program_title')}|{e.get('name')}"
+        fr = fresh_by_key.get(key(e))
+        if fr is None:
+            drifted.append(f"{tag} (no longer proposed by a fresh dry-run)")
+            continue
+        decision = (e.get("decision") or "").lower()
+        if (fr.get("decision") or "").lower() != decision:
+            drifted.append(f"{tag} (decision {decision} -> {(fr.get('decision') or '').lower()})")
+        elif decision == "match" and fr.get("existing_name") != e.get("existing_name"):
+            drifted.append(
+                f"{tag} (match target moved {e.get('existing_name')} -> {fr.get('existing_name')})")
+        elif e.get("kind") == "subject" and fr.get("target_type") != e.get("target_type"):
+            drifted.append(
+                f"{tag} (system type {e.get('target_type')} -> {fr.get('target_type')})")
+    return drifted
+
+
 @cli.group()
 def procurements() -> None:
     """SUV Modernisierungsvorhaben structured ingestion (Track 2b)."""
@@ -494,17 +527,18 @@ def procurements_build(dry_run: bool, approved_path: Path | None, report_out: Pa
     CONTRACTED_TO/CONCERNS_SYSTEM for approved matches, then Qdrant profiles (all programs).
 
     Two gates guard the real build, both BEFORE any write (drift first, then operator preflight):
-      1. Per-kind drift check (contractors + subjects separately, so a contractor and a subject
-         sharing a name can't cross-collide in detect_drift's name-keyed map). The fresh
-         match-reports are re-derived against the LIVE graph; if any approved entry's decision
-         or match target moved/vanished since the dry-run we abort and ask for a re-curate.
-         For subjects, an additional target_type drift check is applied: if the live graph now
-         types a subject system differently from the approved YAML (e.g. AIRCRAFT→VESSEL),
-         LINK_CONCERNS_SYSTEM's $sys_type param would bind the wrong (stale) type and produce no
-         edge. This check aborts before any write in that case too.
-         This keeps the Qdrant payload (built from the same approved entries) consistent with the
-         graph: after a passing drift check every approved match still resolves, so the MATCH-only
-         CONTRACTED_TO/CONCERNS_SYSTEM edge IS written for every entity the payload lists.
+      1. Composite-key drift + orphan check. The contractor + subject match-reports are
+         re-derived against the LIVE graph, then drift is compared by (kind, program_title, name)
+         — NOT name alone — because the same contractor/subject recurs across programs and a
+         per-name check could validate a stale (program, target) pair against a fresh entry for a
+         DIFFERENT program with the same name. Each approved entry must reappear under the same
+         composite key with the same decision, existing_name, and (for subjects) target_type
+         (the third write-bound field — LINK_CONCERNS_SYSTEM's $sys_type would otherwise bind a
+         stale type and produce no edge while the Qdrant payload still lists it). A vanished pair
+         is itself drift. The orphan check hard-aborts if any approved program_title is no longer
+         in the seed (a fresh dry-run could never re-propose it). After a passing check every
+         approved match still resolves, keeping the Qdrant payload (built from the same approved
+         entries) consistent with the MATCH-only CONTRACTED_TO/CONCERNS_SYSTEM edges.
       2. Exactly-1 operator preflight over EVERY operator the programs actually use (both `match`
          and `create` — 2b upserts no operators, so a `create` operator must already exist exactly
          once). LINK_PROCURES is MATCH-only, so this guarantees no program is silently
@@ -574,33 +608,30 @@ def procurements_build(dry_run: bool, approved_path: Path | None, report_out: Pa
             approved_contractors = [e for e in approved if e.get("kind") == "contractor"]
             approved_subjects = [e for e in approved if e.get("kind") == "subject"]
 
-            # GATE 1 — per-kind drift check (BEFORE any write). Contractors and subjects are
-            # drift-checked separately against their own fresh report so two entries sharing a
-            # name (one ORG contractor, one equipment subject) can't cross-collide in
-            # detect_drift's name-keyed map. A stale/retyped/now-ambiguous approved match aborts.
-            drift = (detect_drift(approved_contractors, contractor_report)
-                     + detect_drift(approved_subjects, subject_report))
+            # GATE 1 — composite-key drift + orphan check (BEFORE any write). The fresh
+            # contractor + subject reports are re-derived against the LIVE graph. Drift is keyed
+            # by (kind, program_title, name) — NOT name alone — because the same contractor/subject
+            # recurs across programs; a per-name check could validate a stale (program, target)
+            # pair against a fresh entry for a DIFFERENT program with the same name. The composite
+            # check compares decision + existing_name + (for subjects) target_type (the third
+            # write-bound field, LINK_CONCERNS_SYSTEM's $sys_type), and treats a vanished composite
+            # key as drift. The orphan check is the hard-abort for an approved program_title no
+            # longer in the seed: a fresh dry-run could never re-propose it, and build_procurements
+            # would only log a warning, so we abort here instead of silently dropping the edge.
+            program_titles = {p.title for p in programs}
+            orphans = sorted({
+                e.get("program_title") for e in approved
+                if e.get("program_title") not in program_titles})
+            if orphans:
+                raise ProcurementBuildGateError(
+                    "approved report references program(s) absent from the current seed "
+                    f"(re-run `procurements build --dry-run` + re-curate): {orphans}")
+            drift = _procurement_drift(
+                approved_contractors + approved_subjects, contractor_report + subject_report)
             if drift:
                 raise ProcurementBuildGateError(
-                    "graph changed since dry-run — re-run `procurements build --dry-run` "
-                    f"+ re-curate: {drift}")
-
-            # GATE 1b — subject target_type drift check (BEFORE any write). detect_drift only
-            # compares decision + existing_name. But LINK_CONCERNS_SYSTEM binds $sys_type from
-            # the approved entry's target_type. If the live graph retyped a subject node between
-            # the dry-run and now (e.g. AIRCRAFT → VESSEL), the approved target_type is stale:
-            # the MATCH (s {name: "XYZ", type: "AIRCRAFT"}) binds nothing → no edge, while the
-            # Qdrant system_links payload still lists "XYZ" → graph/Qdrant divergence. Abort.
-            fresh_subject_type = {e["name"]: e.get("target_type") for e in subject_report}
-            subj_type_drift = sorted({
-                e["name"] for e in approved_subjects
-                if (e.get("decision") or "").lower() == "match"
-                and fresh_subject_type.get(e["name"]) != e.get("target_type")
-            })
-            if subj_type_drift:
-                raise ProcurementBuildGateError(
-                    "subject system type changed since dry-run (re-run `procurements build "
-                    f"--dry-run` + re-curate): {subj_type_drift}")
+                    "approved report diverges from a fresh dry-run (graph/seed changed since "
+                    f"curation) — re-run `procurements build --dry-run` + re-curate: {drift}")
 
             operators_list = load_operators(OPERATORS_SEED)
             # GATE 2 — exactly-1 operator preflight over EVERY operator the programs USE

@@ -102,18 +102,19 @@ def test_procurements_build_neo4j_before_qdrant(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(cli_mod, "write_neo4j", _fake_write)
     monkeypatch.setattr(cli_mod, "QdrantClient", _FakeQdrant, raising=False)
     monkeypatch.setattr(cli_mod, "embed_text", AsyncMock(return_value=[0.1, 0.2, 0.3]))
-    # Provide "Leopard 2" as WEAPON_SYSTEM in the live graph so GATE 1b (subject target_type
-    # drift check) sees a matching type and does NOT abort. detect_drift is still mocked to
-    # return [] so the only gate that could abort is operator preflight (also satisfied below).
+    # Live graph: "Leopard 2" is a WEAPON_SYSTEM and "Rheinmetall AG" an ORGANIZATION, both
+    # matching the approved YAML exactly under their (kind, program_title, name) composite key,
+    # so the composite drift + orphan check passes cleanly. Both _lookup_existing calls
+    # (contractors, subjects) consult this same dict.
     monkeypatch.setattr(cli_mod, "_fetch_equipment_node_names", AsyncMock(
         return_value=({"Leopard 2"}, {"Leopard 2": "WEAPON_SYSTEM"})))
     monkeypatch.setattr(cli_mod, "_lookup_existing", AsyncMock(return_value={
         "leopard 2": [("Leopard 2", "WEAPON_SYSTEM", "idL")],
+        "rheinmetall ag": [("Rheinmetall AG", "ORGANIZATION", "idR")],
     }))
 
-    # drift passes (no approved entry drifted) + the Heer operator resolves to exactly one
-    # live node → both new gates are satisfied and the build proceeds to write.
-    monkeypatch.setattr(cli_mod, "detect_drift", lambda approved, fresh: [])
+    # composite drift passes (no approved entry drifted, no orphan) + the Heer operator resolves
+    # to exactly one live node → both gates are satisfied and the build proceeds to write.
     monkeypatch.setattr(cli_mod, "_procurement_operator_counts", AsyncMock(
         return_value={("Deutsches Heer", "MILITARY_UNIT"): 1}))
 
@@ -128,7 +129,8 @@ def test_procurements_build_neo4j_before_qdrant(tmp_path: Path, monkeypatch):
 
 def test_procurements_build_aborts_on_contractor_drift(tmp_path: Path, monkeypatch):
     """F-Q: an approved contractor whose target moved/vanished in the live graph since the
-    dry-run → the per-kind drift check aborts BEFORE any write (write_neo4j never called)."""
+    dry-run → the composite (kind, program_title, name) drift check aborts BEFORE any write
+    (write_neo4j never called)."""
     import suv_structured.cli as cli_mod
 
     seed = tmp_path / "suv_procurements.yaml"
@@ -173,9 +175,10 @@ def test_procurements_build_aborts_on_contractor_drift(tmp_path: Path, monkeypat
 
 def test_procurements_build_aborts_on_subject_type_drift(tmp_path: Path, monkeypatch):
     """F-Q residual: approved subject has target_type=AIRCRAFT but the live graph now types
-    the same node as VESSEL.  detect_drift PASSES (decision=match + existing_name unchanged)
-    but the stale approved target_type would make LINK_CONCERNS_SYSTEM's $sys_type bind nothing
-    → graph/Qdrant divergence.  GATE 1b must abort BEFORE write_neo4j is ever called.
+    the same node as VESSEL.  decision=match + existing_name are unchanged (a per-name/decision
+    check alone would PASS), but the stale approved target_type would make LINK_CONCERNS_SYSTEM's
+    $sys_type bind nothing → graph/Qdrant divergence.  The composite drift check compares
+    target_type for subjects and must abort BEFORE write_neo4j is ever called.
 
     subject_candidate requires len(name) >= 4, so we use "XYZW" (4 chars) as the name."""
     import suv_structured.cli as cli_mod
@@ -227,6 +230,118 @@ def test_procurements_build_aborts_on_subject_type_drift(tmp_path: Path, monkeyp
     # error message must reference the type change
     assert "type" in msg
     assert "neo4j" not in calls  # write_neo4j NEVER called
+
+
+def test_procurements_build_aborts_on_composite_program_drift(tmp_path: Path, monkeypatch):
+    """ROOT-CAUSE repro (3rd external-review finding): the same contractor name recurs across
+    programs. The approved YAML carries a STALE (contractor, Program A, "Rheinmetall AG", match)
+    entry, but the current seed lists Rheinmetall ONLY under Program B (Program A's contractor
+    changed to Airbus). A fresh dry-run would therefore propose (contractor, Program B,
+    Rheinmetall) and (contractor, Program A, Airbus) — NOT (contractor, Program A, Rheinmetall).
+
+    The OLD per-name detect_drift keyed the fresh report by name alone, so the stale Program-A
+    Rheinmetall entry was falsely validated against the fresh Program-B Rheinmetall entry and the
+    build proceeded (writing a CONTRACTED_TO edge + Qdrant link for the WRONG program). The
+    composite (kind, program_title, name) drift check MUST flag the vanished Program-A pair and
+    abort BEFORE any write."""
+    import suv_structured.cli as cli_mod
+
+    seed = tmp_path / "suv_procurements.yaml"
+    # Program A's contractor is now Airbus; Rheinmetall now appears only under Program B.
+    seed.write_text(
+        '- {title: "Program A", branch: Heer, contractor_raw: "Airbus", '
+        'typ: Kampfpanzer, suv_url: a}\n'
+        '- {title: "Program B", branch: Heer, contractor_raw: "Rheinmetall AG", '
+        'typ: Kampfpanzer, suv_url: b}\n')
+    monkeypatch.setattr("suv_structured.cli.PROCUREMENTS_SEED", seed)
+
+    approved = tmp_path / "approved.yaml"
+    # STALE: an approved Program-A Rheinmetall entry (the bug) PLUS the now-valid entries.
+    approved.write_text(
+        '- {name: "Rheinmetall AG", suv_url: a, decision: match, '
+        'existing_name: "Rheinmetall AG", approved: true, kind: contractor, '
+        'program_title: "Program A"}\n'
+        '- {name: "Airbus", suv_url: a, decision: match, '
+        'existing_name: "Airbus", approved: true, kind: contractor, '
+        'program_title: "Program A"}\n'
+        '- {name: "Rheinmetall AG", suv_url: b, decision: match, '
+        'existing_name: "Rheinmetall AG", approved: true, kind: contractor, '
+        'program_title: "Program B"}\n')
+
+    calls: list[str] = []
+
+    async def _fake_write(statements, **kw):
+        calls.append("neo4j")
+
+    monkeypatch.setattr(cli_mod, "write_neo4j", _fake_write)
+    monkeypatch.setattr(
+        cli_mod, "QdrantClient",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no qdrant on abort")),
+        raising=False)
+    monkeypatch.setattr(cli_mod, "embed_text", AsyncMock(return_value=[0.1, 0.2, 0.3]))
+    # Both Airbus and Rheinmetall resolve as exactly-one ORGANIZATION in the live graph,
+    # so each individual name matches — the per-name detect_drift would PASS this case.
+    monkeypatch.setattr(cli_mod, "_lookup_existing", AsyncMock(return_value={
+        "airbus": [("Airbus", "ORGANIZATION", "idA")],
+        "rheinmetall ag": [("Rheinmetall AG", "ORGANIZATION", "idR")],
+    }))
+    monkeypatch.setattr(cli_mod, "_fetch_equipment_node_names", AsyncMock(
+        return_value=(set(), {})))
+    # operator preflight clean → the abort is unambiguously the composite drift check.
+    monkeypatch.setattr(cli_mod, "_procurement_operator_counts", AsyncMock(
+        return_value={("Deutsches Heer", "MILITARY_UNIT"): 1}))
+
+    res = CliRunner().invoke(
+        cli, ["procurements", "build", "--approved-matches", str(approved)])
+    assert res.exit_code != 0, (res.output, res.exception)
+    msg = (res.output + str(res.exception)).lower()
+    assert "fresh dry-run" in msg or "diverges" in msg
+    assert "neo4j" not in calls  # NEVER written
+
+
+def test_procurements_build_aborts_on_orphan_program(tmp_path: Path, monkeypatch):
+    """Orphan hard-abort: an approved entry references a program_title that is no longer in
+    the seed. A fresh dry-run could never re-propose it, so the build MUST abort before any
+    write rather than silently dropping the edge (build_procurements only logs a warning)."""
+    import suv_structured.cli as cli_mod
+
+    seed = tmp_path / "suv_procurements.yaml"
+    seed.write_text(
+        '- {title: "Leopard 2 Kampfwertsteigerung", branch: Heer, '
+        'contractor_raw: "Rheinmetall AG", typ: Kampfpanzer, suv_url: u}\n')
+    monkeypatch.setattr("suv_structured.cli.PROCUREMENTS_SEED", seed)
+
+    approved = tmp_path / "approved.yaml"
+    # references "Ghost Program" which is NOT in the seed
+    approved.write_text(
+        '- {name: "Rheinmetall AG", suv_url: g, decision: match, '
+        'existing_name: "Rheinmetall AG", approved: true, kind: contractor, '
+        'program_title: "Ghost Program"}\n')
+
+    calls: list[str] = []
+
+    async def _fake_write(statements, **kw):
+        calls.append("neo4j")
+
+    monkeypatch.setattr(cli_mod, "write_neo4j", _fake_write)
+    monkeypatch.setattr(
+        cli_mod, "QdrantClient",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no qdrant on abort")),
+        raising=False)
+    monkeypatch.setattr(cli_mod, "embed_text", AsyncMock(return_value=[0.1, 0.2, 0.3]))
+    monkeypatch.setattr(cli_mod, "_lookup_existing", AsyncMock(return_value={
+        "rheinmetall ag": [("Rheinmetall AG", "ORGANIZATION", "idR")]}))
+    monkeypatch.setattr(cli_mod, "_fetch_equipment_node_names", AsyncMock(
+        return_value=(set(), {})))
+    monkeypatch.setattr(cli_mod, "_procurement_operator_counts", AsyncMock(
+        return_value={("Deutsches Heer", "MILITARY_UNIT"): 1}))
+
+    res = CliRunner().invoke(
+        cli, ["procurements", "build", "--approved-matches", str(approved)])
+    assert res.exit_code != 0, (res.output, res.exception)
+    msg = (res.output + str(res.exception)).lower()
+    assert "ghost program" in msg and "absent" in msg
+    assert "neo4j" not in calls  # NEVER written
 
 
 def test_procurements_build_aborts_on_operator_preflight(tmp_path: Path, monkeypatch):
