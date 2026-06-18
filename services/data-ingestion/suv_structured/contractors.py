@@ -1,10 +1,13 @@
 """Split a SUV Auftragnehmer string into individual contractor parties.
 
 Consortia appear as 'A & B', 'A, B', or 'Konsortium … (A & B)'. Empty markers
-('/', 'N/A') yield no parties. NOTE: a genuine single company with '&' in its name
-(e.g. 'Rohde & Schwarz' as a standalone value) would be over-split; in the observed
-data such names only appear inside comma-lists, so we split on '&' too — the match
-gate (no auto-create) is the backstop for any over-split party that doesn't match."""
+('/', 'N/A') yield no parties. RULE: comma/semicolon takes precedence — when present,
+split on those only (so 'Rohde & Schwarz' inside a comma-list stays whole); otherwise
+fall back to splitting on '&'. 'und' is never a delimiter (it occurs inside company
+names, e.g. 'Airbus Defence und Space'). Consequence: a standalone single company with
+'&' (e.g. 'PSM … & Management GmbH') is over-split, and an 'A, B & C' list under-splits
+the 'B & C' tail. Both are acceptable: the match gate (link-only, no node creation)
+drops any non-matching party, and contractor_raw retains the verbatim original."""
 from __future__ import annotations
 
 import re
