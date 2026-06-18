@@ -26,6 +26,8 @@ def test_upsert_weapon_system_is_non_destructive():
     assert 'MERGE (w:Entity {name: $name, type: "WEAPON_SYSTEM"})' in t
     assert "coalesce(w.aliases, [])" in t          # alias append-dedup
     assert "coalesce(w.weapon_type, $weapon_type)" in t   # enrich-if-absent, never clobber
+    assert "coalesce(w.data_source, $data_source)" in t
+    assert "coalesce(w.suv_url, $suv_url)" in t
     assert "ON CREATE SET w.first_seen" in t
 
 
@@ -33,3 +35,4 @@ def test_upsert_operator_creates_typed_node():
     t = wt.UPSERT_OPERATOR
     assert "MERGE (o:Entity {name: $name, type: $type})" in t
     assert "coalesce(o.aliases, [])" in t
+    assert "ON CREATE SET o.first_seen" in t
