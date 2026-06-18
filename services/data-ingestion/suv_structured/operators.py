@@ -49,3 +49,15 @@ def match_preflight_offenders(counts: dict[tuple[str, str], int]) -> list[str]:
     to exactly one node."""
     return [f"{name} ({etype}) -> count={c}"
             for (name, etype), c in sorted(counts.items()) if c != 1]
+
+
+def operator_for_branch(
+    branch_label: str, entries: list[OperatorEntry]
+) -> OperatorEntry | None:
+    """Map a Modernisierungsvorhaben branch heading to the canonical 2a operator
+    (matched on OperatorEntry.page_label, which is the Teilstreitkraft name)."""
+    key = branch_label.strip().lower()
+    for e in entries:
+        if e.page_label.strip().lower() == key:
+            return e
+    return None

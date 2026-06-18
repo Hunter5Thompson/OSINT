@@ -224,6 +224,12 @@ def _match_intent(question: str) -> tuple[str | None, dict]:
     )):
         return "one_hop", {"name": entity}
 
+    if entity and any(kw in q for kw in (
+        "beschafft", "procures", "procurement", "modernisierung", "vorhaben",
+        "contractor", "auftragnehmer",
+    )):
+        return "one_hop", {"name": entity}
+
     if entity and any(
         kw in q for kw in ("connected to", "related to", "neighbors of", "linked to")
     ):

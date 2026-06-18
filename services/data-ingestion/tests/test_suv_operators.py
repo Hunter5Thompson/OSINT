@@ -6,6 +6,7 @@ from suv_structured.operators import (
     OperatorEntry,
     load_operators,
     match_preflight_offenders,
+    operator_for_branch,
     operators_by_slug,
 )
 
@@ -63,3 +64,14 @@ def test_preflight_flags_non_unique_match_targets():
     assert any("Luftwaffe" in o for o in offenders)
     assert any("Marine" in o for o in offenders)
     assert not any("Deutsches Heer" in o for o in offenders)
+
+
+def test_operator_for_branch_maps_to_2a_canonical():
+    ops = load_operators(SEED)
+    heer = operator_for_branch("Heer", ops)
+    assert heer is not None and heer.target_name == "Deutsches Heer"
+    lw = operator_for_branch("Luftwaffe", ops)
+    assert lw.target_name == "Deutsche Luftwaffe"
+    cir = operator_for_branch("Cyber- und Informationsraum", ops)
+    assert cir.target_name == "Cyber- und Informationsraum"
+    assert operator_for_branch("Unbekannt", ops) is None

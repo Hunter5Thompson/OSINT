@@ -83,3 +83,56 @@ ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
 SET r.count = $count, r.count_raw = $count_raw, r.service_end = $service_end,
     r.note = $note, r.suv_url = $suv_url, r.last_seen = datetime()
 """
+
+# --- Track 2b: procurements / Modernisierungsvorhaben ---
+
+UPSERT_PROCUREMENT_PROGRAM = """
+MERGE (p:Entity {name: $title, type: "PROCUREMENT_PROGRAM"})
+ON CREATE SET p.first_seen = datetime()
+SET p.status = coalesce($status, p.status),
+    p.program_type = coalesce($typ, p.program_type),
+    p.quantity = coalesce($quantity, p.quantity),
+    p.quantity_raw = coalesce($quantity_raw, p.quantity_raw),
+    p.cost_eur = coalesce($cost_eur, p.cost_eur),
+    p.cost_raw = coalesce($cost_raw, p.cost_raw),
+    p.financing = coalesce($financing, p.financing),
+    p.delivery_start = coalesce($delivery_start, p.delivery_start),
+    p.delivery_end = coalesce($delivery_end, p.delivery_end),
+    p.delivery_raw = coalesce($delivery_raw, p.delivery_raw),
+    p.description = coalesce($description, p.description),
+    p.branch = coalesce($branch, p.branch),
+    p.contractor_raw = coalesce($contractor_raw, p.contractor_raw),
+    p.data_source = "suv.report",
+    p.suv_url = $suv_url,
+    p.suv_extracted_at = $extracted_at,
+    p.last_seen = datetime()
+"""
+
+LINK_PROCURES = """
+MATCH (op:Entity {name: $op_name, type: $op_type})
+WHERE op.type IN ["MILITARY_UNIT", "ORGANIZATION"]
+MATCH (p:Entity {name: $title, type: "PROCUREMENT_PROGRAM"})
+WITH op, p LIMIT 1
+MERGE (op)-[r:PROCURES]->(p)
+ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
+SET r.last_seen = datetime()
+"""
+
+LINK_CONTRACTED_TO = """
+MATCH (p:Entity {name: $title, type: "PROCUREMENT_PROGRAM"})
+MATCH (c:Entity {name: $company, type: "ORGANIZATION"})
+WITH p, c LIMIT 1
+MERGE (p)-[r:CONTRACTED_TO]->(c)
+ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
+SET r.last_seen = datetime()
+"""
+
+LINK_CONCERNS_SYSTEM = """
+MATCH (p:Entity {name: $title, type: "PROCUREMENT_PROGRAM"})
+MATCH (s:Entity {name: $sys_name, type: $sys_type})
+WHERE s.type IN ["WEAPON_SYSTEM", "AIRCRAFT", "VESSEL", "SATELLITE"]
+WITH p, s LIMIT 1
+MERGE (p)-[r:CONCERNS_SYSTEM]->(s)
+ON CREATE SET r.first_seen = datetime(), r.data_source = "suv.report"
+SET r.last_seen = datetime()
+"""
