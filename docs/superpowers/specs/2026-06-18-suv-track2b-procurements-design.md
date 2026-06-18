@@ -98,15 +98,33 @@ both endpoints MATCH-only (program upserted first).
 - `LINK_CONCERNS_SYSTEM` type-guarded: `(p {type:"PROCUREMENT_PROGRAM"}) -[:CONCERNS_SYSTEM]-> (s {type:$sys_type})`
   with `s.type IN ["WEAPON_SYSTEM","AIRCRAFT","VESSEL","SATELLITE"]`, both MATCH-only.
 
-## 8. Qdrant — per-program profiles (FLAGGED decision; recommend YES)
+## 8. Qdrant — per-program profiles (DECIDED: YES)
 
-Unlike 2a equipment (thin rows → graph-only), procurement programs carry a **rich `Beschreibung`** →
-a per-program Qdrant profile enables semantic queries ("which programs modernize the Puma / are in
-Auslieferung"). **Recommended: write one Qdrant profile per program** (mirroring Slice-1 companies:
-`source="suv_structured"`, `provenance_fields(source_type="dataset", provider="suv.report")`,
-`content = profile_text(program)` [title + typ + status + quantity + cost + delivery + contractor_raw +
-description], point-id = uuid5 on the normalized title). The read-path corpus_policy already admits
-`suv_structured/dataset`. **Decision to confirm at spec review** (vs graph-only like 2a).
+Unlike 2a equipment (thin rows → graph-only), procurement programs carry a **rich `Beschreibung`** + 
+metadata → one Qdrant profile per program enables semantic RAG queries ("which programs modernize the
+Puma / are in Auslieferung"). **Graph is the source of truth; Qdrant is the search profile.** Two guards
+(user-set):
+- **Neo4j first, Qdrant after** — `write_neo4j(...)` must succeed before any Qdrant upsert; if the graph
+  write fails, write zero Qdrant points (mirrors Slice-1 `build_companies` ordering).
+- **Collision-free deterministic point-id:** `uuid5(SUV_QDRANT_NAMESPACE, "suv_procurement_program|" +
+  normalized_title)` — the `suv_procurement_program|` prefix namespaces these apart from the company
+  points (which key on `"suv_structured|<name>"`), so no point-id collision across SUV datasets.
+
+Payload (per program):
+```
+source: "suv_structured"            # + provenance_fields(source_type="dataset", provider="suv.report")
+source_type: "dataset"
+provider: "suv.report"
+title:        <program title>
+content:      <profile_text: title + typ + status + quantity + cost + financing + delivery + contractor_raw + description>
+url:          <suv_url>
+entities:     [<program title>, <contractor parties>, <linked system names>]
+program_status, program_type, quantity, cost_eur, financing, delivery   # structured fields for filtering
+content_hash: sha256(content)[:24]
+ingested_at:  <iso ts>
+```
+The read-path `corpus_policy` already admits `suv_structured/dataset` (intelligence, deployed in Slice 1).
+A regression test asserts the Neo4j-first ordering + the namespaced point-id.
 
 ## 9. Write templates (SUV-owned, deterministic) + read-path/taxonomy
 
@@ -154,7 +172,7 @@ pass on the new type-guards; final whole-branch review; companies/equipment path
 contractor + subject match report (resolve ambiguous; the program nodes + operators are automatic) →
 **Neo4j backup** → `procurements build --approved-matches`. Verify: 30 PROCUREMENT_PROGRAM nodes, 30
 PROCURES edges, N CONTRACTED_TO (matchable parties), M CONCERNS_SYSTEM (~12 clean subjects),
-Qdrant +30 (if §8 yes).
+Qdrant +30 profiles (Neo4j-first).
 
 ## 14. Acceptance criteria
 1. Parser yields 30 programs with branch + normalized cost/quantity/delivery; caption skipped; sane floor (≥20).
@@ -163,7 +181,9 @@ Qdrant +30 (if §8 yes).
 4. `CONTRACTED_TO` only for matched contractor parties (consortia split); `new` party → no edge, contractor_raw retained; `/`/`N/A` → no edge.
 5. `CONCERNS_SYSTEM` only for matched subjects (optional); descriptive programs have none.
 6. New relations + `PROCUREMENT_PROGRAM` in `schema_whitelist` + intent; NOT in event_codebook/RelationType Literal.
-7. Qdrant per §8 decision (regression-tested either way).
+7. 30 Qdrant profiles written, **Neo4j-first** (graph write must succeed first), point-id
+   `uuid5(SUV_QDRANT_NAMESPACE, "suv_procurement_program|"+normalized_title)` (no collision with company
+   points); regression test asserts the ordering + the namespaced id.
 8. Companies (Slice-1) + equipment (2a) paths + full suite stay green; ruff clean.
 
 ## 15. Out of scope
