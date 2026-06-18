@@ -761,7 +761,7 @@ git commit -m "feat(suv): OPERATES + UPSERT_WEAPON_SYSTEM/OPERATOR write templat
 
 **Interfaces:**
 - Consumes: `WeaponSystemRow` (T1), `OperatorEntry`/`operators_by_slug` (T3), `load_approved`/`detect_drift` (T4), `LINK_OPERATES`/`UPSERT_WEAPON_SYSTEM`/`UPSERT_OPERATOR` (T5), `canonicalize_entity` and `write_neo4j` (Slice 1).
-- Produces: `dedup_systems(rows) -> list[WeaponSystemRow]`; `ws_write_name(row, entry) -> str`; `build_equipment_statements(rows, approved, operators, *, extracted_at) -> list[dict]`; `resolve_equipment_build_inputs(*, rows, operators, approved_path) -> list[dict]`; `match_target_counts(...)` live helper.
+- Produces: `dedup_systems(rows) -> list[WeaponSystemRow]`; `ws_write_name(row, entry) -> str`; `build_equipment_statements(rows, approved, operators, *, extracted_at) -> list[dict]`; `resolve_equipment_build_inputs(*, rows, operators, approved: list[dict]) -> list[dict]`; `match_target_counts(...)` live helper.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -769,8 +769,10 @@ git commit -m "feat(suv): OPERATES + UPSERT_WEAPON_SYSTEM/OPERATOR write templat
 # services/data-ingestion/tests/test_suv_build_equipment.py
 from pathlib import Path
 
+import pytest
+
 from suv_structured.build_equipment import (
-    build_equipment_statements, dedup_systems, ws_write_name,
+    EquipmentBuildGateError, build_equipment_statements, dedup_systems, ws_write_name,
 )
 from suv_structured.equipment_schemas import WeaponSystemRow
 from suv_structured.operators import OperatorEntry, operators_by_slug
@@ -818,6 +820,15 @@ def test_build_equipment_module_has_no_qdrant_dependency():
     """Track 2a is graph-only: the build module must not import or touch Qdrant."""
     import suv_structured.build_equipment as be
     assert "qdrant" not in Path(be.__file__).read_text().lower()
+
+
+def test_build_raises_on_missing_operator():
+    """Fail-closed: an approved holding whose page has no operator seed must raise,
+    never be silently skipped (defense-in-depth alongside the gate)."""
+    rows = [_row("Leopard 2")]  # page_slug = HEER
+    approved = [{"name": "Leopard 2", "decision": "match", "existing_name": "Leopard 2"}]
+    with pytest.raises(EquipmentBuildGateError):
+        build_equipment_statements(rows, approved, {}, extracted_at="t")  # empty operator map
 
 
 def test_build_skips_unapproved_rows():
@@ -870,6 +881,10 @@ from suv_structured.write_templates import (
 log = structlog.get_logger(__name__)
 
 
+class EquipmentBuildGateError(RuntimeError):
+    """Raised when the equipment --approved-matches merge gate is not satisfied."""
+
+
 def dedup_systems(rows: list[WeaponSystemRow]) -> list[WeaponSystemRow]:
     """Unique weapon systems by muster (entity resolution is per system, not per
     operator-holding row). First occurrence wins."""
@@ -906,8 +921,10 @@ def build_equipment_statements(
             continue
         op = operators.get(row.page_slug)
         if op is None:
-            log.warning("suv_equipment_no_operator_for_page", page=row.page_slug)
-            continue
+            # fail-closed: never silently drop an approved holding (the gate already
+            # checks this, but the builder must not depend on the gate having run)
+            raise EquipmentBuildGateError(
+                f"no operator seed row for page {row.page_slug!r} (system {row.muster!r})")
         if op.decision == "create" and (op.target_name, op.target_type) not in created_ops:
             created_ops.add((op.target_name, op.target_type))
             statements.append({"statement": UPSERT_OPERATOR, "parameters": {
@@ -935,10 +952,6 @@ def build_equipment_statements(
     return statements
 
 
-class EquipmentBuildGateError(RuntimeError):
-    """Raised when the equipment --approved-matches merge gate is not satisfied."""
-
-
 def resolve_equipment_build_inputs(
     *, rows: list[WeaponSystemRow], operators: dict[str, OperatorEntry],
     approved: list[dict],
@@ -950,9 +963,11 @@ def resolve_equipment_build_inputs(
     unknown = [e["name"] for e in approved if e["name"] not in musters]
     if unknown:
         raise EquipmentBuildGateError(f"approved report diverges from seed (unknown: {unknown})")
-    pages = {r.muster: r.page_slug for r in rows}
-    missing_ops = sorted({pages[e["name"]] for e in approved
-                          if pages.get(e["name"]) not in operators})
+    # check EVERY approved-row occurrence: a system can appear on multiple pages, so a
+    # one-page-per-muster map could hide a page that lacks an operator seed row.
+    approved_names = {e["name"] for e in approved}
+    missing_ops = sorted({r.page_slug for r in rows
+                          if r.muster in approved_names and r.page_slug not in operators})
     if missing_ops:
         raise EquipmentBuildGateError(f"no operator seed row for page(s): {missing_ops}")
     by_name = {r.muster: r for r in rows}
@@ -1005,7 +1020,7 @@ async def match_target_counts(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd services/data-ingestion && uv run pytest tests/test_suv_build_equipment.py -v`
-Expected: PASS (6 passed).
+Expected: PASS (7 passed).
 
 - [ ] **Step 5: Commit**
 
@@ -1193,7 +1208,8 @@ def equipment_build(dry_run: bool, approved_path: Path | None, report_out: Path)
         u, pw = settings.neo4j_user, settings.neo4j_password
         async with httpx.AsyncClient(timeout=60.0) as client:
             if dry_run:
-                lookup = await _lookup_existing(unique, client, settings.neo4j_http_url, u, pw)
+                lookup = await _lookup_existing(unique, client, settings.neo4j_http_url, u, pw,
+                                                entity_type="WEAPON_SYSTEM")
                 dump_report(build_match_report(
                     unique, lookup, target_type="WEAPON_SYSTEM", gate_new_creation=True), report_out)
                 click.echo(f"dry-run: wrote match report -> {report_out}")
@@ -1205,7 +1221,8 @@ def equipment_build(dry_run: bool, approved_path: Path | None, report_out: Path)
             approved = load_approved(approved_path, gate_new_creation=True)
             resolve_equipment_build_inputs(rows=rows, operators=operators, approved=approved)
             # re-derive against the live graph; abort on drift
-            lookup = await _lookup_existing(unique, client, settings.neo4j_http_url, u, pw)
+            lookup = await _lookup_existing(unique, client, settings.neo4j_http_url, u, pw,
+                                            entity_type="WEAPON_SYSTEM")
             fresh = build_match_report(unique, lookup, target_type="WEAPON_SYSTEM", gate_new_creation=True)
             drift = detect_drift(approved, fresh)
             if drift:
@@ -1228,24 +1245,22 @@ def equipment_build(dry_run: bool, approved_path: Path | None, report_out: Path)
     asyncio.run(_run())
 ```
 
-Note: `_lookup_existing` already canonicalizes per item; it works for `WeaponSystemRow` because it only reads `c.name`. Confirm by reading `cli.py:217` — it iterates `companies` using `c.name` and `canonicalize_entity(c.name, "ORGANIZATION")`. **One required tweak:** generalize its canonicalize call. Change `_lookup_existing` to accept the entity type:
+**Required signature change to the existing `_lookup_existing` (cli.py:217)** so the
+`entity_type="WEAPON_SYSTEM"` kwarg used in the code block above is accepted. It already reads only
+`c.name`, so it works for `WeaponSystemRow`; only its hardcoded canonicalize type must be parametrized:
 
 ```python
-# in cli.py, change the signature + the two canonicalize_entity calls:
+# cli.py: add the keyword-only param and use it in the canonicalize call(s)
 async def _lookup_existing(
     companies, client, neo4j_http_url: str, user: str, password: str,
     *, entity_type: str = "ORGANIZATION",
 ):
     ...
-        canon = canonicalize_entity(c.name, entity_type).name
+        canon = canonicalize_entity(c.name, entity_type).name   # was hardcoded "ORGANIZATION"
     ...
 ```
-and call it from `equipment_build` with `entity_type="WEAPON_SYSTEM"`:
-```python
-            lookup = await _lookup_existing(unique, client, settings.neo4j_http_url, u, pw,
-                                            entity_type="WEAPON_SYSTEM")
-```
-(The companies `build` caller keeps the default, so it is unchanged.)
+The companies `build` caller passes no `entity_type`, so it keeps the `"ORGANIZATION"` default and is
+behavior-identical (regression: `tests/test_suv_cli.py` must stay green).
 
 - [ ] **Step 4: Run tests + the companies CLI regression**
 
@@ -1291,19 +1306,29 @@ from agents.tools.graph_query import _match_intent
 
 
 def test_betreibt_question_routes_to_relationship_template():
-    # quoted entity → deterministic extraction (the proper-noun heuristic is brittle)
-    tmpl, params = _match_intent('Welche Systeme betreibt "Heer"?')
-    assert tmpl == "one_hop" and params == {"name": "Heer"}
+    # Quoted CANONICAL operator name. Two reasons it must be quoted+canonical:
+    # (1) the proper-noun heuristic on unquoted text is brittle (it would extract
+    #     "Systeme Heer?" from "Welche Systeme betreibt das Heer?"), and
+    # (2) OPERATES edges attach to "Deutsches Heer" (the seed's canonical operator),
+    #     NOT "Heer" — so only the canonical name actually retrieves the edges.
+    tmpl, params = _match_intent('Welche Systeme betreibt "Deutsches Heer"?')
+    assert tmpl == "one_hop" and params == {"name": "Deutsches Heer"}
 
 
 def test_operates_keyword_routes_to_relationship_template():
-    tmpl, params = _match_intent('what does "Bundeswehr" operate')
-    assert tmpl == "one_hop" and params == {"name": "Bundeswehr"}
+    tmpl, params = _match_intent('what does "Deutsche Luftwaffe" operate')
+    assert tmpl == "one_hop" and params == {"name": "Deutsche Luftwaffe"}
 ```
 
 Verified signature: `_match_intent(question: str) -> tuple[str | None, dict]` (graph_query.py:184);
 the entity is extracted INSIDE via quoted-string then proper-noun heuristics, and the existing
 `one_hop` branch returns `("one_hop", {"name": entity})`.
+
+**Honest scope limit (do NOT overclaim):** this task makes OPERATES *discoverable* — a query naming
+the canonical operator in quotes routes to a relationship template that surfaces OPERATES edges. It
+does NOT make free-text German natural-language querying ("das Heer", alias→canonical resolution
+`Heer`→`Deutsches Heer`) reliable; that depends on the brittle entity-extraction heuristic and is a
+separate, pre-existing read-path concern, explicitly out of 2a scope.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1379,4 +1404,6 @@ Not part of the TDD tasks; performed once the PR is merged, by the operator:
 4. `odin-suv-structured equipment build --approved-matches <curated.yaml>` → verify via Cypher:
    `MATCH (:Entity{type:"MILITARY_UNIT"})-[r:OPERATES]->(w:Entity{type:"WEAPON_SYSTEM"}) RETURN count(r)`.
 5. Rebuild/recreate the intelligence image from this worktree (`docker compose -p osint … --no-build`);
-   no GPU swap. Verify a "Welche Systeme betreibt das Heer?" read-path query surfaces OPERATES edges.
+   no GPU swap. Verify a read-path query naming the canonical operator in quotes —
+   `Welche Systeme betreibt "Deutsches Heer"?` — surfaces OPERATES edges (unquoted/alias forms are a
+   known read-path limitation, see Task 8's scope note).
