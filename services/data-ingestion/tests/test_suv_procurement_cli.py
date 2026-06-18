@@ -102,9 +102,14 @@ def test_procurements_build_neo4j_before_qdrant(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(cli_mod, "write_neo4j", _fake_write)
     monkeypatch.setattr(cli_mod, "QdrantClient", _FakeQdrant, raising=False)
     monkeypatch.setattr(cli_mod, "embed_text", AsyncMock(return_value=[0.1, 0.2, 0.3]))
-    monkeypatch.setattr(cli_mod, "_lookup_existing", AsyncMock(return_value={}))
+    # Provide "Leopard 2" as WEAPON_SYSTEM in the live graph so GATE 1b (subject target_type
+    # drift check) sees a matching type and does NOT abort. detect_drift is still mocked to
+    # return [] so the only gate that could abort is operator preflight (also satisfied below).
     monkeypatch.setattr(cli_mod, "_fetch_equipment_node_names", AsyncMock(
-        return_value=(set(), {})))
+        return_value=({"Leopard 2"}, {"Leopard 2": "WEAPON_SYSTEM"})))
+    monkeypatch.setattr(cli_mod, "_lookup_existing", AsyncMock(return_value={
+        "leopard 2": [("Leopard 2", "WEAPON_SYSTEM", "idL")],
+    }))
 
     # drift passes (no approved entry drifted) + the Heer operator resolves to exactly one
     # live node → both new gates are satisfied and the build proceeds to write.
@@ -164,6 +169,64 @@ def test_procurements_build_aborts_on_contractor_drift(tmp_path: Path, monkeypat
     msg = (res.output + str(res.exception)).lower()
     assert "re-run" in msg or "drift" in msg
     assert "neo4j" not in calls  # NEVER written
+
+
+def test_procurements_build_aborts_on_subject_type_drift(tmp_path: Path, monkeypatch):
+    """F-Q residual: approved subject has target_type=AIRCRAFT but the live graph now types
+    the same node as VESSEL.  detect_drift PASSES (decision=match + existing_name unchanged)
+    but the stale approved target_type would make LINK_CONCERNS_SYSTEM's $sys_type bind nothing
+    → graph/Qdrant divergence.  GATE 1b must abort BEFORE write_neo4j is ever called.
+
+    subject_candidate requires len(name) >= 4, so we use "XYZW" (4 chars) as the name."""
+    import suv_structured.cli as cli_mod
+
+    seed = tmp_path / "suv_procurements.yaml"
+    # "XYZW" appears in the title so subject_candidate (>= 4 chars) picks it up
+    seed.write_text(
+        '- {title: "XYZW Beschaffung", branch: Heer, '
+        'contractor_raw: "Rheinmetall AG", typ: Kampfpanzer, suv_url: u}\n')
+    monkeypatch.setattr("suv_structured.cli.PROCUREMENTS_SEED", seed)
+
+    approved = tmp_path / "approved.yaml"
+    # Approved entry says target_type=AIRCRAFT (what the dry-run saw)
+    approved.write_text(
+        '- {name: "XYZW", suv_url: u, decision: match, existing_name: "XYZW", '
+        'target_type: AIRCRAFT, approved: true, kind: subject, '
+        'program_title: "XYZW Beschaffung"}\n')
+
+    calls: list[str] = []
+
+    async def _fake_write(statements, **kw):
+        calls.append("neo4j")
+
+    monkeypatch.setattr(cli_mod, "write_neo4j", _fake_write)
+    monkeypatch.setattr(
+        cli_mod, "QdrantClient",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no qdrant on abort")),
+        raising=False)
+    monkeypatch.setattr(cli_mod, "embed_text", AsyncMock(return_value=[0.1, 0.2, 0.3]))
+
+    # Live graph: "XYZW" now has type VESSEL (not AIRCRAFT as approved).
+    # _fetch_equipment_node_names returns (names, type_by_name) — XYZW is VESSEL now.
+    monkeypatch.setattr(cli_mod, "_fetch_equipment_node_names", AsyncMock(
+        return_value=({"XYZW"}, {"XYZW": "VESSEL"})))
+    # _lookup_existing: XYZW still found as VESSEL (decision=match, existing_name=XYZW unchanged).
+    # This is the detect_drift PASS condition — decision+existing_name unchanged, only type drifted.
+    monkeypatch.setattr(cli_mod, "_lookup_existing", AsyncMock(return_value={
+        "xyzw": [("XYZW", "VESSEL", "idX")],
+        "rheinmetall ag": [("Rheinmetall AG", "ORGANIZATION", "idR")],
+    }))
+    # Operator preflight returns exactly-1 — so the abort is unambiguously GATE 1b, not GATE 2
+    monkeypatch.setattr(cli_mod, "_procurement_operator_counts", AsyncMock(
+        return_value={("Deutsches Heer", "MILITARY_UNIT"): 1}))
+
+    res = CliRunner().invoke(
+        cli, ["procurements", "build", "--approved-matches", str(approved)])
+    assert res.exit_code != 0
+    msg = (res.output + str(res.exception)).lower()
+    # error message must reference the type change
+    assert "type" in msg
+    assert "neo4j" not in calls  # write_neo4j NEVER called
 
 
 def test_procurements_build_aborts_on_operator_preflight(tmp_path: Path, monkeypatch):

@@ -498,6 +498,10 @@ def procurements_build(dry_run: bool, approved_path: Path | None, report_out: Pa
          sharing a name can't cross-collide in detect_drift's name-keyed map). The fresh
          match-reports are re-derived against the LIVE graph; if any approved entry's decision
          or match target moved/vanished since the dry-run we abort and ask for a re-curate.
+         For subjects, an additional target_type drift check is applied: if the live graph now
+         types a subject system differently from the approved YAML (e.g. AIRCRAFT→VESSEL),
+         LINK_CONCERNS_SYSTEM's $sys_type param would bind the wrong (stale) type and produce no
+         edge. This check aborts before any write in that case too.
          This keeps the Qdrant payload (built from the same approved entries) consistent with the
          graph: after a passing drift check every approved match still resolves, so the MATCH-only
          CONTRACTED_TO/CONCERNS_SYSTEM edge IS written for every entity the payload lists.
@@ -580,6 +584,23 @@ def procurements_build(dry_run: bool, approved_path: Path | None, report_out: Pa
                 raise ProcurementBuildGateError(
                     "graph changed since dry-run — re-run `procurements build --dry-run` "
                     f"+ re-curate: {drift}")
+
+            # GATE 1b — subject target_type drift check (BEFORE any write). detect_drift only
+            # compares decision + existing_name. But LINK_CONCERNS_SYSTEM binds $sys_type from
+            # the approved entry's target_type. If the live graph retyped a subject node between
+            # the dry-run and now (e.g. AIRCRAFT → VESSEL), the approved target_type is stale:
+            # the MATCH (s {name: "XYZ", type: "AIRCRAFT"}) binds nothing → no edge, while the
+            # Qdrant system_links payload still lists "XYZ" → graph/Qdrant divergence. Abort.
+            fresh_subject_type = {e["name"]: e.get("target_type") for e in subject_report}
+            subj_type_drift = sorted({
+                e["name"] for e in approved_subjects
+                if (e.get("decision") or "").lower() == "match"
+                and fresh_subject_type.get(e["name"]) != e.get("target_type")
+            })
+            if subj_type_drift:
+                raise ProcurementBuildGateError(
+                    "subject system type changed since dry-run (re-run `procurements build "
+                    f"--dry-run` + re-curate): {subj_type_drift}")
 
             operators_list = load_operators(OPERATORS_SEED)
             # GATE 2 — exactly-1 operator preflight over EVERY operator the programs USE
