@@ -12,10 +12,33 @@ SEED = Path(__file__).parent.parent / "suv_structured" / "seeds" / "suv_operator
 def test_committed_seed_loads_five_operators():
     ops = load_operators(SEED)
     assert len(ops) == 5
-    slugs = {o.page_slug for o in ops}
-    assert "hauptwaffensysteme-des-heeres" in slugs
     by_slug = operators_by_slug(ops)
-    assert by_slug["hauptwaffensysteme-des-heeres"].target_type in ("MILITARY_UNIT", "ORGANIZATION")
+
+    heer = by_slug["hauptwaffensysteme-des-heeres"]
+    assert heer.decision == "match"
+    assert heer.target_name == "Deutsches Heer"
+    assert heer.target_type == "MILITARY_UNIT"
+
+    lw = by_slug["hauptwaffensysteme-der-luftwaffe"]
+    assert lw.decision == "match"
+    assert lw.target_name == "Deutsche Luftwaffe"
+    assert lw.target_type == "MILITARY_UNIT"
+
+    marine = by_slug["hauptwaffensysteme-der-marine"]
+    assert marine.decision == "match"
+    assert marine.target_name == "Deutsche Marine"
+    assert marine.target_type == "MILITARY_UNIT"
+
+    cir = by_slug["hauptwaffensysteme-des-cyber-und-informationsraums"]
+    assert cir.decision == "create"
+    assert cir.target_name == "Cyber- und Informationsraum"
+    assert cir.target_type == "MILITARY_UNIT"
+    assert cir.create_properties == {"aliases": ["CIR"]}
+
+    unt = by_slug["hauptwaffensysteme-des-unterstuetzungsbereichs"]
+    assert unt.decision == "match"
+    assert unt.target_name == "Unterstützungsbereich"
+    assert unt.target_type == "ORGANIZATION"
 
 
 def test_invalid_decision_rejected():

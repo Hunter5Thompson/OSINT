@@ -18,7 +18,7 @@ class OperatorEntry(BaseModel):
     decision: str                      # "match" | "create"
     target_name: str
     target_type: str                   # "MILITARY_UNIT" | "ORGANIZATION"
-    create_properties: dict = Field(default_factory=dict)
+    create_properties: dict[str, object] = Field(default_factory=dict)
 
     @field_validator("decision")
     @classmethod
@@ -44,7 +44,8 @@ def operators_by_slug(entries: list[OperatorEntry]) -> dict[str, OperatorEntry]:
 
 
 def match_preflight_offenders(counts: dict[tuple[str, str], int]) -> list[str]:
-    """Given (name, type) -> live node-count for each `match` operator, return
-    human-readable offenders that do not resolve to exactly one node."""
+    """Given a `(name, type) -> live node-count` mapping (caller must pass only
+    `match`-decision targets), return human-readable offenders that do not resolve
+    to exactly one node."""
     return [f"{name} ({etype}) -> count={c}"
             for (name, etype), c in sorted(counts.items()) if c != 1]
