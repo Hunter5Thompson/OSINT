@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 
 import structlog
+from pydantic import ValidationError
 
 from suv_structured.equipment_schemas import WeaponSystemRow
 
@@ -17,7 +18,7 @@ def parse_count(raw: str | None) -> int | None:
     '32.000'->32000 (German thousands-dot). First integer found; None if none."""
     if not raw:
         return None
-    m = re.search(r"\d[\d.]*", raw)
+    m = re.search(r"\d[\d.]*", raw)  # integers + German thousands-dot only; "320.5" → 3205 (not a concern: suv.report Anzahl are always integers)
     if not m:
         return None
     try:
@@ -77,7 +78,7 @@ def parse_weapon_systems(
                 page_slug=page_slug,
                 suv_url=suv_url,
             ))
-        except ValueError:
+        except (ValueError, ValidationError):
             log.warning("suv_equipment_row_skipped", cells=cells)
     log.info("suv_equipment_parsed", page=page_slug, count=len(rows))
     return rows
