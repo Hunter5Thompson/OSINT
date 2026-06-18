@@ -28,13 +28,43 @@ from suv_structured.build_companies import (
     embed_text,
     write_neo4j,
 )
+from suv_structured.build_equipment import (
+    EquipmentBuildGateError,
+    build_equipment_statements,
+    dedup_systems,
+    match_target_counts,
+    resolve_equipment_build_inputs,
+)
+from suv_structured.equipment_parse import parse_weapon_systems
+from suv_structured.equipment_schemas import WeaponSystemRow
 from suv_structured.fetch import fetch_directory_markdown
 from suv_structured.match_report import build_match_report, detect_drift, dump_report, load_approved
+from suv_structured.operators import (
+    load_operators,
+    match_preflight_offenders,
+    operators_by_slug,
+)
 from suv_structured.parse import parse_companies
 from suv_structured.schemas import Company, profile_text
 
 DIRECTORY_URL = "https://suv.report/sicherheits-und-verteidigungsindustrie/"
 SEED_PATH = Path(__file__).parent / "seeds" / "suv_companies.yaml"
+
+EQUIPMENT_PAGES = {
+    "hauptwaffensysteme-des-heeres": "https://suv.report/hauptwaffensysteme-des-heeres/",
+    "hauptwaffensysteme-der-luftwaffe": "https://suv.report/hauptwaffensysteme-der-luftwaffe/",
+    "hauptwaffensysteme-der-marine": "https://suv.report/hauptwaffensysteme-der-marine/",
+    "hauptwaffensysteme-des-cyber-und-informationsraums":
+        "https://suv.report/hauptwaffensysteme-des-cyber-und-informationsraums/",
+    "hauptwaffensysteme-des-unterstuetzungsbereichs":
+        "https://suv.report/hauptwaffensysteme-des-unterstuetzungsbereichs/",
+}
+EQUIPMENT_SEED = Path(__file__).parent / "seeds" / "suv_equipment.yaml"
+OPERATORS_SEED = Path(__file__).parent / "seeds" / "suv_operators.yaml"
+
+
+def _load_equipment_seed(path: Path) -> list[WeaponSystemRow]:
+    return [WeaponSystemRow(**row) for row in (yaml.safe_load(path.read_text()) or [])]
 
 
 class BuildGateError(RuntimeError):
@@ -214,15 +244,114 @@ def backfill_hq(do_apply: bool) -> None:
     asyncio.run(_run())
 
 
+@cli.group()
+def equipment() -> None:
+    """SUV Hauptwaffensysteme structured ingestion (Track 2a)."""
+
+
+@equipment.command("fetch")
+def equipment_fetch() -> None:
+    """Render all 5 Hauptwaffensysteme sub-pages and print their markdown."""
+    async def _run() -> None:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            for slug, url in EQUIPMENT_PAGES.items():
+                md = await fetch_directory_markdown(
+                    url, crawl4ai_url=settings.crawl4ai_url, client=client)
+                click.echo(f"===== {slug} ({len(md)} chars) =====")
+                click.echo(md)
+    asyncio.run(_run())
+
+
+@equipment.command("parse")
+def equipment_parse_cmd() -> None:
+    """Render + parse all 5 sub-pages; write the seed snapshot for human review."""
+    async def _run() -> None:
+        rows: list[WeaponSystemRow] = []
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            for slug, url in EQUIPMENT_PAGES.items():
+                md = await fetch_directory_markdown(
+                    url, crawl4ai_url=settings.crawl4ai_url, client=client)
+                rows.extend(parse_weapon_systems(md, page_slug=slug, suv_url=url))
+        if len(rows) < 30:
+            raise click.ClickException(
+                f"parse yielded only {len(rows)} systems — likely a shell/error page; "
+                "seed NOT written")
+        EQUIPMENT_SEED.parent.mkdir(parents=True, exist_ok=True)
+        EQUIPMENT_SEED.write_text(
+            yaml.safe_dump([r.model_dump() for r in rows], allow_unicode=True, sort_keys=False))
+        click.echo(f"wrote {len(rows)} weapon systems -> {EQUIPMENT_SEED}")
+    asyncio.run(_run())
+
+
+@equipment.command("build")
+@click.option("--dry-run", is_flag=True, help="Write match_report.yaml; no graph writes.")
+@click.option("--approved-matches", "approved_path", type=click.Path(path_type=Path),
+              default=None, help="Curated, approved match report (required for real build).")
+@click.option("--report-out", type=click.Path(path_type=Path),
+              default=Path("equipment_match_report.yaml"),
+              help="Where --dry-run writes the report.")
+def equipment_build(dry_run: bool, approved_path: Path | None, report_out: Path) -> None:
+    """Dry-run produces the weapon-system match report; real run requires --approved-matches."""
+    async def _run() -> None:
+        if not EQUIPMENT_SEED.exists():
+            raise click.ClickException(
+                f"no seed at {EQUIPMENT_SEED} — run `odin-suv-structured equipment parse` first")
+        rows = _load_equipment_seed(EQUIPMENT_SEED)
+        operators = operators_by_slug(load_operators(OPERATORS_SEED))
+        unique = dedup_systems(rows)
+        u, pw = settings.neo4j_user, settings.neo4j_password
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            if dry_run:
+                lookup = await _lookup_existing(unique, client, settings.neo4j_http_url, u, pw,
+                                                entity_type="WEAPON_SYSTEM")
+                report = build_match_report(
+                    unique, lookup, target_type="WEAPON_SYSTEM", gate_new_creation=True)
+                dump_report(report, report_out)
+                click.echo(f"dry-run: wrote match report -> {report_out}")
+                return
+            if approved_path is None:
+                raise EquipmentBuildGateError(
+                    "refusing to build without --approved-matches <report.yaml> "
+                    "(run `equipment build --dry-run` first, curate + set approved: true)")
+            approved = load_approved(approved_path, gate_new_creation=True)
+            resolve_equipment_build_inputs(rows=rows, operators=operators, approved=approved)
+            # re-derive against the live graph; abort on drift
+            lookup = await _lookup_existing(unique, client, settings.neo4j_http_url, u, pw,
+                                            entity_type="WEAPON_SYSTEM")
+            fresh = build_match_report(
+                unique, lookup, target_type="WEAPON_SYSTEM", gate_new_creation=True)
+            drift = detect_drift(approved, fresh)
+            if drift:
+                raise EquipmentBuildGateError(
+                    "graph changed since dry-run — re-run `equipment build --dry-run` "
+                    f"+ re-curate: {drift}")
+            # operator exactly-1 preflight (match rows only)
+            counts = await match_target_counts(
+                operators, client, neo4j_http_url=settings.neo4j_http_url,
+                neo4j_user=u, neo4j_password=pw)
+            offenders = match_preflight_offenders(counts)
+            if offenders:
+                raise EquipmentBuildGateError(
+                    f"operator match preflight failed (not exactly-1): {offenders}")
+            from datetime import UTC, datetime
+            ts = datetime.now(UTC).isoformat()
+            stmts = build_equipment_statements(rows, approved, operators, extracted_at=ts)
+            await write_neo4j(stmts, client=client, neo4j_http_url=settings.neo4j_http_url,
+                              neo4j_user=u, neo4j_password=pw)
+            click.echo(f"built {len(approved)} systems (neo4j stmts={len(stmts)}, qdrant=0)")
+    asyncio.run(_run())
+
+
 async def _lookup_existing(
     companies: list[Company], client: httpx.AsyncClient,
     neo4j_http_url: str, user: str, password: str,
+    *, entity_type: str = "ORGANIZATION",
 ) -> dict[str, list[tuple[str, str, str]]]:
     import base64
     names: list[str] = []
     for c in companies:
         names.append(c.name)
-        canon = canonicalize_entity(c.name, "ORGANIZATION").name
+        canon = canonicalize_entity(c.name, entity_type).name
         if canon != c.name:
             names.append(canon)
     names = list(dict.fromkeys(names))  # dedup, preserve order
