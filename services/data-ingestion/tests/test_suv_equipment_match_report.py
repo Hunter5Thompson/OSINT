@@ -19,7 +19,8 @@ def test_weapon_system_match_new_ambiguous():
     }
     report = build_match_report(rows, lookup, target_type="WEAPON_SYSTEM", gate_new_creation=True)
     by = {r["name"]: r for r in report}
-    assert by["Leopard 2"]["decision"] == "match" and by["Leopard 2"]["existing_name"] == "Leopard 2"
+    assert by["Leopard 2"]["decision"] == "match"
+    assert by["Leopard 2"]["existing_name"] == "Leopard 2"
     assert by["Schakal"]["decision"] == "new"
     assert by["PATRIOT"]["decision"] == "ambiguous"
     # new-policy fields are present for curation

@@ -4,7 +4,10 @@ from pathlib import Path
 import pytest
 
 from suv_structured.build_equipment import (
-    EquipmentBuildGateError, build_equipment_statements, dedup_systems, ws_write_name,
+    EquipmentBuildGateError,
+    build_equipment_statements,
+    dedup_systems,
+    ws_write_name,
 )
 from suv_structured.equipment_schemas import WeaponSystemRow
 from suv_structured.operators import OperatorEntry, operators_by_slug

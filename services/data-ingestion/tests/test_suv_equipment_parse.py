@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from suv_structured.equipment_parse import (
-    parse_count, parse_service_end, parse_weapon_systems,
+    parse_count,
+    parse_service_end,
+    parse_weapon_systems,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "suv_equipment_sample.md"
@@ -35,7 +37,10 @@ def test_parse_weapon_systems_skips_header_and_separator():
 
 
 def test_parse_weapon_systems_fields():
-    rows = {r.muster: r for r in parse_weapon_systems(FIXTURE.read_text(), page_slug=PAGE, suv_url=URL)}
+    rows = {
+        r.muster: r
+        for r in parse_weapon_systems(FIXTURE.read_text(), page_slug=PAGE, suv_url=URL)
+    }
     leo = rows["Leopard 2"]
     assert leo.type_raw == "Kampfpanzer" and leo.count == 310 and leo.service_end == 2050
     assert leo.page_slug == PAGE and leo.suv_url == URL

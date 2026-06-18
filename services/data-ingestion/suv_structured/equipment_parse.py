@@ -18,7 +18,9 @@ def parse_count(raw: str | None) -> int | None:
     '32.000'->32000 (German thousands-dot). First integer found; None if none."""
     if not raw:
         return None
-    m = re.search(r"\d[\d.]*", raw)  # integers + German thousands-dot only; "320.5" → 3205 (not a concern: suv.report Anzahl are always integers)
+    # integers + German thousands-dot only; "320.5" → 3205 (not a concern: suv.report
+    # Anzahl are always integers)
+    m = re.search(r"\d[\d.]*", raw)
     if not m:
         return None
     try:

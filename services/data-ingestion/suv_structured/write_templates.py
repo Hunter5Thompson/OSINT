@@ -73,7 +73,8 @@ SET w.aliases = coalesce(w.aliases, []) +
 """
 
 LINK_OPERATES = """
-MATCH (op:Entity {name: $op_name, type: $op_type}) WHERE op.type IN ["MILITARY_UNIT", "ORGANIZATION"]
+MATCH (op:Entity {name: $op_name, type: $op_type})
+WHERE op.type IN ["MILITARY_UNIT", "ORGANIZATION"]
 MATCH (ws:Entity {name: $ws_name, type: "WEAPON_SYSTEM"})
 WITH op, ws LIMIT 1
 MERGE (op)-[r:OPERATES]->(ws)

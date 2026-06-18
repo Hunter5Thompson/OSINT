@@ -3,7 +3,10 @@ from pathlib import Path
 import pytest
 
 from suv_structured.operators import (
-    OperatorEntry, load_operators, match_preflight_offenders, operators_by_slug,
+    OperatorEntry,
+    load_operators,
+    match_preflight_offenders,
+    operators_by_slug,
 )
 
 SEED = Path(__file__).parent.parent / "suv_structured" / "seeds" / "suv_operators.yaml"

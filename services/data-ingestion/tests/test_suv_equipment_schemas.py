@@ -1,4 +1,5 @@
 import pytest
+
 from suv_structured.equipment_schemas import WeaponSystemRow
 
 
