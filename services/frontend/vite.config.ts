@@ -25,5 +25,10 @@ export default defineConfig({
     globals: false,
     setupFiles: ["./src/test/setup.ts"],
     exclude: ["node_modules", "dist", "**/.worktrees/**"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "json-summary", "html"],
+      exclude: ["src/**/*.test.*", "src/test/**", "src/**/*.d.ts"],
+    },
   },
 });

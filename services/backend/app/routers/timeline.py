@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
@@ -114,7 +115,7 @@ RETURN count(DISTINCT ev) AS total
 """
 
 
-def _bbox_params(bbox: BBox | None) -> dict:
+def _bbox_params(bbox: BBox | None) -> dict[str, Any]:
     if bbox is None:
         return {"bbox_off": True, "west": -180.0, "east": 180.0, "south": -90.0, "north": 90.0}
     return {
@@ -167,7 +168,7 @@ async def _events_window(
         log.error("timeline_events_neo4j_query_failed", error=str(exc))
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
     total = int(count_rows[0]["total"]) if count_rows else len(rows)
-    samples = [
+    samples: list[EventSample | TrackSample] = [
         EventSample(
             id=str(r.get("id") or ""),
             time=str(r.get("time") or ""),
@@ -251,7 +252,7 @@ async def _movements_window(
     except Exception as exc:
         log.error("timeline_movements_neo4j_query_failed", error=str(exc))
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
-    samples = [
+    samples: list[EventSample | TrackSample] = [
         TrackSample(
             id=str(r.get("icao24") or ""),
             icao24=r.get("icao24"),
@@ -314,7 +315,7 @@ async def get_histogram(
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
 
     # Bin in Python so the deterministic rules live in one tested place.
-    cats: dict[int, list[str | None]] = {}
+    cats: dict[int, list[object]] = {}
     sevs: dict[int, list[str]] = {}
     counts: dict[int, int] = {}
     for r in rows:
@@ -413,7 +414,7 @@ async def _histogram_notables(t_start: str, t_end: str, box: BBox | None) -> lis
     ev_rows = await read_query(_NOTABLE_EVENTS_QUERY, params)
     inc_rows = await read_query(_NOTABLE_INCIDENTS_QUERY, params)
 
-    candidates: list[dict] = []
+    candidates: list[dict[str, Any]] = []
     for r in ev_rows:
         sev = normalize_severity(r.get("severity"))
         if sev in ("high", "critical"):
@@ -424,7 +425,7 @@ async def _histogram_notables(t_start: str, t_end: str, box: BBox | None) -> lis
             "codebook_type": None, "is_incident": True,
         })
 
-    def _key(c: dict) -> tuple:
+    def _key(c: dict[str, Any]) -> tuple[int, str]:
         sev = c["severity"]
         tier = 0 if sev == "critical" else (1 if c["is_incident"] else (2 if sev == "high" else 3))
         return (tier, _neg_time_key(c.get("time")))
@@ -465,7 +466,9 @@ RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
 _GEO_CAP = 200
 
 
-async def _histogram_geo(t_start: str, t_end: str, box: BBox | None):
+async def _histogram_geo(
+    t_start: str, t_end: str, box: BBox | None
+) -> tuple[list[GeoEvent], int, bool]:
     params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
     rows = await read_query(_GEO_EVENTS_QUERY, params)
     total = len(rows)

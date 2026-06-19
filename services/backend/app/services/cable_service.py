@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import structlog
 
@@ -69,7 +70,7 @@ def _load_fallback() -> CableDataset:
         return CableDataset(cables=[], landing_points=[], source="fallback")
 
 
-def _parse_cables(geojson: dict) -> list[SubmarineCable]:
+def _parse_cables(geojson: dict[str, Any]) -> list[SubmarineCable]:
     """Parse TeleGeography cable GeoJSON into model list."""
     cables: list[SubmarineCable] = []
     for feature in geojson.get("features", []):
@@ -112,7 +113,7 @@ def _parse_cables(geojson: dict) -> list[SubmarineCable]:
     return cables
 
 
-def _parse_landing_points(geojson: dict) -> list[LandingPoint]:
+def _parse_landing_points(geojson: dict[str, Any]) -> list[LandingPoint]:
     """Parse TeleGeography landing point GeoJSON into model list."""
     points: list[LandingPoint] = []
     for feature in geojson.get("features", []):

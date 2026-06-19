@@ -1,5 +1,7 @@
 """Graph exploration response models."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -7,14 +9,14 @@ class GraphNode(BaseModel):
     id: str
     name: str
     type: str
-    properties: dict = Field(default_factory=dict)
+    properties: dict[str, Any] = Field(default_factory=dict)
 
 
 class GraphEdge(BaseModel):
     source: str
     target: str
     relationship: str
-    properties: dict = Field(default_factory=dict)
+    properties: dict[str, Any] = Field(default_factory=dict)
 
 
 class GraphResponse(BaseModel):

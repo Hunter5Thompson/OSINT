@@ -6,6 +6,7 @@ import json
 import time
 from copy import deepcopy
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from neo4j.exceptions import ConstraintError
 
@@ -30,10 +31,12 @@ from app.models.report import (
     AccentTone,
     DossierMetric,
     MarginEntry,
+    MessageRole,
     ReportCreateRequest,
     ReportMessage,
     ReportMessageCreate,
     ReportRecord,
+    ReportStatus,
     ReportUpdateRequest,
 )
 from app.services.briefing import parse_munin_report
@@ -80,7 +83,7 @@ def _parse_dt(value: str | datetime | None, fallback: datetime | None = None) ->
     return fallback or datetime.now(UTC)
 
 
-def _decode_metrics(raw: str | list[dict] | None) -> list[DossierMetric]:
+def _decode_metrics(raw: str | list[dict[str, Any]] | None) -> list[DossierMetric]:
     if isinstance(raw, list):
         data = raw
     elif isinstance(raw, str) and raw.strip():
@@ -100,7 +103,7 @@ def _decode_metrics(raw: str | list[dict] | None) -> list[DossierMetric]:
     return out
 
 
-def _decode_margin(raw: str | list[dict] | None) -> list[MarginEntry]:
+def _decode_margin(raw: str | list[dict[str, Any]] | None) -> list[MarginEntry]:
     if isinstance(raw, list):
         data = raw
     elif isinstance(raw, str) and raw.strip():
@@ -120,7 +123,21 @@ def _decode_margin(raw: str | list[dict] | None) -> list[MarginEntry]:
     return out
 
 
-def _row_to_report(row: dict) -> ReportRecord:
+def _coerce_report_status(value: object) -> ReportStatus:
+    raw = str(value or "Draft")
+    if raw in ("Draft", "Published", "Archived"):
+        return cast(ReportStatus, raw)
+    return "Draft"
+
+
+def _coerce_message_role(value: object) -> MessageRole:
+    raw = str(value or "system")
+    if raw in ("user", "munin", "system"):
+        return cast(MessageRole, raw)
+    return "system"
+
+
+def _row_to_report(row: dict[str, Any]) -> ReportRecord:
     created_at = _parse_dt(row.get("created_at"))
     updated_at = _parse_dt(row.get("updated_at"), fallback=created_at)
     return ReportRecord(
@@ -129,7 +146,7 @@ def _row_to_report(row: dict) -> ReportRecord:
         stamp=str(row.get("stamp") or ""),
         title=str(row.get("title") or ""),
         scope_key=row.get("scope_key"),
-        status=str(row.get("status") or "Draft"),
+        status=_coerce_report_status(row.get("status")),
         confidence=float(row.get("confidence") or 0.0),
         location=str(row.get("location") or ""),
         coords=str(row.get("coords") or ""),
@@ -145,10 +162,10 @@ def _row_to_report(row: dict) -> ReportRecord:
     )
 
 
-def _row_to_message(row: dict) -> ReportMessage:
+def _row_to_message(row: dict[str, Any]) -> ReportMessage:
     return ReportMessage(
         id=str(row.get("id") or ""),
-        role=str(row.get("role") or "system"),
+        role=_coerce_message_role(row.get("role")),
         text=str(row.get("text") or ""),
         ts=_parse_dt(row.get("ts")),
         refs=[str(v) for v in (row.get("refs") or [])],
@@ -160,7 +177,7 @@ def _report_params(
     paragraph_num: int,
     stamp: str,
     payload: ReportCreateRequest | ReportRecord,
-) -> dict:
+) -> dict[str, Any]:
     metrics = payload.metrics if isinstance(payload.metrics, list) else []
     margin = payload.margin if isinstance(payload.margin, list) else []
     return {

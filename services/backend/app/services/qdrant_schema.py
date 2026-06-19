@@ -17,6 +17,8 @@ is detected early, not silently ignored.
 
 from __future__ import annotations
 
+from typing import Any
+
 from qdrant_client.models import CollectionInfo, Distance, VectorParams
 
 __all__ = ["QdrantSchemaMismatch", "validate_collection_schema"]
@@ -58,7 +60,7 @@ def validate_collection_schema(
         _validate_dense_only(vectors)
 
 
-def _validate_dense_only(vectors) -> None:  # type: ignore[type-arg]
+def _validate_dense_only(vectors: Any) -> None:
     if isinstance(vectors, dict):
         raise QdrantSchemaMismatch(
             "dense-only mode expects an unnamed vector, but the collection uses named "
@@ -69,7 +71,7 @@ def _validate_dense_only(vectors) -> None:  # type: ignore[type-arg]
     _check_dense_params(vectors, label="unnamed")
 
 
-def _validate_hybrid(vectors, sparse_vectors) -> None:  # type: ignore[type-arg]
+def _validate_hybrid(vectors: Any, sparse_vectors: Any) -> None:
     if not isinstance(vectors, dict):
         raise QdrantSchemaMismatch(
             "hybrid mode expects a named 'dense' vector, but the collection has "

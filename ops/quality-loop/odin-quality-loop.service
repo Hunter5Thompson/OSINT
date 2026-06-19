@@ -1,0 +1,11 @@
+[Unit]
+Description=ODIN daily quality loop
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/deadpool-ultra/ODIN/OSINT
+ExecStart=/home/deadpool-ultra/ODIN/OSINT/ops/quality-loop/quality_loop.sh
+TimeoutStartSec=7200
+Nice=10

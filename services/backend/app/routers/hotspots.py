@@ -10,7 +10,7 @@ from app.models.hotspot import Hotspot
 router = APIRouter(prefix="/hotspots", tags=["hotspots"])
 
 # Default hotspots - updated by data-ingestion service via Redis
-DEFAULT_HOTSPOTS: list[dict[str, object]] = [
+DEFAULT_HOTSPOTS: list[dict[str, Any]] = [
     {"id": "ukr-001", "name": "Ukraine-Russia Conflict Zone", "latitude": 48.3, "longitude": 37.8, "region": "Eastern Europe", "threat_level": "CRITICAL", "description": "Active armed conflict between Russia and Ukraine", "sources": ["OSCE", "ISW", "Reuters"]},
     {"id": "twn-001", "name": "Taiwan Strait", "latitude": 24.0, "longitude": 121.0, "region": "East Asia", "threat_level": "HIGH", "description": "Cross-strait tensions between China and Taiwan", "sources": ["CSIS", "Reuters", "SCMP"]},
     {"id": "scs-001", "name": "South China Sea", "latitude": 12.0, "longitude": 114.0, "region": "Southeast Asia", "threat_level": "HIGH", "description": "Territorial disputes and militarization of artificial islands", "sources": ["AMTI", "Reuters", "CSIS"]},
@@ -81,7 +81,7 @@ async def get_hotspots(request: Request) -> list[Hotspot]:
         if items:
             return items
 
-    return [Hotspot(**h) for h in DEFAULT_HOTSPOTS]
+    return [_normalize_hotspot(h) for h in DEFAULT_HOTSPOTS]
 
 
 @router.get("/{hotspot_id}", response_model=Hotspot)

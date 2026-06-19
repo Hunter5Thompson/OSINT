@@ -1,7 +1,7 @@
 """Redis cache service with TTL support."""
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis
 import structlog
@@ -17,7 +17,7 @@ class CacheService:
     async def connect(self) -> None:
         self._redis = redis.from_url(self._redis_url, decode_responses=True)
         try:
-            await self._redis.ping()
+            await cast(Any, self._redis).ping()
             logger.info("redis_connected", url=self._redis_url)
         except Exception:
             logger.warning("redis_connection_failed", url=self._redis_url)
@@ -25,13 +25,13 @@ class CacheService:
 
     async def close(self) -> None:
         if self._redis:
-            await self._redis.aclose()
+            await cast(Any, self._redis).aclose()
 
     async def get(self, key: str) -> Any | None:
         if not self._redis:
             return None
         try:
-            value = await self._redis.get(key)
+            value = await cast(Any, self._redis).get(key)
             if value is not None:
                 return json.loads(value)
         except Exception:
@@ -42,7 +42,9 @@ class CacheService:
         if not self._redis:
             return
         try:
-            await self._redis.set(key, json.dumps(value, default=str), ex=ttl_seconds)
+            await cast(Any, self._redis).set(
+                key, json.dumps(value, default=str), ex=ttl_seconds
+            )
         except Exception:
             logger.warning("cache_set_error", key=key)
 
@@ -50,6 +52,6 @@ class CacheService:
         if not self._redis:
             return
         try:
-            await self._redis.delete(key)
+            await cast(Any, self._redis).delete(key)
         except Exception:
             logger.warning("cache_delete_error", key=key)

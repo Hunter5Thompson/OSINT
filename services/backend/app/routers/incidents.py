@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncGenerator
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -18,10 +19,11 @@ from app.config import settings
 from app.models.incident import (
     Incident,
     IncidentCreateRequest,
+    IncidentEnvelope,
     IncidentStatus,
 )
 from app.services import incident_store
-from app.services.incident_stream import IncidentEnvelope, get_incident_stream
+from app.services.incident_stream import get_incident_stream
 
 log = structlog.get_logger(__name__)
 
@@ -84,7 +86,7 @@ async def admin_trigger(payload: IncidentCreateRequest) -> Incident:
     "/_admin/promoter",
     dependencies=[Depends(_require_admin)],
 )
-async def admin_promoter_inspector(request: Request) -> dict:
+async def admin_promoter_inspector(request: Request) -> dict[str, Any]:
     """Read-only snapshot of the auto-promoter ClusterStore."""
     cluster_store = getattr(request.app.state, "cluster_store", None)
     cfg = getattr(request.app.state, "promoter_config", None)

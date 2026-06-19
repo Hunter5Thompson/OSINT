@@ -32,6 +32,8 @@ Thumbs.db
 .superpowers/
 .worktrees/
 .claude/worktrees/
+.agents/
+.quality-loop/
 
 # Skyfall Recon Phase 0 harness — large PLY + isolated workspace deps
 /scripts/recon/phase0/public/*.ply

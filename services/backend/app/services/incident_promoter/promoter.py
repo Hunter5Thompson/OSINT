@@ -9,10 +9,13 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Sequence
 from datetime import datetime
+from typing import Any
 
 import structlog
 
-from app.services.incident_promoter.cluster_store import ClusterStore
+from app.models.incident import Incident
+from app.models.signals import SignalEnvelope
+from app.services.incident_promoter.cluster_store import ClusterState, ClusterStore
 from app.services.incident_promoter.config import PromoterConfig
 from app.services.incident_promoter.detectors.base import Detector
 
@@ -25,10 +28,10 @@ class Promoter:
     def __init__(
         self,
         *,
-        signal_stream,                         # SignalStream | None
+        signal_stream: Any,                    # SignalStream | None
         cluster_store: ClusterStore,
-        incident_store,                        # object with create/apply/close/list_owned
-        incident_event_stream,                 # object with publish(type_, incident)
+        incident_store: Any,                   # object with create/apply/close/list_owned
+        incident_event_stream: Any,            # object with publish(type_, incident)
         config: PromoterConfig,
         clock: Callable[[], datetime],
         detectors: Sequence[Detector],
@@ -41,7 +44,7 @@ class Promoter:
         self._clock = clock
         self._detectors: list[Detector] = list(detectors)
         self._stop_event = asyncio.Event()
-        self._subscribed_queue: asyncio.Queue | None = None
+        self._subscribed_queue: asyncio.Queue[SignalEnvelope] | None = None
 
     # -- lifecycle -------------------------------------------------------
 
@@ -92,9 +95,9 @@ class Promoter:
             )
             self._cluster_store._by_incident_id[incident.id] = cluster_key  # noqa: SLF001
 
-    def _build_rehydrated_state(self, incident, cluster_key: str, detector_id: str):
-        from app.services.incident_promoter.cluster_store import ClusterState
-
+    def _build_rehydrated_state(
+        self, incident: Incident, cluster_key: str, detector_id: str
+    ) -> ClusterState:
         return ClusterState(
             cluster_key=cluster_key,
             incident_id=incident.id,
@@ -117,7 +120,7 @@ class Promoter:
                 return h[len("cluster:"):]
         return None
 
-    def _estimate_last_ts(self, incident):
+    def _estimate_last_ts(self, incident: Incident) -> datetime:
         if incident.timeline:
             offset = max(e.t_offset_s for e in incident.timeline)
             from datetime import timedelta
@@ -139,7 +142,7 @@ class Promoter:
             except Exception:  # noqa: BLE001 — keep loop alive
                 logger.exception("promoter_drain_loop_error")
 
-    async def _process(self, envelope) -> None:
+    async def _process(self, envelope: SignalEnvelope) -> None:
         for detector in self._detectors:
             try:
                 hit = detector.detect(envelope)

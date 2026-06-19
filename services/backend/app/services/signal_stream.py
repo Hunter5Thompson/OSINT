@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
 import redis.asyncio as redis
 import structlog
@@ -251,7 +251,7 @@ async def redis_consumer_loop(
         try:
             if client is None:
                 client = redis.from_url(settings.redis_url, decode_responses=True)
-                await client.ping()
+                await cast(Any, client).ping()
                 logger.info("signal_stream_redis_connected", stream=stream_key)
 
             response = await client.xread(
@@ -272,7 +272,7 @@ async def redis_consumer_loop(
             )
             if client is not None:
                 try:
-                    await client.aclose()
+                    await cast(Any, client).aclose()
                 except Exception:
                     pass
                 client = None
@@ -283,6 +283,6 @@ async def redis_consumer_loop(
 
     if client is not None:
         try:
-            await client.aclose()
+            await cast(Any, client).aclose()
         except Exception:
             pass

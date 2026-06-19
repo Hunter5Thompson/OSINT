@@ -65,4 +65,4 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]

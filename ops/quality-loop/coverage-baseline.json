@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "description": "Ratchet baselines for production-code coverage. Raise these after adding meaningful tests; never lower without an explicit decision.",
+  "services": {
+    "backend": {
+      "format": "coverage.py",
+      "metrics": {
+        "lines": 80.0
+      },
+      "critical_files": {
+        "app/cypher/incident_write.py": {
+          "lines": 100.0
+        },
+        "app/cypher/report_write.py": {
+          "lines": 100.0
+        },
+        "app/services/neo4j_client.py": {
+          "lines": 100.0
+        },
+        "app/services/qdrant_client.py": {
+          "lines": 100.0
+        }
+      }
+    },
+    "frontend": {
+      "format": "vitest-summary",
+      "metrics": {
+        "statements": 56.5,
+        "branches": 44.2,
+        "functions": 66.8,
+        "lines": 58.2
+      },
+      "critical_files": {
+        "src/lib/severity.ts": {
+          "statements": 100.0,
+          "functions": 100.0,
+          "lines": 100.0
+        }
+      }
+    },
+    "intelligence": {
+      "format": "coverage.py",
+      "metrics": {
+        "lines": 75.0
+      },
+      "critical_files": {
+        "agents/tools/graph_templates.py": {
+          "lines": 100.0
+        },
+        "graph/client.py": {
+          "lines": 100.0
+        },
+        "graph/write_templates.py": {
+          "lines": 100.0
+        }
+      }
+    },
+    "data-ingestion": {
+      "format": "coverage.py",
+      "metrics": {
+        "lines": 77.0
+      },
+      "critical_files": {
+        "feeds/provenance.py": {
+          "lines": 100.0
+        },
+        "gdelt_raw/ids.py": {
+          "lines": 100.0
+        },
+        "gdelt_raw/schemas.py": {
+          "lines": 100.0
+        },
+        "nlm_ingest/schemas.py": {
+          "lines": 100.0
+        },
+        "nlm_ingest/state.py": {
+          "lines": 100.0
+        }
+      }
+    },
+    "vision-enrichment": {
+      "format": "coverage.py",
+      "metrics": {
+        "lines": 84.0
+      },
+      "critical_files": {
+        "config.py": {
+          "lines": 100.0
+        }
+      }
+    }
+  }
+}

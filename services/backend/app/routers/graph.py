@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 from fastapi import APIRouter, Query
 
@@ -180,7 +182,7 @@ async def get_geo_events(
 
     if entity:
         entity_match = "MATCH (e:Entity {name: $entity})<-[:INVOLVES]-(ev:Event) "
-        params: dict = {"entity": entity, "limit": limit}
+        params: dict[str, Any] = {"entity": entity, "limit": limit}
     else:
         entity_match = "MATCH (ev:Event) "
         params = {"limit": limit}

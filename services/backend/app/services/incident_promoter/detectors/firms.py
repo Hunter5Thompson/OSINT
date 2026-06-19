@@ -61,7 +61,7 @@ def _bucket_key(lat: float, lon: float, *, deg: float) -> str:
 
 @dataclass
 class _BucketWindow:
-    signals: deque = field(default_factory=deque)  # entries: (ts: datetime, event_id: str)
+    signals: deque[tuple[datetime, str]] = field(default_factory=deque)
     ignited: bool = False
 
 
