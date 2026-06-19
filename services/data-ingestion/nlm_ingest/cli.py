@@ -350,6 +350,8 @@ def extract(notebook_id: str | None):
                                 client=client,
                                 vllm_url=settings.ingestion_vllm_url,
                                 vllm_model=settings.ingestion_vllm_model,
+                                timeout=settings.nlm_ingestion_vllm_timeout,
+                                max_tokens=settings.ingestion_max_tokens,
                             )
                             if claude_client:
                                 extraction = await review_with_claude(
