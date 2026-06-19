@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import uuid4
 
 from app.cypher.incident_read import (
@@ -16,6 +17,7 @@ from app.models.incident import (
     IncidentCreateRequest,
     IncidentStatus,
     IncidentTimelineEvent,
+    Severity,
 )
 from app.services._loc_key import incident_key
 from app.services.neo4j_client import read_query, write_query
@@ -23,7 +25,7 @@ from app.services.neo4j_client import read_query, write_query
 _REHYDRATE_LIMIT = 500
 
 
-def _decode_timeline(raw: str | list | None) -> list[IncidentTimelineEvent]:
+def _decode_timeline(raw: str | list[Any] | None) -> list[IncidentTimelineEvent]:
     if not raw:
         return []
     if isinstance(raw, str):
@@ -44,12 +46,12 @@ def _decode_timeline(raw: str | list | None) -> list[IncidentTimelineEvent]:
     return out
 
 
-def _row_to_incident(row: dict) -> Incident:
+def _row_to_incident(row: dict[str, Any]) -> Incident:
     return Incident(
         id=str(row["id"]),
         kind=str(row.get("kind") or "manual"),
         title=str(row.get("title") or ""),
-        severity=str(row.get("severity") or "low"),  # type: ignore[arg-type]
+        severity=cast(Severity, str(row.get("severity") or "low")),
         coords=(float(row.get("lat") or 0.0), float(row.get("lon") or 0.0)),
         location=str(row.get("location") or ""),
         status=IncidentStatus(str(row.get("status") or "open")),
@@ -61,7 +63,7 @@ def _row_to_incident(row: dict) -> Incident:
     )
 
 
-def _parse_dt(value) -> datetime:
+def _parse_dt(value: Any) -> datetime:
     if isinstance(value, datetime):
         return value.astimezone(UTC)
     if isinstance(value, str) and value:
@@ -73,7 +75,7 @@ def _parse_dt(value) -> datetime:
     return datetime.now(UTC)
 
 
-def _upsert_params(record: Incident, ordinal: int) -> dict:
+def _upsert_params(record: Incident, ordinal: int) -> dict[str, Any]:
     return {
         "incident_id": record.id,
         "ordinal": ordinal,

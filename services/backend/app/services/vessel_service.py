@@ -3,6 +3,7 @@
 import asyncio
 import json
 import time
+from typing import Any
 
 import structlog
 
@@ -185,7 +186,7 @@ async def _fetch_digitraffic(proxy: ProxyService) -> list[Vessel]:
         locations = loc_resp.json()
         metadata_list = meta_resp.json()
 
-        meta_map: dict[int, dict] = {}
+        meta_map: dict[int, dict[str, Any]] = {}
         for m in metadata_list:
             mmsi = m.get("mmsi")
             if mmsi:

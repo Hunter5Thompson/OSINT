@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from functools import partial
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -36,7 +37,7 @@ class IntelAnalysis(BaseModel):
     analysis: str
     confidence: float = 0.0
     threat_assessment: str | None = None
-    tool_trace: list[dict] = Field(default_factory=list)
+    tool_trace: list[dict[str, Any]] = Field(default_factory=list)
     mode: str = "react"
     timestamp: datetime = Field(default_factory=_utc_now)
 

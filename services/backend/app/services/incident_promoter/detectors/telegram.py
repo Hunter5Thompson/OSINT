@@ -87,7 +87,7 @@ class _Centroid:
     cluster_key: str
     tokens: set[tuple[str, ...]]          # 5-gram shingles (cross-channel matching)
     unigram_tokens: set[tuple[str, ...]]   # 1-gram tokens  (same-channel matching)
-    deque: deque = field(default_factory=deque)  # entries: (ts, event_id)
+    deque: deque[tuple[datetime, str]] = field(default_factory=deque)
     ignited: bool = False
     last_seen_ts: datetime | None = None
     domain: str = ""

@@ -25,7 +25,7 @@ _HIGH_SET = {"high", "critical"}
 
 @dataclass
 class _Bucket:
-    signals: deque = field(default_factory=deque)
+    signals: deque[tuple[datetime, str, str]] = field(default_factory=deque)
     ignited: bool = False
 
 
@@ -81,7 +81,9 @@ class SeverityBurstDetector:
         else:
             self._suppressed_until[cluster_key] = suppress_until
 
-    def _build_ignition(self, envelope, cluster_key, bucket: _Bucket) -> ClusterHit:
+    def _build_ignition(
+        self, envelope: SignalEnvelope, cluster_key: str, bucket: _Bucket
+    ) -> ClusterHit:
         count = len(bucket.signals)
         title = f"Severity burst · {count} high-severity signals"
         ids = [eid for _ts, eid, _sev in bucket.signals]
@@ -103,7 +105,7 @@ class SeverityBurstDetector:
             contributing_signal_ids=ids,
         )
 
-    def _build_update(self, envelope, cluster_key) -> ClusterHit:
+    def _build_update(self, envelope: SignalEnvelope, cluster_key: str) -> ClusterHit:
         title = f"Severity hit · {envelope.payload.source}"
         surrogate = ClusterHit(
             cluster_key=cluster_key, detector_id=self.id,

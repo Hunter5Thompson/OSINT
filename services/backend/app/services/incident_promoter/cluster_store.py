@@ -10,15 +10,23 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Any, Literal, Protocol, cast
 
 import structlog
+
+from app.services.incident_promoter.detectors.base import ClusterHit
 
 logger = structlog.get_logger(__name__)
 
 ClusterIncidentStatus = Literal["open", "promoted"]
-TerminationListener = Callable[..., None]
-"""Signature: ``listener(cluster_key: str, suppress_until: datetime | None = None) -> None``."""
+
+
+class TerminationListener(Protocol):
+    """Signature: ``listener(cluster_key, suppress_until=...)``."""
+
+    def __call__(
+        self, cluster_key: str, *, suppress_until: datetime | None = None
+    ) -> None: ...
 
 
 @dataclass
@@ -83,10 +91,10 @@ class ClusterStore:
 
     async def handle(
         self,
-        hit,                                # ClusterHit — quoted to avoid circular import
+        hit: ClusterHit,
         *,
-        incident_store,
-        incident_event_stream,
+        incident_store: Any,
+        incident_event_stream: Any,
     ) -> None:
         """Phased locking: decide and reserve, then I/O, then finalize."""
         from app.models.incident import IncidentCreateRequest
@@ -182,6 +190,7 @@ class ClusterStore:
             return
 
         # action == "update"
+        existing = cast(ClusterState, existing)
         # Recompute the timeline event with the correct t_offset_s relative to created_ts.
         offset = (now - existing.created_ts).total_seconds()
         from app.models.incident import IncidentTimelineEvent  # local import to avoid cycles
@@ -309,9 +318,7 @@ class ClusterStore:
                     "promoter_terminate_callback_failed", cluster_key=cluster_key
                 )
 
-    def _resolve_create_coords(
-        self, hit
-    ) -> tuple[tuple[float, float], list[str]]:
+    def _resolve_create_coords(self, hit: Any) -> tuple[tuple[float, float], list[str]]:
         """Pick representative coords for the new incident.
 
         - hit.coords is not None → use it; no extra layer hints.
