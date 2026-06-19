@@ -9,7 +9,7 @@ dependencies = [
     "structlog>=24.1",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
-    "qdrant-client>=1.9",
+    "qdrant-client>=1.13.0,<1.14.0",  # pin to Qdrant server v1.13.2 minor — avoid client/server version drift
 ]
 
 [project.optional-dependencies]
