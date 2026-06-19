@@ -9,6 +9,17 @@ import pytest
 from agents.tools.qdrant_search import TOOL_OUTPUT_MAX_CHARS, qdrant_search
 
 
+def _prose(min_chars: int = 80) -> str:
+    """Realistic analysis prose (multiple words + sentence punctuation) of at least
+    `min_chars`. Analysis points need real content now that the read-path content-quality
+    gate (corpus_policy.validate_lane) drops empty / single-token / no-sentence chunks."""
+    s = "Western naval forces tracked the tanker through the strait and assessed the risk. "
+    out = s
+    while len(out) < min_chars:
+        out += s
+    return out
+
+
 class TestQdrantSearchTool:
     @pytest.mark.asyncio
     async def test_dedupes_graph_context_and_caps_output(self):
@@ -22,7 +33,7 @@ class TestQdrantSearchTool:
                 "title": f"Result {i}",
                 "source": "rss",
                 "region": "N/A",
-                "content": "source text " * 200,
+                "content": _prose(2000),
                 "graph_context": graph_context,
             }
             for i in range(5)
@@ -44,12 +55,12 @@ class TestQdrantSearchTool:
             {
                 "score": 0.9, "source": "rss", "source_type": "rss",
                 "provider": "reuters.com", "title": "Tanker seized",
-                "content": "body " * 50, "url": "https://reuters.com/a",
+                "content": _prose(300), "url": "https://reuters.com/a",
                 "content_hash": "h1",
             },
             {
                 "score": 0.8, "source": "rss", "feed_name": "RUSI Commentary",
-                "title": "RUSI analysis", "summary": "rusi " * 50,
+                "title": "RUSI analysis", "content": _prose(300),
                 "content_hash": "h2",
             },
         ]
@@ -75,7 +86,7 @@ class TestQdrantSearchTool:
         results = [
             {"score": 0.9 - i * 0.01, "source": "rss", "source_type": "rss",
              "provider": "p" * 10,
-             "title": "T" * 130, "content": "x" * 700, "content_hash": f"h{i}"}
+             "title": "T" * 130, "content": _prose(700), "content_hash": f"h{i}"}
             for i in range(20)
         ]
         with patch("agents.tools.qdrant_search.enhanced_search",
@@ -94,9 +105,9 @@ class TestTwoLaneScoping:
 
         analysis = [
             {"source": "rss", "feed_name": "CSIS", "title": "Tank view",
-             "summary": "deep analysis", "score": 0.8},
+             "content": _prose(), "score": 0.8},
             {"source": "rss", "feed_name": "RUSI Commentary", "title": "RUSI",
-             "summary": "more analysis", "score": 0.7},
+             "content": _prose(), "score": 0.7},
         ]
         realtime = []  # nothing cleared the 0.45 bar
         with patch("agents.tools.qdrant_search.enhanced_search",
@@ -111,7 +122,7 @@ class TestTwoLaneScoping:
         from agents.tools import qdrant_search as qs
 
         analysis = [{"source": "rss", "feed_name": "CSIS", "title": f"A{i}",
-                     "summary": "x", "score": 0.8} for i in range(5)]
+                     "content": _prose(), "score": 0.8} for i in range(5)]
         realtime = [{"source": "telegram", "telegram_channel": "wartranslated",
                      "title": "RT lead", "content": "raw", "score": 0.6}]
         with patch("agents.tools.qdrant_search.enhanced_search",
@@ -124,7 +135,7 @@ class TestTwoLaneScoping:
         from agents.tools import qdrant_search as qs
 
         analysis = [{"source": "rss", "feed_name": "CSIS", "title": "A",
-                     "summary": "x", "score": 0.8}]
+                     "content": _prose(), "score": 0.8}]
         # a rybar item leaks past the (mocked) filter — guard must drop it
         realtime = [{"source": "telegram", "telegram_channel": "rybar",
                      "title": "propaganda", "content": "raw", "score": 0.9}]
@@ -142,7 +153,7 @@ class TestTwoLaneScoping:
         # output guard is the second barrier and must drop them (AC-2).
         analysis = [
             {"source": "rss", "feed_name": "CSIS", "title": "Real analysis",
-             "summary": "x", "score": 0.8},
+             "content": _prose(), "score": 0.8},
             {"source": "gdelt_gkg", "doc_id": "gdelt:gkg:9",
              "title": "gdelt:gkg:9", "score": 0.95},
             {"source": "firms", "title": "thermal anomaly", "score": 0.9},
@@ -159,7 +170,7 @@ class TestTwoLaneScoping:
         from agents.tools import qdrant_search as qs
 
         analysis = [{"source": "rss", "feed_name": "CSIS", "title": "A",
-                     "summary": "x", "score": 0.8}]
+                     "content": _prose(), "score": 0.8}]
         with patch(
             "agents.tools.qdrant_search.enhanced_search",
             AsyncMock(side_effect=[analysis, RuntimeError("realtime down")]),
@@ -177,9 +188,9 @@ class TestTwoLaneScoping:
         # pack must keep tier order, not re-sort by dense score.
         analysis = [
             {"source": "rss", "feed_name": "CSIS", "title": "TANKVIEW",
-             "summary": "x", "score": 0.40},
+             "content": _prose(), "score": 0.40},
             {"source": "rss", "feed_name": "Local Paper", "title": "LOCALVIEW",
-             "summary": "y", "score": 0.95},
+             "content": _prose(), "score": 0.95},
         ]
         with patch("agents.tools.qdrant_search.enhanced_search",
                    self._lane_mock(analysis, [])):

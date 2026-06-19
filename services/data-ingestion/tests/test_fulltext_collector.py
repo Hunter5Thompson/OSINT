@@ -7,7 +7,7 @@ import pytest
 from feeds.fulltext_collector import THINKTANK_FEEDS, FulltextCollector
 from feeds.rss_collector import RSS_FEEDS
 
-TERMINAL = {"done", "failed_permanent", "skipped_paywall"}
+TERMINAL = {"done", "failed_permanent", "skipped_paywall", "skipped_lowquality"}
 
 
 def _teaser(rid, url="https://csis.org/a", feed="CSIS"):
@@ -166,3 +166,34 @@ class TestThinktankRegistry:
                 f"{feed_name!r}: THINKTANK_FEEDS domain {domain!r} != "
                 f"rss provider {by_name[feed_name]['provider']!r}"
             )
+
+
+class TestIngestGuard:
+    @pytest.mark.asyncio
+    async def test_all_junk_body_marks_skipped_lowquality_no_supersede(self):
+        # Fetched body is a base64-image blob (the swp-berlin webmonitor case) -> after
+        # stripping, no usable chunk -> terminal skipped_lowquality, no upsert, no supersede.
+        c, qc = _collector([_teaser(rid=901)])
+        blob = "## H\n\n" + "data:image/png;base64," + "A" * 9000
+        with patch("feeds.fulltext_collector.fetch_fulltext", AsyncMock(return_value=blob)):
+            await c.collect()
+        qc.upsert.assert_not_called()
+        sp = qc.set_payload.call_args
+        assert sp.kwargs["payload"]["fulltext_status"] == "skipped_lowquality"
+        assert "superseded_by_fulltext" not in sp.kwargs["payload"]
+
+    @pytest.mark.asyncio
+    async def test_strips_base64_from_written_chunks(self):
+        # Real prose with an embedded base64 image -> chunks are written WITHOUT the blob.
+        c, qc = _collector([_teaser(rid=902)])
+        md = ("## H\n\n" + "Real analysis sentence here. " * 80
+              + " data:image/png;base64," + "A" * 3000 + " More real analysis here. " * 80)
+        with patch("feeds.fulltext_collector.fetch_fulltext", AsyncMock(return_value=md)):
+            await c.collect()
+        assert qc.upsert.called
+        points = qc.upsert.call_args.kwargs["points"]
+        assert points, "expected at least one usable chunk written"
+        for p in points:
+            assert "base64," not in p.payload["content"]
+        # and the teaser was superseded (real fulltext landed)
+        assert qc.set_payload.call_args.kwargs["payload"]["superseded_by_fulltext"] is True

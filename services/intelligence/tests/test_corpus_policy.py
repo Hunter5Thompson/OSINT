@@ -83,8 +83,10 @@ class TestTierBoost:
 
 class TestGuardAndMerge:
     def test_validate_analysis_drops_cross_lane(self, caplog):
-        rss = {"source": "rss", "feed_name": "CSIS"}
-        nlm = {"source": "unknown", "notebook_id": "nb1"}
+        # content present so the content-quality gate doesn't drop the valid-lane points
+        prose = "NATO is expanding its eastern flank with new brigades and air defences."
+        rss = {"source": "rss", "feed_name": "CSIS", "content": prose}
+        nlm = {"source": "unknown", "notebook_id": "nb1", "content": prose}
         junk = {"source": "gdelt_gkg", "doc_id": "gdelt:gkg:1"}
         firms = {"source": "firms"}
         kept = cp.validate_lane([rss, nlm, junk, firms], "analysis")
@@ -111,8 +113,9 @@ class TestGuardAndMerge:
 
     def test_validate_rejects_inconsistent_source_type(self):
         # raw source says rss but canonical source_type says gdelt -> reject
-        bad = {"source": "rss", "feed_name": "x", "source_type": "gdelt"}
-        good = {"source": "rss", "feed_name": "CSIS", "source_type": "rss"}
+        prose = "NATO is expanding its eastern flank with new brigades and air defences."
+        bad = {"source": "rss", "feed_name": "x", "source_type": "gdelt", "content": prose}
+        good = {"source": "rss", "feed_name": "CSIS", "source_type": "rss", "content": prose}
         assert cp.validate_lane([good, bad], "analysis") == [good]
 
     def test_validate_realtime_rejects_inconsistent_source_type(self):
@@ -154,9 +157,46 @@ class TestFulltextReadPath:
         assert {"key": "superseded_by_fulltext", "match": {"value": True}} in f["must_not"]
 
     def test_validate_lane_keeps_fulltext_chunk(self):
-        chunk = {"source": "rss_fulltext", "source_type": "rss", "feed_name": "CSIS"}
+        chunk = {"source": "rss_fulltext", "source_type": "rss", "feed_name": "CSIS",
+                 "content": "NATO expands its eastern flank with several new brigades."}
         assert cp.validate_lane([chunk], "analysis") == [chunk]
 
     def test_validate_lane_drops_superseded_teaser(self):
         teaser = {"source": "rss", "feed_name": "CSIS", "superseded_by_fulltext": True}
         assert cp.validate_lane([teaser], "analysis") == []
+
+
+class TestContentQualityGate:
+    PROSE = "NATO is expanding its eastern flank with new brigades and air defences."
+
+    def test_drops_empty_content_rss(self, caplog):
+        empty = {"source": "rss", "feed_name": "CSIS", "content": ""}
+        good = {"source": "rss", "feed_name": "CSIS", "content": self.PROSE}
+        assert cp.validate_lane([empty, good], "analysis") == [good]
+
+    def test_drops_base64_image_chunk(self):
+        blob = {"source": "rss_fulltext", "source_type": "rss", "feed_name": "SWP",
+                "content": "Title data:image/png;base64," + "A" * 4000}
+        good = {"source": "rss_fulltext", "source_type": "rss", "feed_name": "CSIS",
+                "content": self.PROSE}
+        assert cp.validate_lane([blob, good], "analysis") == [good]
+
+    def test_keeps_nlm_single_sentence_claim(self):
+        nlm = {"source": "unknown", "notebook_id": "nb1",
+               "content": "There is a resurgence of defense technology investment "
+                          "in Silicon Valley driven by competition with China."}
+        assert cp.validate_lane([nlm], "analysis") == [nlm]
+
+    def test_realtime_lane_not_subject_to_content_gate(self):
+        # short telegram leads are valid; the prose gate is analysis-only
+        lead = {"source": "telegram", "telegram_channel": "wartranslated", "content": "brief lead"}
+        assert cp.validate_lane([lead], "realtime") == [lead]
+
+    def test_bare_rss_summary_survives(self):
+        # REGRESSION (B1): bare rss stores prose under `summary` (no `content` key).
+        # The gate must read the same fallback as _excerpt or it drops ~24 wire/gov feeds.
+        bare = {"source": "rss", "feed_name": "Reuters",
+                "title": "Tanker seized in the strait",
+                "summary": "Western naval forces tracked the tanker through the strait "
+                           "and assessed the move as deliberate escalation."}
+        assert cp.validate_lane([bare], "analysis") == [bare]
