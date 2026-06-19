@@ -33,6 +33,9 @@ notebooklm = [
     "click>=8.0",
     "anthropic>=0.40",
     "pydub>=0.25",
+    # Python 3.13 removed stdlib `audioop` (PEP 594); pydub imports it. Without this,
+    # a fresh `uv sync --extra notebooklm` regresses transcription on 3.13+.
+    "audioop-lts>=0.2.2; python_version >= '3.13'",
 ]
 
 [project.scripts]

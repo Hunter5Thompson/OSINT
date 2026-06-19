@@ -11,6 +11,7 @@ from nlm_ingest.extract import (
     review_with_claude,
 )
 from nlm_ingest.schemas import (
+    CANONICAL_ENTITY_TYPES,
     Extraction,
     ExtractionSource,
 )
@@ -235,8 +236,32 @@ class TestPromptV3:
         assert "{source_text}" in prompt          # honest, source-agnostic placeholder
         assert "{source_hint}" in prompt           # dynamic source-kind hint slot
         assert "{transcript_text}" not in prompt   # old placeholder retired in v3
-        # v3 is derived from v1, NOT v2 — must not carry v2's opt-in LOCATION entity type
-        assert "LOCATION" not in prompt
+        # LOCATION is a canonical EntityType in schemas.py (13 values) — must appear in prompt
+        assert "LOCATION" in prompt
+        # Hard enforcement: EVENT must be explicitly called out as forbidden
+        assert "EVENT" in prompt
+        # Events-are-not-entities rule must be present
+        assert "events" in prompt.lower() and "claims" in prompt.lower()
+
+    def test_v3_entity_types_match_schema_exactly(self):
+        """Prompt entity type list must match CANONICAL_ENTITY_TYPES in schemas.py exactly.
+
+        Extracts the pipe-delimited type string from the prompt's Output Format block
+        and asserts it is an exact set-match against the Literal values in schemas.py.
+        This test fails if a type is added to schemas.py but not the prompt, or vice versa.
+        """
+        import re
+        prompt = load_prompt("v3")
+        # Extract the type enum line from the JSON template block
+        match = re.search(r'"type":\s*"([^"]+)"', prompt)
+        assert match, "Could not find entity type enum line in v3 prompt"
+        type_line = match.group(1)
+        prompt_types = {t.strip() for t in type_line.split("|")}
+        assert prompt_types == set(CANONICAL_ENTITY_TYPES), (
+            f"Prompt entity types do not match schemas.py EntityType Literal.\n"
+            f"  In prompt only:  {prompt_types - set(CANONICAL_ENTITY_TYPES)}\n"
+            f"  In schema only:  {set(CANONICAL_ENTITY_TYPES) - prompt_types}"
+        )
 
     @pytest.mark.asyncio
     async def test_v3_is_default_version(self):
@@ -281,3 +306,90 @@ class TestPromptV3:
         prompt = _sent_prompt(client)
         assert "LEGACY V1 TEXT" in prompt
         assert "{transcript_text}" not in prompt
+
+
+def _payload(client) -> dict:
+    return client.post.call_args.kwargs["json"]
+
+
+def _client_returning(content: str):
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.return_value = httpx.Response(
+        200, json={"choices": [{"message": {"content": content}}]}, request=_REQ)
+    return client
+
+
+class TestStructuredOutputAndLenient:
+    @pytest.mark.asyncio
+    async def test_payload_uses_strict_json_schema(self):
+        from nlm_ingest.schemas import CANONICAL_ENTITY_TYPES
+        client = _ok_client()
+        await extract_with_qwen(source=_make_source(), metadata={"source_name": "R", "title": "T"},
+                                client=client, vllm_url="http://x", vllm_model="qwen")
+        rf = _payload(client)["response_format"]
+        assert rf["type"] == "json_schema"
+        assert rf["json_schema"]["strict"] is True
+        props = rf["json_schema"]["schema"]["properties"]
+        ent_type = props["entities"]["items"]["properties"]["type"]
+        rel_type = props["relations"]["items"]["properties"]["type"]
+        claim_type = props["claims"]["items"]["properties"]["type"]
+        # entity type enum-enforced and matches the 13 canonical schema types (no drift)
+        assert set(ent_type["enum"]) == set(CANONICAL_ENTITY_TYPES)
+        # relation type is a FREE string (NOT enum) by design — observe out-of-enum values
+        assert "enum" not in rel_type
+        # claim type/polarity ARE enum-enforced
+        assert claim_type["enum"] == ["factual", "assessment", "prediction"]
+
+    @pytest.mark.asyncio
+    async def test_max_tokens_default_is_8000_and_overridable(self):
+        client = _ok_client()
+        await extract_with_qwen(source=_make_source(), metadata={"source_name": "R", "title": "T"},
+                                client=client, vllm_url="http://x", vllm_model="qwen")
+        assert _payload(client)["max_tokens"] == 8000
+        client2 = _ok_client()
+        await extract_with_qwen(
+            source=_make_source(), metadata={"source_name": "R", "title": "T"},
+            client=client2, vllm_url="http://x", vllm_model="qwen", max_tokens=12345)
+        assert _payload(client2)["max_tokens"] == 12345
+
+    @pytest.mark.asyncio
+    async def test_lenient_skips_out_of_enum_entity_keeps_rest(self):
+        content = json.dumps({
+            "entities": [
+                {"name": "NATO", "type": "ORGANIZATION", "aliases": [], "confidence": 0.9},
+                {"name": "Dronevation 2026", "type": "EVENT", "aliases": [], "confidence": 0.9},
+            ],
+            "relations": [], "claims": [],
+        })
+        result = await extract_with_qwen(
+            source=_make_source(), metadata={"source_name": "R", "title": "T"},
+            client=_client_returning(content), vllm_url="http://x", vllm_model="qwen")
+        # one bad EVENT item must NOT nuke the notebook — NATO survives, EVENT dropped
+        assert [e.name for e in result.entities] == ["NATO"]
+
+    @pytest.mark.asyncio
+    async def test_lenient_skips_out_of_enum_relation_keeps_rest(self):
+        content = json.dumps({
+            "entities": [],
+            "relations": [
+                {"source": "A", "target": "B", "type": "DEVELOPS",
+                 "evidence": "x", "confidence": 0.8},
+                {"source": "C", "target": "D", "type": "COMPETES_WITH",
+                 "evidence": "y", "confidence": 0.8},
+            ],
+            "claims": [],
+        })
+        result = await extract_with_qwen(
+            source=_make_source(), metadata={"source_name": "R", "title": "T"},
+            client=_client_returning(content), vllm_url="http://x", vllm_model="qwen")
+        # out-of-enum DEVELOPS skipped (and logged for future taxonomy round); valid one kept
+        assert [r.type for r in result.relations] == ["COMPETES_WITH"]
+
+    @pytest.mark.asyncio
+    async def test_null_array_does_not_crash_notebook(self):
+        # Model emits "entities": null (not absent) — must NOT raise; coerced to empty.
+        content = json.dumps({"entities": None, "relations": None, "claims": None})
+        result = await extract_with_qwen(
+            source=_make_source(), metadata={"source_name": "R", "title": "T"},
+            client=_client_returning(content), vllm_url="http://x", vllm_model="qwen")
+        assert result.entities == [] and result.relations == [] and result.claims == []

@@ -35,7 +35,18 @@ class Settings(BaseSettings):
     # Ingestion LLM (Spark — Qwen3.6-35B-A3B MoE). URL WITHOUT /v1 — callers append full path.
     ingestion_vllm_url: str = "http://192.168.178.39:8000"
     ingestion_vllm_model: str = "Qwen/Qwen3.6-35B-A3B"
+    # RSS/intelligence extraction timeout (consumed by pipeline.py). Kept at 120s: the
+    # RSS pipeline is continuous and should fail-fast + retry, not hold a worker for
+    # minutes on a wedged Spark call.
     ingestion_vllm_timeout: float = 120.0
+    # NLM extraction timeout — SEPARATE from RSS (split per code review). 600s because the
+    # NLM batch shares the Spark (35B MoE) with the live RSS pipeline; a single extraction
+    # measured ~160s under concurrency, and 120s caused ReadTimeouts that failed every NLM
+    # extraction. A batch job can wait; the continuous RSS pipeline should not.
+    nlm_ingestion_vllm_timeout: float = 600.0
+    # 8000, not 4000: long NotebookLM transcripts produce large extraction JSON; 4000
+    # truncated mid-string -> JSON parse failure (the whole notebook lost). NLM extract path.
+    ingestion_max_tokens: int = 8000
     event_codebook_path: Path = (
         Path(__file__).parent.parent / "intelligence" / "codebook" / "event_codebook.yaml"
     )

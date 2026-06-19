@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
+from typing import get_args
 
 import httpx
 import structlog
+from pydantic import BaseModel, ValidationError
 
 from nlm_ingest.schemas import (
     Claim,
+    ClaimPolarity,
+    ClaimType,
     Entity,
+    EntityType,
     Extraction,
     ExtractionSource,
     Relation,
@@ -18,6 +24,116 @@ log = structlog.get_logger()
 
 CLAUDE_BUDGET_PER_RUN = 50_000
 PROMPT_DIR = Path(__file__).parent / "prompts"
+
+# JSON Schema for vLLM `response_format` (strict guided decoding). Enums are derived
+# from the schema Literals so they never drift from schemas.py. DESIGN: entity `type`
+# and claim `type`/`polarity` ARE enum-constrained (we trust those taxonomies — this
+# stops the model emitting e.g. EVENT entities). Relation `type` is deliberately a free
+# string (NOT enum): the 9 RelationTypes are intentionally narrow, so we let the model
+# emit naturally and observe out-of-enum values via the lenient skip-logger below,
+# feeding a future curated relation-type expansion. See docs/nlm-smoke-2026-06-19.md.
+_RESPONSE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "entities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "name": {"type": "string"},
+                    "type": {"type": "string", "enum": list(get_args(EntityType))},
+                    "aliases": {"type": "array", "items": {"type": "string"}},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["name", "type", "aliases", "confidence"],
+            },
+        },
+        "relations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "source": {"type": "string"},
+                    "target": {"type": "string"},
+                    "type": {"type": "string"},  # free string by design (see note above)
+                    "evidence": {"type": "string"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["source", "target", "type", "evidence", "confidence"],
+            },
+        },
+        "claims": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "statement": {"type": "string"},
+                    "type": {"type": "string", "enum": list(get_args(ClaimType))},
+                    "polarity": {"type": "string", "enum": list(get_args(ClaimPolarity))},
+                    "entities_involved": {"type": "array", "items": {"type": "string"}},
+                    "confidence": {"type": "number"},
+                    "temporal_scope": {"type": "string"},
+                },
+                "required": [
+                    "statement", "type", "polarity",
+                    "entities_involved", "confidence", "temporal_scope",
+                ],
+            },
+        },
+    },
+    "required": ["entities", "relations", "claims"],
+}
+
+
+def _build_items(
+    cls: type[BaseModel], raws: list, *, kind: str, notebook_id: str
+) -> list:
+    """Build pydantic items leniently: skip+log any item that fails validation rather
+    than letting one bad item (e.g. an out-of-enum type) kill the whole notebook.
+
+    Logs each skipped item AND a per-kind summary Counter of the offending `type`
+    values — that summary is the signal for a future curated taxonomy expansion
+    (esp. relation types, which are intentionally not schema-enforced).
+
+    For entities/claims this is a FALLBACK (the strict response schema is the primary
+    guard against out-of-enum types); for relations it is the PRIMARY mechanism, since
+    relation `type` is deliberately not schema-constrained. Also coerces a non-list
+    `raws` (model emitting ``"entities": null``) to ``[]`` so one malformed array can
+    never crash the whole notebook — the entire point of this lenient layer."""
+    if not isinstance(raws, list):
+        # Telemetry: a non-list array (e.g. model emitted ``"entities": null``) is coerced
+        # to [] so it can't crash the notebook — but log it so full-run quality regressions
+        # (a model/server starting to emit malformed arrays) stay visible.
+        log.warning(
+            "nlm_extract_nonlist_array", kind=kind, notebook_id=notebook_id,
+            got_type=type(raws).__name__,
+        )
+        raws = []
+    out: list = []
+    skipped_types: list[str] = []
+    for raw in raws:
+        try:
+            out.append(cls(**raw))
+        except (ValidationError, TypeError) as e:
+            bad_type = raw.get("type") if isinstance(raw, dict) else "<non-dict>"
+            skipped_types.append(str(bad_type))
+            log.warning(
+                "nlm_extract_item_skipped",
+                kind=kind, notebook_id=notebook_id, bad_type=bad_type,
+                error=str(e).splitlines()[0], raw=raw,
+            )
+    if skipped_types:
+        log.info(
+            "nlm_extract_skipped_summary",
+            kind=kind, notebook_id=notebook_id,
+            skipped=len(skipped_types), kept=len(out),
+            skipped_types=dict(Counter(skipped_types)),
+        )
+    return out
 
 
 def load_prompt(version: str) -> str:
@@ -43,12 +159,20 @@ async def extract_with_qwen(
     vllm_url: str,
     vllm_model: str,
     # Default is "v3": source-agnostic prompt with a dynamic source-kind hint, so
-    # report sources are no longer mislabeled as podcast transcripts. v3 is derived
-    # from v1 semantics (it does NOT include v2's opt-in LOCATION entity type).
-    # v1/v2 remain available for rollback / explicit opt-in (e.g. prompt_version="v2"
-    # still pairs with the default-OFF `entity_type_normalize` flag). See
+    # report sources are no longer mislabeled as podcast transcripts. v3 now lists all
+    # 13 canonical EntityTypes incl. LOCATION (the prompt is drift-guarded against
+    # schemas.py) and hard-enforces them. v1/v2 remain available for rollback. See
     # docs/superpowers/plans/2026-04-30-patch-c-entity-canonicalization.md
     prompt_version: str = "v3",
+    # Per-request HTTP timeout. Defaults high because the Spark (35B MoE) is shared
+    # with the live RSS pipeline; a single extraction measured ~160s under load, so
+    # the old hardcoded 120s caused ReadTimeouts. The CLI passes
+    # settings.nlm_ingestion_vllm_timeout (NLM-specific; RSS keeps its own 120s).
+    timeout: float = 600.0,
+    # Output token budget. 8000 (not 4000): long transcripts produced JSON that
+    # truncated mid-string at 4000 -> parse failure. Callers pass
+    # settings.ingestion_max_tokens.
+    max_tokens: int = 8000,
 ) -> Extraction:
     prompt_template = load_prompt(prompt_version)
     # Dynamic hint so the model knows what kind of source it is reading.
@@ -75,14 +199,25 @@ async def extract_with_qwen(
         "model": vllm_model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.1,
-        "max_tokens": 4000,
+        "max_tokens": max_tokens,
+        # Strict guided decoding: forces valid JSON + valid entity/claim enum values
+        # (kills out-of-enum entity types like EVENT at the source). Relation `type`
+        # stays a free string by design (see _RESPONSE_SCHEMA note).
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "nlm_extraction",
+                "schema": _RESPONSE_SCHEMA,
+                "strict": True,
+            },
+        },
         "chat_template_kwargs": {"enable_thinking": False},
     }
 
     response = await client.post(
         f"{vllm_url}/v1/chat/completions",
         json=payload,
-        timeout=120.0,
+        timeout=timeout,
     )
     response.raise_for_status()
 
@@ -91,11 +226,14 @@ async def extract_with_qwen(
         content = content.split("\n", 1)[1].rsplit("```", 1)[0]
     data = json.loads(content)
 
+    nid = source.notebook_id
     return Extraction(
-        notebook_id=source.notebook_id,
-        entities=[Entity(**e) for e in data.get("entities", [])],
-        relations=[Relation(**r) for r in data.get("relations", [])],
-        claims=[Claim(**c) for c in data.get("claims", [])],
+        notebook_id=nid,
+        entities=_build_items(Entity, data.get("entities", []), kind="entity", notebook_id=nid),
+        relations=_build_items(
+            Relation, data.get("relations", []), kind="relation", notebook_id=nid
+        ),
+        claims=_build_items(Claim, data.get("claims", []), kind="claim", notebook_id=nid),
         extraction_model=vllm_model,
         prompt_version=prompt_version,
         source_kind=source.source_kind,
