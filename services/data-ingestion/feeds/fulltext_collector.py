@@ -18,12 +18,13 @@ from qdrant_client.models import PointStruct
 
 from config import settings
 from feeds._fulltext_fetch import fetch_fulltext
+from feeds.content_quality import content_junk_reason, strip_data_uris
 from feeds.fulltext_chunker import chunk_markdown
 from qdrant_doctor.schema import validate_collection_schema
 
 log = structlog.get_logger(__name__)
 
-_TERMINAL = ("done", "failed_permanent", "skipped_paywall")
+_TERMINAL = ("done", "failed_permanent", "skipped_paywall", "skipped_lowquality")
 
 # feed_name -> canonical provider domain (verified against rss_collector.py feed config)
 THINKTANK_FEEDS: dict[str, str] = {
@@ -213,8 +214,31 @@ class FulltextCollector:
             target_tokens=settings.fulltext_chunk_tokens,
             overlap_tokens=settings.fulltext_chunk_overlap,
         )
+        # INGEST-GUARD: strip embedded base64 data-URIs and drop junk chunks (empty /
+        # image-heavy / keyword-soup) so they never enter the corpus. Survivors are
+        # re-indexed 0..M-1; the filter is deterministic so re-runs reproduce the same set.
+        usable = []
+        for ch in chunks:
+            # Strip data-URIs FIRST, then judge: an all-base64 chunk becomes empty and is
+            # caught as "empty"/"too_short" here (so content_junk_reason's own base64_heavy
+            # branch never fires on this path — that branch serves the read-path, which
+            # sees un-stripped payloads). Either way the junk chunk is dropped.
+            cleaned = strip_data_uris(ch).strip()
+            reason = content_junk_reason(cleaned)
+            if reason is not None:
+                log.info("fulltext_chunk_skipped", url=url, reason=reason, chars=len(cleaned))
+                continue
+            usable.append(cleaned)
+        if not usable:
+            # Fetched body was all junk (e.g. a base64-image webmonitor page). Mark terminal
+            # so it is not retried forever, and do NOT supersede (no fulltext replaced it).
+            log.warning("fulltext_all_chunks_junk", url=url, chunk_count=len(chunks))
+            return await self._mark(rec, {
+                "fulltext_status": "skipped_lowquality",
+                "fulltext_attempted_at": _now(),
+            })
         points = []
-        for i, ch in enumerate(chunks):
+        for i, ch in enumerate(usable):
             vec = await self._embed(ch)
             points.append(PointStruct(
                 id=fulltext_point_id(url, i),
@@ -224,7 +248,7 @@ class FulltextCollector:
                     provider=provider,
                     chunk_text=ch,
                     chunk_index=i,
-                    chunk_count=len(chunks),
+                    chunk_count=len(usable),
                 ),
             ))
         # Phase 1: upsert chunks. Phase 2: supersede the teaser. NEVER reorder these.
@@ -237,7 +261,7 @@ class FulltextCollector:
             "superseded_by_fulltext": True,
             "fulltext_status": "done",
             "fulltext_article_id": article_id(url),
-            "fulltext_chunk_count": len(chunks),
+            "fulltext_chunk_count": len(usable),
             "fulltext_ingested_at": _now(),
         })
 

@@ -3,6 +3,9 @@ from rag.corpus_policy import ANALYSIS_SOURCES, validate_lane
 
 
 def _r(**kw):
+    # default to valid prose so the content-quality gate (analysis lane) doesn't drop
+    # rows that exist to test source/source_type logic; override `content` to test the gate.
+    kw.setdefault("content", "NATO expands its eastern flank with several new brigades.")
     return kw
 
 

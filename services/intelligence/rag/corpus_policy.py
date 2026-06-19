@@ -8,9 +8,12 @@ Two lanes:
 """
 from __future__ import annotations
 
+from collections import Counter
+
 import structlog
 
 from config import settings
+from rag.content_quality import content_junk_reason
 
 log = structlog.get_logger(__name__)
 
@@ -111,7 +114,7 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
     Qdrant filter is the first barrier; index lag / a filter bug must not break
     AC-2. A payload whose canonical `source_type` contradicts the lane (e.g.
     source="rss" but source_type="gdelt") is rejected too. Dropped are logged."""
-    kept, dropped = [], []
+    kept, dropped, content_dropped = [], [], []
     for r in results:
         if r.get("superseded_by_fulltext") is True:
             # normal supersede (fulltext chunks already replace it); logged separately
@@ -129,6 +132,20 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
                 ok = st is None or st == "notebooklm"
             else:
                 ok = False
+            # Content-quality gate (AC: no empty / base64-image / keyword-soup chunks reach
+            # synthesis). The corpus survey found ~14k empty rss headlines + base64-image
+            # blobs in this lane; the Qdrant filter can't express "usable prose", so drop
+            # them here. Logged separately as a quality signal, not a leakage anomaly.
+            if ok:
+                # Evaluate the SAME text the model will see: mirror rag.evidence._excerpt's
+                # fallback. Bare `rss` points store prose under `summary` (no `content`
+                # key), so checking only `content` would wrongly drop ~24 wire/gov feeds.
+                text = (r.get("content") or r.get("summary")
+                        or r.get("description") or r.get("title") or "")
+                reason = content_junk_reason(text)
+                if reason is not None:
+                    content_dropped.append((reason, r))
+                    continue
         elif lane == "realtime":
             identity = (r.get("source") == "telegram"
                         and r.get("telegram_channel") in TELEGRAM_ALLOWLIST)
@@ -140,6 +157,9 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
     if dropped:
         log.warning("corpus_guard_dropped", lane=lane, count=len(dropped),
                     sources=[d.get("source") for d in dropped])
+    if content_dropped:
+        log.warning("corpus_content_dropped", lane=lane, count=len(content_dropped),
+                    reasons=dict(Counter(reason for reason, _ in content_dropped)))
     return kept
 
 
