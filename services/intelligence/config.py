@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     inference_provider: str = "vllm"
     vllm_url: str = "http://localhost:8000"
     vllm_model: str = "qwen3.5"
+    # Synthesis (Munin) model: empty => fall back to vllm_model. Set to "munin"
+    # (env SYNTHESIS_MODEL) once the distilled LoRA is deployed, so synthesis uses
+    # the adapter while ReAct keeps the base.
+    synthesis_model: str = ""
     tei_embed_url: str = "http://localhost:8001"
     tei_rerank_url: str = "http://localhost:8002"
     embedding_dimensions: int = 1024
@@ -46,6 +50,10 @@ class Settings(BaseSettings):
     @property
     def llm_model(self) -> str:
         return self.vllm_model
+
+    @property
+    def synthesis_llm_model(self) -> str:
+        return self.synthesis_model or self.vllm_model
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
