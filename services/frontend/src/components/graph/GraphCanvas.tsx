@@ -1,8 +1,16 @@
 import { useCallback, useRef, useState, useEffect } from "react";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import ForceGraph2D from "react-force-graph-2d";
-import type { ForceGraphMethods } from "react-force-graph-2d";
+import type { ForceGraphMethods, LinkObject, NodeObject } from "react-force-graph-2d";
 import { type GraphNode, type GraphEdge, NODE_COLORS } from "./types";
+
+interface GraphLink {
+  source: string;
+  target: string;
+  label: string;
+}
+
+type RenderNode = NodeObject<GraphNode>;
+type RenderLink = LinkObject<GraphNode, GraphLink>;
 
 interface GraphCanvasProps {
   nodes: GraphNode[];
@@ -20,8 +28,7 @@ export default function GraphCanvas({
   onNodeDoubleClick,
   onNodeHover,
 }: GraphCanvasProps) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fgRef = useRef<ForceGraphMethods<any, any> | undefined>(undefined);
+  const fgRef = useRef<ForceGraphMethods<RenderNode, RenderLink> | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(300);
   const [height, setHeight] = useState(400);
@@ -52,17 +59,14 @@ export default function GraphCanvas({
   };
 
   const nodeColor = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (node: any): string => NODE_COLORS[(node as GraphNode).type] ?? (NODE_COLORS.unknown as string),
+    (node: RenderNode): string => NODE_COLORS[node.type] ?? (NODE_COLORS.unknown as string),
     [],
   );
 
   const nodeSize = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (node: any): number => {
-      const n = node as GraphNode;
+    (node: RenderNode): number => {
       const degree = edges.filter(
-        (e) => e.source === n.id || e.target === n.id,
+        (e) => e.source === node.id || e.target === node.id,
       ).length;
       return Math.max(4, Math.min(12, 4 + degree));
     },
@@ -70,18 +74,13 @@ export default function GraphCanvas({
   );
 
   const nodeLabel = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (node: any): string => {
-      const n = node as GraphNode;
-      return `${n.name} (${n.type})`;
-    },
+    (node: RenderNode): string => `${node.name} (${node.type})`,
     [],
   );
 
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%", minHeight: 300 }}>
-    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-    <ForceGraph2D<any, any>
+    <ForceGraph2D<GraphNode, GraphLink>
       ref={fgRef}
       graphData={graphData}
       nodeColor={nodeColor}
