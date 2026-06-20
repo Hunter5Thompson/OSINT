@@ -23,6 +23,10 @@
     {
       "name": "Frontend",
       "path": "services/frontend"
+    },
+    {
+      "name": "Munin Distill",
+      "path": "training/munin-distill"
     }
   ],
   "settings": {
