@@ -116,22 +116,30 @@ Fail-closed: anything invalid/unclear becomes a structured candidate, never a si
 
 **Candidate record** (appended by the orchestrator to `relation_candidates.jsonl`):
 ```json
-{ "notebook_id","source_kind","source_id","prompt_version","extraction_model",
+{ "candidate_id","notebook_id","source_kind","source_id","prompt_version","extraction_model",
   "source","source_type","type","target","target_type","evidence","confidence",
   "status":"candidate","failed_gate":"OPERATES_IN.target_type",
   "rejection_reason":"OPERATES_IN requires target_type in LOCATION|REGION|COUNTRY, got VESSEL",
   "relation_hash","recorded_at" }
 ```
 No `inferred_correct_type`. `failed_gate` categories drive smoke error-rate drilldowns.
+`candidate_id = hash(provenance_key | failed_gate)` is **deterministic** so the candidate set is
+idempotent under retries (see §10). `recorded_at` is informational and excluded from the id.
 
 ## 6. Canonical Write Semantics (support-set, SUV-safe)
 
 Templates are a **fixed dict keyed by RelationType literal** — built at code time, never an
-f-string from model output (no dynamic labels / Cypher injection).
+f-string from model output (no dynamic labels / Cypher injection). The dict contains **only
+`mode == canonical` types**; candidate_only types (TARGETS) have **no write template** and are
+never emitted to Neo4j (enforced by a test).
 
 ```cypher
-MATCH (s:Entity {name:$source})          -- MATCH not MERGE: endpoints pre-exist (UPSERT_ENTITY
-MATCH (t:Entity {name:$target})          --   ran first); no phantom entities
+-- Bind TYPE too: entities are MERGE-d on {name,type} (UPSERT_ENTITY), so a name-only MATCH can
+-- hit the wrong node or multiple same-named nodes of different types. The validated canonical
+-- relation already carries the resolved endpoint types. (The current v1 templates use name-only
+-- MATCH and have this latent bug; v2 fixes it.)
+MATCH (s:Entity {name:$source, type:$source_type})   -- MATCH not MERGE: endpoints pre-exist
+MATCH (t:Entity {name:$target, type:$target_type})   --   (UPSERT_ENTITY ran first); no phantoms
 MERGE (s)-[r:OPERATES]->(t)
 ON CREATE SET r.first_seen=datetime(), r.last_seen=datetime(),
               r.confidence=$confidence,
@@ -156,9 +164,10 @@ SET r.support_count = size(coalesce(r.provenance_keys,[]))   -- exact, AFTER app
 
 **Hashing / provenance composition** (symmetric sort happens BEFORE the hash):
 ```
-canonical_pair  = (source_name, target_name)                      # asymmetric: as-is
-canonical_pair  = sort(source_name, target_name)                  # symmetric types only
-relation_hash   = hash(canonical_source | type | canonical_target | normalized_evidence)
+endpoint        = (name, type)                                    # full tuple, never name-only
+canonical_pair  = (source_endpoint, target_endpoint)              # asymmetric: as-is
+canonical_pair  = sort(source_endpoint, target_endpoint)          # symmetric: sort the (name,type) tuples
+relation_hash   = hash(src.name | src.type | type | tgt.name | tgt.type | normalized_evidence)
 provenance_key  = notebook_id | source_kind | source_id | prompt_version | extraction_model | relation_hash
 ```
 `normalized_evidence` = whitespace-collapsed, trimmed evidence text, so the *same* citation hashes
@@ -222,9 +231,17 @@ This is how outcomes are measured before any ingest or 81-NB re-extract.
 
 ## 10. Ingest orchestration (cli.py)
 
-Per notebook source: `validate_relations(extraction)` → append `candidates` to the jsonl →
-build+send Neo4j statements for `canonical` relations (support-set MERGE) → existing claim
-Qdrant writes. The backbone writes (Source/Document/Entity/Claim/EXTRACTED_FROM) are unchanged.
+Per notebook source: `validate_relations(extraction)` → record `candidates` → build+send Neo4j
+statements for `canonical` relations (support-set MERGE) → existing claim Qdrant writes. The
+backbone writes (Source/Document/Entity/Claim/EXTRACTED_FROM) are unchanged.
+
+**Candidate write is idempotent** (the validator is pure, so the candidate set is a deterministic
+function of extractions + rules). The orchestrator does **not** blind-append per notebook — a
+retry after a partial failure (e.g. the Neo4j-auth 401/429 we hit on the 81-NB run) must not
+duplicate records. Implementation: recompute the candidate set and write
+`relation_candidates.jsonl` **atomically** (temp → rename), or upsert keyed by the deterministic
+`candidate_id` (dedup on write). Either way, re-running ingest yields the same candidate file and
+clean smoke metrics. (The Neo4j support-set MERGE is already idempotent by construction.)
 
 ## 11. Testing (TDD gates)
 
@@ -243,6 +260,11 @@ Unit (pure, fast):
 - **SUV-safety:** existing edge with `data_source` set → after NLM write, `data_source` preserved,
   support-set added, `support_count` exact.
 - Templates are a fixed dict (no dynamic label); Cypher list append uses `+ [$v]`.
+- **TARGETS (candidate_only) has no canonical write template** and is never emitted to Neo4j
+  (assert the template dict has no TARGETS key; assert validator never returns TARGETS as canonical).
+- Canonical write **MATCH binds both `name` and `type`** for each endpoint (not name-only).
+- **Candidate write idempotency:** running ingest twice over the same extractions yields the same
+  `relation_candidates.jsonl` — no duplicate `candidate_id`s (atomic recompute or id-dedup).
 
 ## 12. 5-NB Smoke + hard Go/No-Go
 
