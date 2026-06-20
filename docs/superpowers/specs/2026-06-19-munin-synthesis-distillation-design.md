@@ -101,7 +101,8 @@ below). Steps 1–2 are local/free.
    Threat/Confidence labels, and `(unverifiziert)` discipline match prod 1:1. Over-generate ~1.3× the target.
 4. **Quality filter** *(layered, to bound cost)* —
    (a) **heuristic pre-filter** *(free)*: drop malformed gold (length out of range, missing any of the 5
-   sections, missing a valid Threat/Confidence label, no citations) — cheap structural gate first;
+   sections, missing a valid Threat/Confidence label — Munin uses (unverifiziert), NOT [n] citations,
+   so there is NO citation gate; faithfulness/citation quality is judged by step 4b) — cheap structural gate first;
    (b) **single-judge quality pass** *(LLM, bounded)*: one judge scores survivors on the Munin rubric;
    keep top ~300–400; drop near-duplicates. Only Opus's *best* outputs become training targets.
 5. **Dataset** — chat-format JSONL `{system: synthesis_sys(), user: full assembled HumanMessage,
