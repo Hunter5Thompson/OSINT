@@ -109,14 +109,17 @@ below). Steps 1–2 are local/free.
    assistant: gold report}` (i.e. the exact prod message pair, not just evidence), 90/10 train/val split.
    Plus **~30 held-out contexts** never in training → the eval gate.
 
-**Cost model (explicit — judges are not free):**
-- Teacher: ~450 Opus completions.
-- Filter judge (step 4b): **1 judge pass** over survivors (~≤450 calls), not the 3-judge panel — bulk
-  filtering does not need triple redundancy. Pick the judge model explicitly: **default = single Opus
-  judge** (bounded API cost), **cheaper alternative = local 27B ingestion model** (no API cost, but needs
-  a GPU swap to load). The 9B is too weak/biased to judge.
-- Eval gate (step 8): the **full 3-judge blind panel** but only on the **~30 held-out** set (~90 calls) —
-  small, so the expensive triple-redundant panel is affordable exactly where rigour matters.
+**Cost model (explicit):** Teacher AND judges are **Opus via Claude Code subagents** (the same Opus
+session already paid for), NOT a metered Anthropic-API integration. There is **no separate API bill** —
+the cost is Claude Code session tokens. So:
+- Teacher: ~450 gold reports, each written by a fresh Opus subagent ("new instance") from one captured
+  `(system, human)` pair. Same proven Opus quality (90% on our panel) at no extra API cost.
+- Filter judge (step 4b): **1 judge pass** over survivors via a single Opus subagent per report — not the
+  3-judge panel (bulk filtering needs no triple redundancy). The 9B is too weak/biased to judge.
+- Eval gate (step 8): the **full 3-judge blind panel** (3 independent Opus subagents) but only on the
+  **~30 held-out** set — small, so the triple-redundant panel is affordable where rigour matters.
+- The real cost lever is **dataset size × token spend**, not dollars: ~350 subagent generations is a
+  deliberate token budget we choose, not a metered charge. Scale the dataset to the available budget.
 
 **Cost envelope:** target ~350 filtered → ~450 generated; judge calls bounded as above. Narrow-domain
 format/style distillation is data-efficient; a few hundred filtered examples is expected to suffice.
@@ -244,7 +247,8 @@ Uses the **new Munin panel harness** (built per §5, modelled on the essay-proxy
 - Serve via **Approach A** (multi-LoRA on AWQ base); **B** as fallback, operated as swap / Spark / verified co-serve (not naive co-serve).
 - **bf16 16-bit LoRA, NOT QLoRA/4-bit** (Unsloth Qwen3.5 docs: 4-bit not recommended; bf16 9B LoRA ~22 GB fits the 5090 w/ stack down); requires transformers v5; **assistant-only loss** (label mask).
 - Synthesis-only adapter (ReAct untouched); not a full fine-tune.
-- Judge cost model: layered filter (free heuristic + **single** judge) for bulk data; **3-judge** panel only on the ~30 held-out eval set. Judge model = single Opus (default) or local 27B (no-API alternative).
+- **Teacher AND judges = Opus via Claude Code subagents** (the already-paid session), NOT a metered Anthropic-API integration — no separate API bill; real cost = session tokens, scaled by dataset size.
+- Judge cost model: layered filter (free heuristic + **single** Opus-subagent judge) for bulk data; **3-judge** subagent panel only on the ~30 held-out eval set. The 9B is too weak to judge.
 - **vLLM image pinned** (tag+digest) after the compat spike — recorded here once known: `TBD-after-spike`.
 - Munin panel harness = **new code** on the essay-panel pattern (essay scripts not reused as-is).
 

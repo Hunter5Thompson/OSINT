@@ -488,7 +488,7 @@ def write_gold(rows: list[dict], path: str) -> None:
 - [ ] **Step 4: Run test to verify it passes**
 Run: `uv run pytest tests/test_teacher.py -v` → PASS.
 
-- [ ] **Step 5: Generate for real.** Provide a real `client` calling the Anthropic API (model `claude-opus-4-8`, temperature ~0.3). Iterate `contexts.jsonl`, generate ~450 gold reports → `artifacts/gold.jsonl`. Bound cost: stop at the configured target. Log token usage.
+- [ ] **Step 5: Generate for real — via Opus SUBAGENTS, not the Anthropic API.** The teacher is Opus delivered through Claude Code subagents (a fresh "new instance" per report) — the already-paid session, **no separate API bill**. The orchestrator iterates `contexts.jsonl`, dispatches one Opus subagent per `(system, human)` pair (each returns the gold Munin Lagebericht as its final message), and collects → `artifacts/gold.jsonl`. `generate(ctx, client)` keeps the injected-`client` abstraction (mock in tests); for the real run the `client` wraps a subagent dispatch. Cost = session tokens; **scale the dataset size to the available token budget** (start small, e.g. a 10–15 slice, before the full ~350).
 
 - [ ] **Step 6: Commit**
 ```bash
@@ -663,7 +663,7 @@ def filter_examples(rows: list[dict], judge: Callable[[str], dict], keep: int) -
 - [ ] **Step 4: Run test to verify it passes**
 Run: `uv run pytest tests/test_filter.py -v` → PASS.
 
-- [ ] **Step 5: Filter for real.** Run `filter_examples` over `gold.jsonl` with a single Opus judge (or local 27B), `keep≈350` → `artifacts/filtered.jsonl`. Record drop counts (heuristic vs judge) in a log.
+- [ ] **Step 5: Filter for real.** Run `filter_examples` over `gold.jsonl` with a single **Opus-subagent** judge (the `judge` callable wraps a subagent dispatch — no API bill), `keep≈350` → `artifacts/filtered.jsonl`. Record drop counts (heuristic vs judge) in a log.
 
 - [ ] **Step 6: Commit**
 ```bash
