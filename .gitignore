@@ -42,4 +42,8 @@ Thumbs.db
 
 # SUV Track 2 walking-skeleton scratch (paid-source raw crawl, throwaway)
 scratch/
-training/**/artifacts/
+# munin-distill run data (large/throwaway); whitelist the small committable provenance artifacts
+training/**/artifacts/*
+!training/**/artifacts/spike-notes.md
+!training/**/artifacts/base-manifest.json
+!training/**/artifacts/gate-report.md

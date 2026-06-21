@@ -635,7 +635,7 @@ def heuristic_ok(report: str) -> bool:
     # Munin's output discipline is (unverifiziert) markers + source obligation, NOT [n] bracket
     # citations. So the heuristic must NOT require [\d+]; it only gates structure + valid labels.
     # Faithfulness/citation quality is judged by the single-judge LLM pass (step 4b).
-    if not (300 <= len(report) <= 6000):
+    if not (300 <= len(report) <= 12000):  # 12000: real Opus gold runs 4400-7100 chars (slice finding)
         return False
     if not all(s in report for s in _SECTIONS):
         return False
