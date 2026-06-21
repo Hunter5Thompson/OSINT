@@ -38,6 +38,13 @@ def test_filter_drops_near_duplicates():
     assert len(kept) == 1
 
 
+def test_heuristic_allows_long_thorough_report():
+    # real Opus gold can exceed 6000 chars; a complete-but-long report must pass (slice finding)
+    long_rep = "Variante L: " + GOOD * 18
+    assert 6000 < len(long_rep) < 12000
+    assert heuristic_ok(long_rep) is True
+
+
 def test_filter_drops_malformed():
     rows = [{"id": "bad", "assistant": "kein label", "human": "h"}]
     kept = filter_examples(rows, judge=lambda rep: {"faithfulness": 10}, keep=5)

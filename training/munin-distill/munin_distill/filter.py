@@ -17,7 +17,10 @@ _SECTIONS = (
 
 
 def heuristic_ok(report: str) -> bool:
-    if not (300 <= len(report) <= 6000):
+    # Upper bound 12000: real Opus Munin Lageberichte run ~4400-7100 chars; 6000 was too tight
+    # and wrongly rejected complete reports (found via the 12-query validation slice). The gate
+    # only drops truncated (too short) or runaway (absurdly long) outputs.
+    if not (300 <= len(report) <= 12000):
         return False
     if not all(s in report for s in _SECTIONS):
         return False
