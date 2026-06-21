@@ -42,3 +42,4 @@ Thumbs.db
 
 # SUV Track 2 walking-skeleton scratch (paid-source raw crawl, throwaway)
 scratch/
+training/**/artifacts/
