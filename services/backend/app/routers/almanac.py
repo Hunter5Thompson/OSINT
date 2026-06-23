@@ -6,10 +6,12 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
 
+from app.admin_auth import require_admin_token
+from app.config import settings
 from app.models.almanac import AlmanacSignalResponse, BriefingSaveRequest, CountryAlmanac
 from app.models.report import ReportMessageCreate, ReportRecord
 from app.services.briefing import build_briefing_context, truncate_message
@@ -26,6 +28,16 @@ from app.services.signal_stream import get_signal_stream
 log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/almanac", tags=["almanac"])
+
+
+def _require_report_admin(
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> None:
+    require_admin_token(
+        expected_token=settings.reports_admin_token or settings.incidents_admin_token,
+        supplied_token=x_admin_token,
+        area="reports",
+    )
 
 
 @router.get("/countries/{country_id}", response_model=CountryAlmanac)
@@ -80,7 +92,11 @@ async def generate_country_briefing(country_id: str) -> EventSourceResponse:
 
 
 # Router prefix is "/almanac" → full mounted path /api/almanac/countries/{id}/briefing/save
-@router.post("/countries/{country_id}/briefing/save", response_model=ReportRecord)
+@router.post(
+    "/countries/{country_id}/briefing/save",
+    response_model=ReportRecord,
+    dependencies=[Depends(_require_report_admin)],
+)
 async def save_country_briefing(
     country_id: str, body: BriefingSaveRequest, request: Request
 ) -> ReportRecord:

@@ -3,12 +3,14 @@
 from collections.abc import AsyncIterator
 from typing import Any
 
+import httpx
 import structlog
 from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
 
 from app.models.intel import IntelAnalysis, IntelQuery
 from app.services.intel_stream import stream_intel_query
+from app.services.proxy_service import ProxyService
 
 log = structlog.get_logger(__name__)
 
@@ -16,6 +18,11 @@ router = APIRouter(prefix="/intel", tags=["intelligence"])
 
 # In-memory history (replaced by persistent storage in production)
 _history: list[IntelAnalysis] = []
+
+
+def _shared_http_client(request: Request) -> httpx.AsyncClient | None:
+    proxy = getattr(request.app.state, "proxy", None)
+    return proxy.client if isinstance(proxy, ProxyService) else None
 
 
 @router.post("/query")
@@ -30,6 +37,7 @@ async def query_intel(query: IntelQuery, request: Request) -> EventSourceRespons
             use_legacy=query.use_legacy,
             report_id=query.report_id.strip() if query.report_id else None,
             report_message=query.report_message,
+            client=_shared_http_client(request),
         ):
             if ev.get("event") == "result":
                 try:

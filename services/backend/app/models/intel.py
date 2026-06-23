@@ -2,9 +2,11 @@
 
 from datetime import UTC, datetime
 from functools import partial
+from ipaddress import ip_address
 from typing import Any
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 _utc_now = partial(datetime.now, UTC)
 
@@ -17,6 +19,37 @@ class IntelQuery(BaseModel):
     use_legacy: bool = False
     report_id: str | None = None
     report_message: str | None = Field(default=None, max_length=8000)
+
+    @field_validator("image_url")
+    @classmethod
+    def validate_image_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("image_url must be an absolute http(s) URL")
+
+        host = parsed.hostname.lower()
+        if host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
+            raise ValueError("image_url host must be public")
+
+        try:
+            addr = ip_address(host)
+        except ValueError:
+            return value
+
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_multicast
+            or addr.is_reserved
+            or addr.is_unspecified
+        ):
+            raise ValueError("image_url host must be public")
+
+        return value
 
 
 class IntelDocument(BaseModel):
