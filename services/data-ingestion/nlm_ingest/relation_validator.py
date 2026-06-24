@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 
+from canonicalize import canonicalize_entity
 from nlm_ingest.ingest_neo4j import _canonical_name
 from nlm_ingest.relation_rules import RELATION_ROLE_RULES
 
@@ -81,10 +82,16 @@ class ValidationResult:
 
 
 def validate_relations(extraction) -> ValidationResult:
-    # entity-type map keyed by the SAME normalization the write uses for endpoints
+    # entity-type map keyed by the SAME normalization the write uses for endpoints.
+    # Use the CANONICALIZED name+type so the map reflects the actual node written by
+    # UPSERT_ENTITY (which runs canonicalize_entity before writing), not the declared
+    # type. Without this, curated aliases (e.g. Royal Navy declared as ORGANIZATION
+    # but written as MILITARY_UNIT) would cause the relation MATCH to find no node
+    # and the edge would be silently dropped.
     type_map: dict[str, str] = {}
     for e in extraction.entities:
-        type_map[_canonical_name(e.name)] = e.type
+        canon = canonicalize_entity(e.name, e.type)
+        type_map[canon.name] = canon.type
 
     res = ValidationResult()
     for r in extraction.relations:

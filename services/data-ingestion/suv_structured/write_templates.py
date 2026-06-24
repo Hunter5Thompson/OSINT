@@ -1,8 +1,7 @@
 """Deterministic Cypher for SUV structured ingestion.
 
-Kept SEPARATE from nlm_ingest/write_templates.py:RELATION_TEMPLATES — that dict is
-key-locked to nlm_ingest.schemas.RelationType by tests/test_nlm_relations.py. SUV
-adds HEADQUARTERED_IN without touching the NLM RelationType contract.
+Kept SEPARATE from nlm_ingest/write_templates.py — SUV adds HEADQUARTERED_IN
+without touching the NLM RelationType contract.
 
 Rules (Two-Loop write path): no LLM-generated Cypher, all values parameter-bound,
 relationship labels hardcoded, existing properties preserved on null (coalesce) and

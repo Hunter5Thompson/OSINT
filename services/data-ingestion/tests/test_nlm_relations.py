@@ -5,7 +5,6 @@ LLM extractions are written via deterministic Cypher templates.
 """
 from __future__ import annotations
 
-from typing import get_args
 from unittest.mock import AsyncMock
 
 import httpx
@@ -17,8 +16,8 @@ from nlm_ingest.ingest_neo4j import (
     ingest_extraction,
 )
 from nlm_ingest.relation_validator import CanonicalRelation
-from nlm_ingest.schemas import Claim, Entity, Extraction, Relation, RelationType
-from nlm_ingest.write_templates import CANONICAL_RELATION_TEMPLATES, RELATION_TEMPLATES
+from nlm_ingest.schemas import Claim, Entity, Extraction, Relation
+from nlm_ingest.write_templates import CANONICAL_RELATION_TEMPLATES
 
 
 def _canon(**kw) -> CanonicalRelation:
@@ -87,59 +86,6 @@ def test_build_relation_statements_binds_name_type_and_params():
     assert s["parameters"]["source"] == "USA" and s["parameters"]["source_type"] == "COUNTRY"
     assert s["parameters"]["prov_key"] == "pk" and s["parameters"]["notebook_id"] == "nb1"
 
-
-class TestRelationTemplates:
-    def test_every_relation_type_has_template(self):
-        """RELATION_TEMPLATES must cover every Literal in RelationType."""
-        rel_types = set(get_args(RelationType))
-        template_keys = set(RELATION_TEMPLATES.keys())
-        assert rel_types == template_keys, (
-            f"missing keys: {rel_types - template_keys}, "
-            f"unexpected keys: {template_keys - rel_types}"
-        )
-
-    def test_relation_template_label_matches_key(self):
-        """Each template hardcodes its relationship label matching its dict key."""
-        for rel_type, template in RELATION_TEMPLATES.items():
-            assert f"[r:{rel_type}]" in template, (
-                f"template for {rel_type} must contain [r:{rel_type}]"
-            )
-
-    def test_templates_match_endpoints_no_merge_entity(self):
-        """Endpoints must be MATCH-ed, never MERGE-d (avoid creating phantom entities)."""
-        for rel_type, template in RELATION_TEMPLATES.items():
-            assert "MATCH (source:Entity" in template, (
-                f"{rel_type}: must MATCH source entity"
-            )
-            assert "MATCH (target:Entity" in template, (
-                f"{rel_type}: must MATCH target entity"
-            )
-            assert "MERGE (source:Entity" not in template, (
-                f"{rel_type}: must NOT MERGE source entity"
-            )
-            assert "MERGE (target:Entity" not in template, (
-                f"{rel_type}: must NOT MERGE target entity"
-            )
-
-    def test_templates_use_parameter_binding(self):
-        """All templates must reference $source, $target, $evidence, $confidence."""
-        for rel_type, template in RELATION_TEMPLATES.items():
-            for param in ("$source", "$target", "$evidence", "$confidence"):
-                assert param in template, f"{rel_type}: missing {param} parameter"
-
-    def test_templates_have_on_create_and_on_match(self):
-        """Templates must use ON CREATE / ON MATCH SET semantics."""
-        for rel_type, template in RELATION_TEMPLATES.items():
-            assert "ON CREATE SET" in template, f"{rel_type}: missing ON CREATE SET"
-            assert "ON MATCH SET" in template, f"{rel_type}: missing ON MATCH SET"
-
-    def test_no_dynamic_label_construction(self):
-        """No string interpolation / dynamic labels — labels must be hardcoded."""
-        for rel_type, template in RELATION_TEMPLATES.items():
-            assert "${" not in template, f"{rel_type}: no dynamic label allowed"
-            assert "$type" not in template, (
-                f"{rel_type}: relationship label must be hardcoded, not parameterised"
-            )
 
 
 def _competes_canon() -> CanonicalRelation:

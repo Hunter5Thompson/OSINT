@@ -121,3 +121,18 @@ def test_targets_is_candidate_only():
     res = validate_relations(ex)
     assert not res.canonical
     assert res.candidates[0].failed_gate == "relation_type_candidate_only"
+
+
+def test_curated_military_alias_uses_canonicalized_type_for_canonical_endpoint():
+    # "Royal Navy" is a curated alias -> canonicalize_entity rewrites ORGANIZATION->MILITARY_UNIT.
+    # The validator MUST emit the canonicalized type so the write-path MATCH {name,type} hits the
+    # same node UPSERT_ENTITY created (declared-type would MATCH nothing -> silent edge loss).
+    ex = _ex(
+        [_e("Royal Navy", "ORGANIZATION"), _e("HMS Queen Elizabeth", "VESSEL")],
+        [_r("Royal Navy", "OPERATES", "HMS Queen Elizabeth")],
+    )
+    res = validate_relations(ex)
+    assert len(res.canonical) == 1 and not res.candidates
+    c = res.canonical[0]
+    assert c.source == "Royal Navy"
+    assert c.source_type == "MILITARY_UNIT"   # canonicalized, NOT the declared ORGANIZATION

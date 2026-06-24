@@ -103,11 +103,13 @@ class TestEntityCanonicalizationNLM:
         res = validate_relations(ex)
         assert len(res.canonical) == 1, res.candidates
         c = res.canonical[0]
-        # endpoint NAME must match the canonicalized entity node, else the MATCH
-        # fails. (Endpoint TYPE is the declared extraction type, which the
-        # validator keys its role check on — here ORGANIZATION, valid for OPERATES.)
+        # Endpoint NAME and TYPE must both match the canonicalized entity node
+        # that UPSERT_ENTITY writes, so the downstream MATCH {name, type} hits the
+        # node. "US Navy" -> canonical name "U.S. Navy", canonical type "MILITARY_UNIT"
+        # (via curated alias map) — the validator must use the canonicalized type, not
+        # the declared "ORGANIZATION", or the edge MATCH would find nothing.
         assert c.source == "U.S. Navy"
-        assert c.source_type == "ORGANIZATION"
+        assert c.source_type == "MILITARY_UNIT"
         assert c.target == "USS Gerald R. Ford"
         assert c.target_type == "VESSEL"
 
