@@ -15,6 +15,7 @@ import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sse_starlette.sse import EventSourceResponse
 
+from app.admin_auth import require_admin_token
 from app.config import settings
 from app.models.incident import (
     Incident,
@@ -35,12 +36,11 @@ _HEARTBEAT_SECONDS = 15.0
 def _require_admin(
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> None:
-    expected = settings.incidents_admin_token
-    if not expected:
-        log.warning("incident_admin_unsecured", note="set INCIDENTS_ADMIN_TOKEN")
-        return
-    if x_admin_token != expected:
-        raise HTTPException(status_code=401, detail="invalid admin token")
+    require_admin_token(
+        expected_token=settings.incidents_admin_token,
+        supplied_token=x_admin_token,
+        area="incidents",
+    )
 
 
 @router.get("", response_model=list[Incident])

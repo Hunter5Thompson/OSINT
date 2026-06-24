@@ -132,3 +132,11 @@ def test_notable_events_query_prefilters_high_critical_in_cypher():
     assert "tolower" in q
     for syn in ("high", "elevated", "critical", "severe", "extreme"):
         assert f"'{syn}'" in q
+
+
+def test_notable_incidents_query_returns_incident_node_id():
+    from app.routers.timeline import _NOTABLE_INCIDENTS_QUERY
+
+    q = _NOTABLE_INCIDENTS_QUERY.lower()
+    assert "i.id as id" in q
+    assert "i.incident_id as id" not in q

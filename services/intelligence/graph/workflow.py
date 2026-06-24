@@ -22,6 +22,7 @@ from agents.synthesis_agent import get_system_message as synthesis_sys
 from agents.tools import ALL_TOOLS
 from agents.tools.graph_query import set_graph_client
 from config import settings
+from distill_capture import capture_synthesis_input
 from graph.client import GraphClient
 from graph.nodes import analyst_node, osint_node, router_node
 from graph.nodes import synthesis_node as legacy_synthesis_node
@@ -226,6 +227,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 ),
             ),
         ]
+        capture_synthesis_input(state["query"], messages)  # no-op unless DISTILL_CAPTURE_DIR set
         response = await llm.ainvoke(messages)
         content = response.content if isinstance(response.content, str) else str(response.content)
 

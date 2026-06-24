@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type { Vessel } from "../types";
 import { getVessels } from "../services/api";
 
@@ -8,34 +8,39 @@ export function useVessels(enabled: boolean) {
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const fetchData = useCallback(async () => {
-    if (!enabled) return;
-    setLoading(true);
-    try {
-      const data = await getVessels();
-      setVessels(data);
-      setLastUpdate(new Date());
-    } catch {
-      // keep stale data on error
-    } finally {
-      setLoading(false);
-    }
-  }, [enabled]);
 
   useEffect(() => {
     if (!enabled) {
       setVessels([]);
+      setLoading(false);
       return;
     }
 
-    void fetchData();
-    timerRef.current = setInterval(() => void fetchData(), POLL_INTERVAL);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+    let cancelled = false;
+    let sequence = 0;
+
+    const fetchData = async () => {
+      const requestId = ++sequence;
+      setLoading(true);
+      try {
+        const data = await getVessels();
+        if (cancelled || requestId !== sequence) return;
+        setVessels(data);
+        setLastUpdate(new Date());
+      } catch {
+        // keep stale data on error
+      } finally {
+        if (!cancelled && requestId === sequence) setLoading(false);
+      }
     };
-  }, [enabled, fetchData]);
+
+    void fetchData();
+    const timer = setInterval(() => void fetchData(), POLL_INTERVAL);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [enabled]);
 
   return { vessels, loading, lastUpdate };
 }

@@ -6,11 +6,19 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 
+from app.config import settings
 from app.main import app
 from app.models.almanac import BriefingSaveRequest
 from app.models.intel import IntelAnalysis
 from app.models.report import ReportMessage, ReportRecord
 from app.routers import almanac as almanac_router
+
+ADMIN_HEADERS = {"X-Admin-Token": "reports-secret"}
+
+
+@pytest.fixture(autouse=True)
+def _report_admin_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "reports_admin_token", "reports-secret")
 
 
 def test_empty_analysis_rejected():
@@ -75,10 +83,18 @@ async def test_save_requires_schema_and_truncates_with_marker(monkeypatch):
     async with AsyncClient(transport=transport, base_url="http://t") as ac:
         app.state.report_schema_ready = False
         assert (
-            await ac.post("/api/almanac/countries/276/briefing/save", json=body)
+            await ac.post(
+                "/api/almanac/countries/276/briefing/save",
+                headers=ADMIN_HEADERS,
+                json=body,
+            )
         ).status_code == 503
         app.state.report_schema_ready = True
-        r = await ac.post("/api/almanac/countries/276/briefing/save", json=body)
+        r = await ac.post(
+            "/api/almanac/countries/276/briefing/save",
+            headers=ADMIN_HEADERS,
+            json=body,
+        )
         assert r.status_code == 200
     assert len(captured["text"]) == 8000 and captured["text"].endswith("…[gekürzt]")
 
@@ -88,8 +104,11 @@ async def test_save_404_for_unknown_country(monkeypatch):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://t") as ac:
         app.state.report_schema_ready = True
-        r = await ac.post("/api/almanac/countries/zzz/briefing/save",
-                          json={"analysis": {"query": "q", "analysis": "Lage stabil"}})
+        r = await ac.post(
+            "/api/almanac/countries/zzz/briefing/save",
+            headers=ADMIN_HEADERS,
+            json={"analysis": {"query": "q", "analysis": "Lage stabil"}},
+        )
         assert r.status_code == 404
 
 
@@ -104,6 +123,7 @@ async def test_save_maps_storage_failure_to_503(monkeypatch):
         app.state.report_schema_ready = True
         r = await ac.post(
             "/api/almanac/countries/276/briefing/save",
+            headers=ADMIN_HEADERS,
             json={"analysis": {"query": "q", "analysis": "Lage stabil"}},
         )
         assert r.status_code == 503
@@ -122,8 +142,11 @@ async def test_save_503_when_hydration_returns_none(monkeypatch):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://t") as ac:
         app.state.report_schema_ready = True
-        r = await ac.post("/api/almanac/countries/276/briefing/save",
-                          json={"analysis": {"query": "q", "analysis": "Lage stabil"}})
+        r = await ac.post(
+            "/api/almanac/countries/276/briefing/save",
+            headers=ADMIN_HEADERS,
+            json={"analysis": {"query": "q", "analysis": "Lage stabil"}},
+        )
         assert r.status_code == 503
         assert "hydration failed" in r.text
 
@@ -142,7 +165,39 @@ async def test_save_invalid_confidence_is_422_without_store_write(monkeypatch):
         app.state.report_schema_ready = True
         r = await ac.post(
             "/api/almanac/countries/276/briefing/save",
+            headers=ADMIN_HEADERS,
             json={"analysis": {"query": "q", "analysis": "Lage", "confidence": 2.0}},
         )
         assert r.status_code == 422               # client error, not 503
         assert called["goc"] is False             # no orphan dossier created before validation
+
+
+@pytest.mark.asyncio
+async def test_save_fails_closed_without_report_admin_token(monkeypatch):
+    called = {"goc": False}
+
+    async def fake_goc(scope_key, title, location, coords):
+        called["goc"] = True
+        return _rec(scope_key)
+
+    async def fake_update(rid, patch):
+        return _rec("country:DEU")
+
+    async def fake_append(rid, payload):
+        return ReportMessage(id="m1", role="munin", text=payload.text)
+
+    monkeypatch.setattr(settings, "reports_admin_token", "")
+    monkeypatch.setattr(settings, "incidents_admin_token", "")
+    monkeypatch.setattr(almanac_router, "get_or_create_report_by_scope", fake_goc)
+    monkeypatch.setattr(almanac_router, "update_report", fake_update)
+    monkeypatch.setattr(almanac_router, "append_report_message", fake_append)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://t") as ac:
+        app.state.report_schema_ready = True
+        r = await ac.post(
+            "/api/almanac/countries/276/briefing/save",
+            json={"analysis": {"query": "q", "analysis": "Lage stabil"}},
+        )
+
+    assert r.status_code == 503
+    assert called["goc"] is False

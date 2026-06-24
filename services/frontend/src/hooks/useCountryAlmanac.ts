@@ -27,7 +27,7 @@ export function useCountryAlmanac({ iso3, m49 }: Params) {
     setFacts(loading<CountryAlmanac>());
     setSignals(loading<AlmanacSignalResponse>());
 
-    getCountryAlmanac(countryId)
+    getCountryAlmanac(countryId, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
           setFacts({ status: "ready", data, error: null });
@@ -39,7 +39,7 @@ export function useCountryAlmanac({ iso3, m49 }: Params) {
         }
       });
 
-    getCountryAlmanacSignals(countryId, 5)
+    getCountryAlmanacSignals(countryId, 5, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
           setSignals({ status: "ready", data, error: null });

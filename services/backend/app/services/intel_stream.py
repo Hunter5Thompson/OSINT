@@ -33,6 +33,7 @@ async def stream_intel_query(
     grounding_evidence: list[dict[str, Any]] | None = None,
     report_id: str | None = None,
     report_message: str | None = None,
+    client: httpx.AsyncClient | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the intelligence /query call, yielding status → result/error SSE events.
 
@@ -87,10 +88,17 @@ async def stream_intel_query(
         if grounding_evidence is not None:
             payload["grounding_evidence"] = grounding_evidence
 
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(f"{settings.intelligence_url}/query", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        if client is None:
+            async with httpx.AsyncClient(timeout=300.0) as owned_client:
+                resp = await owned_client.post(f"{settings.intelligence_url}/query", json=payload)
+        else:
+            resp = await client.post(
+                f"{settings.intelligence_url}/query",
+                json=payload,
+                timeout=300.0,
+            )
+        resp.raise_for_status()
+        data = resp.json()
 
         analysis = IntelAnalysis(
             query=query,

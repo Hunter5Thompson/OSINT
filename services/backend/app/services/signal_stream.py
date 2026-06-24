@@ -33,6 +33,7 @@ from app.models.signals import SignalEnvelope, SignalPayload
 logger = structlog.get_logger(__name__)
 
 ReplayMode = Literal["ok", "reset"]
+RedisStreamEntries = list[tuple[str, list[tuple[str, dict[str, str]]]]]
 
 _CANONICAL_FIELDS = {"title", "severity", "source", "url", "codebook_type"}
 
@@ -254,8 +255,9 @@ async def redis_consumer_loop(
                 await cast(Any, client).ping()
                 logger.info("signal_stream_redis_connected", stream=stream_key)
 
-            response = await client.xread(
-                {stream_key: last_id}, block=block_ms, count=100
+            response = cast(
+                RedisStreamEntries,
+                await client.xread({stream_key: last_id}, block=block_ms, count=100),
             )
             if not response:
                 continue

@@ -32,6 +32,11 @@ import type {
 
 const BASE = "/api";
 
+function adminHeaders(headers: Record<string, string> = {}): Record<string, string> {
+  const token = import.meta.env.VITE_ADMIN_TOKEN;
+  return token ? { ...headers, "X-Admin-Token": token } : headers;
+}
+
 // ── S1 endpoints — mounted at /api ──────────────────────────────────────────
 // The Hlíðskjalf S1 backend router mounts at bare /api.
 
@@ -64,9 +69,13 @@ export async function getLatestSignals(limit = 6): Promise<SignalEnvelope[]> {
   return (await res.json()) as SignalEnvelope[];
 }
 
-export async function getCountryAlmanac(countryId: string): Promise<CountryAlmanac> {
+export async function getCountryAlmanac(
+  countryId: string,
+  signal?: AbortSignal,
+): Promise<CountryAlmanac> {
   const res = await fetch(`/api/almanac/countries/${encodeURIComponent(countryId)}`, {
     headers: { Accept: "application/json" },
+    signal,
   });
   if (!res.ok) {
     throw new Error(`country almanac failed: ${res.status} ${res.statusText}`);
@@ -77,10 +86,11 @@ export async function getCountryAlmanac(countryId: string): Promise<CountryAlman
 export async function getCountryAlmanacSignals(
   countryId: string,
   limit = 5,
+  signal?: AbortSignal,
 ): Promise<AlmanacSignalResponse> {
   const res = await fetch(
     `/api/almanac/countries/${encodeURIComponent(countryId)}/signals?limit=${limit}`,
-    { headers: { Accept: "application/json" } },
+    { headers: { Accept: "application/json" }, signal },
   );
   if (!res.ok) {
     throw new Error(`country almanac signals failed: ${res.status} ${res.statusText}`);
@@ -330,7 +340,7 @@ export async function saveCountryBriefing(
     `${BASE}/almanac/countries/${encodeURIComponent(countryId)}/briefing/save`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: adminHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ analysis }),
     },
   );
@@ -369,7 +379,7 @@ export async function createReport(
 ): Promise<ReportRecord> {
   return fetchJSON<ReportRecord>("/reports", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
 }
@@ -380,7 +390,7 @@ export async function updateReport(
 ): Promise<ReportRecord> {
   return fetchJSON<ReportRecord>(`/reports/${encodeURIComponent(reportId)}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
 }
@@ -388,6 +398,7 @@ export async function updateReport(
 export async function deleteReport(reportId: string): Promise<void> {
   const res = await fetch(`${BASE}/reports/${encodeURIComponent(reportId)}`, {
     method: "DELETE",
+    headers: adminHeaders(),
   });
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -409,7 +420,7 @@ export async function appendReportMessage(
 ): Promise<ReportMessage> {
   return fetchJSON<ReportMessage>(`/reports/${encodeURIComponent(reportId)}/messages`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
 }
@@ -433,7 +444,7 @@ export async function getIncident(id: string): Promise<Incident> {
 export async function triggerIncident(payload: IncidentCreateRequest): Promise<Incident> {
   const resp = await fetch(`${BASE}/incidents/_admin/trigger`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: adminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   if (!resp.ok) throw new Error(`trigger incident: ${resp.status}`);
@@ -443,6 +454,7 @@ export async function triggerIncident(payload: IncidentCreateRequest): Promise<I
 export async function silenceIncident(id: string): Promise<Incident> {
   const resp = await fetch(`${BASE}/incidents/${encodeURIComponent(id)}/silence`, {
     method: "POST",
+    headers: adminHeaders(),
   });
   if (!resp.ok) throw new Error(`silence ${id}: ${resp.status}`);
   return (await resp.json()) as Incident;
@@ -464,6 +476,7 @@ export async function getTimeWindow(
 export async function promoteIncident(id: string): Promise<Incident> {
   const resp = await fetch(`${BASE}/incidents/${encodeURIComponent(id)}/promote`, {
     method: "POST",
+    headers: adminHeaders(),
   });
   if (!resp.ok) throw new Error(`promote ${id}: ${resp.status}`);
   return (await resp.json()) as Incident;

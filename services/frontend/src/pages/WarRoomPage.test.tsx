@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { WarRoomPage } from "./WarRoomPage";
+import { queryIntel } from "../services/api";
+import type { IntelAnalysis } from "../types";
 
 const fakeActive = {
   id: "inc-global",
@@ -19,8 +21,19 @@ const fakeActive = {
   timeline: [],
 };
 
+const secondActive = {
+  ...fakeActive,
+  id: "inc-second",
+  title: "Second Incident",
+};
+
 const useIncidentsMock = vi.fn();
 vi.mock("../hooks/useIncidents", () => ({ useIncidents: () => useIncidentsMock() }));
+vi.mock("../components/warroom/TheatreQuadrant", () => ({
+  TheatreQuadrant: ({ incident }: { incident: { title?: string } | null }) => (
+    <div data-testid="theatre-quadrant">{incident?.title ?? "no active incident"}</div>
+  ),
+}));
 
 vi.mock("../services/api", async (orig) => {
   const actual = (await orig()) as Record<string, unknown>;
@@ -76,5 +89,66 @@ describe("WarRoomPage", () => {
     expect(await screen.findByText(/no active incident/)).toBeInTheDocument();
     // The global active should NOT have leaked through.
     expect(screen.queryByText(/Global Active Incident/)).toBeNull();
+  });
+
+  it("ignores stale Munin SSE callbacks after the active incident changes", async () => {
+    const abort = vi.fn();
+    const queryIntelMock = vi.mocked(queryIntel);
+    let onResult: ((analysis: IntelAnalysis) => void) | null = null;
+    queryIntelMock.mockImplementation((_query, _onStatus, result) => {
+      onResult = result;
+      return { abort } as unknown as AbortController;
+    });
+
+    useIncidentsMock.mockReturnValue({
+      status: "live",
+      active: fakeActive,
+      history: [fakeActive],
+      latestEnvelope: null,
+    });
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/warroom"]}>
+        <Routes>
+          <Route path="/warroom" element={<WarRoomPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const input = await screen.findByPlaceholderText(/ask Munin/i);
+    fireEvent.change(input, { target: { value: "brief stale race" } });
+    fireEvent.submit(input.closest("form")!);
+    expect(queryIntelMock).toHaveBeenCalledTimes(1);
+
+    useIncidentsMock.mockReturnValue({
+      status: "live",
+      active: secondActive,
+      history: [secondActive],
+      latestEnvelope: null,
+    });
+    rerender(
+      <MemoryRouter initialEntries={["/warroom"]}>
+        <Routes>
+          <Route path="/warroom" element={<WarRoomPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(abort).toHaveBeenCalled();
+
+    await act(async () => {
+      onResult?.({
+        query: "q",
+        agent_chain: [],
+        sources_used: [],
+        analysis: "stale synthesis",
+        confidence: 0.5,
+        threat_assessment: "STALE",
+        timestamp: "2026-06-24T10:00:00Z",
+      });
+    });
+
+    expect(screen.queryByText(/stale synthesis/)).toBeNull();
+    expect(screen.getByText(/working hypothesis/)).toBeInTheDocument();
   });
 });

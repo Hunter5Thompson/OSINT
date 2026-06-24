@@ -50,7 +50,10 @@ def test_get_incident_404_when_missing() -> None:
             assert resp.status_code == 404
 
 
-def test_admin_create_publishes_to_stream() -> None:
+def test_admin_create_publishes_to_stream(monkeypatch) -> None:
+    from app.routers import incidents as incidents_router
+
+    monkeypatch.setattr(incidents_router.settings, "incidents_admin_token", "secret-xyz")
     stream = get_incident_stream()
     stream.clear()
     queue = stream.subscribe()
@@ -60,6 +63,7 @@ def test_admin_create_publishes_to_stream() -> None:
             with TestClient(app) as client:
                 resp = client.post(
                     "/api/incidents/_admin/trigger",
+                    headers={"X-Admin-Token": "secret-xyz"},
                     json={
                         "title": "x",
                         "kind": "firms.cluster",
@@ -77,7 +81,10 @@ def test_admin_create_publishes_to_stream() -> None:
         stream.unsubscribe(queue)
 
 
-def test_silence_publishes_close_event() -> None:
+def test_silence_publishes_close_event(monkeypatch) -> None:
+    from app.routers import incidents as incidents_router
+
+    monkeypatch.setattr(incidents_router.settings, "incidents_admin_token", "secret-xyz")
     stream = get_incident_stream()
     stream.clear()
     queue = stream.subscribe()
@@ -88,7 +95,10 @@ def test_silence_publishes_close_event() -> None:
         with patch("app.routers.incidents.incident_store.close_incident",
                    new=AsyncMock(return_value=closed)):
             with TestClient(app) as client:
-                resp = client.post("/api/incidents/inc-001/silence")
+                resp = client.post(
+                    "/api/incidents/inc-001/silence",
+                    headers={"X-Admin-Token": "secret-xyz"},
+                )
                 assert resp.status_code == 200
                 env = queue.get_nowait()
                 assert env.type == "incident.silence"
@@ -127,6 +137,24 @@ def test_admin_trigger_rejects_when_token_required(monkeypatch) -> None:
                 },
             )
             assert resp.status_code == 201
+
+
+def test_admin_trigger_fails_closed_when_token_not_configured(monkeypatch) -> None:
+    from app.routers import incidents as incidents_router
+
+    monkeypatch.setattr(incidents_router.settings, "incidents_admin_token", "")
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/incidents/_admin/trigger",
+            json={
+                "title": "x",
+                "kind": "firms.cluster",
+                "severity": "elevated",
+                "coords": [0.0, 0.0],
+            },
+        )
+
+    assert resp.status_code == 503
 
 
 def test_stream_route_is_not_swallowed_by_dynamic_id() -> None:

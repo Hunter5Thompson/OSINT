@@ -1,5 +1,6 @@
 """Application configuration loaded from environment variables."""
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -39,6 +40,9 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1024
     intelligence_url: str = "http://localhost:8003"
 
+    # HTTP API
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+
     # External APIs
     opensky_api_url: str = "https://opensky-network.org/api/states/all"
     adsb_fi_api_url: str = "https://api.adsb.fi/v2/all"
@@ -53,8 +57,9 @@ class Settings(BaseSettings):
     landing_point_geo_url: str = "https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json"
     cable_cache_ttl_s: int = 86400  # 24 hours
 
-    # Incident admin token (opt-in: set INCIDENTS_ADMIN_TOKEN in .env)
+    # Admin tokens for mutating internal endpoints.
     incidents_admin_token: str = ""
+    reports_admin_token: str = ""
 
     # Signals stream (SSE Ring-Buffer over Redis Stream)
     redis_stream_events: str = "events:new"
