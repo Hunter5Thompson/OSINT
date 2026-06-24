@@ -1,0 +1,828 @@
+- title: Leopard 2 A6A3 / A6A3M / A7A1
+  branch: Heer
+  typ: Kampfpanzer
+  status: Auslieferung
+  contractor_raw: KNDS Deutschland
+  quantity: 101
+  quantity_raw: '101'
+  cost_eur: 300000000.0
+  cost_raw: über 300 Millionen Euro
+  financing: Einzelplan 14
+  delivery_start: 2021
+  delivery_end: 2025
+  delivery_raw: 2021 – 2025
+  description: Am 28. März 2019 hat das BAAINBw Krauss-Maffei Wegmann (KMW), heute
+    KNDS Deutschland, mit der Modernisierung von 50 Leopard 2 A6 und 51 Leopard 2
+    A6M auf den A7V-Stand beauftragt. Nach abgeschlossener Modernisierung werden die
+    Kampfpanzer als Leopard 2 A6A3 bzw. A6A3M bezeichnet. Darüber hinaus erhalten
+    17 Fahrzeuge das aktive Schutzsystem Trophy und werden dann als Leopard 2 A7A1
+    bezeichnet. Mittlerweile müssten bereits 80 Prozent der modernisierten Kampfpanzer
+    ausgeliefert sein.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Konsolidierte Nachrüstung Puma 1. Los
+  branch: Heer
+  typ: Schützenpanzer
+  status: Auslieferung
+  contractor_raw: PSM Projekt System & Management GmbH
+  quantity: 297
+  quantity_raw: '297'
+  cost_eur: 1850000000.0
+  cost_raw: 1,85 Mrd. Euro
+  financing: Einzelplan 14 & Sondervermögen Bundeswehr (Kapitel 1491 Titel 554 07)
+  delivery_start: 2024
+  delivery_end: 2029
+  delivery_raw: 2024 – 2029
+  description: "Am 28. Juni 2021 hat das BAAINBw mit der PSM Projekt System & Management\
+    \ GmbH einen Rahmenvertrag zur konsolidierten Nachrüstung des Schützenpanzer Puma\
+    \ geschlossen. Der Vertrag beinhaltet die Modernisierung von bis zu 297 Puma auf\
+    \ den sogenannten S1 Konfigurationsstand. Aufgrund knapper Haushaltsmittel wurde\
+    \ 2021 jedoch nur die Modernisierung von 154 Schützenpanzern für eine Milliarde\
+    \ Euro beauftragt. Diese sollen bis 2026 zur Verfügung stehen. Am 19. April 2023\
+    \ folgte dann auch der Auftrag, die rechtlichen 143 Puma auf den S1 Konfigurationsstand\
+    \ zu modernisieren. Dafür sind weitere 850,5 Millionen Euro vonnöten, welche aus\
+    \ dem Sondervermögen Bundeswehr finanziert werden. Bis 2029 sollen dann alle Puma\
+    \ des Ersten Loses modernisiert sein. Abgesehen von 13 Fahrschulpanzern und 40\
+    \ Puma im VJTF-2023-Stand. Ab 2029 sollen dann auch die 40 Puma VJTF auf den S1\
+    \ Stand gebracht werden. Im Vergleich zum Basis-Puma verfügen die Puma S1 über\
+    \ folgende Verbesserungen:\n  * Integrierter Werfer für zwei Panzerabwehrlenkflugkörper\
+    \ MELLS\n  * Vorrüstung zur Aufnahme der Turmunabhängigen Sekundärwaffenanlage\
+    \ (TSWA) \n  * Neue digitale querschnittliche Streitkräftegemeinsame Verbundfähige\
+    \ Funkgeräteausstattung (SVFuA)\n  * Neue Bordverständigungsanlage SOTAS IP6R\n\
+    \  * Neues explosionssicheres GPS-Navigationssystem ERGER II\n  * Neues Rundum-\
+    \ und Fahrersichtsystem"
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Beobachtungs- und Aufklärungsausstattung III
+  branch: Heer
+  typ: Beobachtungs- und Aufklärungsausstattung (BAA)
+  status: bestellt
+  contractor_raw: KNDS Deutschland & Hensoldt
+  quantity: 92
+  quantity_raw: '92'
+  cost_eur: 86000000.0
+  cost_raw: 86 Mio. Euro
+  financing: Sondervermögen Bundeswehr & Einzelplan 14
+  delivery_start: 2027
+  delivery_end: 2029
+  delivery_raw: 2027 – 2029
+  description: Das BAAINBw hat KNDS Deutschland und Hensoldt mit der Modernisierung
+    des Spähwagens Fennek beauftragt. Das Hauptwaffensystem der Heeresaufklärungstruppe
+    wird mit einer neuen Beobachtungs- und Aufklärungsausstattung (BAA) III ausgestattet.
+    Diese Modernisierung betrifft 30 Spähwagen Fennek 1A2 und 50 Joint Fire Support
+    Team (JFST) Fennek, inklusive einer Umlaufreserve zur Erhöhung der Einsatzbereitschaft.
+    Ende Juni genehmigte der Haushaltsausschuss des Deutschen Bundestages die dafür
+    notwendigen Mittel im Rahmen einer 25-Millionen-Euro-Vorlage. Das Kostenvolumen
+    beträgt knapp 86 Millionen Euro. Die Finanzierung erfolgt über das Sondervermögen
+    Bundeswehr und den regulären Verteidigungsetat. Die Lieferung und Integration
+    der neuen BAA sind für 2027 bis 2029 geplant. Die BAA, Hauptaufklärungsmittel
+    des Fenneks, umfasst ein Wärmebildgerät, eine Tagsichtkamera und einen Laserentfernungsmesser,
+    die auf einem ausfahrbaren Mast montiert sind. Zusätzlich wird ein Lasertarget-Designator
+    integriert. Der Fennek, seit 2003 in Nutzung, ermöglicht es der dreiköpfigen Besatzung,
+    bei Tag, Nacht und schlechter Sicht Informationen über gegnerische Kräfte zu sammeln.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Zukünftiges System Indirektes Feuer mittlere Reichweite – Panzerhaubitze
+    2000
+  branch: Heer
+  typ: Panzerhaubitze
+  status: geplant
+  contractor_raw: /
+  quantity: 120
+  quantity_raw: '120'
+  cost_eur: null
+  cost_raw: N/A
+  financing: offen
+  delivery_start: 2031
+  delivery_end: 2031
+  delivery_raw: bis 2031
+  description: 120 Panzerhaubitzen 2000 von KMW, basierend auf dem Leopard-Fahrgestell
+    und ausgestattet mit dem 155 mm L/52 Waffensystem von Rheinmetall, werden der
+    Truppe zukünftig zur Verfügung stehen. Sie verfügen über kurze Reaktionszeiten
+    und sind dank einer Kombination aus hybrider Navigationsanlage und ballistischem
+    Rechner autonom und schnell einsetzbar. Die Panzerhaubitze hat eine hohe Feuerrate
+    von zwölf Schuss pro Minute und kann eine Vielzahl von Munitionstypen, wie Spreng-,
+    Suchzünder-, Leucht- und Nebelmunition, verwenden. Durch den Einsatz von automatisch
+    justierbaren Zündern, modularen Treibladungen und innovativen Geschossen können
+    Ziele in Entfernung von 40+ km präzise bekämpft werden. Die spezialisierte Suchzündermunition
+    (SMArt) von der Gesellschaft für Intelligente Wirksysteme mbH (Diehl und Rheinmetall)
+    zeichnet sich durch eine hohe Ersttrefferwahrscheinlichkeit aus und ist effektiv
+    gegen gepanzerte Ziele auf Entfernungen von bis zu 27 km. Diese Munition setzt
+    zwei Wirkungsträger frei, die nach einer festgelegten Flugzeit mit einer dreifachen
+    Sensorik während des Sinkflugs Ziele identifizieren. Anschließend durchdringen
+    sie mit hoher kinetischer Energie die Panzerung von oben. Um Blindgänger zu vermeiden,
+    zerlegt sich die Submunition automatisch. Zukünftig ist die Anschaffung modernisierter
+    SMArt-Munition geplant. Zusätzlich schützt die neue Nebelmunition 155 mm die eigenen
+    Kräfte durch einen multispektralen Nebel, der sowohl im optischen als auch im
+    Laser- und einzigartig im Infrarot-Bereich die Sicht einschränkt. Bis zum Jahr
+    2031 ist die Entwicklung des Zukünftigen Systems Indirektes Feuer mittlerer Reichweite
+    vorgesehen. Die geplante Einsatzdauer der 108 Panzerhaubitzen 2000 in den mechanisierten
+    Brigaden soll bis mindestens 2040 verlängert werden. Eine Verringerung der Besatzungsgröße
+    durch Automatisierung ist ebenso geplant wie Verbesserungen bei Schutz, Sekundärbewaffnung
+    sowie Funk- und Bedienungselementen. Ziel ist auch, die Kampfentfernung auf etwa
+    75 km zu steigern, insbesondere durch den Einsatz fortgeschrittener Munition und
+    Treibmittel mit erhöhtem Gasdruck. Seit Herbst 2018 ersetzt das unempfindliche
+    Sprenggeschoss 155 mm HE, DM121, ältere Munitionstypen wie DM21 und L15. Dieses
+    Geschoss kann sowohl bei Tag als auch bei Nacht mit speziellen Optiken der Haubitze
+    gegen Infrastruktur- und gepanzerte Ziele eingesetzt werden. Eine Nachbestellung
+    dieser Sprenggeschosse ist Teil der aktuellen Maßnahmen. Ab 2024 wird die lasergesteuerte
+    155-mm-Präzisionsmunition Vulcano von den Firmen OTO Melara (Italien) und Diehl
+    Defence in den Dienst gestellt. Diese eignet sich vor allem für den Einsatz gegen
+    weiche und halbharte Einzelziele in Stabilisierungsmissionen, urbanen Gebieten
+    und komplexen Gefechtssituationen. Sie ermöglicht eine sehr präzise Zielbekämpfung
+    auf Distanzen über 60 km und minimiert dabei Kollateralschäden. Zudem besteht
+    die Möglichkeit, Missionen abzubrechen. Die Vulcano-Geschosse werden entweder
+    über GPS oder durch Lasermarkierung in das Ziel geführt, wobei ein Joint Fire
+    Support Team (JFST) für die Laserzielerfassung verantwortlich ist. Ab etwa 2026
+    könnte die Einführung von Korrekturzündern für bereits im Einsatz befindliche
+    155-mm-Geschosse die präzise Bekämpfung von Flächenzielen mit einer Genauigkeit
+    von bis zu 50 Metern erfolgen.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: COBRA MLU
+  branch: Heer
+  typ: Artillerieortungsradar
+  status: Auslieferung
+  contractor_raw: ESG Elektroniksystem- und Logistik-GmbH
+  quantity: 9
+  quantity_raw: '9'
+  cost_eur: null
+  cost_raw: N/A
+  financing: Einzelplan 14
+  delivery_start: 2025
+  delivery_end: 2025
+  delivery_raw: bis 2025
+  description: Bereits im Dezember 2021 hat die OCCAR die ESG Elektroniksystem- und
+    Logistik-GmbH mit der dritten und vierten Modernisierung des Artillerieortungsradar
+    COBRA beauftragt. Im Rahmen dieses Mid-Life-Update (MLU) erhalten die Artillerieortungsradare
+    eine neue Navigationsanlage (New Inertial Navigation Unit, NINU) und einen neuen
+    Signalprozessor (New Signal Processor, NSP). Das MLU soll bis 2025 abgeschlossen
+    sein. Womit die Nutzungsdauer bis mindestens 2035 verlängert wird.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: KH Tiger
+  branch: Heer
+  typ: Kampfhubschrauber
+  status: bestellt
+  contractor_raw: N/A
+  quantity: 51
+  quantity_raw: '51'
+  cost_eur: 772900000.0
+  cost_raw: 772,9 Mio. Euro
+  financing: Sondervermögen Bundeswehr (Kapitel 1491 Titel 554 15) & Einzelplan 14
+    (Kapitel 1405 Titel 554 15)
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: N/A
+  description: "Die Bundesregierung will den Kampfhubschrauber Tiger nur noch auf\
+    \ einem minimalen Fähigkeitsniveau bis 2032 betreiben. Ein vollständiger Fähigkeitserhalt\
+    \ gilt als nicht mehr erreichbar. Statt ursprünglich rund 2,5 Milliarden Euro\
+    \ für umfassende Anpassungen werden noch etwa 772,9 Millionen Euro investiert,\
+    \ wovon bereits circa 423 Millionen Euro vertraglich gebunden sind.\nGeplante\
+    \ Maßnahmen (Schätzwerte, Stand heute):\n  * **Querschnittliches Paket (ca. 700\
+    \ Mio. Euro, davon 423 Mio. gebunden):** Vereinheitlichung des Bauzustands (ASGARD\
+    \ 33), GPS-Integration, Freund-Feind-Kennung sowie Beseitigung gemeldeter Obsoleszenzen\
+    \ zur Sicherung der Flug- und Einsatzfähigkeit.\n  * **Führungsfähigkeit (30,5\
+    \ Mio. Euro):** Kryptomodernisierung für Sprach- und Datenfunk inklusive Schlüsselverteilung.\n\
+    \  * **Selbstschutz (17,2 Mio. Euro):** Software-Updates und Anpassungen an Täuschkörperbehältern.\n\
+    \  * **Integriertes Helmsystem (3,5 Mio. Euro):** Ausbau industrieller Instandsetzungskapazitäten.\n\
+    \  * **Software Hubschrauber/Einsatzunterstützung (17,9 Mio. Euro):** Anpassungen\
+    \ der Basissoftware sowie der Einsatzunterstützungsanlage und Simulatoren.\n \
+    \ * **Mastvisier (0,8 Mio. Euro):** Fehlerbehebung per Softwareupdate.\n  * **Software\
+    \ Rakete (3 Mio. Euro):** Anpassung des Feuerleit-Algorithmus.\n\n\nDie Regierung\
+    \ weist darauf hin, dass es sich um Kostenschätzungen handelt und weitere, derzeit\
+    \ nicht absehbare Obsoleszenzen zusätzliche Ausgaben verursachen können."
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: NH-90
+  branch: Heer
+  typ: Mehrzweckhubschrauber
+  status: bestellt
+  contractor_raw: NATO Helicopter Industries (NHI)
+  quantity: 131
+  quantity_raw: '131'
+  cost_eur: 277000000.0
+  cost_raw: ca. 277 Mio. Euro
+  financing: Einzelplan 14 & Sondervermögen Bundeswehr
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: N/A
+  description: "Die Bundeswehr verfügt aktuell über 100 NH-90 in zwei verschiedenen\
+    \ Varianten. Das Heer verfügt über 82 dieser Hubschrauber in der TTH-Variante.\
+    \ Die Marine verfügt über 18 Stück in der NTH-Variante. Darüber hinaus befinden\
+    \ sich 31 weitere NH-90 in der MRFH-Variante für die Marine im Zulauf. Diese Mehrzweckhubschrauber\
+    \ werden fortlaufend modernisiert. Folgende Modernisierungsmaßnahmen laufen aktuell\
+    \ für die NH-90-Flotte der Bundeswehr:\n  * 1. Änderungsvertrag zum Vertrag Service\
+    \ Order Agreement 019 Software Release 3. Dabei geht es um die Entwicklung zusätzlicher\
+    \ Verbesserungen des Navigationssystems. (25. Februar 2026)\n  * Obsoleszenzbeseitigung\
+    \ des Trägheitsnavigationssystem (Inertial Reference System, IRS) für 59,99 Millionen\
+    \ Euro. Finanziert über Sondervermögen Bundeswehr (Kapitel 1491 Titel 551 11)\
+    \ bis 2027 und über den Einzelplan 14 (Kapitel 1404 Titel 551 11) ab 2028. (18.\
+    \ Dezember 2024)\n  * Ersatz- und Austauschteile für NH-90 NTH Sea Lion (18. Dezember\
+    \ 2024)\n  * Softwarepaket „Software Release 3“ (SWR3) für 216,76 Millionen Euro.\
+    \ Umfasst u.a. die „Integration der neuen Generation des Inertial Reference Systems\
+    \ (IRS-NG) sowie des neuen Multi Functional Displays (MFD)“. (24. April 2024)"
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Obsoleszenzbeseitigung SMArt 155
+  branch: Heer
+  typ: Suchzündermunition Artillerie, Geschoss 155 mm
+  status: bestellt
+  contractor_raw: Gesellschaft für Intelligente Wirksysteme (GIWS)
+  quantity: 8600
+  quantity_raw: '8.600'
+  cost_eur: 102600000.0
+  cost_raw: 102,6 Mio. Euro
+  financing: Einzelplan 14 (Kapitel 1404 Titel 551 11 )
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: N/A
+  description: 'Das BAAINBw hat einen Vertrag mit der Gesellschaft für Intelligente
+    Wirksysteme (GIWS) zur Beseitigung von Obsoleszenzen der Artilleriemunition vom
+    Typ SMArt 155 (Suchzündermunition Artillerie, 155 mm) geschlossen. Der Auftragswert
+    beläuft sich auf etwa 97,4 Millionen Euro. Zudem wurden ergänzende Verträge im
+    Umfang von rund 5,2 Millionen Euro geschlossen. SMArt 155 wurde im Oktober 2000
+    eingeführt, um gepanzerte Ziele auf größere Distanz effektiv bekämpfen und schnell
+    operative Schwerpunkte verlagern zu können. Derzeit verfügt die Bundeswehr über
+    rund 8.600 Geschosse dieses Typs, wobei künftig ein deutlich erhöhter Bedarf erwartet
+    wird.
+
+    Zur Deckung dieses steigenden Bedarfs ist es notwendig, die von Obsoleszenzen
+    betroffenen Komponenten zu erneuern und ab 2027 neue Munition zu beschaffen. Als
+    wesentliche Unterauftragnehmer der GIWS sind Rheinmetall Waffe Munition (RWM)
+    in Unterlüß, Diehl Defence in Röthenbach a. d. Pegnitz und Hensoldt Sensors in
+    Ulm beteiligt. Das Vorhaben ist im Bundeshaushalt und Finanzplan berücksichtigt.
+
+    Ab 2027 ist zusätzlich die Beschaffung von etwa 10.000 neuen Geschossen SMArt
+    155 in zwei Serienlosen vorgesehen. Diese künftige Beschaffung einschließlich
+    Serienvorbereitung und Produktionsunterstützung wird mit rund 810 Millionen Euro
+    veranschlagt und in einer separaten Vorlage behandelt.'
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Ausbildungsgerät Gefechtssimulator Panzertruppe
+  branch: Heer
+  typ: Ausbildungssimulator
+  status: genehmigt
+  contractor_raw: /
+  quantity: 1
+  quantity_raw: 1 (festbeauftragt) / 5 (optional)
+  cost_eur: 40000000.0
+  cost_raw: 40 Mio. Euro
+  financing: Sondervermögen Bundeswehr & Einzelplan 14
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: N/A
+  description: 'Der Haushaltsausschuss des Bundestages hat der Modernisierung des
+    Ausbildungsgeräts Gefechtssimulator Panzertruppe zugestimmt. Die Trainingsgeräte
+    sollen an die gegenwärtige Leopard 2 A7 Ausführung angepasst werden. Der erste
+    Schritt umfasst die Überarbeitung der Steuerungseinheit der Simulatoren und ein
+    Ausbildungssystem. Weitere fünf Ausbildungssysteme sollen folgen. Das Gesamtvolumen
+    dieses Vorhabens erreicht etwa 40 Millionen Euro, finanziert durch das Sondervermögen
+    und den regulären Verteidigungshaushalt.
+
+    Die deutschen Streitkräfte schulen ihre Panzersoldaten derzeit mit Simulatoren
+    der Leopard 2 A5/A6-Generation in Munster. Durch die bewilligte Maßnahme lassen
+    sich diese Anlagen auf die fortschrittliche A7-Version upgraden, wodurch realitätsnahe
+    Trainingsszenarien möglich werden. Seit 2021 setzt die Bundeswehr den Leopard
+    2 A7 ein.'
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Eurofighter
+  branch: Luftwaffe
+  typ: Mehrzweckkampfflugzeug
+  status: bestellt
+  contractor_raw: Airbus
+  quantity: 138
+  quantity_raw: '138'
+  cost_eur: 1973000000.0
+  cost_raw: min. 1,973 Mrd. Euro
+  financing: Einzelplan 14 (Kapitel 1404 Titel 551 18) & Sondervermögen Bundeswehr
+    (Kapitel 1491 Titel 551 18)
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: /
+  description: "Die Bundeswehr verfügt über 138 Eurofighter. Diese Mehrzweckkampfflugzeuge\
+    \ werden fortlaufend modernisiert. Folgende Modernisierungsmaßnahmen laufen aktuell\
+    \ für die Eurofighter-Flotte der Bundeswehr:\n  * Beschaffungsmaßnahme ESCAN Radar\
+    \ 1+ Entry Into Service Early Embodiment und Procurement of Equipment for ESCAN\
+    \ Embodiment beim Waffensystem EUROFIGHTER (17. Dezember 2025)\n  * Beschaffungsmaßnahme\
+    \ Beseitigung von Obsoleszenzen bei speziellen Werkzeugen, Werkstattausstattungen\
+    \ und Testgeräten für das Selbstschutzsystem des Waffensystems EUROFIGHTER (17.\
+    \ Dezember 2025)\n  * Entwicklung- und Beschaffungsvorhaben zur Obsoleszenzbeseitigung\
+    \ des Special to Type Tooling & Test Equipments (STTE) für das Eurofighter Radar.\
+    \ (3. Dezember 2025)\n  * Entwicklung des P4E Aerodynamic Modification Kit Step\
+    \ 1 für rund 600 Millionen Euro. (12. November 2025)\n  * Anpassung „Pilot Synthetic\
+    \ Training System“ (PSTS) an den aktuellen Bauzustand des Waffensystems EUROFIGHTER\
+    \ (EF) P3Ec Step 2 für 411,52 Millionen Euro. Die Finanzierung erfolgt bis 2027\
+    \ aus dem Sondervermögen Bundeswehr und ab 2028 bis 2031 über den Einzelplan 14.\
+    \ (8. Oktober 2025)\n  * Eurofighter Common Radar System MK1 (18. Dezember 2024)\n\
+    \  * Long Term Evolution Technical Maturation Phase (LTE TMP Part 1) für 217,18\
+    \ Millionen Euro. Finanziert über das Sondervermögen Bundeswehr. (18. Dezember\
+    \ 2024)\n  * Entwicklung und Integration eines neuen Piloten-Helm-Systems für\
+    \ den Eurofighter namens Typhoon Future Helmet Striker II für 62,85 Millionen\
+    \ Euro (13. November 2024)\n  * Phase 4 Enhandement (P4E) System Definition für\
+    \ 97,11 Millionen Euro. Finanziert über das Sondervermögen Bundeswehr. (24. April\
+    \ 2024)\n  * Anpassung des nationalen Missionsunterstützungssystems an den Weiterentwicklungsstand\
+    \ P3Ec für 42,85 Millionen Euro. (24. April 2024)\n  * Test- und Nachweisführung\
+    \ des neuen Radar mit elektronischer Strahlschwenkung (ECRS MK1) für 102 Millionen\
+    \ Euro (13. März 2024)\n  * Vertragsänderung beim Vorhaben ECRS MK1 für 197,7\
+    \ Millionen Euro (20. September 2023)\n  * Entwicklungsvorhaben Produktverbesserung\
+    \ im Rahmen der Konsolidierung von Maßnahmen im Waffensystem Eurofighter (P3Ec\
+    \ Step 2 und 3 Consolidation Package) für 241,8 Millionen Euro. „Beinhaltet neben\
+    \ der Weiterentwicklungskomponente auch die Harmonisierung und die Herstellung\
+    \ einer einheitlichen Waffensystemarchitektur sowie eines einheitlichen Konfigurationsstandes“.\
+    \ (6. Juli 2022)"
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Tornado
+  branch: Luftwaffe
+  typ: Jagdbomber
+  status: bestellt
+  contractor_raw: Panavia Aircraft GmbH
+  quantity: 45
+  quantity_raw: '45'
+  cost_eur: 65970000.0
+  cost_raw: 65,97 Mio. Euro
+  financing: Sondervermögen Bundeswehr bis 2027 (Kapitel 1491 Titel 554 93 ) & Einzelplan
+    14 ab 2028 (Kapitel 1405 Titel 554 13)
+  delivery_start: 2025
+  delivery_end: 2028
+  delivery_raw: 2025 – 2028
+  description: 45 der 93 verbleibenden Tornado-Kampfflugzeuge erhalten ein neues Head-up-Displays
+    (HUD).
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: A400M
+  branch: Luftwaffe
+  typ: Transportflugzeug
+  status: bestellt
+  contractor_raw: Airbus Defence and Space
+  quantity: 53
+  quantity_raw: '53'
+  cost_eur: 959870000.0
+  cost_raw: 959,87 Mio. Euro
+  financing: Sondervermögen Bundeswehr bis 2027 (Kapitel 1491 Titel 554 18) & Einzelplan
+    14 ab 2028 bis 2031 (Kapitel 1405 Titel 554 18)
+  delivery_start: 2031
+  delivery_end: 2031
+  delivery_raw: bis 2031
+  description: "Folgende Modernisierungsmaßnahmen laufen aktuell für die A400M-Flotte\
+    \ der Bundeswehr:\n  * Beschaffung von palettierten Rüstsätzen Aeromedical Evacuation\
+    \ Fixed Wing inkl. Modulausstattung zum qualifizierten Patiententransport für\
+    \ rund 48 Millionen Euro. Die Finanzierung erfolgt über das Sondervermögen Bundeswehr\
+    \ und den Einzelplan 14. (5. November 2025)\n  * 23 A400M werden für 760 Millionen\
+    \ Euro mit dem J-MUSIC-DIRCM-Selbstschutzsystem ausgestattet. Die Finanzierung\
+    \ erfolgt über das Sondervermögen Bundeswehr und den Einzelplan 14. Hauptauftragnehmer\
+    \ ist Airbus Defence and Space. Der wichtigste Unterauftragnehmer ist der israelische\
+    \ Rüstungskonzern Elbit Systems. (5. Juni 2025)\n  * Block Upgrade 0 (BU0) für\
+    \ rund 151,87 Millionen Euro. Anpassung an geänderte gesetzliche Regelungen und\
+    \ NATO Vorgaben sowie Beseitigung von Obsoleszenzen und identifizierter Schwachstellen.\
+    \ (16. Oktober 2024)"
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: C-130J DIRCM
+  branch: Luftwaffe
+  typ: Selbstschutzsystem
+  status: bestellt
+  contractor_raw: Lockheed Martin
+  quantity: 6
+  quantity_raw: '6'
+  cost_eur: 206000000.0
+  cost_raw: 206 Mio. Euro
+  financing: Sondervermögen Bundeswehr bis 2027 (Kapitel 1491 Titel 554 65) & Einzelplan
+    14 ab 2028 (Kapitel 1405 Titel 554 23)
+  delivery_start: 2028
+  delivery_end: 2032
+  delivery_raw: 2028 – 2032
+  description: Das BAAINB hat einen Vertrag mit Lockheed Martin (USA) über rund 206
+    Mio. Euro zur Beschaffung und Integration von sechs DIRCM-Selbstschutzsystemen
+    in drei deutsche C-130J-30 und drei KC-130J-Transportflugzeuge geschlossen. Der
+    Auftrag umfasst neben den Systemen selbst deren Muster- und Serienintegration,
+    technische Dokumentation, Ausbildungsunterlagen sowie Schulungen für Besatzung
+    und Wartungspersonal. DIRCM (Directed Infrared Countermeasures) lenkt anfliegende
+    infrarotgelenkte Raketen mithilfe laserbasierter Störcodes vom Flugzeug ab. Unterauftragnehmer
+    sind Leonardo UK (Sensor-/Laseranteile) und Terma A/S (Einrüstungskomponenten).
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: A350-900
+  branch: Luftwaffe
+  typ: Passagierflugzeuge
+  status: bestellt
+  contractor_raw: Lufthansa Technik
+  quantity: 3
+  quantity_raw: '3'
+  cost_eur: 240750000.0
+  cost_raw: 240,75 Mio. Euro
+  financing: Einzelplan 60 (Kapitel 6002 Titel 811 01)
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: N/A
+  description: 'Die deutschen Regierungsflieger vom Typ Airbus A350 werden künftig
+    mit einem modernen Selbstschutzsystem gegen infrarotgelenkte Raketen ausgerüstet.
+    Nach der Genehmigung durch den Haushaltsausschuss des Bundestages wurde Lufthansa
+    Technik mit der Integration der DIRCM-Systeme beauftragt.
+
+    Die drei A350-Langstreckenjets der Flugbereitschaft des Verteidigungsministeriums
+    erhalten sogenannte DIRCM-Systeme (Directed InfraRed Counter Measures) des israelischen
+    Herstellers Elbit Systems. Diese Technologie schützt vor schultergestützten Flugabwehrraketen
+    (MANPADS) mit Infrarotsuchköpfen, indem sie anfliegende Geschosse durch gezielte
+    Störcodes ablenkt. Die Besatzung muss dabei nicht aktiv eingreifen.
+
+    Der Vertrag mit Lufthansa Technik stellt weltweit die erste Modifikation einer
+    A350 mit einem derartigen Selbstschutzsystem dar. Um die Verfügbarkeit der Regierungsflieger
+    nicht zu beeinträchtigen, erfolgt die Nachrüstung während regulärer Wartungsintervalle.
+    Lufthansa Technik wird dabei eng mit Elbit Systems und Airbus zusammenarbeiten.
+
+    Nach Angaben von Lufthansa Technik wird das Projekt über einen Zeitraum von fünf
+    Jahren ausgeführt. Mit der Installation dieser Schutzsysteme stehen der Flugbereitschaft
+    künftig vollständig geschützte Großraum-Langstreckenflugzeuge für den politisch-parlamentarischen
+    Lufttransport zur Verfügung. Die Kosten für das Gesamtpaket belaufen sich auf
+    240,75 Millionen Euro.'
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Fähigkeitserhalt PATRIOT
+  branch: Luftwaffe
+  typ: Flugabwehrsystem
+  status: genehmigt
+  contractor_raw: /
+  quantity: 7
+  quantity_raw: '7'
+  cost_eur: 154500000.0
+  cost_raw: 154,5 Mio. Euro
+  financing: Sondervermögen Bundeswehr (Kapitel 1491 Titel 554 64) & Einzelplan 14
+  delivery_start: 2025
+  delivery_end: 2027
+  delivery_raw: 2025 – 2027
+  description: "Die Bundeswehr verfügt noch über neun PATRIOT-Flugabwehrsysteme. Diese\
+    \ werden im Rahmen des Vorhabens “Fähigkeitserhalt PATRIOT” modernisiert. Folgende\
+    \ Modernisierungsmaßnahmen laufen aktuell für die PATRIOT-Systeme der Bundeswehr:\n\
+    \  * 51 neue Krypto- und Funkgeräte für die Richtfunkanlagen für 40,49 Millionen\
+    \ Euro (18. Oktober 2023)\n  * Beschaffung von Umrüstsätzen M903 für das PATRIOT\
+    \ Startgerät über das Foreign Military Sales Verfahren für rund 114 Millionen\
+    \ Euro. (10. September 2025)\n  * Beschaffung von 93 Umrüstsätzen für das PATRIOT\
+    \ Startgerät zum Verschuss von LFK PATRIOT PAC-3 MSE über das Foreign Military\
+    \ Sales (FMS) Verfahren (17. Dezember 2025)\n  * Beschaffungsvertrag über die\
+    \ Herstellung und Lieferung von Lenkflugkörper-Transportern inklusive Anhänger\
+    \ sowie von EPP (Stromversorgungsanlagen) Wechselpritschen und Sattelzugmaschinen\
+    \ (SaZgM) PATRIOT (17. Dezember 2025)"
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: RRP-117
+  branch: Luftwaffe
+  typ: Luftverteidigungsradar
+  status: genehmigt
+  contractor_raw: /
+  quantity: 8
+  quantity_raw: '8'
+  cost_eur: null
+  cost_raw: N/A
+  financing: Sondervermögen Bundeswehr & Einzelplan 14
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: N/A
+  description: '* **17. Dezember 2025:** Beschaffung und Installation von 8 Upgrade
+    Kits zur Beseitigung einer Obsoleszenz an der Signal- und Datenverarbeitungstechnik
+    der Luftverteidigungsradare RRP-117 durch die NATO Support and Procurement Agency
+    (NSPA) mit Festbeauftragung und optionalen Leistungen.'
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: IRIS-T Block II
+  branch: Luftwaffe
+  typ: Luft-Luft-Lenkflugkörper kurzer Reichweite
+  status: bestellt
+  contractor_raw: Diehl Defence
+  quantity: null
+  quantity_raw: N/A
+  cost_eur: 306000000.0
+  cost_raw: 306 Mio. Euro
+  financing: Sondervermögen Bundeswehr
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: N/A
+  description: Nachdem der Haushaltsausschuss des Deutschen Bundestages der entsprechenden
+    25-Millionen-Euro-Vorlage am 18. Dezember zugestimmt hatte, unterzeichnete das
+    BAAINBw bereits Ende Dezember den Vertrag zur Entwicklung und Serienreifmachung
+    des IRIS-T Block II Lenkflugkörpers mit Diehl Defence. Die Umsetzung erfolgte
+    in kürzester Zeit durch das IRIS-T Project Management Office (PMO) im BAAINBw,
+    das BAAINBw selbst und Diehl Defence. Neben Deutschland als Lead Nation sind Schweden,
+    Spanien und Italien an der Weiterentwicklung beteiligt, weshalb der Vertrag im
+    Namen dieses Konsortiums geschlossen wurde. Der Finanzbedarf für den deutschen
+    Anteil beläuft sich auf 306 Mio. Euro. Die Kosten für die anschließende Nutzung
+    bis 2055 werden auf 28,7 Mio. Euro geschätzt.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: METEOR MLU
+  branch: Luftwaffe
+  typ: Luft-Luft-Lenkflugkörper großer Reichweite
+  status: genehmigt
+  contractor_raw: MBDA
+  quantity: null
+  quantity_raw: N/A
+  cost_eur: 34900000.0
+  cost_raw: 34,9 Mio. Euro
+  financing: Einzelplan 14 (Kapitel 1404 Titel 551)
+  delivery_start: 2024
+  delivery_end: 2025
+  delivery_raw: 2024 – 2025 (Untersuchungen)
+  description: Um die Luftüberlegenheit bis in die 2040er-Jahre zu sichern, hat die
+    Bundeswehr eine Untersuchung zur Modernisierung des Luft-Luft-Lenkflugkörpers
+    Meteor in Auftrag gegeben. Die mit diesem Waffensystem ausgestatteten Eurofighter
+    der Luftwaffe ermöglichen den Kampf gegen Ziele außerhalb der Sichtweite. Für
+    34,9 Millionen Euro sollen mögliche Verbesserungen am Radarzielsuchkopf, der Antriebsanlage,
+    dem Datenlink und dem Gefechtskopf analysiert werden. Das Projekt wird gemeinsam
+    mit fünf weiteren europäischen Nationen durchgeführt.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Fähigkeitserhalt MAW TAURUS
+  branch: Luftwaffe
+  typ: Marschflugkörper
+  status: bestellt
+  contractor_raw: TAURUS Systems GmbH
+  quantity: 600
+  quantity_raw: '600'
+  cost_eur: 829800000.0
+  cost_raw: 829,8 Mio. Euro
+  financing: Einzelplan 14 & Sondervermögen Bundeswehr
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: N/A
+  description: Die Modulare Abstandswaffe “TAURUS KEPD-350”, entwickelt Anfang der
+    2000er Jahre und seit 2005 im Einsatz, ist eines der modernsten Lenkflugkörpersysteme
+    der Luftwaffe. Um die Einsatzfähigkeit zu sichern, wird der TAURUS-Bestand der
+    Bundeswehr ab 2025 im Rahmen einer zweiten Grundüberholung modernisiert. Eine
+    entsprechende Rahmenvereinbarung wurde heute vom Beschaffungsamt der Bundeswehr
+    unterzeichnet. Die Finanzierung erfolgt über den regulären Verteidigungshaushalt
+    und das Sondervermögen Bundeswehr. Der etwa fünf Meter lange und 1.400 Kilogramm
+    schwere Marschflugkörper ist mit einem eigenen Triebwerk und Missionsplanungssystem
+    ausgestattet. TAURUS, kurz für “Target Adaptive Unitary and Dispenser Robotic
+    Ubiquity System”, ermöglicht die präzise Bekämpfung strategisch wichtiger Ziele
+    aus großer Entfernung, ohne dass Piloten in feindlichen Luftraum eindringen müssen.
+    Der Flugkörper ist derzeit mit dem Tornado-Kampfflugzeug kompatibel, eine Integration
+    in den Eurofighter wird vorbereitet. Die Bundeswehr verfügt über rund 600 TAURUS,
+    von denen jedoch nur rund die Hälfte einsatzbereit sein soll. Bis 2030 hat man
+    der NATO insgesamt 1.000 Air Launched Cruise Missile (ALCM) zugesagt. Daher ist
+    die Beschaffung von [600 neuen TAURUS Neo](https://suv.report/bundeswehr-will-600-neue-marschflugkoerper-beschaffen/)
+    geplant.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: German Improved Air Defence System
+  branch: Luftwaffe
+  typ: Gefechtsstand Führungssystem Luftstreitkräfte
+  status: genehmigt
+  contractor_raw: Konsortium KOFA GIADS (Airbus Defence und Space & Frequentis Deutschland)
+  quantity: 3
+  quantity_raw: '3'
+  cost_eur: 87480000.0
+  cost_raw: 87,48 Mio. Euro
+  financing: Sondervermögen Bundeswehr bis 2027 (Kapitel 1491 Titel 554 95) & Einzelplan
+    14 ab 2028 (Kapitel 1405 Titel 554 05)
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: N/A
+  description: Deutschland erneuert das stationäre Gefechtsstand-Führungssystem der
+    Luftwaffe „German Improved Air Defence System“ (GIADS), das zusammen mit der Kommunikationsanlage
+    KOFA die militärische Luftraumüberwachung über Deutschland und angrenzende Gebiete
+    sicherstellt. Im Rahmen der jetzt beauftragten Regeneration wird die komplette
+    Hardware des Führungs- und Waffeneinsatzsystems ausgetauscht und veraltete Betriebs-
+    sowie Einsatzsoftware ersetzt; zudem erhält das Control-and-Reporting-Centre einen
+    vollwertigen Arbeitsplatz für die Fernmeldeaufklärung. Bei KOFA werden gleichfalls
+    obsolet gewordene Hard- und Softwarekomponenten erneuert und zwölf zusätzliche
+    Bundeswehrstandorte an das Kommunikationsnetz angebunden. Das Vorhaben hat ein
+    Volumen von rund 87,5 Millionen Euro. Vertragspartner ist das Konsortium „KOFA
+    GIADS“, bestehend aus Airbus Defence and Space und Frequentis Deutschland. Die
+    Betriebskosten bis 2035 werden auf 108,27 Millionen Euro geschätzt.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Fregatte 124
+  branch: Marine
+  typ: Flugabwehrfregatte
+  status: bestellt
+  contractor_raw: Hensoldt Sensors GmbH, Rohde & Schwarz, etc.
+  quantity: 3
+  quantity_raw: '3'
+  cost_eur: 375100000.0
+  cost_raw: min. 375,1 Mio. Euro
+  financing: Sondervermögen Bundeswehr bis 2027 (Kapitel 1491 Titel 554 92) & Einzelplan
+    14 ab 2028 bis 2031 (Kapitel 1405 Titel 554 12)
+  delivery_start: 2027
+  delivery_end: 2030
+  delivery_raw: 2027 (1 Landanlage), 2028 (2 Landanlagen), 2029 (1 Bordanlage), 2030
+    (2 Bordanlagen)
+  description: "Die drei Flugabwehrfregatten der Klasse F124 werden modernisiert.\
+    \ Folgende Modernisierungsmaßnahmen laufen aktuell:\n  * Anpassungen der Hangars\
+    \ und Landedecks für die neuen Bordhubschrauber des Typs NH90 MRFH Sea Tiger.\
+    \ Die Kosten belaufen sich auf 72,1 Millionen Euro. (15. April 2026). \n  * Softwarepflege\
+    \ und Hardware-Regeneration des Führungs- und Waffeneinsatzsystems für rund 73\
+    \ Millionen Euro (15. April 2026). \n  * Modernisierung der Fernmelde- und Führungsanlagen\
+    \ für 212,7 Millionen Euro (Preis inkludiert die Modernisierung der Fernmelde-\
+    \ und Führungsanlagen der Klasse F123, K130, A404 und A702.) Finanziert aus dem\
+    \ Sondervermögen Bundeswehr und dem Einzelplan 14. (8. Oktober 2025)\n  * Integration\
+    \ des neuen Bordhubschraubers NH-90 MRFH Sea Tiger (22. Oktober 2024)\n  * Drei\
+    \ Bordanlagen für den Elektronischen Kampf (EK) sowie drei Landanlagen für Ausbildungs-\
+    \ und Referenzzwecke vom Typ Kora/Virgilius als Ersatz für die obsolete EK-Anlage\
+    \ FL1800S-II. Der Finanzbedarf beträgt rund 230 Millionen Euro (16. Oktober 2024).\
+    \ \n  * Integration des ESSM Block 2 Lenkflugkörpers (20. April 2023)\n  * Integration\
+    \ des RAM Block 2B Lenkflugkörpers (11. April 2023)\n  * Vier TRS-4D LR Weitbereichsradare\
+    \ zur Luft- und Seeraumüberwachung als Ersatz für die SMART-L-Radare (23.08.2021)\n\
+    \  * Integration des NSM Block 1A Seezielflugkörpers als Ersatz für die Harpoon-Seezielflugkörper\
+    \ (8. Juli 2021)"
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Fregatte 123
+  branch: Marine
+  typ: U-Jagd-Fregatte
+  status: bestellt
+  contractor_raw: Saab AB, ESG Elektroniksystem- und Logistik-GmbH
+  quantity: 4
+  quantity_raw: '4'
+  cost_eur: 1200000000.0
+  cost_raw: 1,2 Mrd. Euro
+  financing: Sondervermögen Bundeswehr bis 2027 (Kapitel 1491 Titel 554 92) & Einzelplan
+    14 ab 2028 (Kapitel 1405 Titel 554 12)
+  delivery_start: 2026
+  delivery_end: 2029
+  delivery_raw: 2026 – 2029
+  description: "Die vier U-Jagd-Fregatten der Klasse 123 werden im Rahmen einer zweiten\
+    \ Nutzungsdauerverlängerung einer umfassenden Modernisierung unterzogen. Nach\
+    \ abgeschlossener Modernisierung werden diese Fregatten als Klasse F123B bezeichnet.\
+    \ Die Modernisierung umfasst:\n  * Änderungsvertrag zum Vertrag F123 Sicherstellen\
+    \ der Einsatzverfügbarkeit (SdeV) – Erweiterung des Segments Elektronischer Kampf\
+    \ (17. Dezember 2025)\n  * Modernisierung der Fernmelde- und Führungsanlagen für\
+    \ 212,7 Millionen Euro (Preis inkludiert die Modernisierung der Fernmelde- und\
+    \ Führungsanlagen der Klasse F124, K130, A404 und A702.) Finanziert aus dem Sondervermögen\
+    \ Bundeswehr und dem Einzelplan 14. (8. Oktober 2025)\n  * Ersatz der Anlage zur\
+    \ elektronischen Kampfführung für 103 Millionen Euro (26. Juni 2024)\n  * Auslösung\
+    \ von zwei Optionen im Projekt Fregatten 123 Sicherstellung der Einsatzverfügbarkeit\
+    \ (SdEV), Anteil COMMS Paket für 203,7 Millionen Euro. Finanziert aus dem Sondervermögen\
+    \ Bundeswehr bis 2027 und dem Einzelplan 14 ab 2028. (15. Mai 2024)\n  * Integration\
+    \ des Kanonensystem Seahawk von MSI – Defence Systems Ltd. im Kaliber 30mm (15.\
+    \ März 2024)\n  * Integration des RBS15 Mk 3 Seezielflugkörper (11. Juli 2023)\n\
+    \  * Integration des ESSM Block 2 Lenkflugkörpers (20. April 2023)\n  * Integration\
+    \ des Saab 9LV Führungs- und Waffeneinsatzsystems (30. Juli 2021)\n  * Integration\
+    \ der Radare Sea Giraffe 4A und Sea Giraffe 1X (30. Juli 2021)\n  * Integration\
+    \ der der Feuerleitanlage Ceros 200 (30. Juli 2021)"
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Korvette 130
+  branch: Marine
+  typ: Korvette
+  status: genehmigt
+  contractor_raw: /
+  quantity: 5
+  quantity_raw: '5'
+  cost_eur: null
+  cost_raw: N/A
+  financing: Sondervermögen Bundeswehr bis 2027 & Einzelplan 14 ab 2028
+  delivery_start: 2025
+  delivery_end: 2025
+  delivery_raw: ab 2025
+  description: Modernisierung der Fernmelde- und Führungsanlagen für 212,7 Millionen
+    Euro (Preis inkludiert die Modernisierung der Fernmelde- und Führungsanlagen der
+    Klasse F124, F123, A404 und A702.) Finanziert aus dem Sondervermögen Bundeswehr
+    und dem Einzelplan 14. (8. Oktober 2025)
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: U-Boot-Klasse 212A
+  branch: Marine
+  typ: U-Boot
+  status: genehmigt
+  contractor_raw: /
+  quantity: 6
+  quantity_raw: '6'
+  cost_eur: 1000000000.0
+  cost_raw: ca. 1 Mrd. Euro
+  financing: Sondervermögen Bundeswehr & Einzelplan 14
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: offen
+  description: Die U-Boote der Klasse U212A der Bundeswehr sollen umfassend modernisiert
+    werden. Geplant ist die Erneuerung zentraler Systeme wie der Navigation, des Führungs-
+    und Waffeneinsatzsystems, der Sonaranlagen sowie elektronischer Unterstützungsmaßnahmen.
+    Die Maßnahmen betreffen vor allem die vier Boote des ersten Bauloses. Für das
+    Modernisierungsprojekt sind rund eine Milliarde Euro vorgesehen, finanziert aus
+    dem Sondervermögen der Bundeswehr und dem regulären Verteidigungshaushalt. Um
+    die Einsatzbereitschaft der Flotte aufrechtzuerhalten, soll die Modernisierung
+    währen regulärer Werftinstandhaltungen erfolgen, sodass längere Ausfallzeiten
+    vermieden werden.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: MJ332
+  branch: Marine
+  typ: Minenjagdboot
+  status: genehmigt
+  contractor_raw: TKMS
+  quantity: 10
+  quantity_raw: '10'
+  cost_eur: 60000000.0
+  cost_raw: rund 60 Mio. Euro (Sonaranlagen) / 1,3 Mrd. Euro (Gesamtvolumen)
+  financing: Sondervermögen Bundeswehr & Einzelplan 14
+  delivery_start: 2026
+  delivery_end: 2030
+  delivery_raw: 2026 – 2030
+  description: "Aufgrund von Kostenexplosionen beim Vorhaben “Fähigkeitsträger verbundene\
+    \ Seeminenabwehr” (FVSma) sollen die verbleibenden zehn Minenjagdboote der Klasse\
+    \ MJ322 für 1,3 Milliarden Euro modernisiert werden. „Diese Modernisierung soll\
+    \ in den Jahren 2026 bis 2030 während planmäßiger Instandsetzungszeiten durchgeführt\
+    \ werden.” Nach abgeschlossener Modernisierung sollen die veralteten Minenjagdboote\
+    \ bis 2040 im Dienst bleiben. \nFolgende Modernisierungsmaßnahmen laufen aktuell\
+    \ für die Minenjagdboote der Klasse MJ332 der Bundeswehr:\n  * Beschaffung von\
+    \ 10 Sonaranlagen des Typs Hull Mounted Sonar – 12M (HMS-12M) für rund 60 Millionen\
+    \ Euro (8. Oktober 2025)."
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Klasse 702
+  branch: Marine
+  typ: Einsatzgruppenversorger
+  status: bestellt
+  contractor_raw: German Naval Yards Kiel
+  quantity: 3
+  quantity_raw: '3'
+  cost_eur: 42000000.0
+  cost_raw: 42 Mio. Euro
+  financing: Sondervermögen Bundeswehr & Einzelplan 14
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: /
+  description: "Die Einsatzgruppenversorger der Klasse 702, in Dienst gestellt in\
+    \ den Jahren 2001, 2002 und 2012, benötigen aufgrund intensiver Nutzung eine umfassende\
+    \ Modernisierung. Dabei werden der Bordhubschrauber NH 90 Sea Lion integriert\
+    \ und auf den Einheiten des ersten Loses das fest verbaute Marine-Einsatz-Rettungszentrum\
+    \ (iMERZ) nachgerüstet, das die sanitätsdienstliche Versorgung verbessert. Zudem\
+    \ wird geprüft, wie Radar, Führungssystem und Rohrwaffen erneuert oder modifiziert\
+    \ werden können, was für die zweite Hälfte der Dekade geplant ist.\nBisher wurden\
+    \ folgende Modernisierungen in Auftrag gegeben: \n  * Modernisierung der Fernmelde-\
+    \ und Führungsanlagen für 212,7 Millionen Euro (Preis inkludiert die Modernisierung\
+    \ der Fernmelde- und Führungsanlagen der Klasse F124, F123, K130 und A404.) Finanziert\
+    \ aus dem Sondervermögen Bundeswehr und dem Einzelplan 14. (8. Oktober 2025)"
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Klasse 404
+  branch: Marine
+  typ: Tender
+  status: genehmigt
+  contractor_raw: /
+  quantity: 6
+  quantity_raw: '6'
+  cost_eur: null
+  cost_raw: N/A
+  financing: Sondervermögen Bundeswehr & Einzelplan 14
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: /
+  description: Modernisierung der Fernmelde- und Führungsanlagen für 212,7 Millionen
+    Euro (Preis inkludiert die Modernisierung der Fernmelde- und Führungsanlagen der
+    Klasse F124, F123, K130 und A702.) Finanziert aus dem Sondervermögen Bundeswehr
+    und dem Einzelplan 14. (8. Oktober 2025)
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: NH90-Simulatoren
+  branch: Marine
+  typ: Simulatoren
+  status: genehmigt
+  contractor_raw: /
+  quantity: 2
+  quantity_raw: '2'
+  cost_eur: 46500000.0
+  cost_raw: rund 46,5 Mio. Euro
+  financing: Einzelplan 14 & Sondervermögen Bundeswehr
+  delivery_start: null
+  delivery_end: null
+  delivery_raw: /
+  description: Der Haushaltsausschuss hat beschlossen, die beiden NH90-Flugsimulatoren
+    der Marine zu modernisieren. Ziel ist es, die technischen Weiterentwicklungen
+    und den aktuellen Stand der Marinehubschrauber in die Ausbildungssysteme zu übernehmen.
+    Die Maßnahme kostet rund 46,5 Millionen Euro und wird sowohl aus dem Sondervermögen
+    der Bundeswehr als auch dem regulären Verteidigungsetat finanziert.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: SATCOMBw Stufe 2 NDV
+  branch: Cyber- und Informationsraum
+  typ: satellitengestütztes Kommunikationssystem
+  status: genehmigt
+  contractor_raw: Airbus Defence and Space
+  quantity: null
+  quantity_raw: /
+  cost_eur: 1393000000.0
+  cost_raw: 1,393 Mrd. Euro
+  financing: Sondervermögen Bundeswehr bis 2027 (Kapitel 1491 Titel 554 33) & Einzelplan
+    14 ab 2028 (Kapitel 1405 Titel 554 33)
+  delivery_start: 2028
+  delivery_end: 2028
+  delivery_raw: bis Ende 2028
+  description: Das satellitengestützte Kommunikationssystem (SATCOMBw Stufe 2) wird
+    für 1,4 Milliarden Euro modernisiert. Die Finanzierung erfolgt aus dem Sondervermögen
+    der Bundeswehr und dem Einzelplan 14. Konkret werden die Bodensegmente und die
+    Steuerungs- und Überwachungssysteme auf den neuesten Stand gebracht. Über den
+    Zeitplan ist bisher nichts bekannt.
+  suv_url: https://suv.report/modernisierungsvorhaben/
+- title: Schweres geschütztes Sanitätskraftfahrzeug
+  branch: Unterstützungsbereich
+  typ: schweres geschütztes Sanitätskraftfahrzeug
+  status: bestellt
+  contractor_raw: KNDS Deutschland
+  quantity: 72
+  quantity_raw: '72'
+  cost_eur: 139000000.0
+  cost_raw: 139 Mio. Euro
+  financing: Sondervermögen Bundeswehr
+  delivery_start: 2027
+  delivery_end: 2027
+  delivery_raw: ab 2027
+  description: 'Die 72 vorhandenen schweren geschützten Sanitätskraftfahrzeuge GTK
+    Boxer werden für 139 Millionen Euro modernisiert. Der Haushaltsausschuss des Bundestages
+    hat am 8. Oktober 2025 grünes Licht für das Vorhaben gegeben. Das Modernisierungspaket
+    umfasst die Erneuerung der medizinischen Ausstattung, der Funk- und Führungsausstattung
+    sowie die Modernisierung der Bordverständigungsanlage zur Anbindung an D-LBO.
+
+    Total
+
+    0
+
+    Shares
+
+    [ Tweet 0 ](https://x.com/share?&text=Modernisierungsvorhaben&via=clemens_speer&url=https://suv.report/modernisierungsvorhaben/)
+
+    [ Pin it 0 ](https://pinterest.com/pin/create/bookmarklet/?url=https://suv.report/modernisierungsvorhaben/&media=https://suv.report/wp-content/uploads/2025/03/200428RichtschuItzeAusb_PzGrenBtl112012-1024x683.jpg)
+
+    [ Share 0 ](whatsapp://send?text=https://suv.report/modernisierungsvorhaben/)
+
+    [ Share 0 ](https://www.facebook.com/sharer.php?u=https://suv.report/modernisierungsvorhaben/)
+
+    Total
+
+    0
+
+    Share'
+  suv_url: https://suv.report/modernisierungsvorhaben/
