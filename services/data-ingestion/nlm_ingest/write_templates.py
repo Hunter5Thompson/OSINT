@@ -173,6 +173,22 @@ ON MATCH SET r.evidence = $evidence,
              END,
              r.last_seen = datetime()
 """,
+    "OPERATES": """
+MATCH (source:Entity {name: $source})
+MATCH (target:Entity {name: $target})
+MERGE (source)-[r:OPERATES]->(target)
+ON CREATE SET r.first_seen = datetime(),
+              r.evidence = $evidence,
+              r.confidence = $confidence,
+              r.last_seen = datetime()
+ON MATCH SET r.evidence = $evidence,
+             r.confidence = CASE
+                 WHEN $confidence > coalesce(r.confidence, 0)
+                 THEN $confidence
+                 ELSE r.confidence
+             END,
+             r.last_seen = datetime()
+""",
     "NEGOTIATES_WITH": """
 MATCH (source:Entity {name: $source})
 MATCH (target:Entity {name: $target})

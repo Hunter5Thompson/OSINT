@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from pydantic import ValidationError
@@ -12,6 +13,7 @@ from nlm_ingest.schemas import (
     Extraction,
     ExtractionSource,
     Relation,
+    RelationType,
     Transcript,
     TranscriptSegment,
     claim_hash,
@@ -285,3 +287,7 @@ def test_extraction_missing_provenance_raises():
     with pytest.raises(ValidationError):
         Extraction(notebook_id="nb1", entities=[], relations=[], claims=[],
                    extraction_model="qwen", prompt_version="v1")  # no source_kind/source_id
+
+
+def test_operates_is_a_relation_type():
+    assert "OPERATES" in get_args(RelationType)

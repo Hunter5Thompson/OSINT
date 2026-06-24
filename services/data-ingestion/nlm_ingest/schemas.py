@@ -50,7 +50,7 @@ def normalize_entity_type(value: str) -> str:
 
 RelationType = Literal[
     "ALLIED_WITH", "COMPETES_WITH", "SANCTIONS",
-    "SUPPLIES_TO", "OPERATES_IN", "MEMBER_OF",
+    "SUPPLIES_TO", "OPERATES", "OPERATES_IN", "MEMBER_OF",
     "COMMANDS", "TARGETS", "NEGOTIATES_WITH",
 ]
 
