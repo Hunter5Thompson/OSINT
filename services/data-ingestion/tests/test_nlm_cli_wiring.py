@@ -448,6 +448,7 @@ def test_ingest_command_marks_completed(tmp_path, monkeypatch):
         status_calls.append((nid, phase, status))
 
     # Local imports inside _run resolve at their definition modules -> patch there.
+    mock_ingest_extraction = AsyncMock()
     with patch.object(cli_mod, "get_all_status", return_value=fake_rows), \
          patch.object(cli_mod, "_get_db", return_value=MagicMock()), \
          patch.object(cli_mod, "set_phase_status", side_effect=record_status), \
@@ -455,12 +456,18 @@ def test_ingest_command_marks_completed(tmp_path, monkeypatch):
          patch("nlm_ingest.ingest_qdrant.ensure_collection", new=AsyncMock()), \
          patch("nlm_ingest.ingest_qdrant.ingest_to_qdrant", new=AsyncMock()), \
          patch("nlm_ingest.ingest_qdrant.build_claim_points", return_value=[]), \
-         patch("nlm_ingest.ingest_neo4j.ingest_extraction", new=AsyncMock()):
+         patch("nlm_ingest.ingest_neo4j.ingest_extraction", new=mock_ingest_extraction):
         result = CliRunner().invoke(cli, ["ingest"], catch_exceptions=False)
 
     assert result.exit_code == 0, result.output
     assert ("nb1", "ingest", "completed") in status_calls
     assert ("nb1", "ingest", "failed") not in status_calls
+    # Task 9: ingest command must pass canonical_relations kwarg to ingest_extraction
+    assert mock_ingest_extraction.await_count > 0
+    assert all(
+        "canonical_relations" in call.kwargs
+        for call in mock_ingest_extraction.await_args_list
+    )
 
 
 @pytest.mark.asyncio

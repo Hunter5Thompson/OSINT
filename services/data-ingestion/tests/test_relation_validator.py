@@ -1,10 +1,14 @@
 from types import SimpleNamespace
 
 from nlm_ingest.relation_validator import (
-    normalize_evidence, canonical_pair, relation_hash, provenance_key, candidate_id,
+    candidate_id,
+    canonical_pair,
+    normalize_evidence,
+    provenance_key,
+    relation_hash,
     validate_relations,
 )
-from nlm_ingest.schemas import Extraction, Entity, Relation
+from nlm_ingest.schemas import Entity, Extraction, Relation
 
 
 def _ex(entities, relations):
@@ -40,13 +44,15 @@ def test_symmetric_relation_hash_equal_both_directions():
 
 def test_candidate_id_is_deterministic():
     pk = provenance_key("nb1", "transcript", "transcript", "v4", "qwen", "abc")
-    assert candidate_id(pk, "OPERATES_IN.target_type") == candidate_id(pk, "OPERATES_IN.target_type")
+    gate = "OPERATES_IN.target_type"
+    assert candidate_id(pk, gate) == candidate_id(pk, gate)
 
 def test_candidate_id_golden_value():
     # Golden value pins the provenance_key composition + candidate_id hash format.
     # If this breaks, the provenance/identity contract changed — update deliberately.
     pk = provenance_key("nb1", "transcript", "transcript", "v4", "qwen", "abc")
-    assert candidate_id(pk, "OPERATES_IN.target_type") == "372ca39ca72b2a353b430c9aa5ff2a528fa09777b23a1af5f25f227ee91b088f"
+    expected = "372ca39ca72b2a353b430c9aa5ff2a528fa09777b23a1af5f25f227ee91b088f"
+    assert candidate_id(pk, "OPERATES_IN.target_type") == expected
 
 def test_symmetric_pair_uses_type_as_tiebreak():
     # Same name, different type: order-independence must still hold, proving the sort
@@ -59,21 +65,30 @@ def test_symmetric_pair_uses_type_as_tiebreak():
 
 
 def test_operates_in_to_platform_is_candidate():
-    ex = _ex([_e("Germany", "COUNTRY"), _e("F-127", "VESSEL")], [_r("Germany", "OPERATES_IN", "F-127")])
+    ex = _ex(
+        [_e("Germany", "COUNTRY"), _e("F-127", "VESSEL")],
+        [_r("Germany", "OPERATES_IN", "F-127")],
+    )
     res = validate_relations(ex)
     assert not res.canonical
     assert res.candidates[0].failed_gate == "OPERATES_IN.target_type"
 
 
 def test_country_operates_platform_is_canonical():
-    ex = _ex([_e("USA", "COUNTRY"), _e("Patriot", "WEAPON_SYSTEM")], [_r("USA", "OPERATES", "Patriot")])
+    ex = _ex(
+        [_e("USA", "COUNTRY"), _e("Patriot", "WEAPON_SYSTEM")],
+        [_r("USA", "OPERATES", "Patriot")],
+    )
     res = validate_relations(ex)
     assert len(res.canonical) == 1 and not res.candidates
     assert res.canonical[0].rel_type == "OPERATES"
 
 
 def test_commands_person_to_country_is_candidate():
-    ex = _ex([_e("Gerasimov", "PERSON"), _e("Russia", "COUNTRY")], [_r("Gerasimov", "COMMANDS", "Russia")])
+    ex = _ex(
+        [_e("Gerasimov", "PERSON"), _e("Russia", "COUNTRY")],
+        [_r("Gerasimov", "COMMANDS", "Russia")],
+    )
     res = validate_relations(ex)
     assert res.candidates[0].failed_gate == "COMMANDS.target_type"
 
@@ -99,7 +114,10 @@ def test_unknown_type_is_candidate():
 
 
 def test_targets_is_candidate_only():
-    ex = _ex([_e("Russia", "COUNTRY"), _e("Ukraine", "COUNTRY")], [_r("Russia", "TARGETS", "Ukraine")])
+    ex = _ex(
+        [_e("Russia", "COUNTRY"), _e("Ukraine", "COUNTRY")],
+        [_r("Russia", "TARGETS", "Ukraine")],
+    )
     res = validate_relations(ex)
     assert not res.canonical
     assert res.candidates[0].failed_gate == "relation_type_candidate_only"

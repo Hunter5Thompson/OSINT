@@ -1,6 +1,8 @@
 from typing import get_args
-from nlm_ingest.relation_rules import RELATION_ROLE_RULES, ACTOR, PLACE, PLATFORM
-from nlm_ingest.schemas import RelationType, CANONICAL_ENTITY_TYPES
+
+from nlm_ingest.relation_rules import ACTOR, PLATFORM, RELATION_ROLE_RULES
+from nlm_ingest.schemas import CANONICAL_ENTITY_TYPES, RelationType
+
 
 def test_every_relation_type_has_exactly_one_rule():
     assert set(RELATION_ROLE_RULES) == set(get_args(RelationType))

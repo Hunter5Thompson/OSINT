@@ -34,7 +34,9 @@ RELATION_ROLE_RULES: dict[str, RoleRule] = {
         frozenset({"COUNTRY", "ORGANIZATION", "PERSON"}), False, "canonical",
     ),
     "SUPPLIES_TO": RoleRule(frozenset({"COUNTRY", "ORGANIZATION"}), ACTOR, False, "canonical"),
-    "MEMBER_OF": RoleRule(ACTOR | _PERSON, frozenset({"ORGANIZATION", "TREATY"}), False, "canonical"),
+    "MEMBER_OF": RoleRule(
+        ACTOR | _PERSON, frozenset({"ORGANIZATION", "TREATY"}), False, "canonical",
+    ),
     "ALLIED_WITH": RoleRule(
         frozenset({"COUNTRY", "ORGANIZATION"}),
         frozenset({"COUNTRY", "ORGANIZATION"}), True, "canonical",

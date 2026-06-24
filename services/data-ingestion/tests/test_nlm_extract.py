@@ -66,7 +66,8 @@ class TestLoadPrompt:
 
     def test_v4_prompt_loads_and_mentions_operates(self):
         p = load_prompt("v4")
-        assert "OPERATES" in p
+        # OPERATES must appear as a standalone token (not just as a prefix of OPERATES_IN)
+        assert "OPERATES |" in p or "OPERATES " in p
         assert "OPERATES_IN" in p  # both present; OPERATES is the new platform-operation relation
 
 
@@ -269,7 +270,7 @@ class TestPromptV3:
         )
 
     @pytest.mark.asyncio
-    async def test_v3_is_default_version(self):
+    async def test_v3_still_loads_when_requested_explicitly(self):
         # default is now v4 (v3→v4: adds OPERATES + tightened guidance); v3 still
         # loads correctly when requested explicitly
         client = _ok_client()
@@ -280,7 +281,7 @@ class TestPromptV3:
         assert result.prompt_version == "v3"
 
     @pytest.mark.asyncio
-    async def test_v3_injects_report_hint_and_text(self):
+    async def test_injects_report_hint_and_text(self):
         client = _ok_client()
         source = ExtractionSource(notebook_id="nb1", source_id="rep-a",
                                   source_kind="report", text="REPORT BODY CONTENT")
@@ -293,7 +294,7 @@ class TestPromptV3:
             assert ph not in prompt                # every placeholder resolved
 
     @pytest.mark.asyncio
-    async def test_v3_injects_transcript_hint(self):
+    async def test_injects_transcript_hint(self):
         client = _ok_client()
         await extract_with_qwen(source=_make_source(text="PODCAST WORDS"),
                                 metadata={"source_name": "RAND", "title": "T"},

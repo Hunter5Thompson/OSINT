@@ -1,5 +1,5 @@
-from nlm_ingest.write_templates import CANONICAL_RELATION_TEMPLATES
 from nlm_ingest.relation_rules import RELATION_ROLE_RULES
+from nlm_ingest.write_templates import CANONICAL_RELATION_TEMPLATES
 
 
 def test_template_dict_only_canonical_types():
@@ -21,6 +21,7 @@ def test_templates_match_name_and_type_and_never_write_data_source():
 
 
 def test_no_dynamic_label_in_keys():
-    from nlm_ingest.schemas import RelationType
     from typing import get_args
+
+    from nlm_ingest.schemas import RelationType
     assert set(CANONICAL_RELATION_TEMPLATES) <= set(get_args(RelationType))

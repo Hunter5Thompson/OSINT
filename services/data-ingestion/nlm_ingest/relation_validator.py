@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass, field
+
+from nlm_ingest.ingest_neo4j import _canonical_name
+from nlm_ingest.relation_rules import RELATION_ROLE_RULES
 
 Endpoint = tuple[str, str]  # (name, type)
 
@@ -17,7 +21,7 @@ def canonical_pair(src: Endpoint, tgt: Endpoint, symmetric: bool) -> tuple[Endpo
 
 def relation_hash(src: Endpoint, type_: str, tgt: Endpoint, evidence: str | None) -> str:
     raw = "|".join([src[0], src[1], type_, tgt[0], tgt[1], normalize_evidence(evidence)])
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 def provenance_key(notebook_id, source_kind, source_id, prompt_version,
@@ -27,16 +31,7 @@ def provenance_key(notebook_id, source_kind, source_id, prompt_version,
 
 
 def candidate_id(prov_key: str, failed_gate: str) -> str:
-    return hashlib.sha256(f"{prov_key}|{failed_gate}".encode("utf-8")).hexdigest()
-
-
-# ---------------------------------------------------------------------------
-# Part 2: dataclasses + validate_relations
-# ---------------------------------------------------------------------------
-from dataclasses import dataclass, field  # noqa: E402  (after module-level code)
-
-from nlm_ingest.ingest_neo4j import _canonical_name  # noqa: E402
-from nlm_ingest.relation_rules import RELATION_ROLE_RULES  # noqa: E402
+    return hashlib.sha256(f"{prov_key}|{failed_gate}".encode()).hexdigest()
 
 
 @dataclass
@@ -100,7 +95,9 @@ def validate_relations(extraction) -> ValidationResult:
         evidence = r.evidence or ""
         conf = float(getattr(r, "confidence", 0.0) or 0.0)
 
-        def _candidate(gate: str, reason: str) -> CandidateRelation:
+        def _candidate(gate: str, reason: str, *, s_key=s_key, s_type=s_type, t_key=t_key,
+                       t_type=t_type, rtype=rtype, evidence=evidence,
+                       conf=conf) -> CandidateRelation:
             rel_h = relation_hash((s_key, s_type or "?"), str(rtype),
                                   (t_key, t_type or "?"), evidence)
             pk = provenance_key(extraction.notebook_id, extraction.source_kind,
