@@ -25,3 +25,18 @@ def test_symmetric_relation_hash_equal_both_directions():
 def test_candidate_id_is_deterministic():
     pk = provenance_key("nb1", "transcript", "transcript", "v4", "qwen", "abc")
     assert candidate_id(pk, "OPERATES_IN.target_type") == candidate_id(pk, "OPERATES_IN.target_type")
+
+def test_candidate_id_golden_value():
+    # Golden value pins the provenance_key composition + candidate_id hash format.
+    # If this breaks, the provenance/identity contract changed — update deliberately.
+    pk = provenance_key("nb1", "transcript", "transcript", "v4", "qwen", "abc")
+    assert candidate_id(pk, "OPERATES_IN.target_type") == "372ca39ca72b2a353b430c9aa5ff2a528fa09777b23a1af5f25f227ee91b088f"
+
+def test_symmetric_pair_uses_type_as_tiebreak():
+    # Same name, different type: order-independence must still hold, proving the sort
+    # compares the full (name, type) tuple, not name-only.
+    a, b = ("Alpha", "COUNTRY"), ("Alpha", "ORGANIZATION")
+    assert canonical_pair(a, b, symmetric=True) == canonical_pair(b, a, symmetric=True)
+    s1, t1 = canonical_pair(a, b, True)
+    s2, t2 = canonical_pair(b, a, True)
+    assert relation_hash(s1, "ALLIED_WITH", t1, "ev") == relation_hash(s2, "ALLIED_WITH", t2, "ev")
