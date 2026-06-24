@@ -21,6 +21,7 @@ export function fadeAlpha(
   window: { startMs: number; endMs: number },
   falloffMs: number,
 ): number {
+  if (!Number.isFinite(eventMs)) return 0;
   if (eventMs < window.startMs || eventMs > window.endMs) return 0;
   const FLOOR = 0.18;
   const d = Math.abs(eventMs - cursorMs);
@@ -297,7 +298,6 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
         const cursor = getT();
         const falloff = (win.endMs - win.startMs) * 0.05;
         for (const { billboard, eventMs } of fadeListRef.current) {
-          if (Number.isNaN(eventMs)) continue;
           billboard.color = Cesium.Color.WHITE.withAlpha(fadeAlpha(eventMs, cursor, win, falloff));
         }
       }

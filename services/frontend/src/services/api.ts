@@ -69,9 +69,13 @@ export async function getLatestSignals(limit = 6): Promise<SignalEnvelope[]> {
   return (await res.json()) as SignalEnvelope[];
 }
 
-export async function getCountryAlmanac(countryId: string): Promise<CountryAlmanac> {
+export async function getCountryAlmanac(
+  countryId: string,
+  signal?: AbortSignal,
+): Promise<CountryAlmanac> {
   const res = await fetch(`/api/almanac/countries/${encodeURIComponent(countryId)}`, {
     headers: { Accept: "application/json" },
+    signal,
   });
   if (!res.ok) {
     throw new Error(`country almanac failed: ${res.status} ${res.statusText}`);
@@ -82,10 +86,11 @@ export async function getCountryAlmanac(countryId: string): Promise<CountryAlman
 export async function getCountryAlmanacSignals(
   countryId: string,
   limit = 5,
+  signal?: AbortSignal,
 ): Promise<AlmanacSignalResponse> {
   const res = await fetch(
     `/api/almanac/countries/${encodeURIComponent(countryId)}/signals?limit=${limit}`,
-    { headers: { Accept: "application/json" } },
+    { headers: { Accept: "application/json" }, signal },
   );
   if (!res.ok) {
     throw new Error(`country almanac signals failed: ${res.status} ${res.statusText}`);
