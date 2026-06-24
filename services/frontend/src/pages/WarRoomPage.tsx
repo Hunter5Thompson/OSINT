@@ -31,6 +31,7 @@ export function WarRoomPage() {
   const [hypothesis, setHypothesis] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const abortRef = useRef<AbortController | null>(null);
+  const streamSeqRef = useRef(0);
 
   // Resolve which incident this page should display.
   useEffect(() => {
@@ -62,6 +63,7 @@ export function WarRoomPage() {
 
   // Reset Munin surface when the incident changes; abort any in-flight query.
   useEffect(() => {
+    streamSeqRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
     setToolCalls([]);
@@ -83,6 +85,8 @@ export function WarRoomPage() {
   const handleAsk = useCallback(
     (prompt: string) => {
       if (!incident || busy) return;
+      const streamSeq = streamSeqRef.current + 1;
+      streamSeqRef.current = streamSeq;
       setToolCalls((prev) => [
         ...prev,
         {
@@ -102,6 +106,7 @@ export function WarRoomPage() {
           region,
         },
         (status) => {
+          if (streamSeqRef.current !== streamSeq) return;
           setToolCalls((prev) => [
             ...prev,
             {
@@ -113,12 +118,14 @@ export function WarRoomPage() {
           ]);
         },
         (analysis) => {
+          if (streamSeqRef.current !== streamSeq) return;
           const body = analysis.analysis?.trim() ?? "";
           const label = analysis.threat_assessment?.trim() ?? "";
           const composed = label ? `[${label}] ${body}` : body;
           setHypothesis(composed || "Munin returned no synthesis.");
         },
         (error) => {
+          if (streamSeqRef.current !== streamSeq) return;
           setToolCalls((prev) => [
             ...prev,
             {
@@ -132,6 +139,7 @@ export function WarRoomPage() {
           abortRef.current = null;
         },
         () => {
+          if (streamSeqRef.current !== streamSeq) return;
           setBusy(false);
           abortRef.current = null;
         },
@@ -144,6 +152,7 @@ export function WarRoomPage() {
   // Cancel any in-flight query on unmount.
   useEffect(() => {
     return () => {
+      streamSeqRef.current += 1;
       abortRef.current?.abort();
       abortRef.current = null;
     };

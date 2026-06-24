@@ -83,4 +83,20 @@ describe("useCountryAlmanac", () => {
       expect(fetchMock).toHaveBeenCalledWith("/api/almanac/countries/732", expect.any(Object));
     });
   });
+
+  it("passes abort signals to both almanac requests and aborts them on cleanup", async () => {
+    const fetchMock = mockFetch();
+    const { unmount } = renderHook(() => useCountryAlmanac({ iso3: "GRC", m49: "300" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    const signals = fetchMock.mock.calls.map(([, init]) => (init as RequestInit).signal);
+    const abortSignals = signals.filter((signal): signal is AbortSignal => signal instanceof AbortSignal);
+    expect(abortSignals).toHaveLength(2);
+    expect(abortSignals.every((signal) => !signal.aborted)).toBe(true);
+
+    unmount();
+
+    expect(abortSignals.every((signal) => signal.aborted)).toBe(true);
+  });
 });

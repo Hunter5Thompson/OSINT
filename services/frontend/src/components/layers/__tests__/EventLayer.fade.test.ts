@@ -17,4 +17,8 @@ describe("EventLayer fadeAlpha (§7)", () => {
     expect(fadeAlpha(90, 50, win, 10)).toBeGreaterThan(0);
     expect(fadeAlpha(90, 50, win, 10)).toBeLessThan(0.5);
   });
+  it("invalid timestamps are treated as outside the window", () => {
+    expect(fadeAlpha(Number.NaN, 50, win, 10)).toBe(0);
+    expect(fadeAlpha(Number.POSITIVE_INFINITY, 50, win, 10)).toBe(0);
+  });
 });

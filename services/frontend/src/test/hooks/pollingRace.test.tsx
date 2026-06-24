@@ -4,6 +4,8 @@ import * as api from "../../services/api";
 import { useEarthquakes } from "../../hooks/useEarthquakes";
 import { useFIRMSHotspots } from "../../hooks/useFIRMSHotspots";
 import { useAircraftTracks } from "../../hooks/useAircraftTracks";
+import { useFlights } from "../../hooks/useFlights";
+import { useVessels } from "../../hooks/useVessels";
 
 describe("useEarthquakes cancelled guard", () => {
   beforeEach(() => {
@@ -116,5 +118,95 @@ describe("useAircraftTracks cancelled guard", () => {
     });
 
     expect(result.current.loading).toBe(false);
+  });
+});
+
+describe("useFlights cancelled guard", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("ignores a late resolve after the hook is disabled", async () => {
+    let resolveFetch!: (v: unknown) => void;
+    const pending = new Promise<unknown>((r) => { resolveFetch = r; });
+    vi.spyOn(api, "getFlights").mockReturnValue(pending as never);
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useFlights(enabled),
+      { initialProps: { enabled: true } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(true));
+    rerender({ enabled: false });
+
+    await act(async () => {
+      resolveFetch([
+        {
+          icao24: "abc123",
+          callsign: "ODIN1",
+          latitude: 1,
+          longitude: 2,
+          altitude_m: 1000,
+          velocity_ms: 200,
+          heading: 90,
+          vertical_rate: 0,
+          on_ground: false,
+          last_contact: "2026-06-24T10:00:00Z",
+          is_military: false,
+          aircraft_type: null,
+        },
+      ]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.flights).toEqual([]);
+  });
+});
+
+describe("useVessels cancelled guard", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("ignores a late resolve after the hook is disabled", async () => {
+    let resolveFetch!: (v: unknown) => void;
+    const pending = new Promise<unknown>((r) => { resolveFetch = r; });
+    vi.spyOn(api, "getVessels").mockReturnValue(pending as never);
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useVessels(enabled),
+      { initialProps: { enabled: true } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(true));
+    rerender({ enabled: false });
+
+    await act(async () => {
+      resolveFetch([
+        {
+          mmsi: 123456789,
+          name: "ODIN SEA",
+          latitude: 1,
+          longitude: 2,
+          speed_knots: 12,
+          course: 180,
+          ship_type: 70,
+          destination: null,
+        },
+      ]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.vessels).toEqual([]);
   });
 });

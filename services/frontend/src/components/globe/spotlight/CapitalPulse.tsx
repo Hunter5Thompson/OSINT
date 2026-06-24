@@ -8,8 +8,9 @@ interface Props {
 
 export function CapitalPulse({ viewer }: Props) {
   const { focusTarget } = useSpotlight();
-  const [screenPos, setScreenPos] = useState<{ x: number; y: number } | null>(null);
+  const [projected, setProjected] = useState(false);
   const elRef = useRef<HTMLDivElement | null>(null);
+  const projectedRef = useRef(false);
 
   const isActive = focusTarget?.kind === "country" && focusTarget.capital !== null;
   const capital = isActive ? focusTarget.capital! : null;
@@ -17,28 +18,46 @@ export function CapitalPulse({ viewer }: Props) {
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed() || !capital) {
-      setScreenPos(null);
+      if (projectedRef.current) {
+        projectedRef.current = false;
+        setProjected(false);
+      }
       return;
     }
     const cartesian = Cesium.Cartesian3.fromDegrees(capital.coords.lon, capital.coords.lat);
+    const setProjectedVisible = (next: boolean) => {
+      if (projectedRef.current === next) return;
+      projectedRef.current = next;
+      setProjected(next);
+    };
     const update = () => {
       if (viewer.isDestroyed()) return;
       const win = Cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, cartesian);
-      if (win) setScreenPos({ x: win.x, y: win.y });
-      else setScreenPos(null);
+      const el = elRef.current;
+      if (!win || !el) {
+        setProjectedVisible(false);
+        return;
+      }
+      el.style.transform = `translate3d(${win.x}px, ${win.y}px, 0) translate(-50%, -50%)`;
+      setProjectedVisible(true);
     };
     update();
     const remove = viewer.scene.preUpdate.addEventListener(update);
     return () => remove();
   }, [viewer, capital]);
 
-  if (!isActive || !screenPos) return null;
+  if (!isActive) return null;
 
   return (
     <div
       ref={elRef}
       className="capital-pulse"
-      style={{ left: screenPos.x, top: screenPos.y }}
+      style={{
+        left: 0,
+        top: 0,
+        transform: "translate3d(0, 0, 0) translate(-50%, -50%)",
+        visibility: projected ? "visible" : "hidden",
+      }}
       aria-hidden="true"
     >
       <span className="capital-pulse-dot" />
