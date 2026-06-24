@@ -158,12 +158,12 @@ async def extract_with_qwen(
     client: httpx.AsyncClient,
     vllm_url: str,
     vllm_model: str,
-    # Default is "v3": source-agnostic prompt with a dynamic source-kind hint, so
-    # report sources are no longer mislabeled as podcast transcripts. v3 now lists all
-    # 13 canonical EntityTypes incl. LOCATION (the prompt is drift-guarded against
-    # schemas.py) and hard-enforces them. v1/v2 remain available for rollback. See
-    # docs/superpowers/plans/2026-04-30-patch-c-entity-canonicalization.md
-    prompt_version: str = "v3",
+    # Default is "v4": adds OPERATES (platform-operation relation, distinct from the
+    # locative OPERATES_IN) and tightens OPERATES_IN/COMMANDS/TARGETS/ALLIED_WITH
+    # guidance to reduce systematic taxonomy errors. v3 was source-agnostic with a
+    # dynamic source-kind hint; v4 inherits all of that. v1/v2/v3 remain available
+    # for rollback. See docs/superpowers/specs/2026-06-20-relation-v2-design.md §7.
+    prompt_version: str = "v4",
     # Per-request HTTP timeout. Defaults high because the Spark (35B MoE) is shared
     # with the live RSS pipeline; a single extraction measured ~160s under load, so
     # the old hardcoded 120s caused ReadTimeouts. The CLI passes

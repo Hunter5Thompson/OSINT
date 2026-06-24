@@ -64,6 +64,11 @@ class TestLoadPrompt:
         with pytest.raises(FileNotFoundError):
             load_prompt("v999")
 
+    def test_v4_prompt_loads_and_mentions_operates(self):
+        p = load_prompt("v4")
+        assert "OPERATES" in p
+        assert "OPERATES_IN" in p  # both present; OPERATES is the new platform-operation relation
+
 
 class TestExtractWithQwen:
     @pytest.mark.asyncio
@@ -91,7 +96,7 @@ class TestExtractWithQwen:
         assert len(extraction.entities) == 2
         assert len(extraction.claims) == 2
         assert extraction.extraction_model == "qwen3.5"
-        assert extraction.prompt_version == "v3"  # v3 is the default since the prompt PR
+        assert extraction.prompt_version == "v4"  # v4 is the default (v3→v4: adds OPERATES)
 
     @pytest.mark.asyncio
     async def test_vllm_error_raises(self):
@@ -265,10 +270,13 @@ class TestPromptV3:
 
     @pytest.mark.asyncio
     async def test_v3_is_default_version(self):
+        # default is now v4 (v3→v4: adds OPERATES + tightened guidance); v3 still
+        # loads correctly when requested explicitly
         client = _ok_client()
         result = await extract_with_qwen(
             source=_make_source(), metadata={"source_name": "RAND", "title": "T"},
-            client=client, vllm_url="http://x", vllm_model="qwen")
+            client=client, vllm_url="http://x", vllm_model="qwen",
+            prompt_version="v3")
         assert result.prompt_version == "v3"
 
     @pytest.mark.asyncio
