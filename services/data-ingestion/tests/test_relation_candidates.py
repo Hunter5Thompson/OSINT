@@ -36,3 +36,21 @@ def test_write_is_idempotent_and_dedupes(tmp_path):
     assert p.read_text() == first  # same content regardless of order/dupes
     lines = [json.loads(x) for x in p.read_text().splitlines()]
     assert {line["candidate_id"] for line in lines} == {"a", "b"}
+
+
+def test_write_preserves_recorded_at_for_existing_candidates(tmp_path):
+    p = tmp_path / "rc.jsonl"
+    first_seen = "2026-06-20T00:00:00Z"
+    later_seen = "2026-06-21T00:00:00Z"
+
+    write_candidates(p, [_cand("a"), _cand("b")], first_seen)
+    first = p.read_text()
+
+    write_candidates(p, [_cand("b"), _cand("a")], later_seen)
+    assert p.read_text() == first
+
+    write_candidates(p, [_cand("b"), _cand("a"), _cand("c")], later_seen)
+    rows = {row["candidate_id"]: row for row in map(json.loads, p.read_text().splitlines())}
+    assert rows["a"]["recorded_at"] == first_seen
+    assert rows["b"]["recorded_at"] == first_seen
+    assert rows["c"]["recorded_at"] == later_seen
