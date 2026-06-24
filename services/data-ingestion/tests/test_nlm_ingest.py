@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from nlm_ingest.ingest_neo4j import _build_statements, ingest_extraction
+from nlm_ingest.relation_validator import validate_relations
 from nlm_ingest.schemas import Claim, Entity, Extraction, Relation
 
 
@@ -69,7 +70,7 @@ class TestEntityCanonicalizationNLM:
         ex = self._extraction(
             [Entity(name="US Navy", type="ORGANIZATION", aliases=[], confidence=0.9)]
         )
-        params = self._entity_upserts(_build_statements(ex, "RAND"))
+        params = self._entity_upserts(_build_statements(ex, "RAND", []))
         assert params[0]["name"] == "U.S. Navy"
         assert params[0]["type"] == "MILITARY_UNIT"
         assert "US Navy" in params[0]["aliases"]
@@ -78,27 +79,37 @@ class TestEntityCanonicalizationNLM:
         ex = self._extraction(
             [Entity(name="Navy", type="ORGANIZATION", aliases=[], confidence=0.9)]
         )
-        params = self._entity_upserts(_build_statements(ex, "RAND"))
+        params = self._entity_upserts(_build_statements(ex, "RAND", []))
         assert params[0]["name"] == "Navy"
         assert params[0]["type"] == "ORGANIZATION"
 
     def test_relation_endpoints_canonicalized_consistently(self):
+        # Endpoint canonicalization now lives in the validator (it keys its
+        # entity-type map by _canonical_name and emits already-canonicalized
+        # endpoints). Verify the curated alias flows through to a canonical
+        # relation's endpoints, else the downstream MATCH (name+type) fails.
         ex = self._extraction(
             entities=[
                 Entity(name="US Navy", type="ORGANIZATION", aliases=[], confidence=0.9),
-                Entity(name="Iran", type="COUNTRY", aliases=[], confidence=0.9),
+                Entity(name="USS Gerald R. Ford", type="VESSEL", aliases=[], confidence=0.9),
             ],
             relations=[
                 Relation(
-                    source="US Navy", target="Iran", type="TARGETS",
-                    evidence="patrols", confidence=0.8,
+                    source="US Navy", target="USS Gerald R. Ford", type="OPERATES",
+                    evidence="flagship", confidence=0.8,
                 ),
             ],
         )
-        rel = self._params_for(_build_statements(ex, "RAND"), "r:TARGETS")[0]
-        # endpoint must match the canonicalized entity node, else the MATCH fails
-        assert rel["source"] == "U.S. Navy"
-        assert rel["target"] == "Iran"
+        res = validate_relations(ex)
+        assert len(res.canonical) == 1, res.candidates
+        c = res.canonical[0]
+        # endpoint NAME must match the canonicalized entity node, else the MATCH
+        # fails. (Endpoint TYPE is the declared extraction type, which the
+        # validator keys its role check on — here ORGANIZATION, valid for OPERATES.)
+        assert c.source == "U.S. Navy"
+        assert c.source_type == "ORGANIZATION"
+        assert c.target == "USS Gerald R. Ford"
+        assert c.target_type == "VESSEL"
 
     def test_entity_upsert_preserves_existing_aliases(self):
         # UPSERT_ENTITY must append-dedup aliases, never overwrite — a later NLM
@@ -111,7 +122,7 @@ class TestEntityCanonicalizationNLM:
             )]
         )
         stmt = next(
-            s for s in _build_statements(ex, "RAND")
+            s for s in _build_statements(ex, "RAND", [])
             if "MERGE (e:Entity" in s["statement"]
         )
         assert "coalesce(e.aliases" in stmt["statement"]
@@ -130,7 +141,7 @@ class TestEntityCanonicalizationNLM:
                 )
             ],
         )
-        link = self._params_for(_build_statements(ex, "RAND"), "MERGE (c)-[:INVOLVES]")[0]
+        link = self._params_for(_build_statements(ex, "RAND", []), "MERGE (c)-[:INVOLVES]")[0]
         assert link["entity_name"] == "U.S. Navy"
 
 
@@ -206,20 +217,25 @@ class TestIngestExtraction:
 
     @pytest.mark.asyncio
     async def test_batch_contains_relation_statement(self):
-        """Patch A: relations from extraction are persisted via templates."""
+        """Pre-validated canonical relations are persisted via canonical templates."""
         mock_response = httpx.Response(
             200, json={"results": [], "errors": []}, request=_DUMMY_REQUEST
         )
         client = AsyncMock(spec=httpx.AsyncClient)
         client.post.return_value = mock_response
 
+        extraction = _make_extraction()
+        canonical = validate_relations(extraction).canonical
+        assert len(canonical) == 1  # China<->NATO COMPETES_WITH validates
+
         await ingest_extraction(
-            extraction=_make_extraction(),
+            extraction=extraction,
             source_name="RAND",
             client=client,
             neo4j_url="http://localhost:7474",
             neo4j_user="neo4j",
             neo4j_password="odin_yggdrasil",
+            canonical_relations=canonical,
         )
         payload = client.post.call_args.kwargs.get("json") or client.post.call_args[1].get("json")
         statements = payload["statements"]
@@ -229,7 +245,9 @@ class TestIngestExtraction:
 
         rel_stmt = next(s for s in statements if "[r:COMPETES_WITH]" in s["statement"])
         assert rel_stmt["parameters"]["source"] == "China"
+        assert rel_stmt["parameters"]["source_type"] == "COUNTRY"
         assert rel_stmt["parameters"]["target"] == "NATO"
+        assert rel_stmt["parameters"]["target_type"] == "ORGANIZATION"
         assert rel_stmt["parameters"]["evidence"] == "opposes expansion"
         assert rel_stmt["parameters"]["confidence"] == 0.75
 
@@ -279,7 +297,7 @@ def _extraction(**kw):
 
 
 def test_link_claim_document_carries_provenance():
-    stmts = _build_statements(_extraction(), "RAND")
+    stmts = _build_statements(_extraction(), "RAND", [])
     link = [s for s in stmts if "EXTRACTED_FROM" in s["statement"]][0]
     assert "$source_kind" in link["statement"] and "$source_id" in link["statement"]
     assert "{source_kind: $source_kind, source_id: $source_id}" in link["statement"]

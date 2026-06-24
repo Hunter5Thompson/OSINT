@@ -11,9 +11,36 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from nlm_ingest.ingest_neo4j import _build_statements, ingest_extraction
+from nlm_ingest.ingest_neo4j import (
+    _build_relation_statements,
+    _build_statements,
+    ingest_extraction,
+)
+from nlm_ingest.relation_validator import CanonicalRelation
 from nlm_ingest.schemas import Claim, Entity, Extraction, Relation, RelationType
-from nlm_ingest.write_templates import RELATION_TEMPLATES
+from nlm_ingest.write_templates import CANONICAL_RELATION_TEMPLATES, RELATION_TEMPLATES
+
+
+def _canon(**kw) -> CanonicalRelation:
+    base = dict(
+        rel_type="OPERATES",
+        source="USA",
+        source_type="COUNTRY",
+        target="Patriot",
+        target_type="WEAPON_SYSTEM",
+        confidence=0.9,
+        evidence="ev",
+        notebook_id="nb1",
+        source_kind="transcript",
+        source_id="transcript",
+        prompt_version="v4",
+        extraction_model="qwen",
+        relation_hash="h",
+        provenance_key="pk",
+        symmetric=False,
+    )
+    base.update(kw)
+    return CanonicalRelation(**base)
 
 
 def _make_extraction_with_relation() -> Extraction:
@@ -50,6 +77,15 @@ def _make_extraction_with_relation() -> Extraction:
 
 
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:7474/db/neo4j/tx/commit")
+
+
+def test_build_relation_statements_binds_name_type_and_params():
+    stmts = _build_relation_statements([_canon()])
+    assert len(stmts) == 1
+    s = stmts[0]
+    assert "[r:OPERATES]" in s["statement"]
+    assert s["parameters"]["source"] == "USA" and s["parameters"]["source_type"] == "COUNTRY"
+    assert s["parameters"]["prov_key"] == "pk" and s["parameters"]["notebook_id"] == "nb1"
 
 
 class TestRelationTemplates:
@@ -106,11 +142,30 @@ class TestRelationTemplates:
             )
 
 
+def _competes_canon() -> CanonicalRelation:
+    """The China<->NATO COMPETES_WITH edge matching _make_extraction_with_relation,
+    as the validator would emit it (symmetric sort keeps China first: C < N)."""
+    return _canon(
+        rel_type="COMPETES_WITH",
+        source="China",
+        source_type="COUNTRY",
+        target="NATO",
+        target_type="ORGANIZATION",
+        confidence=0.75,
+        evidence="opposes expansion",
+        notebook_id="nb-rel-1",
+        provenance_key="pk-competes",
+        symmetric=True,
+    )
+
+
 class TestRelationsInBatch:
     def test_batch_contains_relation_statement(self):
-        """When extraction has a relation, _build_statements emits the matching template."""
+        """A canonical relation passed in emits the matching canonical template."""
         extraction = _make_extraction_with_relation()
-        statements = _build_statements(extraction, source_name="RAND")
+        statements = _build_statements(
+            extraction, source_name="RAND", canonical_relations=[_competes_canon()]
+        )
 
         rel_statements = [
             s for s in statements if "[r:COMPETES_WITH]" in s["statement"]
@@ -118,24 +173,32 @@ class TestRelationsInBatch:
         assert len(rel_statements) == 1
         params = rel_statements[0]["parameters"]
         assert params["source"] == "China"
+        assert params["source_type"] == "COUNTRY"
         assert params["target"] == "NATO"
+        assert params["target_type"] == "ORGANIZATION"
         assert params["evidence"] == "opposes expansion"
         assert params["confidence"] == 0.75
+        assert params["prov_key"] == "pk-competes"
+        assert params["notebook_id"] == "nb-rel-1"
 
     def test_relation_statement_uses_template(self):
-        """Emitted relation statement is exactly the template — no string mutation."""
+        """Emitted relation statement is exactly the canonical template — no mutation."""
         extraction = _make_extraction_with_relation()
-        statements = _build_statements(extraction, source_name="RAND")
+        statements = _build_statements(
+            extraction, source_name="RAND", canonical_relations=[_competes_canon()]
+        )
 
         rel_stmt = next(
             s for s in statements if "[r:COMPETES_WITH]" in s["statement"]
         )
-        assert rel_stmt["statement"] == RELATION_TEMPLATES["COMPETES_WITH"]
+        assert rel_stmt["statement"] == CANONICAL_RELATION_TEMPLATES["COMPETES_WITH"]
 
     def test_entities_ordered_before_relations(self):
         """Entity upserts must precede relation statements so MATCH endpoints exist."""
         extraction = _make_extraction_with_relation()
-        statements = _build_statements(extraction, source_name="RAND")
+        statements = _build_statements(
+            extraction, source_name="RAND", canonical_relations=[_competes_canon()]
+        )
 
         entity_indices = [
             i for i, s in enumerate(statements)
@@ -158,7 +221,9 @@ class TestRelationsInBatch:
     def test_relations_ordered_before_claims(self):
         """Relations are inserted between step 4 (entities) and step 5 (claims)."""
         extraction = _make_extraction_with_relation()
-        statements = _build_statements(extraction, source_name="RAND")
+        statements = _build_statements(
+            extraction, source_name="RAND", canonical_relations=[_competes_canon()]
+        )
 
         relation_indices = [
             i for i, s in enumerate(statements)
@@ -172,43 +237,16 @@ class TestRelationsInBatch:
         assert max(relation_indices) < min(claim_indices)
 
     def test_no_relation_no_relation_statement(self):
-        """When extraction.relations is empty, no relation statement is emitted."""
+        """When no canonical relations are passed, no relation statement is emitted."""
         extraction = _make_extraction_with_relation()
-        extraction = extraction.model_copy(update={"relations": []})
-        statements = _build_statements(extraction, source_name="RAND")
+        statements = _build_statements(
+            extraction, source_name="RAND", canonical_relations=[]
+        )
 
         for s in statements:
             assert "[r:COMPETES_WITH]" not in s["statement"]
-            for rel_type in RELATION_TEMPLATES:
+            for rel_type in CANONICAL_RELATION_TEMPLATES:
                 assert f"[r:{rel_type}]" not in s["statement"]
-
-    def test_unknown_relation_type_logged_and_skipped(self, monkeypatch):
-        """Defensive: an unknown RelationType is skipped with a warning."""
-        extraction = _make_extraction_with_relation()
-        # Bypass pydantic validation by mutating after construction.
-        bad_relation = extraction.relations[0].model_copy()
-        object.__setattr__(bad_relation, "type", "UNKNOWN_REL")
-        extraction = extraction.model_copy(update={"relations": [bad_relation]})
-
-        warnings: list[tuple] = []
-
-        class _Recorder:
-            def warning(self, *args, **kwargs):
-                warnings.append((args, kwargs))
-
-            def info(self, *args, **kwargs):
-                pass
-
-        import nlm_ingest.ingest_neo4j as mod
-        monkeypatch.setattr(mod, "log", _Recorder())
-
-        statements = _build_statements(extraction, source_name="RAND")
-
-        # No relation statement was emitted.
-        for s in statements:
-            for rel_type in RELATION_TEMPLATES:
-                assert f"[r:{rel_type}]" not in s["statement"]
-        assert warnings, "expected a warning for unknown relation type"
 
 
 class TestIngestExtractionWithRelations:
@@ -227,6 +265,7 @@ class TestIngestExtractionWithRelations:
             neo4j_url="http://localhost:7474",
             neo4j_user="neo4j",
             neo4j_password="odin_yggdrasil",
+            canonical_relations=[_competes_canon()],
         )
 
         payload = client.post.call_args.kwargs.get("json") or client.post.call_args[1]["json"]
