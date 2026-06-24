@@ -16,6 +16,8 @@ from app.models.report import (
     ReportRecord,
 )
 
+ADMIN_HEADERS = {"X-Admin-Token": "reports-secret"}
+
 
 def _sample_report(report_id: str = "r-044") -> ReportRecord:
     now = datetime.now(UTC)
@@ -57,12 +59,19 @@ class TestReportsRouter:
         assert len(body) == 1
         assert body[0]["id"] == "r-044"
 
-    def test_create_report(self, client: TestClient) -> None:
+    def test_create_report(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        from app.routers import reports as reports_router
+
+        monkeypatch.setattr(reports_router.settings, "reports_admin_token", "reports-secret")
         report = _sample_report("r-045")
         with patch(
             "app.routers.reports.report_store.create_report", AsyncMock(return_value=report)
         ):
-            resp = client.post("/api/reports", json={"title": "Untitled Dossier"})
+            resp = client.post(
+                "/api/reports",
+                headers=ADMIN_HEADERS,
+                json={"title": "Untitled Dossier"},
+            )
 
         assert resp.status_code == 201
         body = resp.json()
@@ -74,19 +83,29 @@ class TestReportsRouter:
 
         assert resp.status_code == 404
 
-    def test_patch_report(self, client: TestClient) -> None:
+    def test_patch_report(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        from app.routers import reports as reports_router
+
+        monkeypatch.setattr(reports_router.settings, "reports_admin_token", "reports-secret")
         patched = _sample_report("r-044").model_copy(update={"title": "Updated title"})
         with patch(
             "app.routers.reports.report_store.update_report", AsyncMock(return_value=patched)
         ):
-            resp = client.patch("/api/reports/r-044", json={"title": "Updated title"})
+            resp = client.patch(
+                "/api/reports/r-044",
+                headers=ADMIN_HEADERS,
+                json={"title": "Updated title"},
+            )
 
         assert resp.status_code == 200
         assert resp.json()["title"] == "Updated title"
 
-    def test_delete_report_204(self, client: TestClient) -> None:
+    def test_delete_report_204(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        from app.routers import reports as reports_router
+
+        monkeypatch.setattr(reports_router.settings, "reports_admin_token", "reports-secret")
         with patch("app.routers.reports.report_store.delete_report", AsyncMock(return_value=True)):
-            resp = client.delete("/api/reports/r-044")
+            resp = client.delete("/api/reports/r-044", headers=ADMIN_HEADERS)
 
         assert resp.status_code == 204
 
@@ -116,7 +135,14 @@ class TestReportsRouter:
         assert len(body) == 1
         assert body[0]["role"] == "munin"
 
-    def test_create_report_message(self, client: TestClient) -> None:
+    def test_create_report_message(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.routers import reports as reports_router
+
+        monkeypatch.setattr(reports_router.settings, "reports_admin_token", "reports-secret")
         msg = ReportMessage(
             id="msg-2",
             role="user",
@@ -136,6 +162,7 @@ class TestReportsRouter:
         ):
             resp = client.post(
                 "/api/reports/r-044/messages",
+                headers=ADMIN_HEADERS,
                 json={"role": "user", "text": "Brief me on Sinjar"},
             )
 
@@ -143,3 +170,24 @@ class TestReportsRouter:
         body = resp.json()
         assert body["id"] == "msg-2"
         assert body["text"] == "Brief me on Sinjar"
+
+    def test_create_report_requires_admin_token(self, client: TestClient) -> None:
+        resp = client.post("/api/reports", json={"title": "Untitled Dossier"})
+
+        assert resp.status_code == 503
+
+    def test_patch_report_rejects_invalid_admin_token(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.routers import reports as reports_router
+
+        monkeypatch.setattr(reports_router.settings, "reports_admin_token", "reports-secret")
+        resp = client.patch(
+            "/api/reports/r-044",
+            headers={"X-Admin-Token": "wrong"},
+            json={"title": "Updated title"},
+        )
+
+        assert resp.status_code == 401

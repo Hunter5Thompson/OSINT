@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
+from app.admin_auth import require_admin_token
+from app.config import settings
 from app.models.report import (
     ReportCreateRequest,
     ReportMessage,
@@ -19,6 +21,16 @@ log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
+def _require_report_admin(
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> None:
+    require_admin_token(
+        expected_token=settings.reports_admin_token or settings.incidents_admin_token,
+        supplied_token=x_admin_token,
+        area="reports",
+    )
+
+
 @router.get("", response_model=list[ReportRecord])
 async def list_reports(
     limit: int = Query(default=200, ge=1, le=500),
@@ -30,7 +42,12 @@ async def list_reports(
         raise HTTPException(status_code=503, detail="reports backend unavailable") from exc
 
 
-@router.post("", response_model=ReportRecord, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ReportRecord,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(_require_report_admin)],
+)
 async def create_report(payload: ReportCreateRequest) -> ReportRecord:
     try:
         return await report_store.create_report(payload)
@@ -52,7 +69,11 @@ async def get_report(report_id: str) -> ReportRecord:
     return report
 
 
-@router.patch("/{report_id}", response_model=ReportRecord)
+@router.patch(
+    "/{report_id}",
+    response_model=ReportRecord,
+    dependencies=[Depends(_require_report_admin)],
+)
 async def patch_report(report_id: str, patch: ReportUpdateRequest) -> ReportRecord:
     try:
         report = await report_store.update_report(report_id, patch)
@@ -65,7 +86,11 @@ async def patch_report(report_id: str, patch: ReportUpdateRequest) -> ReportReco
     return report
 
 
-@router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{report_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(_require_report_admin)],
+)
 async def delete_report(report_id: str) -> None:
     try:
         deleted = await report_store.delete_report(report_id)
@@ -98,6 +123,7 @@ async def list_report_messages(
     "/{report_id}/messages",
     response_model=ReportMessage,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(_require_report_admin)],
 )
 async def create_report_message(report_id: str, payload: ReportMessageCreate) -> ReportMessage:
     try:

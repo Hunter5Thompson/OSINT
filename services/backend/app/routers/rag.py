@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.config import settings
+from app.services.proxy_service import ProxyService
 
 log = structlog.get_logger(__name__)
 
@@ -41,6 +42,11 @@ class RAGStats(BaseModel):
     embedding_dimensions: int
 
 
+def _shared_http_client(request: Request) -> httpx.AsyncClient | None:
+    proxy = getattr(request.app.state, "proxy", None)
+    return proxy.client if isinstance(proxy, ProxyService) else None
+
+
 @router.post("/ingest", response_model=IngestResult)
 async def ingest_document(req: IngestRequest, request: Request) -> IngestResult:
     """Ingest a document or feed URL into the RAG pipeline."""
@@ -53,7 +59,7 @@ async def ingest_document(req: IngestRequest, request: Request) -> IngestResult:
 
 
 @router.get("/sources", response_model=list[SourceInfo])
-async def get_sources() -> list[SourceInfo]:
+async def get_sources(request: Request) -> list[SourceInfo]:
     """List ingested data sources with document counts from Qdrant."""
     sources = [
         SourceInfo(name="RSS Feeds", type="rss", doc_count=0),
@@ -61,44 +67,29 @@ async def get_sources() -> list[SourceInfo]:
         SourceInfo(name="Manual Uploads", type="manual", doc_count=0),
     ]
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            for source in sources:
-                resp = await client.post(
-                    f"{settings.qdrant_url}/collections/{settings.qdrant_collection}/points/count",
-                    json={"filter": {"must": [{"key": "source", "match": {"value": source.type}}]}},
-                )
-                if resp.status_code == 200:
-                    source.doc_count = resp.json().get("result", {}).get("count", 0)
+        client = _shared_http_client(request)
+        if client is None:
+            async with httpx.AsyncClient(timeout=5.0) as fallback_client:
+                await _populate_source_counts(fallback_client, sources)
+        else:
+            await _populate_source_counts(client, sources)
     except httpx.HTTPError as exc:
         log.warning("qdrant_sources_failed", error=str(exc))
     return sources
 
 
 @router.get("/stats", response_model=RAGStats)
-async def get_rag_stats() -> RAGStats:
+async def get_rag_stats(request: Request) -> RAGStats:
     """Get RAG pipeline statistics from Qdrant."""
     total = 0
     collections: list[str] = []
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            # List collections
-            resp = await client.get(f"{settings.qdrant_url}/collections")
-            if resp.status_code == 200:
-                collections = [
-                    c["name"] for c in resp.json().get("result", {}).get("collections", [])
-                ]
-
-            # Count documents in primary collection
-            if settings.qdrant_collection in collections:
-                resp = await client.get(
-                    f"{settings.qdrant_url}/collections/{settings.qdrant_collection}"
-                )
-                if resp.status_code == 200:
-                    total = (
-                        resp.json()
-                        .get("result", {})
-                        .get("points_count", 0)
-                    )
+        client = _shared_http_client(request)
+        if client is None:
+            async with httpx.AsyncClient(timeout=5.0) as fallback_client:
+                total, collections = await _fetch_rag_stats(fallback_client)
+        else:
+            total, collections = await _fetch_rag_stats(client)
     except httpx.HTTPError as exc:
         log.warning("qdrant_stats_failed", error=str(exc))
 
@@ -108,3 +99,37 @@ async def get_rag_stats() -> RAGStats:
         embedding_model="Qwen3-Embedding-0.6B",
         embedding_dimensions=settings.embedding_dimensions,
     )
+
+
+async def _populate_source_counts(
+    client: httpx.AsyncClient,
+    sources: list[SourceInfo],
+) -> None:
+    for source in sources:
+        resp = await client.post(
+            f"{settings.qdrant_url}/collections/{settings.qdrant_collection}/points/count",
+            json={"filter": {"must": [{"key": "source", "match": {"value": source.type}}]}},
+            timeout=5.0,
+        )
+        if resp.status_code == 200:
+            source.doc_count = resp.json().get("result", {}).get("count", 0)
+
+
+async def _fetch_rag_stats(client: httpx.AsyncClient) -> tuple[int, list[str]]:
+    total = 0
+    collections: list[str] = []
+    resp = await client.get(f"{settings.qdrant_url}/collections", timeout=5.0)
+    if resp.status_code == 200:
+        collections = [
+            c["name"] for c in resp.json().get("result", {}).get("collections", [])
+        ]
+
+    if settings.qdrant_collection in collections:
+        resp = await client.get(
+            f"{settings.qdrant_url}/collections/{settings.qdrant_collection}",
+            timeout=5.0,
+        )
+        if resp.status_code == 200:
+            total = resp.json().get("result", {}).get("points_count", 0)
+
+    return total, collections

@@ -395,7 +395,7 @@ WHERE datetime(i.trigger_ts) >= datetime($t_start)
            AND i.lat >= $south AND i.lat <= $north
            AND ( ($west <= $east AND i.lon >= $west AND i.lon <= $east)
               OR ($west >  $east AND (i.lon >= $west OR i.lon <= $east)) )))
-RETURN i.incident_id AS id, toString(i.trigger_ts) AS time, 'occurred' AS time_basis,
+RETURN i.id AS id, toString(i.trigger_ts) AS time, 'occurred' AS time_basis,
        i.severity AS severity, i.title AS title, i.lat AS lat, i.lon AS lon
 ORDER BY i.trigger_ts DESC
 LIMIT 200
