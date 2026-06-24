@@ -1,6 +1,22 @@
+from types import SimpleNamespace
+
 from nlm_ingest.relation_validator import (
     normalize_evidence, canonical_pair, relation_hash, provenance_key, candidate_id,
+    validate_relations,
 )
+from nlm_ingest.schemas import Extraction, Entity, Relation
+
+
+def _ex(entities, relations):
+    return Extraction(
+        notebook_id="nb1", entities=entities, relations=relations, claims=[],
+        extraction_model="qwen", prompt_version="v4",
+        source_kind="transcript", source_id="transcript",
+    )
+
+
+def _e(name, t): return Entity(name=name, type=t, aliases=[], confidence=1.0)
+def _r(s, ty, t): return Relation(source=s, target=t, type=ty, evidence="ev", confidence=0.9)
 
 def test_normalize_evidence_collapses_whitespace():
     assert normalize_evidence("  a\n  b\t c ") == "a b c"
@@ -40,3 +56,50 @@ def test_symmetric_pair_uses_type_as_tiebreak():
     s1, t1 = canonical_pair(a, b, True)
     s2, t2 = canonical_pair(b, a, True)
     assert relation_hash(s1, "ALLIED_WITH", t1, "ev") == relation_hash(s2, "ALLIED_WITH", t2, "ev")
+
+
+def test_operates_in_to_platform_is_candidate():
+    ex = _ex([_e("Germany", "COUNTRY"), _e("F-127", "VESSEL")], [_r("Germany", "OPERATES_IN", "F-127")])
+    res = validate_relations(ex)
+    assert not res.canonical
+    assert res.candidates[0].failed_gate == "OPERATES_IN.target_type"
+
+
+def test_country_operates_platform_is_canonical():
+    ex = _ex([_e("USA", "COUNTRY"), _e("Patriot", "WEAPON_SYSTEM")], [_r("USA", "OPERATES", "Patriot")])
+    res = validate_relations(ex)
+    assert len(res.canonical) == 1 and not res.candidates
+    assert res.canonical[0].rel_type == "OPERATES"
+
+
+def test_commands_person_to_country_is_candidate():
+    ex = _ex([_e("Gerasimov", "PERSON"), _e("Russia", "COUNTRY")], [_r("Gerasimov", "COMMANDS", "Russia")])
+    res = validate_relations(ex)
+    assert res.candidates[0].failed_gate == "COMMANDS.target_type"
+
+
+def test_concept_endpoint_is_candidate():
+    ex = _ex([_e("Texas", "REGION"), _e("AI", "CONCEPT")], [_r("Texas", "OPERATES_IN", "AI")])
+    res = validate_relations(ex)
+    assert res.candidates and not res.canonical
+
+
+def test_unresolved_endpoint_is_candidate():
+    ex = _ex([_e("USA", "COUNTRY")], [_r("USA", "OPERATES", "Ghost")])
+    res = validate_relations(ex)
+    assert res.candidates[0].failed_gate == "entity_type_unresolved"
+
+
+def test_unknown_type_is_candidate():
+    rel = SimpleNamespace(source="A", target="B", type="FROBNICATES", evidence="ev", confidence=0.9)
+    ex = _ex([_e("A", "COUNTRY"), _e("B", "COUNTRY")], [])
+    ex.relations = [rel]
+    res = validate_relations(ex)
+    assert res.candidates[0].failed_gate == "relation_type_unknown"
+
+
+def test_targets_is_candidate_only():
+    ex = _ex([_e("Russia", "COUNTRY"), _e("Ukraine", "COUNTRY")], [_r("Russia", "TARGETS", "Ukraine")])
+    res = validate_relations(ex)
+    assert not res.canonical
+    assert res.candidates[0].failed_gate == "relation_type_candidate_only"
