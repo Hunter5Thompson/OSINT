@@ -7,6 +7,8 @@ because data-ingestion and intelligence have separate Docker build contexts.
 NLM-specific templates (Claim, Source tier) are new.
 """
 
+from nlm_ingest.relation_rules import RELATION_ROLE_RULES
+
 # --- Pinned from intelligence (stable) ---
 
 # Aliases are append-deduplicated (never overwritten) so a later ingest with a
@@ -272,8 +274,6 @@ ON MATCH SET r.evidence = $evidence,
 }
 
 # --- Canonical relation templates (Relation v2 support-set) ---
-from nlm_ingest.relation_rules import RELATION_ROLE_RULES
-
 
 def _canonical_relation_template(rel_type: str) -> str:
     # rel_type is a known RelationType literal (keys come from RELATION_ROLE_RULES),
