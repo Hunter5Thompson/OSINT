@@ -368,7 +368,7 @@ class TestStructuredOutputAndLenient:
         assert [e.name for e in result.entities] == ["NATO"]
 
     @pytest.mark.asyncio
-    async def test_lenient_skips_out_of_enum_relation_keeps_rest(self):
+    async def test_keeps_out_of_enum_relation_type_for_validator(self):
         content = json.dumps({
             "entities": [],
             "relations": [
@@ -382,8 +382,11 @@ class TestStructuredOutputAndLenient:
         result = await extract_with_qwen(
             source=_make_source(), metadata={"source_name": "R", "title": "T"},
             client=_client_returning(content), vllm_url="http://x", vllm_model="qwen")
-        # out-of-enum DEVELOPS skipped (and logged for future taxonomy round); valid one kept
-        assert [r.type for r in result.relations] == ["COMPETES_WITH"]
+        # spec §8: relation `type` is now a free str (NOT the RelationType Literal), so an
+        # out-of-enum type like DEVELOPS must SURVIVE extraction (no longer silently dropped
+        # by the lenient builder). The role validator — the type authority now — classifies it
+        # downstream as a `relation_type_unknown` candidate. Both relations are kept here.
+        assert [r.type for r in result.relations] == ["DEVELOPS", "COMPETES_WITH"]
 
     @pytest.mark.asyncio
     async def test_null_array_does_not_crash_notebook(self):

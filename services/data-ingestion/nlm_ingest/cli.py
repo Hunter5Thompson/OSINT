@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import UTC
 from pathlib import Path
 
 import click
@@ -387,14 +388,19 @@ def ingest(notebook_id: str | None):
     data_dir = Path(settings.nlm_data_dir)
 
     async def _run():
+        from datetime import datetime
+
         from qdrant_client import QdrantClient
 
+        from nlm_ingest.candidates import write_candidates
         from nlm_ingest.ingest_neo4j import ingest_extraction
         from nlm_ingest.ingest_qdrant import (
             build_claim_points,
             ensure_collection,
             ingest_to_qdrant,
         )
+        from nlm_ingest.relation_validator import validate_relations
+        from nlm_ingest.schemas import Extraction
         db = _get_db()
         qdrant = QdrantClient(url=settings.qdrant_url)
         try:
@@ -437,6 +443,10 @@ def ingest(notebook_id: str | None):
 
                         # Bind row-scoped names as defaults (no loop-var late binding).
                         async def _neo4j_write(extraction, _source=source_name):
+                            # Validate relations: only role-valid canonical edges are
+                            # written to Neo4j. Invalid/candidate relations are captured
+                            # in the corpus-wide candidate staging file written below.
+                            res = validate_relations(extraction)
                             await ingest_extraction(
                                 extraction=extraction,
                                 source_name=_source,
@@ -444,6 +454,7 @@ def ingest(notebook_id: str | None):
                                 neo4j_url=settings.neo4j_http_url,
                                 neo4j_user=settings.neo4j_user,
                                 neo4j_password=settings.neo4j_password,
+                                canonical_relations=res.canonical,
                             )
 
                         async def _qdrant_write(extraction, _source=source_name, _title=title):
@@ -475,6 +486,25 @@ def ingest(notebook_id: str | None):
                     except Exception as e:
                         set_phase_status(db, nid, "ingest", "failed", error=str(e))
                         click.echo(f"FAIL {nid}: {e}")
+
+            # Recompute the relation-candidate staging file over the ENTIRE extraction
+            # corpus (not just this run's targets) and write it atomically. This makes the
+            # file a deterministic function of the extractions, so re-running ingest — even
+            # with zero pending targets — yields the same candidate set (spec §10) instead
+            # of truncating it. Canonical edges are still written per-target-notebook above.
+            ext_dir = data_dir / "extractions"
+            all_candidates: list = []
+            for fp in (sorted(ext_dir.glob("*.json")) if ext_dir.is_dir() else []):
+                ex = Extraction.model_validate_json(fp.read_text())
+                all_candidates.extend(validate_relations(ex).candidates)
+            recorded_at = datetime.now(UTC).isoformat()
+            write_candidates(
+                data_dir / "relation_candidates.jsonl", all_candidates, recorded_at
+            )
+            click.echo(
+                f"relation candidates: {len(all_candidates)} -> "
+                f"{data_dir / 'relation_candidates.jsonl'}"
+            )
         finally:
             # Always release both clients even if ensure_collection raises.
             qdrant.close()

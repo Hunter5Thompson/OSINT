@@ -83,7 +83,13 @@ class Entity(BaseModel):
 class Relation(BaseModel):
     source: str
     target: str
-    type: RelationType
+    # spec §8: STORED relation type is a free `str` (NOT the RelationType Literal).
+    # The role gate (relation_rules / relation_validator), not the schema, is the
+    # relation-type authority now: unknown types must survive parsing so the validator
+    # can classify them as structured candidates (relation_type_unknown) instead of
+    # silently parse-dropping them. RelationType (above) stays the canonical source of
+    # truth for rules/templates/validator — only this stored field is relaxed.
+    type: str
     evidence: str
     confidence: float
 
