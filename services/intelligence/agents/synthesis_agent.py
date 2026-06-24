@@ -62,7 +62,7 @@ def create_synthesis_llm() -> ChatOpenAI:
     """Create LLM instance for the Synthesis agent."""
     return ChatOpenAI(
         base_url=settings.llm_base_url,
-        model=settings.llm_model,
+        model=settings.synthesis_llm_model,
         temperature=0.1,
         max_tokens=2000,
         api_key="not-needed",
