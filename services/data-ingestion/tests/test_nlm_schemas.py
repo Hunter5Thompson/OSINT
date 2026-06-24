@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from pydantic import ValidationError
@@ -12,6 +13,7 @@ from nlm_ingest.schemas import (
     Extraction,
     ExtractionSource,
     Relation,
+    RelationType,
     Transcript,
     TranscriptSegment,
     claim_hash,
@@ -186,14 +188,18 @@ class TestRelation:
         )
         assert r.type == "COMPETES_WITH"
 
-    def test_invalid_relation_type_raises(self):
-        with pytest.raises(ValidationError):
-            Relation(
-                source="A", target="B",
-                type="LOVES",
-                evidence="x",
-                confidence=0.5,
-            )
+    def test_arbitrary_relation_type_is_accepted(self):
+        # spec §8: the STORED relation type is a free `str`, not the RelationType Literal.
+        # An unknown type must survive parsing (stored raw) so the role validator — now the
+        # type authority — can classify it as a structured candidate (relation_type_unknown)
+        # instead of it being silently parse-dropped.
+        r = Relation(
+            source="A", target="B",
+            type="LOVES",
+            evidence="x",
+            confidence=0.5,
+        )
+        assert r.type == "LOVES"
 
 
 class TestClaim:
@@ -285,3 +291,7 @@ def test_extraction_missing_provenance_raises():
     with pytest.raises(ValidationError):
         Extraction(notebook_id="nb1", entities=[], relations=[], claims=[],
                    extraction_model="qwen", prompt_version="v1")  # no source_kind/source_id
+
+
+def test_operates_is_a_relation_type():
+    assert "OPERATES" in get_args(RelationType)

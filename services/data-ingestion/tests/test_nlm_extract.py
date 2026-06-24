@@ -64,6 +64,12 @@ class TestLoadPrompt:
         with pytest.raises(FileNotFoundError):
             load_prompt("v999")
 
+    def test_v4_prompt_loads_and_mentions_operates(self):
+        p = load_prompt("v4")
+        # OPERATES must appear as a standalone token (not just as a prefix of OPERATES_IN)
+        assert "OPERATES |" in p or "OPERATES " in p
+        assert "OPERATES_IN" in p  # both present; OPERATES is the new platform-operation relation
+
 
 class TestExtractWithQwen:
     @pytest.mark.asyncio
@@ -91,7 +97,7 @@ class TestExtractWithQwen:
         assert len(extraction.entities) == 2
         assert len(extraction.claims) == 2
         assert extraction.extraction_model == "qwen3.5"
-        assert extraction.prompt_version == "v3"  # v3 is the default since the prompt PR
+        assert extraction.prompt_version == "v4"  # v4 is the default (v3→v4: adds OPERATES)
 
     @pytest.mark.asyncio
     async def test_vllm_error_raises(self):
@@ -264,15 +270,18 @@ class TestPromptV3:
         )
 
     @pytest.mark.asyncio
-    async def test_v3_is_default_version(self):
+    async def test_v3_still_loads_when_requested_explicitly(self):
+        # default is now v4 (v3→v4: adds OPERATES + tightened guidance); v3 still
+        # loads correctly when requested explicitly
         client = _ok_client()
         result = await extract_with_qwen(
             source=_make_source(), metadata={"source_name": "RAND", "title": "T"},
-            client=client, vllm_url="http://x", vllm_model="qwen")
+            client=client, vllm_url="http://x", vllm_model="qwen",
+            prompt_version="v3")
         assert result.prompt_version == "v3"
 
     @pytest.mark.asyncio
-    async def test_v3_injects_report_hint_and_text(self):
+    async def test_injects_report_hint_and_text(self):
         client = _ok_client()
         source = ExtractionSource(notebook_id="nb1", source_id="rep-a",
                                   source_kind="report", text="REPORT BODY CONTENT")
@@ -285,7 +294,7 @@ class TestPromptV3:
             assert ph not in prompt                # every placeholder resolved
 
     @pytest.mark.asyncio
-    async def test_v3_injects_transcript_hint(self):
+    async def test_injects_transcript_hint(self):
         client = _ok_client()
         await extract_with_qwen(source=_make_source(text="PODCAST WORDS"),
                                 metadata={"source_name": "RAND", "title": "T"},
@@ -368,7 +377,7 @@ class TestStructuredOutputAndLenient:
         assert [e.name for e in result.entities] == ["NATO"]
 
     @pytest.mark.asyncio
-    async def test_lenient_skips_out_of_enum_relation_keeps_rest(self):
+    async def test_keeps_out_of_enum_relation_type_for_validator(self):
         content = json.dumps({
             "entities": [],
             "relations": [
@@ -382,8 +391,11 @@ class TestStructuredOutputAndLenient:
         result = await extract_with_qwen(
             source=_make_source(), metadata={"source_name": "R", "title": "T"},
             client=_client_returning(content), vllm_url="http://x", vllm_model="qwen")
-        # out-of-enum DEVELOPS skipped (and logged for future taxonomy round); valid one kept
-        assert [r.type for r in result.relations] == ["COMPETES_WITH"]
+        # spec §8: relation `type` is now a free str (NOT the RelationType Literal), so an
+        # out-of-enum type like DEVELOPS must SURVIVE extraction (no longer silently dropped
+        # by the lenient builder). The role validator — the type authority now — classifies it
+        # downstream as a `relation_type_unknown` candidate. Both relations are kept here.
+        assert [r.type for r in result.relations] == ["DEVELOPS", "COMPETES_WITH"]
 
     @pytest.mark.asyncio
     async def test_null_array_does_not_crash_notebook(self):

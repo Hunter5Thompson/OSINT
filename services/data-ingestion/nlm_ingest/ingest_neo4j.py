@@ -8,10 +8,10 @@ import structlog
 from canonicalize import canonicalize_entity
 from nlm_ingest.schemas import Extraction, claim_hash
 from nlm_ingest.write_templates import (
+    CANONICAL_RELATION_TEMPLATES,
     LINK_CLAIM_DOCUMENT,
     LINK_CLAIM_ENTITY,
     LINK_DOCUMENT_SOURCE,
-    RELATION_TEMPLATES,
     UPSERT_CLAIM,
     UPSERT_DOCUMENT,
     UPSERT_ENTITY,
@@ -27,7 +27,37 @@ def _canonical_name(name: str) -> str:
     return canonicalize_entity(name, "").name
 
 
-def _build_statements(extraction: Extraction, source_name: str) -> list[dict]:
+def _build_relation_statements(canonical) -> list[dict]:
+    """Statement+params per pre-validated CanonicalRelation (support-set MERGE).
+
+    Endpoints (c.source/c.target) are already _canonical_name-normalized and
+    symmetric-sorted by the validator — passed through as-is. candidate_only
+    types never reach here; the None guard is purely defensive.
+    """
+    out: list[dict] = []
+    for c in canonical:
+        template = CANONICAL_RELATION_TEMPLATES.get(c.rel_type)
+        if template is None:  # defensive: candidate_only types never reach here
+            continue
+        out.append({
+            "statement": template,
+            "parameters": {
+                "source": c.source,
+                "source_type": c.source_type,
+                "target": c.target,
+                "target_type": c.target_type,
+                "confidence": c.confidence,
+                "evidence": c.evidence,
+                "prov_key": c.provenance_key,
+                "notebook_id": c.notebook_id,
+            },
+        })
+    return out
+
+
+def _build_statements(
+    extraction: Extraction, source_name: str, canonical_relations
+) -> list[dict]:
     statements: list[dict] = []
 
     # 1. Upsert Source with quality tier
@@ -78,28 +108,10 @@ def _build_statements(extraction: Extraction, source_name: str) -> list[dict]:
             },
         })
 
-    # 4b. Upsert Relations between entities (deterministic templates only)
-    #     Endpoints are MATCH-ed, so step 4 must precede this block.
-    for relation in extraction.relations:
-        template = RELATION_TEMPLATES.get(relation.type)
-        if template is None:
-            log.warning(
-                "nlm_unknown_relation_type",
-                relation_type=relation.type,
-                source=relation.source,
-                target=relation.target,
-                notebook_id=extraction.notebook_id,
-            )
-            continue
-        statements.append({
-            "statement": template,
-            "parameters": {
-                "source": _canonical_name(relation.source),
-                "target": _canonical_name(relation.target),
-                "evidence": relation.evidence,
-                "confidence": relation.confidence,
-            },
-        })
+    # 4b. Upsert pre-validated canonical relations between entities (canonical
+    #     support-set templates only). Endpoints are MATCH-ed (name+type), so
+    #     the entity upsert step 4 above must precede this block.
+    statements += _build_relation_statements(canonical_relations)
 
     # 5. Upsert Claims with provenance (skip rejected)
     for claim in extraction.claims:
@@ -151,9 +163,15 @@ async def ingest_extraction(
     neo4j_url: str,
     neo4j_user: str,
     neo4j_password: str,
+    canonical_relations=(),
 ) -> None:
-    """Write extraction results to Neo4j via HTTP transactional API. Raises on error."""
-    statements = _build_statements(extraction, source_name)
+    """Write extraction results to Neo4j via HTTP transactional API. Raises on error.
+
+    ``canonical_relations`` is the pre-validated set (Relation v2); the empty
+    default writes the backbone with no relations — the correct interim for any
+    caller not yet migrated (the CLI is migrated in Task 9).
+    """
+    statements = _build_statements(extraction, source_name, canonical_relations)
 
     auth_str = base64.b64encode(f"{neo4j_user}:{neo4j_password}".encode()).decode()
     headers = {

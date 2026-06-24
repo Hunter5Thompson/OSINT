@@ -1,0 +1,138 @@
+from types import SimpleNamespace
+
+from nlm_ingest.relation_validator import (
+    candidate_id,
+    canonical_pair,
+    normalize_evidence,
+    provenance_key,
+    relation_hash,
+    validate_relations,
+)
+from nlm_ingest.schemas import Entity, Extraction, Relation
+
+
+def _ex(entities, relations):
+    return Extraction(
+        notebook_id="nb1", entities=entities, relations=relations, claims=[],
+        extraction_model="qwen", prompt_version="v4",
+        source_kind="transcript", source_id="transcript",
+    )
+
+
+def _e(name, t): return Entity(name=name, type=t, aliases=[], confidence=1.0)
+def _r(s, ty, t): return Relation(source=s, target=t, type=ty, evidence="ev", confidence=0.9)
+
+def test_normalize_evidence_collapses_whitespace():
+    assert normalize_evidence("  a\n  b\t c ") == "a b c"
+
+def test_symmetric_pair_is_order_independent():
+    a, b = ("Russia", "COUNTRY"), ("Iran", "COUNTRY")
+    assert canonical_pair(a, b, symmetric=True) == canonical_pair(b, a, symmetric=True)
+
+def test_asymmetric_pair_keeps_direction():
+    a, b = ("USA", "COUNTRY"), ("Patriot", "WEAPON_SYSTEM")
+    assert canonical_pair(a, b, symmetric=False) == (a, b)
+    assert canonical_pair(b, a, symmetric=False) != (a, b)
+
+def test_symmetric_relation_hash_equal_both_directions():
+    a, b = ("Russia", "COUNTRY"), ("Iran", "COUNTRY")
+    (s1, t1) = canonical_pair(a, b, True)
+    (s2, t2) = canonical_pair(b, a, True)
+    h1 = relation_hash(s1, "ALLIED_WITH", t1, "they are allied")
+    h2 = relation_hash(s2, "ALLIED_WITH", t2, "they are allied")
+    assert h1 == h2
+
+def test_candidate_id_is_deterministic():
+    pk = provenance_key("nb1", "transcript", "transcript", "v4", "qwen", "abc")
+    gate = "OPERATES_IN.target_type"
+    assert candidate_id(pk, gate) == candidate_id(pk, gate)
+
+def test_candidate_id_golden_value():
+    # Golden value pins the provenance_key composition + candidate_id hash format.
+    # If this breaks, the provenance/identity contract changed — update deliberately.
+    pk = provenance_key("nb1", "transcript", "transcript", "v4", "qwen", "abc")
+    expected = "372ca39ca72b2a353b430c9aa5ff2a528fa09777b23a1af5f25f227ee91b088f"
+    assert candidate_id(pk, "OPERATES_IN.target_type") == expected
+
+def test_symmetric_pair_uses_type_as_tiebreak():
+    # Same name, different type: order-independence must still hold, proving the sort
+    # compares the full (name, type) tuple, not name-only.
+    a, b = ("Alpha", "COUNTRY"), ("Alpha", "ORGANIZATION")
+    assert canonical_pair(a, b, symmetric=True) == canonical_pair(b, a, symmetric=True)
+    s1, t1 = canonical_pair(a, b, True)
+    s2, t2 = canonical_pair(b, a, True)
+    assert relation_hash(s1, "ALLIED_WITH", t1, "ev") == relation_hash(s2, "ALLIED_WITH", t2, "ev")
+
+
+def test_operates_in_to_platform_is_candidate():
+    ex = _ex(
+        [_e("Germany", "COUNTRY"), _e("F-127", "VESSEL")],
+        [_r("Germany", "OPERATES_IN", "F-127")],
+    )
+    res = validate_relations(ex)
+    assert not res.canonical
+    assert res.candidates[0].failed_gate == "OPERATES_IN.target_type"
+
+
+def test_country_operates_platform_is_canonical():
+    ex = _ex(
+        [_e("USA", "COUNTRY"), _e("Patriot", "WEAPON_SYSTEM")],
+        [_r("USA", "OPERATES", "Patriot")],
+    )
+    res = validate_relations(ex)
+    assert len(res.canonical) == 1 and not res.candidates
+    assert res.canonical[0].rel_type == "OPERATES"
+
+
+def test_commands_person_to_country_is_candidate():
+    ex = _ex(
+        [_e("Gerasimov", "PERSON"), _e("Russia", "COUNTRY")],
+        [_r("Gerasimov", "COMMANDS", "Russia")],
+    )
+    res = validate_relations(ex)
+    assert res.candidates[0].failed_gate == "COMMANDS.target_type"
+
+
+def test_concept_endpoint_is_candidate():
+    ex = _ex([_e("Texas", "REGION"), _e("AI", "CONCEPT")], [_r("Texas", "OPERATES_IN", "AI")])
+    res = validate_relations(ex)
+    assert res.candidates and not res.canonical
+
+
+def test_unresolved_endpoint_is_candidate():
+    ex = _ex([_e("USA", "COUNTRY")], [_r("USA", "OPERATES", "Ghost")])
+    res = validate_relations(ex)
+    assert res.candidates[0].failed_gate == "entity_type_unresolved"
+
+
+def test_unknown_type_is_candidate():
+    rel = SimpleNamespace(source="A", target="B", type="FROBNICATES", evidence="ev", confidence=0.9)
+    ex = _ex([_e("A", "COUNTRY"), _e("B", "COUNTRY")], [])
+    ex.relations = [rel]
+    res = validate_relations(ex)
+    assert res.candidates[0].failed_gate == "relation_type_unknown"
+
+
+def test_targets_is_candidate_only():
+    ex = _ex(
+        [_e("Russia", "COUNTRY"), _e("Ukraine", "COUNTRY")],
+        [_r("Russia", "TARGETS", "Ukraine")],
+    )
+    res = validate_relations(ex)
+    assert not res.canonical
+    assert res.candidates[0].failed_gate == "relation_type_candidate_only"
+
+
+def test_curated_military_alias_uses_canonicalized_type_for_canonical_endpoint():
+    # "Royal Navy" is a curated alias -> canonicalize_entity rewrites ORGANIZATION->MILITARY_UNIT.
+    # The validator MUST emit the canonicalized type so the write-path MATCH {name,type} hits the
+    # same node UPSERT_ENTITY created (declared-type would MATCH nothing -> silent edge loss).
+    ex = _ex(
+        [_e("Royal Navy", "ORGANIZATION"), _e("HMS Queen Elizabeth", "VESSEL")],
+        [_r("Royal Navy", "OPERATES", "HMS Queen Elizabeth")],
+    )
+    res = validate_relations(ex)
+    assert len(res.canonical) == 1 and not res.candidates
+    c = res.canonical[0]
+    assert c.source == "Royal Navy"
+    assert c.source_type == "MILITARY_UNIT"   # canonicalized, NOT the declared ORGANIZATION

@@ -7,6 +7,8 @@ because data-ingestion and intelligence have separate Docker build contexts.
 NLM-specific templates (Claim, Source tier) are new.
 """
 
+from nlm_ingest.relation_rules import RELATION_ROLE_RULES
+
 # --- Pinned from intelligence (stable) ---
 
 # Aliases are append-deduplicated (never overwritten) so a later ingest with a
@@ -100,157 +102,39 @@ def get_source_tier(source_name: str) -> str:
     return "tier_3"
 
 
-# --- Relation templates ---
-#
-# One deterministic Cypher template per RelationType.  Endpoints are MATCH-ed
-# (never MERGE-d) so phantom entities can never be created on the write path —
-# the entity upsert step must run first in the same batch / transaction.
-# Relationship labels are hardcoded; never construct labels dynamically from
-# untrusted input.
+# --- Canonical relation templates (Relation v2 support-set) ---
 
-RELATION_TEMPLATES: dict[str, str] = {
-    "ALLIED_WITH": """
-MATCH (source:Entity {name: $source})
-MATCH (target:Entity {name: $target})
-MERGE (source)-[r:ALLIED_WITH]->(target)
-ON CREATE SET r.first_seen = datetime(),
-              r.evidence = $evidence,
-              r.confidence = $confidence,
-              r.last_seen = datetime()
-ON MATCH SET r.evidence = $evidence,
-             r.confidence = CASE
-                 WHEN $confidence > coalesce(r.confidence, 0)
-                 THEN $confidence
-                 ELSE r.confidence
-             END,
-             r.last_seen = datetime()
-""",
-    "COMMANDS": """
-MATCH (source:Entity {name: $source})
-MATCH (target:Entity {name: $target})
-MERGE (source)-[r:COMMANDS]->(target)
-ON CREATE SET r.first_seen = datetime(),
-              r.evidence = $evidence,
-              r.confidence = $confidence,
-              r.last_seen = datetime()
-ON MATCH SET r.evidence = $evidence,
-             r.confidence = CASE
-                 WHEN $confidence > coalesce(r.confidence, 0)
-                 THEN $confidence
-                 ELSE r.confidence
-             END,
-             r.last_seen = datetime()
-""",
-    "COMPETES_WITH": """
-MATCH (source:Entity {name: $source})
-MATCH (target:Entity {name: $target})
-MERGE (source)-[r:COMPETES_WITH]->(target)
-ON CREATE SET r.first_seen = datetime(),
-              r.evidence = $evidence,
-              r.confidence = $confidence,
-              r.last_seen = datetime()
-ON MATCH SET r.evidence = $evidence,
-             r.confidence = CASE
-                 WHEN $confidence > coalesce(r.confidence, 0)
-                 THEN $confidence
-                 ELSE r.confidence
-             END,
-             r.last_seen = datetime()
-""",
-    "MEMBER_OF": """
-MATCH (source:Entity {name: $source})
-MATCH (target:Entity {name: $target})
-MERGE (source)-[r:MEMBER_OF]->(target)
-ON CREATE SET r.first_seen = datetime(),
-              r.evidence = $evidence,
-              r.confidence = $confidence,
-              r.last_seen = datetime()
-ON MATCH SET r.evidence = $evidence,
-             r.confidence = CASE
-                 WHEN $confidence > coalesce(r.confidence, 0)
-                 THEN $confidence
-                 ELSE r.confidence
-             END,
-             r.last_seen = datetime()
-""",
-    "NEGOTIATES_WITH": """
-MATCH (source:Entity {name: $source})
-MATCH (target:Entity {name: $target})
-MERGE (source)-[r:NEGOTIATES_WITH]->(target)
-ON CREATE SET r.first_seen = datetime(),
-              r.evidence = $evidence,
-              r.confidence = $confidence,
-              r.last_seen = datetime()
-ON MATCH SET r.evidence = $evidence,
-             r.confidence = CASE
-                 WHEN $confidence > coalesce(r.confidence, 0)
-                 THEN $confidence
-                 ELSE r.confidence
-             END,
-             r.last_seen = datetime()
-""",
-    "OPERATES_IN": """
-MATCH (source:Entity {name: $source})
-MATCH (target:Entity {name: $target})
-MERGE (source)-[r:OPERATES_IN]->(target)
-ON CREATE SET r.first_seen = datetime(),
-              r.evidence = $evidence,
-              r.confidence = $confidence,
-              r.last_seen = datetime()
-ON MATCH SET r.evidence = $evidence,
-             r.confidence = CASE
-                 WHEN $confidence > coalesce(r.confidence, 0)
-                 THEN $confidence
-                 ELSE r.confidence
-             END,
-             r.last_seen = datetime()
-""",
-    "SANCTIONS": """
-MATCH (source:Entity {name: $source})
-MATCH (target:Entity {name: $target})
-MERGE (source)-[r:SANCTIONS]->(target)
-ON CREATE SET r.first_seen = datetime(),
-              r.evidence = $evidence,
-              r.confidence = $confidence,
-              r.last_seen = datetime()
-ON MATCH SET r.evidence = $evidence,
-             r.confidence = CASE
-                 WHEN $confidence > coalesce(r.confidence, 0)
-                 THEN $confidence
-                 ELSE r.confidence
-             END,
-             r.last_seen = datetime()
-""",
-    "SUPPLIES_TO": """
-MATCH (source:Entity {name: $source})
-MATCH (target:Entity {name: $target})
-MERGE (source)-[r:SUPPLIES_TO]->(target)
-ON CREATE SET r.first_seen = datetime(),
-              r.evidence = $evidence,
-              r.confidence = $confidence,
-              r.last_seen = datetime()
-ON MATCH SET r.evidence = $evidence,
-             r.confidence = CASE
-                 WHEN $confidence > coalesce(r.confidence, 0)
-                 THEN $confidence
-                 ELSE r.confidence
-             END,
-             r.last_seen = datetime()
-""",
-    "TARGETS": """
-MATCH (source:Entity {name: $source})
-MATCH (target:Entity {name: $target})
-MERGE (source)-[r:TARGETS]->(target)
-ON CREATE SET r.first_seen = datetime(),
-              r.evidence = $evidence,
-              r.confidence = $confidence,
-              r.last_seen = datetime()
-ON MATCH SET r.evidence = $evidence,
-             r.confidence = CASE
-                 WHEN $confidence > coalesce(r.confidence, 0)
-                 THEN $confidence
-                 ELSE r.confidence
-             END,
-             r.last_seen = datetime()
-""",
+def _canonical_relation_template(rel_type: str) -> str:
+    # rel_type is a known RelationType literal (keys come from RELATION_ROLE_RULES),
+    # never model output — safe to interpolate the label.
+    return f"""
+MATCH (s:Entity {{name:$source, type:$source_type}})
+MATCH (t:Entity {{name:$target, type:$target_type}})
+MERGE (s)-[r:{rel_type}]->(t)
+ON CREATE SET r.first_seen=datetime(), r.last_seen=datetime(),
+              r.confidence=$confidence, r.support_count=1,
+              r.provenance_keys=[$prov_key], r.notebook_ids=[$notebook_id],
+              r.evidence_samples=[$evidence]
+ON MATCH SET  r.last_seen=datetime(),
+              r.confidence = CASE WHEN $confidence > coalesce(r.confidence,0)
+                                  THEN $confidence ELSE r.confidence END,
+              r.provenance_keys = CASE WHEN NOT $prov_key IN coalesce(r.provenance_keys,[])
+                                  THEN coalesce(r.provenance_keys,[]) + [$prov_key]
+                                  ELSE r.provenance_keys END,
+              r.notebook_ids = CASE WHEN NOT $notebook_id IN coalesce(r.notebook_ids,[])
+                                  THEN coalesce(r.notebook_ids,[]) + [$notebook_id]
+                                  ELSE r.notebook_ids END,
+              r.evidence_samples = CASE WHEN size(coalesce(r.evidence_samples,[]))<5
+                                   AND NOT $evidence IN coalesce(r.evidence_samples,[])
+                                   THEN coalesce(r.evidence_samples,[]) + [$evidence]
+                                   ELSE r.evidence_samples END
+WITH r
+SET r.support_count = size(coalesce(r.provenance_keys,[]))
+""".strip()
+
+
+CANONICAL_RELATION_TEMPLATES: dict[str, str] = {
+    rt: _canonical_relation_template(rt)
+    for rt, rule in RELATION_ROLE_RULES.items()
+    if rule.mode == "canonical"
 }
