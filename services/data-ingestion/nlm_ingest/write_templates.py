@@ -270,3 +270,42 @@ ON MATCH SET r.evidence = $evidence,
              r.last_seen = datetime()
 """,
 }
+
+# --- Canonical relation templates (Relation v2 support-set) ---
+from nlm_ingest.relation_rules import RELATION_ROLE_RULES
+
+
+def _canonical_relation_template(rel_type: str) -> str:
+    # rel_type is a known RelationType literal (keys come from RELATION_ROLE_RULES),
+    # never model output — safe to interpolate the label.
+    return f"""
+MATCH (s:Entity {{name:$source, type:$source_type}})
+MATCH (t:Entity {{name:$target, type:$target_type}})
+MERGE (s)-[r:{rel_type}]->(t)
+ON CREATE SET r.first_seen=datetime(), r.last_seen=datetime(),
+              r.confidence=$confidence, r.support_count=1,
+              r.provenance_keys=[$prov_key], r.notebook_ids=[$notebook_id],
+              r.evidence_samples=[$evidence]
+ON MATCH SET  r.last_seen=datetime(),
+              r.confidence = CASE WHEN $confidence > coalesce(r.confidence,0)
+                                  THEN $confidence ELSE r.confidence END,
+              r.provenance_keys = CASE WHEN NOT $prov_key IN coalesce(r.provenance_keys,[])
+                                  THEN coalesce(r.provenance_keys,[]) + [$prov_key]
+                                  ELSE r.provenance_keys END,
+              r.notebook_ids = CASE WHEN NOT $notebook_id IN coalesce(r.notebook_ids,[])
+                                  THEN coalesce(r.notebook_ids,[]) + [$notebook_id]
+                                  ELSE r.notebook_ids END,
+              r.evidence_samples = CASE WHEN size(coalesce(r.evidence_samples,[]))<5
+                                   AND NOT $evidence IN coalesce(r.evidence_samples,[])
+                                   THEN coalesce(r.evidence_samples,[]) + [$evidence]
+                                   ELSE r.evidence_samples END
+WITH r
+SET r.support_count = size(coalesce(r.provenance_keys,[]))
+""".strip()
+
+
+CANONICAL_RELATION_TEMPLATES: dict[str, str] = {
+    rt: _canonical_relation_template(rt)
+    for rt, rule in RELATION_ROLE_RULES.items()
+    if rule.mode == "canonical"
+}
