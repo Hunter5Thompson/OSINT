@@ -521,6 +521,51 @@ def retry(notebook_id: str, phase: str):
     ctx.invoke(phase_commands[phase], notebook_id=notebook_id)
 
 
+def preview_relations(data_dir) -> dict:
+    """Pure, read-only aggregator: count canonical/candidate outcomes across all extractions.
+
+    Iterates all extractions/{nid}.*.json files in data_dir, parses each to
+    Extraction, runs validate_relations, and returns aggregate counts.  No DB
+    writes.  Module-level so tests can import it directly.
+    """
+    from collections import Counter
+
+    from nlm_ingest.relation_validator import validate_relations
+    from nlm_ingest.schemas import Extraction
+
+    canon: Counter[str] = Counter()
+    gates: Counter[str] = Counter()
+    unresolved = 0
+    for fp in sorted(Path(data_dir, "extractions").glob("*.json")):
+        ex = Extraction.model_validate(json.loads(fp.read_text()))
+        res = validate_relations(ex)
+        for c in res.canonical:
+            canon[c.rel_type] += 1
+        for cand in res.candidates:
+            gates[cand.failed_gate] += 1
+            if cand.failed_gate == "entity_type_unresolved":
+                unresolved += 1
+    return {
+        "canonical_by_type": dict(canon),
+        "candidates_by_gate": dict(gates),
+        "unresolved": unresolved,
+    }
+
+
+@cli.command(name="relations-preview")
+@click.option("--report", is_flag=True, help="write relation_validation_preview.json")
+def relations_preview(report: bool) -> None:
+    """Validate relations read-only; print canonical/candidate counts (no writes)."""
+    settings = _get_settings()
+    data_dir = Path(settings.nlm_data_dir)
+    out = preview_relations(data_dir)
+    click.echo(json.dumps(out, indent=2, ensure_ascii=False))
+    if report:
+        (data_dir / "relation_validation_preview.json").write_text(
+            json.dumps(out, indent=2, ensure_ascii=False)
+        )
+
+
 @cli.command()
 @click.option("--local-only", is_flag=True, help="Only SQLite/files, no Neo4j backfill")
 @click.option("--neo4j-only", is_flag=True, help="Only Neo4j edge backfill, no local part")
