@@ -115,7 +115,7 @@ class TestExtractWithQwen:
         assert len(extraction.entities) == 2
         assert len(extraction.claims) == 2
         assert extraction.extraction_model == "qwen3.5"
-        assert extraction.prompt_version == "v6"  # v6 is the default (supplies_to direction + competes precision)
+        assert extraction.prompt_version == "v6"  # v6 is the default
 
     @pytest.mark.asyncio
     async def test_vllm_error_raises(self):
