@@ -162,7 +162,8 @@ async def extract_with_qwen(
     # explicit operational command (rank/authorship/membership is NOT command), OPERATES
     # operator must be a COUNTRY/MILITARY_UNIT (aligns prompt with the Option-A role gate,
     # not an organization), and OPERATES_IN must be evidence-backed (a foreign-ops unit does
-    # not operate in its home country). (v4: split; v5: manufacturer/civilian-COMMANDS; v6: supplies/competes.)
+    # not operate in its home country). (v4: split; v5: manufacturer/civilian-COMMANDS;
+    # v6: supplies/competes.)
     prompt_version: str = "v7",
     # Per-request HTTP timeout. Defaults high because the Spark (35B MoE) is shared
     # with the live RSS pipeline; a single extraction measured ~160s under load, so
