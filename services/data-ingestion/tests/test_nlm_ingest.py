@@ -9,25 +9,24 @@ from nlm_ingest.schemas import Claim, Entity, Extraction, Relation
 
 
 def _make_extraction() -> Extraction:
+    # Smoke A: COMPETES_WITH is now candidate_only; use OPERATES (COUNTRY→WEAPON_SYSTEM)
+    # which is still canonical and direction-unambiguous, to keep these tests valid.
     return Extraction(
         notebook_id="nb1",
         entities=[
-            Entity(
-                name="NATO", type="ORGANIZATION",
-                aliases=["North Atlantic Treaty Organization"], confidence=0.95,
-            ),
-            Entity(name="China", type="COUNTRY", aliases=["PRC"], confidence=0.9),
+            Entity(name="USA", type="COUNTRY", aliases=[], confidence=0.95),
+            Entity(name="Patriot", type="WEAPON_SYSTEM", aliases=[], confidence=0.9),
         ],
         relations=[
             Relation(
-                source="China", target="NATO", type="COMPETES_WITH",
-                evidence="opposes expansion", confidence=0.75,
+                source="USA", target="Patriot", type="OPERATES",
+                evidence="USA operates Patriot batteries", confidence=0.9,
             ),
         ],
         claims=[
             Claim(
-                statement="NATO expanded eastward", type="factual", polarity="neutral",
-                entities_involved=["NATO"], confidence=0.95, temporal_scope="ongoing",
+                statement="USA deploys Patriot missile systems", type="factual", polarity="neutral",
+                entities_involved=["USA"], confidence=0.95, temporal_scope="ongoing",
             ),
         ],
         extraction_model="qwen3.5",
@@ -228,7 +227,7 @@ class TestIngestExtraction:
 
         extraction = _make_extraction()
         canonical = validate_relations(extraction).canonical
-        assert len(canonical) == 1  # China<->NATO COMPETES_WITH validates
+        assert len(canonical) == 1  # USA->Patriot OPERATES validates
 
         await ingest_extraction(
             extraction=extraction,
@@ -243,15 +242,15 @@ class TestIngestExtraction:
         statements = payload["statements"]
         cypher_texts = [s["statement"] for s in statements]
         joined = " ".join(cypher_texts)
-        assert "[r:COMPETES_WITH]" in joined
+        assert "[r:OPERATES]" in joined
 
-        rel_stmt = next(s for s in statements if "[r:COMPETES_WITH]" in s["statement"])
-        assert rel_stmt["parameters"]["source"] == "China"
+        rel_stmt = next(s for s in statements if "[r:OPERATES]" in s["statement"])
+        assert rel_stmt["parameters"]["source"] == "USA"
         assert rel_stmt["parameters"]["source_type"] == "COUNTRY"
-        assert rel_stmt["parameters"]["target"] == "NATO"
-        assert rel_stmt["parameters"]["target_type"] == "ORGANIZATION"
-        assert rel_stmt["parameters"]["evidence"] == "opposes expansion"
-        assert rel_stmt["parameters"]["confidence"] == 0.75
+        assert rel_stmt["parameters"]["target"] == "Patriot"
+        assert rel_stmt["parameters"]["target_type"] == "WEAPON_SYSTEM"
+        assert rel_stmt["parameters"]["evidence"] == "USA operates Patriot batteries"
+        assert rel_stmt["parameters"]["confidence"] == 0.9
 
     @pytest.mark.asyncio
     async def test_neo4j_error_raises_runtime_error(self):
