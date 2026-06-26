@@ -88,6 +88,16 @@ class TestLoadPrompt:
         # COMPETES_WITH excludes formal allies
         assert "Formal allies are NOT competitors" in p
 
+    def test_v7_prompt_tightens_commands_operates_evidence(self):
+        p = load_prompt("v7")
+        # COMMANDS: rank/authorship/membership is not command
+        assert "explicit operational command" in p.lower()
+        assert "is NOT command" in p
+        # OPERATES operator must be COUNTRY/MILITARY_UNIT (not an organization)
+        assert "operator must be a COUNTRY or a MILITARY_UNIT" in p
+        # OPERATES_IN must be evidence-backed (foreign-ops unit not home country)
+        assert "Quds Force" in p and "foreign" in p.lower()
+
 
 class TestExtractWithQwen:
     @pytest.mark.asyncio
@@ -115,7 +125,7 @@ class TestExtractWithQwen:
         assert len(extraction.entities) == 2
         assert len(extraction.claims) == 2
         assert extraction.extraction_model == "qwen3.5"
-        assert extraction.prompt_version == "v6"  # v6 is the default
+        assert extraction.prompt_version == "v7"  # v7 is the default
 
     @pytest.mark.asyncio
     async def test_vllm_error_raises(self):

@@ -70,18 +70,33 @@ Rule shape per type: `{source_types: set, target_types: set, symmetric: bool, mo
 Groups: **ACTOR** = {COUNTRY, ORGANIZATION, MILITARY_UNIT} · **PLACE** = {COUNTRY, REGION, LOCATION}
 · **PLATFORM** = {WEAPON_SYSTEM, VESSEL, AIRCRAFT, SATELLITE}.
 
+**As-built matrix (updated 2026-06-27 — Option A, smoke-driven tightening; see note below):**
+
 | Type | source ∈ | target ∈ | symmetric | mode |
 |---|---|---|---|---|
-| `OPERATES` *(new)* | ACTOR | PLATFORM | no | canonical |
+| `OPERATES` *(new)* | {COUNTRY, MILITARY_UNIT} | PLATFORM | no | canonical |
 | `OPERATES_IN` *(strict locative)* | ACTOR ∪ {PERSON} | PLACE | no | canonical |
-| `COMMANDS` *(narrow)* | {PERSON, MILITARY_UNIT, ORGANIZATION} | {MILITARY_UNIT, ORGANIZATION} | no | canonical |
+| `COMMANDS` *(narrow)* | {PERSON, MILITARY_UNIT, ORGANIZATION} | {MILITARY_UNIT} | no | canonical |
 | `SANCTIONS` | {COUNTRY, ORGANIZATION} | {COUNTRY, ORGANIZATION, PERSON} | no | canonical |
-| `SUPPLIES_TO` | {COUNTRY, ORGANIZATION} | ACTOR | no | canonical |
+| `SUPPLIES_TO` | {COUNTRY, ORGANIZATION} | ACTOR | no | **candidate_only** |
 | `MEMBER_OF` | ACTOR ∪ {PERSON} | {ORGANIZATION, TREATY} | no | canonical |
 | `ALLIED_WITH` | {COUNTRY, ORGANIZATION} | {COUNTRY, ORGANIZATION} | yes | canonical |
-| `COMPETES_WITH` | {COUNTRY, ORGANIZATION} | {COUNTRY, ORGANIZATION} | yes | canonical |
+| `COMPETES_WITH` | {COUNTRY, ORGANIZATION} | {COUNTRY, ORGANIZATION} | yes | **candidate_only** |
 | `NEGOTIATES_WITH` | ACTOR ∪ {PERSON} | ACTOR ∪ {PERSON} | yes | canonical |
 | `TARGETS` | ACTOR ∪ PLATFORM | ACTOR ∪ PLACE ∪ PLATFORM | no | **candidate_only** |
+
+> **Implementation decision — Option A (2026-06-27), recall loss consciously accepted.** Two 5-NB
+> smoke runs (prompt v4→v7) showed the role-gate cannot, by construction, catch errors that depend on
+> **direction** or **world-facts** — the same limitation that already made `TARGETS` candidate-only.
+> So canonical is restricted to type-shapes the gate *guarantees*: (a) `OPERATES` source narrowed to
+> {COUNTRY, MILITARY_UNIT} (an ORGANIZATION/manufacturer "operating" a platform it builds —
+> Lockheed→MK41, Raytheon→AN/SPY-6 — is not gate-distinguishable from a real operator); (b) `COMMANDS`
+> target narrowed to {MILITARY_UNIT} (drops civilian/corporate/academic "leadership" — Terman→Stanford);
+> (c) `SUPPLIES_TO` → **candidate_only** (supplier↔recipient direction not gate-catchable —
+> LLNL↔IBM reversals); (d) `COMPETES_WITH` → **candidate_only** (ally-vs-rival not gate-catchable —
+> Germany↔USA). The lost recall (legit ORG-operators, supply/competition edges) is preserved as
+> structured candidates for a future curation / LLM-judge layer (out of v2 scope). The prompt
+> (`extraction_v7.txt`) is aligned to this matrix.
 
 - `CONCEPT` and `POLICY` appear in **no** rule → any relation with such an endpoint → candidate.
   (Those belong in Claims, not canonical edges.)
