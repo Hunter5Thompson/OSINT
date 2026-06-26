@@ -158,13 +158,12 @@ async def extract_with_qwen(
     client: httpx.AsyncClient,
     vllm_url: str,
     vllm_model: str,
-    # Default is "v7": inherits v6 and adds the third-smoke fixes — COMMANDS requires
-    # explicit operational command (rank/authorship/membership is NOT command), OPERATES
-    # operator must be a COUNTRY/MILITARY_UNIT (aligns prompt with the Option-A role gate,
-    # not an organization), and OPERATES_IN must be evidence-backed (a foreign-ops unit does
-    # not operate in its home country). (v4: split; v5: manufacturer/civilian-COMMANDS;
-    # v6: supplies/competes.)
-    prompt_version: str = "v7",
+    # Default is "v8": inherits v7 and adds the 15-NB-smoke binary/evidence fixes —
+    # planned/ordered/in-development is NOT OPERATES (MGCS/Gripen), business partnership is
+    # NOT ALLIED_WITH, an interview is NOT NEGOTIATES_WITH, MEMBER_OF needs documented
+    # affiliation (capability goals don't count). (v5: manufacturer/COMMANDS; v6: supplies/
+    # competes; v7: command/operator/evidence.)
+    prompt_version: str = "v8",
     # Per-request HTTP timeout. Defaults high because the Spark (35B MoE) is shared
     # with the live RSS pipeline; a single extraction measured ~160s under load, so
     # the old hardcoded 120s caused ReadTimeouts. The CLI passes

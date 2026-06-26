@@ -98,6 +98,17 @@ class TestLoadPrompt:
         # OPERATES_IN must be evidence-backed (foreign-ops unit not home country)
         assert "Quds Force" in p and "foreign" in p.lower()
 
+    def test_v8_prompt_excludes_planned_partnership_interview_capability(self):
+        p = load_prompt("v8")
+        # planned/ordered/in-development is not OPERATES
+        assert "IN ACTIVE SERVICE" in p
+        assert "Main Ground Combat System" in p and "Gripen" in p
+        # business partnership is not ALLIED_WITH
+        assert "Hadion" in p and "is NOT an alliance" in p
+        # interview is not NEGOTIATES_WITH; MEMBER_OF needs documented affiliation
+        assert "Der Standard" in p
+        assert "do NOT emit `Luftwaffe —MEMBER_OF→ NATO`" in p
+
 
 class TestExtractWithQwen:
     @pytest.mark.asyncio
@@ -125,7 +136,7 @@ class TestExtractWithQwen:
         assert len(extraction.entities) == 2
         assert len(extraction.claims) == 2
         assert extraction.extraction_model == "qwen3.5"
-        assert extraction.prompt_version == "v7"  # v7 is the default
+        assert extraction.prompt_version == "v8"  # v8 is the default
 
     @pytest.mark.asyncio
     async def test_vllm_error_raises(self):
