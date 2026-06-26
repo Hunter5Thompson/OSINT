@@ -70,6 +70,24 @@ class TestLoadPrompt:
         assert "OPERATES |" in p or "OPERATES " in p
         assert "OPERATES_IN" in p  # both present; OPERATES is the new platform-operation relation
 
+    def test_v5_prompt_tightens_operates_and_commands_precision(self):
+        p = load_prompt("v5")
+        assert "manufacturer" in p.lower()
+        assert "Lockheed Martin" in p
+        assert "SUPPLIES_TO" in p
+        assert "company, university, lab, or think tank" in p
+        assert "Do NOT use COMMANDS" in p
+
+    def test_v6_prompt_tightens_supplies_to_direction_and_competes(self):
+        p = load_prompt("v6")
+        # SUPPLIES_TO direction: vendor->customer, not reversed
+        assert "direction is critical" in p.lower()
+        assert "REVERSE" in p
+        # acquisition is not SUPPLIES_TO
+        assert "ACQUISITION" in p and "is NOT SUPPLIES_TO" in p
+        # COMPETES_WITH excludes formal allies
+        assert "Formal allies are NOT competitors" in p
+
 
 class TestExtractWithQwen:
     @pytest.mark.asyncio
@@ -97,7 +115,7 @@ class TestExtractWithQwen:
         assert len(extraction.entities) == 2
         assert len(extraction.claims) == 2
         assert extraction.extraction_model == "qwen3.5"
-        assert extraction.prompt_version == "v4"  # v4 is the default (v3→v4: adds OPERATES)
+        assert extraction.prompt_version == "v6"  # v6 is the default (supplies_to direction + competes precision)
 
     @pytest.mark.asyncio
     async def test_vllm_error_raises(self):
@@ -271,8 +289,7 @@ class TestPromptV3:
 
     @pytest.mark.asyncio
     async def test_v3_still_loads_when_requested_explicitly(self):
-        # default is now v4 (v3→v4: adds OPERATES + tightened guidance); v3 still
-        # loads correctly when requested explicitly
+        # default is now v5; v3 still loads correctly when requested explicitly
         client = _ok_client()
         result = await extract_with_qwen(
             source=_make_source(), metadata={"source_name": "RAND", "title": "T"},
