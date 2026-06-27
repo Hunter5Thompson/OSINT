@@ -58,6 +58,7 @@ RUBRIC_VERSION = "v1"
 JUDGE_TEMPERATURE = 0.0
 DEFAULT_MAX_TOKENS = 1024
 MAX_EVIDENCE_CHARS = 2000  # bound the only untrusted, variable-length input
+PAYLOAD_VERSION = "p1"     # bump when build_user_payload's wording/shape changes
 _DECISIONS = frozenset({"approve", "reject", "abstain"})
 _CLOSING_TAG_RE = re.compile(r"<\s*/\s*evidence\s*>", re.IGNORECASE)
 _OPENING_TAG_RE = re.compile(r"<\s*evidence\s*>", re.IGNORECASE)
@@ -80,9 +81,14 @@ _RUBRICS: dict[str, str] = {
         "You are a strict intelligence-graph relation auditor. An upstream model "
         "proposed a typed relation between two entities, with an evidence snippet. "
         "Decide whether that relation may enter a canonical knowledge graph.\n\n"
-        "Judge ONLY from the evidence provided. Do NOT use outside knowledge to "
-        "confirm or to reject — if the evidence as written does not establish the "
-        "relation, you cannot approve it even if you believe it is true.\n\n"
+        "Judge primarily from the evidence. Outside knowledge may NEVER rescue "
+        "missing evidence: if the evidence as written does not establish the "
+        "relation, you cannot approve it even if you believe it is true. But "
+        "outside knowledge MAY lower your confidence — if the evidence asserts "
+        "something you know to be factually false, or that contradicts "
+        "well-established fact (e.g. a wrong agency, branch, or attribution), do "
+        "NOT approve it; reject or abstain. Knowledge can only ever LOWER "
+        "confidence, never raise it.\n\n"
         "Return exactly one decision:\n\n"
         '- "approve": the evidence clearly and directly supports THIS exact relation '
         "as a CURRENT, factual state. ALL of these must hold: (1) the relation TYPE "
@@ -154,6 +160,8 @@ def config_fingerprint(model: str, rubric_version: str, temperature: float,
             "schema": VERDICT_SCHEMA,
             "temperature": temperature,
             "max_tokens": max_tokens,
+            "payload_version": PAYLOAD_VERSION,
+            "max_evidence_chars": MAX_EVIDENCE_CHARS,
         },
         sort_keys=True, ensure_ascii=False,
     )
@@ -259,6 +267,19 @@ async def judge_relation(
                 decision=hit["decision"], reason=str(hit.get("reason", "")),
                 model_id=model, rubric_version=rubric_version, cached=True,
             )
+
+    # Oversized evidence is routed to manual review UNCUT rather than judged on a
+    # truncated snippet — truncation could drop the decisive future/negation
+    # clause and flip the verdict (reviewer finding 8). Local decision, no call,
+    # not cached (a later cap change re-judges via the fingerprint anyway).
+    ev_len = len(rel.evidence or "")
+    if ev_len > MAX_EVIDENCE_CHARS:
+        return JudgeVerdict(
+            decision="abstain",
+            reason=f"evidence_too_long: {ev_len} > {MAX_EVIDENCE_CHARS} chars; "
+                   "routed to manual review uncut, not judged truncated",
+            model_id=model, rubric_version=rubric_version,
+        )
 
     try:
         resp = await client.messages.create(

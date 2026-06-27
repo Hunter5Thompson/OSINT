@@ -349,3 +349,39 @@ def test_rubric_text_is_stable_and_nonempty():
     assert isinstance(t, str) and len(t) > 200
     for token in ("approve", "reject", "abstain"):
         assert token in t
+
+
+def test_rubric_rejects_known_contradictions(monkeypatch):
+    # Finding 1: outside knowledge may never RESCUE missing evidence, but a known
+    # contradiction must drive reject/abstain. The rubric must say so.
+    t = rubric_text("v1").lower()
+    assert "factually false" in t or "contradict" in t
+    assert "lower" in t  # "knowledge can only ever LOWER confidence"
+
+
+# --- oversize evidence -> local abstain, never judged truncated (finding 8) -
+
+async def test_oversize_evidence_local_abstain_no_call():
+    rel = _rel(evidence="A" * (MAX_EVIDENCE_CHARS + 1))
+    client = _FakeClient(_raiser())  # would raise if the gate called the API
+    cache: dict = {}
+    v = await judge_relation(rel, client=client, cache=cache)
+    assert v.decision == "abstain"
+    assert v.error is None
+    assert "evidence_too_long" in v.reason
+    assert client.messages.calls == []  # no API call on oversize
+    assert cache == {}                   # local abstain is not cached
+
+
+# --- fingerprint binds payload template + evidence cap (finding 7) ----------
+
+def test_cache_key_binds_payload_version(monkeypatch):
+    base = cache_key("HASH", model="m", rubric_version="v1")
+    monkeypatch.setattr(rj, "PAYLOAD_VERSION", "pZZ")
+    assert cache_key("HASH", model="m", rubric_version="v1") != base
+
+
+def test_cache_key_binds_evidence_cap(monkeypatch):
+    base = cache_key("HASH", model="m", rubric_version="v1")
+    monkeypatch.setattr(rj, "MAX_EVIDENCE_CHARS", 99)
+    assert cache_key("HASH", model="m", rubric_version="v1") != base
