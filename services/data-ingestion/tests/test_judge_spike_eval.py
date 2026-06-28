@@ -13,6 +13,7 @@ from nlm_ingest.judge_spike_eval import (
     decide,
     is_sha256,
     metrics,
+    require_complete_results,
     require_frozen_gold,
 )
 
@@ -90,6 +91,41 @@ def test_rejects_orphan_labels():
         require_frozen_gold(
             _frozen_gold({"1": "correct", "99": "wrong"}),
             edge_ids={"1"}, edges_sha256=_SHA)
+
+
+# --- results must cover the gold exactly (result-side bypass) --------------
+
+def test_metrics_rejects_partial_results():
+    # The reported bypass: 1 result vs 88 gold labels would score 100% + GO.
+    gold = {str(i): "correct" for i in range(1, 89)}
+    with pytest.raises(ValueError, match="cover the gold exactly"):
+        metrics([{"i": 1, "decision": "approve"}], gold)
+
+
+def test_metrics_rejects_duplicate_result_ids():
+    gold = {"1": "correct", "2": "wrong"}
+    results = [{"i": 1, "decision": "approve"}, {"i": 1, "decision": "reject"}]
+    with pytest.raises(ValueError, match="duplicate ids"):
+        metrics(results, gold)
+
+
+def test_metrics_rejects_extra_result_id():
+    gold = {"1": "correct"}
+    results = [{"i": 1, "decision": "approve"}, {"i": 2, "decision": "reject"}]
+    with pytest.raises(ValueError, match="cover the gold exactly"):
+        metrics(results, gold)
+
+
+def test_require_complete_results_rejects_invalid_decision():
+    gold = {"1": "correct"}
+    with pytest.raises(ValueError, match="invalid decisions"):
+        require_complete_results([{"i": 1, "decision": "maybe"}], gold)
+
+
+def test_require_complete_results_happy_path():
+    gold = {"1": "correct", "2": "wrong"}
+    require_complete_results(
+        [{"i": 1, "decision": "approve"}, {"i": 2, "decision": "reject"}], gold)
 
 
 # --- metrics ---------------------------------------------------------------

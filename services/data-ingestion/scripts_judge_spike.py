@@ -36,6 +36,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -43,7 +44,10 @@ from nlm_ingest.judge_spike_eval import decide, metrics, require_frozen_gold
 from nlm_ingest.relation_validator import relation_hash
 from nlm_ingest.relations_judge import (
     DEFAULT_JUDGE_MODEL,
+    DEFAULT_MAX_TOKENS,
+    JUDGE_TEMPERATURE,
     RUBRIC_VERSION,
+    config_fingerprint,
     judge_relation,
     load_cache,
     save_cache,
@@ -165,6 +169,7 @@ def main() -> int:
           f"| rubric: {RUBRIC_VERSION} | cache entries: {len(cache)}")
 
     gt = None
+    gt_sha = None
     if scored:
         gt_bytes = Path(args.ground_truth).read_bytes()
         gt_sha = _sha256(gt_bytes)
@@ -187,19 +192,41 @@ def main() -> int:
                                    cache_path=args.cache))
     finally:
         save_cache(args.cache, cache)
-    Path(args.out).write_text(json.dumps(results, ensure_ascii=False, indent=2),
-                              encoding="utf-8")
 
     counts = {"approve": 0, "reject": 0, "abstain": 0}
     for r in results:
         counts[r["decision"]] += 1
     failclosed = sum(1 for r in results if r["error"])
+
+    # Auditable report object: provenance hashes + config + decisions + metrics
+    # (reviewer finding 3) so a run can be reproduced/verified after the fact.
+    report = {
+        "meta": {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "model": args.model,
+            "rubric_version": RUBRIC_VERSION,
+            "config_fingerprint": config_fingerprint(
+                args.model, RUBRIC_VERSION, JUDGE_TEMPERATURE, DEFAULT_MAX_TOKENS),
+            "edges_sha256": edges_sha,
+            "gold_sha256": gt_sha,
+            "gt_sha256_expected": args.gt_sha256,
+            "n_edges": len(edges),
+            "decision_counts": counts,
+            "fail_closed_abstains": failclosed,
+        },
+        "metrics": None,
+        "verdict": None,
+        "decisions": results,
+    }
+
     print(f"\n=== DECISIONS ===  approve={counts['approve']}  reject={counts['reject']}  "
           f"abstain={counts['abstain']}  (fail-closed abstains: {failclosed})")
-    print(f"Wrote {args.out}")
 
+    is_go = True
     if gt is not None:
         m = metrics(results, gt)
+        is_go, verdict = decide(m)
+        report["metrics"], report["verdict"] = m, verdict
         p, ar = m["precision_of_approved"], m["approval_rate"]
         print("\n=== REGRESSION vs frozen ground truth ===")
         print(f"  approved: {m['approved_total']} "
@@ -211,9 +238,13 @@ def main() -> int:
         print(f"  labeled: {m['n_correct']} correct / {m['n_wrong']} wrong "
               f"| unlabeled: {m['unlabeled']}")
         print(f"  confusion: {json.dumps(m['confusion'])}")
-        is_go, verdict = decide(m)
         print(f"\n  >>> single-Sonnet gate: {verdict}")
-    return 0
+
+    Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2),
+                              encoding="utf-8")
+    print(f"Wrote audit report -> {args.out}")
+    # Scored runs return 1 on NO-GO so CI / callers can branch on the exit code.
+    return 0 if is_go else 1
 
 
 if __name__ == "__main__":

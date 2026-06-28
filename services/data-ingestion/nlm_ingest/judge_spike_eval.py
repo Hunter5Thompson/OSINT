@@ -11,6 +11,7 @@ suite exercises it directly.
 from __future__ import annotations
 
 import re
+from collections import Counter
 
 THRESHOLD = 0.90
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -63,11 +64,32 @@ def require_frozen_gold(gold_raw: dict, *, edge_ids: set[str],
     return gold
 
 
+def require_complete_results(results, gold: dict) -> None:
+    """Raise ``ValueError`` unless the results cover the gold EXACTLY and uniquely
+    with valid decisions (reviewer finding: a partial result set — e.g. 1 result
+    vs 88 gold labels — would otherwise score 100% and GO). Scoring a subset of
+    the frozen set is never a valid measurement."""
+    ids = [str(r["i"]) for r in results]
+    if len(set(ids)) != len(ids):
+        dup = sorted(i for i, n in Counter(ids).items() if n > 1)
+        raise ValueError(f"results contain duplicate ids: {dup}")
+    rset, gset = set(ids), set(gold)
+    if rset != gset:
+        raise ValueError(
+            f"results must cover the gold exactly: "
+            f"missing={sorted(gset - rset)} extra={sorted(rset - gset)}")
+    bad = [r.get("i") for r in results if r.get("decision") not in _DECISIONS]
+    if bad:
+        raise ValueError(f"results contain invalid decisions for ids: {bad}")
+
+
 def metrics(results, gold: dict) -> dict:
     """Confusion + precision/approval-rate of the gate's decisions vs the gold.
 
     ``results`` is a list of ``{"i", "decision", ...}`` dicts; ``gold`` is
-    ``{str(i): "correct"|"wrong"}``."""
+    ``{str(i): "correct"|"wrong"}``. Refuses to score an incomplete/duplicated
+    result set (see ``require_complete_results``)."""
+    require_complete_results(results, gold)
     conf = {(g, d): 0 for g in _LABELS for d in _DECISIONS}
     unlabeled = 0
     for r in results:
