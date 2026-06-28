@@ -136,3 +136,60 @@ def test_curated_military_alias_uses_canonicalized_type_for_canonical_endpoint()
     c = res.canonical[0]
     assert c.source == "Royal Navy"
     assert c.source_type == "MILITARY_UNIT"   # canonicalized, NOT the declared ORGANIZATION
+
+
+# --- Smoke A new boundary tests ---
+
+def test_organization_operates_platform_is_candidate():
+    # Smoke A: ORG-source OPERATES (Lockheed→MK41 pattern) must be candidate, not canonical.
+    ex = _ex(
+        [_e("Raytheon", "ORGANIZATION"), _e("AN/SPY-6", "WEAPON_SYSTEM")],
+        [_r("Raytheon", "OPERATES", "AN/SPY-6")],
+    )
+    res = validate_relations(ex)
+    assert not res.canonical
+    assert res.candidates[0].failed_gate == "OPERATES.source_type"
+
+
+def test_commands_person_to_military_unit_is_canonical():
+    # PERSON→MILITARY_UNIT is still canonical after the target narrowing.
+    ex = _ex(
+        [_e("Gerasimov", "PERSON"), _e("Russian Ground Forces", "MILITARY_UNIT")],
+        [_r("Gerasimov", "COMMANDS", "Russian Ground Forces")],
+    )
+    res = validate_relations(ex)
+    assert len(res.canonical) == 1 and not res.candidates
+    assert res.canonical[0].rel_type == "COMMANDS"
+
+
+def test_commands_person_to_organization_is_candidate():
+    # Smoke A: COMMANDS→ORGANIZATION (Terman→Stanford, Perry→ISL) must now be candidate.
+    ex = _ex(
+        [_e("Fred Terman", "PERSON"), _e("Stanford University", "ORGANIZATION")],
+        [_r("Fred Terman", "COMMANDS", "Stanford University")],
+    )
+    res = validate_relations(ex)
+    assert not res.canonical
+    assert res.candidates[0].failed_gate == "COMMANDS.target_type"
+
+
+def test_supplies_to_is_candidate_only_gate():
+    # Smoke A: SUPPLIES_TO is now candidate_only regardless of types.
+    ex = _ex(
+        [_e("USA", "COUNTRY"), _e("Ukraine", "COUNTRY")],
+        [_r("USA", "SUPPLIES_TO", "Ukraine")],
+    )
+    res = validate_relations(ex)
+    assert not res.canonical
+    assert res.candidates[0].failed_gate == "relation_type_candidate_only"
+
+
+def test_competes_with_is_candidate_only_gate():
+    # Smoke A: COMPETES_WITH is now candidate_only regardless of types.
+    ex = _ex(
+        [_e("Germany", "COUNTRY"), _e("USA", "COUNTRY")],
+        [_r("Germany", "COMPETES_WITH", "USA")],
+    )
+    res = validate_relations(ex)
+    assert not res.canonical
+    assert res.candidates[0].failed_gate == "relation_type_candidate_only"

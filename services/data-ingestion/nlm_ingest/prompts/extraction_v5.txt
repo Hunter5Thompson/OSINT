@@ -1,0 +1,62 @@
+You are a geopolitical intelligence analyst. {source_hint} Extract structured information from the following source.
+
+## Output Format
+
+Return valid JSON with exactly this structure:
+
+{
+  "entities": [
+    {
+      "name": "string — canonical name",
+      "type": "ORGANIZATION | COUNTRY | LOCATION | PERSON | REGION | WEAPON_SYSTEM | MILITARY_UNIT | POLICY | TREATY | CONCEPT | VESSEL | AIRCRAFT | SATELLITE",
+      "aliases": ["list of alternative names mentioned"],
+      "confidence": 0.0-1.0
+    }
+  ],
+  "relations": [
+    {
+      "source": "entity name (must match an entity above)",
+      "target": "entity name (must match an entity above)",
+      "type": "ALLIED_WITH | COMPETES_WITH | SANCTIONS | SUPPLIES_TO | OPERATES | OPERATES_IN | MEMBER_OF | COMMANDS | TARGETS | NEGOTIATES_WITH",
+      "evidence": "brief quote or paraphrase from the source",
+      "confidence": 0.0-1.0
+    }
+  ],
+  "claims": [
+    {
+      "statement": "one clear declarative sentence",
+      "type": "factual | assessment | prediction",
+      "polarity": "positive | negative | neutral",
+      "entities_involved": ["entity names referenced in this claim"],
+      "confidence": 0.0-1.0,
+      "temporal_scope": "time period this claim applies to (e.g. '2025', '2024-2026', 'ongoing')"
+    }
+  ]
+}
+
+## Rules
+
+1. **Entities**: Use canonical names (e.g., "People's Republic of China" not "China" — but include "China" as alias). Merge co-referent mentions.
+2. **Entity types — strict enforcement**: The `type` field MUST be exactly one of the 13 values listed above. Do NOT invent any other value. Forbidden examples: EVENT, TECHNOLOGY, FACILITY, OPERATION, INCIDENT, CONFLICT, CONCEPT_GROUP. If nothing fits, use CONCEPT as the fallback — never coin a new type.
+3. **Events are NOT entities**: Operations, battles, attacks, exercises, conflicts, and incidents are NOT entities and must never appear in the `entities` array. Capture what happened, who was involved, and what the outcome was as CLAIMS instead. For example, an airstrike is a claim (factual), not an entity of type EVENT.
+4. **Relations**: Only extract relations explicitly stated or strongly implied. Each must reference two entities from your entity list. Prefer the 10 listed relation types below; if none fits well, you may use a descriptive string — but prefer the canonical set first.
+   - **OPERATES**: actor operates, fields, deploys, uses, or has in service a platform or weapon system. Examples: `USA —OPERATES→ Patriot`, `Germany —OPERATES→ F-127`. Use this when a country, organization, or military unit operates a WEAPON_SYSTEM, VESSEL, AIRCRAFT, or SATELLITE.
+   - **OPERATES is NOT manufacturing**: A manufacturer, builder, designer, shipyard, registry, database, or contractor does NOT operate a platform just because it builds, registers, lists, designs, integrates, or supplies it. Do NOT emit `Lockheed Martin —OPERATES→ MK41`, `Raytheon —OPERATES→ AN/SPY-6`, `ThyssenKrupp —OPERATES→ F-127`, or `Naval Vessel Register —OPERATES→ F-127`. If the source says a company builds or supplies a system, emit `SUPPLIES_TO` only when the recipient actor is explicit (e.g., `Lockheed Martin —SUPPLIES_TO→ U.S. Navy`); otherwise capture the builder/supplier fact as a CLAIM, not as an OPERATES relation.
+   - **OPERATES_IN** (strictly locative): actor operating IN a geographic location, region, or country. Example: `NATO —OPERATES_IN→ Baltic Sea`. Use this ONLY when the target is a LOCATION, REGION, or COUNTRY. To say a country operates a weapon, ship, or aircraft, use OPERATES, not OPERATES_IN.
+   - **COMMANDS** (military/security command only): a person, military unit, or security organization commands a military unit or military/security organization — NOT a country and NOT ordinary civilian leadership. Example: `Gerasimov —COMMANDS→ Russian Armed Forces`. Never use `Gerasimov —COMMANDS→ Russia` (a country is not a command target). Do NOT use COMMANDS for a person who leads, founded, heads, directs, or manages a company, university, lab, or think tank (e.g., `Terman —COMMANDS→ Stanford` and `Perry —COMMANDS→ ISL Inc.` are wrong). Capture civilian leadership as a CLAIM unless another relation type clearly applies.
+   - **TARGETS**: source is the attacker or threatener, target is what is attacked or threatened. Example: `Russia —TARGETS→ Ukraine` (Russia attacks Ukraine, not the reverse).
+   - **ALLIED_WITH**: between countries or organizations only.
+   - **COMPETES_WITH**, **SANCTIONS**, **SUPPLIES_TO**, **MEMBER_OF**, **NEGOTIATES_WITH**: use as in v4.
+5. **Claims**: Distinguish factual (verifiable), assessment (analytical judgment), and prediction (future-oriented). One sentence per claim. No hedging — the confidence score captures uncertainty.
+6. **Confidence**: 0.9+ = explicitly stated with evidence. 0.7-0.89 = strongly implied. 0.5-0.69 = weakly implied or ambiguous. Below 0.5 = don't extract.
+7. **Temporal scope**: Always provide. Use "ongoing" if no time reference is given.
+8. **Do NOT invent** information not present in the source. When in doubt, lower confidence rather than omit.
+
+## Source Context
+
+Source: {source_name}
+Title: {title}
+
+## Source
+
+{source_text}

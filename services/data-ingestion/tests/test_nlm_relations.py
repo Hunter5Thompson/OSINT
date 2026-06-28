@@ -43,27 +43,29 @@ def _canon(**kw) -> CanonicalRelation:
 
 
 def _make_extraction_with_relation() -> Extraction:
+    # Smoke A: COMPETES_WITH is now candidate_only, so the batch tests use a still-canonical
+    # type. OPERATES with COUNTRY source (USA→Patriot) is canonical and direction-unambiguous.
     return Extraction(
         notebook_id="nb-rel-1",
         entities=[
-            Entity(name="China", type="COUNTRY", aliases=["PRC"], confidence=0.9),
-            Entity(name="NATO", type="ORGANIZATION", aliases=[], confidence=0.95),
+            Entity(name="USA", type="COUNTRY", aliases=[], confidence=0.9),
+            Entity(name="Patriot", type="WEAPON_SYSTEM", aliases=[], confidence=0.95),
         ],
         relations=[
             Relation(
-                source="China",
-                target="NATO",
-                type="COMPETES_WITH",
-                evidence="opposes expansion",
-                confidence=0.75,
+                source="USA",
+                target="Patriot",
+                type="OPERATES",
+                evidence="USA operates Patriot batteries",
+                confidence=0.9,
             ),
         ],
         claims=[
             Claim(
-                statement="NATO expanded eastward",
+                statement="USA deploys Patriot missile systems",
                 type="factual",
                 polarity="neutral",
-                entities_involved=["NATO"],
+                entities_involved=["USA"],
                 confidence=0.95,
                 temporal_scope="ongoing",
             ),
@@ -88,20 +90,21 @@ def test_build_relation_statements_binds_name_type_and_params():
 
 
 
-def _competes_canon() -> CanonicalRelation:
-    """The China<->NATO COMPETES_WITH edge matching _make_extraction_with_relation,
-    as the validator would emit it (symmetric sort keeps China first: C < N)."""
+def _operates_canon() -> CanonicalRelation:
+    """The USA->Patriot OPERATES edge matching _make_extraction_with_relation.
+    Smoke A: re-pointed from COMPETES_WITH (now candidate_only) to the still-canonical
+    OPERATES with a COUNTRY source — same assertion intent (template bijection + ordering)."""
     return _canon(
-        rel_type="COMPETES_WITH",
-        source="China",
+        rel_type="OPERATES",
+        source="USA",
         source_type="COUNTRY",
-        target="NATO",
-        target_type="ORGANIZATION",
-        confidence=0.75,
-        evidence="opposes expansion",
+        target="Patriot",
+        target_type="WEAPON_SYSTEM",
+        confidence=0.9,
+        evidence="USA operates Patriot batteries",
         notebook_id="nb-rel-1",
-        provenance_key="pk-competes",
-        symmetric=True,
+        provenance_key="pk-operates",
+        symmetric=False,
     )
 
 
@@ -110,40 +113,40 @@ class TestRelationsInBatch:
         """A canonical relation passed in emits the matching canonical template."""
         extraction = _make_extraction_with_relation()
         statements = _build_statements(
-            extraction, source_name="RAND", canonical_relations=[_competes_canon()]
+            extraction, source_name="RAND", canonical_relations=[_operates_canon()]
         )
 
         rel_statements = [
-            s for s in statements if "[r:COMPETES_WITH]" in s["statement"]
+            s for s in statements if "[r:OPERATES]" in s["statement"]
         ]
         assert len(rel_statements) == 1
         params = rel_statements[0]["parameters"]
-        assert params["source"] == "China"
+        assert params["source"] == "USA"
         assert params["source_type"] == "COUNTRY"
-        assert params["target"] == "NATO"
-        assert params["target_type"] == "ORGANIZATION"
-        assert params["evidence"] == "opposes expansion"
-        assert params["confidence"] == 0.75
-        assert params["prov_key"] == "pk-competes"
+        assert params["target"] == "Patriot"
+        assert params["target_type"] == "WEAPON_SYSTEM"
+        assert params["evidence"] == "USA operates Patriot batteries"
+        assert params["confidence"] == 0.9
+        assert params["prov_key"] == "pk-operates"
         assert params["notebook_id"] == "nb-rel-1"
 
     def test_relation_statement_uses_template(self):
         """Emitted relation statement is exactly the canonical template — no mutation."""
         extraction = _make_extraction_with_relation()
         statements = _build_statements(
-            extraction, source_name="RAND", canonical_relations=[_competes_canon()]
+            extraction, source_name="RAND", canonical_relations=[_operates_canon()]
         )
 
         rel_stmt = next(
-            s for s in statements if "[r:COMPETES_WITH]" in s["statement"]
+            s for s in statements if "[r:OPERATES]" in s["statement"]
         )
-        assert rel_stmt["statement"] == CANONICAL_RELATION_TEMPLATES["COMPETES_WITH"]
+        assert rel_stmt["statement"] == CANONICAL_RELATION_TEMPLATES["OPERATES"]
 
     def test_entities_ordered_before_relations(self):
         """Entity upserts must precede relation statements so MATCH endpoints exist."""
         extraction = _make_extraction_with_relation()
         statements = _build_statements(
-            extraction, source_name="RAND", canonical_relations=[_competes_canon()]
+            extraction, source_name="RAND", canonical_relations=[_operates_canon()]
         )
 
         entity_indices = [
@@ -152,7 +155,7 @@ class TestRelationsInBatch:
         ]
         relation_indices = [
             i for i, s in enumerate(statements)
-            if "[r:COMPETES_WITH]" in s["statement"]
+            if "[r:OPERATES]" in s["statement"]
         ]
         assert entity_indices, "expected at least one entity statement"
         assert relation_indices, "expected at least one relation statement"
@@ -168,12 +171,12 @@ class TestRelationsInBatch:
         """Relations are inserted between step 4 (entities) and step 5 (claims)."""
         extraction = _make_extraction_with_relation()
         statements = _build_statements(
-            extraction, source_name="RAND", canonical_relations=[_competes_canon()]
+            extraction, source_name="RAND", canonical_relations=[_operates_canon()]
         )
 
         relation_indices = [
             i for i, s in enumerate(statements)
-            if "[r:COMPETES_WITH]" in s["statement"]
+            if "[r:OPERATES]" in s["statement"]
         ]
         claim_indices = [
             i for i, s in enumerate(statements)
@@ -190,7 +193,7 @@ class TestRelationsInBatch:
         )
 
         for s in statements:
-            assert "[r:COMPETES_WITH]" not in s["statement"]
+            assert "[r:OPERATES]" not in s["statement"]
             for rel_type in CANONICAL_RELATION_TEMPLATES:
                 assert f"[r:{rel_type}]" not in s["statement"]
 
@@ -211,11 +214,11 @@ class TestIngestExtractionWithRelations:
             neo4j_url="http://localhost:7474",
             neo4j_user="neo4j",
             neo4j_password="odin_yggdrasil",
-            canonical_relations=[_competes_canon()],
+            canonical_relations=[_operates_canon()],
         )
 
         payload = client.post.call_args.kwargs.get("json") or client.post.call_args[1]["json"]
         statements = payload["statements"]
         cypher_texts = [s["statement"] for s in statements]
         joined = " ".join(cypher_texts)
-        assert "[r:COMPETES_WITH]" in joined
+        assert "[r:OPERATES]" in joined

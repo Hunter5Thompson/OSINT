@@ -158,12 +158,12 @@ async def extract_with_qwen(
     client: httpx.AsyncClient,
     vllm_url: str,
     vllm_model: str,
-    # Default is "v4": adds OPERATES (platform-operation relation, distinct from the
-    # locative OPERATES_IN) and tightens OPERATES_IN/COMMANDS/TARGETS/ALLIED_WITH
-    # guidance to reduce systematic taxonomy errors. v3 was source-agnostic with a
-    # dynamic source-kind hint; v4 inherits all of that. v1/v2/v3 remain available
-    # for rollback. See docs/superpowers/specs/2026-06-20-relation-v2-design.md §7.
-    prompt_version: str = "v4",
+    # Default is "v8": inherits v7 and adds the 15-NB-smoke binary/evidence fixes —
+    # planned/ordered/in-development is NOT OPERATES (MGCS/Gripen), business partnership is
+    # NOT ALLIED_WITH, an interview is NOT NEGOTIATES_WITH, MEMBER_OF needs documented
+    # affiliation (capability goals don't count). (v5: manufacturer/COMMANDS; v6: supplies/
+    # competes; v7: command/operator/evidence.)
+    prompt_version: str = "v8",
     # Per-request HTTP timeout. Defaults high because the Spark (35B MoE) is shared
     # with the live RSS pipeline; a single extraction measured ~160s under load, so
     # the old hardcoded 120s caused ReadTimeouts. The CLI passes
