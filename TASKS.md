@@ -1624,3 +1624,25 @@ Observation-Producer.
 #   - separater Longform-Pfad; NLM-Claim-Index bleibt unverändert,
 #   - Section-Metadaten durch den strukturierten [EVIDENCE]-Codec führen,
 #   - Analysis/Realtime-Lanes, Tier-Boost und Tool-Budgets erhalten.
+
+
+# ══════════════════════════════════════════
+# TASK-118: Verified Bug-Hunt Follow-ups
+# ══════════════════════════════════════════
+# Status: OFFEN / LOW | Priorität: niedrig
+#
+# Quelle: verifizierter Restbestand aus dem lokalen Bug-Hunt vom 2026-06-14.
+# Der rohe Bericht bleibt wegen widerlegter und inzwischen behobener Findings
+# bewusst außerhalb des Repositories.
+#
+# Verbleibende Arbeit:
+#   1. Intelligence-Toolfehler mit einem strukturierten [TOOL_ERROR]-Sentinel markieren und
+#      vor der Synthese aus dem Evidence-Kontext entfernen; Sources bleiben weiterhin nur
+#      aus gültigen [EVIDENCE]-Zeilen ableitbar.
+#   2. Den live-server-abhängigen Root-Contract-Test durch einen import-/OpenAPI-basierten
+#      Schema-Contract ersetzen und erst danach als eigenen CI-Job aktivieren.
+#
+# Bereits erledigt:
+#   - Live-Ingestion-Dual-Write/Retry-Verlust durch den T1-Slice behoben.
+#   - GraphCanvas `any`-Boundary bereinigt.
+#   - Falsche TEI-Reranker-sm_80-Vermutung in `feat/spark-nvfp4-ops` korrigiert.
