@@ -4,6 +4,29 @@
 
 ## Release Notes
 
+### 2026-06-29 — Spark ingestion vLLM cut over to NVFP4
+
+- The **Spark (DGX GB10) ingestion vLLM** (`data-ingestion-spark`, model
+  `Qwen/Qwen3.6-35B-A3B`) now runs **NVFP4 (W4A16, modelopt)** on `vllm/vllm-openai:nightly`
+  instead of BF16 on vLLM v0.19.0. **No ODIN change** — the new container serves under the
+  same `--served-model-name Qwen/Qwen3.6-35B-A3B`, so `data-ingestion/config.py:ingestion_vllm_model`
+  is unchanged.
+- **Why:** blind pairwise A/B over 30 held-out Munin contexts showed **quality + faithfulness
+  parity** (NVFP4 vs BF16, p≈0.5–1.0). NVFP4 frees ~44 GB UMA (KV cache 82 vs 38 GiB) and
+  ~2.3× throughput on nightly.
+- **Verified contract:** `response_format: json_schema` (strict guided decoding — the RSS/NLM
+  extraction path) returns HTTP 200 + schema-valid on nightly+NVFP4; `/v1/models` reports the
+  expected id (scheduler `check_ingestion_llm` passes). Re-run anytime:
+  `python3 scripts/spark/verify_ingestion_contract.py`.
+- **Requires vLLM nightly** — v0.19.0 cannot load the modelopt NVFP4 MoE
+  (`KeyError: experts.w2_input_scale`). On GB10/sm_121 vLLM has no native FP4 compute yet →
+  Marlin weight-only (W4A16) fallback; the memory win is real, the full speed win awaits
+  sm_121 FP4 kernels.
+- **Runbook + rollback:** `scripts/spark/odin-spark-vllm.sh {up|rollback|status|down|logs}`
+  (installed on the Spark as `/home/albert/odin-spark-vllm.sh`). The old BF16 container
+  `vllm-qwen36` is kept stopped (`restart=no`) as an instant rollback target.
+- See the **Spark (DGX GB10) Ingestion vLLM** section below for the exact config.
+
 ### 2026-06-02 — Country Briefing (Munin) landed
 
 - New backend status-SSE endpoints (require the **interactive vLLM 9B stack**, not
@@ -144,9 +167,52 @@ ghcr.io/huggingface/text-embeddings-inference:120-1.9
 
 **CRITICAL:** `latest` tag is sm_80 and will crash on Blackwell GPUs. Always use `:120-1.9`.
 
-### TEI Rerank (tei-rerank) — UNTESTED (Exited)
+### TEI Rerank (tei-rerank) — RUNTIME UNVERIFIED
 
-Last seen: `Exited (1)` — likely same sm_80/sm_120 issue as TEI Embed.
+The reranker is a custom CUDA 12.8 + PyTorch cu128 image from
+`infra/docker/reranker`, not a TEI image. The old sm_80/sm_120 hypothesis was
+incorrect; verify the active container separately with `./odin.sh smoke`.
+
+### vLLM + Qwen3.6-35B-A3B NVFP4 on the Spark (DGX GB10) — ingestion backend
+
+**Status: WORKS (production). Serves the `data-ingestion-spark` contract.**
+**Host: Spark `192.168.178.39:8000` (NOT the local 5090). Cold start ~8 min (compile + FP4 autotune).**
+
+Runs on the Spark, addressed by `data-ingestion-spark` via `INGESTION_VLLM_URL` /
+`ingestion_vllm_model` (`http://192.168.178.39:8000`, model `Qwen/Qwen3.6-35B-A3B`). Started and
+managed by `scripts/spark/odin-spark-vllm.sh` (installed on the Spark as `/home/albert/odin-spark-vllm.sh`):
+
+```bash
+docker run -d --name vllm-qwen36-nvfp4 --restart unless-stopped --gpus all -p 8000:8000 \
+  -v /home/albert/.cache/huggingface:/root/.cache/huggingface \
+  vllm/vllm-openai@sha256:907377dd...   `# :nightly pinned 2026-06-29` \
+  --model nvidia/Qwen3.6-35B-A3B-NVFP4 \
+  --served-model-name Qwen/Qwen3.6-35B-A3B \
+  --quantization modelopt \
+  --max-model-len 32768 \
+  --gpu-memory-utilization 0.90 \
+  --trust-remote-code
+```
+
+- **Why NVFP4:** parity with BF16 on quality + faithfulness (blind A/B, 30 held-out Munin
+  contexts); frees ~44 GB UMA, ~2.3× throughput on nightly. (Nemotron-3-Super-120B was also
+  A/B-tested and was statistically indistinguishable but 3.6× slower — not adopted.)
+- **Contract (data-ingestion):** model name `Qwen/Qwen3.6-35B-A3B`; `response_format json_schema`
+  strict; `chat_template_kwargs.enable_thinking:false`; temperature 0.1; max_tokens 2000 (RSS) /
+  8000 (NLM). `4xx/422` → `ExtractionConfigError` (hard fail, no retry); `5xx/timeout/connect` →
+  `ExtractionTransientError` (retry). **No tool-calling on this path** (JSON-schema only — tool
+  calling is the local 9B's ReAct path).
+- **Requires `vllm/vllm-openai:nightly`** (v0.23.1+) — v0.19.0 fails to load the modelopt NVFP4
+  MoE (`KeyError: experts.w2_input_scale`). sm_121 has no native FP4 compute yet → Marlin W4A16
+  fallback (memory win real; speed win partly from the newer vLLM).
+- **Operate:** `odin-spark-vllm.sh up` (cutover → NVFP4), `rollback` (→ legacy BF16
+  `vllm-qwen36`), `status`, `down`, `logs [container] [n]`. **One model at a time** (single GPU /
+  unified memory). Prefix a mutating action with `--dry-run` to print the Docker commands
+  without executing them.
+- **Verify the contract anytime:** `python3 scripts/spark/verify_ingestion_contract.py`
+  (replicates `pipeline.py:_call_vllm` + the scheduler `/v1/models` check).
+- **Note:** independent of the local 5090 embeddings — `*_embed_failed` in ingestion logs means
+  TEI / the 5090 is busy (e.g. Munin LoRA training), NOT a Spark issue.
 
 ## Infrastructure Containers
 
