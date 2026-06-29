@@ -1559,3 +1559,49 @@ Observation-Producer.
 #
 # Erster Schritt (wenn Zeit): make cuda-spark → download_model.sh q2-imatrix → ds4-server →
 # Claude-Code-Wrapper auf die Spark zeigen → fühlen + t/s messen. Details + offene Entscheidungen im Spec.
+
+
+# ══════════════════════════════════════════
+# TASK-116: Country Indicators Enrichment Layer (World Bank / OWID / SIPRI / V-Dem / Comtrade)
+# ══════════════════════════════════════════
+# Status: OFFEN | Aufwand: 2–4 Tage P0, deutlich mehr für Comtrade/SDMX | Priorität: hoch
+#
+# Voller Spec: docs/superpowers/specs/2026-06-23-country-indicators-enrichment-design.md
+#
+# Ziel: Ein normalisierter `country-indicators` Layer für harte Country-Year-Fakten:
+# Ökonomie, Demografie, Handel, Fiskal/Makro-Finanz, Demokratie-/Regime-Indizes,
+# Militärausgaben und später bilaterale Handelsabhängigkeiten.
+#
+# Warum wichtig:
+#   - WorldReport/Country Inspector bekommt belastbare Zahlen statt statischer Platzhalter.
+#   - Intelligence-Agenten können harte numerische Evidenz zitieren.
+#   - Neo4j kann Country->IndicatorObservation Beziehungen und später Trade-Dependency-Kanten
+#     deterministisch aufbauen.
+#   - Geopolitische Analyse gewinnt Basislinien: Macht, Verwundbarkeit, Abhängigkeit,
+#     Belastbarkeit, Militarisierung.
+#
+# Quellenpriorität:
+#   P0:
+#     1. World Bank Open Data — REST/JSON, kein Key, globale Zeitreihen.
+#     2. Our World in Data — kuratierte CSV/metadata JSON via Grapher API.
+#   P1:
+#     3. SIPRI — Militärausgaben strukturiert, Batch/Excel.
+#     4. V-Dem — Demokratie-/Regime-Indizes, jährlicher Batch-Dataset-Import.
+#   P2:
+#     5. UN Comtrade — bilaterale Handelsströme, API-Key/Limits, großer Backfill.
+#     6. IMF SDMX — BoP/Fiskal/Wechselkurse, technisch härter.
+#     7. OECD/Eurostat — SDMX/JSON-stat, EU/OECD/NATO-nah.
+#
+# P0-Scope bewusst klein:
+#   - Shared CountryIndicatorObservation Schema + deterministic IDs.
+#   - World Bank Collector für kuratierte Indikatorliste (GDP, Bevölkerung, Inflation,
+#     Arbeitslosigkeit, Trade%GDP, Militärausgaben, Energie/CO2).
+#   - OWID Collector für kuratierte Grapher-Charts.
+#   - Raw artifacts + normalized JSONL/Parquet lokal.
+#   - Tests first: Parser, Schema, IDs, null/missing values, pagination, country mapping.
+#
+# Invarianten:
+#   - Keine Live-Calls in Backend/Frontend Request Paths.
+#   - Keine API Keys in Code; Comtrade später nur via `.env`/Settings.
+#   - Neo4j Write Path später nur mit deterministischen Cypher-Templates und Parameterbindung.
+#   - Nicht alle World-Bank-Indikatoren blind ziehen; erst kleiner sauber getesteter Seed.
