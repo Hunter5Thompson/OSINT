@@ -24,6 +24,7 @@ Services are opt-in via profiles: `ingestion`, `interactive`, `interactive-spark
 
 ```bash
 ./odin.sh up interactive          # 9B + reranker + intelligence + backend + frontend
+./odin.sh up interactive-spark    # local 9B + remote Spark ingestion, concurrently
 ./odin.sh up ingestion            # 27B + data-ingestion (GDELT, RSS, TLE)
 ./odin.sh swap ingestion          # stop active vLLM, start other mode
 ./odin.sh smoke                   # health checks for running services
@@ -31,7 +32,10 @@ Services are opt-in via profiles: `ingestion`, `interactive`, `interactive-spark
 
 ## GPU constraint (single RTX 5090, 32 GB)
 
-**Only one LLM at a time.** Swap modes with `odin.sh swap`. No two vLLM/llama.cpp containers can run concurrently.
+**Only one LLM at a time on the local RTX 5090.** Swap local modes with
+`odin.sh swap`; no two local vLLM/llama.cpp containers can run concurrently.
+`interactive-spark` is the exception at system level: it keeps the interactive
+9B locally and uses the separate DGX Spark for ingestion.
 
 **CRITICAL: vLLM 27B is BROKEN** in docker-compose (infinite encoder profiling loop with v0.18+). Use **llama.cpp** for Qwen3.5-27B-GGUF Q6_K. See `docs/CONTAINER-STATUS.md` for the working `docker run` command.
 

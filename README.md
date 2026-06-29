@@ -86,15 +86,24 @@ cp .env.example .env
 
 ```bash
 ./odin.sh doctor
-./odin.sh pull 9b-awq          # nur einmal nötig, falls noch nicht lokal vorhanden
-./odin.sh up interactive
+./odin.sh pull 9b-awq               # nur einmal nötig, falls noch nicht lokal vorhanden
+./odin.sh up interactive-spark      # empfohlen: 9B interaktiv (5090) + Ingestion via DGX Spark
 ```
 
-Mode switch (GPU model swap):
+**Empfohlener Betrieb — kein GPU-Swap.** Der interaktive ReAct-Stack (Qwen3.5-9B-AWQ)
+läuft lokal auf der RTX 5090; die schwere Ingestion-Extraktion läuft auf dem DGX Spark
+(`Qwen3.6-35B-A3B` @ `192.168.178.39:8000`, überschreibbar via `SPARK_VLLM_URL`). So
+laufen beide Stacks gleichzeitig — ohne dass sich Interaktiv- und Ingestion-Modell die
+32 GB VRAM der 5090 streitig machen. TEI-Embeddings bleiben lokal; `./odin.sh doctor`
+prüft zusätzlich die Spark-Erreichbarkeit.
+
+Single-Box-Fallback (Spark nicht erreichbar) — nur hier ist ein GPU-Swap nötig, weil
+sonst nur **ein** LLM gleichzeitig in die 5090 passt. `swap` stoppt den aktiven vLLM,
+bevor der andere startet:
 
 ```bash
-./odin.sh swap ingestion    # Qwen3.5-27B + embed + data-ingestion
-./odin.sh swap interactive  # Qwen3.5-9B + reranker + API + UI
+./odin.sh swap interactive   # Qwen3.5-9B + Reranker + API + UI
+./odin.sh swap ingestion     # Qwen3.5-27B + Embed + Data-Ingestion (blockiert interaktiv)
 ```
 
 ### 3. Backend
@@ -118,13 +127,13 @@ Open **http://localhost:5173** in Chrome/Chromium.
 ### Full Stack (Docker)
 
 ```bash
-./odin.sh up interactive
+./odin.sh up interactive-spark   # interaktiv (5090) + Ingestion (Spark), ohne GPU-Swap
 ```
 
 Service Ports (Docker Compose, Host):
 - Frontend: `5173`
 - Backend: `8080`
-- vLLM: `8000` (profile-driven: `vllm-27b` or `vllm-9b`)
+- vLLM: `8000` (profilgesteuert: `vllm-9b` interaktiv bzw. `vllm-27b` für lokale Ingestion; bei `interactive-spark` läuft lokal nur `vllm-9b` — das Ingestion-LLM liegt auf dem Spark)
 - TEI Embed: `8001`
 - TEI Rerank: `8002`
 - Redis: `6379`
@@ -238,7 +247,8 @@ docker exec osint-neo4j-1 sh -lc \
 | 3D Engine | CesiumJS 1.132+, Google Photorealistic 3D Tiles |
 | Satellite Math | satellite.js (SGP4/SDP4) |
 | Backend | FastAPI, Pydantic v2, httpx, Redis |
-| Intelligence | LangGraph, LangChain, vLLM, Qwen3.5-27B-AWQ |
+| Intelligence | LangGraph, LangChain, vLLM · Qwen3.5-9B-AWQ (interaktiv, lokal auf RTX 5090) |
+| Ingestion-LLM | Qwen3.6-35B-A3B via vLLM auf DGX Spark (kein GPU-Swap) |
 | Vector DB | Qdrant |
 | Embeddings | Qwen3-Embedding-0.6B (1024 dim, TEI) |
 | Container | Docker Compose |
