@@ -1531,3 +1531,118 @@ Observation-Producer.
 #   - PerformanceGuard (components/globe/PerformanceGuard.tsx, DegradationLevel) existiert schon —
 #     drauf aufbauen, nicht ersetzen.
 #   - LOD-Rebuilds auf camera.moveEnd (debounced), NICHT per-frame / nicht auf camera.changed.
+
+
+# ══════════════════════════════════════════
+# TASK-115: Local Sovereign Agent Sidecar (ds4 + DeepSeek V4 neben Claude Code)
+# ══════════════════════════════════════════
+# Status: IDEE / Exploration (kein Code) | Aufwand: 0.5 Tag erster Beweis, offen danach | Priorität: niedrig (when-time-allows)
+#
+# Voller Spec: docs/superpowers/specs/2026-06-18-local-sovereign-agent-sidecar-design.md
+# Memory: reference_ds4_dwarfstar, project_local_agent_sidecar, project_spark_ingestion_offload
+#
+# Idee: Ein ZWEITER, vollständig LOKALER Agent neben Claude Code — DeepSeek V4 Flash über die
+# ds4/DwarfStar4-Engine auf der DGX Spark. NICHT als Ingestion-Tool (Write-Path bleibt deterministisch!),
+# sondern als souveräner, offline, kostenloser Sidekick für privacy-sensible/Massen-/Hintergrund-Arbeit.
+# Cloud (ich) vs. Lokal (DeepSeek) als bewusste Arbeitsteilung, nicht Ersatz.
+#
+# Drei Schichten: ds4 (Engine) / DeepSeek V4 q2 (Modell, 80.8GB, passt in Spark-128GB) / Harness.
+# Harness-Optionen: (a) ds4-agent nativ · (b) Claude Code → lokales Hirn via Anthropic-Wrapper
+# (EMPFOHLEN für ersten Beweis) · (c) Hermes Agent (self-improving, Telegram). Spätere Koordination = Omnigent.
+#
+# ⚠ KRITISCHER KONFLIKT: 80.8GB resident auf der Spark kollidiert mit dem Spark-Ingestion-Offload-Plan
+# (project_spark_ingestion_offload). Swap wäre nur verschoben, nicht eliminiert. Auswege: on-demand /
+# Spark=Agent-Box / mehr HW. MUSS zusammen mit Ingestion-Offload entschieden werden.
+#
+# Throughput-Realität: ~13.75 t/s gen (GB10 q2) → agentic Loops sind zäh. Spark = Batch-/Hintergrund-Agent,
+# nicht schnelles Live-Coding. q2-only (q4=153GB passt nicht in 128GB). 5090 (32GB) ist KEIN Target.
+#
+# Erster Schritt (wenn Zeit): make cuda-spark → download_model.sh q2-imatrix → ds4-server →
+# Claude-Code-Wrapper auf die Spark zeigen → fühlen + t/s messen. Details + offene Entscheidungen im Spec.
+
+
+# ══════════════════════════════════════════
+# TASK-116: Country Indicators Enrichment Layer (World Bank / OWID / SIPRI / V-Dem / Comtrade)
+# ══════════════════════════════════════════
+# Status: OFFEN | Aufwand: 2–4 Tage P0, deutlich mehr für Comtrade/SDMX | Priorität: hoch
+#
+# Voller Spec: docs/superpowers/specs/2026-06-23-country-indicators-enrichment-design.md
+#
+# Ziel: Ein normalisierter `country-indicators` Layer für harte Country-Year-Fakten:
+# Ökonomie, Demografie, Handel, Fiskal/Makro-Finanz, Demokratie-/Regime-Indizes,
+# Militärausgaben und später bilaterale Handelsabhängigkeiten.
+#
+# Warum wichtig:
+#   - WorldReport/Country Inspector bekommt belastbare Zahlen statt statischer Platzhalter.
+#   - Intelligence-Agenten können harte numerische Evidenz zitieren.
+#   - Neo4j kann Country->IndicatorObservation Beziehungen und später Trade-Dependency-Kanten
+#     deterministisch aufbauen.
+#   - Geopolitische Analyse gewinnt Basislinien: Macht, Verwundbarkeit, Abhängigkeit,
+#     Belastbarkeit, Militarisierung.
+#
+# Quellenpriorität:
+#   P0:
+#     1. World Bank Open Data — REST/JSON, kein Key, globale Zeitreihen.
+#     2. Our World in Data — kuratierte CSV/metadata JSON via Grapher API.
+#   P1:
+#     3. SIPRI — Militärausgaben strukturiert, Batch/Excel.
+#     4. V-Dem — Demokratie-/Regime-Indizes, jährlicher Batch-Dataset-Import.
+#   P2:
+#     5. UN Comtrade — bilaterale Handelsströme, API-Key/Limits, großer Backfill.
+#     6. IMF SDMX — BoP/Fiskal/Wechselkurse, technisch härter.
+#     7. OECD/Eurostat — SDMX/JSON-stat, EU/OECD/NATO-nah.
+#
+# P0-Scope bewusst klein:
+#   - Shared CountryIndicatorObservation Schema + deterministic IDs.
+#   - World Bank Collector für kuratierte Indikatorliste (GDP, Bevölkerung, Inflation,
+#     Arbeitslosigkeit, Trade%GDP, Militärausgaben, Energie/CO2).
+#   - OWID Collector für kuratierte Grapher-Charts.
+#   - Raw artifacts + normalized JSONL/Parquet lokal.
+#   - Tests first: Parser, Schema, IDs, null/missing values, pagination, country mapping.
+#
+# Invarianten:
+#   - Keine Live-Calls in Backend/Frontend Request Paths.
+#   - Keine API Keys in Code; Comtrade später nur via `.env`/Settings.
+#   - Neo4j Write Path später nur mit deterministischen Cypher-Templates und Parameterbindung.
+#   - Nicht alle World-Bank-Indikatoren blind ziehen; erst kleiner sauber getesteter Seed.
+
+
+# ══════════════════════════════════════════
+# TASK-117: Tree-Aware Longform Retrieval
+# ══════════════════════════════════════════
+# Status: DESIGN REVISED / IMPLEMENTIERUNGSPLAN OFFEN | Priorität: mittel
+#
+# Voller Spec: docs/superpowers/specs/2026-05-17-tree-search-retrieval-design.md
+#
+# Ziel: Lange Reports hierarchisch nach Dokumentabschnitt durchsuchen, ohne PageIndex als
+# Runtime-Abhängigkeit einzuführen. Phase 1 bleibt default-off und nutzt den bestehenden
+# Qdrant/TEI/Neo4j-Stack.
+#
+# Vor Implementierung zwingend:
+#   - deterministische Qdrant-Point-IDs + Replace-Set-Semantik gegen stale Chunks,
+#   - kein rekursiver Fallback zwischen tree_search und enhanced_search,
+#   - separater Longform-Pfad; NLM-Claim-Index bleibt unverändert,
+#   - Section-Metadaten durch den strukturierten [EVIDENCE]-Codec führen,
+#   - Analysis/Realtime-Lanes, Tier-Boost und Tool-Budgets erhalten.
+
+
+# ══════════════════════════════════════════
+# TASK-118: Verified Bug-Hunt Follow-ups
+# ══════════════════════════════════════════
+# Status: OFFEN / LOW | Priorität: niedrig
+#
+# Quelle: verifizierter Restbestand aus dem lokalen Bug-Hunt vom 2026-06-14.
+# Der rohe Bericht bleibt wegen widerlegter und inzwischen behobener Findings
+# bewusst außerhalb des Repositories.
+#
+# Verbleibende Arbeit:
+#   1. Intelligence-Toolfehler mit einem strukturierten [TOOL_ERROR]-Sentinel markieren und
+#      vor der Synthese aus dem Evidence-Kontext entfernen; Sources bleiben weiterhin nur
+#      aus gültigen [EVIDENCE]-Zeilen ableitbar.
+#   2. Den live-server-abhängigen Root-Contract-Test durch einen import-/OpenAPI-basierten
+#      Schema-Contract ersetzen und erst danach als eigenen CI-Job aktivieren.
+#
+# Bereits erledigt:
+#   - Live-Ingestion-Dual-Write/Retry-Verlust durch den T1-Slice behoben.
+#   - GraphCanvas `any`-Boundary bereinigt.
+#   - Falsche TEI-Reranker-sm_80-Vermutung in `feat/spark-nvfp4-ops` korrigiert.
