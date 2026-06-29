@@ -23,6 +23,18 @@ ODIN_QUALITY_LOOP_DRY_RUN=1 ops/quality-loop/quality_loop.sh
 ```
 
 Reports are written to `.quality-loop/logs/` by default.
+Each run also writes a Codex handoff next to the report:
+
+```bash
+ls -t .quality-loop/logs/handoff-*.md | head -1
+python3 ops/quality-loop/summarize_report.py
+```
+
+Use the handoff first in the morning. It points at the failing section/command
+when the loop fails, and otherwise lists low-coverage production files that are
+good candidates for meaningful test work. Coverage inputs are stamped per run,
+so an interrupted run cannot reuse stale reports. A summarizer failure emits a
+warning and publishes no partial handoff.
 
 ## Install Timer
 
