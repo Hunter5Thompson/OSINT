@@ -1531,3 +1531,31 @@ Observation-Producer.
 #   - PerformanceGuard (components/globe/PerformanceGuard.tsx, DegradationLevel) existiert schon —
 #     drauf aufbauen, nicht ersetzen.
 #   - LOD-Rebuilds auf camera.moveEnd (debounced), NICHT per-frame / nicht auf camera.changed.
+
+
+# ══════════════════════════════════════════
+# TASK-115: Local Sovereign Agent Sidecar (ds4 + DeepSeek V4 neben Claude Code)
+# ══════════════════════════════════════════
+# Status: IDEE / Exploration (kein Code) | Aufwand: 0.5 Tag erster Beweis, offen danach | Priorität: niedrig (when-time-allows)
+#
+# Voller Spec: docs/superpowers/specs/2026-06-18-local-sovereign-agent-sidecar-design.md
+# Memory: reference_ds4_dwarfstar, project_local_agent_sidecar, project_spark_ingestion_offload
+#
+# Idee: Ein ZWEITER, vollständig LOKALER Agent neben Claude Code — DeepSeek V4 Flash über die
+# ds4/DwarfStar4-Engine auf der DGX Spark. NICHT als Ingestion-Tool (Write-Path bleibt deterministisch!),
+# sondern als souveräner, offline, kostenloser Sidekick für privacy-sensible/Massen-/Hintergrund-Arbeit.
+# Cloud (ich) vs. Lokal (DeepSeek) als bewusste Arbeitsteilung, nicht Ersatz.
+#
+# Drei Schichten: ds4 (Engine) / DeepSeek V4 q2 (Modell, 80.8GB, passt in Spark-128GB) / Harness.
+# Harness-Optionen: (a) ds4-agent nativ · (b) Claude Code → lokales Hirn via Anthropic-Wrapper
+# (EMPFOHLEN für ersten Beweis) · (c) Hermes Agent (self-improving, Telegram). Spätere Koordination = Omnigent.
+#
+# ⚠ KRITISCHER KONFLIKT: 80.8GB resident auf der Spark kollidiert mit dem Spark-Ingestion-Offload-Plan
+# (project_spark_ingestion_offload). Swap wäre nur verschoben, nicht eliminiert. Auswege: on-demand /
+# Spark=Agent-Box / mehr HW. MUSS zusammen mit Ingestion-Offload entschieden werden.
+#
+# Throughput-Realität: ~13.75 t/s gen (GB10 q2) → agentic Loops sind zäh. Spark = Batch-/Hintergrund-Agent,
+# nicht schnelles Live-Coding. q2-only (q4=153GB passt nicht in 128GB). 5090 (32GB) ist KEIN Target.
+#
+# Erster Schritt (wenn Zeit): make cuda-spark → download_model.sh q2-imatrix → ds4-server →
+# Claude-Code-Wrapper auf die Spark zeigen → fühlen + t/s messen. Details + offene Entscheidungen im Spec.
