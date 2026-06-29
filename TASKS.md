@@ -1605,3 +1605,22 @@ Observation-Producer.
 #   - Keine API Keys in Code; Comtrade später nur via `.env`/Settings.
 #   - Neo4j Write Path später nur mit deterministischen Cypher-Templates und Parameterbindung.
 #   - Nicht alle World-Bank-Indikatoren blind ziehen; erst kleiner sauber getesteter Seed.
+
+
+# ══════════════════════════════════════════
+# TASK-117: Tree-Aware Longform Retrieval
+# ══════════════════════════════════════════
+# Status: DESIGN REVISED / IMPLEMENTIERUNGSPLAN OFFEN | Priorität: mittel
+#
+# Voller Spec: docs/superpowers/specs/2026-05-17-tree-search-retrieval-design.md
+#
+# Ziel: Lange Reports hierarchisch nach Dokumentabschnitt durchsuchen, ohne PageIndex als
+# Runtime-Abhängigkeit einzuführen. Phase 1 bleibt default-off und nutzt den bestehenden
+# Qdrant/TEI/Neo4j-Stack.
+#
+# Vor Implementierung zwingend:
+#   - deterministische Qdrant-Point-IDs + Replace-Set-Semantik gegen stale Chunks,
+#   - kein rekursiver Fallback zwischen tree_search und enhanced_search,
+#   - separater Longform-Pfad; NLM-Claim-Index bleibt unverändert,
+#   - Section-Metadaten durch den strukturierten [EVIDENCE]-Codec führen,
+#   - Analysis/Realtime-Lanes, Tier-Boost und Tool-Budgets erhalten.
