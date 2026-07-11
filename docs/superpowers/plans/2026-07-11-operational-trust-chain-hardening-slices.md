@@ -2,7 +2,7 @@
 
 **Datum:** 2026-07-11
 
-**Status:** IN EXECUTION — S01 VERIFIED, COMMIT/PR PENDING
+**Status:** IN EXECUTION — S01 COMMITTED, PR/MERGE PENDING
 
 **Design-Spec:**
 `docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md`
@@ -48,7 +48,7 @@ wird bis dahin weder verworfen noch mit anderen Slices vermischt.
 
 ## S01 — Kanonischer Munin Runtime Model Contract
 
-**Status:** IMPLEMENTED + VERIFIED — COMMIT/PR PENDING
+**Status:** COMMITTED + VERIFIED — PR/MERGE PENDING
 
 **Priorität:** P0
 
@@ -191,9 +191,11 @@ ODIN_ENV_FILE=tests/fixtures/compose.env docker compose \
   Host-`.venv`; `uv run` reparierte sie deshalb beim Containerstart und lud
   Dependencies nach. S04 erhält dafür einen ausführbaren Build-Kontext- und
   No-Sync-Vertrag; S01 wird dafür nicht verbreitert.
-- Noch offen: Der vorhandene Nutzer-Change an `docker-compose.override.yml`
-  bleibt unverändert staged. Erst Commit/PR macht ihn zu getracktem `main` und
-  erfüllt damit das letzte EXIT-Kriterium; S02 beginnt vorher nicht.
+- VERSIONIERUNG: Der vorgefundene Nutzer-Change an
+  `docker-compose.override.yml` ist unverändert Teil des separaten S01-Commits
+  auf `fix/task-119-s01-runtime-contract`. Erst der Merge macht ihn zu
+  getracktem `main` und erfüllt damit das letzte EXIT-Kriterium; S02 beginnt
+  vorher nicht.
 
 **Commit:** `fix(intelligence): make Munin runtime contract reproducible`
 

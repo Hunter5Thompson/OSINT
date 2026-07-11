@@ -202,7 +202,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8000"
-    env_file: .env
+    env_file: ${ODIN_ENV_FILE:-.env}
     environment:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
@@ -234,7 +234,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8003:80"
-    env_file: .env
+    env_file: ${ODIN_ENV_FILE:-.env}
     environment:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
@@ -266,7 +266,7 @@ services:
     build:
       context: .
       dockerfile: services/data-ingestion/Dockerfile
-    env_file: .env
+    env_file: ${ODIN_ENV_FILE:-.env}
     environment:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
@@ -320,7 +320,7 @@ services:
     build:
       context: .
       dockerfile: services/data-ingestion/Dockerfile
-    env_file: .env
+    env_file: ${ODIN_ENV_FILE:-.env}
     environment:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
