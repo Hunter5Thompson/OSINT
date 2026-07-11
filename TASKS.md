@@ -1646,3 +1646,44 @@ Observation-Producer.
 #   - Live-Ingestion-Dual-Write/Retry-Verlust durch den T1-Slice behoben.
 #   - GraphCanvas `any`-Boundary bereinigt.
 #   - Falsche TEI-Reranker-sm_80-Vermutung in `feat/spark-nvfp4-ops` korrigiert.
+
+
+# ══════════════════════════════════════════
+# TASK-119: Operational Trust Chain Hardening
+# ══════════════════════════════════════════
+# Status: IN PROGRESS — S01 COMMITTED, PR/MERGE PENDING | Priorität: P0 → P2
+#
+# Design-Spec:
+#   docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md
+# Work Orders:
+#   docs/superpowers/plans/2026-07-11-operational-trust-chain-hardening-slices.md
+#
+# Ziel: Die Kette Git → Build → Compose → Runtime → Retrieval → Synthese wird
+# durch explizite Invarianten und ausführbare Contract-Tests überprüfbar. Kein
+# neues Feature und kein neuer Orchestrator.
+#
+# Verbindlicher Workflow je Slice:
+#   SPEC → RED → GREEN → REFACTOR → VERIFY → RECORD
+#
+# Slices:
+#   S01 [P0] [COMMITTED ⏳ MERGE] Kanonischer Munin Runtime Model Contract
+#   S02 [P0] Hermetischer Quality-Loop
+#   S03 [P0] Local Exposure Floor
+#   S04 [P1] Locked Dependency Contract
+#   S05 [P1] Runtime Provenance, Deploy und Drift
+#   S06 [P1] Evidence Hygiene am Codec-Seam
+#   S07 [P1] Graph Write/Read Contract und Integritätsvokabular
+#   S08 [P2] Ehrliche Publication Metadata
+#   S09 [P2] Directional Retrieval Gate und kleinste Korrektur
+#   S10 [P2] ReAct Research Trace, Injection-Gate und Entscheidung
+#
+# Harte Guardrails:
+#   - ein Slice pro PR; keine benachbarte Modernisierung
+#   - kein Produktionscode vor dokumentiert rotem Test
+#   - tests/ops laufen ab S02 im Quality-Loop und ab S04 in CI
+#   - Compose-Contracts lesen nur tests/fixtures/compose.env, nie die Host-.env
+#   - die getrackte Quality-Unit läuft explizit als deadpool-ultra, niemals als Root
+#   - Production-Compose ist image-basiert; ein separater Dev-Adapter erhält den Bind-Mount
+#   - keine Graph-Reparatur oder Datenlöschung in TASK-119
+#   - kein ReAct-Controller und keine Budgeterhöhung vor S10-Messung
+#   - bestehender Quality-Loop bleibt einziger Nightly-Eigentümer

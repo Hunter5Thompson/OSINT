@@ -5,9 +5,12 @@ from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from config import settings
 from graph.workflow import run_intelligence_query, shutdown_graph_client
+from model_readiness import check_model_readiness
 from rag import retriever
 
 
@@ -43,8 +46,19 @@ class QueryRequest(BaseModel):
 
 
 @app.get("/health")
-async def health() -> dict:
-    return {"status": "ok"}
+async def health() -> JSONResponse:
+    readiness = await check_model_readiness(
+        base_url=settings.llm_base_url,
+        base_model=settings.llm_model,
+        synthesis_model=settings.synthesis_model,
+    )
+    content = {
+        "status": "ok" if readiness.ready else "not_ready",
+        "reason": readiness.reason.value,
+        "required_models": list(readiness.required_models),
+        "missing_models": list(readiness.missing_models),
+    }
+    return JSONResponse(status_code=200 if readiness.ready else 503, content=content)
 
 
 @app.post("/query")
