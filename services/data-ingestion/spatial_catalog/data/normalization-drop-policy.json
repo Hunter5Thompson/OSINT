@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "source_id": "natural-earth-admin0",
+  "source_release": "5.1.2+f1890d9f152c",
+  "drops": [
+    {
+      "source_code": "729",
+      "source_label": "Sudan",
+      "error_code": "SELF_INTERSECTION",
+      "action": "drop_position",
+      "polygon_index": 0,
+      "ring_index": 0,
+      "position_index": 47,
+      "expected_position": [33.97498, 8.68456],
+      "review_note": "Drop the reviewed near-zero-area needle-spike vertex; the locked source ring otherwise self-intersects."
+    },
+    {
+      "source_code": "840",
+      "source_label": "United States of America",
+      "error_code": "SELF_INTERSECTION",
+      "action": "drop_position",
+      "polygon_index": 8,
+      "ring_index": 0,
+      "position_index": 1,
+      "expected_position": [-140.986, 69.712],
+      "review_note": "Drop the reviewed Alaska closure needle vertex; the locked source ring otherwise self-intersects."
+    }
+  ]
+}

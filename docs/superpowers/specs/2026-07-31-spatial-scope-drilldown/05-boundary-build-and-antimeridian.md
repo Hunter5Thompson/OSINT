@@ -85,6 +85,7 @@ services/data-ingestion/spatial_catalog/
   catalog-plan.json
   models.py
   source_lock.py
+  compiler.py
   normalize.py
   topology.py
   lod.py
@@ -149,12 +150,16 @@ Normative Reihenfolge:
 18. Einen zweiten Build aus denselben Inputs ausführen und Bytegleichheit beider
     Revisionen sowie aller Artefakte prüfen.
 
+Ein `BoundaryPackV1` enthält dabei keine Katalogrevision in seinen eigenen Bytes. Der
+Pack-Hash wird vom revisionsbildenden Manifest gebunden; eine eingebettete Revision
+würde einen kryptographischen Selbstbezug aus Asset-Hash und Manifest-Hash erzeugen.
+
 Der World-Overview darf Natural Earth verwenden, während ein betretenes Country für
 Admin-1 auf die gepinnte geoBoundaries-Representation verfeinert. Dieser bewusste
 Source-/LOD-Wechsel steht in der Provenance; innerhalb der gleichzeitig sichtbaren
 Parent-/Child-Geometrie werden jedoch nie unabhängig widersprechende Kanten gemischt.
 
-Für die topology-aware Simplification ist ein offline-only, exakt gepinntes Tool zu wählen. Mapshaper ist der bevorzugte Kandidat, weil seine offizielle Dokumentation topology-preserving Simplification und gewichtete Visvalingam-Verfahren beschreibt. Exakte Version, Lock und Prüfsumme sind ein Slice-0-Gate; es gibt keine ungepinnte `npx latest`-Ausführung und keine Runtime-Abhängigkeit.
+Für die topology-aware Simplification ist ein offline-only, exakt gepinntes Tool zu wählen. Mapshaper ist der bevorzugte Kandidat, weil seine offizielle Dokumentation topology-preserving Simplification und gewichtete Visvalingam-Verfahren beschreibt. Exakte Version, Lock und Prüfsumme sind ein Slice-0-Gate. ODIN versioniert dafür ein einziges gehashtes Offline-Archiv mit Mapshaper und der vollständigen, für den GeoJSON-Compilerpfad benötigten JavaScript-Abhängigkeitsclosure samt Lizenzmanifest; es gibt keine ungepinnte `npx latest`-Ausführung und keinen Paketdownload während des Builds.
 
 ### 11.4 LOD und harte Budgets
 
