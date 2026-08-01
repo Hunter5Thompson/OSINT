@@ -53,6 +53,12 @@ SEED_OUT = (
 OVERRIDES = SEED_OUT.parent / "country_almanac_overrides.json"
 _SECTIONS = ["profile", "people", "government", "economy", "security"]
 GEONAMES_COUNTRYINFO_URL = "https://download.geonames.org/export/dump/countryInfo.txt"
+
+
+class ReviewedAlmanacMappingError(ValueError):
+    """A reviewed ISO3-to-GEC mapping is absent or conflicts with the release."""
+
+
 def _topo_ids() -> list[tuple[str, str]]:
     topo = json.loads(FRONTEND_TOPO.read_text())
     geoms = topo["objects"]["countries"]["geometries"]
@@ -124,8 +130,20 @@ def _build_iso3_gec(
 
     # Reviewed registry entries cover source gaps such as Kosovo without a local constant.
     for record in crosswalk.records:
-        if record.almanac_iso3 and record.almanac_gec in valid_gec:
-            iso3_gec.setdefault(record.almanac_iso3, record.almanac_gec)
+        if record.almanac_iso3 is None or not record.almanac_gec:
+            continue
+        if record.almanac_gec not in valid_gec:
+            raise ReviewedAlmanacMappingError(
+                "reviewed almanac mapping has no Factbook profile: "
+                f"{record.almanac_iso3}:{record.almanac_gec}"
+            )
+        existing = iso3_gec.get(record.almanac_iso3)
+        if existing is not None and existing != record.almanac_gec:
+            raise ReviewedAlmanacMappingError(
+                "reviewed almanac mapping conflicts with GeoNames: "
+                f"{record.almanac_iso3}:{existing}!={record.almanac_gec}"
+            )
+        iso3_gec[record.almanac_iso3] = record.almanac_gec
 
     if dropped:
         print(
@@ -282,7 +300,7 @@ def render(out_path: Path = SEED_OUT, refreshed_at: str | None = None) -> int:
     fb = json.loads((DATA_DIR / "factbook_snapshot.json").read_text())["by_gec"]
     rest = json.loads((DATA_DIR / "restcountries_snapshot.json").read_text())["countries"]
     overrides = json.loads(OVERRIDES.read_text()) if OVERRIDES.exists() else {}
-    refreshed = refreshed_at or ""
+    refreshed = refreshed_at or cross.release_date
 
     countries = []
     for row in cross.records:
@@ -341,7 +359,7 @@ def refresh(refreshed_at: str) -> None:
     with httpx.Client(timeout=120.0) as client:
         tar_bytes = _fetch_factbook_tar(client)
         valid_gec = _factbook_gec_set(tar_bytes)
-        _build_iso3_gec(client, valid_gec, crosswalk)
+        iso3_gec = _build_iso3_gec(client, valid_gec, crosswalk)
 
         rest_rows = _fetch_restcountries(client)
 
@@ -359,4 +377,7 @@ def refresh(refreshed_at: str) -> None:
 
     topo_features = _topo_ids()
     validate_natural_earth_coverage(crosswalk, topo_features)
-    print(f"[crosswalk] validated {len(topo_features)} reviewed entries")
+    print(
+        f"[crosswalk] validated {len(topo_features)} reviewed entries and "
+        f"{len(iso3_gec)} ISO3-to-GEC mappings"
+    )

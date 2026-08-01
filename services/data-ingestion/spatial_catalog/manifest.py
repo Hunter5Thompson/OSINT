@@ -289,6 +289,8 @@ def _build_scope_record(
         compatible_derivation_revisions=ordered_compatible,
         carry_forward_from=carry_forward_from,
     )
+
+
 def _validate_manifest_records(
     *,
     root_scope_key: str,

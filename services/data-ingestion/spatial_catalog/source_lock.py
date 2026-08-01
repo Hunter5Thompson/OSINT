@@ -14,9 +14,19 @@ from pydantic import Field, StrictBool, StrictStr, StringConstraints, model_vali
 from spatial_catalog.identity import CountryCrosswalk, CountryCrosswalkRecord, parse_scope_key
 from spatial_catalog.models import AssetId, ScopeKey, ScopeKind, StrictFrozenModel
 
-DEFAULT_SOURCE_LOCK_PATH = (
-    Path(__file__).resolve().parents[2] / "backend" / "data" / "spatial" / "source-lock.json"
-)
+_SOURCE_LOCK_RELATIVE_PATH = Path("services/backend/data/spatial/source-lock.json")
+
+
+def _find_repo_root(module_path: Path, fallback: Path | None = None) -> Path:
+    """Find the checkout owning the backend source lock, with a flat-image fallback."""
+
+    for parent in module_path.resolve().parents:
+        if (parent / _SOURCE_LOCK_RELATIVE_PATH).is_file():
+            return parent
+    return fallback or Path.cwd()
+
+
+DEFAULT_SOURCE_LOCK_PATH = _find_repo_root(Path(__file__)) / _SOURCE_LOCK_RELATIVE_PATH
 CATALOG_PLAN_PATH = Path(__file__).resolve().parent / "catalog-plan.json"
 
 _PLACEHOLDER_MARKERS = ("placeholder", "<pinned", "latest")

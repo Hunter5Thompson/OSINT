@@ -130,6 +130,23 @@ def test_committed_repo_source_matches_lock_hash() -> None:
     assert b'"spatial-crosswalk-v1"' in payload
 
 
+def test_source_lock_repo_root_is_discovered_from_layout(tmp_path: Path) -> None:
+    from spatial_catalog import source_lock as source_lock_module
+
+    lock_path = tmp_path / "services" / "backend" / "data" / "spatial" / "source-lock.json"
+    lock_path.parent.mkdir(parents=True)
+    lock_path.write_text("{}", encoding="utf-8")
+    module_path = (
+        tmp_path
+        / "services"
+        / "data-ingestion"
+        / "spatial_catalog"
+        / "source_lock.py"
+    )
+
+    assert source_lock_module._find_repo_root(module_path) == tmp_path
+
+
 def test_catalog_plan_has_explicit_reviewed_coverage_and_controls_children() -> None:
     crosswalk = load_country_crosswalk()
     source_lock = load_source_lock()
