@@ -20,6 +20,7 @@ dependencies = [
     "pyarrow>=17.0",
     "click>=8.0",
     "neo4j>=6.1.0",
+    "shapely>=2.1,<2.2",
 ]
 
 [project.optional-dependencies]
@@ -63,6 +64,7 @@ include = [
   "infra_atlas/data/*.json",
   "spatial_catalog/**/*.py",
   "spatial_catalog/data/*.json",
+  "spatial_catalog/data/*.tgz",
   "spatial_catalog/*.json",
   "suv_structured/**/*.py",
   "suv_structured/seeds/*.yaml",
