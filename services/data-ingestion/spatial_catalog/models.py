@@ -8,7 +8,7 @@ to maintain parallel, weaker dictionaries.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import (
     BaseModel,
@@ -49,6 +49,17 @@ type PolicyIdentifier = Annotated[
     StrictStr,
     StringConstraints(min_length=1, max_length=96, pattern=r"^[A-Za-z0-9._-]+$"),
 ]
+
+_IDENTITY_SPEC = (
+    "docs/superpowers/specs/2026-07-31-spatial-scope-drilldown/"
+    "02-scope-identity-and-boundary-policy.md"
+)
+CONTRACT_DOC_OWNERS: Final[tuple[tuple[str, str], ...]] = (
+    ("CatalogRevision", _IDENTITY_SPEC),
+    ("DerivationRevision", _IDENTITY_SPEC),
+    ("ScopeKey", _IDENTITY_SPEC),
+    ("ScopeKind", _IDENTITY_SPEC),
+)
 
 
 class ScopeKind(StrEnum):
