@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "bundle_release": "0.7.49+odin-offline-v1",
+  "entrypoint": "mapshaper/bin/mapshaper",
+  "node_engine": ">=20.11.0",
+  "purpose": "ODIN GeoJSON topology-preserving simplification runtime closure",
+  "packages": [
+    {
+      "name": "adm-zip",
+      "version": "0.5.16",
+      "integrity": "sha512-TGw5yVi4saajsSEgz25grObGHEUaDrniwvA2qwSC060KfqGPdglhvPMA2lPIoxs3PQIItj2iag35fONcQqgUaQ==",
+      "license": "MIT"
+    },
+    {
+      "name": "geographiclib",
+      "version": "1.48.0",
+      "integrity": "sha512-WIpDKKj2Gu+E4jkF3f3fg7OPF6T1/35tQXKc4jLLQrwjNiTZ5KrrYF5Gp0dQ/YbJIoCjb9vs2/abWTRsCEoi2w==",
+      "license": "MIT"
+    },
+    {
+      "name": "iconv-lite",
+      "version": "0.6.3",
+      "integrity": "sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==",
+      "license": "MIT"
+    },
+    {
+      "name": "mapshaper",
+      "version": "0.7.49",
+      "integrity": "sha512-PrIPNdYOFk4uOOHtD8fHA6bTGbfW6+Z+jPn43Mq73g7WWEeHRJMrTAqdgovpk9L+8osj1KYbtJzkOT5+h8fs2g==",
+      "license": "MPL-2.0",
+      "source_sha256": "c9f5fbf07bad687bda80769d7fdeb6b6ac27d39c7ba2511ab54537978c0da13d"
+    },
+    {
+      "name": "mproj",
+      "version": "0.1.5",
+      "integrity": "sha512-HgUQtpYqzZzYD4gQXDiTFu2KgMJP7AAQCfYFR9lQpulx9hcspmnMOuCiMMs1bUUj9gPg9uAGnHQYU3We/5yipQ==",
+      "license": "MIT"
+    },
+    {
+      "name": "rw",
+      "version": "1.3.3",
+      "integrity": "sha512-PdhdWy89SiZogBLaw42zdeqtRJ//zFd2PgQavcICDUgJT5oW10QCRKbJ6bg4r0/UY2M6BWd5tkxuGFRvCkgfHQ==",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "safer-buffer",
+      "version": "2.1.2",
+      "integrity": "sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==",
+      "license": "MIT"
+    }
+  ]
+}

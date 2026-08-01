@@ -213,7 +213,7 @@ Gate:
 
 - Lizenz/Attribution reviewed;
 - Boundary-Policy schriftlich approved;
-- topology-aware Tool exakt gepinnt;
+- topology-aware Tool samt benötigter Offline-Abhängigkeitsclosure exakt gepinnt und gehasht;
 - zweiter Build byteidentisch;
 - keine unklassifizierten Admin-0-Features; Kosovo, N. Cyprus und Somaliland besitzen
   explizite, getestete Policy-/Alias-Entscheidungen statt Namensfallbacks.

@@ -1,0 +1,23 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "left",
+      "properties": {"scope_key": "admin1:gbopen:TEST.LEFT", "label": "Left"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 0.5], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "right",
+      "properties": {"scope_key": "admin1:gbopen:TEST.RIGHT", "label": "Right"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[1.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 1.0], [1.0, 0.5], [1.0, 0.0]]]
+      }
+    }
+  ]
+}
