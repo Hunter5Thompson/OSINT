@@ -29,10 +29,14 @@ from infra_atlas.almanac_constants import (
     FACTBOOK_REVISION_DATE,
     FACTBOOK_TARBALL_URL,
     FIELD_MAP,
-    MAP_STUB_TOPO_IDS,
     MAX_CAPITAL_CENTROID_DISTANCE_KM,
-    REST_FALLBACK_ISO3,
     RESTCOUNTRIES_URL,
+)
+from spatial_catalog.identity import (
+    COUNTRY_CROSSWALK_PATH,
+    CountryCrosswalk,
+    load_country_crosswalk,
+    validate_natural_earth_coverage,
 )
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -49,11 +53,6 @@ SEED_OUT = (
 OVERRIDES = SEED_OUT.parent / "country_almanac_overrides.json"
 _SECTIONS = ["profile", "people", "government", "economy", "security"]
 GEONAMES_COUNTRYINFO_URL = "https://download.geonames.org/export/dump/countryInfo.txt"
-# Kosovo: no FIPS 10-4 code in GeoNames; CIA Factbook uses GEC "kv".
-KOSOVO_ISO3 = "XKX"
-KOSOVO_GEC = "kv"
-
-
 def _topo_ids() -> list[tuple[str, str]]:
     topo = json.loads(FRONTEND_TOPO.read_text())
     geoms = topo["objects"]["countries"]["geometries"]
@@ -95,7 +94,11 @@ def _factbook_gec_set(tar_bytes: bytes) -> set[str]:
     return gecs
 
 
-def _build_iso3_gec(client: httpx.Client, valid_gec: set[str]) -> dict[str, str]:
+def _build_iso3_gec(
+    client: httpx.Client,
+    valid_gec: set[str],
+    crosswalk: CountryCrosswalk,
+) -> dict[str, str]:
     """Fetch GeoNames ISO3<->FIPS, validate against the Factbook, vendor the map."""
     resp = client.get(GEONAMES_COUNTRYINFO_URL)
     resp.raise_for_status()
@@ -119,8 +122,10 @@ def _build_iso3_gec(client: httpx.Client, valid_gec: set[str]) -> dict[str, str]
         else:
             dropped.append((iso3, gec))
 
-    # Known special case absent from GeoNames FIPS column.
-    iso3_gec[KOSOVO_ISO3] = KOSOVO_GEC
+    # Reviewed registry entries cover source gaps such as Kosovo without a local constant.
+    for record in crosswalk.records:
+        if record.almanac_iso3 and record.almanac_gec in valid_gec:
+            iso3_gec.setdefault(record.almanac_iso3, record.almanac_gec)
 
     if dropped:
         print(
@@ -273,15 +278,15 @@ def _apply_override(entry: dict, ov: dict | None) -> None:
 
 
 def render(out_path: Path = SEED_OUT, refreshed_at: str | None = None) -> int:
-    cross = json.loads((DATA_DIR / "crosswalk.json").read_text())
+    cross = load_country_crosswalk(COUNTRY_CROSSWALK_PATH)
     fb = json.loads((DATA_DIR / "factbook_snapshot.json").read_text())["by_gec"]
     rest = json.loads((DATA_DIR / "restcountries_snapshot.json").read_text())["countries"]
     overrides = json.loads(OVERRIDES.read_text()) if OVERRIDES.exists() else {}
-    refreshed = refreshed_at or cross.get("_refreshed_at", "")
+    refreshed = refreshed_at or ""
 
     countries = []
-    for row in cross["countries"]:
-        iso3, gec, topo = row["iso3"], row["gec"], row["topo_id"]
+    for row in cross.records:
+        iso3, gec, topo = row.almanac_iso3, row.almanac_gec, row.source_code
         rc = rest.get(iso3, {}) if iso3 else {}
         facts: dict[str, list] = {s: [] for s in _SECTIONS}
         for sec, items in (fb.get(gec) or {}).items():
@@ -304,8 +309,8 @@ def render(out_path: Path = SEED_OUT, refreshed_at: str | None = None) -> int:
         entry: dict = {
             "id": topo,
             "iso3": iso3,
-            "m49": row["m49"],
-            "name": row["name"],
+            "m49": row.canonical_m49 or topo,
+            "name": row.source_label,
             "region": rc.get("region", ""),
             "subregion": rc.get("subregion", ""),
             "capital": capital,
@@ -332,10 +337,11 @@ def render(out_path: Path = SEED_OUT, refreshed_at: str | None = None) -> int:
 
 def refresh(refreshed_at: str) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    crosswalk = load_country_crosswalk(COUNTRY_CROSSWALK_PATH)
     with httpx.Client(timeout=120.0) as client:
         tar_bytes = _fetch_factbook_tar(client)
         valid_gec = _factbook_gec_set(tar_bytes)
-        iso3_gec = _build_iso3_gec(client, valid_gec)
+        _build_iso3_gec(client, valid_gec, crosswalk)
 
         rest_rows = _fetch_restcountries(client)
 
@@ -351,43 +357,6 @@ def refresh(refreshed_at: str) -> None:
         {"_refreshed_at": refreshed_at, "by_gec": by_gec},
     )
 
-    rest_by_m49 = {
-        v["m49"]: iso3 for iso3, v in rest_countries.items() if v.get("m49")
-    }
-    countries = []
-    seen: set[str] = set()
-    for topo_id, name in _topo_ids():
-        assert topo_id not in seen, f"duplicate topo_id: {topo_id}"
-        seen.add(topo_id)
-        if topo_id in MAP_STUB_TOPO_IDS:
-            entry = {
-                "name": name,
-                "topo_id": topo_id,
-                "m49": topo_id,
-                "iso3": None,
-                "gec": "",
-            }
-        elif topo_id == "Kosovo":
-            entry = {
-                "name": "Kosovo",
-                "topo_id": "Kosovo",
-                "m49": "Kosovo",
-                "iso3": KOSOVO_ISO3,
-                "gec": KOSOVO_GEC,
-            }
-        else:
-            iso3 = rest_by_m49.get(topo_id.zfill(3))
-            entry = {
-                "name": name,
-                "topo_id": topo_id,
-                "m49": topo_id,
-                "iso3": iso3,
-                "gec": "" if iso3 in REST_FALLBACK_ISO3 else iso3_gec.get(iso3, ""),
-            }
-        countries.append(entry)
-
-    _write_json(
-        DATA_DIR / "crosswalk.json",
-        {"_refreshed_at": refreshed_at, "countries": countries},
-    )
-    print(f"[crosswalk] wrote {len(countries)} entries")
+    topo_features = _topo_ids()
+    validate_natural_earth_coverage(crosswalk, topo_features)
+    print(f"[crosswalk] validated {len(topo_features)} reviewed entries")
