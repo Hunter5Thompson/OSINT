@@ -55,3 +55,38 @@ def test_render_is_deterministic_and_covers(tmp_path):
     ids = [c["id"] for c in seed["countries"]]
     assert len(ids) == len(set(ids))                       # no id collision
     assert seed["_meta"]["factbook_revision"] == FACTBOOK_REVISION
+
+
+def test_render_without_explicit_date_preserves_crosswalk_release_date(tmp_path):
+    import json
+
+    from infra_atlas import build_country_almanac as b
+
+    out = tmp_path / "almanac.json"
+    b.render(out_path=out)
+
+    seed = json.loads(out.read_text())
+    assert seed["_meta"]["refreshed_at"] == "2026-06-01"
+    assert {country["updated_at"] for country in seed["countries"]} == {"2026-06-01"}
+
+
+def test_reviewed_almanac_gec_missing_from_factbook_fails_loudly(tmp_path, monkeypatch):
+    import httpx
+    import pytest
+
+    from infra_atlas import build_country_almanac as b
+    from spatial_catalog.identity import load_country_crosswalk
+
+    registry = load_country_crosswalk()
+    kosovo = next(record for record in registry.records if record.almanac_iso3 == "XKX")
+    kosovo_only = registry.model_copy(update={"records": (kosovo,)})
+    monkeypatch.setattr(b, "DATA_DIR", tmp_path)
+
+    def geonames_response(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="# no Kosovo row in GeoNames\n")
+
+    with (
+        httpx.Client(transport=httpx.MockTransport(geonames_response)) as client,
+        pytest.raises(ValueError, match=r"XKX.*kv"),
+    ):
+        b._build_iso3_gec(client, valid_gec=set(), crosswalk=kosovo_only)

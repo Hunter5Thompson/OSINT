@@ -46,6 +46,7 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert "COPY services/data-ingestion/graph_integrity/ graph_integrity/" in dockerfile
     assert "COPY services/data-ingestion/qdrant_doctor/ qdrant_doctor/" in dockerfile
     assert "COPY services/data-ingestion/infra_atlas/ infra_atlas/" in dockerfile
+    assert "COPY services/data-ingestion/spatial_catalog/ spatial_catalog/" in dockerfile
     assert (
         "COPY services/intelligence/codebook/event_codebook.yaml "
         "runtime_contracts/event_codebook.yaml"
@@ -60,6 +61,14 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert "uv run" not in dockerfile
     assert "COPY . ." not in dockerfile
     assert "migrations/" not in dockerfile
+
+
+def test_data_ingestion_wheel_packages_spatial_catalog_runtime_contract():
+    pyproject = (SERVICE_ROOT / "pyproject.toml").read_text()
+
+    assert '"spatial_catalog/**/*.py"' in pyproject
+    assert '"spatial_catalog/data/*.json"' in pyproject
+    assert '"spatial_catalog/*.json"' in pyproject
 
 
 def test_compose_builds_data_ingestion_images_from_repo_root():

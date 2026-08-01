@@ -29,7 +29,7 @@
       "source_id": "odin-country-crosswalk",
       "release": "spatial-crosswalk-v1",
       "url": "repo:services/data-ingestion/spatial_catalog/data/country_crosswalk.json",
-      "sha256": "d393f5026dedd808cf2b517b574f16c311591a18891d0de6d738e327dbf4a369",
+      "sha256": "0ea93f12d5028fc0f741b38d231f143cdce3b8938f32e2d3274d76863a534fd3",
       "license_id": "LicenseRef-ODIN-Reviewed-Crosswalk",
       "attribution": "ODIN reviewed identity registry; per-record provenance is embedded in the crosswalk"
     }

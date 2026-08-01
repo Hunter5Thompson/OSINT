@@ -76,6 +76,10 @@ type M49 = Annotated[
     StrictStr,
     StringConstraints(min_length=3, max_length=3, pattern=r"^[0-9]{3}$"),
 ]
+type IsoDate = Annotated[
+    StrictStr,
+    StringConstraints(min_length=10, max_length=10, pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"),
+]
 
 
 class CrosswalkAlias(StrictFrozenModel):
@@ -142,6 +146,7 @@ class CountryCrosswalkRecord(StrictFrozenModel):
 class CountryCrosswalk(StrictFrozenModel):
     schema_version: Literal[1]
     release: Literal["spatial-crosswalk-v1"]
+    release_date: IsoDate
     boundary_policy: Literal["odin-reference-v1"]
     records: tuple[CountryCrosswalkRecord, ...] = Field(min_length=1)
 
