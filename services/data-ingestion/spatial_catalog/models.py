@@ -72,7 +72,7 @@ class ScopeKind(StrEnum):
 class Lod(StrEnum):
     OVERVIEW = "overview"
     REGIONAL = "regional"
-    DETAIL = "detail"
+    LOCAL = "local"
 
 
 class StrictFrozenModel(BaseModel):
