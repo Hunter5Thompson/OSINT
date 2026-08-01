@@ -237,11 +237,15 @@ type BoundaryPackFeatureV1 =
 
 interface BoundaryPackV1 {
   readonly schema_version: 1;
-  readonly catalog_revision: string;
   readonly parent_scope_key: string;
   readonly features: readonly BoundaryPackFeatureV1[];
 }
 ```
+
+`BoundaryPackV1` trägt bewusst keine `catalog_revision`: Sein SHA-256 ist selbst Teil
+des Manifests, aus dessen Hash die Revision entsteht. Die Revisionsbindung erfolgt
+stattdessen ohne Selbstreferenz über Asset-ID, Manifest und revisionsgebundenen
+Scope-Bundle-/HTTP-Kontext.
 
 Jedes Asset wird vor Cesium-Konvertierung gegen Schema, Scope-Key-Grammatik,
 Koordinatenbereiche, Ringabschluss, Ringgröße, Featurezahl, Vertexzahl und Bytebudget

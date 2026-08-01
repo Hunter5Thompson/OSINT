@@ -63,7 +63,7 @@ Threats und Controls:
 | geopolitische Injection | reviewte Boundary-Policy und Provenance; keine Source-Regel im Prompt |
 | GPU-/Event-listener-Leak | ein Owner, deterministisches remove/destroy, Listener-Cleanup, Zyklentest |
 | manipulierte Parent-Kette | serverseitig rekonstruierte Lineage |
-| Revisions-Mix | jeder Token/Asset/Response trägt Catalog-Revision; alte Revision 409 statt Fallback |
+| Revisions-Mix | Token, Manifest, Scope-Bundle und Response tragen Catalog-Revision; content-addressed Assets werden ausschließlich über das Manifest derselben Revision aufgelöst; alte Revision 409 statt Fallback |
 
 Telemetry enthält Scope-Key, Katalogrevision, Mode, Dauer und Zählwerte, aber keinen freien Query-Text und keine ungefilterten Dokumentinhalte.
 
