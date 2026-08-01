@@ -22,7 +22,8 @@ offline from locked inputs.
 
 Create in `services/data-ingestion/spatial_catalog/`:
 
-- `__main__.py`, `normalize.py`, `topology.py`, `lod.py`, `emit.py`, `audit.py`
+- `__main__.py`, `compiler.py`, `normalize.py`, `topology.py`, `lod.py`, `emit.py`,
+  `audit.py`
 
 Create tests:
 
@@ -38,67 +39,71 @@ Generated reviewed output goes only to
 
 ## Work order 1 — Geometry normal form
 
-- [ ] **RED:** Add fixtures for open/reversed/duplicate rings, holes, orphan holes,
+- [x] **RED:** Add fixtures for open/reversed/duplicate rings, holes, orphan holes,
   self-intersection, degenerate area, non-finite/range-invalid coordinates, Fiji,
   Aleutians, Russia, Antarctica, and points at `179/-179`. Assert canonical closure,
   orientation, six-decimal containment precision, and one/two-span `GeoExtent`.
-- [ ] **GREEN:** Implement strict parsing and normalization in `normalize.py`; implement
+- [x] **GREEN:** Implement strict parsing and normalization in `normalize.py`; implement
   largest-longitude-gap extent calculation and query/ring unwrapping in
   `topology.py`. Invalid input fails or produces an explicit reviewed audit drop—never
   an undocumented repair.
-- [ ] **REFACTOR:** Keep geometry functions pure and free of Pydantic/file concerns.
+- [x] **REFACTOR:** Keep geometry functions pure and free of Pydantic/file concerns.
   Export fixtures usable later by frontend `geometry.ts` parity tests.
-- [ ] **VERIFY:** `cd services/data-ingestion && uv run pytest tests/test_spatial_catalog_normalize.py tests/test_spatial_catalog_topology.py -v`
-- [ ] **COMMIT:** `feat(spatial-catalog): normalize topology and dateline geometry`
+- [x] **VERIFY:** `cd services/data-ingestion && uv run pytest tests/test_spatial_catalog_normalize.py tests/test_spatial_catalog_topology.py -v`
+- [x] **COMMIT:** `feat(spatial-catalog): normalize topology and dateline geometry`
 
 ## Work order 2 — Topology-aware LOD and containment
 
-- [ ] **RED:** Test shared-border preservation, parent dissolve from complete
+- [x] **RED:** Test shared-border preservation, parent dissolve from complete
   children, protected junction/island/enclave anchors, per-LOD error and vertex
   budgets, containment max error `<= 50 m`, and strict-containment build failure.
   Include intentionally impossible fixtures to prove there is no silent coarse LOD.
-- [ ] **GREEN:** Wrap the exactly pinned topology tool in `lod.py`; its subprocess
+- [x] **GREEN:** Wrap the exactly pinned topology tool in `lod.py`; its subprocess
   receives explicit files/arguments and produces validated intermediate output.
   Generate containment independently from render LODs and calculate geodesic maximum
   deviation plus the boundary-uncertain band.
-- [ ] **REFACTOR:** Isolate the external-tool adapter behind one function while ODIN
+- [x] **REFACTOR:** Isolate the external-tool adapter behind one function while ODIN
   owns validation, metrics, protected-feature policy, and output encoding.
-- [ ] **VERIFY:** Run the focused topology/LOD tests twice, including with network
+- [x] **VERIFY:** Run the focused topology/LOD tests twice, including with network
   disabled. Both runs must produce identical normalized geometry bytes.
-- [ ] **COMMIT:** `feat(spatial-catalog): build bounded topology-aware lods`
+- [x] **COMMIT:** `feat(spatial-catalog): build bounded topology-aware lods`
 
 ## Work order 3 — Canonical asset emission
 
-- [ ] **RED:** Test exact wire schema, stripped source properties/URLs, canonical
+- [x] **RED:** Test exact wire schema, stripped source properties/URLs, canonical
   scope keys in every pickable feature, context-feature reasons, descriptor byte/
   vertex/feature counts, SHA-addressing, stable manifest order, attribution, and
   two byte-identical builds. Explicitly count post-arc-expansion repeated borders and
   ring closure.
-- [ ] **GREEN:** Implement `emit.py` with the serializer from 00A. Hash the exact bytes
+- [x] **GREEN:** Implement `emit.py` with the serializer from 00A. Hash the exact bytes
   written; construct descriptors from the same counters used by gates; emit assets,
   manifest, attribution, and revisions into a temporary revision directory before an
-  atomic publish into the explicit output path.
-- [ ] **REFACTOR:** One traversal computes wire counters and descriptors. Do not keep a
+  atomic publish into the explicit output path. `BoundaryPackV1` omits the
+  `catalog_revision`; its Asset-ID is revision-bound by the manifest, avoiding a
+  cryptographic self-reference.
+- [x] **REFACTOR:** One traversal computes wire counters and descriptors. Do not keep a
   second TopoJSON-point estimate that can drift from enforcement.
-- [ ] **VERIFY:** `cd services/data-ingestion && uv run pytest tests/test_spatial_catalog_emit.py -v`
-- [ ] **COMMIT:** `feat(spatial-catalog): emit content-addressed boundary packs`
+- [x] **VERIFY:** `cd services/data-ingestion && uv run pytest tests/test_spatial_catalog_emit.py -v`
+- [x] **COMMIT:** `feat(spatial-catalog): emit content-addressed boundary packs`
 
 ## Work order 4 — CLI, audit and feasibility gate
 
-- [ ] **RED:** Test CLI argument validation, hash failure before parse, offline build,
+- [x] **RED:** Test CLI argument validation, hash failure before parse, offline build,
   verify of corrupt/missing assets, deterministic audit output, mandatory-theater and
   top-ten-ring coverage, every emitted world child LOD, 4 MiB wire/16 MiB heap/ring/
   feature/LOD-vertex limits, and the 25 MiB seed-catalog ceiling.
-- [ ] **GREEN:** Implement `fetch`, `build`, `verify`, and `audit` commands. Emit
+- [x] **GREEN:** Implement `fetch`, `build`, `verify`, and `audit` commands. Emit
   `containment-feasibility.json` with separate `containment` and
   `world_child_packs` sections using the production gate counters. Build the real
   world/Admin-0 seed plus only catalog-plan-selected Admin-1 fixtures.
-- [ ] **REFACTOR:** Make command handlers thin over pure pipeline stages. Fetch never
+  The pinned topology tool is consumed from one hash-verified offline archive that
+  includes its complete ODIN GeoJSON runtime dependency closure and license manifest.
+- [x] **REFACTOR:** Make command handlers thin over pure pipeline stages. Fetch never
   runs implicitly; build never accepts an unhashed input.
-- [ ] **VERIFY:** From `services/data-ingestion`, run the focused suite, then two real
+- [x] **VERIFY:** From `services/data-ingestion`, run the focused suite, then two real
   offline builds to separate temporary output roots and byte-compare every file.
   Run `uv run python -m spatial_catalog verify --catalog <first-root>` and audit it.
-- [ ] **COMMIT:** `build(spatial-catalog): gate deterministic seed catalog`
+- [x] **COMMIT:** `build(spatial-catalog): gate deterministic seed catalog`
 
 ## Slice 0 exit gate
 
