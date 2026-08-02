@@ -33,6 +33,7 @@ async def test_lifespan_rolls_back_proxy_when_cache_startup_fails() -> None:
 async def test_lifespan_closes_backend_singletons_on_shutdown() -> None:
     proxy = MagicMock(start=AsyncMock(), stop=AsyncMock())
     cache = MagicMock(connect=AsyncMock(), close=AsyncMock())
+    spatial_catalog = MagicMock(load=AsyncMock(), close=AsyncMock())
     promoter_config = SimpleNamespace(
         enabled=False,
         firms_enabled=False,
@@ -47,6 +48,7 @@ async def test_lifespan_closes_backend_singletons_on_shutdown() -> None:
         patch("app.main.vessel_service.stop_collector", new=AsyncMock()),
         patch("app.main.redis_consumer_loop", new=AsyncMock()),
         patch("app.main.ReconManifestLoader") as manifest_loader,
+        patch("app.main.SpatialCatalogLoader", return_value=spatial_catalog),
         patch(
             "app.services.incident_promoter.config.PromoterConfig.from_env",
             return_value=promoter_config,
@@ -64,8 +66,11 @@ async def test_lifespan_closes_backend_singletons_on_shutdown() -> None:
         ) as close_neo4j,
     ):
         manifest_loader.return_value.list_scenes.return_value = []
-        async with lifespan(FastAPI()):
-            pass
+        test_app = FastAPI()
+        async with lifespan(test_app):
+            assert test_app.state.spatial_catalog is spatial_catalog
 
     close_qdrant.assert_awaited_once()
     close_neo4j.assert_awaited_once()
+    spatial_catalog.load.assert_awaited_once()
+    spatial_catalog.close.assert_awaited_once()

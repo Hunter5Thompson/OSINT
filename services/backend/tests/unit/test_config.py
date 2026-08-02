@@ -1,7 +1,11 @@
 """Unit tests for Settings — verifies vLLM/TEI/Neo4j fields, no Ollama."""
 
 import os
+from pathlib import Path
 from unittest.mock import patch
+
+import pytest
+from pydantic import ValidationError
 
 from app.config import Settings
 
@@ -71,3 +75,27 @@ class TestSettings:
         assert "submarinecablemap.com" in s.cable_geo_url
         assert "submarinecablemap.com" in s.landing_point_geo_url
         assert s.cable_cache_ttl_s == 86400
+
+    def test_spatial_catalog_defaults(self) -> None:
+        settings = Settings(_env_file=None, neo4j_password="test-secret")
+
+        assert settings.spatial_catalog_path == Path("/app/data/spatial")
+        assert settings.spatial_asset_max_concurrency == 8
+        assert settings.spatial_asset_acquire_timeout_s == 0.05
+
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("spatial_asset_max_concurrency", 0),
+            ("spatial_asset_max_concurrency", 65),
+            ("spatial_asset_acquire_timeout_s", 0),
+            ("spatial_asset_acquire_timeout_s", 5.1),
+        ],
+    )
+    def test_spatial_resource_limits_are_bounded(self, name: str, value: float) -> None:
+        with pytest.raises(ValidationError):
+            Settings(
+                _env_file=None,
+                neo4j_password="test-secret",
+                **{name: value},
+            )

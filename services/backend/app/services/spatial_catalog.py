@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
+import math
 import re
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import structlog
 from pydantic import ValidationError
 
 from app.models.spatial import (
@@ -29,11 +33,20 @@ from app.models.spatial import (
 )
 
 _CATALOG_DIRECTORY = re.compile(r"^spatial-v[0-9]+-[a-f0-9]{12,64}$")
+_logger = structlog.get_logger()
 _GENERIC_UNAVAILABLE = SpatialCatalogProblem(
     code=CatalogProblemCode.CATALOG_UNAVAILABLE,
     message="Spatial catalog is unavailable",
     recoverable=True,
 )
+
+
+def _read_file(path: Path) -> bytes:
+    return path.read_bytes()
+
+
+def _emit_structured_event(event: str, fields: dict[str, object]) -> None:
+    _logger.info(event, **fields)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +111,9 @@ type AssetLookup = SpatialAsset | SpatialCatalogProblem
 type AssetRead = bytes | SpatialCatalogProblem
 type CatalogBootstrapLookup = CatalogBootstrap | SpatialCatalogProblem
 type ResolveLookup = ResolvedSpatialScope | SpatialCatalogProblem
+type FileReader = Callable[[Path], bytes]
+type MonotonicClock = Callable[[], float]
+type EventSink = Callable[[str, dict[str, object]], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,8 +128,36 @@ class _LoadedCatalog:
 class SpatialCatalogLoader:
     """Load at most the active and previous immutable local catalog revisions."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        asset_max_concurrency: int = 8,
+        asset_acquire_timeout_s: float = 0.05,
+        file_reader: FileReader = _read_file,
+        monotonic: MonotonicClock = time.monotonic,
+        event_sink: EventSink = _emit_structured_event,
+    ) -> None:
+        if (
+            isinstance(asset_max_concurrency, bool)
+            or not isinstance(asset_max_concurrency, int)
+            or not 1 <= asset_max_concurrency <= 64
+        ):
+            raise ValueError("asset_max_concurrency must be between 1 and 64")
+        if (
+            isinstance(asset_acquire_timeout_s, bool)
+            or not isinstance(asset_acquire_timeout_s, (int, float))
+            or not math.isfinite(asset_acquire_timeout_s)
+            or not 0 < asset_acquire_timeout_s <= 5
+        ):
+            raise ValueError("asset_acquire_timeout_s must be greater than 0 and at most 5")
         self._path = Path(path)
+        self._asset_semaphore = asyncio.Semaphore(asset_max_concurrency)
+        self._asset_acquire_timeout_s = float(asset_acquire_timeout_s)
+        self._file_reader = file_reader
+        self._monotonic = monotonic
+        self._event_sink = event_sink
+        self._inflight_file_reads: set[asyncio.Task[bytes]] = set()
         self._catalogs: dict[str, _LoadedCatalog] = {}
         self._state: CatalogState = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
         self._verified_assets: set[tuple[str, str]] = set()
@@ -140,6 +184,7 @@ class SpatialCatalogLoader:
     async def load(self) -> CatalogState:
         """Validate local metadata and indexes without blocking the event loop."""
 
+        started = self._monotonic()
         try:
             loaded = await asyncio.to_thread(self._load_sync)
         except (OSError, UnicodeError, ValueError, ValidationError) as exc:
@@ -147,6 +192,12 @@ class SpatialCatalogLoader:
             self._verified_assets.clear()
             self._diagnostic = f"{type(exc).__name__}: {exc}"
             self._state = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
+            self._emit(
+                "spatial_catalog_readiness",
+                cause="unavailable",
+                duration_ms=self._duration_ms(started),
+                cache_status="empty",
+            )
             return self._state
 
         self._catalogs = {catalog.manifest.catalog_revision: catalog for catalog in loaded}
@@ -157,11 +208,20 @@ class SpatialCatalogLoader:
             active_catalog_revision=revisions[0],
             served_catalog_revisions=revisions,
         )
+        self._emit(
+            "spatial_catalog_readiness",
+            catalog_revision=revisions[0],
+            cause="ready",
+            duration_ms=self._duration_ms(started),
+            cache_status="loaded",
+        )
         return self._state
 
     async def close(self) -> None:
         """Dispose all immutable verification and lookup caches."""
 
+        if self._inflight_file_reads:
+            await asyncio.gather(*tuple(self._inflight_file_reads), return_exceptions=True)
         self._catalogs.clear()
         self._verified_assets.clear()
         self._diagnostic = None
@@ -188,9 +248,18 @@ class SpatialCatalogLoader:
         scope_key: str | None,
         catalog_revision: str | None,
     ) -> ResolveLookup:
+        started = self._monotonic()
         try:
-            parsed = parse_scope_key(scope_key)  # type: ignore[arg-type]
+            if scope_key is None:
+                raise ValueError("INVALID_SCOPE_KEY")
+            parsed = parse_scope_key(scope_key)
         except (TypeError, ValueError):
+            self._emit(
+                "spatial_catalog_resolve",
+                cause="invalid_scope_key",
+                duration_ms=self._duration_ms(started),
+                cache_status="rejected",
+            )
             return SpatialCatalogProblem(
                 code=CatalogProblemCode.INVALID_SCOPE_KEY,
                 message="Invalid spatial scope key",
@@ -203,6 +272,13 @@ class SpatialCatalogLoader:
             try:
                 revision = validate_catalog_revision_candidate(revision)
             except ValueError:
+                self._emit(
+                    "spatial_catalog_resolve",
+                    scope_key=parsed.canonical,
+                    cause="invalid_catalog_revision",
+                    duration_ms=self._duration_ms(started),
+                    cache_status="rejected",
+                )
                 return SpatialCatalogProblem(
                     code=CatalogProblemCode.INVALID_CATALOG_REVISION,
                     message="Invalid spatial catalog revision",
@@ -211,13 +287,36 @@ class SpatialCatalogLoader:
                 )
 
         if not isinstance(self._state, CatalogReadyState):
+            self._emit(
+                "spatial_catalog_resolve",
+                scope_key=parsed.canonical,
+                cause="catalog_unavailable",
+                duration_ms=self._duration_ms(started),
+                cache_status="unavailable",
+            )
             return _GENERIC_UNAVAILABLE
         selected_revision = revision or self._state.active_catalog_revision
         catalog = self._catalogs.get(selected_revision)
         if catalog is None:
+            self._emit(
+                "spatial_catalog_resolve",
+                scope_key=parsed.canonical,
+                catalog_revision=selected_revision,
+                cause="revision_unavailable",
+                duration_ms=self._duration_ms(started),
+                cache_status="miss",
+            )
             return self._revision_problem(selected_revision)
         record = catalog.scopes.get(parsed.canonical)
         if record is None:
+            self._emit(
+                "spatial_catalog_resolve",
+                scope_key=parsed.canonical,
+                catalog_revision=selected_revision,
+                cause="unknown_scope",
+                duration_ms=self._duration_ms(started),
+                cache_status="miss",
+            )
             return SpatialCatalogProblem(
                 code=CatalogProblemCode.UNKNOWN_SCOPE,
                 message="Spatial scope was not found",
@@ -225,13 +324,22 @@ class SpatialCatalogLoader:
                 recoverable=False,
                 active_catalog_revision=self._active_revision(),
             )
-        return ResolvedSpatialScope(
+        resolved = ResolvedSpatialScope(
             catalog_revision=selected_revision,
             boundary_policy=catalog.manifest.boundary_policy,
             canonicalized_from=(scope_key if parsed.canonical != scope_key else None),
             record=record,
             path=tuple(catalog.scopes[key].scope for key in record.path),
         )
+        self._emit(
+            "spatial_catalog_resolve",
+            scope_key=parsed.canonical,
+            catalog_revision=selected_revision,
+            cause="resolved",
+            duration_ms=self._duration_ms(started),
+            cache_status="hit",
+        )
+        return resolved
 
     def get_asset_by_id(self, asset_id: str) -> AssetLookup:
         try:
@@ -299,19 +407,78 @@ class SpatialCatalogLoader:
         indexed = self.get_asset(asset.catalog_revision, asset.asset_id)
         if not isinstance(indexed, SpatialAsset):
             return indexed
+        started = self._monotonic()
         try:
-            payload = await asyncio.to_thread(indexed._path.read_bytes)
-        except OSError as exc:
-            return self._asset_corrupt(exc)
-        if len(payload) != indexed.byte_length:
-            return self._asset_corrupt(ValueError("asset byte length changed"))
+            await asyncio.wait_for(
+                self._asset_semaphore.acquire(),
+                timeout=self._asset_acquire_timeout_s,
+            )
+        except TimeoutError:
+            self._emit(
+                "spatial_asset_rejected_busy",
+                catalog_revision=indexed.catalog_revision,
+                cause="asset_semaphore_timeout",
+                duration_ms=self._duration_ms(started),
+                cache_status="rejected",
+            )
+            return SpatialCatalogProblem(
+                code=CatalogProblemCode.ASSET_BUSY,
+                message="Spatial asset reader is busy",
+                target=indexed.asset_id,
+                recoverable=True,
+                active_catalog_revision=self._active_revision(),
+            )
 
-        cache_key = (indexed.catalog_revision, indexed.asset_id)
-        if cache_key not in self._verified_assets:
-            if _sha256_bytes(payload) != indexed.asset_id:
-                return self._asset_corrupt(ValueError("asset hash mismatch"))
-            self._verified_assets.add(cache_key)
-        return payload
+        try:
+            read_task = asyncio.create_task(
+                asyncio.to_thread(self._file_reader, indexed._path),
+                name=f"spatial-asset-{indexed.asset_id[:12]}",
+            )
+            self._inflight_file_reads.add(read_task)
+            try:
+                payload = await asyncio.shield(read_task)
+            except asyncio.CancelledError:
+                with contextlib.suppress(Exception):
+                    await asyncio.shield(read_task)
+                self._emit(
+                    "spatial_asset_load",
+                    catalog_revision=indexed.catalog_revision,
+                    cause="cancelled",
+                    duration_ms=self._duration_ms(started),
+                    cache_status="cancelled",
+                )
+                raise
+            except OSError as exc:
+                return self._asset_corrupt(exc)
+            finally:
+                self._inflight_file_reads.discard(read_task)
+
+            if len(payload) != indexed.byte_length:
+                return self._asset_corrupt(ValueError("asset byte length changed"))
+
+            cache_key = (indexed.catalog_revision, indexed.asset_id)
+            cache_status = "hit" if cache_key in self._verified_assets else "miss"
+            if cache_key not in self._verified_assets:
+                if _sha256_bytes(payload) != indexed.asset_id:
+                    return self._asset_corrupt(ValueError("asset hash mismatch"))
+                self._verified_assets.add(cache_key)
+                self._emit(
+                    "spatial_asset_hash_verified",
+                    catalog_revision=indexed.catalog_revision,
+                    cause="sha256_match",
+                    duration_ms=self._duration_ms(started),
+                    cache_status="miss",
+                )
+            self._emit(
+                "spatial_asset_load",
+                catalog_revision=indexed.catalog_revision,
+                cause="served",
+                duration_ms=self._duration_ms(started),
+                cache_status=cache_status,
+            )
+            return payload
+        finally:
+            self._asset_semaphore.release()
 
     def _load_sync(self) -> tuple[_LoadedCatalog, ...]:
         directories = self._discover_served_directories()
@@ -450,12 +617,26 @@ class SpatialCatalogLoader:
         self._verified_assets.clear()
         self._diagnostic = f"{type(exc).__name__}: {exc}"
         self._state = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
+        self._emit(
+            "spatial_asset_hash_failed",
+            cause=type(exc).__name__,
+            cache_status="invalid",
+        )
         return _GENERIC_UNAVAILABLE
 
     def _active_revision(self) -> str | None:
         if isinstance(self._state, CatalogReadyState):
             return self._state.active_catalog_revision
         return None
+
+    def _duration_ms(self, started: float) -> float:
+        return max(0.0, (self._monotonic() - started) * 1000.0)
+
+    def _emit(self, event: str, **fields: object) -> None:
+        try:
+            self._event_sink(event, fields)
+        except Exception:  # noqa: BLE001
+            _logger.exception("spatial_observability_sink_failed", event=event)
 
 
 def _project_attribution(

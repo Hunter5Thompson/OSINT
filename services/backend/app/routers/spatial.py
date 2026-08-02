@@ -33,6 +33,9 @@ from app.services.spatial_catalog import (
 from app.static.cached_static import IMMUTABLE_CACHE_CONTROL
 
 router = APIRouter(prefix="/spatial", tags=["spatial"])
+# V1 is a trusted on-prem/LAN read surface. Authentication and per-IP limiting are
+# deployment-edge gates before external exposure; the global read semaphore below is
+# resource protection, not an authorization boundary.
 
 _METADATA_CACHE_CONTROL = "public, max-age=60, must-revalidate"
 _NO_STORE = "no-store"
