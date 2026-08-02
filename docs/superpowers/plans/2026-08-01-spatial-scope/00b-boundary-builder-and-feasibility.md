@@ -123,7 +123,9 @@ reviewed immutable seed revision plus validators and minimal fixtures for Plans 
 - [x] Atomic publication normalizes revision directories to `0755` and files to
   `0644`, including an already-identical destination.
 - [x] The Spatial compiler is an explicit checkout/build extra; the production
-  ingestion wheel and image exclude it, Shapely, Node, and the tool bundle.
+  ingestion wheel and image exclude it, Shapely, Node, and the tool bundle. They ship
+  only the Shapely-free identity/manifest interface required by `odin-infra-atlas`;
+  an isolated built-wheel import test gates that seam.
 
 This explicitly accepts Node as a controlled compiler-host dependency. It does not
 relax the runtime boundary: no deployed service downloads, imports, or runs the

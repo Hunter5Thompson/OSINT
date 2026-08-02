@@ -3,6 +3,8 @@
 `mapshaper-0.7.49-offline.tgz` is a deterministic build input for the Spatial
 Scope compiler. It is not an ingestion-service runtime dependency. The production
 wheel and Docker image deliberately exclude the compiler, Shapely, and this archive.
+They retain only the Shapely-free identity/manifest contract and reviewed country
+crosswalk required by `odin-infra-atlas`.
 
 The adjacent manifest locks Mapshaper and its six-package GeoJSON runtime closure.
 Every downloaded npm archive is checked twice during regeneration: npm's reported

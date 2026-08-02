@@ -54,7 +54,14 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 exclude = [
-  "spatial_catalog/**",
+  "spatial_catalog/__main__.py",
+  "spatial_catalog/audit.py",
+  "spatial_catalog/compiler.py",
+  "spatial_catalog/emit.py",
+  "spatial_catalog/lod.py",
+  "spatial_catalog/normalize.py",
+  "spatial_catalog/topology.py",
+  "spatial_catalog/tools/**",
   "tests/fixtures/spatial_catalog/**",
   "tests/test_spatial_catalog_*.py",
 ]
@@ -69,6 +76,13 @@ include = [
   "infra_atlas/seeds/*.yaml",
   "infra_atlas/seeds/*.json",
   "infra_atlas/data/*.json",
+  "spatial_catalog/__init__.py",
+  "spatial_catalog/identity.py",
+  "spatial_catalog/manifest.py",
+  "spatial_catalog/models.py",
+  "spatial_catalog/source_lock.py",
+  "spatial_catalog/catalog-plan.json",
+  "spatial_catalog/data/country_crosswalk.json",
   "suv_structured/**/*.py",
   "suv_structured/seeds/*.yaml",
   "qdrant_doctor/*.py",

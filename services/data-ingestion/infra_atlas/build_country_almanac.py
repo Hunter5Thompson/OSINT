@@ -32,6 +32,7 @@ from infra_atlas.almanac_constants import (
     MAX_CAPITAL_CENTROID_DISTANCE_KM,
     RESTCOUNTRIES_URL,
 )
+from infra_atlas.paths import find_repo_root
 from spatial_catalog.identity import (
     COUNTRY_CROSSWALK_PATH,
     CountryCrosswalk,
@@ -40,16 +41,9 @@ from spatial_catalog.identity import (
 )
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
-FRONTEND_TOPO = (
-    Path(__file__).resolve().parents[3]
-    / "services"
-    / "frontend"
-    / "public"
-    / "countries-110m.json"
-)
-SEED_OUT = (
-    Path(__file__).resolve().parents[3] / "services" / "backend" / "data" / "country_almanac.json"
-)
+REPO_ROOT = find_repo_root(Path(__file__))
+FRONTEND_TOPO = REPO_ROOT / "services" / "frontend" / "public" / "countries-110m.json"
+SEED_OUT = REPO_ROOT / "services" / "backend" / "data" / "country_almanac.json"
 OVERRIDES = SEED_OUT.parent / "country_almanac_overrides.json"
 _SECTIONS = ["profile", "people", "government", "economy", "security"]
 GEONAMES_COUNTRYINFO_URL = "https://download.geonames.org/export/dump/countryInfo.txt"
