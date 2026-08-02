@@ -159,7 +159,9 @@ Admin-1 auf die gepinnte geoBoundaries-Representation verfeinert. Dieser bewusst
 Source-/LOD-Wechsel steht in der Provenance; innerhalb der gleichzeitig sichtbaren
 Parent-/Child-Geometrie werden jedoch nie unabhängig widersprechende Kanten gemischt.
 
-Für die topology-aware Simplification ist ein offline-only, exakt gepinntes Tool zu wählen. Mapshaper ist der bevorzugte Kandidat, weil seine offizielle Dokumentation topology-preserving Simplification und gewichtete Visvalingam-Verfahren beschreibt. Exakte Version, Lock und Prüfsumme sind ein Slice-0-Gate. ODIN versioniert dafür ein einziges gehashtes Offline-Archiv mit Mapshaper und der vollständigen, für den GeoJSON-Compilerpfad benötigten JavaScript-Abhängigkeitsclosure samt Lizenzmanifest; es gibt keine ungepinnte `npx latest`-Ausführung und keinen Paketdownload während des Builds.
+Für die topology-aware Simplification ist ein offline-only, exakt gepinntes Tool zu wählen. Mapshaper ist der bevorzugte Kandidat, weil seine offizielle Dokumentation topology-preserving Simplification und gewichtete Visvalingam-Verfahren beschreibt. Exakte Version, Lock und Prüfsumme sind ein Slice-0-Gate. ODIN versioniert dafür ein einziges gehashtes Offline-Archiv mit Mapshaper und der vollständigen, für den GeoJSON-Compilerpfad benötigten JavaScript-Abhängigkeitsclosure samt Lizenzmanifest; es gibt keine ungepinnte `npx latest`-Ausführung und keinen Paketdownload während des Builds. Eine eingecheckte Regenerierungsprozedur lädt ausschließlich die exakten Manifest-Versionen, verifiziert die npm-`integrity` jedes Upstream-Archivs selbst und muss das Offline-Archiv byteidentisch zum Source-Lock reproduzieren.
+
+Node ist eine explizite Build-Host-Abhängigkeit des Compilers, keine Abhängigkeit eines Runtime-Service. Vor dem Entpacken oder Ausführen von Mapshaper prüft der Adapter die reale Ausgabe von `node --version` gegen `node_engine` und ruft den geprüften Node-Pfad direkt auf statt über den Entrypoint-Shebang. Die konkrete Node-Version steht in `build-provenance.json`; dieser Report bildet die Katalogrevision nicht mit. Das Bytegleichheits-Gate gilt für denselben verifizierten Toolchain-Satz. Produktions-Wheel und Ingestion-Image enthalten weder Spatial-Compiler noch Shapely, Node oder das Offline-Archiv.
 
 ### 11.4 LOD und harte Budgets
 
@@ -213,9 +215,12 @@ entfernte Degenerate-Ringe und protected-feature count.
 
 „Boundary-Fehler“ ist die maximale geodesische Originalpunkt-zu-vereinfachtem-Segment-
 Abweichung aus dem Audit, nicht eine Grad-Toleranz. Das Containment-Ergebnis
-`boundary-uncertain` verwendet genau dieses Fehlerband. Dadurch bleibt das Gate über
-Breitengrade hinweg vergleichbar und behauptet für grenznahe Punkte keine falsche
-Exaktheit.
+`boundary-uncertain` verwendet genau dieses Fehlerband. Es misst damit ausschließlich
+die Abweichung zur gelockten Quellgeometrie. Insbesondere bedeutet `max_error_m: 0`
+keine metergenaue kartografische Quelle; Quellmaßstab und Quellgenauigkeit sind davon
+unabhängig. Der Feasibility-Report nennt diese Semantik maschinenlesbar. Dadurch
+bleibt das Gate über Breitengrade hinweg vergleichbar und behauptet für grenznahe
+Punkte keine falsche Exaktheit.
 
 ### 11.5 Antimeridian-Normalform
 

@@ -1427,7 +1427,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "qdrant-client" },
     { name = "redis" },
-    { name = "shapely" },
     { name = "structlog" },
     { name = "telethon" },
 ]
@@ -1445,6 +1444,9 @@ notebooklm = [
     { name = "playwright" },
     { name = "pydub" },
 ]
+spatial-catalog = [
+    { name = "shapely" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1453,6 +1455,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-httpx" },
     { name = "ruff" },
+    { name = "shapely" },
 ]
 
 [package.metadata]
@@ -1479,11 +1482,11 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qdrant-client", specifier = ">=1.13.0,<1.14.0" },
     { name = "redis", specifier = ">=5.0" },
-    { name = "shapely", specifier = ">=2.1,<2.2" },
+    { name = "shapely", marker = "extra == 'spatial-catalog'", specifier = ">=2.1,<2.2" },
     { name = "structlog", specifier = ">=24.1" },
     { name = "telethon", specifier = ">=1.36" },
 ]
-provides-extras = ["dev", "notebooklm"]
+provides-extras = ["dev", "notebooklm", "spatial-catalog"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1492,4 +1495,5 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "pytest-httpx", specifier = ">=0.36.2" },
     { name = "ruff", specifier = ">=0.8" },
+    { name = "shapely", specifier = ">=2.1,<2.2" },
 ]

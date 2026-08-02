@@ -8,6 +8,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import tarfile
 from collections import Counter
@@ -111,9 +112,12 @@ class ContainmentResult:
 
 @dataclass(frozen=True, slots=True)
 class PinnedTopologyTool:
-    """Executable plus the reviewed archive proving its exact source version."""
+    """Reviewed Mapshaper entrypoint bound to one validated Node runtime."""
 
     executable: Path
+    runtime_executable: Path
+    runtime_engine: str
+    runtime_version: str
     source_archive: Path
     expected_version: str
     expected_sha256: str
@@ -126,6 +130,7 @@ def prepare_topology_tool(
     expected_bundle_release: str,
     expected_version: str,
     work_dir: Path,
+    runtime_executable: Path | None = None,
 ) -> PinnedTopologyTool:
     """Verify and safely materialize the committed offline Mapshaper closure."""
 
@@ -194,13 +199,20 @@ def prepare_topology_tool(
             manifest = json.load(manifest_file)
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise LodBudgetError(f"INVALID_TOPOLOGY_BUNDLE_MANIFEST: {exc}") from exc
-        entrypoint = _validate_tool_bundle_manifest(
+        entrypoint, runtime_engine = _validate_tool_bundle_manifest(
             manifest,
             expected_bundle_release=expected_bundle_release,
             expected_version=expected_version,
         )
         if entrypoint.as_posix() not in seen_names:
             raise LodBudgetError("INVALID_TOPOLOGY_BUNDLE_MANIFEST: missing entrypoint")
+
+        runtime = _resolve_node_runtime(runtime_executable)
+        runtime_version = _validated_node_version(
+            runtime,
+            engine=runtime_engine,
+            environment=_offline_environment(),
+        )
 
         if work_dir.exists() and any(work_dir.iterdir()):
             raise LodBudgetError("TOPOLOGY_TOOL_WORK_DIR_NOT_EMPTY")
@@ -235,6 +247,9 @@ def prepare_topology_tool(
     executable.chmod(0o755)
     return PinnedTopologyTool(
         executable=executable,
+        runtime_executable=runtime,
+        runtime_engine=runtime_engine,
+        runtime_version=runtime_version,
         source_archive=source_archive,
         expected_version=expected_version,
         expected_sha256=expected_sha256,
@@ -479,10 +494,22 @@ def run_topology_tool(
     if not destination.parent.is_dir():
         raise ValueError("topology output parent must already exist")
     executable = tool.executable.resolve(strict=True)
+    runtime = tool.runtime_executable.resolve(strict=True)
     environment = _offline_environment()
 
+    runtime_version = _validated_node_version(
+        runtime,
+        engine=tool.runtime_engine,
+        environment=environment,
+    )
+    if runtime_version != tool.runtime_version:
+        raise LodBudgetError(
+            "TOPOLOGY_RUNTIME_CHANGED: "
+            f"expected {tool.runtime_version}, got {runtime_version}"
+        )
+
     version = _run_tool_command(
-        [str(executable), "--version"],
+        [str(runtime), str(executable), "--version"],
         environment=environment,
     ).stdout.strip()
     if re.search(rf"(?<![0-9.]){re.escape(tool.expected_version)}(?![0-9.])", version) is None:
@@ -492,6 +519,7 @@ def run_topology_tool(
 
     precision_value = format(10**-precision, f".{precision}f") if precision else "1"
     command = [
+        str(runtime),
         str(executable),
         str(source),
         "-simplify",
@@ -632,7 +660,7 @@ def _validate_tool_bundle_manifest(
     *,
     expected_bundle_release: str,
     expected_version: str,
-) -> PurePosixPath:
+) -> tuple[PurePosixPath, str]:
     expected_keys = {
         "schema_version",
         "bundle_release",
@@ -649,6 +677,7 @@ def _validate_tool_bundle_manifest(
         raise LodBudgetError("INVALID_TOPOLOGY_BUNDLE_MANIFEST: release")
     if payload["node_engine"] != ">=20.11.0":
         raise LodBudgetError("INVALID_TOPOLOGY_BUNDLE_MANIFEST: Node engine")
+    runtime_engine = payload["node_engine"]
     raw_entrypoint = payload["entrypoint"]
     if not isinstance(raw_entrypoint, str):
         raise LodBudgetError("INVALID_TOPOLOGY_BUNDLE_MANIFEST: entrypoint")
@@ -665,7 +694,48 @@ def _validate_tool_bundle_manifest(
     ]
     if mapshaper_versions != [expected_version]:
         raise LodBudgetError("INVALID_TOPOLOGY_BUNDLE_MANIFEST: Mapshaper version")
-    return entrypoint
+    return entrypoint, runtime_engine
+
+
+def _resolve_node_runtime(explicit: Path | None) -> Path:
+    candidate = str(explicit) if explicit is not None else shutil.which("node")
+    if candidate is None:
+        raise LodBudgetError("TOPOLOGY_RUNTIME_MISSING: node is not in PATH")
+    try:
+        return Path(candidate).resolve(strict=True)
+    except OSError as exc:
+        raise LodBudgetError(f"TOPOLOGY_RUNTIME_MISSING: {candidate}") from exc
+
+
+def _validated_node_version(
+    executable: Path,
+    *,
+    engine: str,
+    environment: Mapping[str, str],
+) -> str:
+    engine_match = re.fullmatch(r">=(\d+)\.(\d+)\.(\d+)", engine)
+    if engine_match is None:
+        raise LodBudgetError(f"INVALID_TOPOLOGY_RUNTIME_ENGINE: {engine}")
+    try:
+        raw_version = _run_tool_command(
+            [str(executable), "--version"],
+            environment=environment,
+        ).stdout.strip()
+    except LodBudgetError as exc:
+        raise LodBudgetError(f"TOPOLOGY_RUNTIME_UNAVAILABLE: {executable}") from exc
+    version_match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", raw_version)
+    if version_match is None:
+        raise LodBudgetError(
+            f"TOPOLOGY_RUNTIME_VERSION_INVALID: {raw_version!r}"
+        )
+    actual = tuple(int(part) for part in version_match.groups())
+    minimum = tuple(int(part) for part in engine_match.groups())
+    if actual < minimum:
+        raise LodBudgetError(
+            "TOPOLOGY_RUNTIME_VERSION_MISMATCH: "
+            f"expected {engine}, got {raw_version}"
+        )
+    return raw_version
 
 
 def _offline_environment() -> dict[str, str]:

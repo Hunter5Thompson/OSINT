@@ -296,6 +296,11 @@ def compile_catalog(
             ),
         )
         reports = {
+            "build-provenance.json": _build_provenance_bytes(
+                manifest.catalog_revision,
+                tool=tool,
+                mapshaper_source=mapshaper_source,
+            ),
             "containment-feasibility.json": feasibility,
             "lod-audit.json": _lod_audit_bytes(
                 manifest.catalog_revision,
@@ -1131,5 +1136,33 @@ def _lod_audit_bytes(
                 "sha256": mapshaper_source.sha256,
             },
             "records": records,
+        }
+    )
+
+
+def _build_provenance_bytes(
+    catalog_revision: str,
+    *,
+    tool: PinnedTopologyTool,
+    mapshaper_source: LockedSource,
+) -> bytes:
+    """Record host toolchain evidence without feeding it into revision identity."""
+
+    return canonical_json_bytes(
+        {
+            "schema_version": 1,
+            "catalog_revision": catalog_revision,
+            "revision_forming": False,
+            "toolchain": {
+                "node": {
+                    "engine": tool.runtime_engine,
+                    "version": tool.runtime_version,
+                },
+                "mapshaper": {
+                    "release": mapshaper_source.release,
+                    "sha256": mapshaper_source.sha256,
+                    "version": tool.expected_version,
+                },
+            },
         }
     )

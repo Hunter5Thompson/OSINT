@@ -1,5 +1,6 @@
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -46,7 +47,7 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert "COPY services/data-ingestion/graph_integrity/ graph_integrity/" in dockerfile
     assert "COPY services/data-ingestion/qdrant_doctor/ qdrant_doctor/" in dockerfile
     assert "COPY services/data-ingestion/infra_atlas/ infra_atlas/" in dockerfile
-    assert "COPY services/data-ingestion/spatial_catalog/ spatial_catalog/" in dockerfile
+    assert "COPY services/data-ingestion/spatial_catalog/ spatial_catalog/" not in dockerfile
     assert (
         "COPY services/intelligence/codebook/event_codebook.yaml "
         "runtime_contracts/event_codebook.yaml"
@@ -63,12 +64,21 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert "migrations/" not in dockerfile
 
 
-def test_data_ingestion_wheel_packages_spatial_catalog_runtime_contract():
-    pyproject = (SERVICE_ROOT / "pyproject.toml").read_text()
+def test_spatial_compiler_dependencies_and_sources_are_build_time_only():
+    pyproject_path = SERVICE_ROOT / "pyproject.toml"
+    pyproject = pyproject_path.read_text()
+    configuration = tomllib.loads(pyproject)
+    project = configuration["project"]
+    wheel = configuration["tool"]["hatch"]["build"]["targets"]["wheel"]
 
-    assert '"spatial_catalog/**/*.py"' in pyproject
-    assert '"spatial_catalog/data/*.json"' in pyproject
-    assert '"spatial_catalog/*.json"' in pyproject
+    assert not any(dependency.startswith("shapely") for dependency in project["dependencies"])
+    assert project["optional-dependencies"]["spatial-catalog"] == ["shapely>=2.1,<2.2"]
+    assert not any(path.startswith("spatial_catalog/") for path in wheel["include"])
+    assert "spatial_catalog/**" in wheel["exclude"]
+    assert "tests/test_spatial_catalog_*.py" in wheel["exclude"]
+    assert "services/data-ingestion/spatial_catalog" in (
+        REPO_ROOT / ".dockerignore"
+    ).read_text().splitlines()
 
 
 def test_compose_builds_data_ingestion_images_from_repo_root():

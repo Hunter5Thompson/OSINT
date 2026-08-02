@@ -271,21 +271,29 @@ def test_pinned_tool_adapter_is_offline_explicit_and_byte_deterministic(tmp_path
     archive = tmp_path / "mapshaper.tgz"
     archive.write_bytes(b"reviewed-mapshaper-archive")
     executable = tmp_path / "mapshaper"
-    executable.write_text(
+    executable.write_text("// invoked by the reviewed Node runtime\n", encoding="utf-8")
+    runtime = tmp_path / "node"
+    runtime.write_text(
         "#!/usr/bin/env python3\n"
         "import os, pathlib, shutil, sys\n"
         "if sys.argv[1:] == ['--version']:\n"
+        "    print('v22.23.1')\n"
+        "    raise SystemExit(0)\n"
+        "if sys.argv[2:] == ['--version']:\n"
         "    print('0.7.49')\n"
         "    raise SystemExit(0)\n"
         "assert os.environ['npm_config_offline'] == 'true'\n"
         "assert os.environ['NO_PROXY'] == '*'\n"
         "assert '-simplify' in sys.argv and '-o' in sys.argv\n"
-        "shutil.copyfile(pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[-1]))\n",
+        "shutil.copyfile(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[-1]))\n",
         encoding="utf-8",
     )
-    executable.chmod(0o755)
+    runtime.chmod(0o755)
     tool = PinnedTopologyTool(
         executable=executable,
+        runtime_executable=runtime,
+        runtime_engine=">=20.11.0",
+        runtime_version="v22.23.1",
         source_archive=archive,
         expected_version="0.7.49",
         expected_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
@@ -322,6 +330,9 @@ def test_reviewed_offline_bundle_runs_real_mapshaper_deterministically(tmp_path:
         expected_version="0.7.49",
         work_dir=tmp_path / "tool",
     )
+    assert tool.runtime_engine == ">=20.11.0"
+    assert tool.runtime_version.startswith("v")
+    assert tool.runtime_executable.name == "node"
     first = tmp_path / "first-real.geojson"
     second = tmp_path / "second-real.geojson"
 
@@ -371,16 +382,21 @@ def test_pinned_tool_hash_fails_before_process_execution(tmp_path: Path) -> None
     archive.write_bytes(b"tampered")
     marker = tmp_path / "executed"
     executable = tmp_path / "mapshaper"
-    executable.write_text(
+    executable.write_text("// must not run\n", encoding="utf-8")
+    runtime = tmp_path / "node"
+    runtime.write_text(
         f"#!/bin/sh\ntouch '{marker}'\n",
         encoding="utf-8",
     )
-    executable.chmod(0o755)
+    runtime.chmod(0o755)
 
     with pytest.raises(LodBudgetError, match="TOPOLOGY_TOOL_HASH_MISMATCH"):
         run_topology_tool(
             PinnedTopologyTool(
                 executable=executable,
+                runtime_executable=runtime,
+                runtime_engine=">=20.11.0",
+                runtime_version="v22.23.1",
                 source_archive=archive,
                 expected_version="0.7.49",
                 expected_sha256="0" * 64,
@@ -391,6 +407,27 @@ def test_pinned_tool_hash_fails_before_process_execution(tmp_path: Path) -> None
             precision=6,
         )
     assert not marker.exists()
+
+
+def test_prepare_tool_rejects_node_below_reviewed_engine_before_extraction(
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "node"
+    runtime.write_text("#!/bin/sh\nprintf 'v20.10.0\\n'\n", encoding="utf-8")
+    runtime.chmod(0o755)
+    work_dir = tmp_path / "tool"
+
+    with pytest.raises(LodBudgetError, match="TOPOLOGY_RUNTIME_VERSION_MISMATCH"):
+        prepare_topology_tool(
+            source_archive=MAPSHAPER_BUNDLE,
+            expected_sha256=MAPSHAPER_BUNDLE_SHA256,
+            expected_bundle_release="0.7.49+odin-offline-v1",
+            expected_version="0.7.49",
+            work_dir=work_dir,
+            runtime_executable=runtime,
+        )
+
+    assert not work_dir.exists()
 
 
 def test_lod_policy_matches_reviewed_wire_contract() -> None:

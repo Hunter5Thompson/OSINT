@@ -290,6 +290,9 @@ def build_feasibility_report(
             "catalog_revision": catalog_revision,
             "status": "pass",
             "containment": {
+                "max_error_semantics": (
+                    "deviation_from_locked_source_geometry_not_source_cartographic_accuracy"
+                ),
                 "mandatory_scope_keys": sorted(mandatory_scope_keys),
                 "top_ten_raw_ring_scope_keys": sorted(top_ten),
                 "coverage_scope_keys": sorted(required),
