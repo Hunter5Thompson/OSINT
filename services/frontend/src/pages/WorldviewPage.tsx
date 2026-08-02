@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useLocation } from "react-router-dom";
 import * as Cesium from "cesium";
+import { SpatialScopeProvider } from "../spatial/react";
 import { PerformanceGuard } from "../components/globe/PerformanceGuard";
 import { GlobeViewer } from "../components/globe/GlobeViewer";
 import { EntityClickHandler } from "../components/globe/EntityClickHandler";
@@ -482,7 +483,7 @@ function decodeEntityQuery(value: string | null): string {
   return decoded.includes(":") ? (decoded.split(":")[0] ?? "").trim() : decoded.trim();
 }
 
-export function WorldviewPage() {
+function WorldviewContent() {
   const location = useLocation();
 
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
@@ -784,5 +785,13 @@ export function WorldviewPage() {
     </TimeProvider>
     </PerformanceGuard>
     </SpotlightProvider>
+  );
+}
+
+export function WorldviewPage() {
+  return (
+    <SpatialScopeProvider>
+      <WorldviewContent />
+    </SpatialScopeProvider>
   );
 }

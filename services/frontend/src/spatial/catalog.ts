@@ -626,3 +626,59 @@ export class MemorySpatialCatalog implements SpatialCatalogPort {
     }
   }
 }
+
+const BOOTSTRAP_CATALOG_REVISION = "spatial-v1-44e5d2d7bff0";
+
+const BOOTSTRAP_WORLD_SCOPE: unknown = {
+  scope: {
+    key: "world",
+    kind: "world",
+    label: "World",
+    shortLabel: "World",
+    parentKey: null,
+    childrenAvailable: true,
+    presentation: "boundary",
+  },
+  path: [{
+    key: "world",
+    kind: "world",
+    label: "World",
+    shortLabel: "World",
+    parentKey: null,
+    childrenAvailable: true,
+    presentation: "boundary",
+  }],
+  query: {
+    schemaVersion: 1,
+    scopeKey: "world",
+    catalogRevision: BOOTSTRAP_CATALOG_REVISION,
+    boundaryPolicy: "odin-reference-v1",
+  },
+  presentation: {
+    mode: "boundary",
+    scopeKey: "world",
+    catalogRevision: BOOTSTRAP_CATALOG_REVISION,
+    preferredLod: "overview",
+    outlineLods: {},
+    childrenLods: {
+      overview: {
+        assetId: "b90baf4f115232700cade2dd6e7366de9193bcf38803fac09d66e99ae5934939",
+        mediaType: "application/vnd.odin.boundary-pack+json;v=1",
+        byteLength: 218408,
+        vertexCount: 10598,
+        featureCount: 177,
+        role: "render",
+        lod: "overview",
+      },
+    },
+    cameraExtent: { kind: "world" },
+  },
+  containment: null,
+};
+
+export function createBootstrapSpatialCatalog(): MemorySpatialCatalog {
+  return new MemorySpatialCatalog({
+    activeCatalogRevision: BOOTSTRAP_CATALOG_REVISION,
+    resolvedScopes: [BOOTSTRAP_WORLD_SCOPE],
+  });
+}
