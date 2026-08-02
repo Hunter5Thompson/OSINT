@@ -124,6 +124,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
   private presentationController: AbortController | null = null;
   private unsubscribeNavigation: (() => void) | null = null;
   private generation = 0;
+  private lifecycleGeneration = 0;
   private started = false;
 
   constructor(options: CreateSpatialScopeControllerOptions) {
@@ -150,16 +151,21 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
     this.unsubscribeNavigation = this.navigation.subscribeLocation((event) => {
       this.onLocation(event);
     });
-    this.hydrateCandidate(
-      this.navigation.readScopeCandidate(),
-      null,
-      "deep-link",
-    );
+    const lifecycleGeneration = ++this.lifecycleGeneration;
+    queueMicrotask(() => {
+      if (!this.started || lifecycleGeneration !== this.lifecycleGeneration) return;
+      this.hydrateCandidate(
+        this.navigation.readScopeCandidate(),
+        null,
+        "deep-link",
+      );
+    });
   }
 
   stop(): void {
     if (!this.started && this.snapshot === HYDRATING_SPATIAL_SCOPE_SNAPSHOT) return;
     this.started = false;
+    this.lifecycleGeneration += 1;
     this.generation += 1;
     if (this.foreground !== null) {
       this.foreground.cancelledByStop = true;
