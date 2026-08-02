@@ -16,11 +16,16 @@ from app.models.spatial import (
     CatalogManifest,
     CatalogProblemCode,
     ManifestScope,
+    ScopeKind,
+    ScopeNode,
     SourceLock,
     SourceLockRecord,
     SpatialCatalogProblem,
     canonical_json_bytes,
     iter_manifest_descriptors,
+    parse_scope_key,
+    validate_asset_id_candidate,
+    validate_catalog_revision_candidate,
 )
 
 _CATALOG_DIRECTORY = re.compile(r"^spatial-v[0-9]+-[a-f0-9]{12,64}$")
@@ -44,6 +49,25 @@ class AttributionProjection:
     catalog_revision: str
     representation_note: str
     sources: tuple[AttributionProjectionSource, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogBootstrap:
+    active_catalog_revision: str
+    served_catalog_revisions: tuple[str, ...]
+    boundary_policy: str
+    root_scope_key: str
+    max_enabled_kind: ScopeKind
+    attributions: tuple[AttributionProjection, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedSpatialScope:
+    catalog_revision: str
+    boundary_policy: str
+    canonicalized_from: str | None
+    record: ManifestScope
+    path: tuple[ScopeNode, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +96,8 @@ type CatalogState = CatalogReadyState | CatalogUnavailableState
 type ScopeLookup = ManifestScope | SpatialCatalogProblem
 type AssetLookup = SpatialAsset | SpatialCatalogProblem
 type AssetRead = bytes | SpatialCatalogProblem
+type CatalogBootstrapLookup = CatalogBootstrap | SpatialCatalogProblem
+type ResolveLookup = ResolvedSpatialScope | SpatialCatalogProblem
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +167,96 @@ class SpatialCatalogLoader:
         self._diagnostic = None
         self._state = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
 
+    def bootstrap(self) -> CatalogBootstrapLookup:
+        if not isinstance(self._state, CatalogReadyState):
+            return _GENERIC_UNAVAILABLE
+        catalogs = tuple(
+            self._catalogs[revision] for revision in self._state.served_catalog_revisions
+        )
+        active = catalogs[0]
+        return CatalogBootstrap(
+            active_catalog_revision=self._state.active_catalog_revision,
+            served_catalog_revisions=self._state.served_catalog_revisions,
+            boundary_policy=active.manifest.boundary_policy,
+            root_scope_key=active.manifest.root_scope_key,
+            max_enabled_kind=_max_scope_kind(active.manifest),
+            attributions=tuple(catalog.attribution for catalog in catalogs),
+        )
+
+    def resolve_scope(
+        self,
+        scope_key: str | None,
+        catalog_revision: str | None,
+    ) -> ResolveLookup:
+        try:
+            parsed = parse_scope_key(scope_key)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return SpatialCatalogProblem(
+                code=CatalogProblemCode.INVALID_SCOPE_KEY,
+                message="Invalid spatial scope key",
+                recoverable=False,
+                active_catalog_revision=self._active_revision(),
+            )
+
+        revision = catalog_revision
+        if revision is not None:
+            try:
+                revision = validate_catalog_revision_candidate(revision)
+            except ValueError:
+                return SpatialCatalogProblem(
+                    code=CatalogProblemCode.INVALID_CATALOG_REVISION,
+                    message="Invalid spatial catalog revision",
+                    recoverable=False,
+                    active_catalog_revision=self._active_revision(),
+                )
+
+        if not isinstance(self._state, CatalogReadyState):
+            return _GENERIC_UNAVAILABLE
+        selected_revision = revision or self._state.active_catalog_revision
+        catalog = self._catalogs.get(selected_revision)
+        if catalog is None:
+            return self._revision_problem(selected_revision)
+        record = catalog.scopes.get(parsed.canonical)
+        if record is None:
+            return SpatialCatalogProblem(
+                code=CatalogProblemCode.UNKNOWN_SCOPE,
+                message="Spatial scope was not found",
+                target=parsed.canonical,
+                recoverable=False,
+                active_catalog_revision=self._active_revision(),
+            )
+        return ResolvedSpatialScope(
+            catalog_revision=selected_revision,
+            boundary_policy=catalog.manifest.boundary_policy,
+            canonicalized_from=(scope_key if parsed.canonical != scope_key else None),
+            record=record,
+            path=tuple(catalog.scopes[key].scope for key in record.path),
+        )
+
+    def get_asset_by_id(self, asset_id: str) -> AssetLookup:
+        try:
+            validated = validate_asset_id_candidate(asset_id)
+        except ValueError:
+            return SpatialCatalogProblem(
+                code=CatalogProblemCode.INVALID_ASSET_ID,
+                message="Invalid spatial asset ID",
+                recoverable=False,
+                active_catalog_revision=self._active_revision(),
+            )
+        if not isinstance(self._state, CatalogReadyState):
+            return _GENERIC_UNAVAILABLE
+        for revision in self._state.served_catalog_revisions:
+            asset = self._catalogs[revision].assets.get(validated)
+            if asset is not None:
+                return asset
+        return SpatialCatalogProblem(
+            code=CatalogProblemCode.UNKNOWN_ASSET,
+            message="Spatial asset was not found",
+            target=validated,
+            recoverable=False,
+            active_catalog_revision=self._active_revision(),
+        )
+
     def get_scope(self, catalog_revision: str, scope_key: str) -> ScopeLookup:
         catalog = self._catalogs.get(catalog_revision)
         if catalog is None:
@@ -206,7 +322,9 @@ class SpatialCatalogLoader:
             self._load_catalog(directory, source_by_id=source_by_id)
             for directory in directories
         )
-        return _order_loaded_catalogs(loaded)
+        ordered = _order_loaded_catalogs(loaded)
+        _validate_cross_catalog_assets(ordered)
+        return ordered
 
     def _discover_served_directories(self) -> tuple[Path, ...]:
         if (self._path / "manifest.json").is_file():
@@ -398,3 +516,23 @@ def _order_loaded_catalogs(
 
 def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+def _max_scope_kind(manifest: CatalogManifest) -> ScopeKind:
+    rank = {
+        ScopeKind.WORLD: 0,
+        ScopeKind.COUNTRY: 1,
+        ScopeKind.ADMIN1: 2,
+        ScopeKind.ADMIN2: 3,
+    }
+    return max((record.scope.kind for record in manifest.scopes), key=rank.__getitem__)
+
+
+def _validate_cross_catalog_assets(catalogs: tuple[_LoadedCatalog, ...]) -> None:
+    metadata_by_id: dict[str, tuple[str, int]] = {}
+    for catalog in catalogs:
+        for asset in catalog.assets.values():
+            metadata = (asset.media_type, asset.byte_length)
+            existing = metadata_by_id.setdefault(asset.asset_id, metadata)
+            if existing != metadata:
+                raise ValueError("shared content-addressed asset metadata differs by revision")

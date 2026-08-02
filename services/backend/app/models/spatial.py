@@ -93,6 +93,19 @@ class SpatialCatalogProblem(StrictFrozenModel):
     active_catalog_revision: CatalogRevision | None = None
 
 
+class ScopeProblemDetail(StrictFrozenModel):
+    schema_version: Literal[1] = 1
+    code: CatalogProblemCode
+    message: StrictStr = Field(min_length=1, max_length=200)
+    target: StrictStr | None = Field(default=None, max_length=128)
+    recoverable: bool
+    active_catalog_revision: CatalogRevision | None = None
+
+
+class ScopeProblemResponse(StrictFrozenModel):
+    detail: ScopeProblemDetail
+
+
 class ScopeNode(StrictFrozenModel):
     key: ScopeKey
     kind: ScopeKind
@@ -334,6 +347,87 @@ class SourceLock(StrictFrozenModel):
         return self
 
 
+class CatalogCapabilities(StrictFrozenModel):
+    max_enabled_kind: ScopeKind
+    timeline_scope: Literal["bbox_approximate", "exact"]
+    intelligence_scope: Literal["unavailable", "exact"]
+
+
+class BootstrapAttributionSource(StrictFrozenModel):
+    source_id: PolicyIdentifier
+    release: Annotated[StrictStr, StringConstraints(min_length=1, max_length=128)]
+    license_id: PolicyIdentifier
+    text: Annotated[StrictStr, StringConstraints(min_length=1, max_length=300)]
+
+
+class BootstrapAttribution(StrictFrozenModel):
+    catalog_revision: CatalogRevision
+    representation_note: Annotated[
+        StrictStr,
+        StringConstraints(min_length=1, max_length=500),
+    ]
+    sources: tuple[BootstrapAttributionSource, ...] = Field(min_length=1, max_length=32)
+
+
+class CatalogBootstrapResponse(StrictFrozenModel):
+    schema_version: Literal[1] = 1
+    active_catalog_revision: CatalogRevision
+    served_catalog_revisions: tuple[CatalogRevision, ...] = Field(min_length=1, max_length=2)
+    boundary_policy: Literal["odin-reference-v1"]
+    root_scope_key: ScopeKey
+    capabilities: CatalogCapabilities
+    attributions: tuple[BootstrapAttribution, ...] = Field(min_length=1, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_served_attributions(self) -> CatalogBootstrapResponse:
+        if self.active_catalog_revision != self.served_catalog_revisions[0]:
+            raise ValueError("active revision must be first in served revisions")
+        attribution_revisions = tuple(item.catalog_revision for item in self.attributions)
+        if attribution_revisions != self.served_catalog_revisions:
+            raise ValueError("exactly one attribution is required per served revision")
+        return self
+
+
+class BoundaryRenderDescriptor(StrictFrozenModel):
+    asset_id: AssetId
+    media_type: Literal["application/vnd.odin.boundary+json;v=1"]
+    byte_length: StrictInt = Field(gt=0)
+    vertex_count: StrictInt = Field(gt=0)
+    role: Literal["render"]
+    lod: Lod
+
+
+class BoundaryPackRenderDescriptor(StrictFrozenModel):
+    asset_id: AssetId
+    media_type: Literal["application/vnd.odin.boundary-pack+json;v=1"]
+    byte_length: StrictInt = Field(gt=0)
+    vertex_count: StrictInt = Field(gt=0)
+    feature_count: StrictInt = Field(gt=0)
+    role: Literal["render"]
+    lod: Lod
+
+
+type RenderDescriptor = BoundaryRenderDescriptor | BoundaryPackRenderDescriptor
+
+
+class ScopePresentationResponse(StrictFrozenModel):
+    preferred_lod: Lod | None
+    outline_lods: dict[Lod, RenderDescriptor]
+    children_lods: dict[Lod, RenderDescriptor]
+
+
+class ScopeBundleResponse(StrictFrozenModel):
+    schema_version: Literal[1] = 1
+    catalog_revision: CatalogRevision
+    boundary_policy: Literal["odin-reference-v1"]
+    canonicalized_from: ScopeKey | None
+    scope: ScopeNode
+    path: tuple[ScopeNode, ...] = Field(min_length=1, max_length=4)
+    presentation: ScopePresentationResponse
+    containment: ContainmentDescriptor | None
+    provenance_ref: Annotated[StrictStr, StringConstraints(min_length=1, max_length=256)]
+
+
 class ParsedScopeKey(StrictFrozenModel):
     canonical: ScopeKey
     kind: ScopeKind
@@ -342,6 +436,8 @@ class ParsedScopeKey(StrictFrozenModel):
 
 
 _LEXICAL_SCOPE_KEY: Final = re.compile(r"^[A-Za-z0-9:._-]+$")
+_CATALOG_REVISION: Final = re.compile(r"^spatial-v[0-9]+-[a-f0-9]{12,64}$")
+_ASSET_ID: Final = re.compile(r"^[a-f0-9]{64}$")
 _NORMALIZABLE_ISO3: Final = re.compile(r"^country:([A-Za-z]{3})$")
 _NORMALIZABLE_ISO3166_2: Final = re.compile(
     r"^admin1:iso3166-2:([A-Za-z]{2})-([A-Za-z0-9]{1,3})$"
@@ -426,6 +522,26 @@ def parse_scope_key(candidate: str) -> ParsedScopeKey:
             canonical_code=code,
         )
     raise ValueError("INVALID_SCOPE_KEY")
+
+
+def validate_catalog_revision_candidate(candidate: str) -> str:
+    if (
+        not isinstance(candidate, str)
+        or not 23 <= len(candidate) <= 79
+        or _CATALOG_REVISION.fullmatch(candidate) is None
+    ):
+        raise ValueError("INVALID_CATALOG_REVISION")
+    return candidate
+
+
+def validate_asset_id_candidate(candidate: str) -> str:
+    if (
+        not isinstance(candidate, str)
+        or len(candidate) != 64
+        or _ASSET_ID.fullmatch(candidate) is None
+    ):
+        raise ValueError("INVALID_ASSET_ID")
+    return candidate
 
 
 def derive_derivation_revision(inputs: DerivationInputs) -> str:
