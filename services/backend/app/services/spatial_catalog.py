@@ -1,0 +1,400 @@
+"""Async, local-only runtime access to reviewed spatial catalog revisions."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from pydantic import ValidationError
+
+from app.models.spatial import (
+    CatalogAttribution,
+    CatalogManifest,
+    CatalogProblemCode,
+    ManifestScope,
+    SourceLock,
+    SourceLockRecord,
+    SpatialCatalogProblem,
+    canonical_json_bytes,
+    iter_manifest_descriptors,
+)
+
+_CATALOG_DIRECTORY = re.compile(r"^spatial-v[0-9]+-[a-f0-9]{12,64}$")
+_GENERIC_UNAVAILABLE = SpatialCatalogProblem(
+    code=CatalogProblemCode.CATALOG_UNAVAILABLE,
+    message="Spatial catalog is unavailable",
+    recoverable=True,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class AttributionProjectionSource:
+    source_id: str
+    release: str
+    license_id: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class AttributionProjection:
+    catalog_revision: str
+    representation_note: str
+    sources: tuple[AttributionProjectionSource, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SpatialAsset:
+    """Manifest-owned file identity; callers never supply its filesystem path."""
+
+    catalog_revision: str
+    asset_id: str
+    media_type: str
+    byte_length: int
+    _path: Path = field(repr=False, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogReadyState:
+    active_catalog_revision: str
+    served_catalog_revisions: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogUnavailableState:
+    problem: SpatialCatalogProblem
+
+
+type CatalogState = CatalogReadyState | CatalogUnavailableState
+type ScopeLookup = ManifestScope | SpatialCatalogProblem
+type AssetLookup = SpatialAsset | SpatialCatalogProblem
+type AssetRead = bytes | SpatialCatalogProblem
+
+
+@dataclass(frozen=True, slots=True)
+class _LoadedCatalog:
+    directory: Path
+    manifest: CatalogManifest
+    scopes: dict[str, ManifestScope]
+    assets: dict[str, SpatialAsset]
+    attribution: AttributionProjection
+
+
+class SpatialCatalogLoader:
+    """Load at most the active and previous immutable local catalog revisions."""
+
+    def __init__(self, path: Path) -> None:
+        self._path = Path(path)
+        self._catalogs: dict[str, _LoadedCatalog] = {}
+        self._state: CatalogState = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
+        self._verified_assets: set[tuple[str, str]] = set()
+        self._diagnostic: str | None = None
+
+    @property
+    def state(self) -> CatalogState:
+        return self._state
+
+    @property
+    def is_available(self) -> bool:
+        return isinstance(self._state, CatalogReadyState)
+
+    @property
+    def verified_asset_count(self) -> int:
+        return len(self._verified_assets)
+
+    @property
+    def diagnostic(self) -> str | None:
+        """Server-internal load diagnostic; never serialize this into HTTP."""
+
+        return self._diagnostic
+
+    async def load(self) -> CatalogState:
+        """Validate local metadata and indexes without blocking the event loop."""
+
+        try:
+            loaded = await asyncio.to_thread(self._load_sync)
+        except (OSError, UnicodeError, ValueError, ValidationError) as exc:
+            self._catalogs.clear()
+            self._verified_assets.clear()
+            self._diagnostic = f"{type(exc).__name__}: {exc}"
+            self._state = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
+            return self._state
+
+        self._catalogs = {catalog.manifest.catalog_revision: catalog for catalog in loaded}
+        self._verified_assets.clear()
+        self._diagnostic = None
+        revisions = tuple(catalog.manifest.catalog_revision for catalog in loaded)
+        self._state = CatalogReadyState(
+            active_catalog_revision=revisions[0],
+            served_catalog_revisions=revisions,
+        )
+        return self._state
+
+    async def close(self) -> None:
+        """Dispose all immutable verification and lookup caches."""
+
+        self._catalogs.clear()
+        self._verified_assets.clear()
+        self._diagnostic = None
+        self._state = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
+
+    def get_scope(self, catalog_revision: str, scope_key: str) -> ScopeLookup:
+        catalog = self._catalogs.get(catalog_revision)
+        if catalog is None:
+            return self._revision_problem(catalog_revision)
+        scope = catalog.scopes.get(scope_key)
+        if scope is None:
+            return SpatialCatalogProblem(
+                code=CatalogProblemCode.UNKNOWN_SCOPE,
+                message="Spatial scope was not found",
+                target=scope_key,
+                recoverable=False,
+                active_catalog_revision=self._active_revision(),
+            )
+        return scope
+
+    def get_asset(self, catalog_revision: str, asset_id: str) -> AssetLookup:
+        catalog = self._catalogs.get(catalog_revision)
+        if catalog is None:
+            return self._revision_problem(catalog_revision)
+        asset = catalog.assets.get(asset_id)
+        if asset is None:
+            return SpatialCatalogProblem(
+                code=CatalogProblemCode.UNKNOWN_ASSET,
+                message="Spatial asset was not found",
+                target=asset_id,
+                recoverable=False,
+                active_catalog_revision=self._active_revision(),
+            )
+        return asset
+
+    def get_catalog(self, catalog_revision: str) -> _LoadedCatalog | SpatialCatalogProblem:
+        catalog = self._catalogs.get(catalog_revision)
+        if catalog is None:
+            return self._revision_problem(catalog_revision)
+        return catalog
+
+    async def read_asset(self, asset: SpatialAsset) -> AssetRead:
+        """Read and lazily hash an indexed asset; an injected path is never honored."""
+
+        indexed = self.get_asset(asset.catalog_revision, asset.asset_id)
+        if not isinstance(indexed, SpatialAsset):
+            return indexed
+        try:
+            payload = await asyncio.to_thread(indexed._path.read_bytes)
+        except OSError as exc:
+            return self._asset_corrupt(exc)
+        if len(payload) != indexed.byte_length:
+            return self._asset_corrupt(ValueError("asset byte length changed"))
+
+        cache_key = (indexed.catalog_revision, indexed.asset_id)
+        if cache_key not in self._verified_assets:
+            if _sha256_bytes(payload) != indexed.asset_id:
+                return self._asset_corrupt(ValueError("asset hash mismatch"))
+            self._verified_assets.add(cache_key)
+        return payload
+
+    def _load_sync(self) -> tuple[_LoadedCatalog, ...]:
+        directories = self._discover_served_directories()
+        source_lock_path = self._source_lock_path(directories[0])
+        source_lock = SourceLock.model_validate_json(source_lock_path.read_bytes())
+        source_by_id = {source.source_id: source for source in source_lock.sources}
+        loaded = tuple(
+            self._load_catalog(directory, source_by_id=source_by_id)
+            for directory in directories
+        )
+        return _order_loaded_catalogs(loaded)
+
+    def _discover_served_directories(self) -> tuple[Path, ...]:
+        if (self._path / "manifest.json").is_file():
+            if self._path.is_symlink():
+                raise ValueError("catalog directory must not be a symlink")
+            return (self._path,)
+
+        catalogs_root = self._path / "catalogs"
+        if not catalogs_root.is_dir():
+            raise FileNotFoundError("spatial catalog directory is missing")
+        candidates: list[Path] = []
+        for candidate in catalogs_root.iterdir():
+            if not _CATALOG_DIRECTORY.fullmatch(candidate.name):
+                continue
+            if candidate.is_symlink() or not candidate.is_dir():
+                raise ValueError("catalog revision path must be a regular directory")
+            candidates.append(candidate)
+        if not candidates:
+            raise FileNotFoundError("no spatial catalog revision is installed")
+        candidates.sort(
+            key=lambda candidate: (candidate.stat().st_mtime_ns, candidate.name),
+            reverse=True,
+        )
+        return tuple(candidates[:2])
+
+    def _source_lock_path(self, catalog_directory: Path) -> Path:
+        candidates = (
+            self._path / "source-lock.json",
+            catalog_directory.parent / "source-lock.json",
+            catalog_directory.parent.parent / "source-lock.json",
+        )
+        for candidate in candidates:
+            if candidate.is_file() and not candidate.is_symlink():
+                return candidate
+        raise FileNotFoundError("spatial source lock is missing")
+
+    def _load_catalog(
+        self,
+        directory: Path,
+        *,
+        source_by_id: Mapping[str, SourceLockRecord],
+    ) -> _LoadedCatalog:
+        manifest_path = directory / "manifest.json"
+        manifest_bytes = manifest_path.read_bytes()
+        manifest = CatalogManifest.model_validate_json(manifest_bytes)
+        if canonical_json_bytes(manifest) != manifest_bytes:
+            raise ValueError("manifest is not canonical JSON")
+        if directory.name != manifest.catalog_revision:
+            raise ValueError("catalog directory and manifest revision differ")
+
+        attribution_path = directory / "attribution.json"
+        attribution_bytes = attribution_path.read_bytes()
+        attribution = CatalogAttribution.model_validate_json(attribution_bytes)
+        if canonical_json_bytes(attribution) != attribution_bytes:
+            raise ValueError("attribution is not canonical JSON")
+        if attribution.catalog_revision != manifest.catalog_revision:
+            raise ValueError("attribution and manifest revision differ")
+        projection = _project_attribution(
+            attribution,
+            source_by_id=source_by_id,
+        )
+
+        descriptor_by_id: dict[str, tuple[str, int]] = {}
+        for descriptor in iter_manifest_descriptors(manifest):
+            identity = (descriptor.media_type, descriptor.byte_length)
+            existing = descriptor_by_id.setdefault(descriptor.asset_id, identity)
+            if existing != identity:
+                raise ValueError("one asset has conflicting descriptors")
+
+        assets_dir = directory / "assets"
+        if assets_dir.is_symlink() or not assets_dir.is_dir():
+            raise ValueError("catalog assets path must be a regular directory")
+        expected_names = {f"{asset_id}.json" for asset_id in manifest.assets}
+        actual_entries = tuple(assets_dir.iterdir())
+        actual_names = {entry.name for entry in actual_entries}
+        if actual_names != expected_names:
+            raise ValueError("catalog assets do not match manifest declarations")
+
+        assets_root = assets_dir.resolve(strict=True)
+        assets: dict[str, SpatialAsset] = {}
+        for asset_id in manifest.assets:
+            path = assets_dir / f"{asset_id}.json"
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("catalog asset must be a regular file")
+            resolved = path.resolve(strict=True)
+            if resolved.parent != assets_root:
+                raise ValueError("catalog asset path escapes its manifest directory")
+            asset_metadata = descriptor_by_id.get(asset_id)
+            if asset_metadata is None:
+                raise ValueError("manifest asset has no descriptor")
+            media_type, byte_length = asset_metadata
+            if path.stat().st_size != byte_length:
+                raise ValueError("catalog asset byte length differs from descriptor")
+            assets[asset_id] = SpatialAsset(
+                catalog_revision=manifest.catalog_revision,
+                asset_id=asset_id,
+                media_type=media_type,
+                byte_length=byte_length,
+                _path=path,
+            )
+
+        return _LoadedCatalog(
+            directory=directory,
+            manifest=manifest,
+            scopes={record.scope.key: record for record in manifest.scopes},
+            assets=assets,
+            attribution=projection,
+        )
+
+    def _revision_problem(self, revision: str) -> SpatialCatalogProblem:
+        if not self.is_available:
+            return _GENERIC_UNAVAILABLE
+        return SpatialCatalogProblem(
+            code=CatalogProblemCode.CATALOG_REVISION_UNAVAILABLE,
+            message="Requested spatial catalog revision is not served",
+            target=revision,
+            recoverable=True,
+            active_catalog_revision=self._active_revision(),
+        )
+
+    def _asset_corrupt(self, exc: Exception) -> SpatialCatalogProblem:
+        self._catalogs.clear()
+        self._verified_assets.clear()
+        self._diagnostic = f"{type(exc).__name__}: {exc}"
+        self._state = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
+        return _GENERIC_UNAVAILABLE
+
+    def _active_revision(self) -> str | None:
+        if isinstance(self._state, CatalogReadyState):
+            return self._state.active_catalog_revision
+        return None
+
+
+def _project_attribution(
+    attribution: CatalogAttribution,
+    *,
+    source_by_id: Mapping[str, SourceLockRecord],
+) -> AttributionProjection:
+    sources: list[AttributionProjectionSource] = []
+    for item in attribution.sources:
+        source = source_by_id.get(item.source_id)
+        if source is None:
+            raise ValueError("attribution source is absent from source lock")
+        if (
+            source.source_id != item.source_id
+            or source.license_id != item.license_id
+            or source.attribution != item.attribution
+        ):
+            raise ValueError("attribution does not match its reviewed source lock")
+        sources.append(
+            AttributionProjectionSource(
+                source_id=item.source_id,
+                release=source.release,
+                license_id=item.license_id,
+                text=item.attribution,
+            )
+        )
+    return AttributionProjection(
+        catalog_revision=attribution.catalog_revision,
+        representation_note="ODIN reference boundary representation",
+        sources=tuple(sources),
+    )
+
+
+def _order_loaded_catalogs(
+    loaded: tuple[_LoadedCatalog, ...],
+) -> tuple[_LoadedCatalog, ...]:
+    """Prefer the manifest carry-forward relation over filesystem timestamp order."""
+
+    if len(loaded) < 2:
+        return loaded
+    loaded_revisions = {catalog.manifest.catalog_revision for catalog in loaded}
+    referenced_revisions = {
+        record.carry_forward_from
+        for catalog in loaded
+        for record in catalog.manifest.scopes
+        if record.carry_forward_from in loaded_revisions
+    }
+    active_candidates = tuple(
+        catalog
+        for catalog in loaded
+        if catalog.manifest.catalog_revision not in referenced_revisions
+    )
+    if len(active_candidates) != 1:
+        return loaded
+    active = active_candidates[0]
+    return (active, *(catalog for catalog in loaded if catalog is not active))
+
+
+def _sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
