@@ -21,6 +21,7 @@ import {
   type SpatialScopeSnapshot,
 } from "./contracts";
 import { mapSpatialCatalogProblem } from "./catalog";
+import { ScopeNavigationError } from "./navigation";
 
 export interface SpatialScopePresentationPort {
   present(
@@ -87,6 +88,15 @@ function problemFromContractError(error: SpatialScopeContractError): ScopeProble
 
 function problemFromUnknown(error: unknown): ScopeProblem {
   if (error instanceof SpatialScopeContractError) return problemFromContractError(error);
+  if (error instanceof ScopeNavigationError) {
+    return freezeSpatialValue({
+      severity: "error",
+      code: error.code,
+      target: error.target,
+      recoverable: error.recoverable,
+      message: error.message,
+    });
+  }
   return mapSpatialCatalogProblem(error);
 }
 
@@ -114,6 +124,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
   private presentationController: AbortController | null = null;
   private unsubscribeNavigation: (() => void) | null = null;
   private generation = 0;
+  private lifecycleGeneration = 0;
   private started = false;
 
   constructor(options: CreateSpatialScopeControllerOptions) {
@@ -140,16 +151,21 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
     this.unsubscribeNavigation = this.navigation.subscribeLocation((event) => {
       this.onLocation(event);
     });
-    this.hydrateCandidate(
-      this.navigation.readScopeCandidate(),
-      null,
-      "deep-link",
-    );
+    const lifecycleGeneration = ++this.lifecycleGeneration;
+    queueMicrotask(() => {
+      if (!this.started || lifecycleGeneration !== this.lifecycleGeneration) return;
+      this.hydrateCandidate(
+        this.navigation.readScopeCandidate(),
+        null,
+        "deep-link",
+      );
+    });
   }
 
   stop(): void {
     if (!this.started && this.snapshot === HYDRATING_SPATIAL_SCOPE_SNAPSHOT) return;
     this.started = false;
+    this.lifecycleGeneration += 1;
     this.generation += 1;
     if (this.foreground !== null) {
       this.foreground.cancelledByStop = true;
@@ -179,7 +195,12 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
       case "ascend":
         return this.ascend(command.cause, options.signal);
       case "hydrate":
-        return this.hydrate(command.target, command.catalogRevision, options.signal);
+        return this.hydrate(
+          command.target,
+          command.catalogRevision,
+          command.cause,
+          options.signal,
+        );
       case "prefetch":
         return this.prefetch(command.target, command.priority, options.signal);
     }
@@ -207,6 +228,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
   private hydrate(
     target: ScopeKey | null,
     catalogRevision: string | null,
+    cause: "browser-history" | "deep-link",
     callerSignal?: AbortSignal,
   ): Promise<SpatialScopeResult> {
     const canonicalTarget = target === null ? WORLD_SCOPE_KEY : parseScopeKeyCandidate(target);
@@ -218,7 +240,15 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
       return Promise.resolve(this.finishUnchanged());
     }
     const revision = catalogRevision === null ? null : parseCatalogRevision(catalogRevision);
-    return this.runForeground(canonicalTarget, revision, null, callerSignal);
+    return this.runForeground(
+      canonicalTarget,
+      revision,
+      null,
+      callerSignal,
+      null,
+      cause === "deep-link" && this.snapshot.phase === "hydrating",
+      cause === "browser-history",
+    );
   }
 
   private async prefetch(
@@ -263,6 +293,9 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
     catalogRevision: string | null,
     navigationMode: "push" | "replace" | null,
     callerSignal?: AbortSignal,
+    committedProblem: ScopeProblem | null = null,
+    fallbackInitialHydration = false,
+    repairHistoricalFailure = false,
   ): Promise<SpatialScopeResult> {
     const intent = this.beginForeground(target, callerSignal);
     if (!intent.controller.signal.aborted) this.publishResolving(target);
@@ -289,7 +322,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
         this.pendingNavigationIds.delete(navigationId);
       }
 
-      const committed = this.commitResolved(resolved);
+      const committed = this.commitResolved(resolved, committedProblem);
       this.finishForeground(intent);
       return { outcome: "committed", snapshot: committed };
     } catch (error: unknown) {
@@ -308,6 +341,56 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
         return { outcome: "superseded" };
       }
       const problem = problemFromUnknown(error);
+      if (fallbackInitialHydration && target !== WORLD_SCOPE_KEY) {
+        this.finishForeground(intent);
+        const fallback = await this.runForeground(
+          WORLD_SCOPE_KEY,
+          null,
+          "replace",
+          undefined,
+          problem,
+          false,
+        );
+        return fallback.outcome === "failed" ? fallback : { outcome: "failed", problem };
+      }
+      if (
+        repairHistoricalFailure &&
+        this.snapshot.phase !== "hydrating" &&
+        this.snapshot.current !== null
+      ) {
+        const committed = this.snapshot;
+        const navigationId = this.createNavigationId();
+        intent.navigationId = navigationId;
+        this.pendingNavigationIds.add(navigationId);
+        try {
+          await waitWithSignal(this.navigation.writeScope({
+            scopeKey: committed.current.key === WORLD_SCOPE_KEY ? null : committed.current.key,
+            catalogRevision: committed.query.catalogRevision,
+            mode: "replace",
+            navigationId,
+          }), intent.controller.signal);
+          this.assertCurrent(intent);
+          this.pendingNavigationIds.delete(navigationId);
+        } catch (repairError: unknown) {
+          this.pendingNavigationIds.delete(navigationId);
+          if (intent.superseded) {
+            intent.detachCallerSignal();
+            return { outcome: "superseded" };
+          }
+          if (intent.cancelledByStop || intent.controller.signal.aborted || isAbortError(repairError)) {
+            this.clearPending(intent);
+            this.finishForeground(intent);
+            return { outcome: "cancelled" };
+          }
+          const repairProblem = problemFromUnknown(repairError);
+          this.publishFailure(repairProblem);
+          this.finishForeground(intent);
+          return { outcome: "failed", problem: repairProblem };
+        }
+        this.publishFailure(problem);
+        this.finishForeground(intent);
+        return { outcome: "failed", problem };
+      }
       this.publishFailure(problem);
       this.finishForeground(intent);
       return { outcome: "failed", problem };
@@ -412,7 +495,10 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
     }));
   }
 
-  private commitResolved(resolved: ResolvedScope): SpatialScopeSnapshot {
+  private commitResolved(
+    resolved: ResolvedScope,
+    committedProblem: ScopeProblem | null,
+  ): SpatialScopeSnapshot {
     const stateRevision = this.snapshot.stateRevision + 1;
     this.presentationController?.abort();
     this.presentationController = null;
@@ -424,7 +510,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
       path: resolved.path,
       query: resolved.query,
       pending: null,
-      problem: semanticOnly ? resolved.presentation.problem : null,
+      problem: committedProblem ?? (semanticOnly ? resolved.presentation.problem : null),
       visual: semanticOnly
         ? {
             phase: "unavailable",
@@ -561,7 +647,20 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
         ? null
         : parseCatalogRevision(catalogRevisionCandidate);
     } catch (error: unknown) {
-      this.publishFailure(problemFromUnknown(error));
+      const problem = problemFromUnknown(error);
+      if (cause === "deep-link" && this.snapshot.phase === "hydrating") {
+        void this.runForeground(
+          WORLD_SCOPE_KEY,
+          null,
+          "replace",
+          undefined,
+          problem,
+        );
+      } else if (cause === "browser-history" && this.snapshot.phase !== "hydrating") {
+        void this.repairCommittedLocation(problem);
+      } else {
+        this.publishFailure(problem);
+      }
       return;
     }
     void this.dispatch({
@@ -570,6 +669,43 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
       catalogRevision,
       cause,
     });
+  }
+
+  private async repairCommittedLocation(problem: ScopeProblem): Promise<void> {
+    if (this.snapshot.phase === "hydrating") {
+      this.publishFailure(problem);
+      return;
+    }
+    const committed = this.snapshot;
+    const intent = this.beginForeground(committed.current.key);
+    const navigationId = this.createNavigationId();
+    intent.navigationId = navigationId;
+    this.pendingNavigationIds.add(navigationId);
+    try {
+      await waitWithSignal(this.navigation.writeScope({
+        scopeKey: committed.current.key === WORLD_SCOPE_KEY ? null : committed.current.key,
+        catalogRevision: committed.query.catalogRevision,
+        mode: "replace",
+        navigationId,
+      }), intent.controller.signal);
+      this.assertCurrent(intent);
+      this.pendingNavigationIds.delete(navigationId);
+      this.publishFailure(problem);
+      this.finishForeground(intent);
+    } catch (error: unknown) {
+      this.pendingNavigationIds.delete(navigationId);
+      if (intent.superseded) {
+        intent.detachCallerSignal();
+        return;
+      }
+      if (intent.cancelledByStop || intent.controller.signal.aborted || isAbortError(error)) {
+        this.clearPending(intent);
+        this.finishForeground(intent);
+        return;
+      }
+      this.publishFailure(problemFromUnknown(error));
+      this.finishForeground(intent);
+    }
   }
 
   private publish(next: SpatialScopeSnapshot): void {

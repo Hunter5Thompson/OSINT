@@ -140,6 +140,12 @@ export interface OwnedSpatialScopeModule extends SpatialScopeModule {
   stop(): void;
 }
 
+export type SpatialScopeHandle = SpatialScopeSnapshot & {
+  enter(target: ScopeKey, cause: EnterCause): Promise<SpatialScopeResult>;
+  ascend(cause: "breadcrumb" | "keyboard"): Promise<SpatialScopeResult>;
+  prefetch(target: ScopeKey): Promise<SpatialScopeResult>;
+};
+
 export interface LongitudeSpan {
   readonly west: number;
   readonly east: number;
