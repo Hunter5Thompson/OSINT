@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -11,7 +13,11 @@ from httpx import ASGITransport, AsyncClient, Response
 
 from app.main import app as production_app
 from app.routers.spatial import router
-from app.services.spatial_catalog import CatalogReadyState, SpatialCatalogLoader
+from app.services.spatial_catalog import (
+    CatalogReadyState,
+    SpatialAsset,
+    SpatialCatalogLoader,
+)
 from tests.unit.test_spatial_catalog import _canonical_bytes, _publish_catalog
 
 
@@ -406,3 +412,82 @@ async def test_invalid_range_returns_416_without_internal_path(tmp_path: Path) -
     assert response.status_code == 416
     assert response.headers["content-range"] == "bytes */5"
     assert str(tmp_path) not in response.text
+
+
+class _BlockingReader:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def __call__(self, path: Path) -> bytes:
+        self.calls += 1
+        if self.calls == 1:
+            self.entered.set()
+            if not self.release.wait(timeout=2):
+                raise RuntimeError("test reader release timed out")
+        return path.read_bytes()
+
+
+@pytest.mark.asyncio
+async def test_asset_saturation_returns_429_without_opening_rejected_file(
+    tmp_path: Path,
+) -> None:
+    spatial_root = tmp_path / "spatial"
+    _, asset_id, _ = _publish_catalog(spatial_root, asset_content=b"bounded")
+    reader = _BlockingReader()
+    events: list[tuple[str, dict[str, object]]] = []
+    loader = SpatialCatalogLoader(
+        spatial_root,
+        asset_max_concurrency=1,
+        asset_acquire_timeout_s=0.01,
+        file_reader=reader,
+        monotonic=lambda: 42.0,
+        event_sink=lambda name, fields: events.append((name, fields)),
+    )
+    await loader.load()
+    url = f"/api/spatial/assets/{asset_id}"
+
+    active = asyncio.create_task(_get(loader, url))
+    assert await asyncio.to_thread(reader.entered.wait, 1)
+    rejected = await _get(loader, url)
+
+    assert rejected.status_code == 429
+    assert rejected.headers["retry-after"] == "1"
+    assert rejected.json()["detail"]["code"] == "ASSET_BUSY"
+    assert reader.calls == 1
+    assert any(name == "spatial_asset_rejected_busy" for name, _ in events)
+
+    reader.release.set()
+    assert (await active).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_cancellation_holds_then_releases_asset_slot_without_leak(
+    tmp_path: Path,
+) -> None:
+    spatial_root = tmp_path / "spatial"
+    revision, asset_id, _ = _publish_catalog(spatial_root, asset_content=b"bounded")
+    reader = _BlockingReader()
+    loader = SpatialCatalogLoader(
+        spatial_root,
+        asset_max_concurrency=1,
+        asset_acquire_timeout_s=0.01,
+        file_reader=reader,
+    )
+    await loader.load()
+    asset = loader.get_asset(revision, asset_id)
+    assert isinstance(asset, SpatialAsset)
+
+    cancelled_read = asyncio.create_task(loader.read_asset(asset))
+    assert await asyncio.to_thread(reader.entered.wait, 1)
+    cancelled_read.cancel()
+    await asyncio.sleep(0)
+    assert not cancelled_read.done()
+
+    reader.release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled_read
+
+    assert await loader.read_asset(asset) == b"bounded"
+    assert reader.calls == 2

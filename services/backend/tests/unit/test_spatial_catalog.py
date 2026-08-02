@@ -345,3 +345,32 @@ async def test_close_discards_loaded_catalog_and_hash_cache(tmp_path: Path) -> N
 
     assert loader.is_available is False
     assert loader.verified_asset_count == 0
+
+
+@pytest.mark.asyncio
+async def test_readiness_resolve_and_hash_events_are_bounded_metadata(tmp_path: Path) -> None:
+    spatial_root = tmp_path / "spatial"
+    revision, asset_id, _ = _publish_catalog(spatial_root)
+    events: list[tuple[str, dict[str, object]]] = []
+    loader = SpatialCatalogLoader(
+        spatial_root,
+        monotonic=lambda: 10.0,
+        event_sink=lambda name, fields: events.append((name, fields)),
+    )
+
+    await loader.load()
+    loader.resolve_scope("world", revision)
+    asset = loader.get_asset(revision, asset_id)
+    assert isinstance(asset, SpatialAsset)
+    await loader.read_asset(asset)
+
+    names = {name for name, _ in events}
+    assert {
+        "spatial_catalog_readiness",
+        "spatial_catalog_resolve",
+        "spatial_asset_hash_verified",
+        "spatial_asset_load",
+    } <= names
+    serialized = json.dumps(events)
+    assert str(tmp_path) not in serialized
+    assert "example.invalid" not in serialized
