@@ -495,12 +495,17 @@ export interface MemoryResolveCall {
   readonly catalogRevision: CatalogRevision;
 }
 
+export interface MemoryPrefetchCall extends MemoryResolveCall {
+  readonly priority: "hover" | "anticipated";
+}
+
 export class MemorySpatialCatalog implements SpatialCatalogPort {
   private readonly activeCatalogRevision: CatalogRevision;
   private readonly entries = new Map<string, ResolvedScope>();
   private readonly revisions = new Set<CatalogRevision>();
   private readonly resolveGates = new Map<ScopeKey, DeferredGate[]>();
   private readonly resolveCallLog: MemoryResolveCall[] = [];
+  private readonly prefetchCallLog: MemoryPrefetchCall[] = [];
   private disposed = false;
 
   constructor(options: MemorySpatialCatalogOptions) {
@@ -519,6 +524,10 @@ export class MemorySpatialCatalog implements SpatialCatalogPort {
 
   get resolveCalls(): readonly MemoryResolveCall[] {
     return this.resolveCallLog;
+  }
+
+  get prefetchCalls(): readonly MemoryPrefetchCall[] {
+    return this.prefetchCallLog;
   }
 
   deferNextResolve(scopeKey: ScopeKey): DeferredGate {
@@ -556,10 +565,22 @@ export class MemorySpatialCatalog implements SpatialCatalogPort {
   async prefetch(
     scopeKey: ScopeKey,
     catalogRevision: string,
-    _priority: "hover" | "anticipated",
+    priority: "hover" | "anticipated",
     signal: AbortSignal,
   ): Promise<void> {
-    await this.resolve(scopeKey, catalogRevision, signal);
+    this.assertAvailable();
+    if (signal.aborted) throw abortError();
+    const revision = this.requestedRevision(catalogRevision);
+    this.prefetchCallLog.push(freezeSpatialValue({ scopeKey, catalogRevision: revision, priority }));
+    if (!this.entries.has(this.entryKey(scopeKey, revision))) {
+      throw new SpatialCatalogError({
+        code: "UNKNOWN_SCOPE",
+        target: scopeKey,
+        message: "Scope is not present in the catalog.",
+      });
+    }
+    await Promise.resolve();
+    if (signal.aborted) throw abortError();
   }
 
   dispose(): void {
