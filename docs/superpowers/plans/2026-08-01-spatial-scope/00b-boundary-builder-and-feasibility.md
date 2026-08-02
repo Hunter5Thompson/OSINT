@@ -113,3 +113,18 @@ mandatory strict-containment scope and every emitted world child-pack LOD meets 
 same counters used in its descriptor. Any violation invokes Spec 14 stop rules; it is
 not deferred to Cesium. Finally run all `services/data-ingestion` tests. Handoff is a
 reviewed immutable seed revision plus validators and minimal fixtures for Plans 01/02.
+
+## Post-review release hardening
+
+- [x] The committed Mapshaper bundle has a documented regeneration script that
+  independently verifies every npm integrity and reproduces the source-lock SHA-256.
+- [x] The adapter validates the actual Node engine, invokes that exact runtime, and
+  records its version outside revision identity.
+- [x] Atomic publication normalizes revision directories to `0755` and files to
+  `0644`, including an already-identical destination.
+- [x] The Spatial compiler is an explicit checkout/build extra; the production
+  ingestion wheel and image exclude it, Shapely, Node, and the tool bundle.
+
+This explicitly accepts Node as a controlled compiler-host dependency. It does not
+relax the runtime boundary: no deployed service downloads, imports, or runs the
+geometry compiler.

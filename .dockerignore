@@ -12,4 +12,5 @@
 **/dist
 services/frontend
 docs
+services/data-ingestion/spatial_catalog
 *.dump

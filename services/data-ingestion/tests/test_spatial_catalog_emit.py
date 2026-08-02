@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import stat
 from pathlib import Path
 
 import pytest
@@ -254,6 +255,12 @@ def test_attribution_and_atomic_revision_publication_are_deterministic(tmp_path:
         assets=(asset,),
         attribution=attribution,
     )
+    assert stat.S_IMODE(first.stat().st_mode) == 0o755
+    assert stat.S_IMODE((first / "assets").stat().st_mode) == 0o755
+    assert stat.S_IMODE((first / "manifest.json").stat().st_mode) == 0o644
+    first.chmod(0o700)
+    (first / "assets").chmod(0o700)
+    (first / "manifest.json").chmod(0o600)
     second = publish_revision(
         output_root,
         manifest=manifest,
@@ -273,6 +280,9 @@ def test_attribution_and_atomic_revision_publication_are_deterministic(tmp_path:
         path.name.startswith(f".{manifest.catalog_revision}-")
         for path in output_root.iterdir()
     )
+    assert stat.S_IMODE(first.stat().st_mode) == 0o755
+    assert stat.S_IMODE((first / "assets").stat().st_mode) == 0o755
+    assert stat.S_IMODE((first / "manifest.json").stat().st_mode) == 0o644
 
     (first / "attribution.json").write_bytes(b"corrupt")
     with pytest.raises(PublicationError, match="IMMUTABLE_REVISION_CONFLICT"):

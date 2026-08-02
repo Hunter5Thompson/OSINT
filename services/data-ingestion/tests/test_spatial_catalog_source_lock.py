@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import copy
+import hashlib
 import io
 import json
 import tarfile
@@ -180,6 +182,24 @@ def test_mapshaper_offline_bundle_contains_reviewed_runtime_closure() -> None:
         ("rw", "1.3.3"),
         ("safer-buffer", "2.1.2"),
     ]
+    for package in manifest["packages"]:
+        algorithm, digest = package["integrity"].split("-", 1)
+        assert algorithm == "sha512"
+        assert len(base64.b64decode(digest, validate=True)) == hashlib.sha512().digest_size
+
+
+def test_mapshaper_bundle_has_a_reproducible_reviewed_build_procedure() -> None:
+    tool_root = REPO_ROOT / "services/data-ingestion/spatial_catalog"
+    script = tool_root / "tools/rebuild_mapshaper_bundle.py"
+    readme = tool_root / "data/README-mapshaper-offline-bundle.md"
+
+    assert script.is_file()
+    assert readme.is_file()
+    documentation = readme.read_text(encoding="utf-8")
+    assert "68b39a96791d6e62b51163e8e39f1f32ba55c0d3b9fbceade58ad07db7dae8f1" in (
+        documentation
+    )
+    assert "npm integrity" in documentation.lower()
 
 
 def test_source_lock_repo_root_is_discovered_from_layout(tmp_path: Path) -> None:

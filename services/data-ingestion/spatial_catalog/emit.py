@@ -363,18 +363,28 @@ def publish_revision(
         (staging / "attribution.json").write_bytes(attribution)
         for name, content in sorted(report_values.items()):
             (staging / name).write_bytes(content)
+        _set_publication_modes(staging)
 
         if destination.exists():
             if _tree_bytes(destination) != _tree_bytes(staging):
                 raise PublicationError(
                     f"IMMUTABLE_REVISION_CONFLICT: {manifest.catalog_revision} already differs"
                 )
+            _set_publication_modes(destination)
             return destination
         os.replace(staging, destination)
         return destination
     finally:
         if staging.exists():
             shutil.rmtree(staging)
+
+
+def _set_publication_modes(root: Path) -> None:
+    """Make immutable catalog content traversable across service UIDs."""
+
+    root.chmod(0o755)
+    for path in root.rglob("*"):
+        path.chmod(0o755 if path.is_dir() else 0o644)
 
 
 def _geometry_wire(geometry: BoundaryGeometry, *, counter: _Counter) -> dict[str, object]:

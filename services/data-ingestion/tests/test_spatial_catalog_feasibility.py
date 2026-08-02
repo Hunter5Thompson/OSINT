@@ -218,6 +218,9 @@ def test_feasibility_covers_mandatory_theater_and_top_ten_raw_ring_counts() -> N
     assert first == second
     payload = json.loads(first)
     coverage = payload["containment"]["coverage_scope_keys"]
+    assert payload["containment"]["max_error_semantics"] == (
+        "deviation_from_locked_source_geometry_not_source_cartographic_accuracy"
+    )
     assert "country:AFG" in coverage
     assert set(SCOPES[-10:]).issubset(coverage)
     world_pack = payload["world_child_packs"][0]
@@ -495,6 +498,14 @@ def test_offline_compiler_builds_byte_identical_revision_twice(tmp_path: Path) -
     }
     assert first_files == second_files
     assert verify_catalog(first).catalog_revision == first.name
+    provenance = json.loads((first / "build-provenance.json").read_bytes())
+    assert provenance["catalog_revision"] == first.name
+    assert provenance["revision_forming"] is False
+    assert provenance["toolchain"]["node"]["engine"] == ">=20.11.0"
+    assert provenance["toolchain"]["node"]["version"].startswith("v")
+    assert provenance["toolchain"]["mapshaper"]["release"] == (
+        "0.7.49+odin-offline-v1"
+    )
     manifest = json.loads((first / "manifest.json").read_bytes())
     pack_id = manifest["scopes"][0]["presentation"]["children_lods"]["overview"][
         "asset_id"
