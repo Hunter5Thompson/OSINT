@@ -42,17 +42,22 @@ def _derivation_revision(scope_path: list[str]) -> str:
     return f"spatial-derive-v1-{hashlib.sha256(_canonical_bytes(inputs)).hexdigest()[:12]}"
 
 
-def _source_lock() -> dict[str, object]:
+def _source_lock(
+    *,
+    source_release: str = "fixture-v1",
+    source_license_id: str = "public-domain",
+    source_attribution: str = "Fixture source",
+) -> dict[str, object]:
     return {
         "schema_version": 1,
         "sources": [
             {
                 "source_id": "fixture-source",
-                "release": "fixture-v1",
+                "release": source_release,
                 "url": "https://example.invalid/must-never-be-opened.json",
                 "sha256": "c" * 64,
-                "license_id": "public-domain",
-                "attribution": "Fixture source",
+                "license_id": source_license_id,
+                "attribution": source_attribution,
             }
         ],
     }
@@ -67,9 +72,20 @@ def _publish_catalog(
     scope_path: list[str] | None = None,
     compatible: list[str] | None = None,
     modified_ns: int | None = None,
+    source_release: str = "fixture-v1",
+    source_license_id: str = "public-domain",
+    source_attribution: str = "Fixture source",
 ) -> tuple[str, str, Path]:
     root.mkdir(parents=True, exist_ok=True)
-    (root / "source-lock.json").write_bytes(_canonical_bytes(_source_lock()))
+    (root / "source-lock.json").write_bytes(
+        _canonical_bytes(
+            _source_lock(
+                source_release=source_release,
+                source_license_id=source_license_id,
+                source_attribution=source_attribution,
+            )
+        )
+    )
 
     asset_id = hashlib.sha256(asset_content).hexdigest()
     path = scope_path or ["world"]
@@ -99,9 +115,9 @@ def _publish_catalog(
             "representation_id": "fixture-representation",
             "dispute_status": "none",
             "source_id": "fixture-source",
-            "source_release": "fixture-v1",
-            "license_id": "public-domain",
-            "attribution": "Fixture source",
+            "source_release": source_release,
+            "license_id": source_license_id,
+            "attribution": source_attribution,
         },
         "presentation": {
             "preferred_lod": None,
@@ -142,8 +158,8 @@ def _publish_catalog(
                 "sources": [
                     {
                         "source_id": "fixture-source",
-                        "license_id": "public-domain",
-                        "attribution": "Fixture source",
+                        "license_id": source_license_id,
+                        "attribution": source_attribution,
                     }
                 ],
             }
@@ -181,6 +197,82 @@ async def test_loader_serves_active_and_previous_catalogs(tmp_path: Path) -> Non
     assert loader.get_scope(previous, "world").scope.key == "world"
     assert loader.get_asset(active, active_asset).asset_id == active_asset
     assert loader.get_asset(previous, previous_asset).asset_id == previous_asset
+
+
+@pytest.mark.asyncio
+async def test_each_revision_projects_its_own_reviewed_source_release(
+    tmp_path: Path,
+) -> None:
+    spatial_root = tmp_path / "spatial"
+    previous, _, _ = _publish_catalog(
+        spatial_root,
+        source_release="fixture-v1",
+        source_license_id="public-domain",
+        source_attribution="Fixture source v1",
+        modified_ns=2_000_000_000,
+    )
+    active, _, _ = _publish_catalog(
+        spatial_root,
+        carry_forward_from=previous,
+        source_release="fixture-v2",
+        source_license_id="CC-BY-4.0",
+        source_attribution="Fixture source v2",
+        modified_ns=1_000_000_000,
+    )
+    loader = SpatialCatalogLoader(spatial_root)
+
+    state = await loader.load()
+    bootstrap = loader.bootstrap()
+
+    assert isinstance(state, CatalogReadyState)
+    assert bootstrap.active_catalog_revision == active
+    assert tuple(
+        (
+            attribution.catalog_revision,
+            attribution.sources[0].release,
+            attribution.sources[0].license_id,
+            attribution.sources[0].text,
+        )
+        for attribution in bootstrap.attributions
+    ) == (
+        (active, "fixture-v2", "CC-BY-4.0", "Fixture source v2"),
+        (previous, "fixture-v1", "public-domain", "Fixture source v1"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_active_attribution_only_source_must_match_source_lock(
+    tmp_path: Path,
+) -> None:
+    spatial_root = tmp_path / "spatial"
+    revision, _, _ = _publish_catalog(spatial_root)
+    source_lock_path = spatial_root / "source-lock.json"
+    source_lock = json.loads(source_lock_path.read_bytes())
+    source_lock["sources"].append(
+        {
+            "source_id": "fixture-tool",
+            "release": "tool-v1",
+            "url": "repo:fixture-tool",
+            "sha256": "d" * 64,
+            "license_id": "MPL-2.0",
+            "attribution": "Fixture tool",
+        }
+    )
+    source_lock_path.write_bytes(_canonical_bytes(source_lock))
+    attribution_path = spatial_root / "catalogs" / revision / "attribution.json"
+    attribution = json.loads(attribution_path.read_bytes())
+    attribution["sources"].append(
+        {
+            "source_id": "fixture-tool",
+            "license_id": "MPL-2.0",
+            "attribution": "Tampered fixture tool",
+        }
+    )
+    attribution_path.write_bytes(_canonical_bytes(attribution))
+
+    state = await SpatialCatalogLoader(spatial_root).load()
+
+    assert isinstance(state, CatalogUnavailableState)
 
 
 @pytest.mark.asyncio
@@ -329,6 +421,34 @@ async def test_successful_immutable_asset_hash_is_cached(
     assert await loader.read_asset(asset) == b"{}"
     assert hash_calls == 1
     assert loader.verified_asset_count == 1
+
+
+@pytest.mark.asyncio
+async def test_transient_asset_io_error_does_not_disable_loaded_catalog(
+    tmp_path: Path,
+) -> None:
+    spatial_root = tmp_path / "spatial"
+    revision, asset_id, _ = _publish_catalog(spatial_root, asset_content=b"available")
+    calls = 0
+
+    def flaky_reader(path: Path) -> bytes:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("transient fixture read failure")
+        return path.read_bytes()
+
+    loader = SpatialCatalogLoader(spatial_root, file_reader=flaky_reader)
+    assert isinstance(await loader.load(), CatalogReadyState)
+    asset = loader.get_asset(revision, asset_id)
+    assert isinstance(asset, SpatialAsset)
+
+    first = await loader.read_asset(asset)
+
+    assert first.code is CatalogProblemCode.CATALOG_UNAVAILABLE
+    assert loader.is_available is True
+    assert await loader.read_asset(asset) == b"available"
+    assert calls == 2
 
 
 @pytest.mark.asyncio

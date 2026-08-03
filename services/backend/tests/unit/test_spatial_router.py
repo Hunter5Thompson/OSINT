@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient, Response
 
 from app.main import app as production_app
+from app.models.spatial import CatalogProblemCode
 from app.routers.spatial import router
 from app.services.spatial_catalog import (
     CatalogReadyState,
@@ -397,6 +398,34 @@ async def test_asset_success_etag_304_and_range_headers(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_matching_asset_etag_returns_304_without_opening_the_file(
+    tmp_path: Path,
+) -> None:
+    spatial_root = tmp_path / "spatial"
+    _, asset_id, _ = _publish_catalog(spatial_root, asset_content=b"cached")
+    reader_calls = 0
+
+    def counting_reader(path: Path) -> bytes:
+        nonlocal reader_calls
+        reader_calls += 1
+        return path.read_bytes()
+
+    loader = SpatialCatalogLoader(spatial_root, file_reader=counting_reader)
+    await loader.load()
+
+    response = await _get(
+        loader,
+        f"/api/spatial/assets/{asset_id}",
+        headers={"If-None-Match": f'"{asset_id}"'},
+    )
+
+    assert response.status_code == 304
+    assert response.content == b""
+    assert reader_calls == 0
+    assert loader.verified_asset_count == 0
+
+
+@pytest.mark.asyncio
 async def test_invalid_range_returns_416_without_internal_path(tmp_path: Path) -> None:
     spatial_root = tmp_path / "spatial"
     _, asset_id, _ = _publish_catalog(spatial_root, asset_content=b"short")
@@ -484,6 +513,13 @@ async def test_cancellation_holds_then_releases_asset_slot_without_leak(
     cancelled_read.cancel()
     await asyncio.sleep(0)
     assert not cancelled_read.done()
+
+    cancelled_read.cancel()
+    await asyncio.sleep(0)
+    assert not cancelled_read.done()
+    busy = await loader.read_asset(asset)
+    assert busy.code is CatalogProblemCode.ASSET_BUSY
+    assert reader.calls == 1
 
     reader.release.set()
     with pytest.raises(asyncio.CancelledError):

@@ -438,8 +438,7 @@ class SpatialCatalogLoader:
             try:
                 payload = await asyncio.shield(read_task)
             except asyncio.CancelledError:
-                with contextlib.suppress(Exception):
-                    await asyncio.shield(read_task)
+                await _wait_for_file_read_after_cancellation(read_task)
                 self._emit(
                     "spatial_asset_load",
                     catalog_revision=indexed.catalog_revision,
@@ -448,8 +447,8 @@ class SpatialCatalogLoader:
                     cache_status="cancelled",
                 )
                 raise
-            except OSError as exc:
-                return self._asset_corrupt(exc)
+            except OSError:
+                return self._asset_io_unavailable(indexed)
             finally:
                 self._inflight_file_reads.discard(read_task)
 
@@ -490,6 +489,7 @@ class SpatialCatalogLoader:
             for directory in directories
         )
         ordered = _order_loaded_catalogs(loaded)
+        _validate_active_source_lock(ordered[0], source_by_id=source_by_id)
         _validate_cross_catalog_assets(ordered)
         return ordered
 
@@ -551,6 +551,7 @@ class SpatialCatalogLoader:
             raise ValueError("attribution and manifest revision differ")
         projection = _project_attribution(
             attribution,
+            manifest=manifest,
             source_by_id=source_by_id,
         )
 
@@ -624,6 +625,21 @@ class SpatialCatalogLoader:
         )
         return _GENERIC_UNAVAILABLE
 
+    def _asset_io_unavailable(self, asset: SpatialAsset) -> SpatialCatalogProblem:
+        self._emit(
+            "spatial_asset_load",
+            catalog_revision=asset.catalog_revision,
+            cause="io_error",
+            cache_status="error",
+        )
+        return SpatialCatalogProblem(
+            code=CatalogProblemCode.CATALOG_UNAVAILABLE,
+            message="Spatial asset is temporarily unavailable",
+            target=asset.asset_id,
+            recoverable=True,
+            active_catalog_revision=self._active_revision(),
+        )
+
     def _active_revision(self) -> str | None:
         if isinstance(self._state, CatalogReadyState):
             return self._state.active_catalog_revision
@@ -642,19 +658,29 @@ class SpatialCatalogLoader:
 def _project_attribution(
     attribution: CatalogAttribution,
     *,
+    manifest: CatalogManifest,
     source_by_id: Mapping[str, SourceLockRecord],
 ) -> AttributionProjection:
+    manifest_sources = _manifest_source_metadata(manifest)
     sources: list[AttributionProjectionSource] = []
     for item in attribution.sources:
+        manifest_source = manifest_sources.get(item.source_id)
+        if manifest_source is not None:
+            release, license_id, text = manifest_source
+            if license_id != item.license_id or text != item.attribution:
+                raise ValueError("attribution does not match revision provenance")
+            sources.append(
+                AttributionProjectionSource(
+                    source_id=item.source_id,
+                    release=release,
+                    license_id=item.license_id,
+                    text=item.attribution,
+                )
+            )
+            continue
         source = source_by_id.get(item.source_id)
         if source is None:
             raise ValueError("attribution source is absent from source lock")
-        if (
-            source.source_id != item.source_id
-            or source.license_id != item.license_id
-            or source.attribution != item.attribution
-        ):
-            raise ValueError("attribution does not match its reviewed source lock")
         sources.append(
             AttributionProjectionSource(
                 source_id=item.source_id,
@@ -668,6 +694,53 @@ def _project_attribution(
         representation_note="ODIN reference boundary representation",
         sources=tuple(sources),
     )
+
+
+def _manifest_source_metadata(
+    manifest: CatalogManifest,
+) -> dict[str, tuple[str, str, str]]:
+    sources: dict[str, tuple[str, str, str]] = {}
+    for record in manifest.scopes:
+        provenance = record.provenance
+        metadata = (
+            provenance.source_release,
+            provenance.license_id,
+            provenance.attribution,
+        )
+        existing = sources.setdefault(provenance.source_id, metadata)
+        if existing != metadata:
+            raise ValueError("one revision has conflicting source provenance")
+    return sources
+
+
+def _validate_active_source_lock(
+    catalog: _LoadedCatalog,
+    *,
+    source_by_id: Mapping[str, SourceLockRecord],
+) -> None:
+    for projected in catalog.attribution.sources:
+        source = source_by_id.get(projected.source_id)
+        if source is None:
+            raise ValueError("active attribution source is absent from source lock")
+        expected = (source.release, source.license_id, source.attribution)
+        actual = (projected.release, projected.license_id, projected.text)
+        if actual != expected:
+            raise ValueError("active attribution differs from source lock")
+
+
+async def _wait_for_file_read_after_cancellation(read_task: asyncio.Task[bytes]) -> None:
+    """Keep the semaphore slot until a shielded thread read really finishes."""
+
+    while not read_task.done():
+        try:
+            await asyncio.shield(read_task)
+        except asyncio.CancelledError:
+            continue
+        except Exception:  # the cancelled caller no longer consumes the result
+            break
+    if not read_task.cancelled():
+        with contextlib.suppress(Exception):
+            read_task.result()
 
 
 def _order_loaded_catalogs(

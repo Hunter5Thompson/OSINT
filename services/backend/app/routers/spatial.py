@@ -102,10 +102,6 @@ async def _serve_asset(request: Request, asset_id: str) -> Response:
     value = loader.get_asset_by_id(asset_id)
     if isinstance(value, SpatialCatalogProblem):
         return _problem_response(value)
-    payload = await loader.read_asset(value)
-    if isinstance(payload, SpatialCatalogProblem):
-        return _problem_response(payload)
-
     etag = f'"{value.asset_id}"'
     common_headers = {
         "Accept-Ranges": "bytes",
@@ -115,6 +111,10 @@ async def _serve_asset(request: Request, asset_id: str) -> Response:
     }
     if _etag_matches(request.headers.get("if-none-match"), etag):
         return Response(status_code=304, headers=common_headers)
+
+    payload = await loader.read_asset(value)
+    if isinstance(payload, SpatialCatalogProblem):
+        return _problem_response(payload)
 
     range_header = request.headers.get("range")
     if range_header is None:
