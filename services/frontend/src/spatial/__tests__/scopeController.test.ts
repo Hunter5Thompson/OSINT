@@ -98,6 +98,7 @@ function semanticScope(
       },
     },
     containment: null,
+    canonicalizedFrom: null,
   };
 }
 

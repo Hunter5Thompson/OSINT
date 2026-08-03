@@ -291,9 +291,92 @@ describe("RouterScopeNavigation serialized echoes", () => {
     expect(catalog.resolveCalls.filter((call) => call.scopeKey === UKRAINE)).toHaveLength(2);
     expect(requests).toHaveLength(1);
   });
+
+  it("suppresses and repairs an own echo that arrives after lifecycle cancellation", async () => {
+    const { navigation, requests } = makeNavigation();
+    navigations.push(navigation);
+    const listener = vi.fn();
+    navigation.subscribeLocation(listener);
+    const cancelledWrite = navigation.writeScope({
+      scopeKey: UKRAINE,
+      catalogRevision: fixture.catalogRevision,
+      mode: "push",
+      navigationId: "strict-replay-cancelled",
+    });
+    const cancelled = expect(cancelledWrite).rejects.toMatchObject({ name: "AbortError" });
+    navigation.cancelPending();
+    await cancelled;
+
+    const committedWrite = navigation.writeScope({
+      scopeKey: POLAND,
+      catalogRevision: fixture.catalogRevision,
+      mode: "push",
+      navigationId: "strict-replay-committed",
+    });
+    echo(navigation, requests[1] as RouterNavigationRequest);
+    await committedWrite;
+    listener.mockClear();
+
+    echo(navigation, requests[0] as RouterNavigationRequest);
+    expect(listener).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(3);
+    expect(requests[2]?.replace).toBe(true);
+    expect(new URLSearchParams(requests[2]?.search).get("scope")).toBe(POLAND);
+  });
 });
 
 describe("controller and router revision/failure coordination", () => {
+  it("replaces an explicit world candidate with the canonical absent parameter", async () => {
+    const initial = location("?scope=world&foreign=keep", null);
+    const { navigation, requests } = makeNavigation(initial);
+    navigations.push(navigation);
+    const catalog = new MemorySpatialCatalog({
+      activeCatalogRevision: fixture.catalogRevision,
+      resolvedScopes: fixture.resolvedScopes,
+    });
+    const controller = createSpatialScopeController({ catalog, navigation });
+    controllers.push(controller);
+    controller.start();
+
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]?.replace).toBe(true);
+    const parameters = new URLSearchParams(requests[0]?.search);
+    expect(parameters.has("scope")).toBe(false);
+    expect(parameters.get("foreign")).toBe("keep");
+    echo(navigation, requests[0] as RouterNavigationRequest);
+    await waitForScope(controller, WORLD_SCOPE_KEY);
+  });
+
+  it("replaces a non-canonical historical candidate without duplicating semantic state", async () => {
+    const { navigation, requests } = makeNavigation();
+    navigations.push(navigation);
+    const catalog = new MemorySpatialCatalog({
+      activeCatalogRevision: fixture.catalogRevision,
+      resolvedScopes: fixture.resolvedScopes,
+    });
+    const controller = createSpatialScopeController({ catalog, navigation });
+    controllers.push(controller);
+    controller.start();
+    await waitForScope(controller, WORLD_SCOPE_KEY);
+
+    const lowerCaseLocation = location("?scope=country%3Aukr&foreign=keep", null);
+    navigation.acceptLocation(lowerCaseLocation);
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]?.replace).toBe(true);
+    expect(new URLSearchParams(requests[0]?.search).get("scope")).toBe(UKRAINE);
+    echo(navigation, requests[0] as RouterNavigationRequest);
+    await waitForScope(controller, UKRAINE);
+
+    const stateRevision = controller.getSnapshot().stateRevision;
+    navigation.acceptLocation(lowerCaseLocation);
+    await vi.waitFor(() => expect(requests).toHaveLength(2));
+    echo(navigation, requests[1] as RouterNavigationRequest);
+    await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("ready"));
+
+    expect(controller.getSnapshot().stateRevision).toBe(stateRevision);
+    expect(catalog.resolveCalls.filter((call) => call.scopeKey === UKRAINE)).toHaveLength(1);
+  });
+
   it("uses active revision on reload but the validated pinned revision on Back", async () => {
     const initial = location("?scope=country%3AUKR", {
       odinSpatialCatalogRevision: fixture.catalogRevision,

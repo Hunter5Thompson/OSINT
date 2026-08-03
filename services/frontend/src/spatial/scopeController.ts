@@ -5,6 +5,7 @@ import {
   freezeSpatialScopeSnapshot,
   freezeSpatialValue,
   parseCatalogRevision,
+  parseScopeLocationCandidate,
   parseScopeKeyCandidate,
   type CatalogRevision,
   type DispatchOptions,
@@ -230,6 +231,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
     catalogRevision: string | null,
     cause: "browser-history" | "deep-link",
     callerSignal?: AbortSignal,
+    locationNeedsCanonicalization = false,
   ): Promise<SpatialScopeResult> {
     const canonicalTarget = target === null ? WORLD_SCOPE_KEY : parseScopeKeyCandidate(target);
     const currentQuery = this.snapshot.query;
@@ -237,13 +239,16 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
       currentQuery?.scopeKey === canonicalTarget &&
       (catalogRevision === null || catalogRevision === currentQuery.catalogRevision)
     ) {
+      if (locationNeedsCanonicalization) {
+        return this.replaceCommittedLocation(null);
+      }
       return Promise.resolve(this.finishUnchanged());
     }
     const revision = catalogRevision === null ? null : parseCatalogRevision(catalogRevision);
     return this.runForeground(
       canonicalTarget,
       revision,
-      null,
+      locationNeedsCanonicalization ? "replace" : null,
       callerSignal,
       null,
       cause === "deep-link" && this.snapshot.phase === "hydrating",
@@ -308,14 +313,17 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
       );
       this.assertCurrent(intent);
 
-      if (navigationMode !== null) {
+      const effectiveNavigationMode = navigationMode ?? (
+        resolved.canonicalizedFrom === null ? null : "replace"
+      );
+      if (effectiveNavigationMode !== null) {
         const navigationId = this.createNavigationId();
         intent.navigationId = navigationId;
         this.pendingNavigationIds.add(navigationId);
         await waitWithSignal(this.navigation.writeScope({
           scopeKey: resolved.scope.key === WORLD_SCOPE_KEY ? null : resolved.scope.key,
           catalogRevision: resolved.query.catalogRevision,
-          mode: navigationMode,
+          mode: effectiveNavigationMode,
           navigationId,
         }), intent.controller.signal);
         this.assertCurrent(intent);
@@ -641,8 +649,16 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
   ): void {
     let target: ScopeKey;
     let catalogRevision: CatalogRevision | null;
+    let locationNeedsCanonicalization = false;
     try {
-      target = candidate === null ? WORLD_SCOPE_KEY : parseScopeKeyCandidate(candidate);
+      if (candidate === null) {
+        target = WORLD_SCOPE_KEY;
+      } else {
+        const parsed = parseScopeLocationCandidate(candidate);
+        target = parsed.scopeKey;
+        locationNeedsCanonicalization =
+          parsed.canonicalizedFrom !== null || parsed.scopeKey === WORLD_SCOPE_KEY;
+      }
       catalogRevision = catalogRevisionCandidate === null
         ? null
         : parseCatalogRevision(catalogRevisionCandidate);
@@ -663,18 +679,23 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
       }
       return;
     }
-    void this.dispatch({
-      type: "hydrate",
+    void this.hydrate(
       target,
       catalogRevision,
       cause,
-    });
+      undefined,
+      locationNeedsCanonicalization,
+    );
   }
 
-  private async repairCommittedLocation(problem: ScopeProblem): Promise<void> {
+  private async replaceCommittedLocation(
+    committedProblem: ScopeProblem | null,
+  ): Promise<SpatialScopeResult> {
     if (this.snapshot.phase === "hydrating") {
-      this.publishFailure(problem);
-      return;
+      if (committedProblem !== null) this.publishFailure(committedProblem);
+      return committedProblem === null
+        ? { outcome: "unchanged", snapshot: this.snapshot }
+        : { outcome: "failed", problem: committedProblem };
     }
     const committed = this.snapshot;
     const intent = this.beginForeground(committed.current.key);
@@ -690,22 +711,29 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
       }), intent.controller.signal);
       this.assertCurrent(intent);
       this.pendingNavigationIds.delete(navigationId);
-      this.publishFailure(problem);
+      if (committedProblem !== null) this.publishFailure(committedProblem);
       this.finishForeground(intent);
+      return { outcome: "unchanged", snapshot: this.snapshot };
     } catch (error: unknown) {
       this.pendingNavigationIds.delete(navigationId);
       if (intent.superseded) {
         intent.detachCallerSignal();
-        return;
+        return { outcome: "superseded" };
       }
       if (intent.cancelledByStop || intent.controller.signal.aborted || isAbortError(error)) {
         this.clearPending(intent);
         this.finishForeground(intent);
-        return;
+        return { outcome: "cancelled" };
       }
-      this.publishFailure(problemFromUnknown(error));
+      const problem = problemFromUnknown(error);
+      this.publishFailure(problem);
       this.finishForeground(intent);
+      return { outcome: "failed", problem };
     }
+  }
+
+  private async repairCommittedLocation(problem: ScopeProblem): Promise<void> {
+    await this.replaceCommittedLocation(problem);
   }
 
   private publish(next: SpatialScopeSnapshot): void {

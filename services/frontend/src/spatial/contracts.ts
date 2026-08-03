@@ -211,6 +211,7 @@ export interface ResolvedScope {
   readonly query: SpatialQueryRef;
   readonly presentation: ResolvedPresentation;
   readonly containment: ContainmentAssetDescriptor | null;
+  readonly canonicalizedFrom: string | null;
 }
 
 export interface SpatialCatalogPort {
@@ -306,6 +307,37 @@ export function parseScopeKeyCandidate(candidate: unknown): ScopeKey {
 
   if (!valid) return invalidScopeKey(candidate);
   return canonical as ScopeKey;
+}
+
+export interface ParsedScopeLocationCandidate {
+  readonly scopeKey: ScopeKey;
+  readonly canonicalizedFrom: string | null;
+}
+
+// URL/storage compatibility only: aliases never enter the canonical ScopeKey grammar.
+const LEGACY_SCOPE_LOCATION_ALIASES = new Map<string, ScopeKey>([
+  ["country:XKX", parseScopeKeyCandidate("country:odin:kosovo")],
+]);
+
+export function parseScopeLocationCandidate(
+  candidate: unknown,
+): ParsedScopeLocationCandidate {
+  if (typeof candidate === "string") {
+    const legacyTarget = LEGACY_SCOPE_LOCATION_ALIASES.get(candidate);
+    if (legacyTarget !== undefined) {
+      return Object.freeze({
+        scopeKey: legacyTarget,
+        canonicalizedFrom: candidate,
+      });
+    }
+  }
+
+  const scopeKey = parseScopeKeyCandidate(candidate);
+  return Object.freeze({
+    scopeKey,
+    canonicalizedFrom:
+      typeof candidate === "string" && candidate !== scopeKey ? candidate : null,
+  });
 }
 
 export function scopeKindForKey(scopeKey: ScopeKey): ScopeKind {

@@ -279,6 +279,26 @@ describe("HttpSpatialCatalog wire contract", () => {
     ]);
   });
 
+  it("preserves a canonicalizing wire identity separately from ScopeKey", async () => {
+    const wire = scopeWire();
+    wire.canonicalized_from = "country:ukr";
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      if (url.startsWith("/api/spatial/scope")) return metadataResponse(wire);
+      if (url === `/api/spatial/assets/${BOUNDARY_ID}`) return assetResponse(BOUNDARY_ID);
+      throw new Error(`unexpected URL: ${url}`);
+    });
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: createStore(fetcher) });
+
+    const resolved = await catalog.resolve(
+      parseScopeKeyCandidate("country:UKR"),
+      REVISION,
+      new AbortController().signal,
+    );
+
+    expect(resolved.canonicalizedFrom).toBe("country:ukr");
+  });
+
   it.each([
     ["unknown field", (wire: Record<string, unknown>) => { wire.unexpected = true; }],
     ["schema", (wire: Record<string, unknown>) => { wire.schema_version = 2; }],
