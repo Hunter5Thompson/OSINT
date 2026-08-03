@@ -700,14 +700,15 @@ interface AssetCacheEntry extends DecodedAsset {
 interface InflightAsset {
   readonly descriptor: AssetDescriptor;
   readonly controller: AbortController;
+  readonly retryPolicy: AssetRetryPolicy;
   readonly promise: Promise<DecodedAsset>;
   consumers: number;
   settled: boolean;
 }
 
 interface AssetRetryPolicy {
-  readonly network: boolean;
-  readonly busy: boolean;
+  network: boolean;
+  busy: boolean;
 }
 
 interface GeometryCounts {
@@ -911,10 +912,12 @@ export class BoundaryAssetStore {
     let load = this.inflight.get(descriptor.assetId);
     if (load === undefined) {
       const controller = new AbortController();
+      const retryPolicy = { ...policy };
       load = {
         descriptor,
         controller,
-        promise: this.loadAsset(descriptor, controller.signal, policy),
+        retryPolicy,
+        promise: this.loadAsset(descriptor, controller.signal, retryPolicy),
         consumers: 0,
         settled: false,
       };
@@ -926,6 +929,8 @@ export class BoundaryAssetStore {
       );
     } else {
       assertDescriptorMatch(load.descriptor, descriptor);
+      load.retryPolicy.network ||= policy.network;
+      load.retryPolicy.busy ||= policy.busy;
     }
 
     load.consumers += 1;

@@ -459,6 +459,35 @@ describe("BoundaryAssetStore", () => {
     lease.release();
   });
 
+  it("upgrades a shared prefetch load when active presentation joins", async () => {
+    const clock = createClock();
+    let releaseFirst: ((response: Response) => void) | undefined;
+    const firstResponse = new Promise<Response>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let requests = 0;
+    const fetcher = vi.fn<typeof fetch>(() => {
+      requests += 1;
+      return requests === 1
+        ? firstResponse
+        : Promise.resolve(assetResponse(BOUNDARY_ID));
+    });
+    const store = createStore(fetcher, { clock });
+
+    const prefetch = store.prefetch(boundaryDescriptor, new AbortController().signal);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    const active = store.acquire(boundaryDescriptor, new AbortController().signal);
+    releaseFirst?.(assetResponse(BOUNDARY_ID, { status: 429, retryAfter: "1" }));
+
+    const [prefetchResult, activeResult] = await Promise.allSettled([prefetch, active]);
+
+    expect(prefetchResult.status).toBe("fulfilled");
+    expect(activeResult.status).toBe("fulfilled");
+    if (activeResult.status === "fulfilled") activeResult.value.release();
+    expect(requests).toBe(2);
+    expect(clock.sleeps).toEqual([1_000]);
+  });
+
   it("never evicts a leased decoded asset", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const id = urlOf(input).split("/").at(-1) ?? "";
