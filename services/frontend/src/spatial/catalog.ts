@@ -1,6 +1,7 @@
 import {
   freezeSpatialValue,
   parseCatalogRevision,
+  parseScopeLocationCandidate,
   parseScopeKeyCandidate,
   scopeKindForKey,
   type AssetDescriptor,
@@ -9,6 +10,7 @@ import {
   type ContainmentAssetDescriptor,
   type GeoExtent,
   type GeometryLod,
+  type LongitudeSpan,
   type RenderAssetDescriptor,
   type ResolvedPresentation,
   type ResolvedScope,
@@ -341,12 +343,46 @@ function parseGeoExtent(value: unknown): GeoExtent {
     if (west < -180 || east > 180 || west > east) contractError("cameraExtent longitude span is invalid");
     return { west, east };
   });
+  let longitudeTuple:
+    | readonly [LongitudeSpan]
+    | readonly [LongitudeSpan, LongitudeSpan];
+  if (longitude.length === 1) {
+    const [onlySpan] = longitude;
+    if (onlySpan === undefined) contractError("cameraExtent.longitude is empty");
+    longitudeTuple = [onlySpan];
+  } else {
+    const [firstSpan, secondSpan] = longitude;
+    if (firstSpan === undefined || secondSpan === undefined) {
+      contractError("cameraExtent.longitude must contain two spans");
+    }
+    longitudeTuple = [firstSpan, secondSpan];
+  }
   return {
     kind: "segments",
     south,
     north,
-    longitude: longitude as [{ west: number; east: number }],
+    longitude: longitudeTuple,
   };
+}
+
+function parseCanonicalizedFrom(value: unknown, scopeKey: ScopeKey): string | null {
+  if (value === null) return null;
+  const candidate = parseString(value, "canonicalizedFrom", 128);
+  try {
+    const parsed = parseScopeLocationCandidate(candidate);
+    if (parsed.scopeKey !== scopeKey || parsed.canonicalizedFrom !== candidate) {
+      lineageError("canonicalizedFrom does not canonicalize to current", scopeKey);
+    }
+  } catch (error: unknown) {
+    if (error instanceof SpatialCatalogError) throw error;
+    throw new SpatialCatalogError({
+      code: "INVALID_LINEAGE",
+      target: candidate,
+      message: "INVALID_LINEAGE: canonicalizedFrom is not a valid location candidate",
+      cause: error,
+    });
+  }
+  return candidate;
 }
 
 function parsePresentation(
@@ -403,7 +439,14 @@ function parsePresentation(
 
 export function parseResolvedScope(value: unknown): ResolvedScope {
   const record = asRecord(value, "resolvedScope");
-  assertExactKeys(record, "resolvedScope", ["scope", "path", "query", "presentation", "containment"]);
+  assertExactKeys(record, "resolvedScope", [
+    "scope",
+    "path",
+    "query",
+    "presentation",
+    "containment",
+    "canonicalizedFrom",
+  ]);
   const scope = parseScopeSummary(record.scope, "scope");
   const path = parseScopePath(record.path, scope);
   const queryRecord = asRecord(record.query, "query");
@@ -431,6 +474,7 @@ export function parseResolvedScope(value: unknown): ResolvedScope {
     },
     presentation: parsePresentation(record.presentation, scope.key, catalogRevision),
     containment: parseContainment(record.containment),
+    canonicalizedFrom: parseCanonicalizedFrom(record.canonicalizedFrom, scope.key),
   });
 }
 
@@ -1452,6 +1496,7 @@ export interface HttpSpatialCatalogOptions {
 interface DecodedScopeBundle {
   readonly catalogRevision: CatalogRevision;
   readonly boundaryPolicy: string;
+  readonly canonicalizedFrom: string | null;
   readonly scope: ScopeSummary;
   readonly path: ScopePath;
   readonly preferredLod: GeometryLod | null;
@@ -1596,12 +1641,7 @@ function decodeScopeBundle(
   if (scope.key !== requestedScope) {
     lineageError("scope response identity does not match its request", requestedScope);
   }
-  if (record.canonicalized_from !== null) {
-    const canonicalized = parseScopeKeyCandidate(record.canonicalized_from);
-    if (canonicalized !== scope.key) {
-      lineageError("canonicalized_from does not resolve to current scope", scope.key);
-    }
-  }
+  const canonicalizedFrom = parseCanonicalizedFrom(record.canonicalized_from, scope.key);
   const path = parseWirePath(record.path, scope);
   const presentation = asRecord(record.presentation, "presentation");
   assertExactKeys(presentation, "presentation", [
@@ -1627,6 +1667,7 @@ function decodeScopeBundle(
   return freezeSpatialValue({
     catalogRevision,
     boundaryPolicy,
+    canonicalizedFrom,
     scope,
     path,
     preferredLod,
@@ -1776,6 +1817,7 @@ async function resolvedFromBundle(
     },
     presentation,
     containment: bundle.containment,
+    canonicalizedFrom: bundle.canonicalizedFrom,
   });
 }
 

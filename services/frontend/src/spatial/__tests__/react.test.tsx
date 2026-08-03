@@ -1,6 +1,6 @@
 import { StrictMode, type ReactNode } from "react";
 import { act, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigationType } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fixtureText from "./fixtures/spatial-contract-v1.json?raw";
 import {
@@ -14,7 +14,11 @@ import {
   type SpatialScopeHandle,
 } from "../contracts";
 import { MemorySpatialCatalog } from "../catalog";
-import { MemoryScopeNavigation } from "../navigation";
+import {
+  MemoryScopeNavigation,
+  RouterScopeNavigation,
+  type RouterLocationSnapshot,
+} from "../navigation";
 import {
   SpatialScopeProvider,
   useSpatialScope,
@@ -28,6 +32,7 @@ interface Fixture {
 
 const fixture = JSON.parse(fixtureText) as Fixture;
 const UKRAINE = parseScopeKeyCandidate("country:UKR");
+const KOSOVO = parseScopeKeyCandidate("country:odin:kosovo");
 
 class CountingNavigation implements ScopeNavigationPort {
   readonly listeners = new Set<(event: ScopeLocationEvent) => void>();
@@ -82,9 +87,26 @@ class LifecycleModule implements OwnedSpatialScopeModule {
 }
 
 let latestHandle: SpatialScopeHandle | null = null;
+let latestLocation: RouterLocationSnapshot | null = null;
+let latestNavigationType: ReturnType<typeof useNavigationType> | null = null;
+let renderLog: string[] = [];
 
 function Probe(): ReactNode {
   latestHandle = useSpatialScope();
+  return <div data-testid="scope-phase">{latestHandle.phase}</div>;
+}
+
+function RouterProbe(): ReactNode {
+  latestHandle = useSpatialScope();
+  const location = useLocation();
+  latestLocation = {
+    pathname: location.pathname,
+    search: location.search,
+    hash: location.hash,
+    state: location.state as unknown,
+  };
+  latestNavigationType = useNavigationType();
+  renderLog.push(`${latestHandle.phase}:${latestHandle.pending ?? "none"}`);
   return <div data-testid="scope-phase">{latestHandle.phase}</div>;
 }
 
@@ -100,8 +122,25 @@ function catalog(): MemorySpatialCatalog {
   });
 }
 
+function catalogWithKosovo(): MemorySpatialCatalog {
+  const ukraine = fixture.resolvedScopes[1];
+  const kosovo: unknown = JSON.parse(
+    JSON.stringify(ukraine)
+      .replaceAll("country:UKR", "country:odin:kosovo")
+      .replaceAll("Ukraine", "Kosovo"),
+  );
+  return new MemorySpatialCatalog({
+    activeCatalogRevision: fixture.catalogRevision,
+    resolvedScopes: [...fixture.resolvedScopes, kosovo],
+  });
+}
+
 afterEach(() => {
   latestHandle = null;
+  latestLocation = null;
+  latestNavigationType = null;
+  renderLog = [];
+  vi.restoreAllMocks();
 });
 
 describe("SpatialScopeProvider gate and hook", () => {
@@ -211,5 +250,129 @@ describe("SpatialScopeProvider lifecycle", () => {
 
     expect(navigation.listeners.size).toBe(0);
     await expect(pending).resolves.toEqual({ outcome: "cancelled" });
+  });
+
+  it("disposes a factory-owned catalog only after the final StrictMode cleanup", async () => {
+    const ownedCatalog = catalog();
+    const dispose = vi.spyOn(ownedCatalog, "dispose");
+    const catalogFactory = vi.fn(() => ownedCatalog);
+    const view = render(
+      <StrictMode>
+        <MemoryRouter>
+          <SpatialScopeProvider
+            enabled
+            catalogFactory={catalogFactory}
+            navigation={new CountingNavigation()}
+          >
+            <Probe />
+          </SpatialScopeProvider>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+
+    await vi.waitFor(() => expect(latestHandle?.query?.scopeKey).toBe(WORLD_SCOPE_KEY));
+    await act(async () => Promise.resolve());
+    expect(catalogFactory).toHaveBeenCalledOnce();
+    expect(dispose).not.toHaveBeenCalled();
+
+    view.unmount();
+    await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce());
+  });
+
+  it("does not dispose a borrowed catalog", async () => {
+    const borrowedCatalog = catalog();
+    const dispose = vi.spyOn(borrowedCatalog, "dispose");
+    const view = render(
+      <MemoryRouter>
+        <SpatialScopeProvider
+          enabled
+          catalog={borrowedCatalog}
+          navigation={new CountingNavigation()}
+        >
+          <Probe />
+        </SpatialScopeProvider>
+      </MemoryRouter>,
+    );
+    await vi.waitFor(() => expect(latestHandle?.query?.scopeKey).toBe(WORLD_SCOPE_KEY));
+
+    view.unmount();
+    await act(async () => Promise.resolve());
+    expect(dispose).not.toHaveBeenCalled();
+  });
+
+  it("disposes its router coordinator only after the final StrictMode cleanup", async () => {
+    const dispose = vi.spyOn(RouterScopeNavigation.prototype, "dispose");
+    const view = render(
+      <StrictMode>
+        <MemoryRouter>
+          <SpatialScopeProvider enabled catalog={catalog()}>
+            <RouterProbe />
+          </SpatialScopeProvider>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+
+    await vi.waitFor(() => expect(latestHandle?.query?.scopeKey).toBe(WORLD_SCOPE_KEY));
+    await act(async () => Promise.resolve());
+    expect(dispose).not.toHaveBeenCalled();
+
+    view.unmount();
+    await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce());
+  });
+});
+
+describe("SpatialScopeProvider router composition", () => {
+  it("resolves one initial intent and replaces a non-canonical deep link", async () => {
+    const memoryCatalog = catalog();
+    const gate = memoryCatalog.deferNextResolve(UKRAINE);
+    const acceptLocation = vi.spyOn(RouterScopeNavigation.prototype, "acceptLocation");
+    render(
+      <MemoryRouter
+        initialEntries={[{
+          pathname: "/worldview",
+          search: "?scope=country%3Aukr&layer=flights&foreign=keep",
+          hash: "#intel",
+          state: { foreignState: 7 },
+        }]}
+      >
+        <SpatialScopeProvider enabled catalog={memoryCatalog}>
+          <RouterProbe />
+        </SpatialScopeProvider>
+      </MemoryRouter>,
+    );
+
+    await vi.waitFor(() => {
+      expect(memoryCatalog.resolveCalls.filter((call) => call.scopeKey === UKRAINE)).toHaveLength(1);
+    });
+    expect(acceptLocation).not.toHaveBeenCalled();
+    expect(renderLog.filter((value) => value === `hydrating:${UKRAINE}`)).toHaveLength(1);
+
+    act(() => gate.resolve());
+    await vi.waitFor(() => expect(latestHandle?.query?.scopeKey).toBe(UKRAINE));
+
+    const parameters = new URLSearchParams(latestLocation?.search ?? "");
+    expect(parameters.get("scope")).toBe(UKRAINE);
+    expect(parameters.get("layer")).toBe("flights");
+    expect(parameters.get("foreign")).toBe("keep");
+    expect(latestLocation?.hash).toBe("#intel");
+    expect(latestLocation?.state).toMatchObject({ foreignState: 7 });
+    expect(latestNavigationType).toBe("REPLACE");
+    expect(acceptLocation).toHaveBeenCalledOnce();
+  });
+
+  it("resolves the explicit XKX legacy location alias to Kosovo and replaces it", async () => {
+    const memoryCatalog = catalogWithKosovo();
+    render(
+      <MemoryRouter initialEntries={["/worldview?scope=country%3AXKX"]}>
+        <SpatialScopeProvider enabled catalog={memoryCatalog}>
+          <RouterProbe />
+        </SpatialScopeProvider>
+      </MemoryRouter>,
+    );
+
+    await vi.waitFor(() => expect(latestHandle?.query?.scopeKey).toBe(KOSOVO));
+    expect(memoryCatalog.resolveCalls.filter((call) => call.scopeKey === KOSOVO)).toHaveLength(1);
+    expect(new URLSearchParams(latestLocation?.search ?? "").get("scope")).toBe(KOSOVO);
+    expect(latestNavigationType).toBe("REPLACE");
   });
 });
