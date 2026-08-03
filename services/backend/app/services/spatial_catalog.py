@@ -681,6 +681,11 @@ def _project_attribution(
         source = source_by_id.get(item.source_id)
         if source is None:
             raise ValueError("attribution source is absent from source lock")
+        if (
+            source.license_id != item.license_id
+            or source.attribution != item.attribution
+        ):
+            raise ValueError("unversioned attribution differs from source lock")
         sources.append(
             AttributionProjectionSource(
                 source_id=item.source_id,
