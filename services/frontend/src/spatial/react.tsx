@@ -192,6 +192,7 @@ function ModuleProvider({
 
   return (
     <SpatialScopeContext.Provider value={module}>
+      <SpatialScopeRecoveryAction />
       {children}
     </SpatialScopeContext.Provider>
   );
@@ -255,9 +256,71 @@ export function useSpatialScope(): SpatialScopeHandle {
     (target: ScopeKey) => module.dispatch({ type: "prefetch", target, priority: "hover" }),
     [module],
   );
+  const rehydrate = useCallback(
+    () => module.dispatch({ type: "rehydrate" }),
+    [module],
+  );
 
   return useMemo<SpatialScopeHandle>(
-    () => freezeSpatialValue({ ...snapshot, enter, ascend, prefetch }) as SpatialScopeHandle,
-    [ascend, enter, prefetch, snapshot],
+    () => freezeSpatialValue({
+      ...snapshot,
+      enter,
+      ascend,
+      prefetch,
+      rehydrate,
+    }) as SpatialScopeHandle,
+    [ascend, enter, prefetch, rehydrate, snapshot],
+  );
+}
+
+function SpatialScopeRecoveryAction() {
+  const scope = useSpatialScope();
+  const problem = scope.problem;
+  if (
+    scope.phase === "hydrating" ||
+    problem?.code !== "CATALOG_REVISION_UNAVAILABLE" ||
+    problem.activeCatalogRevision === null
+  ) {
+    return null;
+  }
+  return (
+    <div
+      role="alert"
+      style={{
+        position: "fixed",
+        top: 16,
+        left: "50%",
+        zIndex: 50,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        maxWidth: 560,
+        padding: "10px 12px",
+        border: "1px solid rgba(255, 190, 80, 0.72)",
+        background: "rgba(13, 17, 23, 0.94)",
+        color: "#f5d7a1",
+        fontFamily: "monospace",
+        fontSize: 12,
+        transform: "translateX(-50%)",
+      }}
+    >
+      <span>
+        Kartenstand abgelaufen. Aktive Revision: {problem.activeCatalogRevision}
+      </span>
+      <button
+        type="button"
+        onClick={() => { void scope.rehydrate(); }}
+        style={{
+          border: "1px solid currentColor",
+          padding: "5px 8px",
+          background: "transparent",
+          color: "inherit",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Aktiven Kartenstand laden
+      </button>
+    </div>
   );
 }

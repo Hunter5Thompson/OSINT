@@ -74,6 +74,7 @@ export interface ScopeProblem {
   readonly target: string | null;
   readonly recoverable: boolean;
   readonly message: string;
+  readonly activeCatalogRevision: CatalogRevision | null;
 }
 
 export type ScopeVisualState =
@@ -138,7 +139,8 @@ export type SpatialScopeCommand =
       readonly type: "prefetch";
       readonly target: ScopeKey;
       readonly priority: "hover" | "anticipated";
-    };
+    }
+  | { readonly type: "rehydrate" };
 
 export type SpatialScopeResult =
   | { readonly outcome: "committed"; readonly snapshot: SpatialScopeSnapshot }
@@ -171,6 +173,12 @@ Das ist die vollständige primäre Caller-Interface. Nur der Provider besitzt zu
 den Lifecycle `start/stop`; Context-Consumer sehen ihn nicht. Es gibt keine öffentliche
 Methode für BBox, GeoJSON, Cesium, History-Push oder Qdrant-Filter.
 
+`activeCatalogRevision` ist ausschließlich strukturierter Vertrag und wird niemals
+aus `message` extrahiert. `rehydrate` besitzt absichtlich keine Caller-Parameter: Der
+Controller übernimmt Ziel und aktive Revision nur aus dem weiterhin committed
+Snapshot und dessen validiertem `CATALOG_REVISION_UNAVAILABLE`-Problem. Ohne dieses
+Problem ist der Command idempotent `unchanged`.
+
 ### 8.3 React-Adapter
 
 `useSpatialScope()` ist ein dünner `useSyncExternalStore`-Adapter. Er darf nur ergonomische Wrapper bilden:
@@ -180,6 +188,7 @@ export type SpatialScopeHandle = SpatialScopeSnapshot & {
   enter(target: ScopeKey, cause: EnterCause): Promise<SpatialScopeResult>;
   ascend(cause: "breadcrumb" | "keyboard"): Promise<SpatialScopeResult>;
   prefetch(target: ScopeKey): Promise<SpatialScopeResult>;
+  rehydrate(): Promise<SpatialScopeResult>;
 };
 ```
 
@@ -303,6 +312,14 @@ Feinregeln:
   übergebenen Caller-Signal oder `stop()` ohne neueren Intent liefert `cancelled`.
 - Ungültige Lineage, unbekannter Scope oder Katalogausfall lassen State und URL unverändert.
 - Fehlende Geometrie ist ein semantisch erfolgreicher Commit mit `presentation: "semantic-only"` und Warning.
+- Ein Revisions-409 publiziert die typisierte aktive Revision, committet nichts und
+  retryt nicht. Erst der parameterlose, sichtbare `rehydrate`-Command löst den aktuell
+  committed Scope über `SpatialCatalogPort.rehydrate` gegen diese Revision auf,
+  ersetzt den Router-State und committet anschließend Scope, Query und Revision
+  gemeinsam. 404, erneuter 409 und Katalogfehler bleiben sichtbar und fail-closed.
+- Auch Rehydrate prüft Foreground-Generation und Abort vor und nach jedem Await. Ein
+  bereits abgebrochener Command ruft den Adapter nicht auf; eine verspätete Antwort
+  besitzt keine Commit-, URL- oder Presentation-Rechte.
 
 ### 8.6 Subscription- und Effect-Ordnung
 

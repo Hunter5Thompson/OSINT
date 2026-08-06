@@ -341,6 +341,36 @@ describe("HttpSpatialCatalog wire contract", () => {
     expect(urlOf(fetcher.mock.calls[0]?.[0] ?? "")).toContain(OLD_REVISION);
   });
 
+  it("resolves a rehydrate only after an explicit active-revision command", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      if (url.startsWith("/api/spatial/scope")) return metadataResponse(scopeWire());
+      if (url === `/api/spatial/assets/${BOUNDARY_ID}`) return assetResponse(BOUNDARY_ID);
+      throw new Error(`unexpected URL: ${url}`);
+    });
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: createStore(fetcher) });
+
+    const resolved = await catalog.rehydrate(
+      parseScopeKeyCandidate("country:UKR"),
+      parseCatalogRevision(REVISION),
+      new AbortController().signal,
+    );
+    await catalog.resolve(
+      parseScopeKeyCandidate("country:UKR"),
+      null,
+      new AbortController().signal,
+    );
+
+    expect(resolved.query.catalogRevision).toBe(REVISION);
+    const scopeRequests = fetcher.mock.calls
+      .map((call) => urlOf(call[0]))
+      .filter((url) => url.startsWith("/api/spatial/scope"));
+    expect(scopeRequests).toHaveLength(2);
+    expect(scopeRequests.every(
+      (url) => url.includes(`catalog_revision=${REVISION}`),
+    )).toBe(true);
+  });
+
   it("negative-caches a 404 for exactly thirty seconds", async () => {
     const clock = createClock();
     const fetcher = vi.fn<typeof fetch>(async () => problemResponse(

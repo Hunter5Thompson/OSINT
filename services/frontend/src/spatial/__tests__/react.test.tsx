@@ -1,17 +1,21 @@
 import { StrictMode, type ReactNode } from "react";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigationType } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fixtureText from "./fixtures/spatial-contract-v1.json?raw";
 import {
   HYDRATING_SPATIAL_SCOPE_SNAPSHOT,
   WORLD_SCOPE_KEY,
+  freezeSpatialScopeSnapshot,
+  parseCatalogRevision,
   parseScopeKeyCandidate,
   type OwnedSpatialScopeModule,
   type ScopeLocationEvent,
   type ScopeNavigationPort,
   type ScopeNavigationWrite,
+  type SpatialScopeCommand,
   type SpatialScopeHandle,
+  type SpatialScopeSnapshot,
 } from "../contracts";
 import { MemorySpatialCatalog } from "../catalog";
 import {
@@ -83,6 +87,76 @@ class LifecycleModule implements OwnedSpatialScopeModule {
 
   stop(): void {
     this.calls.push("stop");
+  }
+}
+
+class RecoveryModule implements OwnedSpatialScopeModule {
+  readonly commands: SpatialScopeCommand[] = [];
+  private readonly snapshot: SpatialScopeSnapshot = freezeSpatialScopeSnapshot({
+    phase: "ready",
+    stateRevision: 1,
+    current: {
+      key: UKRAINE,
+      kind: "country",
+      label: "Ukraine",
+      shortLabel: "Ukraine",
+      parentKey: WORLD_SCOPE_KEY,
+      childrenAvailable: true,
+      presentation: "boundary",
+    },
+    path: [
+      {
+        key: WORLD_SCOPE_KEY,
+        kind: "world",
+        label: "World",
+        shortLabel: "World",
+        parentKey: null,
+        childrenAvailable: true,
+        presentation: "boundary",
+      },
+      {
+        key: UKRAINE,
+        kind: "country",
+        label: "Ukraine",
+        shortLabel: "Ukraine",
+        parentKey: WORLD_SCOPE_KEY,
+        childrenAvailable: true,
+        presentation: "boundary",
+      },
+    ],
+    query: {
+      schemaVersion: 1,
+      scopeKey: UKRAINE,
+      catalogRevision: parseCatalogRevision("spatial-v1-001122334455"),
+      boundaryPolicy: "odin-reference-v1",
+    },
+    pending: null,
+    problem: {
+      severity: "error",
+      code: "CATALOG_REVISION_UNAVAILABLE",
+      target: "spatial-v1-001122334455",
+      recoverable: true,
+      message: "The pinned catalog revision is no longer served.",
+      activeCatalogRevision: parseCatalogRevision(fixture.catalogRevision),
+    },
+    visual: { phase: "ready", stateRevision: 1 },
+  });
+
+  getSnapshot = () => this.snapshot;
+
+  subscribe = (_listener: () => void) => () => undefined;
+
+  dispatch: OwnedSpatialScopeModule["dispatch"] = async (command) => {
+    this.commands.push(command);
+    return { outcome: "unchanged", snapshot: this.snapshot };
+  };
+
+  start(): void {
+    // Static test store.
+  }
+
+  stop(): void {
+    // Static test store.
   }
 }
 
@@ -187,12 +261,40 @@ describe("SpatialScopeProvider gate and hook", () => {
     const enter = hydrating?.enter;
     const ascend = hydrating?.ascend;
     const prefetch = hydrating?.prefetch;
+    const rehydrate = hydrating?.rehydrate;
 
     gate.resolve();
     await vi.waitFor(() => expect(latestHandle?.phase).toBe("ready"));
     expect(latestHandle?.enter).toBe(enter);
     expect(latestHandle?.ascend).toBe(ascend);
     expect(latestHandle?.prefetch).toBe(prefetch);
+    expect(latestHandle?.rehydrate).toBe(rehydrate);
+  });
+
+  it("renders exactly one explicit 409 recovery action", async () => {
+    const recoveryModule = new RecoveryModule();
+    render(
+      <MemoryRouter>
+        <SpatialScopeProvider
+          enabled
+          catalog={catalog()}
+          navigation={new CountingNavigation()}
+          moduleFactory={() => recoveryModule}
+        >
+          <Probe />
+        </SpatialScopeProvider>
+      </MemoryRouter>,
+    );
+
+    const actions = screen.getAllByRole("button", {
+      name: "Aktiven Kartenstand laden",
+    });
+    expect(actions).toHaveLength(1);
+    fireEvent.click(actions[0] as HTMLButtonElement);
+
+    await vi.waitFor(() => {
+      expect(recoveryModule.commands).toEqual([{ type: "rehydrate" }]);
+    });
   });
 });
 

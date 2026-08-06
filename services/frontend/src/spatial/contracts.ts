@@ -58,6 +58,7 @@ export interface ScopeProblem {
   readonly target: string | null;
   readonly recoverable: boolean;
   readonly message: string;
+  readonly activeCatalogRevision: CatalogRevision | null;
 }
 
 export type ScopeVisualState =
@@ -112,7 +113,8 @@ export type SpatialScopeCommand =
       readonly type: "prefetch";
       readonly target: ScopeKey;
       readonly priority: "hover" | "anticipated";
-    };
+    }
+  | { readonly type: "rehydrate" };
 
 export type SpatialScopeResult =
   | { readonly outcome: "committed"; readonly snapshot: SpatialScopeSnapshot }
@@ -144,6 +146,7 @@ export type SpatialScopeHandle = SpatialScopeSnapshot & {
   enter(target: ScopeKey, cause: EnterCause): Promise<SpatialScopeResult>;
   ascend(cause: "breadcrumb" | "keyboard"): Promise<SpatialScopeResult>;
   prefetch(target: ScopeKey): Promise<SpatialScopeResult>;
+  rehydrate(): Promise<SpatialScopeResult>;
 };
 
 export interface LongitudeSpan {
@@ -226,6 +229,11 @@ export interface SpatialCatalogPort {
     priority: "hover" | "anticipated",
     signal: AbortSignal,
   ): Promise<void>;
+  rehydrate(
+    scopeKey: ScopeKey,
+    activeCatalogRevision: CatalogRevision,
+    signal: AbortSignal,
+  ): Promise<ResolvedScope>;
   dispose(): void;
 }
 

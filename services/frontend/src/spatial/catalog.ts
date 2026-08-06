@@ -45,7 +45,7 @@ export interface SpatialCatalogErrorInit {
   readonly target?: string | null;
   readonly recoverable?: boolean;
   readonly message: string;
-  readonly activeCatalogRevision?: string | null;
+  readonly activeCatalogRevision?: CatalogRevision | null;
   readonly cause?: unknown;
 }
 
@@ -53,7 +53,7 @@ export class SpatialCatalogError extends Error {
   readonly code: ScopeProblem["code"];
   readonly target: string | null;
   readonly recoverable: boolean;
-  readonly activeCatalogRevision: string | null;
+  readonly activeCatalogRevision: CatalogRevision | null;
 
   constructor(init: SpatialCatalogErrorInit) {
     super(init.message, { cause: init.cause });
@@ -219,6 +219,7 @@ export function parseScopeProblem(value: unknown): ScopeProblem {
     "target",
     "recoverable",
     "message",
+    "activeCatalogRevision",
   ]);
   if (record.severity !== "warning" && record.severity !== "error") {
     contractError("problem.severity is invalid");
@@ -232,12 +233,16 @@ export function parseScopeProblem(value: unknown): ScopeProblem {
   if (typeof record.recoverable !== "boolean") {
     contractError("problem.recoverable must be boolean");
   }
+  const activeCatalogRevision = record.activeCatalogRevision === null
+    ? null
+    : parseCatalogRevision(record.activeCatalogRevision);
   return freezeSpatialValue({
     severity: record.severity,
     code: record.code as ScopeProblem["code"],
     target: record.target,
     recoverable: record.recoverable,
     message: parseString(record.message, "problem.message", 500),
+    activeCatalogRevision,
   });
 }
 
@@ -499,6 +504,7 @@ export function mapSpatialCatalogProblem(error: unknown): ScopeProblem {
     target: catalogError.target,
     recoverable: catalogError.recoverable,
     message: catalogError.message,
+    activeCatalogRevision: catalogError.activeCatalogRevision,
   });
 }
 
@@ -631,6 +637,25 @@ export class MemorySpatialCatalog implements SpatialCatalogPort {
     if (signal.aborted) throw abortError();
   }
 
+  async rehydrate(
+    scopeKey: ScopeKey,
+    activeCatalogRevision: CatalogRevision,
+    signal: AbortSignal,
+  ): Promise<ResolvedScope> {
+    this.assertAvailable();
+    if (signal.aborted) throw abortError();
+    if (activeCatalogRevision !== this.activeCatalogRevision) {
+      throw new SpatialCatalogError({
+        code: "CATALOG_REVISION_UNAVAILABLE",
+        target: activeCatalogRevision,
+        message: "Catalog recovery revision is no longer active.",
+        recoverable: true,
+        activeCatalogRevision: this.activeCatalogRevision,
+      });
+    }
+    return this.resolve(scopeKey, activeCatalogRevision, signal);
+  }
+
   dispose(): void {
     this.disposed = true;
     for (const gates of this.resolveGates.values()) {
@@ -648,6 +673,8 @@ export class MemorySpatialCatalog implements SpatialCatalogPort {
         code: "CATALOG_REVISION_UNAVAILABLE",
         target: candidate,
         message: "Catalog revision is invalid or unavailable.",
+        recoverable: true,
+        activeCatalogRevision: this.activeCatalogRevision,
         cause: error,
       });
     }
@@ -656,6 +683,8 @@ export class MemorySpatialCatalog implements SpatialCatalogPort {
         code: "CATALOG_REVISION_UNAVAILABLE",
         target: revision,
         message: "Catalog revision is invalid or unavailable.",
+        recoverable: true,
+        activeCatalogRevision: this.activeCatalogRevision,
       });
     }
     return revision;
@@ -1852,6 +1881,20 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
     return this.loadScope(scopeKey, revision, signal, true, false);
   }
 
+  async rehydrate(
+    scopeKey: ScopeKey,
+    activeCatalogRevision: CatalogRevision,
+    signal: AbortSignal,
+  ): Promise<ResolvedScope> {
+    this.assertAvailable();
+    if (signal.aborted) throw abortError();
+    const revision = parseCatalogRevision(activeCatalogRevision);
+    const resolved = await this.loadScope(scopeKey, revision, signal, true, false);
+    if (signal.aborted) throw abortError();
+    this.pinnedRevision = revision;
+    return resolved;
+  }
+
   async prefetch(
     scopeKey: ScopeKey,
     catalogRevision: string,
@@ -2028,6 +2071,7 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
         target: candidate,
         message: "Catalog revision is invalid or unavailable.",
         recoverable: true,
+        activeCatalogRevision: this.pinnedRevision,
         cause: error,
       });
     }

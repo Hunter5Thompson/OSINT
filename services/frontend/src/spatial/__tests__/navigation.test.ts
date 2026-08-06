@@ -436,6 +436,81 @@ describe("controller and router revision/failure coordination", () => {
     });
   });
 
+  it("keeps Back fail-closed and rehydrates only through an explicit replace", async () => {
+    const { navigation, requests } = makeNavigation(location(
+      "?foreign=keep",
+      { foreignState: 7 },
+      "/worldview",
+      "#history",
+    ));
+    navigations.push(navigation);
+    const catalog = new MemorySpatialCatalog({
+      activeCatalogRevision: ACTIVE_REVISION,
+      resolvedScopes: scopesAtRevision(ACTIVE_REVISION),
+    });
+    const controller = createSpatialScopeController({ catalog, navigation });
+    controllers.push(controller);
+    controller.start();
+    await waitForScope(controller, WORLD_SCOPE_KEY, ACTIVE_REVISION);
+    const committedStateRevision = controller.getSnapshot().stateRevision;
+
+    navigation.acceptLocation(location(
+      "?scope=country%3AUKR&foreign=keep",
+      {
+        foreignState: 7,
+        odinSpatialCatalogRevision: fixture.catalogRevision,
+        odinSpatialNavigationId: "retired-back-entry",
+      },
+      "/worldview",
+      "#history",
+    ));
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({
+      replace: true,
+      hash: "#history",
+      state: {
+        foreignState: 7,
+        odinSpatialCatalogRevision: ACTIVE_REVISION,
+      },
+    });
+    expect(new URLSearchParams(requests[0]?.search).get("scope")).toBeNull();
+    expect(new URLSearchParams(requests[0]?.search).get("foreign")).toBe("keep");
+    echo(navigation, requests[0] as RouterNavigationRequest);
+    await vi.waitFor(() => {
+      expect(controller.getSnapshot().problem).toMatchObject({
+        code: "CATALOG_REVISION_UNAVAILABLE",
+        activeCatalogRevision: ACTIVE_REVISION,
+      });
+    });
+    expect(controller.getSnapshot().stateRevision).toBe(committedStateRevision);
+
+    const recovery = controller.dispatch({ type: "rehydrate" });
+    await vi.waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[1]).toMatchObject({
+      replace: true,
+      state: {
+        foreignState: 7,
+        odinSpatialCatalogRevision: ACTIVE_REVISION,
+      },
+    });
+    echo(navigation, requests[1] as RouterNavigationRequest);
+    await expect(recovery).resolves.toMatchObject({ outcome: "committed" });
+    expect(controller.getSnapshot().stateRevision).toBe(committedStateRevision + 1);
+
+    navigation.acceptLocation(location(
+      "?scope=country%3AUKR&foreign=keep",
+      {
+        foreignState: 7,
+        odinSpatialCatalogRevision: ACTIVE_REVISION,
+        odinSpatialNavigationId: "active-forward-entry",
+      },
+      "/worldview",
+      "#history",
+    ));
+    await waitForScope(controller, UKRAINE, ACTIVE_REVISION);
+    expect(requests).toHaveLength(2);
+  });
+
   it("repairs a lexically invalid historical URL without a semantic revision", async () => {
     const { navigation, requests } = makeNavigation();
     navigations.push(navigation);

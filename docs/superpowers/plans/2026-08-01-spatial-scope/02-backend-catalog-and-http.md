@@ -93,3 +93,10 @@ Active and previous revisions are concurrently served; arbitrary filesystem path
 unreachable; rejected busy requests do not open files; corruption is a visible 503;
 and frontend runtime decoding enforces the same budgets as the build. No third-party
 URL exists in either runtime path.
+
+## Post-integration 409 recovery
+
+- [x] The HTTP problem adapter preserves `active_catalog_revision` as a branded value
+  rather than message text, and malformed responses remain fail-closed.
+- [x] Only the explicit `rehydrate` port resolves and re-pins that revision; ordinary
+  409 resolution performs no replacement or hidden retry.
