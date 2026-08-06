@@ -1,6 +1,6 @@
 # Spatial Scope 00B — Boundary Builder and Feasibility
 
-> **Canonical slice:** 0 (second half) · **Requires:** [Plan 00A](00a-catalog-policy-and-contracts.md)
+> **Status:** DONE (2026-08-06) · **Canonical slice:** 0 (second half) · **Requires:** [Plan 00A](00a-catalog-policy-and-contracts.md)
 >
 > **Load with:** [Spec 04 §10.5–10.6](../../specs/2026-07-31-spatial-scope-drilldown/04-spatial-catalog-contracts.md),
 > [Spec 05](../../specs/2026-07-31-spatial-scope-drilldown/05-boundary-build-and-antimeridian.md),

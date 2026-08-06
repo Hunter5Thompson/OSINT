@@ -1,6 +1,6 @@
 # Spatial Scope — Implementation Plan Index
 
-> **Status:** Ready for implementation · **Design gate:** PASS (2026-08-01)
+> **Status:** IN PROGRESS — Slices 0–2 done, Plan 03 active (2026-08-06) · **Design gate:** PASS (2026-08-01)
 >
 > **Normative source:** [Spatial-Scope-Spec](../specs/2026-07-31-spatial-scope-drilldown-design.md)
 
@@ -18,21 +18,21 @@ cleanup PR guarded by the Phase-D rollout decision.
 
 ## Plan set and dependency order
 
-| Plan | Canonical slice | Outcome | Requires |
-|---|---:|---|---|
-| [00A](2026-08-01-spatial-scope/00a-catalog-policy-and-contracts.md) | 0 | Identity, source lock, crosswalk, manifest contracts | approved spec |
-| [00B](2026-08-01-spatial-scope/00b-boundary-builder-and-feasibility.md) | 0 | Deterministic assets, LODs, antimeridian, feasibility gate | 00A |
-| [01](2026-08-01-spatial-scope/01-frontend-core-and-navigation.md) | 1 | Framework-free command store, URL port, React seam | 00A contract fixtures |
-| [02](2026-08-01-spatial-scope/02-backend-catalog-and-http.md) | 2 | Runtime catalog service, safe HTTP, frontend adapter | 00B, 01 contracts |
-| [03](2026-08-01-spatial-scope/03-cesium-country-migration.md) | 3 | World→country rendering, picking, breadcrumb, almanac | 01, 02 |
-| [04](2026-08-01-spatial-scope/04-chronik-bbox-scope.md) | 4 | Honest bbox-scoped timeline with stale-data guards | 02, 03 |
-| [05](2026-08-01-spatial-scope/05-admin1-and-prefetch.md) | 5 | Admin-1 drilldown, bounded cache and hover prefetch | 03 |
-| [05D](2026-08-01-spatial-scope/05d-phase-d-legacy-cleanup.md) | Phase D | Remove legacy country identity/renderer and build flag | 05 + canary/default-on soak |
-| [06A](2026-08-01-spatial-scope/06a-neo4j-normalization-and-backfill.md) | 6 | Canonical Location fields, writers, indexes, repeatable jobs | 00B |
-| [06B](2026-08-01-spatial-scope/06b-chronik-exact-scope.md) | 6 | Static exact Cypher and per-lane activation | 04, 06A |
-| [07A](2026-08-01-spatial-scope/07a-qdrant-spatial-payload.md) | 7 | Spatial payload, indexes and repeatable re-enrichment | 06A |
-| [07B](2026-08-01-spatial-scope/07b-munin-scope-enforcement.md) | 7 | Immutable run scope and capability-bound tools | 06B, 07A |
-| [08](2026-08-01-spatial-scope/08-layers-admin2-and-3d.md) | 8 | Reviewed extra layers, Admin-2, truthful 3D metrics | V1 gates from 03–07B |
+| Plan | Status | Canonical slice | Outcome | Requires |
+|---|---|---:|---|---|
+| [00A](2026-08-01-spatial-scope/00a-catalog-policy-and-contracts.md) | DONE | 0 | Identity, source lock, crosswalk, manifest contracts | approved spec |
+| [00B](2026-08-01-spatial-scope/00b-boundary-builder-and-feasibility.md) | DONE | 0 | Deterministic assets, LODs, antimeridian, feasibility gate | 00A |
+| [01](2026-08-01-spatial-scope/01-frontend-core-and-navigation.md) | DONE | 1 | Framework-free command store, URL port, React seam | 00A contract fixtures |
+| [02](2026-08-01-spatial-scope/02-backend-catalog-and-http.md) | DONE | 2 | Runtime catalog service, safe HTTP, frontend adapter | 00B, 01 contracts |
+| [03](2026-08-01-spatial-scope/03-cesium-country-migration.md) | IN PROGRESS | 3 | World→country rendering, picking, breadcrumb, almanac | 01, 02 |
+| [04](2026-08-01-spatial-scope/04-chronik-bbox-scope.md) | PLANNED | 4 | Honest bbox-scoped timeline with stale-data guards | 02, 03 |
+| [05](2026-08-01-spatial-scope/05-admin1-and-prefetch.md) | PLANNED | 5 | Admin-1 drilldown, bounded cache and hover prefetch | 03 |
+| [05D](2026-08-01-spatial-scope/05d-phase-d-legacy-cleanup.md) | PLANNED | Phase D | Remove legacy country identity/renderer and build flag | 05 + canary/default-on soak |
+| [06A](2026-08-01-spatial-scope/06a-neo4j-normalization-and-backfill.md) | PLANNED | 6 | Canonical Location fields, writers, indexes, repeatable jobs | 00B |
+| [06B](2026-08-01-spatial-scope/06b-chronik-exact-scope.md) | PLANNED | 6 | Static exact Cypher and per-lane activation | 04, 06A |
+| [07A](2026-08-01-spatial-scope/07a-qdrant-spatial-payload.md) | PLANNED | 7 | Spatial payload, indexes and repeatable re-enrichment | 06A |
+| [07B](2026-08-01-spatial-scope/07b-munin-scope-enforcement.md) | PLANNED | 7 | Immutable run scope and capability-bound tools | 06B, 07A |
+| [08](2026-08-01-spatial-scope/08-layers-admin2-and-3d.md) | PLANNED | 8 | Reviewed extra layers, Admin-2, truthful 3D metrics | V1 gates from 03–07B |
 
 `01` may start after 00A while 00B builds geometry. `06A` may proceed after Slice 0
 while UI Slices 1–5 run, but exact activation still waits for `04` and its coverage
