@@ -28,20 +28,20 @@ with focused tests. Modify `WorldviewPage`, `EntityClickHandler`, Spotlight file
 
 ## Work order 1 — Geometry and pick contract
 
-- [ ] **RED:** Test holes, multipolygons, dateline unwrapping, duplicate RBush spans,
+- [x] **RED:** Test holes, multipolygons, dateline unwrapping, duplicate RBush spans,
   boundary-uncertain, operational primitive over child surface, child over terrain,
   blank click, stale generation, and catalog IDs including Kosovo (never XKX). Add the
   deliberately divergent overview/regional fixture and pin expected pick to
   `childrenLods[preferredLod]` before/after camera LOD change. Fixed containment
   points must also return the same result through every camera LOD swap. Assert one
   `drillPick(position, 16)` per frame and a saturation metric at exactly 16 hits.
-- [ ] **GREEN:** Move/harden geometry helpers; implement tagged primitive pick
+- [x] **GREEN:** Move/harden geometry helpers; implement tagged primitive pick
   resolution. Pick surfaces are built once per `stateRevision` from the preferred
   child asset and are never reindexed by camera movement.
-- [ ] **REFACTOR:** `_topoIndex`, labels, and local ISO maps are absent from all spatial
+- [x] **REFACTOR:** `_topoIndex`, labels, and local ISO maps are absent from all spatial
   imports. Camera LOD applies only to non-pickable render geometry.
-- [ ] **VERIFY:** Run `geometry.test.ts` and `resolveWorldviewPick.test.ts`.
-- [ ] **COMMIT:** `feat(frontend): resolve deterministic spatial picks`
+- [x] **VERIFY:** Run `geometry.test.ts` and `resolveWorldviewPick.test.ts`.
+- [x] **COMMIT:** `feat(frontend): resolve deterministic spatial picks`
 
 ## Work order 2 — Generation-safe Cesium presenter
 
