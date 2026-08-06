@@ -1,7 +1,7 @@
 """Integration smoke test against real Spark vLLM.
 
-Skipped automatically if Spark is unreachable.
-Run explicitly: uv run pytest tests/integration -v
+Excluded from the hermetic default suite. Run explicitly against Spark with:
+uv run pytest -m live tests/integration/test_spark_smoke.py -v
 
 The reachability pre-check honours the ``SPARK_VLLM_URL_OVERRIDE`` environment
 variable — point it at an unreachable host (e.g. ``http://127.0.0.1:1``) to
@@ -16,6 +16,8 @@ import httpx
 import pytest
 
 from config import Settings
+
+pytestmark = pytest.mark.live
 
 
 def _effective_url() -> str:

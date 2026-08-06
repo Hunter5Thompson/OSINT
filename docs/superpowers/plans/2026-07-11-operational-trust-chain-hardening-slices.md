@@ -2,7 +2,7 @@
 
 **Datum:** 2026-07-11
 
-**Status:** IN EXECUTION — S01 COMMITTED, PR/MERGE PENDING
+**Status:** IN EXECUTION — S01-S02 DONE, S03 NEXT
 
 **Design-Spec:**
 `docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md`
@@ -48,7 +48,7 @@ wird bis dahin weder verworfen noch mit anderen Slices vermischt.
 
 ## S01 — Kanonischer Munin Runtime Model Contract
 
-**Status:** COMMITTED + VERIFIED — PR/MERGE PENDING
+**Status:** DONE
 
 **Priorität:** P0
 
@@ -203,6 +203,8 @@ ODIN_ENV_FILE=tests/fixtures/compose.env docker compose \
 
 ## S02 — Hermetischer Quality-Loop
 
+**Status:** DONE
+
 **Priorität:** P0
 
 **Abhängigkeiten:** S01, damit der erste PR sofort vom Gate geschützt wird
@@ -303,6 +305,38 @@ Exit-Code im PR dokumentieren.
   `daemon-reload`-Warnhinweis
 - vom Loop neu erzeugte `.venv`-, `node_modules`- und Log-Artefakte gehören nicht
   Root
+
+### RECORD — 2026-07-11
+
+- RED: Der vorhandene fokussierte Report-Test reproduzierte den Host-Leak exakt
+  mit `401` statt `503`. Die ergänzten Verträge scheiterten danach an einem aus
+  Hostzustand geladenen Admin-Token, der fehlenden Sektion `Ops Contracts` und
+  der fehlenden Non-Root-Identität der getrackten Service-Unit.
+- GREEN: Backend-Tests setzen vor dem ersten App-Import ein synthetisches
+  Neo4j-Passwort sowie leere Report-/Incident-Tokens im Testprozess. Der
+  Quality-Loop führt `uv run pytest ../../tests/ops -q` aus der Backend-Umgebung
+  vor der Backend-Suite aus. Die getrackte Service-Unit übernimmt User, Group,
+  HOME und PATH der bereits live bewährten Non-Root-Unit.
+- REFACTOR: Es entstand weder eine Settings-Factory noch eine zweite Runner-
+  Abstraktion. Tests, die absichtlich Admin-Tokens setzen, behalten ihre lokalen
+  Monkeypatches; die fail-fast-Orchestrierung bleibt unverändert.
+- VERIFY: Backend-Suite `399 passed`; fokussierter Ops-Vertrag `5 passed`;
+  hermetischer Report-Test mit Caller-Sentinels sowohl aus dem Service-Verzeichnis
+  als auch ohne lokale `.env` jeweils `1 passed`; Dry-Run listet Ops Contracts
+  vor allen fünf Service-Suites und endet beim Smoke. Der genau einmal gestartete
+  vollständige Lauf `20260711T021318Z` endete mit Exit-Code 0 und Handoff-Status
+  `PASS`: Ops `15 passed`, Backend `399 passed`, Frontend `373 passed`,
+  Intelligence `353 passed`, Data Ingestion `1133 passed` und Vision Enrichment
+  `22 passed`; alle fünf Coverage-Ratchets sowie der Smoke mit `14 passed`,
+  `0 failed`, `1 skipped` waren grün. Alle erzeugten Environments, Node-/Coverage-
+  und Log-Artefakte gehören `deadpool-ultra:deadpool-ultra`.
+- SYSTEMD HANDOFF: Getrackte und installierte Service-/Timer-Dateien sind
+  bytegleich; Timer ist enabled/active, die geladene Service-Identität ist
+  `deadpool-ultra` und `NeedDaemonReload=no`.
+- FOLLOW-UP VERIFY 2026-08-06: Der reale Spark-Smoke ist explizit `live` und
+  wird vom hermetischen Default-/Nightly-Gate nicht mehr eingesammelt. Ops
+  `16 passed`, Backend `399 passed`, Data Ingestion `1276 passed`, `1 skipped`,
+  `17 deselected`; der Live-Smoke bleibt mit `-m live` gezielt ausführbar.
 
 **Commit:** `fix(ops): isolate nightly quality gate from host environment`
 
