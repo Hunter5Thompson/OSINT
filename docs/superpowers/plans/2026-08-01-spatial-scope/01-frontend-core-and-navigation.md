@@ -1,6 +1,6 @@
 # Spatial Scope 01 — Frontend Core and Navigation
 
-> **Canonical slice:** 1 · **Requires:** [Plan 00A](00a-catalog-policy-and-contracts.md) contract fixtures
+> **Status:** DONE (2026-08-06) · **Canonical slice:** 1 · **Requires:** [Plan 00A](00a-catalog-policy-and-contracts.md) contract fixtures
 >
 > **Load with:** [Spec 01](../../specs/2026-07-31-spatial-scope-drilldown/01-architecture-and-invariants.md),
 > [Spec 03](../../specs/2026-07-31-spatial-scope-drilldown/03-frontend-core-and-navigation.md),
@@ -27,64 +27,64 @@ and tests under `src/spatial/__tests__/`. Modify `src/app/router.tsx`, add
 
 ## Work order 1 — Contracts and memory adapters
 
-- [ ] **RED:** Port shared JSON contract vectors from Slice 0 and test branded scope
+- [x] **RED:** Port shared JSON contract vectors from Slice 0 and test branded scope
   parsing, immutable discriminated snapshots, path invariants, problem mapping, and
   stable object identity between publications.
-- [ ] **GREEN:** Implement the public types exactly once in `contracts.ts`. Add strict
+- [x] **GREEN:** Implement the public types exactly once in `contracts.ts`. Add strict
   runtime parsers plus `MemorySpatialCatalog` in `catalog.ts` and an injectable-clock
   `MemoryScopeNavigation` in `navigation.ts`.
-- [ ] **REFACTOR:** Keep wire decoding out of public commands. `SpatialQueryRef` is the
+- [x] **REFACTOR:** Keep wire decoding out of public commands. `SpatialQueryRef` is the
   only query-facing token; geometry never enters a snapshot.
-- [ ] **VERIFY:** `cd services/frontend && npm test -- src/spatial/__tests__/catalog.test.ts`
-- [ ] **COMMIT:** `feat(frontend): define spatial scope contracts`
+- [x] **VERIFY:** `cd services/frontend && npm test -- src/spatial/__tests__/catalog.test.ts`
+- [x] **COMMIT:** `feat(frontend): define spatial scope contracts`
 
 ## Work order 2 — Command store and generations
 
-- [ ] **RED:** Test deep-link hydration without a world query flash, world→country→
+- [x] **RED:** Test deep-link hydration without a world query flash, world→country→
   admin1→ascend, sibling lineage reconstruction, current/root no-ops, A→B supersede,
   caller cancellation, pending ascend from committed parent, shared in-flight resolve,
   catalog failure, semantic-only commit, and presentation completion for a stale
   `stateRevision`.
-- [ ] **GREEN:** Implement `createSpatialScopeController` with cached frozen snapshots,
+- [x] **GREEN:** Implement `createSpatialScopeController` with cached frozen snapshots,
   monotonic foreground intent and state revisions, ref-counted loads, separate
   presentation lifetime, and idempotent `start/stop`. Validate generation and abort
   after every await. Operation failures return results; only programmer misuse throws.
-- [ ] **REFACTOR:** Keep transition bookkeeping private. Expose only `getSnapshot`,
+- [x] **REFACTOR:** Keep transition bookkeeping private. Expose only `getSnapshot`,
   `subscribe`, and `dispatch`; lifecycle stays with the provider owner.
-- [ ] **VERIFY:** `cd services/frontend && npm test -- src/spatial/__tests__/scopeController.test.ts`
-- [ ] **COMMIT:** `feat(frontend): add race-safe spatial scope controller`
+- [x] **VERIFY:** `cd services/frontend && npm test -- src/spatial/__tests__/scopeController.test.ts`
+- [x] **COMMIT:** `feat(frontend): add race-safe spatial scope controller`
 
 ## Work order 3 — Router navigation coordinator
 
-- [ ] **RED:** Test push versus replace, popstate without history echo, preservation of
+- [x] **RED:** Test push versus replace, popstate without history echo, preservation of
   all foreign query/hash/state fields, stale A write after B, pending navigation-ID
   echo suppression, historical reuse of an old ID, world without visible `scope`,
   revision only in validated router state, reload against active versus Back against
   the pinned served revision, invalid initial link repair, and the two-second
   `URL_SYNC_FAILED` path with fake time and explicit retry.
-- [ ] **GREEN:** Implement the framework-free coordinator in `navigation.ts` and its
+- [x] **GREEN:** Implement the framework-free coordinator in `navigation.ts` and its
   React-Router bridge in `react.tsx`. `writeScope` resolves only on the matching bridge
   echo. It serializes writes and repairs a superseded location to the latest committed
   or desired scope.
-- [ ] **REFACTOR:** Do not import the router singleton from `spatial/`; the bridge owns
+- [x] **REFACTOR:** Do not import the router singleton from `spatial/`; the bridge owns
   `useLocation/useNavigate`. The controller alone parses the untrusted candidate.
-- [ ] **VERIFY:** Run `navigation.test.ts`, then the new router test proving `/` keeps
+- [x] **VERIFY:** Run `navigation.test.ts`, then the new router test proving `/` keeps
   `scope` and all other parameters when redirecting to `/worldview`.
-- [ ] **COMMIT:** `feat(frontend): synchronize spatial scope with router history`
+- [x] **COMMIT:** `feat(frontend): synchronize spatial scope with router history`
 
 ## Work order 4 — React provider and composition root
 
-- [ ] **RED:** Test `useSyncExternalStore` stable wrappers, hook-outside-provider
+- [x] **RED:** Test `useSyncExternalStore` stable wrappers, hook-outside-provider
   failure, hydrating singleton, StrictMode `start→stop→start`, one router subscription,
   one initial resolve, and full cleanup of requests/listeners/leases.
-- [ ] **GREEN:** Implement `SpatialScopeProvider` and `useSpatialScope`; instantiate
+- [x] **GREEN:** Implement `SpatialScopeProvider` and `useSpatialScope`; instantiate
   the module once per provider and mount it in `WorldviewPage`. The provider is inert
   behind the default-off `VITE_SPATIAL_SCOPE_ENABLED` gate and creates no renderer.
-- [ ] **REFACTOR:** Type the Vite flag in `src/vite-env.d.ts`. Keep existing page query
+- [x] **REFACTOR:** Type the Vite flag in `src/vite-env.d.ts`. Keep existing page query
   concerns and all Spotlight behavior unchanged.
-- [ ] **VERIFY:** Run all spatial/router/page focused tests, then
+- [x] **VERIFY:** Run all spatial/router/page focused tests, then
   `npm run lint`, `npm run type-check`, and `npm test` from `services/frontend`.
-- [ ] **COMMIT:** `feat(frontend): mount spatial scope provider`
+- [x] **COMMIT:** `feat(frontend): mount spatial scope provider`
 
 ## Exit gate
 
