@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any, Literal
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from starlette.responses import Response
 
-from app.models.spatial import parse_scope_key, validate_catalog_revision_candidate
+from app.models.spatial import (
+    CatalogProblemCode,
+    SpatialCatalogProblem,
+    parse_scope_key,
+    validate_catalog_revision_candidate,
+)
 from app.models.timeline import (
     BBox,
     EventDetail,
@@ -24,12 +31,21 @@ from app.models.timeline import (
     TrackSample,
     WindowResponse,
 )
+from app.routers.spatial import spatial_problem_response
 from app.services.neo4j_client import read_query
 from app.services.severity import (
     category_of,
     dominant_category,
     normalize_severity,
     severity_rank,
+)
+from app.services.spatial_catalog import SpatialCatalogLoader
+from app.services.spatial_filters import (
+    CatalogFilterResolution,
+    CompiledSpatialFilter,
+    TimelineSpatialQueryId,
+    compile_legacy_bbox_filter,
+    resolve_catalog_filter,
 )
 
 log = structlog.get_logger(__name__)
@@ -110,32 +126,96 @@ def validate_spatial_params(
         raise HTTPException(status_code=422, detail="invalid spatial scope reference") from exc
 
 
-def _legacy_spatial_application(
+async def _resolve_spatial_filter(
+    request: Request,
     *,
+    scope_key: str | None,
+    catalog_revision: str | None,
+    bbox: BBox | None,
+) -> CatalogFilterResolution:
+    if scope_key is None:
+        return compile_legacy_bbox_filter(bbox)
+    loader = getattr(request.app.state, "spatial_catalog", None)
+    if not isinstance(loader, SpatialCatalogLoader):
+        return SpatialCatalogProblem(
+            code=CatalogProblemCode.CATALOG_UNAVAILABLE,
+            message="Spatial catalog is unavailable",
+            recoverable=True,
+        )
+    assert catalog_revision is not None
+    log.info(
+        "spatial_filter_requested",
+        consumer="chronik",
+        scope_key=scope_key,
+        catalog_revision=catalog_revision,
+    )
+    return await resolve_catalog_filter(loader, scope_key, catalog_revision)
+
+
+def _spatial_application(
+    *,
+    spatial_filter: CompiledSpatialFilter,
     relation: Literal["occurs-in", "intersects"],
     included_count: int,
-    bbox: BBox | None,
+    excluded_unlocated_count: int,
 ) -> SpatialApplicationV1:
+    token = (
+        spatial_filter.constraint.token
+        if spatial_filter.constraint is not None
+        else None
+    )
+    is_global = spatial_filter.query_id is TimelineSpatialQueryId.GLOBAL
     return SpatialApplicationV1(
-        requested_scope_key=None,
-        catalog_revision=None,
-        derivation_revision=None,
-        boundary_policy=None,
+        requested_scope_key=token.scope_key if token is not None else None,
+        catalog_revision=token.catalog_revision if token is not None else None,
+        derivation_revision=token.derivation_revision if token is not None else None,
+        boundary_policy=token.boundary_policy if token is not None else None,
         relation=relation,
         mode=(
             SpatialFilterMode.GLOBAL
-            if bbox is None
+            if is_global
             else SpatialFilterMode.BBOX_APPROXIMATE
         ),
         completeness=(
             SpatialCompleteness.COMPLETE
-            if bbox is None
+            if is_global
             else SpatialCompleteness.PARTIAL
         ),
         included_count=included_count,
-        excluded_unlocated_count=0,
+        excluded_unlocated_count=(0 if is_global else excluded_unlocated_count),
         excluded_conflict_count=0,
         excluded_stale_revision_count=0,
+    )
+
+
+def _count_accounting(
+    rows: list[dict[str, Any]],
+    *,
+    fallback_total: int,
+) -> tuple[int, int]:
+    if not rows:
+        return fallback_total, 0
+    row = rows[0]
+    return (
+        int(row.get("total", fallback_total)),
+        int(row.get("excluded_unlocated_count", 0)),
+    )
+
+
+def _emit_filter_applied(application: SpatialApplicationV1, started: float) -> None:
+    log.info(
+        "spatial_filter_applied",
+        consumer="chronik",
+        scope_key=application.requested_scope_key,
+        catalog_revision=application.catalog_revision,
+        derivation_revision=application.derivation_revision,
+        filter_mode=application.mode.value,
+        completeness=application.completeness.value,
+        duration_ms=max(0.0, (perf_counter() - started) * 1000.0),
+        included_count=application.included_count,
+        excluded_unlocated_count=application.excluded_unlocated_count,
+        excluded_conflict_count=application.excluded_conflict_count,
+        excluded_stale_revision_count=application.excluded_stale_revision_count,
     )
 
 
@@ -159,30 +239,37 @@ LIMIT $limit
 """
 
 _EVENTS_COUNT_QUERY = """
-MATCH (ev:Event)
-WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
-OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
-WITH ev, l
-WHERE $bbox_off
-   OR (l.lat IS NOT NULL AND l.lon IS NOT NULL
-       AND l.lat >= $south AND l.lat <= $north
-       AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
-          OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) ))
-RETURN count(DISTINCT ev) AS total
+CALL {
+  MATCH (ev:Event)
+  WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+  OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+  WITH ev, collect(l) AS locations
+  WHERE $bbox_off
+     OR any(location IN locations WHERE
+       location.lat IS NOT NULL AND location.lon IS NOT NULL
+       AND location.lat >= $south AND location.lat <= $north
+       AND ( ($west <= $east
+              AND location.lon >= $west AND location.lon <= $east)
+          OR ($west > $east
+              AND (location.lon >= $west OR location.lon <= $east)) ))
+  RETURN count(ev) AS total
+}
+CALL {
+  MATCH (ev:Event)
+  WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+  OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+  WITH ev, [location IN collect(l) WHERE
+    location.lat IS NOT NULL AND location.lon IS NOT NULL] AS located
+  WHERE size(located) = 0
+  RETURN count(ev) AS excluded_unlocated_count
+}
+RETURN total, excluded_unlocated_count
 """
-
-
-def _bbox_params(bbox: BBox | None) -> dict[str, Any]:
-    if bbox is None:
-        return {"bbox_off": True, "west": -180.0, "east": 180.0, "south": -90.0, "north": 90.0}
-    return {
-        "bbox_off": False,
-        "west": bbox.west, "east": bbox.east, "south": bbox.south, "north": bbox.north,
-    }
 
 
 @router.get("/window", response_model=WindowResponse)
 async def get_window(
+    request: Request,
     t_start: str,
     t_end: str,
     domain: str = "events",
@@ -192,7 +279,7 @@ async def get_window(
     scope_key: str | None = None,
     catalog_revision: str | None = None,
     limit: int = Query(default=200),
-) -> WindowResponse:
+) -> WindowResponse | Response:
     if domain not in ("events", "movements"):
         raise HTTPException(status_code=422, detail="domain must be events|movements")
     if tier not in ("coarse", "fine"):
@@ -202,8 +289,6 @@ async def get_window(
     start, end = validate_window(t_start, t_end)
     box = parse_bbox(bbox)
     validate_spatial_params(scope_key, catalog_revision, box)
-    if scope_key is not None:
-        raise HTTPException(status_code=503, detail="spatial filtering unavailable")
 
     if domain == "events":
         if movement_kind is not None:
@@ -212,24 +297,62 @@ async def get_window(
             )
         if tier != "coarse":
             raise HTTPException(status_code=422, detail="events only support tier=coarse")
-        return await _events_window(t_start, t_end, box, limit)
-
-    return await _movements_window(
-        t_start, t_end, tier, movement_kind, box, limit, start=start, end=end
+    started = perf_counter()
+    spatial_filter = await _resolve_spatial_filter(
+        request,
+        scope_key=scope_key,
+        catalog_revision=catalog_revision,
+        bbox=box,
     )
+    if isinstance(spatial_filter, SpatialCatalogProblem):
+        log.info(
+            "spatial_filter_unsupported",
+            consumer="chronik",
+            scope_key=scope_key,
+            catalog_revision=catalog_revision,
+            cause=spatial_filter.code.value,
+            duration_ms=max(0.0, (perf_counter() - started) * 1000.0),
+        )
+        return spatial_problem_response(spatial_filter)
+
+    if domain == "events":
+        result = await _events_window(t_start, t_end, spatial_filter, limit)
+        _emit_filter_applied(result.spatial_application, started)
+        return result
+
+    result = await _movements_window(
+        t_start,
+        t_end,
+        tier,
+        movement_kind,
+        spatial_filter,
+        limit,
+        start=start,
+        end=end,
+    )
+    _emit_filter_applied(result.spatial_application, started)
+    return result
 
 
 async def _events_window(
-    t_start: str, t_end: str, box: BBox | None, limit: int
+    t_start: str,
+    t_end: str,
+    spatial_filter: CompiledSpatialFilter,
+    limit: int,
 ) -> WindowResponse:
-    params = {"t_start": t_start, "t_end": t_end, "limit": limit, **_bbox_params(box)}
+    params = {
+        "t_start": t_start,
+        "t_end": t_end,
+        "limit": limit,
+        **spatial_filter.parameters,
+    }
     try:
         rows = await read_query(_EVENTS_QUERY, params)
         count_rows = await read_query(_EVENTS_COUNT_QUERY, params)
     except Exception as exc:
         log.error("timeline_events_neo4j_query_failed", error=str(exc))
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
-    total = int(count_rows[0]["total"]) if count_rows else len(rows)
+    total, excluded_unlocated = _count_accounting(count_rows, fallback_total=len(rows))
     samples: list[EventSample | TrackSample] = [
         EventSample(
             id=str(r.get("id") or ""),
@@ -246,12 +369,17 @@ async def _events_window(
         for r in rows
     ]
     return WindowResponse(
-        domain="events", tier="coarse", t_start=t_start, t_end=t_end, bbox=box,
+        domain="events",
+        tier="coarse",
+        t_start=t_start,
+        t_end=t_end,
+        bbox=spatial_filter.bbox,
         samples=samples, total_count=total, truncated=total > len(samples),
-        spatial_application=_legacy_spatial_application(
+        spatial_application=_spatial_application(
+            spatial_filter=spatial_filter,
             relation="occurs-in",
             included_count=total,
-            bbox=box,
+            excluded_unlocated_count=excluded_unlocated,
         ),
     )
 
@@ -282,23 +410,38 @@ LIMIT $limit
 # DISTINCT in-window/in-bbox aircraft so total_count is the true pre-limit match
 # count (tracks, not points), per spec §5.
 _MIL_TRACKS_COUNT_QUERY = """
-MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
-WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
-  AND r.latitude IS NOT NULL AND r.longitude IS NOT NULL
-WITH a, collect(r) AS rs
-WITH a,
-  [x IN rs WHERE $bbox_off
-     OR (x.latitude >= $south AND x.latitude <= $north
-         AND ( ($west <= $east AND x.longitude >= $west AND x.longitude <= $east)
-            OR ($west >  $east AND (x.longitude >= $west OR x.longitude <= $east)) ))] AS inbox
-WHERE size(inbox) >= 1
-RETURN count(DISTINCT a) AS total
+CALL {
+  MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
+  WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
+    AND r.latitude IS NOT NULL AND r.longitude IS NOT NULL
+  WITH a, collect(r) AS rs
+  WITH a,
+    [x IN rs WHERE $bbox_off
+       OR (x.latitude >= $south AND x.latitude <= $north
+           AND ( ($west <= $east AND x.longitude >= $west AND x.longitude <= $east)
+              OR ($west > $east AND (x.longitude >= $west OR x.longitude <= $east)) ))] AS inbox
+  WHERE size(inbox) >= 1
+  RETURN count(DISTINCT a) AS total
+}
+CALL {
+  MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
+  WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
+  WITH a, collect(r) AS samples
+  WHERE none(sample IN samples WHERE
+    sample.latitude IS NOT NULL AND sample.longitude IS NOT NULL)
+  RETURN count(DISTINCT a) AS excluded_unlocated_count
+}
+RETURN total, excluded_unlocated_count
 """
 
 
 async def _movements_window(
     t_start: str, t_end: str, tier: str, movement_kind: str | None,
-    box: BBox | None, limit: int, *, start: datetime, end: datetime,
+    spatial_filter: CompiledSpatialFilter,
+    limit: int,
+    *,
+    start: datetime,
+    end: datetime,
 ) -> WindowResponse:
     if movement_kind is None:
         raise HTTPException(status_code=422, detail="movement_kind required for domain=movements")
@@ -311,7 +454,7 @@ async def _movements_window(
 
     params = {
         "start_s": int(start.timestamp()), "end_s": int(end.timestamp()),
-        "limit": limit, **_bbox_params(box),
+        "limit": limit, **spatial_filter.parameters,
     }
     try:
         rows = await read_query(_MIL_TRACKS_QUERY, params)
@@ -331,14 +474,22 @@ async def _movements_window(
         )
         for r in rows
     ]
-    total = int(count_rows[0]["total"]) if count_rows else len(samples)
+    total, excluded_unlocated = _count_accounting(
+        count_rows,
+        fallback_total=len(samples),
+    )
     return WindowResponse(
-        domain="movements", tier="fine", t_start=t_start, t_end=t_end, bbox=box,
+        domain="movements",
+        tier="fine",
+        t_start=t_start,
+        t_end=t_end,
+        bbox=spatial_filter.bbox,
         samples=samples, total_count=total, truncated=total > len(samples),
-        spatial_application=_legacy_spatial_application(
+        spatial_application=_spatial_application(
+            spatial_filter=spatial_filter,
             relation="intersects",
             included_count=total,
-            bbox=box,
+            excluded_unlocated_count=excluded_unlocated,
         ),
     )
 
@@ -361,6 +512,7 @@ RETURN toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
 
 @router.get("/histogram", response_model=HistogramResponse)
 async def get_histogram(
+    request: Request,
     t_start: str,
     t_end: str,
     buckets: int = 120,
@@ -368,7 +520,7 @@ async def get_histogram(
     bbox: str | None = None,
     scope_key: str | None = None,
     catalog_revision: str | None = None,
-) -> HistogramResponse:
+) -> HistogramResponse | Response:
     if domain != "events":
         raise HTTPException(status_code=422, detail="histogram supports domain=events only")
     if not (1 <= buckets <= _MAX_BUCKETS):
@@ -376,9 +528,28 @@ async def get_histogram(
     start, end = validate_window(t_start, t_end)
     box = parse_bbox(bbox)
     validate_spatial_params(scope_key, catalog_revision, box)
-    if scope_key is not None:
-        raise HTTPException(status_code=503, detail="spatial filtering unavailable")
-    params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
+    started = perf_counter()
+    spatial_filter = await _resolve_spatial_filter(
+        request,
+        scope_key=scope_key,
+        catalog_revision=catalog_revision,
+        bbox=box,
+    )
+    if isinstance(spatial_filter, SpatialCatalogProblem):
+        log.info(
+            "spatial_filter_unsupported",
+            consumer="chronik",
+            scope_key=scope_key,
+            catalog_revision=catalog_revision,
+            cause=spatial_filter.code.value,
+            duration_ms=max(0.0, (perf_counter() - started) * 1000.0),
+        )
+        return spatial_problem_response(spatial_filter)
+    params = {
+        "t_start": t_start,
+        "t_end": t_end,
+        **spatial_filter.parameters,
+    }
 
     start_ms = int(start.timestamp() * 1000)
     end_ms = int(end.timestamp() * 1000)
@@ -387,6 +558,7 @@ async def get_histogram(
 
     try:
         rows = await read_query(_HISTOGRAM_QUERY, params)
+        count_rows = await read_query(_EVENTS_COUNT_QUERY, params)
     except Exception as exc:
         log.error("timeline_histogram_neo4j_query_failed", error=str(exc))
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
@@ -427,22 +599,33 @@ async def get_histogram(
     # The notable + geo reads hit Neo4j too — keep them inside a 503 guard so a failure
     # there returns the promised 503, not an unhandled 500 (review finding #1).
     try:
-        notables = await _histogram_notables(t_start, t_end, box)
-        geo_events, geo_count, geo_trunc = await _histogram_geo(t_start, t_end, box)
+        notables = await _histogram_notables(t_start, t_end, spatial_filter)
+        geo_events, geo_count, geo_trunc = await _histogram_geo(
+            t_start,
+            t_end,
+            spatial_filter,
+        )
     except Exception as exc:
         log.error("timeline_histogram_aux_neo4j_query_failed", error=str(exc))
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
 
-    return HistogramResponse(
+    total, excluded_unlocated = _count_accounting(
+        count_rows,
+        fallback_total=len(rows),
+    )
+    response = HistogramResponse(
         t_start=t_start, t_end=t_end, bucket_ms=bucket_ms, buckets=bucket_list,
-        notables=notables, geo_events=geo_events, total_count=len(rows),
+        notables=notables, geo_events=geo_events, total_count=total,
         geo_located_count=geo_count, geo_truncated=geo_trunc,
-        spatial_application=_legacy_spatial_application(
+        spatial_application=_spatial_application(
+            spatial_filter=spatial_filter,
             relation="occurs-in",
-            included_count=len(rows),
-            bbox=box,
+            included_count=total,
+            excluded_unlocated_count=excluded_unlocated,
         ),
     )
+    _emit_filter_applied(response.spatial_application, started)
+    return response
 
 
 # Pre-filter to high/critical synonyms IN Cypher (review finding #3): otherwise the
@@ -491,8 +674,16 @@ def _neg_time_key(t: object) -> str:
     return "".join(chr(0x10FFFF - ord(ch)) for ch in str(t or ""))
 
 
-async def _histogram_notables(t_start: str, t_end: str, box: BBox | None) -> list[Notable]:
-    params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
+async def _histogram_notables(
+    t_start: str,
+    t_end: str,
+    spatial_filter: CompiledSpatialFilter,
+) -> list[Notable]:
+    params = {
+        "t_start": t_start,
+        "t_end": t_end,
+        **spatial_filter.parameters,
+    }
     ev_rows = await read_query(_NOTABLE_EVENTS_QUERY, params)
     inc_rows = await read_query(_NOTABLE_INCIDENTS_QUERY, params)
 
@@ -549,9 +740,15 @@ _GEO_CAP = 200
 
 
 async def _histogram_geo(
-    t_start: str, t_end: str, box: BBox | None
+    t_start: str,
+    t_end: str,
+    spatial_filter: CompiledSpatialFilter,
 ) -> tuple[list[GeoEvent], int, bool]:
-    params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
+    params = {
+        "t_start": t_start,
+        "t_end": t_end,
+        **spatial_filter.parameters,
+    }
     rows = await read_query(_GEO_EVENTS_QUERY, params)
     total = len(rows)
     ranked = sorted(
