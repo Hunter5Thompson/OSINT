@@ -147,6 +147,7 @@ async def _resolve_spatial_filter(
         "spatial_filter_requested",
         consumer="chronik",
         scope_key=scope_key,
+        scope_kind=parse_scope_key(scope_key).kind.value,
         catalog_revision=catalog_revision,
     )
     return await resolve_catalog_filter(loader, scope_key, catalog_revision)
@@ -203,10 +204,16 @@ def _count_accounting(
 
 
 def _emit_filter_applied(application: SpatialApplicationV1, started: float) -> None:
+    scope_kind = (
+        parse_scope_key(application.requested_scope_key).kind.value
+        if application.requested_scope_key is not None
+        else None
+    )
     log.info(
         "spatial_filter_applied",
         consumer="chronik",
         scope_key=application.requested_scope_key,
+        scope_kind=scope_kind,
         catalog_revision=application.catalog_revision,
         derivation_revision=application.derivation_revision,
         filter_mode=application.mode.value,
@@ -309,6 +316,7 @@ async def get_window(
             "spatial_filter_unsupported",
             consumer="chronik",
             scope_key=scope_key,
+            scope_kind=(parse_scope_key(scope_key).kind.value if scope_key else None),
             catalog_revision=catalog_revision,
             cause=spatial_filter.code.value,
             duration_ms=max(0.0, (perf_counter() - started) * 1000.0),
@@ -540,6 +548,7 @@ async def get_histogram(
             "spatial_filter_unsupported",
             consumer="chronik",
             scope_key=scope_key,
+            scope_kind=(parse_scope_key(scope_key).kind.value if scope_key else None),
             catalog_revision=catalog_revision,
             cause=spatial_filter.code.value,
             duration_ms=max(0.0, (perf_counter() - started) * 1000.0),

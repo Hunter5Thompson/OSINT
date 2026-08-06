@@ -237,4 +237,33 @@ describe("ScrubberMount", () => {
     expect(screen.getByText("▶ REPLAY")).toBeInTheDocument();
     expect(calls.every((request) => request.spatialScope !== undefined)).toBe(true);
   });
+
+  it("removes stale bars synchronously when the breadcrumb scope changes", async () => {
+    const ukraine = scope("country:UKR");
+    const poland = scope("country:POL");
+    const pendingPoland = new Promise<HistogramResponse>(() => {});
+    vi.spyOn(api, "getTimeHistogram").mockImplementation((request) => {
+      if (request.spatialScope === ukraine) return Promise.resolve(scopedHistogram(ukraine));
+      return pendingPoland;
+    });
+    const onSelectEvent = vi.fn();
+    const onTimelineData = vi.fn();
+    const renderTree = (spatialScope: SpatialQueryRef, scopeGeneration: number) => (
+      <TimeProvider viewer={null}>
+        <ScrubberMount
+          onSelectEvent={onSelectEvent}
+          onTimelineData={onTimelineData}
+          spatialScope={spatialScope}
+          scopeGeneration={scopeGeneration}
+        />
+      </TimeProvider>
+    );
+    const mounted = render(renderTree(ukraine, 1));
+    await waitFor(() => expect(screen.getAllByTestId("chronik-bar")).toHaveLength(1));
+
+    mounted.rerender(renderTree(poland, 2));
+
+    expect(screen.queryAllByTestId("chronik-bar")).toHaveLength(0);
+    expect(screen.getByTestId("chronik-spatial-status")).toHaveTextContent("scope loading");
+  });
 });

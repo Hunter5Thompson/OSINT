@@ -62,7 +62,7 @@ export function ScrubberMount({
     }),
     [coarse.tEnd, coarse.tStart, spatialScope],
   );
-  const { data } = useTimeHistogram(
+  const { data, loading, error } = useTimeHistogram(
     spatialScope !== null,
     histogramQuery,
     30_000,
@@ -146,6 +146,9 @@ export function ScrubberMount({
       onReverse={() => { ensureReplay(); setSpeed(signedSpeed(magnitude, -1)); play(); }}
       onForward={() => { setSpeed(signedSpeed(magnitude, 1)); play(); }}
       onSetSpeedMagnitude={(m) => setSpeed(signedSpeed(m, speed < 0 ? -1 : 1))}
+      spatialApplication={data?.spatial_application ?? null}
+      spatialLoading={spatialScope === null || loading}
+      spatialError={error}
     />
   );
 }

@@ -1,6 +1,6 @@
 # Spatial Scope — Implementation Plan Index
 
-> **Status:** IN PROGRESS — Slices 0–2 done, Plan 03 active (2026-08-06) · **Design gate:** PASS (2026-08-01)
+> **Status:** IN PROGRESS — Slices 0–2 and 4 done, Plan 03 active (2026-08-06) · **Design gate:** PASS (2026-08-01)
 >
 > **Normative source:** [Spatial-Scope-Spec](../specs/2026-07-31-spatial-scope-drilldown-design.md)
 
@@ -25,7 +25,7 @@ cleanup PR guarded by the Phase-D rollout decision.
 | [01](2026-08-01-spatial-scope/01-frontend-core-and-navigation.md) | DONE | 1 | Framework-free command store, URL port, React seam | 00A contract fixtures |
 | [02](2026-08-01-spatial-scope/02-backend-catalog-and-http.md) | DONE | 2 | Runtime catalog service, safe HTTP, frontend adapter | 00B, 01 contracts |
 | [03](2026-08-01-spatial-scope/03-cesium-country-migration.md) | IN PROGRESS | 3 | World→country rendering, picking, breadcrumb, almanac | 01, 02 |
-| [04](2026-08-01-spatial-scope/04-chronik-bbox-scope.md) | PLANNED | 4 | Honest bbox-scoped timeline with stale-data guards | 02, 03 |
+| [04](2026-08-01-spatial-scope/04-chronik-bbox-scope.md) | DONE | 4 | Honest bbox-scoped timeline with stale-data guards | 02, 03 |
 | [05](2026-08-01-spatial-scope/05-admin1-and-prefetch.md) | PLANNED | 5 | Admin-1 drilldown, bounded cache and hover prefetch | 03 |
 | [05D](2026-08-01-spatial-scope/05d-phase-d-legacy-cleanup.md) | PLANNED | Phase D | Remove legacy country identity/renderer and build flag | 05 + canary/default-on soak |
 | [06A](2026-08-01-spatial-scope/06a-neo4j-normalization-and-backfill.md) | PLANNED | 6 | Canonical Location fields, writers, indexes, repeatable jobs | 00B |
