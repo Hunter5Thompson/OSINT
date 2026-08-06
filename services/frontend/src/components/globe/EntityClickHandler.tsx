@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import type { Selected } from "../worldview/InspectorPanel";
+import type { ScopeKey } from "../../spatial/contracts";
+import {
+  isSpatialChildPickId,
+  resolveWorldviewPick,
+  type WorldviewPickCategory,
+} from "../../spatial/cesium/resolveWorldviewPick";
 import { useSpotlight } from "./spotlight/SpotlightContext";
 import { useCountryHitTest, hitTestCountry } from "./hooks/useCountryHitTest";
 import { isPhotorealSurfacePick } from "./isPhotorealSurfacePick";
@@ -18,12 +24,58 @@ function shipTypeLabel(code: number): string {
   return SHIP_TYPES[code] ?? SHIP_TYPES[Math.floor(code / 10) * 10] ?? `Type ${code}`;
 }
 
+interface LegacyCountryInteraction {
+  readonly mode: "legacy";
+  readonly onCountrySelect: (selection: Selected | null) => void;
+}
+
+interface SpatialCountryInteraction {
+  readonly mode: "spatial";
+  readonly stateRevision: number;
+  readonly onSpatialChild: (scopeKey: ScopeKey) => void | Promise<void>;
+  readonly onBlank: () => void;
+}
+
+export type CountryClickInteraction =
+  | LegacyCountryInteraction
+  | SpatialCountryInteraction;
+
 interface EntityClickHandlerProps {
   viewer: Cesium.Viewer | null;
   photorealTileset?: Cesium.Cesium3DTileset | null;
-  onCountrySelect: (sel: Selected | null) => void;
+  countryInteraction: CountryClickInteraction;
   // Event-billboard click → open the new EventCallout (and seek if a time is known).
   onEventSelect?: (id: string, timeIso?: string) => void;
+}
+
+type PickRecord = Record<string, unknown>;
+
+function pickRecord(value: unknown): PickRecord | null {
+  return typeof value === "object" && value !== null
+    ? value as PickRecord
+    : null;
+}
+
+export function classifyWorldviewHit(
+  hit: unknown,
+  photorealTileset: Cesium.Cesium3DTileset | null,
+): WorldviewPickCategory | null {
+  const record = pickRecord(hit);
+  const values = [record?.id, record?.primitive, hit];
+  if (values.some(isSpatialChildPickId)) return null;
+  for (const value of values) {
+    const candidate = pickRecord(value);
+    if (
+      candidate?.odinKind === "ui"
+      || candidate?.odinKind === "operational"
+      || candidate?.odinKind === "legacy-country"
+      || candidate?.odinKind === "terrain"
+    ) {
+      return candidate.odinKind;
+    }
+  }
+  if (isPhotorealSurfacePick(hit, photorealTileset)) return "terrain";
+  return record === null ? null : "operational";
 }
 
 interface SelectedEntity {
@@ -37,18 +89,20 @@ interface SelectedEntity {
 export function EntityClickHandler({
   viewer,
   photorealTileset,
-  onCountrySelect,
+  countryInteraction,
   onEventSelect,
 }: EntityClickHandlerProps) {
   const [selected, setSelected] = useState<SelectedEntity | null>(null);
   const { dispatch: dispatchSpotlight } = useSpotlight();
-  const country = useCountryHitTest();
+  const country = useCountryHitTest(countryInteraction.mode === "legacy");
   // Ref so the [viewer]-keyed pick handler always calls the latest callback without
   // re-subscribing (the parent useTime() bridge re-renders at the ~4 Hz cursor cadence).
   const onEventSelectRef = useRef(onEventSelect);
   onEventSelectRef.current = onEventSelect;
   const photorealTilesetRef = useRef(photorealTileset ?? null);
   photorealTilesetRef.current = photorealTileset ?? null;
+  const countryInteractionRef = useRef(countryInteraction);
+  countryInteractionRef.current = countryInteraction;
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -56,7 +110,26 @@ export function EntityClickHandler({
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 
     handler.setInputAction((movement: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
-      const picked = viewer.scene.pick(movement.position);
+      const interaction = countryInteractionRef.current;
+      const resolvedPick = resolveWorldviewPick(viewer.scene, movement.position, {
+        stateRevision: interaction.mode === "spatial" ? interaction.stateRevision : 0,
+        spatialEnabled: interaction.mode === "spatial",
+        classify: (hit) => classifyWorldviewHit(hit, photorealTilesetRef.current),
+      });
+      if (resolvedPick.kind === "ui") return;
+      if (resolvedPick.kind === "spatial-child") {
+        if (interaction.mode === "spatial") {
+          void interaction.onSpatialChild(resolvedPick.id.scopeKey);
+        }
+        return;
+      }
+      const picked = (
+        resolvedPick.kind === "operational"
+        || resolvedPick.kind === "legacy-country"
+        || resolvedPick.kind === "terrain"
+      )
+        ? resolvedPick.hit as { readonly id?: Cesium.Entity; readonly primitive?: unknown }
+        : undefined;
 
       // Guard 1: Event billboard (custom _eventData property)
       const eventData = (picked?.primitive as Record<string, unknown>)?._eventData as
@@ -359,7 +432,7 @@ export function EntityClickHandler({
       }
 
       // Nothing under the cursor — true void or country territory.
-      if (country.index) {
+      if (interaction.mode === "legacy" && country.index) {
         const cartesian = viewer.scene.pickPosition(movement.position) ?? viewer.camera.pickEllipsoid(movement.position);
         if (cartesian) {
           const carto = Cesium.Cartographic.fromCartesian(cartesian);
@@ -368,7 +441,7 @@ export function EntityClickHandler({
           const hit = hitTestCountry(country.index, country.features, country.topoIndex, country.countries, lon, lat);
           if (hit) {
             setSelected(null);                                // clear local bottom-popup
-            onCountrySelect({ type: "country", data: hit });  // lift to right InspectorPanel
+            interaction.onCountrySelect({ type: "country", data: hit });
             dispatchSpotlight({
               type: "set",
               target: {
@@ -386,14 +459,15 @@ export function EntityClickHandler({
         }
       }
       setSelected(null);
-      onCountrySelect(null);
+      if (interaction.mode === "legacy") interaction.onCountrySelect(null);
+      else interaction.onBlank();
       dispatchSpotlight({ type: "reset" });
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
     return () => {
       handler.destroy();
     };
-  }, [viewer, dispatchSpotlight, country, onCountrySelect]);
+  }, [viewer, dispatchSpotlight, country]);
 
   if (!selected) return null;
 

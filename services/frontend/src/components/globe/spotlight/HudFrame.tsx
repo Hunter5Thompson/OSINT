@@ -7,7 +7,7 @@ function utcLabel(d: Date): string {
 
 const REDUCED = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-export function HudFrame() {
+export function HudFrame({ allowCountry = true }: { readonly allowCountry?: boolean }) {
   const { focusTarget } = useSpotlight();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -16,12 +16,15 @@ export function HudFrame() {
     return () => clearInterval(id);
   }, []);
 
+  const visibleTarget = !allowCountry && focusTarget?.kind === "country"
+    ? null
+    : focusTarget;
   const stateLabel =
-    focusTarget == null
+    visibleTarget == null
       ? "idle"
-      : focusTarget.kind === "country"
-        ? `country · ${focusTarget.iso3 ?? focusTarget.m49}`
-        : `focus · ${focusTarget.label}`;
+      : visibleTarget.kind === "country"
+        ? `country · ${visibleTarget.iso3 ?? visibleTarget.m49}`
+        : `focus · ${visibleTarget.label}`;
 
   return (
     <div className="hud-frame" aria-hidden="true">

@@ -3,7 +3,6 @@ import * as Cesium from "cesium";
 import type {
   BoundaryAsset,
   BoundaryAssetLease,
-  BoundaryAssetStore,
   BoundaryPackV1,
 } from "../catalog";
 import type {
@@ -531,7 +530,7 @@ export class CesiumSpatialScopeAdapter {
 
 export function createCesiumSpatialScopeAdapter(
   viewer: Cesium.Viewer,
-  assets: BoundaryAssetStore,
+  assets: BoundaryAssetProvider,
 ): CesiumSpatialScopeAdapter {
   return new CesiumSpatialScopeAdapter({
     assets,

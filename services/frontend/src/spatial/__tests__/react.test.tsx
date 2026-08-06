@@ -262,6 +262,7 @@ describe("SpatialScopeProvider gate and hook", () => {
     const ascend = hydrating?.ascend;
     const prefetch = hydrating?.prefetch;
     const rehydrate = hydrating?.rehydrate;
+    const cancelPending = hydrating?.cancelPending;
 
     gate.resolve();
     await vi.waitFor(() => expect(latestHandle?.phase).toBe("ready"));
@@ -269,6 +270,7 @@ describe("SpatialScopeProvider gate and hook", () => {
     expect(latestHandle?.ascend).toBe(ascend);
     expect(latestHandle?.prefetch).toBe(prefetch);
     expect(latestHandle?.rehydrate).toBe(rehydrate);
+    expect(latestHandle?.cancelPending).toBe(cancelPending);
   });
 
   it("renders exactly one explicit 409 recovery action", async () => {

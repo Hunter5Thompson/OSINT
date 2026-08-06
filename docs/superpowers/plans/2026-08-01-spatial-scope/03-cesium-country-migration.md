@@ -62,7 +62,7 @@ with focused tests. Modify `WorldviewPage`, `EntityClickHandler`, Spotlight file
 
 ## Work order 3 — Mutually exclusive migration and UX
 
-- [ ] **RED:** Test flag-off only Legacy and flag-on only Spatial; never two renderers
+- [x] **RED:** Test flag-off only Legacy and flag-on only Spatial; never two renderers
   or click handlers, and a Legacy hit has no Spatial dispatch access. Test country
   click dispatches both scope and separate selection, failed resolve changes neither,
   scope commit clears unverified operational selection, blank click preserves scope,
@@ -71,15 +71,15 @@ with focused tests. Modify `WorldviewPage`, `EntityClickHandler`, Spotlight file
   priority-ordered Escape action. An old `SelectionEnvelope` is hidden on the first
   render of a new `stateRevision`. Breadcrumb tests cover semantic nav, `aria-current`,
   keyboard activation and focus retention.
-- [ ] **GREEN:** Wire the adapter through a viewer bridge within the provider. Keep
+- [x] **GREEN:** Wire the adapter through a viewer bridge within the provider. Keep
   `CountryTarget` writable/renderable only in the legacy branch; Circle Spotlight
   remains shared. Add revision-tagged selection, accessible breadcrumb and scope
   error/pending presentation without moving state into `WorldviewPage`. Treat
   `VITE_SPATIAL_SCOPE_ENABLED` strictly as build-time configuration.
-- [ ] **REFACTOR:** Centralize Escape arbitration and primitive ownership. Do not
+- [x] **REFACTOR:** Centralize Escape arbitration and primitive ownership. Do not
   delete legacy files or the build flag before Plan 05D.
-- [ ] **VERIFY:** Run spatial, Spotlight, page, and StrictMode suites.
-- [ ] **COMMIT:** `feat(frontend): enable flagged country scope drilldown`
+- [x] **VERIFY:** Run spatial, Spotlight, page, and StrictMode suites.
+- [x] **COMMIT:** `feat(frontend): enable flagged country scope drilldown`
 
 ## Work order 4 — Canonical almanac adapter and canary evidence
 

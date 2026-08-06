@@ -132,12 +132,18 @@ interface LoaderState {
   countries: Record<string, CountryDatum>;
 }
 
-export function useCountryHitTest(): LoaderState {
-  const [state, setState] = useState<LoaderState>({
+const EMPTY_LOADER_STATE: LoaderState = {
     features: [], index: null, topoIndex: {}, countries: {},
-  });
+};
+
+export function useCountryHitTest(enabled = true): LoaderState {
+  const [state, setState] = useState<LoaderState>(EMPTY_LOADER_STATE);
 
   useEffect(() => {
+    if (!enabled) {
+      setState(EMPTY_LOADER_STATE);
+      return;
+    }
     let cancelled = false;
     (async () => {
       const [topoRes, endoRes] = await Promise.all([
@@ -170,7 +176,7 @@ export function useCountryHitTest(): LoaderState {
       });
     })().catch((e) => console.error("useCountryHitTest load failed:", e));
     return () => { cancelled = true; };
-  }, []);
+  }, [enabled]);
 
   return state;
 }

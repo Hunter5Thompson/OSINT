@@ -79,10 +79,10 @@ function Probe() {
   );
 }
 
-it("ESC resets focusTarget to null", async () => {
+it("leaves Escape arbitration to the WorldView coordinator", () => {
   const { getByText, getByTestId } = render(<SpotlightProvider><Probe /></SpotlightProvider>);
   fireEvent.click(getByText("set"));
   expect(getByTestId("state").textContent).toBe("circle");
   fireEvent.keyDown(window, { key: "Escape" });
-  expect(getByTestId("state").textContent).toBe("idle");
+  expect(getByTestId("state").textContent).toBe("circle");
 });

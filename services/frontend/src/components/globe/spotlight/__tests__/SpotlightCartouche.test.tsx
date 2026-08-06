@@ -47,4 +47,13 @@ describe("renderCartouche", () => {
     const { container } = render(<>{r}</>);
     expect(container.textContent).toContain("W. Sahara");
   });
+
+  it("does not render a legacy CountryTarget in the Spatial branch", () => {
+    expect(renderCartouche({
+      kind: "country", trigger: "country",
+      m49: "300", iso3: "GRC",
+      polygon: { type: "Polygon", coordinates: [[[0,0],[1,0],[1,1],[0,1],[0,0]]] },
+      name: "Greece", capital: null,
+    }, null, false)).toBeNull();
+  });
 });

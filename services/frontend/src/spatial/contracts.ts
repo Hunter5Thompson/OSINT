@@ -114,6 +114,7 @@ export type SpatialScopeCommand =
       readonly target: ScopeKey;
       readonly priority: "hover" | "anticipated";
     }
+  | { readonly type: "cancel-pending" }
   | { readonly type: "rehydrate" };
 
 export type SpatialScopeResult =
@@ -146,6 +147,7 @@ export type SpatialScopeHandle = SpatialScopeSnapshot & {
   enter(target: ScopeKey, cause: EnterCause): Promise<SpatialScopeResult>;
   ascend(cause: "breadcrumb" | "keyboard"): Promise<SpatialScopeResult>;
   prefetch(target: ScopeKey): Promise<SpatialScopeResult>;
+  cancelPending(): Promise<SpatialScopeResult>;
   rehydrate(): Promise<SpatialScopeResult>;
 };
 

@@ -11,6 +11,7 @@ import type { MilTrackRender } from "../layers/milTrackAdapter";
 import { OverlayPanel } from "../hlidskjalf/OverlayPanel";
 import type { CountryHit } from "../globe/hooks/useCountryHitTest";
 import { CountryHeader } from "../globe/spotlight/CountryHeader";
+import type { CountrySelection } from "../../spatial/selection";
 
 export type Selected =
   | { type: "firms"; data: FIRMSHotspot }
@@ -19,7 +20,8 @@ export type Selected =
   | { type: "refinery"; data: RefineryProperties }
   | { type: "eonet"; data: EONETEvent }
   | { type: "gdacs"; data: GDACSEvent }
-  | { type: "country"; data: CountryHit };
+  | { type: "country"; data: CountryHit }
+  | { type: "spatial-country"; data: CountrySelection };
 
 export interface InspectorPanelProps {
   selected: Selected | null;
@@ -166,6 +168,13 @@ function AircraftInspector({
 
 function InspectorBody({ selected, viewer }: { selected: Selected; viewer: Cesium.Viewer | null }) {
   switch (selected.type) {
+    case "spatial-country":
+      return (
+        <>
+          <div style={titleStyle}>{selected.data.label}</div>
+          <Property label="§ Canonical scope" value={selected.data.scopeKey} />
+        </>
+      );
     case "country": {
       const c = selected.data;
       return (
