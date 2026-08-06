@@ -245,6 +245,7 @@ def test_catalog_resolution_failure_never_falls_back_to_global_query(
             return_value=problem,
         ),
         patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.log") as logger,
     ):
         response = client.get(
             f"/api/timeline/window{W}&scope_key=country:UKR"
@@ -254,6 +255,52 @@ def test_catalog_resolution_failure_never_falls_back_to_global_query(
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "CATALOG_UNAVAILABLE"
     read.assert_not_awaited()
+    rejected = next(
+        call for call in logger.info.call_args_list
+        if call.args[0] == "spatial_filter_unsupported"
+    )
+    assert rejected.kwargs["scope_kind"] == "country"
+    assert rejected.kwargs["catalog_revision"] == "spatial-v1-0123456789ab"
+    assert rejected.kwargs["cause"] == "CATALOG_UNAVAILABLE"
+    assert rejected.kwargs["duration_ms"] >= 0
+
+
+def test_scoped_filter_logs_request_mode_coverage_and_latency_without_query_content(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.log") as logger,
+    ):
+        read.side_effect = [[], [{"total": 3, "excluded_unlocated_count": 2}]]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 200
+    events = {call.args[0]: call.kwargs for call in logger.info.call_args_list}
+    assert events["spatial_filter_requested"] == {
+        "consumer": "chronik",
+        "scope_key": "country:UKR",
+        "scope_kind": "country",
+        "catalog_revision": "spatial-v1-0123456789ab",
+    }
+    applied = events["spatial_filter_applied"]
+    assert applied["scope_kind"] == "country"
+    assert applied["filter_mode"] == "bbox_approximate"
+    assert applied["completeness"] == "partial"
+    assert applied["included_count"] == 3
+    assert applied["excluded_unlocated_count"] == 2
+    assert applied["duration_ms"] >= 0
+    assert {"t_start", "t_end", "bbox", "query"}.isdisjoint(applied)
 
 
 def test_scoped_movement_uses_intersects_relation(client, spatial_loader):

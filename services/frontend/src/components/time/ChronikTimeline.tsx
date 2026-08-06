@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
-import type { HistogramBucket, TimelineNotable } from "../../types";
+import type { HistogramBucket, SpatialApplicationV1, TimelineNotable } from "../../types";
 import { DEFAULT_COLOR, EVENT_COLORS } from "../layers/EventLayer";
 import { severityRank } from "../../lib/severity";
+import { chronikSpatialStatus } from "../../spatial/layerScopePolicy";
 import "./ChronikTimeline.css";
 
 type Preset = "24h" | "7d" | "30d";
@@ -29,6 +30,9 @@ interface ChronikTimelineProps {
   onReverse: () => void;
   onForward: () => void;
   onSetSpeedMagnitude: (magnitude: number) => void;
+  spatialApplication: SpatialApplicationV1 | null;
+  spatialLoading: boolean;
+  spatialError: Error | null;
 }
 
 const DRAG_THRESHOLD_PX = 6;
@@ -44,6 +48,7 @@ export function ChronikTimeline({
   buckets, notables, rangeStartMs, rangeEndMs, cursorMs, mode, playing, preset,
   geoLocatedCount, totalCount, onSeek, onBrush, onSelectNotable, onTogglePlay, onNow, onPreset,
   speed, onStepBack, onStepForward, onReverse, onForward, onSetSpeedMagnitude,
+  spatialApplication, spatialLoading, spatialError,
 }: ChronikTimelineProps) {
   const stripRef = useRef<HTMLDivElement | null>(null);
   const dragStartXRef = useRef<number | null>(null);
@@ -52,6 +57,11 @@ export function ChronikTimeline({
   const span = Math.max(rangeEndMs - rangeStartMs, 1);
   const maxCount = Math.max(1, ...buckets.map((b) => b.count));
   const stripHeightPx = 60;
+  const spatialStatus = chronikSpatialStatus(
+    spatialApplication,
+    spatialLoading,
+    spatialError,
+  );
 
   const msToPct = (ms: number) => ((ms - rangeStartMs) / span) * 100;
   const xToFrac = (clientX: number) => {
@@ -141,6 +151,14 @@ export function ChronikTimeline({
         <span className="chronik__cursor chronik__spacer">{cursorLabel}</span>
         <span className={mode === "live" ? "chronik__badge--live" : "chronik__badge--replay"}>
           {mode === "live" ? "● LIVE" : "▶ REPLAY"}
+        </span>
+        <span
+          className={`chronik__scope chronik__scope--${spatialStatus.tone}`}
+          data-testid="chronik-spatial-status"
+          title={spatialStatus.title}
+          aria-live="polite"
+        >
+          {spatialStatus.label}
         </span>
         <span className="chronik__located">located: {geoLocatedCount} / {totalCount}</span>
       </div>
