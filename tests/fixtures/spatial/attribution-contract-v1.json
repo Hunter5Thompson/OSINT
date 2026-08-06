@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "catalog_revision": "spatial-v1-001122334455",
+  "sources": [
+    {
+      "source_id": "fixture-source",
+      "release": "fixture-v1",
+      "license_id": "public-domain",
+      "attribution": "Fixture source"
+    },
+    {
+      "source_id": "fixture-tool",
+      "release": "tool-v1",
+      "license_id": "MPL-2.0",
+      "attribution": "Fixture tool"
+    }
+  ]
+}

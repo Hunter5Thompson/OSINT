@@ -28,7 +28,12 @@ from spatial_catalog.emit import (
 )
 from spatial_catalog.identity import parse_scope_key
 from spatial_catalog.manifest import CatalogManifest, canonical_json_bytes, canonical_manifest_bytes
-from spatial_catalog.models import ContainmentDescriptor, GeometryDescriptor, Lod
+from spatial_catalog.models import (
+    CatalogAttribution,
+    ContainmentDescriptor,
+    GeometryDescriptor,
+    Lod,
+)
 from spatial_catalog.normalize import BoundaryGeometry, GeometryValidationError, normalize_geometry
 
 MAX_SEED_CATALOG_BYTES = 25 * 1024 * 1024
@@ -128,7 +133,11 @@ def verify_catalog(
     if catalog_dir.name != manifest.catalog_revision:
         raise CatalogVerificationError("CATALOG_DIRECTORY_REVISION_MISMATCH")
 
-    _verify_attribution(catalog_dir / "attribution.json", manifest.catalog_revision)
+    _verify_attribution(
+        catalog_dir / "attribution.json",
+        manifest.catalog_revision,
+        manifest.attribution_sources_sha256,
+    )
     descriptor_uses = _descriptor_uses(manifest)
     if set(descriptor_uses) != set(manifest.assets):
         raise CatalogVerificationError("UNREFERENCED_MANIFEST_ASSET")
@@ -473,22 +482,25 @@ def _verify_descriptor(
         raise CatalogVerificationError(f"DESCRIPTOR_COUNT_MISMATCH: {expected.asset_id}")
 
 
-def _verify_attribution(path: Path, catalog_revision: str) -> None:
+def _verify_attribution(
+    path: Path,
+    catalog_revision: str,
+    attribution_sources_sha256: str,
+) -> None:
     try:
         content = path.read_bytes()
-        payload = json.loads(content)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        attribution = CatalogAttribution.model_validate_json(content)
+    except (OSError, UnicodeError, ValidationError) as exc:
         raise CatalogVerificationError("ATTRIBUTION_MISSING_OR_INVALID") from exc
-    if canonical_json_bytes(payload) != content:
+    if canonical_json_bytes(attribution) != content:
         raise CatalogVerificationError("NON_CANONICAL_ATTRIBUTION")
-    if (
-        not isinstance(payload, dict)
-        or set(payload) != {"schema_version", "catalog_revision", "sources"}
-        or payload["schema_version"] != 1
-        or payload["catalog_revision"] != catalog_revision
-        or not isinstance(payload["sources"], list)
-    ):
+    if attribution.catalog_revision != catalog_revision:
         raise CatalogVerificationError("INVALID_ATTRIBUTION_SCHEMA")
+    actual_sources_sha256 = hashlib.sha256(
+        canonical_json_bytes(attribution.sources)
+    ).hexdigest()
+    if actual_sources_sha256 != attribution_sources_sha256:
+        raise CatalogVerificationError("ATTRIBUTION_SOURCES_HASH_MISMATCH")
 
 
 def _enforce_feasibility_counts(counts: WireCounts) -> None:

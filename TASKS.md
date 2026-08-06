@@ -1692,9 +1692,9 @@ Observation-Producer.
 # ══════════════════════════════════════════
 # TASK-120: Versionierter Spatial-Attribution-Release-Vertrag
 # ══════════════════════════════════════════
-# Status: OFFEN | Priorität: P1
+# Status: DONE ✅ (2026-08-06) | Priorität: P1
 # Owner: Spatial Slice 00B (Data Ingestion) + Backend Catalog
-# Blocked by: explizite Freigabe für Spec-/Katalogschema-Migration
+# Freigabe: Schema-/Katalogmigration vom Nutzer am 2026-08-06 bestätigt
 # Blocks: revisionsgenaue Attribution bei zukünftigen Catalog-Rollovers
 #
 # Kontext:
@@ -1728,6 +1728,17 @@ Observation-Producer.
 #   5. Compiler, Verify-Gate, Backend-Loader und Bootstrap-Tests teilen dieselben
 #      Contract-Fixtures. Falls Packaging betroffen ist, wird ein gebautes Artefakt
 #      statt ausschließlich Source-Tree-Imports getestet.
+#
+# Abschluss:
+#   - `release` ist Pflichtfeld jeder revisionsgebundenen Attribution-Source.
+#   - Der SHA-256 der kanonischen Source-Projektion ist im Manifest gebunden und Teil
+#     der Katalogrevisionsableitung; Attribution-only-Release-Bumps sind sichtbar.
+#   - Nur die aktive Revision wird exakt gegen den aktuellen vollständigen Source-Lock
+#     geprüft; vorherige Revisionen validieren sich selbst aus Manifest+Attribution.
+#   - Shared Contract-Fixture deckt Compiler/Emitter und Backend-Loader ab; Missing,
+#     Extra, Duplicate, Oversize, falsche Reihenfolge und Hash-Mismatch failen closed.
+#   - Referenzkatalog zweimal offline byteidentisch gebaut, verifiziert und auditiert;
+#     veröffentlichte Revision: `spatial-v1-fe9828dcda05` (41 unveränderte Assets).
 
 
 # ══════════════════════════════════════════

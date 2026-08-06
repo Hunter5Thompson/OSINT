@@ -91,6 +91,7 @@ class ManifestDraft(StrictFrozenModel):
     schema_version: Literal[1]
     boundary_policy: Literal["odin-reference-v1"]
     root_scope_key: ScopeKey
+    attribution_sources_sha256: AssetId
     scopes: tuple[ManifestScopeInput, ...] = Field(min_length=1)
     assets: tuple[AssetId, ...]
 
@@ -100,6 +101,7 @@ class CatalogManifest(StrictFrozenModel):
     catalog_revision: CatalogRevision
     boundary_policy: Literal["odin-reference-v1"]
     root_scope_key: ScopeKey
+    attribution_sources_sha256: AssetId
     scopes: tuple[ManifestScope, ...] = Field(min_length=1)
     assets: tuple[AssetId, ...]
 
@@ -115,6 +117,7 @@ class CatalogManifest(StrictFrozenModel):
             schema_version=self.schema_version,
             boundary_policy=self.boundary_policy,
             root_scope_key=self.root_scope_key,
+            attribution_sources_sha256=self.attribution_sources_sha256,
             scopes=self.scopes,
             assets=self.assets,
         )
@@ -188,6 +191,7 @@ def build_manifest(
         schema_version=draft.schema_version,
         boundary_policy=draft.boundary_policy,
         root_scope_key=draft.root_scope_key,
+        attribution_sources_sha256=draft.attribution_sources_sha256,
         scopes=records,
         assets=assets,
     )
@@ -196,6 +200,7 @@ def build_manifest(
         catalog_revision=catalog_revision,
         boundary_policy=draft.boundary_policy,
         root_scope_key=draft.root_scope_key,
+        attribution_sources_sha256=draft.attribution_sources_sha256,
         scopes=records,
         assets=assets,
     )
@@ -206,6 +211,7 @@ def _draft_matches_previous(draft: ManifestDraft, previous: CatalogManifest) -> 
         draft.schema_version != previous.schema_version
         or draft.boundary_policy != previous.boundary_policy
         or draft.root_scope_key != previous.root_scope_key
+        or draft.attribution_sources_sha256 != previous.attribution_sources_sha256
         or tuple(sorted(draft.assets)) != previous.assets
         or len(draft.scopes) != len(previous.scopes)
     ):
@@ -390,6 +396,7 @@ def _catalog_revision(
     schema_version: int,
     boundary_policy: str,
     root_scope_key: str,
+    attribution_sources_sha256: str,
     scopes: tuple[ManifestScope, ...],
     assets: tuple[str, ...],
 ) -> str:
@@ -397,6 +404,7 @@ def _catalog_revision(
         "schema_version": schema_version,
         "boundary_policy": boundary_policy,
         "root_scope_key": root_scope_key,
+        "attribution_sources_sha256": attribution_sources_sha256,
         "scopes": scopes,
         "assets": assets,
     }

@@ -12,12 +12,14 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Literal
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from spatial_catalog.identity import parse_scope_key
 from spatial_catalog.lod import LOD_POLICIES
 from spatial_catalog.manifest import CatalogManifest, canonical_json_bytes, canonical_manifest_bytes
 from spatial_catalog.models import (
+    AttributionSource,
+    CatalogAttribution,
     CatalogRevision,
     ContainmentDescriptor,
     GeometryDescriptor,
@@ -133,12 +135,42 @@ class EmittedAsset:
 @dataclass(frozen=True, slots=True, order=True)
 class AttributionRecord:
     source_id: str
+    release: str
     license_id: str
     attribution: str
 
     def __post_init__(self) -> None:
-        if not self.source_id or not self.license_id or not self.attribution:
-            raise ValueError("attribution fields must not be empty")
+        AttributionSource(
+            source_id=self.source_id,
+            release=self.release,
+            license_id=self.license_id,
+            attribution=self.attribution,
+        )
+
+
+def canonical_attribution_sources_bytes(
+    records: Sequence[AttributionRecord],
+) -> bytes:
+    """Canonical revision-owned source metadata, independent of revision ID."""
+
+    ordered = tuple(sorted(records))
+    sources = tuple(
+        AttributionSource(
+            source_id=record.source_id,
+            release=record.release,
+            license_id=record.license_id,
+            attribution=record.attribution,
+        )
+        for record in ordered
+    )
+    source_ids = tuple(source.source_id for source in sources)
+    if len(source_ids) != len(set(source_ids)):
+        raise ValueError("duplicate attribution source_id")
+    return canonical_json_bytes(sources)
+
+
+def attribution_sources_sha256(records: Sequence[AttributionRecord]) -> str:
+    return hashlib.sha256(canonical_attribution_sources_bytes(records)).hexdigest()
 
 
 def emit_render_boundary(
@@ -292,22 +324,16 @@ def emit_attribution(
     """Emit URL-free, stable source attribution owned by one catalog revision."""
 
     _CATALOG_REVISION_ADAPTER.validate_python(catalog_revision)
-    ordered = tuple(sorted(records))
-    if len({record.source_id for record in ordered}) != len(ordered):
-        raise ValueError("duplicate attribution source_id")
+    sources = tuple(
+        AttributionSource.model_validate(source)
+        for source in json.loads(canonical_attribution_sources_bytes(records))
+    )
     return canonical_json_bytes(
-        {
-            "schema_version": 1,
-            "catalog_revision": catalog_revision,
-            "sources": [
-                {
-                    "source_id": record.source_id,
-                    "license_id": record.license_id,
-                    "attribution": record.attribution,
-                }
-                for record in ordered
-            ],
-        }
+        CatalogAttribution(
+            schema_version=1,
+            catalog_revision=catalog_revision,
+            sources=sources,
+        )
     )
 
 
@@ -334,13 +360,14 @@ def publish_revision(
             raise PublicationError(f"DESCRIPTOR_ASSET_MISMATCH: {asset.asset_id}")
 
     try:
-        attribution_value = json.loads(attribution)
-    except json.JSONDecodeError as exc:
-        raise PublicationError("INVALID_ATTRIBUTION: expected JSON") from exc
+        attribution_value = CatalogAttribution.model_validate_json(attribution)
+    except ValidationError as exc:
+        raise PublicationError("INVALID_ATTRIBUTION: expected strict JSON") from exc
     if (
-        not isinstance(attribution_value, dict)
-        or attribution_value.get("catalog_revision") != manifest.catalog_revision
+        attribution_value.catalog_revision != manifest.catalog_revision
         or canonical_json_bytes(attribution_value) != attribution
+        or hashlib.sha256(canonical_json_bytes(attribution_value.sources)).hexdigest()
+        != manifest.attribution_sources_sha256
     ):
         raise PublicationError("INVALID_ATTRIBUTION: revision or canonical bytes mismatch")
 

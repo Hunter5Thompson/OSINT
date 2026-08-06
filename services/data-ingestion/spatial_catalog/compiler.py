@@ -23,6 +23,7 @@ from spatial_catalog.emit import (
     ContextPackFeature,
     EmittedAsset,
     ScopePackFeature,
+    attribution_sources_sha256,
     emit_attribution,
     emit_boundary_pack,
     emit_containment_boundary,
@@ -264,6 +265,15 @@ def compile_catalog(
         for asset in containment_assets.values():
             _add_asset(assets, asset)
 
+        attribution_records = tuple(
+            AttributionRecord(
+                source.source_id,
+                source.release,
+                source.license_id,
+                source.attribution,
+            )
+            for source in source_lock.sources
+        )
         manifest = _build_catalog_manifest(
             source_lock=source_lock,
             crosswalk_source=crosswalk_source,
@@ -274,6 +284,7 @@ def compile_catalog(
             containment_assets=containment_assets,
             admin1_builds=admin1_builds,
             asset_ids=tuple(assets),
+            attribution_sources_hash=attribution_sources_sha256(attribution_records),
         )
         feasibility = build_feasibility_report(
             catalog_revision=manifest.catalog_revision,
@@ -290,10 +301,7 @@ def compile_catalog(
         )
         attribution = emit_attribution(
             manifest.catalog_revision,
-            tuple(
-                AttributionRecord(source.source_id, source.license_id, source.attribution)
-                for source in source_lock.sources
-            ),
+            attribution_records,
         )
         reports = {
             "build-provenance.json": _build_provenance_bytes(
@@ -743,6 +751,7 @@ def _build_catalog_manifest(
     containment_assets: Mapping[str, EmittedAsset],
     admin1_builds: Mapping[str, _Admin1Build],
     asset_ids: tuple[str, ...],
+    attribution_sources_hash: str,
 ):
     natural = source_lock.source("natural-earth-admin0")
     world_scope = ScopeNode(
@@ -872,6 +881,7 @@ def _build_catalog_manifest(
             schema_version=1,
             boundary_policy=catalog_plan.boundary_policy,
             root_scope_key="world",
+            attribution_sources_sha256=attribution_sources_hash,
             scopes=tuple(records),
             assets=asset_ids,
         )

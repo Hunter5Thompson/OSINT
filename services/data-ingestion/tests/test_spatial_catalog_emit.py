@@ -13,6 +13,7 @@ from spatial_catalog.emit import (
     ContextPackFeature,
     PublicationError,
     ScopePackFeature,
+    attribution_sources_sha256,
     emit_attribution,
     emit_boundary_pack,
     emit_render_boundary,
@@ -36,6 +37,32 @@ from spatial_catalog.normalize import normalize_geometry
 
 FIXTURES = Path(__file__).parent / "fixtures" / "spatial_catalog"
 CROSSWALK_HASH = "d393f5026dedd808cf2b517b574f16c311591a18891d0de6d738e327dbf4a369"
+
+
+def test_shared_attribution_contract_fixture_emits_exact_wire_shape() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[3]
+        / "tests"
+        / "fixtures"
+        / "spatial"
+        / "attribution-contract-v1.json"
+    )
+    fixture = json.loads(fixture_path.read_bytes())
+    records = tuple(
+        AttributionRecord(
+            source["source_id"],
+            source["release"],
+            source["license_id"],
+            source["attribution"],
+        )
+        for source in fixture["sources"]
+    )
+
+    emitted = json.loads(emit_attribution(fixture["catalog_revision"], records))
+
+    assert emitted == fixture
+
+
 def _shared_border_features() -> tuple[BoundaryFeature, ...]:
     payload = json.loads((FIXTURES / "shared_border.geojson").read_text(encoding="utf-8"))
     return tuple(
@@ -211,11 +238,26 @@ def test_attribution_and_atomic_revision_publication_are_deterministic(tmp_path:
         children_available=False,
         presentation="boundary",
     )
+    attribution_records = (
+        AttributionRecord(
+            "natural-earth-admin0",
+            "5.1.2+f1890d9f152c",
+            "public-domain",
+            "Natural Earth",
+        ),
+        AttributionRecord(
+            "mapshaper",
+            "0.7.49+odin-offline-v1",
+            "MPL-2.0",
+            "Mapshaper by Matthew Bloch",
+        ),
+    )
     manifest = build_manifest(
         ManifestDraft(
             schema_version=1,
             boundary_policy="odin-reference-v1",
             root_scope_key="world",
+            attribution_sources_sha256=attribution_sources_sha256(attribution_records),
             scopes=(
                 ManifestScopeInput(
                     scope=world,
@@ -242,10 +284,7 @@ def test_attribution_and_atomic_revision_publication_are_deterministic(tmp_path:
     )
     attribution = emit_attribution(
         manifest.catalog_revision,
-        (
-            AttributionRecord("natural-earth-admin0", "public-domain", "Natural Earth"),
-            AttributionRecord("mapshaper", "MPL-2.0", "Mapshaper by Matthew Bloch"),
-        ),
+        attribution_records,
     )
     output_root = tmp_path / "catalogs"
 
@@ -276,6 +315,9 @@ def test_attribution_and_atomic_revision_publication_are_deterministic(tmp_path:
     assert json.loads((first / "attribution.json").read_bytes())["sources"][0][
         "source_id"
     ] == "mapshaper"
+    assert json.loads((first / "attribution.json").read_bytes())["sources"][0][
+        "release"
+    ] == "0.7.49+odin-offline-v1"
     assert not any(
         path.name.startswith(f".{manifest.catalog_revision}-")
         for path in output_root.iterdir()

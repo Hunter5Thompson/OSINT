@@ -237,6 +237,7 @@ class CatalogManifest(StrictFrozenModel):
     catalog_revision: CatalogRevision
     boundary_policy: Literal["odin-reference-v1"]
     root_scope_key: ScopeKey
+    attribution_sources_sha256: AssetId
     scopes: tuple[ManifestScope, ...] = Field(min_length=1)
     assets: tuple[AssetId, ...]
 
@@ -295,6 +296,7 @@ class CatalogManifest(StrictFrozenModel):
 
 class AttributionSource(StrictFrozenModel):
     source_id: PolicyIdentifier
+    release: Annotated[StrictStr, StringConstraints(min_length=1, max_length=128)]
     license_id: PolicyIdentifier
     attribution: Annotated[StrictStr, StringConstraints(min_length=1, max_length=300)]
 
@@ -316,6 +318,8 @@ class CatalogAttribution(StrictFrozenModel):
         source_ids = tuple(source.source_id for source in self.sources)
         if len(source_ids) != len(set(source_ids)):
             raise ValueError("duplicate attribution source")
+        if source_ids != tuple(sorted(source_ids)):
+            raise ValueError("attribution sources must be canonically ordered")
         return self
 
 
@@ -560,6 +564,7 @@ def derive_catalog_revision(manifest: CatalogManifest) -> str:
         "schema_version": manifest.schema_version,
         "boundary_policy": manifest.boundary_policy,
         "root_scope_key": manifest.root_scope_key,
+        "attribution_sources_sha256": manifest.attribution_sources_sha256,
         "scopes": manifest.scopes,
         "assets": manifest.assets,
     }

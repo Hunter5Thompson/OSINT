@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogRevision": "spatial-v1-44e5d2d7bff0",
+  "catalogRevision": "spatial-v1-fe9828dcda05",
   "boundaryPolicy": "odin-reference-v1",
   "scopeKeyVectors": {
     "accepted": [
@@ -38,7 +38,7 @@
     "accepted": [
       "spatial-v1-001122334455",
       "spatial-v12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "spatial-v1-44e5d2d7bff0"
+      "spatial-v1-fe9828dcda05"
     ],
     "rejected": [
       "spatial-v1-placeholder",
@@ -71,13 +71,13 @@
       "query": {
         "schemaVersion": 1,
         "scopeKey": "world",
-        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "catalogRevision": "spatial-v1-fe9828dcda05",
         "boundaryPolicy": "odin-reference-v1"
       },
       "presentation": {
         "mode": "boundary",
         "scopeKey": "world",
-        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "catalogRevision": "spatial-v1-fe9828dcda05",
         "preferredLod": "overview",
         "outlineLods": {},
         "childrenLods": {
@@ -129,13 +129,13 @@
       "query": {
         "schemaVersion": 1,
         "scopeKey": "country:UKR",
-        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "catalogRevision": "spatial-v1-fe9828dcda05",
         "boundaryPolicy": "odin-reference-v1"
       },
       "presentation": {
         "mode": "boundary",
         "scopeKey": "country:UKR",
-        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "catalogRevision": "spatial-v1-fe9828dcda05",
         "preferredLod": "regional",
         "outlineLods": {
           "regional": {
@@ -217,13 +217,13 @@
       "query": {
         "schemaVersion": 1,
         "scopeKey": "admin1:iso3166-2:UA-14",
-        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "catalogRevision": "spatial-v1-fe9828dcda05",
         "boundaryPolicy": "odin-reference-v1"
       },
       "presentation": {
         "mode": "semantic-only",
         "scopeKey": "admin1:iso3166-2:UA-14",
-        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "catalogRevision": "spatial-v1-fe9828dcda05",
         "problem": {
           "severity": "warning",
           "code": "GEOMETRY_UNAVAILABLE",

@@ -22,7 +22,7 @@ describe("production spatial catalog bootstrap", () => {
   });
 });
 
-const REVISION = "spatial-v1-44e5d2d7bff0";
+const REVISION = "spatial-v1-fe9828dcda05";
 const OLD_REVISION = "spatial-v1-001122334455";
 const BOUNDARY_ID = "a".repeat(64);
 const PACK_ID = "b".repeat(64);

@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from app.models.spatial import CatalogProblemCode
+from app.models.spatial import CatalogAttribution, CatalogProblemCode
 from app.services import spatial_catalog as spatial_catalog_module
 from app.services.spatial_catalog import (
     CatalogReadyState,
@@ -63,6 +63,23 @@ def _source_lock(
     }
 
 
+def test_shared_attribution_contract_fixture_is_accepted() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "tests"
+        / "fixtures"
+        / "spatial"
+        / "attribution-contract-v1.json"
+    )
+
+    attribution = CatalogAttribution.model_validate_json(fixture_path.read_bytes())
+
+    assert tuple(source.release for source in attribution.sources) == (
+        "fixture-v1",
+        "tool-v1",
+    )
+
+
 def _publish_catalog(
     root: Path,
     *,
@@ -75,17 +92,42 @@ def _publish_catalog(
     source_release: str = "fixture-v1",
     source_license_id: str = "public-domain",
     source_attribution: str = "Fixture source",
+    attribution_only_release: str | None = None,
 ) -> tuple[str, str, Path]:
     root.mkdir(parents=True, exist_ok=True)
-    (root / "source-lock.json").write_bytes(
-        _canonical_bytes(
-            _source_lock(
-                source_release=source_release,
-                source_license_id=source_license_id,
-                source_attribution=source_attribution,
-            )
-        )
+    source_lock = _source_lock(
+        source_release=source_release,
+        source_license_id=source_license_id,
+        source_attribution=source_attribution,
     )
+    attribution_sources: list[dict[str, object]] = [
+        {
+            "source_id": "fixture-source",
+            "release": source_release,
+            "license_id": source_license_id,
+            "attribution": source_attribution,
+        }
+    ]
+    if attribution_only_release is not None:
+        source_lock["sources"].append(  # type: ignore[union-attr]
+            {
+                "source_id": "fixture-tool",
+                "release": attribution_only_release,
+                "url": "repo:fixture-tool",
+                "sha256": "d" * 64,
+                "license_id": "MPL-2.0",
+                "attribution": "Fixture tool",
+            }
+        )
+        attribution_sources.append(
+            {
+                "source_id": "fixture-tool",
+                "release": attribution_only_release,
+                "license_id": "MPL-2.0",
+                "attribution": "Fixture tool",
+            }
+        )
+    (root / "source-lock.json").write_bytes(_canonical_bytes(source_lock))
 
     asset_id = hashlib.sha256(asset_content).hexdigest()
     path = scope_path or ["world"]
@@ -139,6 +181,9 @@ def _publish_catalog(
         "schema_version": 1,
         "boundary_policy": "odin-reference-v1",
         "root_scope_key": "world",
+        "attribution_sources_sha256": hashlib.sha256(
+            _canonical_bytes(attribution_sources)
+        ).hexdigest(),
         "scopes": [record],
         "assets": [asset_id],
     }
@@ -155,13 +200,7 @@ def _publish_catalog(
             {
                 "schema_version": 1,
                 "catalog_revision": revision,
-                "sources": [
-                    {
-                        "source_id": "fixture-source",
-                        "license_id": source_license_id,
-                        "attribution": source_attribution,
-                    }
-                ],
+                "sources": attribution_sources,
             }
         )
     )
@@ -241,11 +280,105 @@ async def test_each_revision_projects_its_own_reviewed_source_release(
 
 
 @pytest.mark.asyncio
-async def test_active_attribution_only_source_must_match_source_lock(
+async def test_attribution_only_release_is_pinned_per_catalog_revision(
     tmp_path: Path,
 ) -> None:
     spatial_root = tmp_path / "spatial"
+    previous, _, _ = _publish_catalog(
+        spatial_root,
+        attribution_only_release="tool-v1",
+        modified_ns=2_000_000_000,
+    )
+    active, _, _ = _publish_catalog(
+        spatial_root,
+        carry_forward_from=previous,
+        attribution_only_release="tool-v2",
+        modified_ns=1_000_000_000,
+    )
+    loader = SpatialCatalogLoader(spatial_root)
+
+    state = await loader.load()
+    bootstrap = loader.bootstrap()
+
+    assert isinstance(state, CatalogReadyState)
+    projected = {
+        attribution.catalog_revision: {
+            source.source_id: source.release for source in attribution.sources
+        }
+        for attribution in bootstrap.attributions
+    }
+    assert projected == {
+        active: {"fixture-source": "fixture-v1", "fixture-tool": "tool-v2"},
+        previous: {"fixture-source": "fixture-v1", "fixture-tool": "tool-v1"},
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda source: source.pop("release"),
+        lambda source: source.update(release=""),
+        lambda source: source.update(release="x" * 129),
+        lambda source: source.update(release_metadata="unexpected"),
+    ],
+    ids=("missing", "empty", "oversized", "extra"),
+)
+async def test_attribution_release_contract_fails_closed(
+    tmp_path: Path,
+    mutate: Callable[[dict[str, Any]], object],
+) -> None:
+    spatial_root = tmp_path / "spatial"
     revision, _, _ = _publish_catalog(spatial_root)
+    attribution_path = spatial_root / "catalogs" / revision / "attribution.json"
+    attribution = json.loads(attribution_path.read_bytes())
+    mutate(attribution["sources"][0])
+    attribution_path.write_bytes(_canonical_bytes(attribution))
+
+    state = await SpatialCatalogLoader(spatial_root).load()
+
+    assert isinstance(state, CatalogUnavailableState)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mutate", "diagnostic"),
+    [
+        (
+            lambda sources: sources.append(dict(sources[0])),
+            "duplicate attribution source",
+        ),
+        (lambda sources: sources.reverse(), "canonically ordered"),
+    ],
+    ids=("duplicate", "noncanonical-order"),
+)
+async def test_attribution_source_collection_contract_fails_closed(
+    tmp_path: Path,
+    mutate: Callable[[list[dict[str, Any]]], object],
+    diagnostic: str,
+) -> None:
+    spatial_root = tmp_path / "spatial"
+    revision, _, _ = _publish_catalog(
+        spatial_root,
+        attribution_only_release="tool-v1",
+    )
+    attribution_path = spatial_root / "catalogs" / revision / "attribution.json"
+    attribution = json.loads(attribution_path.read_bytes())
+    mutate(attribution["sources"])
+    attribution_path.write_bytes(_canonical_bytes(attribution))
+    loader = SpatialCatalogLoader(spatial_root)
+
+    state = await loader.load()
+
+    assert isinstance(state, CatalogUnavailableState)
+    assert loader.diagnostic is not None
+    assert diagnostic in loader.diagnostic
+
+
+@pytest.mark.asyncio
+async def test_active_attribution_source_set_must_match_source_lock(tmp_path: Path) -> None:
+    spatial_root = tmp_path / "spatial"
+    _publish_catalog(spatial_root)
     source_lock_path = spatial_root / "source-lock.json"
     source_lock = json.loads(source_lock_path.read_bytes())
     source_lock["sources"].append(
@@ -259,16 +392,27 @@ async def test_active_attribution_only_source_must_match_source_lock(
         }
     )
     source_lock_path.write_bytes(_canonical_bytes(source_lock))
-    attribution_path = spatial_root / "catalogs" / revision / "attribution.json"
-    attribution = json.loads(attribution_path.read_bytes())
-    attribution["sources"].append(
-        {
-            "source_id": "fixture-tool",
-            "license_id": "MPL-2.0",
-            "attribution": "Tampered fixture tool",
-        }
+
+    state = await SpatialCatalogLoader(spatial_root).load()
+
+    assert isinstance(state, CatalogUnavailableState)
+
+
+@pytest.mark.asyncio
+async def test_active_attribution_only_source_must_match_source_lock(
+    tmp_path: Path,
+) -> None:
+    spatial_root = tmp_path / "spatial"
+    _publish_catalog(spatial_root, attribution_only_release="tool-v1")
+    source_lock_path = spatial_root / "source-lock.json"
+    source_lock = json.loads(source_lock_path.read_bytes())
+    tool_source = next(
+        source
+        for source in source_lock["sources"]
+        if source["source_id"] == "fixture-tool"
     )
-    attribution_path.write_bytes(_canonical_bytes(attribution))
+    tool_source["release"] = "tool-v2"
+    source_lock_path.write_bytes(_canonical_bytes(source_lock))
 
     state = await SpatialCatalogLoader(spatial_root).load()
 
@@ -283,7 +427,7 @@ async def test_loader_accepts_the_reviewed_reference_catalog() -> None:
     state = await loader.load()
 
     assert isinstance(state, CatalogReadyState)
-    assert state.active_catalog_revision == "spatial-v1-44e5d2d7bff0"
+    assert state.active_catalog_revision == "spatial-v1-fe9828dcda05"
     assert loader.get_scope(state.active_catalog_revision, "country:UKR").scope.label == "Ukraine"
 
 

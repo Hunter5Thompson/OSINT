@@ -26,6 +26,7 @@ from spatial_catalog.models import (
 
 CROSSWALK_HASH = "d393f5026dedd808cf2b517b574f16c311591a18891d0de6d738e327dbf4a369"
 WORLD_PACK_ID = "a" * 64
+ATTRIBUTION_SOURCES_HASH = "e" * 64
 
 
 def _provenance() -> CatalogProvenance:
@@ -107,6 +108,7 @@ def _draft(*, world_label: str = "World", reverse: bool = False) -> ManifestDraf
         schema_version=1,
         boundary_policy="odin-reference-v1",
         root_scope_key="world",
+        attribution_sources_sha256=ATTRIBUTION_SOURCES_HASH,
         scopes=scopes,
         assets=(WORLD_PACK_ID,),
     )
@@ -185,6 +187,7 @@ def test_manifest_rejects_cycles() -> None:
         schema_version=1,
         boundary_policy="odin-reference-v1",
         root_scope_key="world",
+        attribution_sources_sha256=ATTRIBUTION_SOURCES_HASH,
         scopes=scopes,
         assets=(),
     )
