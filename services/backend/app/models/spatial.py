@@ -108,6 +108,7 @@ class CatalogProblemCode(StrEnum):
     UNKNOWN_ASSET = "UNKNOWN_ASSET"
     ASSET_BUSY = "ASSET_BUSY"
     ASSET_CORRUPT = "ASSET_CORRUPT"
+    SPATIAL_FILTER_UNAVAILABLE = "SPATIAL_FILTER_UNAVAILABLE"
 
 
 class SpatialCatalogProblem(StrictFrozenModel):

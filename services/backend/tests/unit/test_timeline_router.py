@@ -1,9 +1,23 @@
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models.spatial import (
+    CatalogProblemCode,
+    ScopeKind,
+    SpatialCatalogProblem,
+    SpatialScopeTokenV1,
+)
+from app.services.spatial_catalog import SpatialCatalogLoader
+from app.services.spatial_filters import (
+    GeoExtent,
+    LongitudeSpan,
+    ResolvedSpatialConstraint,
+    compile_extent_filter,
+)
 
 W = "?t_start=2026-05-01T00:00:00Z&t_end=2026-05-02T00:00:00Z"
 
@@ -11,6 +25,45 @@ W = "?t_start=2026-05-01T00:00:00Z&t_end=2026-05-02T00:00:00Z"
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+def _catalog_filter(
+    *,
+    scope_key: str = "country:UKR",
+    catalog_revision: str = "spatial-v1-0123456789ab",
+    kind: ScopeKind = ScopeKind.COUNTRY,
+    extent: GeoExtent | None = None,
+):
+    derivation_revision = "spatial-derive-v1-0123456789ab"
+    token = SpatialScopeTokenV1(
+        scope_key=scope_key,
+        kind=kind,
+        catalog_revision=catalog_revision,
+        derivation_revision=derivation_revision,
+        boundary_policy="odin-reference-v1",
+        compatible_derivation_revisions=(derivation_revision,),
+    )
+    selected_extent = extent or GeoExtent(
+        kind="segments",
+        south=40,
+        north=53,
+        longitude=(LongitudeSpan(20, 41),),
+    )
+    constraint = ResolvedSpatialConstraint(
+        token=token,
+        extent=selected_extent,
+        country_scope_key=scope_key if kind is ScopeKind.COUNTRY else None,
+        admin1_scope_key=None,
+        admin2_scope_key=None,
+    )
+    return compile_extent_filter(selected_extent, constraint=constraint)
+
+
+@pytest.fixture
+def spatial_loader():
+    loader = SpatialCatalogLoader(Path("/catalog-not-read-by-this-router-test"))
+    app.state.spatial_catalog = loader
+    return loader
 
 
 def test_events_window_returns_samples(client):
@@ -88,6 +141,142 @@ def test_window_invalid_catalog_revision_is_422_before_query(client):
 
     assert resp.status_code == 422
     mock.assert_not_awaited()
+
+
+def test_scoped_event_window_echoes_catalog_token_and_distinct_accounting(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ) as resolve,
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [
+            [{
+                "id": "gdelt:event:1",
+                "time": "2026-05-01T06:00:00Z",
+                "time_basis": "indexed",
+            }],
+            [{"total": 3, "excluded_unlocated_count": 2}],
+        ]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab&limit=1"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["samples"]) == 1
+    assert body["spatial_application"] == {
+        "schema_version": 1,
+        "requested_scope_key": "country:UKR",
+        "catalog_revision": "spatial-v1-0123456789ab",
+        "derivation_revision": "spatial-derive-v1-0123456789ab",
+        "boundary_policy": "odin-reference-v1",
+        "relation": "occurs-in",
+        "mode": "bbox_approximate",
+        "completeness": "partial",
+        "included_count": 3,
+        "excluded_unlocated_count": 2,
+        "excluded_conflict_count": 0,
+        "excluded_stale_revision_count": 0,
+    }
+    resolve.assert_awaited_once_with(
+        spatial_loader,
+        "country:UKR",
+        "spatial-v1-0123456789ab",
+    )
+    for call in read.await_args_list:
+        query, parameters = call.args
+        assert "country:UKR" not in query
+        assert parameters["west"] == 20
+        assert parameters["east"] == 41
+
+
+def test_new_client_world_token_echoes_identity_while_using_global_query(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter(
+        scope_key="world",
+        kind=ScopeKind.WORLD,
+        extent=GeoExtent(kind="world"),
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [[], [{"total": 0, "excluded_unlocated_count": 4}]]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=world"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    application = response.json()["spatial_application"]
+    assert application["requested_scope_key"] == "world"
+    assert application["catalog_revision"] == "spatial-v1-0123456789ab"
+    assert application["mode"] == "global"
+    assert application["completeness"] == "complete"
+    assert application["excluded_unlocated_count"] == 0
+
+
+def test_catalog_resolution_failure_never_falls_back_to_global_query(
+    client,
+    spatial_loader,
+):
+    problem = SpatialCatalogProblem(
+        code=CatalogProblemCode.CATALOG_UNAVAILABLE,
+        message="Spatial catalog is unavailable",
+        recoverable=True,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=problem,
+        ),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "CATALOG_UNAVAILABLE"
+    read.assert_not_awaited()
+
+
+def test_scoped_movement_uses_intersects_relation(client, spatial_loader):
+    compiled = _catalog_filter()
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [[], [{"total": 0, "excluded_unlocated_count": 1}]]
+        response = client.get(
+            f"/api/timeline/window{W}&domain=movements&tier=fine"
+            "&movement_kind=mil_aircraft&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    application = response.json()["spatial_application"]
+    assert application["relation"] == "intersects"
+    assert application["mode"] == "bbox_approximate"
+    assert application["excluded_unlocated_count"] == 1
 
 
 def test_movements_mil_aircraft_window(client):

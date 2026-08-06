@@ -1,9 +1,18 @@
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models.spatial import ScopeKind, SpatialScopeTokenV1
+from app.services.spatial_catalog import SpatialCatalogLoader
+from app.services.spatial_filters import (
+    GeoExtent,
+    LongitudeSpan,
+    ResolvedSpatialConstraint,
+    compile_extent_filter,
+)
 
 W = "?t_start=2026-06-01T00:00:00Z&t_end=2026-06-01T04:00:00Z&buckets=4"
 
@@ -11,6 +20,34 @@ W = "?t_start=2026-06-01T00:00:00Z&t_end=2026-06-01T04:00:00Z&buckets=4"
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+def _catalog_filter():
+    derivation = "spatial-derive-v1-0123456789ab"
+    token = SpatialScopeTokenV1(
+        scope_key="country:UKR",
+        kind=ScopeKind.COUNTRY,
+        catalog_revision="spatial-v1-0123456789ab",
+        derivation_revision=derivation,
+        boundary_policy="odin-reference-v1",
+        compatible_derivation_revisions=(derivation,),
+    )
+    extent = GeoExtent(
+        kind="segments",
+        south=40,
+        north=53,
+        longitude=(LongitudeSpan(20, 41),),
+    )
+    return compile_extent_filter(
+        extent,
+        constraint=ResolvedSpatialConstraint(
+            token=token,
+            extent=extent,
+            country_scope_key="country:UKR",
+            admin1_scope_key=None,
+            admin2_scope_key=None,
+        ),
+    )
 
 
 def _rows(*triples):
@@ -25,7 +62,7 @@ def test_histogram_bins_and_dominant_category_is_modal(client):
         ("2026-06-01T02:30:00Z", "conflict.armed", None),
     )
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [rows, [], [], []]  # hist, notable-events, incidents, geo
+        mock.side_effect = [rows, [], [], [], []]  # hist, accounting, notable, incident, geo
         resp = client.get(f"/api/timeline/histogram{W}")
     assert resp.status_code == 200
     data = resp.json()
@@ -63,6 +100,49 @@ def test_histogram_scope_key_and_bbox_are_rejected_before_query(client):
     mock.assert_not_awaited()
 
 
+def test_scoped_histogram_uses_catalog_bbox_and_echoes_partial_accounting(client):
+    loader = SpatialCatalogLoader(Path("/catalog-not-read-by-this-router-test"))
+    app.state.spatial_catalog = loader
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=_catalog_filter(),
+        ) as resolve,
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [
+            _rows(("2026-06-01T00:30:00Z", "civil.demo", "low")),
+            [{"total": 3, "excluded_unlocated_count": 2}],
+            [],
+            [],
+            [],
+        ]
+        response = client.get(
+            f"/api/timeline/histogram{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 200
+    application = response.json()["spatial_application"]
+    assert application["requested_scope_key"] == "country:UKR"
+    assert application["relation"] == "occurs-in"
+    assert application["mode"] == "bbox_approximate"
+    assert application["completeness"] == "partial"
+    assert application["included_count"] == 3
+    assert application["excluded_unlocated_count"] == 2
+    resolve.assert_awaited_once_with(
+        loader,
+        "country:UKR",
+        "spatial-v1-0123456789ab",
+    )
+    for call in read.await_args_list:
+        query, parameters = call.args
+        assert "country:UKR" not in query
+        assert parameters["west"] == 20
+        assert parameters["east"] == 41
+
+
 def test_histogram_neo4j_down_503(client):
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
         mock.side_effect = RuntimeError("boom")
@@ -77,7 +157,7 @@ def test_notables_union_capped_and_ranked(client):
     incidents = [{"id": "inc-1", "time": "2026-06-01T02:00:00Z", "time_basis": "occurred",
                   "severity": "critical", "title": "Strike", "lat": 50.0, "lon": 30.0}]
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], events, incidents, []]  # hist, notable-events, incidents, geo
+        mock.side_effect = [[], [], events, incidents, []]
         resp = client.get(f"/api/timeline/histogram{W}")
     data = resp.json()
     notables = data["notables"]
@@ -89,10 +169,10 @@ def test_notables_union_capped_and_ranked(client):
 
 def test_notables_pass_bbox_params_to_queries(client):
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], [], [], []]  # hist, notable-events, incidents, geo
+        mock.side_effect = [[], [], [], [], []]
         client.get(f"/api/timeline/histogram{W}&bbox=170,-10,-170,10")
-    ev_params = mock.call_args_list[1].args[1]
-    inc_params = mock.call_args_list[2].args[1]
+    ev_params = mock.call_args_list[2].args[1]
+    inc_params = mock.call_args_list[3].args[1]
     for p in (ev_params, inc_params):
         assert p["bbox_off"] is False
         assert p["west"] == 170.0 and p["east"] == -170.0  # anti-meridian preserved
@@ -103,7 +183,7 @@ def test_geo_events_capped_ranked_and_truncated(client):
             "severity": "low", "lat": 1.0 + i, "lon": 2.0} for i in range(205)]
     geo[0]["severity"] = "critical"
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], [], [], geo]  # hist, notable-events, incidents, geo
+        mock.side_effect = [[], [], [], [], geo]
         resp = client.get(f"/api/timeline/histogram{W}")
     data = resp.json()
     assert len(data["geo_events"]) == 200          # cap
@@ -113,23 +193,23 @@ def test_geo_events_capped_ranked_and_truncated(client):
 
 
 def test_histogram_notable_events_failure_returns_503(client):
-    # finding #1: a failure in the SECOND read_query (notable-events) must be 503, not 500
+    # finding #1: failure after the histogram/accounting reads must be 503, not 500.
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], RuntimeError("boom")]  # hist ok, notable-events raises
+        mock.side_effect = [[], [], RuntimeError("boom")]
         resp = client.get(f"/api/timeline/histogram{W}")
     assert resp.status_code == 503
 
 
 def test_histogram_incidents_failure_returns_503(client):
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], [], RuntimeError("boom")]  # incidents (3rd read) raises
+        mock.side_effect = [[], [], [], RuntimeError("boom")]
         resp = client.get(f"/api/timeline/histogram{W}")
     assert resp.status_code == 503
 
 
 def test_histogram_geo_failure_returns_503(client):
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], [], [], RuntimeError("boom")]  # geo (4th) raises
+        mock.side_effect = [[], [], [], [], RuntimeError("boom")]
         resp = client.get(f"/api/timeline/histogram{W}")
     assert resp.status_code == 503
 
