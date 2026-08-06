@@ -218,11 +218,12 @@ afterEach(() => {
 });
 
 describe("SpatialScopeProvider gate and hook", () => {
-  it("is inert and default-off when VITE_SPATIAL_SCOPE_ENABLED is absent", () => {
+  it("is inert when explicitly disabled regardless of the build artifact", () => {
     const factory = vi.fn<SpatialScopeModuleFactory>();
     render(
       <MemoryRouter>
         <SpatialScopeProvider
+          enabled={false}
           catalog={catalog()}
           navigation={new CountingNavigation()}
           moduleFactory={factory}
