@@ -771,6 +771,36 @@ describe("SpatialScopeController semantic and presentation lifetimes", () => {
     });
   });
 
+  it("keeps the semantic commit when presentation fails", async () => {
+    const presentation = new ControlledPresentation();
+    const { controller } = setup({ presentation });
+    await startAtWorld(controller);
+    const failedPresentation = presentation.deferNext(UKRAINE);
+
+    await expect(controller.dispatch({
+      type: "enter",
+      target: UKRAINE,
+      cause: "country-click",
+    })).resolves.toMatchObject({ outcome: "committed" });
+    const committedRevision = controller.getSnapshot().stateRevision;
+    failedPresentation.reject(new Error("WebGL staging failed"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      stateRevision: committedRevision,
+      current: { key: UKRAINE },
+      query: { scopeKey: UKRAINE },
+      problem: { code: "PRESENTATION_FAILED" },
+      visual: {
+        phase: "unavailable",
+        stateRevision: committedRevision,
+        problem: { code: "PRESENTATION_FAILED" },
+      },
+    });
+  });
+
   it("caches snapshot identity until the next publication", async () => {
     const { controller } = setup();
     expect(controller.getSnapshot()).toBe(controller.getSnapshot());
