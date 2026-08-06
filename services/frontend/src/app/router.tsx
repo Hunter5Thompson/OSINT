@@ -14,14 +14,19 @@ import { WarRoomPage } from "../pages/WarRoomPage";
  * Legacy query migration loader for `/`.
  *
  * Before the 4-layer restructure the globe was mounted at `/` and consumers
- * deep-linked via `?entity=...` / `?layer=...`. Those links now live on
- * `/worldview`, so any request to `/` carrying either query param is forwarded
- * with the full query string preserved.
+ * deep-linked via `?entity=...` / `?layer=...`. Spatial scope links use the
+ * same migration seam. Those links now live on `/worldview`, so any request to
+ * `/` carrying a recognized query param is forwarded with the full query
+ * string preserved.
  */
 function rootLoader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
-  if (url.searchParams.has("entity") || url.searchParams.has("layer")) {
-    return redirect(`/worldview${url.search}`);
+  if (
+    url.searchParams.has("entity") ||
+    url.searchParams.has("layer") ||
+    url.searchParams.has("scope")
+  ) {
+    return redirect(`/worldview${url.search}${url.hash}`);
   }
   return null;
 }
