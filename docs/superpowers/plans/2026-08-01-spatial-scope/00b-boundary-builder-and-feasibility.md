@@ -126,6 +126,11 @@ reviewed immutable seed revision plus validators and minimal fixtures for Plans 
   ingestion wheel and image exclude it, Shapely, Node, and the tool bundle. They ship
   only the Shapely-free identity/manifest interface required by `odin-infra-atlas`;
   an isolated built-wheel import test gates that seam.
+- [x] Every emitted attribution source owns a strict pinned release. The canonical
+  source projection is hash-bound into the manifest and therefore into catalog
+  revision identity; active and historical revisions cannot borrow release metadata
+  from one another. The reviewed seed was rebuilt twice offline, byte-compared,
+  verified, audited, and published as `spatial-v1-fe9828dcda05`.
 
 This explicitly accepts Node as a controlled compiler-host dependency. It does not
 relax the runtime boundary: no deployed service downloads, imports, or runs the

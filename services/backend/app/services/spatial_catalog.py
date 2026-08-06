@@ -484,10 +484,7 @@ class SpatialCatalogLoader:
         source_lock_path = self._source_lock_path(directories[0])
         source_lock = SourceLock.model_validate_json(source_lock_path.read_bytes())
         source_by_id = {source.source_id: source for source in source_lock.sources}
-        loaded = tuple(
-            self._load_catalog(directory, source_by_id=source_by_id)
-            for directory in directories
-        )
+        loaded = tuple(self._load_catalog(directory) for directory in directories)
         ordered = _order_loaded_catalogs(loaded)
         _validate_active_source_lock(ordered[0], source_by_id=source_by_id)
         _validate_cross_catalog_assets(ordered)
@@ -531,8 +528,6 @@ class SpatialCatalogLoader:
     def _load_catalog(
         self,
         directory: Path,
-        *,
-        source_by_id: Mapping[str, SourceLockRecord],
     ) -> _LoadedCatalog:
         manifest_path = directory / "manifest.json"
         manifest_bytes = manifest_path.read_bytes()
@@ -549,10 +544,14 @@ class SpatialCatalogLoader:
             raise ValueError("attribution is not canonical JSON")
         if attribution.catalog_revision != manifest.catalog_revision:
             raise ValueError("attribution and manifest revision differ")
+        attribution_sources_sha256 = _sha256_bytes(
+            canonical_json_bytes(attribution.sources)
+        )
+        if attribution_sources_sha256 != manifest.attribution_sources_sha256:
+            raise ValueError("attribution sources do not match manifest hash")
         projection = _project_attribution(
             attribution,
             manifest=manifest,
-            source_by_id=source_by_id,
         )
 
         descriptor_by_id: dict[str, tuple[str, int]] = {}
@@ -659,7 +658,6 @@ def _project_attribution(
     attribution: CatalogAttribution,
     *,
     manifest: CatalogManifest,
-    source_by_id: Mapping[str, SourceLockRecord],
 ) -> AttributionProjection:
     manifest_sources = _manifest_source_metadata(manifest)
     sources: list[AttributionProjectionSource] = []
@@ -667,29 +665,16 @@ def _project_attribution(
         manifest_source = manifest_sources.get(item.source_id)
         if manifest_source is not None:
             release, license_id, text = manifest_source
-            if license_id != item.license_id or text != item.attribution:
+            if (
+                release != item.release
+                or license_id != item.license_id
+                or text != item.attribution
+            ):
                 raise ValueError("attribution does not match revision provenance")
-            sources.append(
-                AttributionProjectionSource(
-                    source_id=item.source_id,
-                    release=release,
-                    license_id=item.license_id,
-                    text=item.attribution,
-                )
-            )
-            continue
-        source = source_by_id.get(item.source_id)
-        if source is None:
-            raise ValueError("attribution source is absent from source lock")
-        if (
-            source.license_id != item.license_id
-            or source.attribution != item.attribution
-        ):
-            raise ValueError("unversioned attribution differs from source lock")
         sources.append(
             AttributionProjectionSource(
                 source_id=item.source_id,
-                release=source.release,
+                release=item.release,
                 license_id=item.license_id,
                 text=item.attribution,
             )
@@ -723,6 +708,11 @@ def _validate_active_source_lock(
     *,
     source_by_id: Mapping[str, SourceLockRecord],
 ) -> None:
+    projected_by_id = {
+        source.source_id: source for source in catalog.attribution.sources
+    }
+    if set(projected_by_id) != set(source_by_id):
+        raise ValueError("active attribution source set differs from source lock")
     for projected in catalog.attribution.sources:
         source = source_by_id.get(projected.source_id)
         if source is None:

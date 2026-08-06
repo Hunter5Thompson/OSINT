@@ -25,6 +25,7 @@ from spatial_catalog.compiler import compile_catalog
 from spatial_catalog.emit import (
     AttributionRecord,
     ScopePackFeature,
+    attribution_sources_sha256,
     emit_attribution,
     emit_boundary_pack,
     emit_containment_boundary,
@@ -36,6 +37,7 @@ from spatial_catalog.manifest import (
     ManifestDraft,
     ManifestScopeInput,
     build_manifest,
+    canonical_json_bytes,
 )
 from spatial_catalog.models import (
     CatalogProvenance,
@@ -104,11 +106,20 @@ def _published_catalog(tmp_path: Path):
         children_available=False,
         presentation="boundary",
     )
+    attribution_records = (
+        AttributionRecord(
+            "natural-earth-admin0",
+            "5.1.2+f1890d9f152c",
+            "public-domain",
+            "Natural Earth",
+        ),
+    )
     manifest = build_manifest(
         ManifestDraft(
             schema_version=1,
             boundary_policy="odin-reference-v1",
             root_scope_key="world",
+            attribution_sources_sha256=attribution_sources_sha256(attribution_records),
             scopes=(
                 ManifestScopeInput(
                     scope=world,
@@ -129,7 +140,7 @@ def _published_catalog(tmp_path: Path):
     )
     attribution = emit_attribution(
         manifest.catalog_revision,
-        (AttributionRecord("natural-earth-admin0", "public-domain", "Natural Earth"),),
+        attribution_records,
     )
     path = publish_revision(
         tmp_path / "catalogs",
@@ -155,6 +166,28 @@ def test_verify_detects_missing_corrupt_and_descriptor_drift(tmp_path: Path) -> 
     asset_path.write_bytes(original)
     asset_path.unlink()
     with pytest.raises(CatalogVerificationError, match="ASSET_MISSING"):
+        verify_catalog(catalog)
+
+
+def test_verify_rejects_missing_or_unbound_attribution_release(tmp_path: Path) -> None:
+    catalog, _, _ = _published_catalog(tmp_path)
+    attribution_path = catalog / "attribution.json"
+    attribution = json.loads(attribution_path.read_bytes())
+    attribution["sources"][0].pop("release")
+    attribution_path.write_bytes(canonical_json_bytes(attribution))
+
+    with pytest.raises(CatalogVerificationError, match="ATTRIBUTION_MISSING_OR_INVALID"):
+        verify_catalog(catalog)
+
+
+def test_verify_rejects_attribution_release_not_bound_by_manifest(tmp_path: Path) -> None:
+    catalog, _, _ = _published_catalog(tmp_path)
+    attribution_path = catalog / "attribution.json"
+    attribution = json.loads(attribution_path.read_bytes())
+    attribution["sources"][0]["release"] = "5.1.3-tampered"
+    attribution_path.write_bytes(canonical_json_bytes(attribution))
+
+    with pytest.raises(CatalogVerificationError, match="ATTRIBUTION_SOURCES_HASH_MISMATCH"):
         verify_catalog(catalog)
 
 
