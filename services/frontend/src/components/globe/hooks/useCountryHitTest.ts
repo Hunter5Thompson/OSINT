@@ -1,7 +1,8 @@
 import RBush from "rbush";
 import { useEffect, useState } from "react";
 import { feature as topojsonFeature } from "topojson-client";
-import { polygonContains } from "./pointInPolygon";
+import type { BoundaryGeometryV1, Position2D } from "../../../spatial/catalog";
+import { classifyPointInGeometry } from "../../../spatial/geometry";
 
 export interface CountryFeature {
   m49: string;
@@ -36,6 +37,39 @@ export interface CountryHit {
   name: string;
   geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
   capital: { name: string; coords: { lon: number; lat: number } } | null;
+}
+
+function legacyGeometryContains(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+  longitude: number,
+  latitude: number,
+): boolean {
+  const rawPolygons = geometry.type === "Polygon"
+    ? [geometry.coordinates]
+    : geometry.coordinates;
+  const polygons = rawPolygons.map((polygon) =>
+    polygon.map((ring) =>
+      ring.map((position): Position2D => {
+        const longitude = position[0];
+        const latitude = position[1];
+        if (
+          typeof longitude !== "number"
+          || typeof latitude !== "number"
+          || !Number.isFinite(longitude)
+          || !Number.isFinite(latitude)
+        ) {
+          throw new TypeError("Legacy country geometry contains an invalid position.");
+        }
+        return [longitude, latitude];
+      }),
+    ),
+  );
+  const boundary: BoundaryGeometryV1 = {
+    schemaVersion: 1,
+    geometryType: "MultiPolygon",
+    polygons,
+  };
+  return classifyPointInGeometry(boundary, longitude, latitude) !== "outside";
 }
 
 function bboxOf(geom: GeoJSON.Polygon | GeoJSON.MultiPolygon): [number, number, number, number] {
@@ -75,7 +109,7 @@ export function hitTestCountry(
   const candidates = index.search({ minX: lon, minY: lat, maxX: lon, maxY: lat });
   for (const c of candidates) {
     const f = features[c.index]!;
-    if (!polygonContains(f.geometry, lon, lat)) continue;
+    if (!legacyGeometryContains(f.geometry, lon, lat)) continue;
     const iso3 = topoIndex[f.m49] ?? null;
     const datum = iso3 ? countries[iso3] : null;
     return {
