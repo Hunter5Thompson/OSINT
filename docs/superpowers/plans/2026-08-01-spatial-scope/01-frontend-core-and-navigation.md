@@ -92,3 +92,13 @@ All Slice-1 red cases are green with memory adapters only. URL, committed scope,
 query token change together; failed/superseded work cannot mutate them. A deep link
 publishes no query before resolution. StrictMode leaves one live module. No React or
 Cesium type appears in `scopeController.ts`.
+
+## Post-integration 409 hardening
+
+- [x] `ScopeProblem` carries a branded active catalog revision and the memory/HTTP
+  adapters expose one shared explicit `rehydrate` port.
+- [x] The parameterless controller command re-resolves only the committed scope,
+  performs a replace navigation, and checks generation/abort around every await.
+- [x] A production alert renders exactly one recovery action; controller, navigation,
+  React and router-composition tests cover 404, repeated 409, network failure,
+  pre-abort, supersession and Back/Forward without a global-data fallback.

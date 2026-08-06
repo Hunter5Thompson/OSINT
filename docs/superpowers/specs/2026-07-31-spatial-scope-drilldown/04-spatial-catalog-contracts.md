@@ -466,6 +466,11 @@ interface SpatialCatalogPort {
     priority: "hover" | "anticipated",
     signal: AbortSignal,
   ): Promise<void>;
+  rehydrate(
+    scopeKey: ScopeKey,
+    activeCatalogRevision: CatalogRevision,
+    signal: AbortSignal,
+  ): Promise<ResolvedScope>;
   dispose(): void;
 }
 
@@ -528,7 +533,9 @@ Initiale Hydration übergibt `catalogRevision=null` und erhält die aktive Revis
 Jeder spätere `enter`/`ascend`/`prefetch` wird gegen die Revision des committed Query-
 Tokens aufgelöst. So kann ein Deployment nicht Country aus Revision A mit Admin-1 aus
 Revision B mischen. Wird A nicht mehr bedient, folgt 409 und eine sichtbare, explizite
-Rehydrate-Entscheidung auf die aktive Revision; der Controller retryt nicht heimlich.
+Rehydrate-Entscheidung auf die strukturierte aktive Revision; der Controller retryt
+nicht heimlich. Erst ein erfolgreiches `rehydrate` pinnt den HTTP-Adapter neu. Bis
+dahin bleiben dessen Revision, der committed Query-Token und Router-State unverändert.
 
 ### 10.10 Backend-Lifecycle
 

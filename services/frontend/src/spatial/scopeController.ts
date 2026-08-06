@@ -56,6 +56,8 @@ interface SharedResolve {
   settled: boolean;
 }
 
+type ForegroundResolver = (signal: AbortSignal) => Promise<ResolvedScope>;
+
 const noPresentation: SpatialScopePresentationPort = {
   present: () => Promise.resolve(),
 };
@@ -84,6 +86,7 @@ function problemFromContractError(error: SpatialScopeContractError): ScopeProble
     target: error.target,
     recoverable: false,
     message: error.message,
+    activeCatalogRevision: null,
   });
 }
 
@@ -96,6 +99,7 @@ function problemFromUnknown(error: unknown): ScopeProblem {
       target: error.target,
       recoverable: error.recoverable,
       message: error.message,
+      activeCatalogRevision: null,
     });
   }
   return mapSpatialCatalogProblem(error);
@@ -108,6 +112,7 @@ function presentationProblem(target: ScopeKey, error: unknown): ScopeProblem {
     target,
     recoverable: true,
     message: error instanceof Error ? error.message : "Scope presentation failed.",
+    activeCatalogRevision: null,
   });
 }
 
@@ -204,6 +209,8 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
         );
       case "prefetch":
         return this.prefetch(command.target, command.priority, options.signal);
+      case "rehydrate":
+        return this.rehydrate(options.signal);
     }
   }
 
@@ -272,6 +279,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
           target: canonicalTarget,
           recoverable: true,
           message: "Spatial scope is still hydrating.",
+          activeCatalogRevision: null,
         }),
       };
     }
@@ -293,6 +301,30 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
     }
   }
 
+  private rehydrate(callerSignal?: AbortSignal): Promise<SpatialScopeResult> {
+    const current = this.snapshot;
+    const problem = current.problem;
+    if (
+      current.phase === "hydrating" ||
+      problem?.code !== "CATALOG_REVISION_UNAVAILABLE" ||
+      problem.activeCatalogRevision === null
+    ) {
+      return Promise.resolve({ outcome: "unchanged", snapshot: current });
+    }
+    const target = current.current.key;
+    const activeCatalogRevision = problem.activeCatalogRevision;
+    return this.runForeground(
+      target,
+      activeCatalogRevision,
+      "replace",
+      callerSignal,
+      null,
+      false,
+      false,
+      (signal) => this.catalog.rehydrate(target, activeCatalogRevision, signal),
+    );
+  }
+
   private async runForeground(
     target: ScopeKey,
     catalogRevision: string | null,
@@ -301,15 +333,16 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
     committedProblem: ScopeProblem | null = null,
     fallbackInitialHydration = false,
     repairHistoricalFailure = false,
+    resolver?: ForegroundResolver,
   ): Promise<SpatialScopeResult> {
     const intent = this.beginForeground(target, callerSignal);
     if (!intent.controller.signal.aborted) this.publishResolving(target);
 
     try {
-      const resolved = await this.acquireResolved(
-        target,
-        catalogRevision,
-        intent.controller.signal,
+      this.assertCurrent(intent);
+      const resolved = await (
+        resolver?.(intent.controller.signal)
+        ?? this.acquireResolved(target, catalogRevision, intent.controller.signal)
       );
       this.assertCurrent(intent);
 
@@ -320,6 +353,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
         const navigationId = this.createNavigationId();
         intent.navigationId = navigationId;
         this.pendingNavigationIds.add(navigationId);
+        this.assertCurrent(intent);
         await waitWithSignal(this.navigation.writeScope({
           scopeKey: resolved.scope.key === WORLD_SCOPE_KEY ? null : resolved.scope.key,
           catalogRevision: resolved.query.catalogRevision,

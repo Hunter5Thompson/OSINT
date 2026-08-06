@@ -1775,10 +1775,10 @@ Observation-Producer.
 # ══════════════════════════════════════════
 # TASK-122: Expliziter Spatial-409-Rehydrate-Vertrag
 # ══════════════════════════════════════════
-# Status: OFFEN | Priorität: P1
+# Status: DONE ✅ (2026-08-06) | Priorität: P1
 # Owner: Spatial Plan 01 Contracts/Controller + Plan 02 HTTP Adapter
-# Blocked by: Plan-01-Port-/Controller-Vertragsentscheidung
-# Blocks: Recovery ohne Page-Reload nach Auslaufen einer gepinnten Katalogrevision
+# Vertragsentscheidung: parameterloser Rehydrate-Command auf den committed Scope
+# Unblocks: Recovery ohne Page-Reload nach Auslaufen einer gepinnten Katalogrevision
 #
 # Kontext:
 #   Das Backend liefert bei `409 CATALOG_REVISION_UNAVAILABLE` die aktive Revision
@@ -1803,3 +1803,14 @@ Observation-Producer.
 #   5. Controller-, Navigation-, React- und Router-Tests beweisen Back/Forward-Semantik
 #      sowie den unveränderten Fail-closed-Grundsatz: kein globaler Datenfallback für
 #      einen nicht-globalen Scope.
+#
+# Abschluss:
+#   - `ScopeProblem.activeCatalogRevision` ist branded, strikt decodiert und wird vom
+#     HTTP- sowie Memory-Adapter transportiert; Meldungstext ist nie Datenquelle.
+#   - Genau ein sichtbarer UI-Command rehydriert den committed Scope per Replace und
+#     pinnt den HTTP-Adapter erst nach erfolgreichem Resolve auf die aktive Revision.
+#   - 409 selbst schreibt weder Store noch URL und retryt nicht; 404, wiederholter 409
+#     und Network/5xx bleiben sichtbar, ohne World-/Global-Fallback.
+#   - Foreground-/Abort-Gates laufen vor und nach jedem Await. Pre-Abort ruft den
+#     Adapter nicht auf; verspätete Antworten verlieren Commit- und URL-Rechte.
+#   - Spatial/Router: 82 Tests grün; ESLint, TypeScript und Produktionsbuild grün.

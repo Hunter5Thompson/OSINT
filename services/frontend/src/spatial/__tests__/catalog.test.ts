@@ -247,6 +247,33 @@ describe("MemorySpatialCatalog", () => {
     expect(catalog.resolveCalls).toHaveLength(2);
   });
 
+  it("transports the active revision for an unavailable memory-catalog revision", async () => {
+    const catalog = new MemorySpatialCatalog({
+      activeCatalogRevision: fixture.catalogRevision,
+      resolvedScopes: fixture.resolvedScopes,
+    });
+    const ukraine = parseScopeKeyCandidate("country:UKR");
+    const staleRevision = parseCatalogRevision("spatial-v1-001122334455");
+
+    await expect(catalog.resolve(
+      ukraine,
+      staleRevision,
+      new AbortController().signal,
+    )).rejects.toMatchObject({
+      code: "CATALOG_REVISION_UNAVAILABLE",
+      activeCatalogRevision: parseCatalogRevision(fixture.catalogRevision),
+    });
+
+    await expect(catalog.rehydrate(
+      ukraine,
+      parseCatalogRevision(fixture.catalogRevision),
+      new AbortController().signal,
+    )).resolves.toMatchObject({
+      scope: { key: ukraine },
+      query: { catalogRevision: fixture.catalogRevision },
+    });
+  });
+
   it("supports deterministic deferred resolve and caller cancellation", async () => {
     const catalog = new MemorySpatialCatalog({
       activeCatalogRevision: fixture.catalogRevision,
@@ -275,8 +302,26 @@ describe("MemorySpatialCatalog", () => {
       target: "country:ZZZ",
       recoverable: false,
       message: "Scope is not present in the catalog.",
+      activeCatalogRevision: null,
     });
     expect(Object.isFrozen(problem)).toBe(true);
+  });
+
+  it("preserves the typed active revision instead of parsing the message", () => {
+    const activeCatalogRevision = parseCatalogRevision(fixture.catalogRevision);
+    const problem = mapSpatialCatalogProblem(new SpatialCatalogError({
+      code: "CATALOG_REVISION_UNAVAILABLE",
+      target: "spatial-v1-001122334455",
+      message: "The prose intentionally contains no replacement revision.",
+      recoverable: true,
+      activeCatalogRevision,
+    }));
+
+    expect(problem).toMatchObject({
+      code: "CATALOG_REVISION_UNAVAILABLE",
+      activeCatalogRevision,
+    });
+    expect(problem.message).not.toContain(activeCatalogRevision);
   });
 });
 

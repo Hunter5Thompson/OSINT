@@ -229,7 +229,8 @@
           "code": "GEOMETRY_UNAVAILABLE",
           "target": "admin1:iso3166-2:UA-14",
           "recoverable": false,
-          "message": "Boundary presentation is unavailable."
+          "message": "Boundary presentation is unavailable.",
+          "activeCatalogRevision": null
         }
       },
       "containment": null,
