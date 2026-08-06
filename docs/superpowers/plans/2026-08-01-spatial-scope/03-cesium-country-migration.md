@@ -96,19 +96,19 @@ with focused tests. Modify `WorldviewPage`, `EntityClickHandler`, Spotlight file
 
 ## Work order 5 — Cartographic provenance
 
-- [ ] **RED:** Test an accessible Layers-panel link renders the active boundary policy,
+- [x] **RED:** Test an accessible Layers-panel link renders the active boundary policy,
   catalog revision, exact source releases, representation/dispute note and all
   reviewed attributions as text. Reject stale/malformed attribution, external author
   handles, and every `dangerouslySetInnerHTML` path.
-- [ ] **GREEN:** Load `attribution.json` through the validated catalog metadata and add
+- [x] **GREEN:** Load `attribution.json` through the validated catalog metadata and add
   the matching committed catalog revision's compact Data/Boundary-policy view to the
   existing Cartography section. It is presentation-only and cannot alter identity or
   scope.
-- [ ] **REFACTOR:** Reuse existing Hlíðskjalf typography/theme tokens; no copied HUD or
+- [x] **REFACTOR:** Reuse existing Hlíðskjalf typography/theme tokens; no copied HUD or
   hard-coded external-template styling.
-- [ ] **VERIFY:** Run Layers-panel accessibility tests and frontend full quality
+- [x] **VERIFY:** Run Layers-panel accessibility tests and frontend full quality
   commands.
-- [ ] **COMMIT:** `feat(worldview): expose boundary provenance and attribution`
+- [x] **COMMIT:** `feat(worldview): expose boundary provenance and attribution`
 
 ## Exit gate
 

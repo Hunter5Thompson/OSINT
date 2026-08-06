@@ -4,6 +4,7 @@ import {
   parseScopeKeyCandidate,
   type AssetDescriptor,
   type RenderAssetDescriptor,
+  type SpatialQueryRef,
 } from "../contracts";
 import {
   BoundaryAssetStore,
@@ -177,6 +178,63 @@ function metadataResponse(value: unknown, etag = '"scope-etag"'): Response {
   });
 }
 
+function spatialQuery(
+  catalogRevision = REVISION,
+  boundaryPolicy = "odin-reference-v1",
+): Pick<SpatialQueryRef, "catalogRevision" | "boundaryPolicy"> {
+  return {
+    catalogRevision: parseCatalogRevision(catalogRevision),
+    boundaryPolicy,
+  };
+}
+
+function catalogWire(): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    active_catalog_revision: REVISION,
+    served_catalog_revisions: [REVISION, OLD_REVISION],
+    boundary_policy: "odin-reference-v1",
+    root_scope_key: "world",
+    capabilities: {
+      max_enabled_kind: "country",
+      timeline_scope: "bbox_approximate",
+      intelligence_scope: "unavailable",
+    },
+    attributions: [
+      {
+        catalog_revision: REVISION,
+        representation_note: "ODIN reference boundary representation",
+        sources: [
+          {
+            source_id: "natural-earth-admin0",
+            release: "5.1.2+f1890d9f152c",
+            license_id: "public-domain",
+            text: "Natural Earth",
+          },
+          {
+            source_id: "odin-country-crosswalk",
+            release: "spatial-crosswalk-v1",
+            license_id: "LicenseRef-ODIN-Reviewed-Crosswalk",
+            text: "ODIN reviewed identity registry",
+          },
+        ],
+      },
+      {
+        catalog_revision: OLD_REVISION,
+        representation_note: "Previous reviewed representation",
+        sources: [
+          {
+            source_id: "natural-earth-admin0",
+            release: "5.1.1",
+            license_id: "public-domain",
+            text: "Natural Earth",
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function problemResponse(
   status: number,
   code: string,
@@ -228,6 +286,74 @@ function createStore(
 }
 
 describe("HttpSpatialCatalog wire contract", () => {
+  it("selects reviewed provenance for the exact committed catalog revision", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => metadataResponse(catalogWire()));
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: createStore(fetcher) });
+
+    const provenance = await catalog.loadBoundaryProvenance(
+      spatialQuery(OLD_REVISION),
+      new AbortController().signal,
+    );
+
+    expect(provenance).toEqual({
+      boundaryPolicy: "odin-reference-v1",
+      catalogRevision: OLD_REVISION,
+      representationNote: "Previous reviewed representation",
+      sources: [
+        {
+          licenseId: "public-domain",
+          release: "5.1.1",
+          sourceId: "natural-earth-admin0",
+          text: "Natural Earth",
+        },
+      ],
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/spatial/catalog",
+      expect.objectContaining({
+        headers: { Accept: "application/json" },
+        method: "GET",
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  it.each([
+    ["stale revision", (wire: Record<string, unknown>) => {
+      wire.served_catalog_revisions = [OLD_REVISION];
+      wire.attributions = (wire.attributions as unknown[]).slice(1);
+      wire.active_catalog_revision = OLD_REVISION;
+    }],
+    ["extra field", (wire: Record<string, unknown>) => {
+      const attribution = (wire.attributions as Array<Record<string, unknown>>)[0];
+      if (attribution !== undefined) attribution.external_url = "https://example.invalid";
+    }],
+    ["array-valued capability", (wire: Record<string, unknown>) => {
+      const capabilities = wire.capabilities as Record<string, unknown>;
+      capabilities.max_enabled_kind = ["country"];
+    }],
+    ["external author handle", (wire: Record<string, unknown>) => {
+      const attribution = (wire.attributions as Array<Record<string, unknown>>)[0];
+      const sources = attribution?.sources as Array<Record<string, unknown>>;
+      if (sources[0] !== undefined) sources[0].text = "Data assembled by @unreviewed";
+    }],
+    ["HTML attribution", (wire: Record<string, unknown>) => {
+      const attribution = (wire.attributions as Array<Record<string, unknown>>)[0];
+      const sources = attribution?.sources as Array<Record<string, unknown>>;
+      if (sources[0] !== undefined) sources[0].text = "<strong>Natural Earth</strong>";
+    }],
+  ])("rejects %s catalog attribution", async (_name, mutate) => {
+    const wire = catalogWire();
+    mutate(wire);
+    const fetcher = vi.fn<typeof fetch>(async () => metadataResponse(wire));
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: createStore(fetcher) });
+
+    await expect(catalog.loadBoundaryProvenance(
+      spatialQuery(),
+      new AbortController().signal,
+    )).rejects.toBeInstanceOf(SpatialCatalogError);
+  });
+
   it("strictly decodes snake_case, pins the revision, and reuses a 304", async () => {
     let scopeRequests = 0;
     const fetcher = vi.fn<typeof fetch>(async (input, init) => {

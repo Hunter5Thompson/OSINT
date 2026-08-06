@@ -15,7 +15,11 @@ import {
   useOptionalSpatialScope,
   useSpatialScope,
 } from "../spatial/react";
-import { BoundaryAssetStore, HttpSpatialCatalog } from "../spatial/catalog";
+import {
+  BoundaryAssetStore,
+  HttpSpatialCatalog,
+  type SpatialBoundaryProvenanceLoader,
+} from "../spatial/catalog";
 import { WORLD_SCOPE_KEY } from "../spatial/contracts";
 import { SpatialScopeBreadcrumb } from "../spatial/SpatialScopeBreadcrumb";
 import { WorldviewKeyboardCoordinator } from "../spatial/WorldviewKeyboardCoordinator";
@@ -87,6 +91,7 @@ import { useRefineries } from "../hooks/useRefineries";
 import { useEONETEvents } from "../hooks/useEONETEvents";
 import { useGDACSEvents } from "../hooks/useGDACSEvents";
 import { getConfig } from "../services/api";
+import { useSpatialBoundaryProvenance } from "../hooks/useSpatialBoundaryProvenance";
 import type {
   ClientConfig,
   LayerVisibility,
@@ -565,11 +570,13 @@ function decodeEntityQuery(value: string | null): string {
 interface WorldviewContentProps {
   readonly spatialEnabled: boolean;
   readonly presentationBridge: CesiumSpatialPresentationBridge | null;
+  readonly provenanceLoader: SpatialBoundaryProvenanceLoader | null;
 }
 
 function WorldviewContent({
   spatialEnabled,
   presentationBridge,
+  provenanceLoader,
 }: WorldviewContentProps) {
   const location = useLocation();
   const spatialScope = useOptionalSpatialScope();
@@ -621,6 +628,10 @@ function WorldviewContent({
     search: false,
     ticker: true,
   });
+  const spatialProvenance = useSpatialBoundaryProvenance(
+    spatialEnabled ? provenanceLoader : null,
+    spatialEnabled && expandedPanels.layers ? committedSpatialQuery : null,
+  );
   // Replay window for mil tracks — defaults to the last 6h; an event click on the
   // scrubber scopes it to that event ±3h. Kept as stable state (not derived from
   // the cursor) so replay does not refetch on every cursor tick.
@@ -918,6 +929,7 @@ function WorldviewContent({
                 onToggle={handleToggleLayer}
                 activeShader={activeShader}
                 onShaderChange={setActiveShader}
+                spatialProvenance={spatialEnabled ? spatialProvenance : undefined}
               />
             </OverlayPanel>
           ) : (
@@ -1047,6 +1059,7 @@ export function WorldviewPage() {
       <WorldviewContent
         spatialEnabled={SPATIAL_SCOPE_ENABLED}
         presentationBridge={resources?.presentation ?? null}
+        provenanceLoader={resources?.catalog ?? null}
       />
     </SpatialScopeProvider>
   );
