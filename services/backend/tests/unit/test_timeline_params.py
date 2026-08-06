@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app.routers.timeline import parse_bbox, validate_window
+from app.routers.timeline import parse_bbox, validate_spatial_params, validate_window
 
 
 def test_validate_window_rejects_reversed():
@@ -60,3 +60,35 @@ def test_parse_bbox_south_gt_north_422():
     with pytest.raises(HTTPException) as e:
         parse_bbox("0,40,10,0")  # south=40 > north=0
     assert e.value.status_code == 422
+
+
+def test_scope_key_and_bbox_are_mutually_exclusive():
+    with pytest.raises(HTTPException) as error:
+        validate_spatial_params(
+            "country:UKR",
+            "spatial-v1-0123456789ab",
+            parse_bbox("20,40,41,53"),
+        )
+    assert error.value.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("scope_key", "catalog_revision"),
+    [
+        ("country:UKR", None),
+        (None, "spatial-v1-0123456789ab"),
+        ("country:UKR", "latest"),
+    ],
+)
+def test_scope_reference_must_be_complete_and_revision_pinned(
+    scope_key: str | None,
+    catalog_revision: str | None,
+):
+    with pytest.raises(HTTPException) as error:
+        validate_spatial_params(scope_key, catalog_revision, None)
+    assert error.value.status_code == 422
+
+
+def test_world_scope_reference_and_legacy_tokenless_global_are_distinct_valid_modes():
+    validate_spatial_params("world", "spatial-v1-0123456789ab", None)
+    validate_spatial_params(None, None, None)

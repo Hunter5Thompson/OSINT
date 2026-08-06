@@ -52,6 +52,17 @@ def test_histogram_buckets_over_cap_422(client):
     assert resp.status_code == 422
 
 
+def test_histogram_scope_key_and_bbox_are_rejected_before_query(client):
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        resp = client.get(
+            f"/api/timeline/histogram{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab&bbox=20,40,41,53"
+        )
+
+    assert resp.status_code == 422
+    mock.assert_not_awaited()
+
+
 def test_histogram_neo4j_down_503(client):
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
         mock.side_effect = RuntimeError("boom")

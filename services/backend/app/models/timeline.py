@@ -1,8 +1,42 @@
 """Windowed-data contract models for /api/timeline/window."""
 
+from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
+
+from app.models.spatial import CatalogRevision, DerivationRevision, PolicyIdentifier, ScopeKey
+
+
+class SpatialFilterMode(StrEnum):
+    GLOBAL = "global"
+    SEMANTIC_KEY = "semantic_key"
+    POINT_IN_BOUNDARY = "point_in_boundary"
+    BBOX_APPROXIMATE = "bbox_approximate"
+
+
+class SpatialCompleteness(StrEnum):
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+
+
+class SpatialApplicationV1(BaseModel):
+    """Truthful accounting for the spatial filter applied to a timeline response."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    requested_scope_key: ScopeKey | None
+    catalog_revision: CatalogRevision | None
+    derivation_revision: DerivationRevision | None
+    boundary_policy: PolicyIdentifier | None
+    relation: Literal["occurs-in", "intersects"]
+    mode: SpatialFilterMode
+    completeness: SpatialCompleteness
+    included_count: StrictInt = Field(ge=0)
+    excluded_unlocated_count: StrictInt = Field(ge=0)
+    excluded_conflict_count: StrictInt = Field(ge=0)
+    excluded_stale_revision_count: StrictInt = Field(ge=0)
 
 
 class EventSample(BaseModel):
@@ -55,6 +89,7 @@ class WindowResponse(BaseModel):
     samples: list[EventSample | TrackSample] = Field(default_factory=list)
     total_count: int = 0
     truncated: bool = False
+    spatial_application: SpatialApplicationV1
 
 
 class HistogramBucket(BaseModel):
@@ -98,6 +133,7 @@ class HistogramResponse(BaseModel):
     total_count: int = 0
     geo_located_count: int = 0
     geo_truncated: bool = False
+    spatial_application: SpatialApplicationV1
 
 
 class EventDetail(BaseModel):

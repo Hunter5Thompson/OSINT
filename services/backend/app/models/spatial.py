@@ -65,6 +65,33 @@ class ScopeKind(StrEnum):
     ADMIN2 = "admin2"
 
 
+class SpatialScopeTokenV1(StrictFrozenModel):
+    """Backend-owned scope identity resolved from one immutable catalog revision."""
+
+    schema_version: Literal[1] = 1
+    scope_key: ScopeKey
+    kind: ScopeKind
+    catalog_revision: CatalogRevision
+    derivation_revision: DerivationRevision
+    boundary_policy: PolicyIdentifier
+    compatible_derivation_revisions: tuple[DerivationRevision, ...] = Field(
+        min_length=1,
+        max_length=8,
+    )
+
+    @model_validator(mode="after")
+    def validate_identity_and_compatibility(self) -> SpatialScopeTokenV1:
+        if parse_scope_key(self.scope_key).kind is not self.kind:
+            raise ValueError("scope key kind does not match token kind")
+        if self.derivation_revision not in self.compatible_derivation_revisions:
+            raise ValueError("derivation_revision must be compatible")
+        if len(set(self.compatible_derivation_revisions)) != len(
+            self.compatible_derivation_revisions
+        ):
+            raise ValueError("compatible derivation revisions must be unique")
+        return self
+
+
 class Lod(StrEnum):
     OVERVIEW = "overview"
     REGIONAL = "regional"
