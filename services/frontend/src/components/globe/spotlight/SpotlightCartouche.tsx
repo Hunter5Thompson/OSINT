@@ -8,7 +8,11 @@ interface EndonymJson {
   }>;
 }
 
-export function renderCartouche(t: FocusTarget, endo?: EndonymJson | null): ReactNode {
+export function renderCartouche(
+  t: FocusTarget,
+  endo?: EndonymJson | null,
+  allowCountry = true,
+): ReactNode {
   if (t == null) return null;
   if (t.kind === "circle") {
     return (
@@ -20,6 +24,7 @@ export function renderCartouche(t: FocusTarget, endo?: EndonymJson | null): Reac
       </div>
     );
   }
+  if (!allowCountry) return null;
   // country
   const datum = t.iso3 && endo ? endo.countries[t.iso3] : null;
   const endonyms = datum?.names?.endonyms ?? {};
@@ -37,11 +42,12 @@ export function renderCartouche(t: FocusTarget, endo?: EndonymJson | null): Reac
   );
 }
 
-export function SpotlightCartouche() {
+export function SpotlightCartouche({ allowCountry = true }: { readonly allowCountry?: boolean }) {
   const { focusTarget } = useSpotlight();
   const [endo, setEndo] = useState<EndonymJson | null>(null);
   useEffect(() => {
+    if (!allowCountry) return;
     fetch("/country-endonyms.json").then((r) => r.json()).then(setEndo).catch(() => setEndo(null));
-  }, []);
-  return <>{renderCartouche(focusTarget, endo)}</>;
+  }, [allowCountry]);
+  return <>{renderCartouche(focusTarget, endo, allowCountry)}</>;
 }

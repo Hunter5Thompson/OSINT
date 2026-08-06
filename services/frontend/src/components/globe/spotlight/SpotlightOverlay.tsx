@@ -47,6 +47,15 @@ const FADE_IN_MS = REDUCED ? 120 : 320;
 const FADE_OUT_MS = REDUCED ? 120 : 200;
 
 export function SpotlightOverlay({ viewer }: Props) {
+  return (
+    <>
+      <CircleSpotlightOverlay viewer={viewer} />
+      <LegacyCountrySpotlightOverlay viewer={viewer} />
+    </>
+  );
+}
+
+export function CircleSpotlightOverlay({ viewer }: Props) {
   const { focusTarget } = useSpotlight();
 
   useEffect(() => {
@@ -54,6 +63,12 @@ export function SpotlightOverlay({ viewer }: Props) {
     if (focusTarget.kind !== "circle") return;
     return mountCircle(viewer, focusTarget);
   }, [viewer, focusTarget]);
+
+  return null;
+}
+
+export function LegacyCountrySpotlightOverlay({ viewer }: Props) {
+  const { focusTarget } = useSpotlight();
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed() || !focusTarget) return;

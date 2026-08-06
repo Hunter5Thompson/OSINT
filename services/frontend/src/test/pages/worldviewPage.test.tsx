@@ -21,9 +21,11 @@ vi.mock("../../services/api", () => ({
   getHotspots: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("../../spatial/react", () => ({
+  SPATIAL_SCOPE_ENABLED: false,
   SpatialScopeProvider: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="spatial-scope-provider">{children}</div>
   ),
+  useOptionalSpatialScope: () => null,
 }));
 
 import { WorldviewPage } from "../../pages/WorldviewPage";

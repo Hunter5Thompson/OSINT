@@ -1,7 +1,33 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useLocation } from "react-router-dom";
 import * as Cesium from "cesium";
-import { SpatialScopeProvider } from "../spatial/react";
+import {
+  SPATIAL_SCOPE_ENABLED,
+  SpatialScopeProvider,
+  useOptionalSpatialScope,
+  useSpatialScope,
+} from "../spatial/react";
+import { BoundaryAssetStore, HttpSpatialCatalog } from "../spatial/catalog";
+import { WORLD_SCOPE_KEY } from "../spatial/contracts";
+import { SpatialScopeBreadcrumb } from "../spatial/SpatialScopeBreadcrumb";
+import { WorldviewKeyboardCoordinator } from "../spatial/WorldviewKeyboardCoordinator";
+import { MutuallyExclusiveCountryPath } from "../spatial/WorldviewCountryPath";
+import {
+  createSelectionEnvelope,
+  openSpatialChild,
+  selectionForScopeRevision,
+  type SelectionEnvelope,
+} from "../spatial/selection";
+import { CesiumSpatialPresentationBridge } from "../spatial/cesium/SpatialPresentationBridge";
+import { SpatialScopeViewerBridge } from "../spatial/cesium/SpatialScopeViewerBridge";
 import { PerformanceGuard } from "../components/globe/PerformanceGuard";
 import { GlobeViewer } from "../components/globe/GlobeViewer";
 import { EntityClickHandler } from "../components/globe/EntityClickHandler";
@@ -30,7 +56,10 @@ import { InspectorPanel, type Selected } from "../components/worldview/Inspector
 import { TickerPanel } from "../components/worldview/TickerPanel";
 import { WorldviewHudLoader } from "../components/worldview/WorldviewHudLoader";
 import { SpotlightProvider, useSpotlight } from "../components/globe/spotlight/SpotlightContext";
-import { SpotlightOverlay } from "../components/globe/spotlight/SpotlightOverlay";
+import {
+  CircleSpotlightOverlay,
+  LegacyCountrySpotlightOverlay,
+} from "../components/globe/spotlight/SpotlightOverlay";
 import { HudFrame } from "../components/globe/spotlight/HudFrame";
 import { SpotlightCartouche } from "../components/globe/spotlight/SpotlightCartouche";
 import { CapitalPulse } from "../components/globe/spotlight/CapitalPulse";
@@ -134,10 +163,8 @@ function isLayerKey(value: string): value is keyof LayerVisibility {
 
 interface GlobeChildrenProps {
   viewer: Cesium.Viewer | null;
-  photorealTileset: Cesium.Cesium3DTileset | null;
   layers: LayerVisibility;
   setSelected: Dispatch<SetStateAction<Selected | null>>;
-  onSelectEvent: (id: string) => void;
   firmsHotspots: FIRMSHotspot[];
   selectedWindow: { tStart: string; tEnd: string };
   datacenterData: DatacenterGeoJSON | null;
@@ -148,10 +175,8 @@ interface GlobeChildrenProps {
 
 function GlobeChildren({
   viewer,
-  photorealTileset,
   layers,
   setSelected,
-  onSelectEvent,
   firmsHotspots,
   selectedWindow,
   datacenterData,
@@ -164,7 +189,6 @@ function GlobeChildren({
   return (
     <>
       <Graticule viewer={viewer} />
-      <CountryBorders viewer={viewer} visible={layers.countryBorders} />
       <FIRMSLayer
         viewer={viewer}
         hotspots={firmsHotspots}
@@ -275,12 +299,6 @@ function GlobeChildren({
           });
         }}
       />
-      <EventClickBridge
-        viewer={viewer}
-        photorealTileset={photorealTileset}
-        onCountrySelect={setSelected}
-        onSelectEvent={onSelectEvent}
-      />
     </>
   );
 }
@@ -387,22 +405,17 @@ function EventLayerBridge({
   );
 }
 
-// ── EventClickBridge ────────────────────────────────────────────────────────────
-// useTime() consumer wrapping EntityClickHandler so an event-dot click opens the callout
-// AND seeks to that event's time (pause+seek), per spec §5/§7.
-function EventClickBridge({
-  viewer,
-  photorealTileset,
-  onCountrySelect,
-  onSelectEvent,
-}: {
+interface EventClickBridgeProps {
   viewer: Cesium.Viewer | null;
   photorealTileset: Cesium.Cesium3DTileset | null;
   onCountrySelect: Dispatch<SetStateAction<Selected | null>>;
   onSelectEvent: (id: string) => void;
-}) {
+  onClearEvent: () => void;
+}
+
+function useEventClickCallback(onSelectEvent: (id: string) => void) {
   const { pause, seek } = useTime();
-  const handleEventSelect = useCallback(
+  return useCallback(
     (id: string, timeIso?: string) => {
       onSelectEvent(id);
       if (timeIso) {
@@ -415,11 +428,77 @@ function EventClickBridge({
     },
     [onSelectEvent, pause, seek],
   );
+}
+
+// The build-time migration switch mounts this legacy country capability or the
+// Spatial capability below. Operational entity handling remains available in both.
+function LegacyEventClickBridge({
+  viewer,
+  photorealTileset,
+  onCountrySelect,
+  onSelectEvent,
+  onClearEvent,
+}: EventClickBridgeProps) {
+  const handleEventSelect = useEventClickCallback(onSelectEvent);
   return (
     <EntityClickHandler
       viewer={viewer}
       photorealTileset={photorealTileset}
-      onCountrySelect={onCountrySelect}
+      countryInteraction={{
+        mode: "legacy",
+        onCountrySelect: (selection) => {
+          onCountrySelect(selection);
+          onClearEvent();
+        },
+      }}
+      onEventSelect={handleEventSelect}
+    />
+  );
+}
+
+function SpatialEventClickBridge({
+  viewer,
+  photorealTileset,
+  onCountrySelect,
+  onSelectEvent,
+  onClearEvent,
+}: EventClickBridgeProps) {
+  const scope = useSpatialScope();
+  const { dispatch: dispatchSpotlight } = useSpotlight();
+  const handleEventSelect = useEventClickCallback(onSelectEvent);
+  const handleSpatialChild = useCallback(
+    async (target: Parameters<typeof scope.enter>[0]) => {
+      const cause = scope.phase !== "hydrating" && scope.current.kind === "world"
+        ? "country-click"
+        : "child-click";
+      await openSpatialChild(
+        target,
+        () => scope.enter(target, cause),
+        (selection) => {
+          onCountrySelect(selection === null
+            ? null
+            : { type: "spatial-country", data: selection });
+          onClearEvent();
+        },
+        () => dispatchSpotlight({ type: "reset" }),
+      );
+    },
+    [dispatchSpotlight, onClearEvent, onCountrySelect, scope],
+  );
+
+  return (
+    <EntityClickHandler
+      viewer={viewer}
+      photorealTileset={photorealTileset}
+      countryInteraction={{
+        mode: "spatial",
+        stateRevision: scope.stateRevision,
+        onSpatialChild: handleSpatialChild,
+        onBlank: () => {
+          onCountrySelect(null);
+          onClearEvent();
+        },
+      }}
       onEventSelect={handleEventSelect}
     />
   );
@@ -483,15 +562,54 @@ function decodeEntityQuery(value: string | null): string {
   return decoded.includes(":") ? (decoded.split(":")[0] ?? "").trim() : decoded.trim();
 }
 
-function WorldviewContent() {
+interface WorldviewContentProps {
+  readonly spatialEnabled: boolean;
+  readonly presentationBridge: CesiumSpatialPresentationBridge | null;
+}
+
+function WorldviewContent({
+  spatialEnabled,
+  presentationBridge,
+}: WorldviewContentProps) {
   const location = useLocation();
+  const spatialScope = useOptionalSpatialScope();
+  const scopeStateRevision = spatialEnabled ? spatialScope?.stateRevision ?? 0 : 0;
+  const currentScopeKey = spatialEnabled
+    && spatialScope !== null
+    && spatialScope.phase !== "hydrating"
+    ? spatialScope.current.key
+    : WORLD_SCOPE_KEY;
 
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [photorealTileset, setPhotorealTileset] = useState<Cesium.Cesium3DTileset | null>(null);
   const [config, setConfig] = useState<ClientConfig | null>(null);
   const [layers, setLayers] = useState<LayerVisibility>(DEFAULT_LAYERS);
   const [activeShader, setActiveShader] = useState<ShaderType>("none");
-  const [selected, setSelected] = useState<Selected | null>(null);
+  const [selectionEnvelope, setSelectionEnvelope] =
+    useState<SelectionEnvelope<Selected> | null>(null);
+  const selected = selectionForScopeRevision(
+    selectionEnvelope,
+    scopeStateRevision,
+    currentScopeKey,
+  );
+  const setSelected = useCallback<Dispatch<SetStateAction<Selected | null>>>(
+    (action) => {
+      setSelectionEnvelope((previousEnvelope) => {
+        const previous = selectionForScopeRevision(
+          previousEnvelope,
+          scopeStateRevision,
+          currentScopeKey,
+        );
+        const next = typeof action === "function" ? action(previous) : action;
+        if (next === null) return null;
+        const verifiedScopeKey = next.type === "spatial-country"
+          ? next.data.scopeKey
+          : null;
+        return createSelectionEnvelope(next, scopeStateRevision, verifiedScopeKey);
+      });
+    },
+    [currentScopeKey, scopeStateRevision],
+  );
   const [searchSeed, setSearchSeed] = useState("");
   const [expandedPanels, setExpandedPanels] = useState<Record<PanelId, boolean>>({
     layers: false,
@@ -510,11 +628,39 @@ function WorldviewContent() {
   });
 
   // § CHRONIK timeline state (lifted from ScrubberMount; see EventClickBridge/EventLayerBridge).
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedEventEnvelope, setSelectedEventEnvelope] =
+    useState<SelectionEnvelope<string> | null>(null);
+  const selectedEventId = selectionForScopeRevision(
+    selectedEventEnvelope,
+    scopeStateRevision,
+    currentScopeKey,
+  );
+  const setSelectedEventId = useCallback(
+    (id: string | null) => setSelectedEventEnvelope(
+      id === null ? null : createSelectionEnvelope(id, scopeStateRevision),
+    ),
+    [scopeStateRevision],
+  );
   const [timelineGeo, setTimelineGeo] = useState<TimelineGeoEvent[]>([]);
   const [timelineWindow, setTimelineWindow] = useState<{ startMs: number; endMs: number } | null>(
     null,
   );
+  useEffect(() => {
+    if (!spatialEnabled) return;
+    setSelectionEnvelope((previous) => (
+      previous !== null
+      && previous.verifiedScopeKey === null
+      && previous.selectedAtScopeStateRevision !== scopeStateRevision
+        ? null
+        : previous
+    ));
+    setSelectedEventEnvelope((previous) => (
+      previous !== null
+      && previous.selectedAtScopeStateRevision !== scopeStateRevision
+        ? null
+        : previous
+    ));
+  }, [scopeStateRevision, spatialEnabled]);
   const handleTimelineData = useCallback(
     (d: { geoEvents: TimelineGeoEvent[]; window: { startMs: number; endMs: number } | null }) => {
       setTimelineGeo(d.geoEvents);
@@ -634,6 +780,14 @@ function WorldviewContent() {
   const handleViewerReady = useCallback((createdViewer: Cesium.Viewer) => {
     setViewer(createdViewer);
   }, []);
+  const clearSelectedEvent = useCallback(
+    () => setSelectedEventId(null),
+    [setSelectedEventId],
+  );
+  const clearTransientSelection = useCallback(() => {
+    setSelected(null);
+    setSelectedEventId(null);
+  }, [setSelected, setSelectedEventId]);
 
   if (!config) {
     return (
@@ -653,7 +807,7 @@ function WorldviewContent() {
             onViewerReady={handleViewerReady}
             cesiumToken={config.cesium_ion_token}
             activeShader={activeShader}
-            showCountryBorders={layers.countryBorders}
+            showCountryBorders={!spatialEnabled && layers.countryBorders}
             showCityBuildings={layers.cityBuildings}
             onPhotorealTilesetReady={setPhotorealTileset}
           />
@@ -680,10 +834,8 @@ function WorldviewContent() {
         />
         <GlobeChildren
           viewer={viewer}
-          photorealTileset={photorealTileset}
           layers={layers}
           setSelected={setSelected}
-          onSelectEvent={setSelectedEventId}
           firmsHotspots={firmsHotspots}
           selectedWindow={selectedWindow}
           datacenterData={datacenterData}
@@ -691,10 +843,57 @@ function WorldviewContent() {
           eonetEvents={eonetEvents}
           gdacsEvents={gdacsEvents}
         />
-        <SpotlightOverlay viewer={viewer} />
-        <HudFrame />
-        <SpotlightCartouche />
-        <CapitalPulse viewer={viewer} />
+        <MutuallyExclusiveCountryPath
+          spatialEnabled={spatialEnabled}
+          legacyRenderer={(
+            <>
+              <CountryBorders viewer={viewer} visible={layers.countryBorders} />
+              <LegacyCountrySpotlightOverlay viewer={viewer} />
+              <CapitalPulse viewer={viewer} />
+            </>
+          )}
+          legacyClickHandler={(
+            <LegacyEventClickBridge
+              viewer={viewer}
+              photorealTileset={photorealTileset}
+              onCountrySelect={setSelected}
+              onSelectEvent={setSelectedEventId}
+              onClearEvent={clearSelectedEvent}
+            />
+          )}
+          spatialRenderer={presentationBridge === null ? null : (
+            <>
+              <SpatialScopeViewerBridge viewer={viewer} bridge={presentationBridge} />
+              <div
+                style={{
+                  position: "absolute",
+                  top: 16,
+                  left: "50%",
+                  zIndex: 10,
+                  transform: "translateX(-50%)",
+                }}
+              >
+                <SpatialScopeBreadcrumb />
+              </div>
+            </>
+          )}
+          spatialClickHandler={(
+            <SpatialEventClickBridge
+              viewer={viewer}
+              photorealTileset={photorealTileset}
+              onCountrySelect={setSelected}
+              onSelectEvent={setSelectedEventId}
+              onClearEvent={clearSelectedEvent}
+            />
+          )}
+        />
+        <CircleSpotlightOverlay viewer={viewer} />
+        <WorldviewKeyboardCoordinator
+          hasTransientSelection={selected !== null || selectedEventId !== null}
+          clearTransientSelection={clearTransientSelection}
+        />
+        <HudFrame allowCountry={!spatialEnabled} />
+        <SpotlightCartouche allowCountry={!spatialEnabled} />
         <ZoomTriggerHook viewer={viewer} />
 
         {!hasViewer ? <WorldviewHudLoader /> : null}
@@ -788,10 +987,57 @@ function WorldviewContent() {
   );
 }
 
+interface SpatialWorldviewResources {
+  readonly catalog: HttpSpatialCatalog;
+  readonly presentation: CesiumSpatialPresentationBridge;
+  lifecycleGeneration: number;
+  disposed: boolean;
+}
+
+function createSpatialWorldviewResources(): SpatialWorldviewResources {
+  const assets = new BoundaryAssetStore();
+  return {
+    catalog: new HttpSpatialCatalog({ assetStore: assets }),
+    presentation: new CesiumSpatialPresentationBridge({ assets }),
+    lifecycleGeneration: 0,
+    disposed: false,
+  };
+}
+
 export function WorldviewPage() {
+  const resourcesRef = useRef<SpatialWorldviewResources | null>(null);
+  if (SPATIAL_SCOPE_ENABLED && resourcesRef.current === null) {
+    resourcesRef.current = createSpatialWorldviewResources();
+  }
+  const resources = resourcesRef.current;
+
+  useEffect(() => {
+    if (resources === null) return;
+    const lifecycleGeneration = ++resources.lifecycleGeneration;
+    return () => {
+      queueMicrotask(() => {
+        if (
+          resources.lifecycleGeneration === lifecycleGeneration
+          && !resources.disposed
+        ) {
+          resources.disposed = true;
+          resources.presentation.dispose();
+          resources.catalog.dispose();
+        }
+      });
+    };
+  }, [resources]);
+
   return (
-    <SpatialScopeProvider>
-      <WorldviewContent />
+    <SpatialScopeProvider
+      enabled={SPATIAL_SCOPE_ENABLED}
+      catalog={resources?.catalog}
+      presentation={resources?.presentation}
+    >
+      <WorldviewContent
+        spatialEnabled={SPATIAL_SCOPE_ENABLED}
+        presentationBridge={resources?.presentation ?? null}
+      />
     </SpatialScopeProvider>
   );
 }

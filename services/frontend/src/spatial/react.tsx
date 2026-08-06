@@ -111,7 +111,7 @@ export function useReactRouterScopeNavigation(
 const SpatialScopeContext = createContext<SpatialScopeModule | null>(null);
 SpatialScopeContext.displayName = "SpatialScopeContext";
 
-const spatialScopeEnabledByDefault =
+export const SPATIAL_SCOPE_ENABLED =
   import.meta.env.VITE_SPATIAL_SCOPE_ENABLED === "true";
 
 export type SpatialScopeModuleFactory = (
@@ -217,7 +217,7 @@ function InjectedSpatialScopeProvider(
 }
 
 export function SpatialScopeProvider(props: SpatialScopeProviderProps) {
-  const enabled = props.enabled ?? spatialScopeEnabledByDefault;
+  const enabled = props.enabled ?? SPATIAL_SCOPE_ENABLED;
   if (!enabled) return <>{props.children}</>;
   if (props.navigation !== undefined) {
     return <InjectedSpatialScopeProvider {...props} navigation={props.navigation} />;
@@ -229,48 +229,82 @@ function getStableHydratingSnapshot() {
   return HYDRATING_SPATIAL_SCOPE_SNAPSHOT;
 }
 
-export function useSpatialScope(): SpatialScopeHandle {
+function useSpatialScopeValue(): SpatialScopeHandle | null {
   const module = useContext(SpatialScopeContext);
-  if (module === null) {
-    throw new Error("useSpatialScope must be used inside <SpatialScopeProvider>");
-  }
   const subscribe = useCallback(
-    (listener: () => void) => module.subscribe(listener),
+    (listener: () => void) => module?.subscribe(listener) ?? (() => undefined),
     [module],
   );
-  const getSnapshot = useCallback(() => module.getSnapshot(), [module]);
+  const getSnapshot = useCallback(
+    () => module?.getSnapshot() ?? HYDRATING_SPATIAL_SCOPE_SNAPSHOT,
+    [module],
+  );
   const snapshot = useSyncExternalStore(
     subscribe,
     getSnapshot,
     getStableHydratingSnapshot,
   );
   const enter = useCallback(
-    (target: ScopeKey, cause: EnterCause) => module.dispatch({ type: "enter", target, cause }),
+    (target: ScopeKey, cause: EnterCause) => {
+      if (module === null) throw new Error("Spatial scope is unavailable.");
+      return module.dispatch({ type: "enter", target, cause });
+    },
     [module],
   );
   const ascend = useCallback(
-    (cause: "breadcrumb" | "keyboard") => module.dispatch({ type: "ascend", cause }),
+    (cause: "breadcrumb" | "keyboard") => {
+      if (module === null) throw new Error("Spatial scope is unavailable.");
+      return module.dispatch({ type: "ascend", cause });
+    },
     [module],
   );
   const prefetch = useCallback(
-    (target: ScopeKey) => module.dispatch({ type: "prefetch", target, priority: "hover" }),
+    (target: ScopeKey) => {
+      if (module === null) throw new Error("Spatial scope is unavailable.");
+      return module.dispatch({ type: "prefetch", target, priority: "hover" });
+    },
+    [module],
+  );
+  const cancelPending = useCallback(
+    () => {
+      if (module === null) throw new Error("Spatial scope is unavailable.");
+      return module.dispatch({ type: "cancel-pending" });
+    },
     [module],
   );
   const rehydrate = useCallback(
-    () => module.dispatch({ type: "rehydrate" }),
+    () => {
+      if (module === null) throw new Error("Spatial scope is unavailable.");
+      return module.dispatch({ type: "rehydrate" });
+    },
     [module],
   );
 
-  return useMemo<SpatialScopeHandle>(
-    () => freezeSpatialValue({
-      ...snapshot,
-      enter,
-      ascend,
-      prefetch,
-      rehydrate,
-    }) as SpatialScopeHandle,
-    [ascend, enter, prefetch, rehydrate, snapshot],
+  return useMemo<SpatialScopeHandle | null>(
+    () => module === null
+      ? null
+      : freezeSpatialValue({
+          ...snapshot,
+          enter,
+          ascend,
+          prefetch,
+          cancelPending,
+          rehydrate,
+        }) as SpatialScopeHandle,
+    [ascend, cancelPending, enter, module, prefetch, rehydrate, snapshot],
   );
+}
+
+export function useOptionalSpatialScope(): SpatialScopeHandle | null {
+  return useSpatialScopeValue();
+}
+
+export function useSpatialScope(): SpatialScopeHandle {
+  const scope = useSpatialScopeValue();
+  if (scope === null) {
+    throw new Error("useSpatialScope must be used inside <SpatialScopeProvider>");
+  }
+  return scope;
 }
 
 function SpatialScopeRecoveryAction() {

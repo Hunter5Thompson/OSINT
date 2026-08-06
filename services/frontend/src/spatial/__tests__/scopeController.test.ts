@@ -457,6 +457,38 @@ describe("SpatialScopeController hydration and hierarchy", () => {
 });
 
 describe("SpatialScopeController generations and failures", () => {
+  it("cancels a pending foreground resolve and keeps the committed scope", async () => {
+    const { catalog, controller } = setup();
+    await startAtWorld(controller);
+    const gate = catalog.deferNextResolve(UKRAINE);
+    const pending = controller.dispatch({
+      type: "enter",
+      target: UKRAINE,
+      cause: "country-click",
+    });
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "resolving",
+      current: { key: WORLD_SCOPE_KEY },
+      pending: UKRAINE,
+    });
+
+    await expect(controller.dispatch({ type: "cancel-pending" })).resolves.toMatchObject({
+      outcome: "unchanged",
+      snapshot: {
+        phase: "ready",
+        current: { key: WORLD_SCOPE_KEY },
+        pending: null,
+      },
+    });
+    gate.resolve();
+    await expect(pending).resolves.toEqual({ outcome: "cancelled" });
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      current: { key: WORLD_SCOPE_KEY },
+      pending: null,
+    });
+  });
+
   it("lets B supersede a deferred A without stale state or URL mutation", async () => {
     const { catalog, controller, navigation } = setup();
     await startAtWorld(controller);

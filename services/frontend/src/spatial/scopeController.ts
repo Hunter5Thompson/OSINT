@@ -209,6 +209,8 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
         );
       case "prefetch":
         return this.prefetch(command.target, command.priority, options.signal);
+      case "cancel-pending":
+        return Promise.resolve(this.cancelPending());
       case "rehydrate":
         return this.rehydrate(options.signal);
     }
@@ -479,6 +481,23 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
         }));
       }
     }
+    return { outcome: "unchanged", snapshot: this.snapshot };
+  }
+
+  private cancelPending(): SpatialScopeResult {
+    const intent = this.foreground;
+    if (intent === null || this.snapshot.phase !== "resolving") {
+      return { outcome: "unchanged", snapshot: this.snapshot };
+    }
+    intent.controller.abort();
+    intent.detachCallerSignal();
+    if (this.foreground === intent) this.foreground = null;
+    this.generation += 1;
+    this.publish(freezeSpatialScopeSnapshot({
+      ...this.snapshot,
+      phase: "ready",
+      pending: null,
+    }));
     return { outcome: "unchanged", snapshot: this.snapshot };
   }
 
