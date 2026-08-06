@@ -579,6 +579,11 @@ function WorldviewContent({
     && spatialScope.phase !== "hydrating"
     ? spatialScope.current.key
     : WORLD_SCOPE_KEY;
+  const committedSpatialQuery = spatialEnabled
+    && spatialScope !== null
+    && spatialScope.phase !== "hydrating"
+    ? spatialScope.query
+    : null;
 
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [photorealTileset, setPhotorealTileset] = useState<Cesium.Cesium3DTileset | null>(null);
@@ -951,7 +956,12 @@ function WorldviewContent({
         </div>
 
         <div style={{ position: "absolute", top: 86, right: 16, zIndex: 10 }}>
-          <InspectorPanel selected={selected} onClose={() => setSelected(null)} viewer={viewer} />
+          <InspectorPanel
+            selected={selected}
+            onClose={() => setSelected(null)}
+            viewer={viewer}
+            spatialQuery={committedSpatialQuery}
+          />
         </div>
 
         {/* raised above the full-width § CHRONIK strip (height 90) docked at the bottom */}

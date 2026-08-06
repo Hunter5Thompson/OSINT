@@ -446,6 +446,40 @@ describe("HttpSpatialCatalog wire contract", () => {
 });
 
 describe("BoundaryAssetStore", () => {
+  it("reports bounded decoded-cache counters for canary evidence", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const id = urlOf(input).split("/").at(-1) ?? "";
+      return assetResponse(id);
+    });
+    const store = createStore(fetcher, { maxEntries: 1 });
+
+    const first = await store.acquire(boundaryDescriptor, new AbortController().signal);
+    first.release();
+    const second = await store.acquire(packDescriptor, new AbortController().signal);
+    second.release();
+
+    expect(store.diagnostics()).toEqual({
+      activeLeases: 0,
+      decodedBytes: 1_728,
+      decodedEntries: 1,
+      disposed: false,
+      inflightLoads: 0,
+      maxDecodedBytes: 32 * 1024 * 1024,
+      maxEntries: 1,
+    });
+
+    store.dispose();
+    expect(store.diagnostics()).toEqual({
+      activeLeases: 0,
+      decodedBytes: 0,
+      decodedEntries: 0,
+      disposed: true,
+      inflightLoads: 0,
+      maxDecodedBytes: 32 * 1024 * 1024,
+      maxEntries: 1,
+    });
+  });
+
   it("validates bytes, hash, schema and descriptor counts before caching", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => assetResponse(BOUNDARY_ID));
     const store = createStore(fetcher);

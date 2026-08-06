@@ -343,7 +343,7 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
   });
 
   it("keeps primitive/container counts constant across 100 semantic transitions", async () => {
-    const { adapter, runtime } = setup();
+    const { adapter, assets, runtime } = setup();
     for (let revision = 1; revision <= 100; revision += 1) {
       const pending = adapter.present(
         presentation(world, String((revision % 9) + 1)),
@@ -356,7 +356,14 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
       expect(runtime.postRenderListeners.size).toBe(0);
       expect(runtime.cameraListeners.size).toBe(1);
     }
+
+    expect(assets.acquired).toBe(200);
+    expect(assets.released).toBe(assets.acquired);
     adapter.dispose();
+    expect(runtime.mounted).toHaveLength(0);
+    expect(runtime.postRenderListeners.size).toBe(0);
+    expect(runtime.cameraListeners.size).toBe(0);
+    expect(assets.released).toBe(assets.acquired);
   });
 
   it("keeps the preferred pick primitive across 100 camera LOD swaps", async () => {

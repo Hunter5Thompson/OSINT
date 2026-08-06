@@ -44,6 +44,7 @@ import type { LandingSummary } from "../types/landing";
 import type { SignalEnvelope } from "../types/signals";
 import type { Incident, IncidentCreateRequest } from "../types/incident";
 import type { AlmanacSignalResponse, CountryAlmanac } from "../types/almanac";
+import type { SpatialQueryRef } from "../spatial/contracts";
 
 export const SIGNAL_STREAM_URL = "/api/signals/stream";
 
@@ -79,6 +80,24 @@ export async function getCountryAlmanac(
   });
   if (!res.ok) {
     throw new Error(`country almanac failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as CountryAlmanac;
+}
+
+export async function getSpatialCountryAlmanac(
+  query: Pick<SpatialQueryRef, "scopeKey" | "catalogRevision">,
+  signal?: AbortSignal,
+): Promise<CountryAlmanac> {
+  const parameters = new URLSearchParams({
+    scope_key: query.scopeKey,
+    catalog_revision: query.catalogRevision,
+  });
+  const res = await fetch(`/api/almanac/country?${parameters.toString()}`, {
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`spatial country almanac failed: ${res.status} ${res.statusText}`);
   }
   return (await res.json()) as CountryAlmanac;
 }

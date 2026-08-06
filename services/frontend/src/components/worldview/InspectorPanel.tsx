@@ -10,8 +10,12 @@ import type {
 import type { MilTrackRender } from "../layers/milTrackAdapter";
 import { OverlayPanel } from "../hlidskjalf/OverlayPanel";
 import type { CountryHit } from "../globe/hooks/useCountryHitTest";
-import { CountryHeader } from "../globe/spotlight/CountryHeader";
 import type { CountrySelection } from "../../spatial/selection";
+import type { SpatialQueryRef } from "../../spatial/contracts";
+import {
+  CountryHeader,
+  SpatialCountryHeader,
+} from "../globe/spotlight/CountryHeader";
 
 export type Selected =
   | { type: "firms"; data: FIRMSHotspot }
@@ -27,6 +31,7 @@ export interface InspectorPanelProps {
   selected: Selected | null;
   onClose: () => void;
   viewer: Cesium.Viewer | null;
+  spatialQuery?: SpatialQueryRef | null;
 }
 
 const labelStyle: CSSProperties = {
@@ -166,14 +171,19 @@ function AircraftInspector({
   );
 }
 
-function InspectorBody({ selected, viewer }: { selected: Selected; viewer: Cesium.Viewer | null }) {
+function InspectorBody({
+  selected,
+  viewer,
+  spatialQuery,
+}: {
+  selected: Selected;
+  viewer: Cesium.Viewer | null;
+  spatialQuery: SpatialQueryRef | null;
+}) {
   switch (selected.type) {
     case "spatial-country":
       return (
-        <>
-          <div style={titleStyle}>{selected.data.label}</div>
-          <Property label="§ Canonical scope" value={selected.data.scopeKey} />
-        </>
+        <SpatialCountryHeader selection={selected.data} query={spatialQuery} />
       );
     case "country": {
       const c = selected.data;
@@ -281,7 +291,12 @@ function InspectorBody({ selected, viewer }: { selected: Selected; viewer: Cesiu
   }
 }
 
-export function InspectorPanel({ selected, onClose, viewer }: InspectorPanelProps) {
+export function InspectorPanel({
+  selected,
+  onClose,
+  viewer,
+  spatialQuery = null,
+}: InspectorPanelProps) {
   return (
     <OverlayPanel
       paragraph="III"
@@ -294,7 +309,13 @@ export function InspectorPanel({ selected, onClose, viewer }: InspectorPanelProp
       // so OverlayPanel's inner overflowY:auto region engages and long almanacs scroll.
       style={{ maxHeight: "calc(100vh - 128px)" }}
     >
-      {selected ? <InspectorBody selected={selected} viewer={viewer} /> : null}
+      {selected ? (
+        <InspectorBody
+          selected={selected}
+          viewer={viewer}
+          spatialQuery={spatialQuery}
+        />
+      ) : null}
     </OverlayPanel>
   );
 }

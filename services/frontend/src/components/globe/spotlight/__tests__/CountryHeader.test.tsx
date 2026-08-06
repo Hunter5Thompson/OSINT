@@ -1,7 +1,14 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CountryHeader } from "../CountryHeader";
+import {
+  CountryHeader,
+  SpatialCountryHeader,
+} from "../CountryHeader";
+import {
+  parseCatalogRevision,
+  parseScopeKeyCandidate,
+} from "../../../../spatial/contracts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -90,5 +97,32 @@ describe("CountryHeader", () => {
     render(<CountryHeader name="Atlantis" iso3="ATL" m49="999" capital={null} />);
     expect(screen.getByText(/Atlantis/)).toBeInTheDocument();
     expect(await screen.findByText(/unavailable for this country/i)).toBeInTheDocument();
+  });
+
+  it("keeps canonical selection identity while using committed Spatial almanac data", async () => {
+    const fetchMock = mockCountryFetch();
+    const scopeKey = parseScopeKeyCandidate("country:UKR");
+    render(
+      <SpatialCountryHeader
+        selection={{ scopeKey, label: "Canonical Ukraine" }}
+        query={{
+          schemaVersion: 1,
+          scopeKey,
+          catalogRevision: parseCatalogRevision("spatial-v1-fe9828dcda05"),
+          boundaryPolicy: "odin-reference-v1",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Canonical Ukraine")).toBeInTheDocument();
+    expect(await screen.findByText(/Euro \(EUR\)/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Greece" })).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/almanac/country?scope_key=country%3AUKR"
+        + "&catalog_revision=spatial-v1-fe9828dcda05",
+      expect.any(Object),
+    );
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/signals")))
+      .toBe(false);
   });
 });

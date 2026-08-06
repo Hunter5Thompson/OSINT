@@ -9,11 +9,19 @@ import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
+from starlette.responses import Response
 
 from app.admin_auth import require_admin_token
 from app.config import settings
 from app.models.almanac import AlmanacSignalResponse, BriefingSaveRequest, CountryAlmanac
 from app.models.report import ReportMessageCreate, ReportRecord
+from app.models.spatial import (
+    CatalogProblemCode,
+    ScopeKind,
+    SpatialCatalogProblem,
+    parse_scope_key,
+)
+from app.routers.spatial import spatial_problem_response
 from app.services.briefing import build_briefing_context, truncate_message
 from app.services.country_almanac import get_country_almanac_store
 from app.services.intel_stream import stream_intel_query
@@ -24,6 +32,7 @@ from app.services.report_store import (
     update_report,
 )
 from app.services.signal_stream import get_signal_stream
+from app.services.spatial_catalog import SpatialCatalogLoader
 
 log = structlog.get_logger(__name__)
 
@@ -44,6 +53,47 @@ def _require_report_admin(
 async def get_country_almanac(country_id: str) -> CountryAlmanac:
     store = get_country_almanac_store()
     country = store.get_country(country_id)
+    if country is None:
+        raise HTTPException(status_code=404, detail="country almanac not found")
+    return country
+
+
+@router.get("/country", response_model=CountryAlmanac)
+async def get_spatial_country_almanac(
+    request: Request,
+    scope_key: str = Query(),
+    catalog_revision: str = Query(),
+) -> CountryAlmanac | Response:
+    """Resolve catalog identity before adapting it to existing almanac data."""
+
+    candidate = getattr(request.app.state, "spatial_catalog", None)
+    if not isinstance(candidate, SpatialCatalogLoader):
+        return spatial_problem_response(
+            SpatialCatalogProblem(
+                code=CatalogProblemCode.CATALOG_UNAVAILABLE,
+                message="Spatial catalog is unavailable",
+                recoverable=True,
+            )
+        )
+
+    resolved = candidate.resolve_scope(scope_key, catalog_revision)
+    if isinstance(resolved, SpatialCatalogProblem):
+        return spatial_problem_response(resolved)
+
+    parsed = parse_scope_key(resolved.record.scope.key)
+    if parsed.kind is not ScopeKind.COUNTRY or parsed.canonical_code is None:
+        return spatial_problem_response(
+            SpatialCatalogProblem(
+                code=CatalogProblemCode.INVALID_SCOPE_KEY,
+                message="Country almanac requires a country scope",
+                target=resolved.record.scope.key,
+                recoverable=False,
+                active_catalog_revision=resolved.catalog_revision,
+            )
+        )
+
+    store = get_country_almanac_store()
+    country = store.get_country(parsed.canonical_code)
     if country is None:
         raise HTTPException(status_code=404, detail="country almanac not found")
     return country
