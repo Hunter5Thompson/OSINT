@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -153,6 +154,23 @@ class QualityLoopTests(unittest.TestCase):
         self.assertNotIn("test_models_endpoint_lists_expected_model", result.stdout)
         self.assertNotIn("test_real_extraction_call", result.stdout)
         self.assertIn("2 deselected", result.stdout)
+
+    def test_backend_default_sync_keeps_documented_quality_tools(self) -> None:
+        pyproject = tomllib.loads(
+            (ROOT / "services" / "backend" / "pyproject.toml").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        optional_dev = pyproject["project"]["optional-dependencies"]["dev"]
+        default_dev = pyproject.get("dependency-groups", {}).get("dev")
+
+        self.assertEqual(default_dev, optional_dev)
+        for tool in ("pytest", "pytest-asyncio", "pytest-cov", "ruff", "mypy"):
+            self.assertTrue(
+                any(requirement.startswith(f"{tool}>") for requirement in default_dev),
+                f"backend default dev group is missing {tool}",
+            )
 
     def test_quality_loop_does_not_publish_failed_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
