@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
 
+from app.models.spatial import parse_scope_key, validate_catalog_revision_candidate
 from app.models.timeline import (
     BBox,
     EventDetail,
@@ -16,6 +17,9 @@ from app.models.timeline import (
     HistogramBucket,
     HistogramResponse,
     Notable,
+    SpatialApplicationV1,
+    SpatialCompleteness,
+    SpatialFilterMode,
     TrackPoint,
     TrackSample,
     WindowResponse,
@@ -82,6 +86,59 @@ def parse_bbox(raw: str | None) -> BBox | None:
     return BBox(west=west, south=south, east=east, north=north)
 
 
+def validate_spatial_params(
+    scope_key: str | None,
+    catalog_revision: str | None,
+    bbox: BBox | None,
+) -> None:
+    """Validate mutually exclusive legacy AOI and catalog-pinned scope modes."""
+
+    if scope_key is not None and bbox is not None:
+        raise HTTPException(status_code=422, detail="scope_key and bbox are mutually exclusive")
+    if (scope_key is None) != (catalog_revision is None):
+        raise HTTPException(
+            status_code=422,
+            detail="scope_key and catalog_revision must be provided together",
+        )
+    if scope_key is None:
+        return
+    try:
+        parse_scope_key(scope_key)
+        assert catalog_revision is not None
+        validate_catalog_revision_candidate(catalog_revision)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="invalid spatial scope reference") from exc
+
+
+def _legacy_spatial_application(
+    *,
+    relation: Literal["occurs-in", "intersects"],
+    included_count: int,
+    bbox: BBox | None,
+) -> SpatialApplicationV1:
+    return SpatialApplicationV1(
+        requested_scope_key=None,
+        catalog_revision=None,
+        derivation_revision=None,
+        boundary_policy=None,
+        relation=relation,
+        mode=(
+            SpatialFilterMode.GLOBAL
+            if bbox is None
+            else SpatialFilterMode.BBOX_APPROXIMATE
+        ),
+        completeness=(
+            SpatialCompleteness.COMPLETE
+            if bbox is None
+            else SpatialCompleteness.PARTIAL
+        ),
+        included_count=included_count,
+        excluded_unlocated_count=0,
+        excluded_conflict_count=0,
+        excluded_stale_revision_count=0,
+    )
+
+
 _EVENTS_QUERY = """
 MATCH (ev:Event)
 WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
@@ -132,6 +189,8 @@ async def get_window(
     tier: str = "coarse",
     movement_kind: str | None = None,
     bbox: str | None = None,
+    scope_key: str | None = None,
+    catalog_revision: str | None = None,
     limit: int = Query(default=200),
 ) -> WindowResponse:
     if domain not in ("events", "movements"):
@@ -142,6 +201,9 @@ async def get_window(
         raise HTTPException(status_code=422, detail=f"limit must be in [1,{_MAX_LIMIT}]")
     start, end = validate_window(t_start, t_end)
     box = parse_bbox(bbox)
+    validate_spatial_params(scope_key, catalog_revision, box)
+    if scope_key is not None:
+        raise HTTPException(status_code=503, detail="spatial filtering unavailable")
 
     if domain == "events":
         if movement_kind is not None:
@@ -186,6 +248,11 @@ async def _events_window(
     return WindowResponse(
         domain="events", tier="coarse", t_start=t_start, t_end=t_end, bbox=box,
         samples=samples, total_count=total, truncated=total > len(samples),
+        spatial_application=_legacy_spatial_application(
+            relation="occurs-in",
+            included_count=total,
+            bbox=box,
+        ),
     )
 
 
@@ -268,6 +335,11 @@ async def _movements_window(
     return WindowResponse(
         domain="movements", tier="fine", t_start=t_start, t_end=t_end, bbox=box,
         samples=samples, total_count=total, truncated=total > len(samples),
+        spatial_application=_legacy_spatial_application(
+            relation="intersects",
+            included_count=total,
+            bbox=box,
+        ),
     )
 
 
@@ -294,6 +366,8 @@ async def get_histogram(
     buckets: int = 120,
     domain: str = "events",
     bbox: str | None = None,
+    scope_key: str | None = None,
+    catalog_revision: str | None = None,
 ) -> HistogramResponse:
     if domain != "events":
         raise HTTPException(status_code=422, detail="histogram supports domain=events only")
@@ -301,6 +375,9 @@ async def get_histogram(
         raise HTTPException(status_code=422, detail=f"buckets must be in [1,{_MAX_BUCKETS}]")
     start, end = validate_window(t_start, t_end)
     box = parse_bbox(bbox)
+    validate_spatial_params(scope_key, catalog_revision, box)
+    if scope_key is not None:
+        raise HTTPException(status_code=503, detail="spatial filtering unavailable")
     params = {"t_start": t_start, "t_end": t_end, **_bbox_params(box)}
 
     start_ms = int(start.timestamp() * 1000)
@@ -360,6 +437,11 @@ async def get_histogram(
         t_start=t_start, t_end=t_end, bucket_ms=bucket_ms, buckets=bucket_list,
         notables=notables, geo_events=geo_events, total_count=len(rows),
         geo_located_count=geo_count, geo_truncated=geo_trunc,
+        spatial_application=_legacy_spatial_application(
+            relation="occurs-in",
+            included_count=len(rows),
+            bbox=box,
+        ),
     )
 
 

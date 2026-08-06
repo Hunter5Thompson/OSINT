@@ -31,6 +31,20 @@ def test_events_window_returns_samples(client):
     assert data["samples"][0]["title"] is None  # GDELT nullable
     assert data["samples"][0]["time_basis"] == "indexed"
     assert data["total_count"] == 1 and data["truncated"] is False
+    assert data["spatial_application"] == {
+        "schema_version": 1,
+        "requested_scope_key": None,
+        "catalog_revision": None,
+        "derivation_revision": None,
+        "boundary_policy": None,
+        "relation": "occurs-in",
+        "mode": "global",
+        "completeness": "complete",
+        "included_count": 1,
+        "excluded_unlocated_count": 0,
+        "excluded_conflict_count": 0,
+        "excluded_stale_revision_count": 0,
+    }
 
 
 def test_reversed_window_422(client):
@@ -53,6 +67,27 @@ def test_events_with_movement_kind_422(client):
 def test_events_fine_422(client):
     resp = client.get(f"/api/timeline/window{W}&tier=fine")
     assert resp.status_code == 422
+
+
+def test_window_scope_key_and_bbox_are_rejected_before_query(client):
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        resp = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab&bbox=20,40,41,53"
+        )
+
+    assert resp.status_code == 422
+    mock.assert_not_awaited()
+
+
+def test_window_invalid_catalog_revision_is_422_before_query(client):
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        resp = client.get(
+            f"/api/timeline/window{W}&scope_key=world&catalog_revision=latest"
+        )
+
+    assert resp.status_code == 422
+    mock.assert_not_awaited()
 
 
 def test_movements_mil_aircraft_window(client):
