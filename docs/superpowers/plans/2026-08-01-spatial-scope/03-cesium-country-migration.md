@@ -45,20 +45,20 @@ with focused tests. Modify `WorldviewPage`, `EntityClickHandler`, Spotlight file
 
 ## Work order 2 — Generation-safe Cesium presenter
 
-- [ ] **RED:** Test build→ready swap, old-container visibility until semantic commit,
+- [x] **RED:** Test build→ready swap, old-container visibility until semantic commit,
   stale build disposal, presentation failure without semantic rollback, reduced-motion
   zero flight, dateline camera fit, listener removal, and constant primitive/container
   counts across 100 synthetic transitions and LOD swaps. CPU conversion yields after
   8,000 vertices or 8 ms, rechecks abort after each frame, and never leaves a main-
   thread task above the 50 ms release gate.
-- [ ] **GREEN:** Implement chunked primitive construction in per-revision
+- [x] **GREEN:** Implement chunked primitive construction in per-revision
   `PrimitiveCollection`s, using batched geometry/appearance rather than Entity API.
   Abort/dispose by generation; release asset leases after readiness; derive camera
   bounds from Cartesian points. Report visual state only for the matching revision.
-- [ ] **REFACTOR:** Keep Cesium types inside `spatial/cesium`. Controller sees one
+- [x] **REFACTOR:** Keep Cesium types inside `spatial/cesium`. Controller sees one
   presentation port and never camera state.
-- [ ] **VERIFY:** `cd services/frontend && npm test -- src/spatial/__tests__/cesiumAdapter.test.ts`
-- [ ] **COMMIT:** `feat(frontend): present spatial scope with cesium primitives`
+- [x] **VERIFY:** `cd services/frontend && npm test -- src/spatial/__tests__/cesiumAdapter.test.ts`
+- [x] **COMMIT:** `feat(frontend): present spatial scope with cesium primitives`
 
 ## Work order 3 — Mutually exclusive migration and UX
 
