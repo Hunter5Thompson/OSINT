@@ -1814,3 +1814,41 @@ Observation-Producer.
 #   - Foreground-/Abort-Gates laufen vor und nach jedem Await. Pre-Abort ruft den
 #     Adapter nicht auf; verspätete Antworten verlieren Commit- und URL-Rechte.
 #   - Spatial/Router: 82 Tests grün; ESLint, TypeScript und Produktionsbuild grün.
+
+
+# ══════════════════════════════════════════
+# TASK-123: Spatial Plan-03 Review-Follow-ups vor Legacy-Cleanup
+# ══════════════════════════════════════════
+# Status: OFFEN | Priorität: P1
+# Owner: Spatial Plans 05/05D + Frontend WorldView
+# Blocked by: nichts
+# Blocks: Spatial Plan 05D / Löschung des Legacy-Country-Pfads
+#
+# Kontext:
+#   Der Plan-03-Review vom 2026-08-06 bestätigte die semantischen und Lifecycle-
+#   Exit-Gates, fand aber verbleibende Paritäts-, Accessibility- und LOD-Schulden.
+#   Flag-on-Harness, Canary-Reproduktion, Legacy-Klickkosten/Fail-closed und das
+#   ungemountete Cesium-Collection-Leak wurden direkt auf dem Plan-03-Branch behoben.
+#
+# Verbleibende Akzeptanzkriterien / RED-Gates:
+#   1. Der Spatial-Country-Inspector erhält Signal-Liste und Munin-Briefing über
+#      kanonisch aufgelöste `scope_key + catalog_revision`-Adapter. Almanac-Felder
+#      oder Displaynamen dürfen dabei niemals wieder Identitätsquelle werden.
+#   2. Vor Plan 05D beweist ein Paritätstest, dass der Flag-on-Inspector keine
+#      freigegebene Legacy-Funktion still verliert; bewusst nicht migrierte Funktionen
+#      benötigen eine explizite Produktentscheidung.
+#   3. Breadcrumb-Status ist sprachlich konsistent, zeigt kein rohes Scope-Key als
+#      sichtbares Opening-Label und verwendet eine vorab gemountete Live-Region mit
+#      getestetem Screenreader-/Focus-Verhalten.
+#   4. Die Cartography-Disclosure verwendet Button-Semantik; `aria-expanded` und
+#      `aria-controls` referenzieren einen stabil vorhandenen Disclosure-Container.
+#   5. Gemeinsame Koordinatenformatierung rendert negative Breite/Länge als S/W statt
+#      als negative N/E-Werte und wird von Legacy- und Spatial-Header geteilt.
+#   6. `BoundaryGeometryIndex`/`createSpatialChildGeometryIndex` wird entweder im
+#      vorgesehenen Plan-08-Containment-Adapter produktiv verdrahtet oder vor 05D als
+#      ungenutzte Vorleistung entfernt; Cesium-Pick-Identität bleibt ausschließlich
+#      der getaggte Katalog-Primitive-Pfad.
+#   7. Scope-Primitive-Farben liegen in einer zentralen Cesium-kompatiblen
+#      Hlíðskjalf-Palette. Child-Outlines folgen dem Kamera-LOD, während allein die
+#      Pick-Surface unverändert auf `childrenLods[preferredLod]` gepinnt bleibt; ein
+#      100-Swap-Test belegt stabile Pick-Identität und gebundene Leases.

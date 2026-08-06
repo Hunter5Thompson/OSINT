@@ -1,5 +1,5 @@
 import * as Cesium from "cesium";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type {
   BoundaryAsset,
@@ -16,6 +16,7 @@ import type {
 import { parseCatalogRevision, parseScopeKeyCandidate } from "../contracts";
 import {
   CesiumSpatialScopeAdapter,
+  ViewerSpatialCesiumRuntime,
   type BoundaryAssetProvider,
   type ScopePrimitiveBuilder,
   type SpatialCesiumRuntime,
@@ -271,6 +272,19 @@ function setup(options: { readonly reducedMotion?: boolean } = {}) {
 }
 
 describe("CesiumSpatialScopeAdapter lifecycle", () => {
+  it("destroys a staging collection that failed before it could be mounted", () => {
+    const viewer = {
+      scene: { primitives: { add: vi.fn() } },
+    } as unknown as Cesium.Viewer;
+    const runtime = new ViewerSpatialCesiumRuntime(viewer);
+    const staging = runtime.createContainer();
+    const destroy = vi.spyOn(staging, "destroy");
+
+    runtime.unmount(staging);
+
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it("hides the old semantic container immediately and swaps only after ready", async () => {
     const { adapter, assets, runtime } = setup();
     const first = adapter.present(presentation(world, "1"), 1, new AbortController().signal);
