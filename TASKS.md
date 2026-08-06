@@ -1844,11 +1844,21 @@ Observation-Producer.
 #      `aria-controls` referenzieren einen stabil vorhandenen Disclosure-Container.
 #   5. Gemeinsame Koordinatenformatierung rendert negative Breite/Länge als S/W statt
 #      als negative N/E-Werte und wird von Legacy- und Spatial-Header geteilt.
-#   6. `BoundaryGeometryIndex`/`createSpatialChildGeometryIndex` wird entweder im
-#      vorgesehenen Plan-08-Containment-Adapter produktiv verdrahtet oder vor 05D als
-#      ungenutzte Vorleistung entfernt; Cesium-Pick-Identität bleibt ausschließlich
-#      der getaggte Katalog-Primitive-Pfad.
+#   6. Das inzwischen vollständig produktionsimportfreie Modul `spatial/geometry.ts`
+#      einschließlich `BoundaryGeometryIndex`/`createSpatialChildGeometryIndex` wird
+#      entweder im vorgesehenen Plan-08-Containment-Adapter produktiv verdrahtet oder
+#      vor 05D als ungenutzte Vorleistung entfernt. Die im Legacy-Hit-Test temporär
+#      geforkten Segment-, Containment- und Dateline-Primitiven machen 05D zu einer
+#      harten Abhängigkeit statt optionaler Aufräumarbeit: danach bleibt genau eine
+#      produktive Implementierung oder keine tote Kopie zurück. Cesium-Pick-Identität
+#      bleibt ausschließlich der getaggte Katalog-Primitive-Pfad.
 #   7. Scope-Primitive-Farben liegen in einer zentralen Cesium-kompatiblen
 #      Hlíðskjalf-Palette. Child-Outlines folgen dem Kamera-LOD, während allein die
 #      Pick-Surface unverändert auf `childrenLods[preferredLod]` gepinnt bleibt; ein
 #      100-Swap-Test belegt stabile Pick-Identität und gebundene Leases.
+#   8. Solange der Legacy-Pfad produktiv bleibt, protokolliert sein Indexbau jedes
+#      wegen ungültiger Koordinaten fail-closed verworfene Feature einmalig und
+#      begrenzt, statt es diagnoselos unklickbar zu machen. Dateline-Features werden
+#      über minimale geteilte Longitude-Spans in RBush eingetragen statt mit einer
+#      globalen `[-180, 180]`-BBox; Tests belegen Diagnose, beidseitige Treffer und
+#      Pruning außerhalb der tatsächlichen Spans.

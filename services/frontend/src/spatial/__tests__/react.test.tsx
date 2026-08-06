@@ -24,6 +24,7 @@ import {
   type RouterLocationSnapshot,
 } from "../navigation";
 import {
+  SPATIAL_SCOPE_ENABLED,
   SpatialScopeProvider,
   useSpatialScope,
   type SpatialScopeModuleFactory,
@@ -218,6 +219,35 @@ afterEach(() => {
 });
 
 describe("SpatialScopeProvider gate and hook", () => {
+  it("maps the build env exactly and defaults the provider to that gate", () => {
+    expect(SPATIAL_SCOPE_ENABLED).toBe(
+      import.meta.env.VITE_SPATIAL_SCOPE_ENABLED === "true",
+    );
+
+    const lifecycle = new LifecycleModule();
+    const factory = vi.fn<SpatialScopeModuleFactory>(() => lifecycle);
+    const view = render(
+      <MemoryRouter>
+        <SpatialScopeProvider
+          catalog={catalog()}
+          navigation={new CountingNavigation()}
+          moduleFactory={factory}
+        >
+          <div data-testid="default-gated-child">default gated</div>
+        </SpatialScopeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("default-gated-child")).toBeInTheDocument();
+    expect(factory).toHaveBeenCalledTimes(SPATIAL_SCOPE_ENABLED ? 1 : 0);
+    expect(lifecycle.calls).toEqual(SPATIAL_SCOPE_ENABLED ? ["start"] : []);
+
+    view.unmount();
+    expect(lifecycle.calls).toEqual(
+      SPATIAL_SCOPE_ENABLED ? ["start", "stop"] : [],
+    );
+  });
+
   it("is inert when explicitly disabled regardless of the build artifact", () => {
     const factory = vi.fn<SpatialScopeModuleFactory>();
     render(
