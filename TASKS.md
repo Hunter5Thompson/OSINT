@@ -1651,7 +1651,7 @@ Observation-Producer.
 # ══════════════════════════════════════════
 # TASK-119: Operational Trust Chain Hardening
 # ══════════════════════════════════════════
-# Status: IN PROGRESS — S01 COMMITTED, PR/MERGE PENDING | Priorität: P0 → P2
+# Status: IN PROGRESS — S01-S02 DONE, S03 NEXT | Priorität: P0 → P2
 #
 # Design-Spec:
 #   docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md
@@ -1666,8 +1666,8 @@ Observation-Producer.
 #   SPEC → RED → GREEN → REFACTOR → VERIFY → RECORD
 #
 # Slices:
-#   S01 [P0] [COMMITTED ⏳ MERGE] Kanonischer Munin Runtime Model Contract
-#   S02 [P0] Hermetischer Quality-Loop
+#   S01 [P0] [DONE] Kanonischer Munin Runtime Model Contract
+#   S02 [P0] [DONE] Hermetischer Quality-Loop
 #   S03 [P0] Local Exposure Floor
 #   S04 [P1] Locked Dependency Contract
 #   S05 [P1] Runtime Provenance, Deploy und Drift
@@ -1687,3 +1687,108 @@ Observation-Producer.
 #   - keine Graph-Reparatur oder Datenlöschung in TASK-119
 #   - kein ReAct-Controller und keine Budgeterhöhung vor S10-Messung
 #   - bestehender Quality-Loop bleibt einziger Nightly-Eigentümer
+
+
+# ══════════════════════════════════════════
+# TASK-120: Versionierter Spatial-Attribution-Release-Vertrag
+# ══════════════════════════════════════════
+# Status: OFFEN | Priorität: P1
+# Owner: Spatial Slice 00B (Data Ingestion) + Backend Catalog
+# Blocked by: explizite Freigabe für Spec-/Katalogschema-Migration
+# Blocks: revisionsgenaue Attribution bei zukünftigen Catalog-Rollovers
+#
+# Kontext:
+#   Plan 02 projiziert releases für manifestgebundene Drittquellen inzwischen aus
+#   `ManifestScope.provenance.source_release`. Für Attribution-only-Sources enthält
+#   `attribution.json` jedoch kein `release`: `mapshaper` und
+#   `odin-country-crosswalk` übernehmen deshalb auch für die vorherige Revision blind
+#   den Wert aus dem aktuellen globalen `source-lock.json`. Ein reiner Release-Bump ist
+#   strukturell unsichtbar; nur license_id-/Attribution-Text-Abweichungen sind erkennbar.
+#
+# Ziel:
+#   Jede bediente Katalogrevision besitzt für jede Attribution-Source einen eigenen,
+#   validierten Release-Wert. Historische Revisionen leihen niemals den Release der
+#   aktiven Revision aus.
+#
+# Vertragsentscheidung:
+#   - bevorzugt `release` als Pflichtfeld in jeder Source von `attribution.json`, oder
+#   - alternativ ein vollständiger, revisionsgebundener Source-Lock je Katalogrevision;
+#   - Referenzartefakt 00B nicht still verändern: Migration und neue Referenzrevision
+#     müssen explizit reviewt und über `spatial_catalog verify` veröffentlicht werden.
+#
+# Akzeptanzkriterien / RED-Gates:
+#   1. Active+Previous mit reinem Release-Bump liefern im Bootstrap je Revision den
+#      korrekten Wert, einschließlich `mapshaper` und `odin-country-crosswalk`.
+#   2. Die aktive Revision wird vollständig gegen den aktuellen Source-Lock geprüft;
+#      die vorherige Revision bleibt von späteren Lock-Änderungen unbeeinflusst.
+#   3. Fehlende, zusätzliche, doppelte, übergroße oder nicht kanonische Release-Daten
+#      führen fail-closed zu `503 CATALOG_UNAVAILABLE`, ohne andere Routen zu stören.
+#   4. License-ID, Attribution-Text und Release werden als ein revisionsgebundener
+#      Datensatz validiert; es entsteht keine gemischte Projektion aus zwei Revisionen.
+#   5. Compiler, Verify-Gate, Backend-Loader und Bootstrap-Tests teilen dieselben
+#      Contract-Fixtures. Falls Packaging betroffen ist, wird ein gebautes Artefakt
+#      statt ausschließlich Source-Tree-Imports getestet.
+
+
+# ══════════════════════════════════════════
+# TASK-121: Gebundene HttpSpatialCatalog-Metadaten-Caches
+# ══════════════════════════════════════════
+# Status: OFFEN | Priorität: P1
+# Owner: Spatial Slice 05 (Admin1/Admin2) + Frontend Catalog Adapter
+# Blocked by: nichts
+# Blocks: belastbare Aktivierung großer Admin1-/Admin2-Kataloge
+#
+# Kontext:
+#   `BoundaryAssetStore` ist bereits gebunden und lease-sicher. Die Maps `scopes` und
+#   `negativeScopes` im `HttpSpatialCatalog` besitzen dagegen noch kein Größenbudget;
+#   außerdem bleibt der initiale Alias `active\0<scope>` nach Revision-Pinning stale.
+#   Country-Level ist praktisch klein, Admin1/Admin2 vergrößert den Zustandsraum.
+#
+# Ziel:
+#   Metadaten- und Negative-Caches bleiben unter beliebigen gültigen Resolve-/404-
+#   Sequenzen deterministisch begrenzt, ohne ETag-Revalidation, 30-s-Negative-Cache,
+#   Revisions-Pinning oder Abort-/Race-Semantik zu schwächen.
+#
+# Akzeptanzkriterien / RED-Gates:
+#   1. Ein injizierter Clock und viele eindeutige Scope-/404-Keys beweisen ein festes,
+#      dokumentiertes Entry-/Byte-Budget und deterministische Eviction.
+#   2. Abgelaufene Negativeinträge werden aktiv bereinigt; 404 bleibt exakt 30 Sekunden
+#      gecacht, während 409/5xx/Korruptionsfehler nie negativ gecacht werden.
+#   3. Nach erfolgreichem Pinning existiert kein stale `active\0<scope>`-Alias mehr.
+#   4. Committed/current-revision Reads, laufende Requests und 304-Revalidation werden
+#      durch Eviction nicht beschädigt; Superseded/Abort bleibt still und leak-frei.
+#   5. `dispose()` leert alle Metadatenzustände deterministisch. Spatial-Suite,
+#      TypeScript, ESLint und Produktionsbuild bleiben grün.
+
+
+# ══════════════════════════════════════════
+# TASK-122: Expliziter Spatial-409-Rehydrate-Vertrag
+# ══════════════════════════════════════════
+# Status: OFFEN | Priorität: P1
+# Owner: Spatial Plan 01 Contracts/Controller + Plan 02 HTTP Adapter
+# Blocked by: Plan-01-Port-/Controller-Vertragsentscheidung
+# Blocks: Recovery ohne Page-Reload nach Auslaufen einer gepinnten Katalogrevision
+#
+# Kontext:
+#   Das Backend liefert bei `409 CATALOG_REVISION_UNAVAILABLE` die aktive Revision
+#   strukturiert. Der aktuelle Plan-01-Port besitzt jedoch keinen expliziten Rehydrate-
+#   Command. Stilles Umpinnen oder automatisches Wiederholen bleibt verboten; heute ist
+#   deshalb ein Page-Reload der einzige Weg aus einer ausgelaufenen Revision.
+#
+# Ziel:
+#   Die UI bietet eine sichtbare, explizite Rehydrate-Entscheidung. Bis zur Bestätigung
+#   bleiben committed Scope, Query-Token und URL unverändert. Die aktive Revision wird
+#   typisiert transportiert und niemals aus freiem Meldungstext geparst.
+#
+# Akzeptanzkriterien / RED-Gates:
+#   1. Der gemeinsame Plan-01-Port transportiert `active_catalog_revision` strukturiert;
+#      Memory- und HTTP-Adapter erfüllen denselben Vertrag.
+#   2. Ein 409 committet keinen neuen Scope, ändert URL/History nicht und löst keinen
+#      stillen Retry aus; die UI zeigt genau eine explizite Rehydrate-Aktion.
+#   3. Erst bestätigtes Rehydrate löst gegen die aktive Revision auf. 404, zweiter 409,
+#      Network/5xx und Superseded Intent bleiben sichtbar beziehungsweise race-sicher.
+#   4. Foreground-Generation und AbortSignal werden vor und nach jedem Await geprüft;
+#      eine ältere Rehydrate-Antwort kann keinen neueren Intent überschreiben.
+#   5. Controller-, Navigation-, React- und Router-Tests beweisen Back/Forward-Semantik
+#      sowie den unveränderten Fail-closed-Grundsatz: kein globaler Datenfallback für
+#      einen nicht-globalen Scope.
