@@ -83,16 +83,16 @@ with focused tests. Modify `WorldviewPage`, `EntityClickHandler`, Spotlight file
 
 ## Work order 4 — Canonical almanac adapter and canary evidence
 
-- [ ] **RED:** Backend tests resolve `scope_key + catalog_revision` before existing
+- [x] **RED:** Backend tests resolve `scope_key + catalog_revision` before existing
   almanac lookup, reject invalid/unserved keys, support reviewed legacy aliases, and
   never alter scope on missing dossier. Frontend tests ignore stale almanac responses.
-- [ ] **GREEN:** Add `/api/almanac/country?scope_key=&catalog_revision=` as a thin
+- [x] **GREEN:** Add `/api/almanac/country?scope_key=&catalog_revision=` as a thin
   catalog-to-`CountryAlmanacStore` adapter. Change Inspector/Header to request only
   from the committed query token.
-- [ ] **REFACTOR:** Almanac supplies display/capital data but never identity.
-- [ ] **VERIFY:** Run focused backend almanac tests; frontend full quality commands;
+- [x] **REFACTOR:** Almanac supplies display/capital data but never identity.
+- [x] **VERIFY:** Run focused backend almanac tests; frontend full quality commands;
   then capture a flag-on canary run with primitive/listener/cache counters.
-- [ ] **COMMIT:** `feat(worldview): load almanac by canonical scope`
+- [x] **COMMIT:** `feat(worldview): load almanac by canonical scope`
 
 ## Work order 5 — Cartographic provenance
 

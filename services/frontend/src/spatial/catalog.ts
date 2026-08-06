@@ -759,6 +759,16 @@ export interface BoundaryAssetStoreOptions {
   readonly maxDecodedBytes?: number;
 }
 
+export interface BoundaryAssetStoreDiagnostics {
+  readonly activeLeases: number;
+  readonly decodedBytes: number;
+  readonly decodedEntries: number;
+  readonly disposed: boolean;
+  readonly inflightLoads: number;
+  readonly maxDecodedBytes: number;
+  readonly maxEntries: number;
+}
+
 interface DecodedAsset {
   readonly asset: BoundaryAsset;
   readonly estimatedHeapBytes: number;
@@ -966,6 +976,22 @@ export class BoundaryAssetStore {
     for (const load of this.inflight.values()) load.controller.abort();
     this.inflight.clear();
     this.cache.clear();
+  }
+
+  diagnostics(): BoundaryAssetStoreDiagnostics {
+    const entries = [...this.cache.values()];
+    return freezeSpatialValue({
+      activeLeases: entries.reduce((total, entry) => total + entry.leases, 0),
+      decodedBytes: entries.reduce(
+        (total, entry) => total + entry.estimatedHeapBytes,
+        0,
+      ),
+      decodedEntries: entries.length,
+      disposed: this.disposed,
+      inflightLoads: this.inflight.size,
+      maxDecodedBytes: this.maxDecodedBytes,
+      maxEntries: this.maxEntries,
+    });
   }
 
   private async acquireWithPolicy(

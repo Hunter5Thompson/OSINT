@@ -247,6 +247,12 @@ def _problem_response(problem: SpatialCatalogProblem) -> Response:
     )
 
 
+def spatial_problem_response(problem: SpatialCatalogProblem) -> Response:
+    """Project a catalog problem for another Spatial-backed read adapter."""
+
+    return _problem_response(problem)
+
+
 def _loader(request: Request) -> SpatialCatalogLoader | None:
     candidate = getattr(request.app.state, "spatial_catalog", None)
     return candidate if isinstance(candidate, SpatialCatalogLoader) else None
