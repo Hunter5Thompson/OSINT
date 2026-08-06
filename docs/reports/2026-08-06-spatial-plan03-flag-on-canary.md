@@ -17,8 +17,8 @@ VITE_SPATIAL_SCOPE_ENABLED=true npm test
 VITE_SPATIAL_SCOPE_ENABLED=true npm run build
 ```
 
-Observed result: the full flag-off suite passed with 500/500 tests, the full
-flag-on suite passed with 500/500 tests, and the flag-on production artifact
+Observed result: the full flag-off suite passed with 505/505 tests, the full
+flag-on suite passed with 505/505 tests, and the flag-on production artifact
 built successfully. The full suites include the lifecycle and cache fixtures
 whose counters are recorded below.
 

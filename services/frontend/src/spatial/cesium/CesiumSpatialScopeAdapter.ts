@@ -121,7 +121,10 @@ export class ViewerSpatialCesiumRuntime implements SpatialCesiumRuntime {
 
   unmount(container: SpatialPrimitiveContainer): void {
     const owned = this.ownedContainer(container);
-    if (!this.containers.delete(owned)) return;
+    if (!this.containers.delete(owned)) {
+      owned.destroy();
+      return;
+    }
     this.root.remove(owned.collection);
     owned.markUnmounted();
   }
