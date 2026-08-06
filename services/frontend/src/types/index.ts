@@ -1,3 +1,5 @@
+import type { SpatialQueryRef } from "../spatial/contracts";
+
 // ── Data Models (matching backend Pydantic models) ──
 
 export interface Aircraft {
@@ -132,6 +134,21 @@ export interface WindowEventSample {
 
 export type WindowSample = WindowEventSample | WindowTrackSample;
 
+export interface SpatialApplicationV1 {
+  readonly schema_version: 1;
+  readonly requested_scope_key: string | null;
+  readonly catalog_revision: string | null;
+  readonly derivation_revision: string | null;
+  readonly boundary_policy: string | null;
+  readonly relation: "occurs-in" | "intersects";
+  readonly mode: "global" | "semantic_key" | "point_in_boundary" | "bbox_approximate";
+  readonly completeness: "complete" | "partial";
+  readonly included_count: number;
+  readonly excluded_unlocated_count: number;
+  readonly excluded_conflict_count: number;
+  readonly excluded_stale_revision_count: number;
+}
+
 export interface WindowResponse {
   domain: "events" | "movements";
   tier: "coarse" | "fine";
@@ -141,6 +158,7 @@ export interface WindowResponse {
   samples: WindowSample[];
   total_count: number;
   truncated: boolean;
+  spatial_application: SpatialApplicationV1;
 }
 
 export interface TimeWindowQuery {
@@ -149,8 +167,17 @@ export interface TimeWindowQuery {
   domain?: "events" | "movements";
   tier?: "coarse" | "fine";
   movementKind?: "mil_aircraft" | "civil_aircraft" | "ship" | "satellite";
-  bbox?: [number, number, number, number];
+  spatialScope?: SpatialQueryRef;
+  bbox?: readonly [number, number, number, number];
   limit?: number;
+}
+
+export interface TimeHistogramQuery {
+  tStart: string;
+  tEnd: string;
+  buckets?: number;
+  spatialScope?: SpatialQueryRef;
+  bbox?: readonly [number, number, number, number];
 }
 
 export interface IntelAnalysis {
@@ -403,6 +430,7 @@ export interface HistogramResponse {
   total_count: number;
   geo_located_count: number;
   geo_truncated: boolean;
+  spatial_application: SpatialApplicationV1;
 }
 export interface TimelineEventDetail {
   id: string;

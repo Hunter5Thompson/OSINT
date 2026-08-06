@@ -24,6 +24,8 @@ import type {
   HistogramResponse,
   ReportUpdateRequest,
   Satellite,
+  SpatialApplicationV1,
+  TimeHistogramQuery,
   TimeWindowQuery,
   TimelineEventDetail,
   Vessel,
@@ -479,17 +481,121 @@ export async function silenceIncident(id: string): Promise<Incident> {
   return (await resp.json()) as Incident;
 }
 
+interface TimelineSpatialQuery {
+  readonly spatialScope?: SpatialQueryRef;
+  readonly bbox?: readonly [number, number, number, number];
+}
+
+const SPATIAL_APPLICATION_FIELDS = new Set<string>([
+  "schema_version",
+  "requested_scope_key",
+  "catalog_revision",
+  "derivation_revision",
+  "boundary_policy",
+  "relation",
+  "mode",
+  "completeness",
+  "included_count",
+  "excluded_unlocated_count",
+  "excluded_conflict_count",
+  "excluded_stale_revision_count",
+]);
+const SPATIAL_FILTER_MODES = new Set<SpatialApplicationV1["mode"]>([
+  "global",
+  "semantic_key",
+  "point_in_boundary",
+  "bbox_approximate",
+]);
+const SPATIAL_COMPLETENESS = new Set<SpatialApplicationV1["completeness"]>([
+  "complete",
+  "partial",
+]);
+const SPATIAL_RELATIONS = new Set<SpatialApplicationV1["relation"]>([
+  "occurs-in",
+  "intersects",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function invalidSpatialApplication(): never {
+  throw new Error("invalid timeline spatial_application contract");
+}
+
+function decodeSpatialApplication(value: unknown): SpatialApplicationV1 {
+  if (!isRecord(value)) invalidSpatialApplication();
+  const keys = Object.keys(value);
+  if (
+    keys.length !== SPATIAL_APPLICATION_FIELDS.size
+    || keys.some((key) => !SPATIAL_APPLICATION_FIELDS.has(key))
+    || value.schema_version !== 1
+    || !isNullableString(value.requested_scope_key)
+    || !isNullableString(value.catalog_revision)
+    || !isNullableString(value.derivation_revision)
+    || !isNullableString(value.boundary_policy)
+    || !SPATIAL_RELATIONS.has(value.relation as SpatialApplicationV1["relation"])
+    || !SPATIAL_FILTER_MODES.has(value.mode as SpatialApplicationV1["mode"])
+    || !SPATIAL_COMPLETENESS.has(value.completeness as SpatialApplicationV1["completeness"])
+    || !isNonNegativeInteger(value.included_count)
+    || !isNonNegativeInteger(value.excluded_unlocated_count)
+    || !isNonNegativeInteger(value.excluded_conflict_count)
+    || !isNonNegativeInteger(value.excluded_stale_revision_count)
+  ) {
+    invalidSpatialApplication();
+  }
+  return value as unknown as SpatialApplicationV1;
+}
+
+function assertTimelineSpatialMode(query: TimelineSpatialQuery): void {
+  if (query.spatialScope !== undefined && query.bbox !== undefined) {
+    throw new Error("timeline spatialScope and bbox are mutually exclusive");
+  }
+}
+
+function appendSpatialScope(
+  parameters: URLSearchParams,
+  spatialScope: SpatialQueryRef | undefined,
+): void {
+  if (spatialScope === undefined) return;
+  parameters.set("scope_key", spatialScope.scopeKey);
+  parameters.set("catalog_revision", spatialScope.catalogRevision);
+}
+
+function decodeWindowResponse(value: unknown): WindowResponse {
+  if (!isRecord(value)) invalidSpatialApplication();
+  decodeSpatialApplication(value.spatial_application);
+  return value as unknown as WindowResponse;
+}
+
+function decodeHistogramResponse(value: unknown): HistogramResponse {
+  if (!isRecord(value)) invalidSpatialApplication();
+  decodeSpatialApplication(value.spatial_application);
+  return value as unknown as HistogramResponse;
+}
+
 export async function getTimeWindow(
   q: TimeWindowQuery,
   signal?: AbortSignal,
 ): Promise<WindowResponse> {
+  assertTimelineSpatialMode(q);
   const p = new URLSearchParams({ t_start: q.tStart, t_end: q.tEnd });
   if (q.domain) p.set("domain", q.domain);
   if (q.tier) p.set("tier", q.tier);
   if (q.movementKind) p.set("movement_kind", q.movementKind);
+  appendSpatialScope(p, q.spatialScope);
   if (q.bbox) p.set("bbox", q.bbox.join(","));
   if (q.limit) p.set("limit", String(q.limit));
-  return fetchJSON<WindowResponse>(`/timeline/window?${p.toString()}`, { signal });
+  const response = await fetchJSON<unknown>(`/timeline/window?${p.toString()}`, { signal });
+  return decodeWindowResponse(response);
 }
 
 export async function promoteIncident(id: string): Promise<Incident> {
@@ -502,13 +608,16 @@ export async function promoteIncident(id: string): Promise<Incident> {
 }
 
 export async function getTimeHistogram(
-  q: { tStart: string; tEnd: string; buckets?: number; bbox?: [number, number, number, number] },
+  q: TimeHistogramQuery,
   signal?: AbortSignal,
 ): Promise<HistogramResponse> {
+  assertTimelineSpatialMode(q);
   const p = new URLSearchParams({ t_start: q.tStart, t_end: q.tEnd, domain: "events" });
   if (q.buckets) p.set("buckets", String(q.buckets));
+  appendSpatialScope(p, q.spatialScope);
   if (q.bbox) p.set("bbox", q.bbox.join(","));
-  return fetchJSON<HistogramResponse>(`/timeline/histogram?${p.toString()}`, { signal });
+  const response = await fetchJSON<unknown>(`/timeline/histogram?${p.toString()}`, { signal });
+  return decodeHistogramResponse(response);
 }
 
 export async function getEventDetail(
