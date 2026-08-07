@@ -23,6 +23,7 @@ import {
 } from "./contracts";
 import { mapSpatialCatalogProblem } from "./catalog";
 import { ScopeNavigationError } from "./navigation";
+import { BoundedPrefetchScheduler } from "./prefetch";
 
 export interface SpatialScopePresentationPort {
   present(
@@ -123,7 +124,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
   private readonly createNavigationId: () => string;
   private readonly listeners = new Set<() => void>();
   private readonly sharedResolves = new Map<string, SharedResolve>();
-  private readonly prefetchControllers = new Set<AbortController>();
+  private readonly prefetchScheduler = new BoundedPrefetchScheduler({ maxConcurrency: 2 });
   private readonly pendingNavigationIds = new Set<string>();
   private snapshot: SpatialScopeSnapshot = HYDRATING_SPATIAL_SCOPE_SNAPSHOT;
   private foreground: ForegroundIntent | null = null;
@@ -181,8 +182,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
     }
     this.presentationController?.abort();
     this.presentationController = null;
-    for (const controller of this.prefetchControllers) controller.abort();
-    this.prefetchControllers.clear();
+    this.prefetchScheduler.cancelAll();
     for (const load of this.sharedResolves.values()) load.controller.abort();
     this.sharedResolves.clear();
     this.pendingNavigationIds.clear();
@@ -285,21 +285,16 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
         }),
       };
     }
-    const controller = new AbortController();
-    const detachCallerSignal = this.forwardAbort(callerSignal, controller);
-    this.prefetchControllers.add(controller);
     try {
-      await this.acquireResolved(canonicalTarget, revision, controller.signal);
-      if (controller.signal.aborted) throw abortError();
-      await this.catalog.prefetch(canonicalTarget, revision, priority, controller.signal);
-      if (controller.signal.aborted) throw abortError();
+      const scheduled = await this.prefetchScheduler.schedule(async (signal) => {
+        await this.catalog.prefetch(canonicalTarget, revision, priority, signal);
+        if (signal.aborted) throw abortError();
+      }, callerSignal);
+      if (scheduled.outcome === "cancelled") return { outcome: "cancelled" };
       return { outcome: "prefetched", target: canonicalTarget };
     } catch (error: unknown) {
-      if (controller.signal.aborted || isAbortError(error)) return { outcome: "cancelled" };
+      if (isAbortError(error)) return { outcome: "cancelled" };
       return { outcome: "failed", problem: problemFromUnknown(error) };
-    } finally {
-      detachCallerSignal();
-      this.prefetchControllers.delete(controller);
     }
   }
 

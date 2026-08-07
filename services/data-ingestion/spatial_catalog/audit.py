@@ -466,8 +466,6 @@ def _verify_descriptor(
     emitted: EmittedAsset,
 ) -> None:
     actual = emitted.descriptor
-    if type(expected) is not type(actual):
-        raise CatalogVerificationError(f"DESCRIPTOR_TYPE_MISMATCH: {expected.asset_id}")
     expected_counts = (
         expected.byte_length,
         expected.vertex_count,
@@ -478,7 +476,11 @@ def _verify_descriptor(
         actual.vertex_count,
         getattr(actual, "feature_count", None),
     )
-    if expected_counts != actual_counts or expected.asset_id != emitted.asset_id:
+    if (
+        expected_counts != actual_counts
+        or expected.asset_id != emitted.asset_id
+        or expected.media_type != emitted.media_type
+    ):
         raise CatalogVerificationError(f"DESCRIPTOR_COUNT_MISMATCH: {expected.asset_id}")
 
 

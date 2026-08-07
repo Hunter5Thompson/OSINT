@@ -4,6 +4,7 @@ import type { ResolvedPresentationInput } from "../contracts";
 import {
   createCesiumSpatialScopeAdapter,
   type BoundaryAssetProvider,
+  type CesiumSpatialScopeDiagnostics,
 } from "./CesiumSpatialScopeAdapter";
 
 export interface AttachedSpatialPresenter {
@@ -13,6 +14,14 @@ export interface AttachedSpatialPresenter {
     signal: AbortSignal,
   ): Promise<void>;
   dispose(): void;
+  diagnostics?(): CesiumSpatialScopeDiagnostics;
+}
+
+export interface CesiumSpatialPresentationBridgeDiagnostics {
+  readonly attached: boolean;
+  readonly disposed: boolean;
+  readonly presenter: CesiumSpatialScopeDiagnostics | null;
+  readonly waitingPresentations: number;
 }
 
 interface WaitingPresentation {
@@ -92,6 +101,15 @@ export class CesiumSpatialPresentationBridge {
       this.finishWaiter(waiter);
       waiter.reject(abortError());
     }
+  }
+
+  diagnostics(): CesiumSpatialPresentationBridgeDiagnostics {
+    return Object.freeze({
+      attached: this.viewer !== null && this.presenter !== null,
+      disposed: this.disposed,
+      presenter: this.presenter?.diagnostics?.() ?? null,
+      waitingPresentations: this.waiting.size,
+    });
   }
 
   private waitForPresenter(signal: AbortSignal): Promise<AttachedSpatialPresenter> {

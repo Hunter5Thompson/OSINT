@@ -148,6 +148,7 @@ class _Admin1Build:
     full_parent: BoundaryGeometry
     parent_render: EmittedAsset
     child_pack: EmittedAsset
+    child_render: Mapping[str, EmittedAsset]
     child_containment: Mapping[str, EmittedAsset]
     metrics: LodMetrics
     containment_metrics: LodMetrics
@@ -255,6 +256,8 @@ def compile_catalog(
         for built in admin1_builds.values():
             _add_asset(assets, built.parent_render)
             _add_asset(assets, built.child_pack)
+            for asset in built.child_render.values():
+                _add_asset(assets, asset)
             for asset in built.child_containment.values():
                 _add_asset(assets, asset)
 
@@ -286,14 +289,20 @@ def compile_catalog(
             asset_ids=tuple(assets),
             attribution_sources_hash=attribution_sources_sha256(attribution_records),
         )
+        admin1_feasibility_records = _admin1_containment_feasibility_records(
+            admin1_builds
+        )
         feasibility = build_feasibility_report(
             catalog_revision=manifest.catalog_revision,
-            containment_records=feasibility_records,
-            mandatory_scope_keys={
-                entry.scope_key
-                for entry in active_plan.values()
-                if entry.client_strict_containment_required
-            },
+            containment_records=feasibility_records + admin1_feasibility_records,
+            mandatory_scope_keys=(
+                {
+                    entry.scope_key
+                    for entry in active_plan.values()
+                    if entry.client_strict_containment_required
+                }
+                | {record.scope_key for record in admin1_feasibility_records}
+            ),
             raw_ring_counts=raw_ring_counts,
             world_child_packs=(WorldChildPackRecord(Lod.OVERVIEW, world_pack),),
             emitted_world_lods={Lod.OVERVIEW},
@@ -564,6 +573,13 @@ def _build_admin1(
             for feature in features
         ),
     )
+    child_render = {
+        feature.scope_key: emit_render_boundary(
+            output[feature.scope_key],
+            lod=Lod.REGIONAL,
+        )
+        for feature in features
+    }
     containment_policy = LOD_POLICIES["local"].with_limits(
         max_error_m=50,
         max_vertices=1_000_000,
@@ -604,6 +620,7 @@ def _build_admin1(
         full_parent=full_parent,
         parent_render=parent_render,
         child_pack=child_pack,
+        child_render=child_render,
         child_containment=child_containment,
         metrics=metrics,
         containment_metrics=containment_metrics,
@@ -740,6 +757,28 @@ def _build_required_containment(
     return assets, tuple(records), raw_ring_counts
 
 
+def _admin1_containment_feasibility_records(
+    admin1_builds: Mapping[str, _Admin1Build],
+) -> tuple[ContainmentFeasibilityRecord, ...]:
+    records: list[ContainmentFeasibilityRecord] = []
+    for built in admin1_builds.values():
+        for feature in built.full_features:
+            asset = built.child_containment[feature.scope_key]
+            descriptor = _containment_descriptor(asset)
+            records.append(
+                ContainmentFeasibilityRecord(
+                    scope_key=feature.scope_key,
+                    source_bytes=feature.source_bytes,
+                    normalized_bytes=len(canonical_json_bytes(feature.geometry.to_wire())),
+                    raw_ring_count=feature.raw_ring_count,
+                    raw_vertex_count=feature.raw_vertex_count,
+                    asset=asset,
+                    max_error_m=descriptor.max_error_m,
+                )
+            )
+    return tuple(sorted(records, key=lambda record: record.scope_key))
+
+
 def _build_catalog_manifest(
     *,
     source_lock: SourceLock,
@@ -866,6 +905,11 @@ def _build_catalog_manifest(
                         boundary_policy=catalog_plan.boundary_policy,
                     ),
                     presentation=ScopePresentation(
+                        outline_lods={
+                            Lod.REGIONAL: _geometry_descriptor(
+                                built.child_render[child.scope_key]
+                            )
+                        },
                         containment=_containment_descriptor(child_containment)
                     ),
                     provenance_ref=built.source.source_id,
@@ -1118,6 +1162,24 @@ def _lod_audit_bytes(
             )
         )
         for feature in built.full_features:
+            render_asset = built.child_render[feature.scope_key]
+            records.append(
+                {
+                    "asset_id": render_asset.asset_id,
+                    "scope_key": feature.scope_key,
+                    "representation": "outline",
+                    "lod": built.metrics.lod,
+                    "original_vertices": vertex_count(feature.geometry),
+                    "output_vertices": render_asset.counts.vertex_count,
+                    "max_error_m": built.metrics.max_error_m,
+                    "protected_feature_count": sum(
+                        len(polygon) for polygon in feature.geometry.polygons
+                    ),
+                    "removed_degenerate_ring_count": (
+                        built.metrics.removed_degenerate_ring_count
+                    ),
+                }
+            )
             asset = built.child_containment[feature.scope_key]
             descriptor = _containment_descriptor(asset)
             records.append(

@@ -269,6 +269,7 @@ function createStore(
   fetcher: typeof fetch,
   options: {
     readonly clock?: SpatialCatalogClock;
+    readonly maxDecodedBytes?: number;
     readonly maxEntries?: number;
     readonly sha256?: (bytes: Uint8Array) => Promise<string>;
     readonly random?: () => number;
@@ -277,6 +278,7 @@ function createStore(
   return new BoundaryAssetStore({
     fetch: fetcher,
     clock: options.clock,
+    maxDecodedBytes: options.maxDecodedBytes,
     maxEntries: options.maxEntries,
     random: options.random,
     sha256: options.sha256 ?? (async (bytes) => (
@@ -285,7 +287,328 @@ function createStore(
   });
 }
 
+class RecordingAssetStore extends BoundaryAssetStore {
+  readonly acquired: AssetDescriptor[] = [];
+  readonly prefetched: AssetDescriptor[] = [];
+
+  constructor() {
+    super({ fetch: vi.fn<typeof fetch>() });
+  }
+
+  override async acquire(descriptor: AssetDescriptor) {
+    this.acquired.push(descriptor);
+    const geometry = {
+      schemaVersion: 1 as const,
+      geometryType: "MultiPolygon" as const,
+      polygons: [[[[30, 50], [31, 50], [31, 51], [30, 50]]]] as const,
+    };
+    return {
+      asset: descriptor.mediaType.includes("boundary-pack")
+        ? {
+            schemaVersion: 1 as const,
+            parentScopeKey: parseScopeKeyCandidate("country:UKR"),
+            features: [{
+              kind: "scope" as const,
+              scopeKey: parseScopeKeyCandidate("admin1:iso3166-2:UA-14"),
+              label: "Donetsk",
+              geometry,
+            }],
+          }
+        : geometry,
+      release: () => undefined,
+    };
+  }
+
+  override async acquireForPrefetch(descriptor: AssetDescriptor) {
+    this.prefetched.push(descriptor);
+    return this.acquire(descriptor);
+  }
+
+  override async prefetch(descriptor: AssetDescriptor): Promise<void> {
+    this.prefetched.push(descriptor);
+  }
+}
+
 describe("HttpSpatialCatalog wire contract", () => {
+  it("renders a direct non-drillable Admin-1 bundle from its preferred outline", async () => {
+    const wire = scopeWire();
+    const world = (wire.path as unknown[])[0];
+    const country = (wire.path as unknown[])[1];
+    const admin1 = {
+      key: "admin1:iso3166-2:UA-14",
+      kind: "admin1",
+      label: "Donetsk Oblast",
+      short_label: "Donetsk",
+      parent_key: "country:UKR",
+      children_available: false,
+      presentation: "boundary",
+    };
+    wire.scope = admin1;
+    wire.path = [world, country, admin1];
+    wire.presentation = {
+      preferred_lod: null,
+      outline_lods: (wire.presentation as Record<string, unknown>).outline_lods,
+      children_lods: {},
+    };
+    const fetcher = vi.fn<typeof fetch>(async () => metadataResponse(wire));
+    const assets = new RecordingAssetStore();
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: assets });
+
+    const resolved = await catalog.resolve(
+      parseScopeKeyCandidate("admin1:iso3166-2:UA-14"),
+      REVISION,
+      new AbortController().signal,
+    );
+
+    expect(resolved.presentation).toMatchObject({
+      mode: "boundary",
+      preferredLod: "regional",
+      cameraExtent: { kind: "segments", south: 50, north: 51 },
+    });
+    expect(assets.acquired.map((descriptor) => descriptor.assetId)).toEqual([BOUNDARY_ID]);
+  });
+
+  it("prefetches only the preferred outline and child LOD", async () => {
+    const wire = scopeWire();
+    const presentation = wire.presentation as Record<string, Record<string, unknown>>;
+    presentation.outline_lods = {
+      ...(presentation.outline_lods as object),
+      overview: {
+        asset_id: "c".repeat(64),
+        media_type: boundaryDescriptor.mediaType,
+        byte_length: boundaryDescriptor.byteLength,
+        vertex_count: boundaryDescriptor.vertexCount,
+        role: "render",
+        lod: "overview",
+      },
+    };
+    presentation.children_lods = {
+      ...(presentation.children_lods as object),
+      local: {
+        asset_id: "d".repeat(64),
+        media_type: packDescriptor.mediaType,
+        byte_length: packDescriptor.byteLength,
+        vertex_count: packDescriptor.vertexCount,
+        feature_count: packDescriptor.featureCount,
+        role: "render",
+        lod: "local",
+      },
+    };
+    wire.containment = {
+      asset_id: "e".repeat(64),
+      media_type: boundaryDescriptor.mediaType,
+      byte_length: boundaryDescriptor.byteLength,
+      vertex_count: boundaryDescriptor.vertexCount,
+      role: "containment",
+      max_error_m: 0,
+    };
+    const fetcher = vi.fn<typeof fetch>(async () => metadataResponse(wire));
+    const assets = new RecordingAssetStore();
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: assets });
+
+    await catalog.prefetch(
+      parseScopeKeyCandidate("country:UKR"),
+      REVISION,
+      "hover",
+      new AbortController().signal,
+    );
+
+    expect(assets.prefetched.map((descriptor) => descriptor.assetId)).toEqual([
+      BOUNDARY_ID,
+      PACK_ID,
+    ]);
+    expect(assets.prefetched).toHaveLength(2);
+  });
+
+  it("shares an in-flight hover load with click while cancelling only hover", async () => {
+    let scopeRequests = 0;
+    let assetRequests = 0;
+    let releaseAsset: ((response: Response) => void) | undefined;
+    const pendingAsset = new Promise<Response>((resolve) => {
+      releaseAsset = resolve;
+    });
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      if (url.startsWith("/api/spatial/scope")) {
+        scopeRequests += 1;
+        return metadataResponse(scopeWire());
+      }
+      if (url === `/api/spatial/assets/${BOUNDARY_ID}`) {
+        assetRequests += 1;
+        return pendingAsset;
+      }
+      if (url === `/api/spatial/assets/${PACK_ID}`) return assetResponse(PACK_ID);
+      throw new Error(`unexpected URL: ${url}`);
+    });
+    const store = createStore(fetcher);
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: store });
+    const scopeKey = parseScopeKeyCandidate("country:UKR");
+    const hoverController = new AbortController();
+
+    const hover = catalog.prefetch(
+      scopeKey,
+      REVISION,
+      "hover",
+      hoverController.signal,
+    );
+    await vi.waitFor(() => expect(assetRequests).toBe(1));
+    const click = catalog.resolve(
+      scopeKey,
+      REVISION,
+      new AbortController().signal,
+    );
+    hoverController.abort();
+    releaseAsset?.(assetResponse(BOUNDARY_ID));
+
+    await expect(hover).rejects.toMatchObject({ name: "AbortError" });
+    await expect(click).resolves.toMatchObject({ scope: { key: scopeKey } });
+    expect(scopeRequests).toBe(1);
+    expect(assetRequests).toBe(1);
+    expect(store.diagnostics()).toMatchObject({
+      activeLeases: 0,
+      prefetchedEntries: 0,
+    });
+  });
+
+  it("bounds scope metadata with a 256-entry LRU and exposes high-water counters", async () => {
+    const clock = createClock();
+    const scopeKeys = ["country:POL", "country:DEU", "country:FRA"] as const;
+    const requestCounts = new Map<string, number>();
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(urlOf(input), "http://odin.test");
+      const scopeKey = url.searchParams.get("scope_key") ?? "";
+      requestCounts.set(scopeKey, (requestCounts.get(scopeKey) ?? 0) + 1);
+      const wire = scopeWire();
+      const world = (wire.path as unknown[])[0];
+      const country = {
+        key: scopeKey,
+        kind: "country",
+        label: scopeKey,
+        short_label: scopeKey,
+        parent_key: "world",
+        children_available: false,
+        presentation: "boundary",
+      };
+      wire.scope = country;
+      wire.path = [world, country];
+      wire.presentation = {
+        preferred_lod: null,
+        outline_lods: (wire.presentation as Record<string, unknown>).outline_lods,
+        children_lods: {},
+      };
+      return metadataResponse(wire, `"${scopeKey}"`);
+    });
+    const catalog = new HttpSpatialCatalog({
+      fetch: fetcher,
+      assetStore: new RecordingAssetStore(),
+      clock,
+      maxScopeEntries: 2,
+    });
+
+    for (const scopeKey of scopeKeys) {
+      await catalog.resolve(
+        parseScopeKeyCandidate(scopeKey),
+        REVISION,
+        new AbortController().signal,
+      );
+      clock.advance(1);
+    }
+
+    expect(catalog.diagnostics()).toMatchObject({
+      metadataEntries: 2,
+      metadataEvictions: 1,
+      metadataHighWater: 2,
+      maxScopeEntries: 2,
+    });
+    await catalog.resolve(
+      parseScopeKeyCandidate(scopeKeys[0]),
+      REVISION,
+      new AbortController().signal,
+    );
+    expect(requestCounts.get(scopeKeys[0])).toBe(2);
+
+    const defaultCatalog = new HttpSpatialCatalog({
+      fetch: fetcher,
+      assetStore: new RecordingAssetStore(),
+    });
+    expect(defaultCatalog.diagnostics().maxScopeEntries).toBe(256);
+  });
+
+  it("also evicts scope metadata against its aggregate byte budget", async () => {
+    const clock = createClock();
+    const requestCounts = new Map<string, number>();
+    const responseFor = (scopeKey: string) => {
+      const wire = scopeWire();
+      const world = (wire.path as unknown[])[0];
+      const country = {
+        key: scopeKey,
+        kind: "country",
+        label: scopeKey,
+        short_label: scopeKey,
+        parent_key: "world",
+        children_available: false,
+        presentation: "boundary",
+      };
+      wire.scope = country;
+      wire.path = [world, country];
+      wire.presentation = {
+        preferred_lod: null,
+        outline_lods: (wire.presentation as Record<string, unknown>).outline_lods,
+        children_lods: {},
+      };
+      return wire;
+    };
+    const firstKey = "country:POL";
+    const secondKey = "country:DEU";
+    const oneEntryBytes = new TextEncoder().encode(
+      JSON.stringify(responseFor(firstKey)),
+    ).byteLength;
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(urlOf(input), "http://odin.test");
+      const scopeKey = url.searchParams.get("scope_key") ?? "";
+      requestCounts.set(scopeKey, (requestCounts.get(scopeKey) ?? 0) + 1);
+      return metadataResponse(responseFor(scopeKey), `"${scopeKey}"`);
+    });
+    const catalog = new HttpSpatialCatalog({
+      fetch: fetcher,
+      assetStore: new RecordingAssetStore(),
+      clock,
+      maxScopeBytes: oneEntryBytes + 16,
+      maxScopeEntries: 3,
+    });
+
+    for (const scopeKey of [firstKey, secondKey]) {
+      await catalog.resolve(
+        parseScopeKeyCandidate(scopeKey),
+        REVISION,
+        new AbortController().signal,
+      );
+      clock.advance(1);
+    }
+
+    expect(catalog.diagnostics()).toMatchObject({
+      metadataEntries: 1,
+      metadataEvictions: 1,
+      maxScopeBytes: oneEntryBytes + 16,
+    });
+    expect(catalog.diagnostics().metadataBytes).toBeLessThanOrEqual(oneEntryBytes + 16);
+    await catalog.resolve(
+      parseScopeKeyCandidate(firstKey),
+      REVISION,
+      new AbortController().signal,
+    );
+    expect(requestCounts.get(firstKey)).toBe(2);
+
+    catalog.dispose();
+    expect(catalog.diagnostics()).toMatchObject({
+      disposed: true,
+      inflightMetadataLoads: 0,
+      metadataBytes: 0,
+      metadataEntries: 0,
+      negativeEntries: 0,
+    });
+  });
+
   it("selects reviewed provenance for the exact committed catalog revision", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => metadataResponse(catalogWire()));
     const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: createStore(fetcher) });
@@ -354,7 +677,8 @@ describe("HttpSpatialCatalog wire contract", () => {
     )).rejects.toBeInstanceOf(SpatialCatalogError);
   });
 
-  it("strictly decodes snake_case, pins the revision, and reuses a 304", async () => {
+  it("pins the revision, adopts a fresh cached resolve, then revalidates at 60 seconds", async () => {
+    const clock = createClock();
     let scopeRequests = 0;
     const fetcher = vi.fn<typeof fetch>(async (input, init) => {
       const url = urlOf(input);
@@ -369,14 +693,23 @@ describe("HttpSpatialCatalog wire contract", () => {
       if (url === `/api/spatial/assets/${BOUNDARY_ID}`) return assetResponse(BOUNDARY_ID);
       throw new Error(`unexpected URL: ${url}`);
     });
-    const store = createStore(fetcher);
-    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: store });
+    const store = createStore(fetcher, { clock });
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: store, clock });
     const scopeKey = parseScopeKeyCandidate("country:UKR");
 
     const active = await catalog.resolve(scopeKey, null, new AbortController().signal);
     const cached = await catalog.resolve(scopeKey, null, new AbortController().signal);
+    expect(scopeRequests).toBe(1);
+    expect(catalog.diagnostics().metadataEntries).toBe(1);
+    clock.advance(60_001);
+    const revalidated = await catalog.resolve(
+      scopeKey,
+      REVISION,
+      new AbortController().signal,
+    );
 
     expect(active).toBe(cached);
+    expect(active).toBe(revalidated);
     expect(active.scope).toEqual({
       key: scopeKey,
       kind: "country",
@@ -491,7 +824,7 @@ describe("HttpSpatialCatalog wire contract", () => {
     const scopeRequests = fetcher.mock.calls
       .map((call) => urlOf(call[0]))
       .filter((url) => url.startsWith("/api/spatial/scope"));
-    expect(scopeRequests).toHaveLength(2);
+    expect(scopeRequests).toHaveLength(1);
     expect(scopeRequests.every(
       (url) => url.includes(`catalog_revision=${REVISION}`),
     )).toBe(true);
@@ -521,6 +854,39 @@ describe("HttpSpatialCatalog wire contract", () => {
     await expect(catalog.resolve(missing, REVISION, new AbortController().signal)).rejects
       .toMatchObject({ code: "UNKNOWN_SCOPE" });
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("prunes expired negative entries when another scope is requested", async () => {
+    const clock = createClock();
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      if (url.includes("scope_key=country%3AZZZ")) {
+        return problemResponse(404, "UNKNOWN_SCOPE", "country:ZZZ");
+      }
+      if (url.startsWith("/api/spatial/scope")) return metadataResponse(scopeWire());
+      if (url === `/api/spatial/assets/${BOUNDARY_ID}`) return assetResponse(BOUNDARY_ID);
+      throw new Error(`unexpected URL: ${url}`);
+    });
+    const catalog = new HttpSpatialCatalog({
+      fetch: fetcher,
+      assetStore: createStore(fetcher, { clock }),
+      clock,
+    });
+
+    await expect(catalog.resolve(
+      parseScopeKeyCandidate("country:ZZZ"),
+      REVISION,
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: "UNKNOWN_SCOPE" });
+    expect(catalog.diagnostics().negativeEntries).toBe(1);
+
+    clock.advance(30_001);
+    await catalog.resolve(
+      parseScopeKeyCandidate("country:UKR"),
+      REVISION,
+      new AbortController().signal,
+    );
+    expect(catalog.diagnostics().negativeEntries).toBe(0);
   });
 
   it("performs one jittered current-signal retry for network/5xx", async () => {
@@ -572,6 +938,16 @@ describe("HttpSpatialCatalog wire contract", () => {
 });
 
 describe("BoundaryAssetStore", () => {
+  it("uses the exact Plan-05 decoded-cache budgets by default", () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const store = createStore(fetcher);
+
+    expect(store.diagnostics()).toMatchObject({
+      maxDecodedBytes: 64 * 1024 * 1024,
+      maxEntries: 8,
+    });
+  });
+
   it("reports bounded decoded-cache counters for canary evidence", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const id = urlOf(input).split("/").at(-1) ?? "";
@@ -584,26 +960,62 @@ describe("BoundaryAssetStore", () => {
     const second = await store.acquire(packDescriptor, new AbortController().signal);
     second.release();
 
-    expect(store.diagnostics()).toEqual({
+    expect(store.diagnostics()).toMatchObject({
       activeLeases: 0,
       decodedBytes: 1_728,
       decodedEntries: 1,
       disposed: false,
+      evictions: 1,
+      highWaterDecodedBytes: 1_728,
+      highWaterDecodedEntries: 1,
       inflightLoads: 0,
-      maxDecodedBytes: 32 * 1024 * 1024,
+      maxDecodedBytes: 64 * 1024 * 1024,
       maxEntries: 1,
+      prefetchedEntries: 0,
     });
 
     store.dispose();
-    expect(store.diagnostics()).toEqual({
+    expect(store.diagnostics()).toMatchObject({
       activeLeases: 0,
       decodedBytes: 0,
       decodedEntries: 0,
       disposed: true,
       inflightLoads: 0,
-      maxDecodedBytes: 32 * 1024 * 1024,
+      maxDecodedBytes: 64 * 1024 * 1024,
       maxEntries: 1,
+      prefetchedEntries: 0,
     });
+  });
+
+  it("evicts a prefetched entry before an older foreground entry", async () => {
+    const clock = createClock();
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const id = urlOf(input).split("/").at(-1) ?? "";
+      return assetResponse(id);
+    });
+    const store = createStore(fetcher, { clock, maxEntries: 1 });
+
+    const foreground = await store.acquire(
+      boundaryDescriptor,
+      new AbortController().signal,
+    );
+    foreground.release();
+    clock.advance(10);
+    await store.prefetch(packDescriptor, new AbortController().signal);
+
+    const foregroundAgain = await store.acquire(
+      boundaryDescriptor,
+      new AbortController().signal,
+    );
+    foregroundAgain.release();
+    const prefetchedAgain = await store.acquire(
+      packDescriptor,
+      new AbortController().signal,
+    );
+    prefetchedAgain.release();
+
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(store.diagnostics()).toMatchObject({ evictions: 2 });
   });
 
   it("validates bytes, hash, schema and descriptor counts before caching", async () => {

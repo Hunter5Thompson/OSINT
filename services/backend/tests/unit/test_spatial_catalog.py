@@ -427,8 +427,18 @@ async def test_loader_accepts_the_reviewed_reference_catalog() -> None:
     state = await loader.load()
 
     assert isinstance(state, CatalogReadyState)
-    assert state.active_catalog_revision == "spatial-v1-fe9828dcda05"
+    assert state.active_catalog_revision == "spatial-v1-e76a16bff799"
     assert loader.get_scope(state.active_catalog_revision, "country:UKR").scope.label == "Ukraine"
+    admin1 = loader.get_scope(
+        state.active_catalog_revision,
+        "admin1:iso3166-2:UA-14",
+    )
+    assert admin1.scope.label == "Donetsk Oblast"
+    assert admin1.scope.presentation == "boundary"
+    assert admin1.presentation.preferred_lod is None
+    assert admin1.presentation.outline_lods["regional"].asset_id == (
+        "a7c85e0208cf628a320a2f4642e3589168e2da34a573f7d2daaebed220017123"
+    )
 
 
 @pytest.mark.asyncio
