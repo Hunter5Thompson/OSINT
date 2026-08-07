@@ -25,18 +25,18 @@ catalog's crosswalk and containment artifacts—do not create a second geo model
 
 ## Work order 1 — Pure deterministic normalizer
 
-- [ ] **RED:** Test paired code/system and coordinate validation, zero values, real
+- [x] **RED:** Test paired code/system and coordinate validation, zero values, real
   `(0,0)`, GDELT GEC `UP→country:UKR`, ISO/M49/ISO-3166-2, raw preservation,
   country-only without invented point/Admin-1, coordinate-only interior assignment,
   boundary ambiguity, explicit source-code precedence, contradictory sources, unknown
   codes, and derivation/catalog/version separation.
-- [ ] **GREEN:** Implement strict `RawLocationIdentity` and output models plus a pure
+- [x] **GREEN:** Implement strict `RawLocationIdentity` and output models plus a pure
   normalizer over reviewed crosswalk/containment indexes. Return values, basis,
   precision, conflict candidates and revisions; never Cypher.
-- [ ] **REFACTOR:** Codesystem adapters are explicit allowlisted functions. Free names
+- [x] **REFACTOR:** Codesystem adapters are explicit allowlisted functions. Free names
   never become keys. Reuse normal-form fixtures from Slice 0.
-- [ ] **VERIFY:** `cd services/data-ingestion && uv run pytest tests/test_spatial_normalizer.py -v`
-- [ ] **COMMIT:** `feat(data-ingestion): normalize canonical location scopes`
+- [x] **VERIFY:** `cd services/data-ingestion && uv run pytest tests/test_spatial_normalizer.py -v`
+- [x] **COMMIT:** `feat(data-ingestion): normalize canonical location scopes`
 
 ## Work order 2 — Forward writers and atomic transaction
 
