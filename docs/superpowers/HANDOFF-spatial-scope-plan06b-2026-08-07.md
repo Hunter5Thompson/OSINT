@@ -8,16 +8,17 @@
 
 **Arbeitsverzeichnis:** `/home/deadpool-ultra/ODIN/OSINT`
 
-**Plan-06A-Implementierungs-HEAD:** `51f15f9`
+**Plan-06A-Code-HEAD nach Review:** `2aee913`
 
 **Basis:** `origin/main` bei `7704d8e`
 
 ## Kurzstand
 
-Plan 06A ist im Code vollständig und testgetrieben implementiert. Alle vier
-vorgesehenen Work-Order-Commits liegen auf `origin/feat/spatial-plan03`. Der Plan steht
-ehrlich bei **18/20 Checkboxen**: Die beiden VERIFY-Punkte benötigen reale
-Staging-/Betriebsnachweise, für die in diesem Chat keine Freigabe bestand.
+Plan 06A ist im Code vollständig und testgetrieben implementiert. Auf die vier
+vorgesehenen Work-Order-Commits folgt der Review-Fix `2aee913`. Der Plan steht ehrlich
+bei **18/20 Checkboxen**: Die beiden VERIFY-Punkte benötigen reale
+Staging-/Betriebsnachweise. Beim Review war weder ein eindeutiges Staging-Ziel
+konfiguriert noch ein ODIN-Neo4j-Container aktiv.
 
 Es wurden insbesondere **keine** Neo4j-Migration, kein Deployment, kein Staging-
 `EXPLAIN`, kein Staging-Dry-run, kein Backup und kein Backfill gegen einen echten Graph
@@ -50,14 +51,16 @@ schalten, bevor die unten genannten Exit-Gates belegt und reviewt sind.
 | 2 — Forward Writer | `2dae8a7` | Atomare parametergebundene Location-Writes |
 | 3 — Indizes | `cfe20b2` | Additive Migration und read-only Plan-Smoke |
 | 4 — Backfill | `51f15f9` | Restartbarer Dry-run/Apply- und Re-Enrichment-Pfad |
+| Review-Fix | `2aee913` | Source-Sentinel-Guards, Runner-Ownership und Conflict-Ausschluss |
 
 ## Implementierter Vertrag
 
 ### Pure Normalisierung
 
 - `RawLocationIdentity` validiert Code/System- und Latitude/Longitude-Paare strikt.
-- `(0,0)` bleibt ein echter Source-Punkt; es gibt weder Truthiness-Verlust noch einen
-  erfundenen Null-Island-/Centroid-Fallback.
+- Der generische Normalizer akzeptiert ein echtes `(0,0)` ohne Truthiness-Verlust.
+  Source-Adapter verwerfen `(0,0)` dort separat, wo die Quelle es als Sentinel
+  definiert; insbesondere GDELT, ADS-B und die Incident-/Backfill-Lanes.
 - Explizite Adapter decken ISO-2, ISO-3, UN M49, Natural-Earth-M49, GDELT GEC,
   ISO-3166-2, geoBoundaries und ODIN-Scope-Keys ab.
 - Freie Namen bleiben Rohprovenienz und werden niemals Scope-Identität.
@@ -97,8 +100,10 @@ freigegebene Derivationsrevision binden.
 Der Graph-Integrity-Report enthält ein versioniertes, JSON-fähiges Inventar:
 
 - `gdelt_raw` — aktiv, gemeinsamer Normalizer, explizite Bolt-Transaktion mit Rollback;
+  GDELT-ActionGeo `(0,0)` erzeugt keine Location;
 - `rss_pipeline` — aktiv, strukturierter ISO-2-Country-Scope ohne Centroid;
-- `military_aircraft` — aktiv, beobachtungsbezogener Location-Key und Point;
+- `military_aircraft` — aktiv, beobachtungsbezogener Location-Key und Point nur bei
+  vollständiger, nicht als `(0,0)` codierter Position;
 - `backend_incident` — aktiv, aber ausdrücklich `unsupported` wegen noch nicht
   integrierter Cross-Service-Normalisierung;
 - `intelligence_link_event_location` — inaktiv, keine Produktionsaufrufer;
@@ -120,7 +125,10 @@ location_geo                      (geo) — POINT
 
 Alle vier Deklarationen verwenden `IF NOT EXISTS`. Der frühere `location_geo`-Satz
 wurde aus `gdelt_raw/migrations/phase2_indexes.cypher` entfernt, sodass genau eine
-Deklaration existiert.
+Deklaration existiert. Der bestehende `apply_phase2()`-Runner liest beide Dateien und
+wendet damit auf einer frischen Instanz GDELT- und Spatial-Indizes gemeinsam an. Die
+zentrale Spatial-Datei ist dafür explizit in Wheel und Container enthalten; ein
+statischer Runner-Test friert diese Ownership ein.
 
 Der read-only Smoke ist vorbereitet:
 
@@ -130,7 +138,9 @@ uv run python -m graph_integrity.cli spatial-index-smoke
 ```
 
 Er gibt maschinenlesbare `EXPLAIN`-Evidence aus und failt, wenn ein vorgesehener
-Composite-Index nicht gewählt wird. Er wurde nicht gegen Staging ausgeführt.
+Composite-Index nicht gewählt wird. Jede Probe bindet Scope und Derivationsrevision
+und fordert zusätzlich `spatial_conflict = false`. Er wurde nicht gegen Staging
+ausgeführt.
 
 ### Backfill und Re-Enrichment
 
@@ -141,7 +151,11 @@ Composite-Index nicht gewählt wird. Er wurde nicht gegen Staging ausgeführt.
 - Ein Checkpoint wird erst nach einem vollständig angewandten atomaren Batch
   fortgeschrieben; Wiederholung nach Crash ist idempotent.
 - Konflikte erhalten nur Audit-/Conflict-Felder; bestehende Roh-/Scope-Felder bleiben
-  unangetastet. Unresolved/invalid werden nicht geschrieben.
+  unangetastet. Eine eventuell alte `spatial_derivation_revision` wird entfernt,
+  sodass Konflikte nicht in den Composite-Indizes verbleiben. Unresolved/invalid
+  werden nicht geschrieben.
+- Source-Null-Island-Sentinels werden als `invalid_coordinate` gezählt und niemals als
+  resolvable oder als Write ausgewiesen.
 - Legacy-RSS-Centroids werden country-only normalisiert, ohne ihren synthetischen
   Mittelpunkt als neuen Point zu materialisieren.
 - Location-Datensätze ohne stabile ID werden gezählt, machen das Report
@@ -178,14 +192,17 @@ Dokumentierte RED-Schritte:
 - WO2: acht GDELT-, drei RSS- und die neuen Aircraft-Writer-Tests waren zunächst rot.
 - WO3: Migration und `spatial_index_smoke` fehlten; die statischen Tests waren rot.
 - WO4: `spatial_batch` und `reenrich_spatial_scope` fehlten; die neuen Tests waren rot.
+- Review: Raw-Fallback-Import fehlte, vier Aircraft-Guard-Tests, drei
+  Runner-/Packaging-Tests und sechs Conflict-/Backfill-/Smoke-Tests waren rot.
 
 Grüne Nachweise:
 
 - WO2 betroffene Writer-/Runtime-Suites: **120 bestanden**.
 - WO3 Migration/Plan-Smoke fokussiert: **14 bestanden**.
 - Graph-/Spatial-Fokus nach WO4: **109 bestanden**.
-- Vollständiger Data-Ingestion-Lauf:
-  **1.336 bestanden, 1 bedingter Integration-Skip, 17 `live` deselected**.
+- Review-Fokus: **57 bestanden** in vier getrennten Läufen.
+- Vollständiger Data-Ingestion-Lauf nach Review-Fix:
+  **1.345 bestanden, 1 bedingter Integration-Skip, 17 `live` deselected**.
 - `uv run ruff check .`: **grün**.
 
 Der Skip ist der vorbestehende, bedingte GDELT-Integrationstest bei nicht laufenden
@@ -229,5 +246,6 @@ Sie wurden in keinem Plan-06A-Commit gestaged, verändert oder zurückgesetzt.
 
 - Remote: `git@github.com:Hunter5Thompson/OSINT.git`
 - Feature-Branch: `feat/spatial-plan03`
-- Implementierungs-HEAD und Remote waren vor diesem Handoff identisch bei `51f15f9`.
+- Review-Code-HEAD: `2aee913`; der nachfolgende Dokumentationscommit ändert keinen
+  Runtime-Code.
 - Es wurde kein PR erstellt und nichts nach `main` gemerged.
