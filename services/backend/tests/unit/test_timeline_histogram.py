@@ -62,7 +62,7 @@ def test_histogram_bins_and_dominant_category_is_modal(client):
         ("2026-06-01T02:30:00Z", "conflict.armed", None),
     )
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [rows, [], [], [], []]  # hist, accounting, notable, incident, geo
+        mock.side_effect = [rows, [], [], []]  # histogram, notable, incident, geo
         resp = client.get(f"/api/timeline/histogram{W}")
     assert resp.status_code == 200
     data = resp.json()
@@ -75,6 +75,21 @@ def test_histogram_bins_and_dominant_category_is_modal(client):
     b2 = next(b for b in data["buckets"] if b["count"] == 1)
     assert b2["by_severity"].get("unknown") == 1
     assert data["total_count"] == 202
+
+
+def test_global_histogram_reuses_distinct_rows_without_an_accounting_scan(client):
+    rows = _rows(
+        ("2026-06-01T00:30:00Z", "civil.demo", "low"),
+        ("2026-06-01T01:30:00Z", "civil.demo", "low"),
+    )
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read:
+        read.side_effect = [rows, [], [], []]  # histogram, notable, incident, geo
+        response = client.get(f"/api/timeline/histogram{W}")
+
+    assert response.status_code == 200
+    assert response.json()["total_count"] == len(rows)
+    assert len(read.await_args_list) == 4
+    assert all("excluded_unlocated_count" not in call.args[0] for call in read.await_args_list)
 
 
 def test_histogram_reversed_window_422(client):
@@ -112,8 +127,12 @@ def test_scoped_histogram_uses_catalog_bbox_and_echoes_partial_accounting(client
         patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
     ):
         read.side_effect = [
-            _rows(("2026-06-01T00:30:00Z", "civil.demo", "low")),
-            [{"total": 3, "excluded_unlocated_count": 2}],
+            _rows(
+                ("2026-06-01T00:30:00Z", "civil.demo", "low"),
+                ("2026-06-01T01:30:00Z", "civil.demo", "low"),
+                ("2026-06-01T02:30:00Z", "civil.demo", "low"),
+            ),
+            [{"excluded_unlocated_count": 2}],
             [],
             [],
             [],
@@ -131,6 +150,9 @@ def test_scoped_histogram_uses_catalog_bbox_and_echoes_partial_accounting(client
     assert application["completeness"] == "partial"
     assert application["included_count"] == 3
     assert application["excluded_unlocated_count"] == 2
+    accounting_query = read.await_args_list[1].args[0]
+    assert "excluded_unlocated_count" in accounting_query
+    assert " AS total" not in accounting_query
     resolve.assert_awaited_once_with(
         loader,
         "country:UKR",
@@ -157,7 +179,7 @@ def test_notables_union_capped_and_ranked(client):
     incidents = [{"id": "inc-1", "time": "2026-06-01T02:00:00Z", "time_basis": "occurred",
                   "severity": "critical", "title": "Strike", "lat": 50.0, "lon": 30.0}]
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], [], events, incidents, []]
+        mock.side_effect = [[], events, incidents, []]
         resp = client.get(f"/api/timeline/histogram{W}")
     data = resp.json()
     notables = data["notables"]
@@ -183,7 +205,7 @@ def test_geo_events_capped_ranked_and_truncated(client):
             "severity": "low", "lat": 1.0 + i, "lon": 2.0} for i in range(205)]
     geo[0]["severity"] = "critical"
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], [], [], [], geo]
+        mock.side_effect = [[], [], [], geo]
         resp = client.get(f"/api/timeline/histogram{W}")
     data = resp.json()
     assert len(data["geo_events"]) == 200          # cap
@@ -193,23 +215,23 @@ def test_geo_events_capped_ranked_and_truncated(client):
 
 
 def test_histogram_notable_events_failure_returns_503(client):
-    # finding #1: failure after the histogram/accounting reads must be 503, not 500.
+    # A failure after the primary histogram read must be 503, not an unhandled 500.
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], [], RuntimeError("boom")]
+        mock.side_effect = [[], RuntimeError("boom")]
         resp = client.get(f"/api/timeline/histogram{W}")
     assert resp.status_code == 503
 
 
 def test_histogram_incidents_failure_returns_503(client):
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], [], [], RuntimeError("boom")]
+        mock.side_effect = [[], [], RuntimeError("boom")]
         resp = client.get(f"/api/timeline/histogram{W}")
     assert resp.status_code == 503
 
 
 def test_histogram_geo_failure_returns_503(client):
     with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
-        mock.side_effect = [[], [], [], [], RuntimeError("boom")]
+        mock.side_effect = [[], [], [], RuntimeError("boom")]
         resp = client.get(f"/api/timeline/histogram{W}")
     assert resp.status_code == 503
 

@@ -229,6 +229,31 @@ def test_new_client_world_token_echoes_identity_while_using_global_query(
     assert application["excluded_unlocated_count"] == 0
 
 
+def test_requested_scope_key_echoes_the_literal_reviewed_alias(client, spatial_loader):
+    compiled = _catalog_filter()
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ) as resolve,
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [[], [{"total": 0, "excluded_unlocated_count": 0}]]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:ukr"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["spatial_application"]["requested_scope_key"] == "country:ukr"
+    resolve.assert_awaited_once_with(
+        spatial_loader,
+        "country:ukr",
+        "spatial-v1-0123456789ab",
+    )
+
+
 def test_catalog_resolution_failure_never_falls_back_to_global_query(
     client,
     spatial_loader,
@@ -286,13 +311,17 @@ def test_scoped_filter_logs_request_mode_coverage_and_latency_without_query_cont
         )
 
     assert response.status_code == 200
-    events = {call.args[0]: call.kwargs for call in logger.info.call_args_list}
-    assert events["spatial_filter_requested"] == {
+    requested = next(
+        call.kwargs for call in logger.debug.call_args_list
+        if call.args[0] == "spatial_filter_requested"
+    )
+    assert requested == {
         "consumer": "chronik",
         "scope_key": "country:UKR",
         "scope_kind": "country",
         "catalog_revision": "spatial-v1-0123456789ab",
     }
+    events = {call.args[0]: call.kwargs for call in logger.info.call_args_list}
     applied = events["spatial_filter_applied"]
     assert applied["scope_kind"] == "country"
     assert applied["filter_mode"] == "bbox_approximate"

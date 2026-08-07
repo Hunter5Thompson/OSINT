@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SpatialQueryRef } from "../spatial/contracts";
 import type { SpatialApplicationV1 } from "../types";
 
@@ -72,13 +72,18 @@ export function useScopedTimelineRequest<
   const [status, setStatus] = useState<RequestStatus | null>(null);
   const sequenceRef = useRef(0);
   const queryRef = useRef(query);
-  queryRef.current = query;
 
   const scopeTokenKey = timelineScopeTokenKey(query.spatialScope);
   const requestKey = JSON.stringify(query);
   const activeRequestKey = JSON.stringify([scopeTokenKey, scopeGeneration, requestKey]);
   const activeRequestRef = useRef<string | null>(null);
-  activeRequestRef.current = enabled ? activeRequestKey : null;
+
+  // Publish render inputs only after commit. A speculative concurrent render must not
+  // revoke a request belonging to the still-committed tree.
+  useLayoutEffect(() => {
+    queryRef.current = query;
+    activeRequestRef.current = enabled ? activeRequestKey : null;
+  }, [activeRequestKey, enabled, query]);
 
   useEffect(() => {
     if (!enabled) {
