@@ -53,6 +53,11 @@ catalog's crosswalk and containment artifacts—do not create a second geo model
 - [x] **VERIFY:** Run all affected writer suites and `ruff` on changed ingestion code.
 - [x] **COMMIT:** `feat(data-ingestion): write spatial location fields atomically`
 
+> Review-Fix `2aee913`: Der pure Normalizer akzeptiert weiterhin echte `(0,0)`-Punkte.
+> Die GDELT- und Military-Aircraft-Source-Adapter verwerfen ihre jeweiligen
+> Null-Island-Sentinels; bei fehlendem Normalisierungsindex bleibt die rohe
+> GDELT-Location erhalten und die Lane meldet sich weiterhin als unsupported.
+
 ## Work order 3 — Index migration and plan smoke
 
 - [x] **RED:** Static tests require the three composite range indexes and exactly one
@@ -68,6 +73,11 @@ catalog's crosswalk and containment artifacts—do not create a second geo model
 > Hermetischer Stand: Migrationstests und der read-only `EXPLAIN`-Evidence-Collector
 > sind grün. Der **VERIFY**-Punkt bleibt bis zum freigegebenen Staging-Lauf samt
 > realer Neo4j-Plan-Evidence offen.
+>
+> Review-Fix `2aee913`: `apply_phase2()` führt GDELT- und Spatial-Indexdatei gemeinsam
+> aus; Wheel und Container enthalten die zentrale Migration. Exact-Smokes schließen
+> Conflicts explizit aus, und Conflict-Backfills entfernen alte
+> Derivationsrevisionen, ohne Roh- oder Scope-Felder zu verändern.
 
 ## Work order 4 — Backfill and recurring re-enrichment
 
@@ -84,7 +94,8 @@ catalog's crosswalk and containment artifacts—do not create a second geo model
   already-normalized, resolvable, unresolved, conflict, invalid and by-source/system.
 - [x] **COMMIT:** `feat(graph-integrity): backfill spatial scope revisions`
 
-> Hermetischer Stand: 1.336 Tests bestanden, 1 dokumentierter Skip und 17 deselected;
+> Hermetischer Stand nach Review-Fix: 1.345 Tests bestanden, 1 dokumentierter Skip
+> und 17 deselected;
 > Ruff ist grün. Der **VERIFY**-Punkt bleibt bis zum freigegebenen Staging-Dry-run
 > und dessen reviewtem Accounting offen; es wurde kein Graph mutiert.
 
