@@ -55,15 +55,19 @@ catalog's crosswalk and containment artifacts—do not create a second geo model
 
 ## Work order 3 — Index migration and plan smoke
 
-- [ ] **RED:** Static tests require the three composite range indexes and exactly one
+- [x] **RED:** Static tests require the three composite range indexes and exactly one
   existing point index, all `IF NOT EXISTS`; reject duplicate or renamed properties.
   Integration smoke uses `EXPLAIN`/staging plan to prove the intended index for each
   scope kind.
-- [ ] **GREEN:** Add the deterministic migration and consolidate the existing
+- [x] **GREEN:** Add the deterministic migration and consolidate the existing
   `location_geo` declaration instead of duplicating it.
-- [ ] **REFACTOR:** Migration is additive and independently deployable before writers.
+- [x] **REFACTOR:** Migration is additive and independently deployable before writers.
 - [ ] **VERIFY:** Run migration tests; attach Neo4j plan evidence to the slice record.
-- [ ] **COMMIT:** `build(neo4j): add spatial location indexes`
+- [x] **COMMIT:** `build(neo4j): add spatial location indexes`
+
+> Hermetischer Stand: Migrationstests und der read-only `EXPLAIN`-Evidence-Collector
+> sind grün. Der **VERIFY**-Punkt bleibt bis zum freigegebenen Staging-Lauf samt
+> realer Neo4j-Plan-Evidence offen.
 
 ## Work order 4 — Backfill and recurring re-enrichment
 
