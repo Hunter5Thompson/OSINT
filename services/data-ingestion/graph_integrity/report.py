@@ -83,6 +83,83 @@ REPORT_LABELS = [
     "Location",
 ]
 
+_LOCATION_WRITER_LANES: tuple[tuple[str, str, bool, str, str], ...] = (
+    (
+        "backend_incident",
+        "services/backend/app/cypher/incident_write.py",
+        True,
+        "unsupported",
+        "cross_service_normalizer_not_integrated",
+    ),
+    (
+        "gdelt_raw",
+        "services/data-ingestion/gdelt_raw/writers/neo4j_writer.py",
+        True,
+        "shared_spatial_normalizer",
+        "plan_06a_forward_writer",
+    ),
+    (
+        "graph_integrity_geo_gdelt",
+        "services/data-ingestion/graph_integrity/geo_gdelt.py",
+        False,
+        "migration_only",
+        "legacy_repair_job_not_forward_writer",
+    ),
+    (
+        "graph_integrity_geo_incident",
+        "services/data-ingestion/graph_integrity/geo_incident.py",
+        False,
+        "migration_only",
+        "legacy_repair_job_not_forward_writer",
+    ),
+    (
+        "graph_integrity_rekey_incident_locations",
+        "services/data-ingestion/graph_integrity/rekey_incident_locations.py",
+        False,
+        "migration_only",
+        "legacy_repair_job_not_forward_writer",
+    ),
+    (
+        "intelligence_link_event_location",
+        "services/intelligence/graph/write_templates.py",
+        False,
+        "not_applicable",
+        "no_production_call_sites",
+    ),
+    (
+        "military_aircraft",
+        "services/data-ingestion/feeds/military_aircraft_collector.py",
+        True,
+        "shared_spatial_normalizer",
+        "plan_06a_forward_writer",
+    ),
+    (
+        "rss_pipeline",
+        "services/data-ingestion/pipeline.py",
+        True,
+        "shared_spatial_normalizer",
+        "plan_06a_forward_writer",
+    ),
+)
+
+
+def location_writer_inventory() -> dict[str, Any]:
+    """Return the deterministic, JSON-safe inventory of Location write lanes."""
+
+    return {
+        "schema_version": 1,
+        "lanes": [
+            {
+                "lane": lane,
+                "path": path,
+                "active": active,
+                "normalization": normalization,
+                "reason": reason,
+            }
+            for lane, path, active, normalization, reason in _LOCATION_WRITER_LANES
+        ],
+    }
+
 
 def shape_report(
     orphans: list[dict[str, Any]],
@@ -98,4 +175,5 @@ def shape_report(
         "dup_edges": dup_edges,
         "coord_disagreements": coord_disagreements or [],
         "null_island": null_island or [],
+        "location_writer_inventory": location_writer_inventory(),
     }

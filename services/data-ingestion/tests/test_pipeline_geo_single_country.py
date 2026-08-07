@@ -1,6 +1,7 @@
-"""WP-05: a document is geo-stamped only when it resolves to exactly ONE distinct
-country. Multi-country docs stay geoless (honest located:0) instead of plotting
-every event onto the first location's country centroid."""
+"""A document is scoped only when extraction yields one distinct ISO-2 country.
+
+Multi-country documents stay geoless instead of inventing a point location.
+"""
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -46,23 +47,23 @@ def _occurred_loc_key(stmts):
 
 
 @pytest.mark.asyncio
-async def test_single_country_single_location_stamps_centroid():
+async def test_single_country_single_location_stamps_country_scope():
     stmts = await _geo_statements(
         [{"title": "Strike on Kyiv", "codebook_type": "conflict.armed_clash"}],
-        [{"name": "Kyiv", "country": "Ukraine"}],
+        [{"name": "Kyiv", "country": "UA"}],
     )
     assert _has_occurred_at(stmts)
-    assert _occurred_loc_key(stmts) == "centroid:ua"
+    assert _occurred_loc_key(stmts) == "spatial:country:ua"
 
 
 @pytest.mark.asyncio
-async def test_single_country_multiple_locations_still_stamps():
+async def test_single_country_multiple_locations_still_stamps_country_scope():
     stmts = await _geo_statements(
         [{"title": "Strikes across Ukraine", "codebook_type": "conflict.armed_clash"}],
-        [{"name": "Kyiv", "country": "Ukraine"}, {"name": "Odessa", "country": "Ukraine"}],
+        [{"name": "Kyiv", "country": "UA"}, {"name": "Odessa", "country": "UA"}],
     )
     assert _has_occurred_at(stmts)
-    assert _occurred_loc_key(stmts) == "centroid:ua"
+    assert _occurred_loc_key(stmts) == "spatial:country:ua"
 
 
 @pytest.mark.asyncio
@@ -70,7 +71,7 @@ async def test_multi_country_document_is_geoless():
     stmts = await _geo_statements(
         [{"title": "Russia strikes Kyiv; US sanctions Iran",
           "codebook_type": "conflict.armed_clash"}],
-        [{"name": "Kyiv", "country": "Ukraine"}, {"name": "Tehran", "country": "Iran"}],
+        [{"name": "Kyiv", "country": "UA"}, {"name": "Tehran", "country": "IR"}],
     )
     assert not _has_occurred_at(stmts)
 
@@ -79,7 +80,7 @@ async def test_multi_country_document_is_geoless():
 async def test_known_plus_unresolvable_country_is_geoless():
     stmts = await _geo_statements(
         [{"title": "x", "codebook_type": "conflict.armed_clash"}],
-        [{"name": "Kyiv", "country": "Ukraine"}, {"name": "Nowhere", "country": "Atlantis"}],
+        [{"name": "Kyiv", "country": "UA"}, {"name": "Nowhere", "country": "ZZ"}],
     )
     assert not _has_occurred_at(stmts)
 

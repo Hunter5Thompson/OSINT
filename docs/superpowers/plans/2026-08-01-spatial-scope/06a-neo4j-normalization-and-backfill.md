@@ -40,18 +40,18 @@ catalog's crosswalk and containment artifacts—do not create a second geo model
 
 ## Work order 2 — Forward writers and atomic transaction
 
-- [ ] **RED:** Writer tests assert `geo=point(...)`, all scope/audit/conflict fields in
+- [x] **RED:** Writer tests assert `geo=point(...)`, all scope/audit/conflict fields in
   one parameter-bound transaction, rollback on partial error, country-only records,
   no truthiness loss at zero, and unchanged raw fields. Assert no dynamic Cypher or
   interpolated values.
-- [ ] **GREEN:** Call the shared normalizer before `MERGE_LOCATION`; extend existing
+- [x] **GREEN:** Call the shared normalizer before `MERGE_LOCATION`; extend existing
   deterministic templates/parameter builders. Start with live GDELT raw, then migrate
   every currently active Neo4j `Location` producer enumerated by `rg` and
   record unsupported lanes in the report rather than silently skipping them.
-- [ ] **REFACTOR:** One parameter projection maps normalizer output to properties;
+- [x] **REFACTOR:** One parameter projection maps normalizer output to properties;
   writers retain source-specific extraction only.
-- [ ] **VERIFY:** Run all affected writer suites and `ruff` on changed ingestion code.
-- [ ] **COMMIT:** `feat(data-ingestion): write spatial location fields atomically`
+- [x] **VERIFY:** Run all affected writer suites and `ruff` on changed ingestion code.
+- [x] **COMMIT:** `feat(data-ingestion): write spatial location fields atomically`
 
 ## Work order 3 — Index migration and plan smoke
 

@@ -16,6 +16,13 @@ from pydantic import BaseModel, ValidationError
 
 from gdelt_raw.ids import build_location_id
 from gdelt_raw.schemas import GDELTDocumentWrite, GDELTEventWrite
+from graph_integrity.spatial_normalizer import (
+    CountryCodeSystem,
+    RawLocationIdentity,
+    SpatialNormalizationIndex,
+    normalize_location,
+    spatial_property_parameters,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -105,16 +112,34 @@ MERGE_LOCATION = """
 MATCH (ev:GDELTEvent {event_id: $event_id})
 MERGE (l:Location {loc_key: $loc_key})
   ON CREATE SET l.name = $name, l.country = $country,
-                l.lat = $lat, l.lon = $lon, l.geo_basis = 'gdelt_actiongeo'
+                l.lat = $latitude, l.lon = $longitude,
+                l.geo_basis = CASE WHEN $latitude IS NULL THEN NULL ELSE 'gdelt_actiongeo' END
+SET l.source_country_code = $source_country_code,
+    l.source_country_code_system = $source_country_code_system,
+    l.country_iso3 = $country_iso3,
+    l.admin1_code = $admin1_code,
+    l.admin2_code = $admin2_code,
+    l.country_scope_key = $country_scope_key,
+    l.admin1_scope_key = $admin1_scope_key,
+    l.admin2_scope_key = $admin2_scope_key,
+    l.spatial_basis = $spatial_basis,
+    l.spatial_precision = $spatial_precision,
+    l.spatial_catalog_revision = $spatial_catalog_revision,
+    l.spatial_derivation_revision = $spatial_derivation_revision,
+    l.spatial_conflict = $spatial_conflict,
+    l.spatial_conflict_scope_keys = $spatial_conflict_scope_keys,
+    l.geo = CASE
+      WHEN $latitude IS NULL OR $longitude IS NULL THEN l.geo
+      ELSE point({longitude: $longitude, latitude: $latitude})
+    END
 MERGE (ev)-[:OCCURRED_AT]->(l)
 """
 
 
-def location_params_for(ev: GDELTEventWrite) -> dict[str, Any] | None:
-    if ev.action_geo_lat is None or ev.action_geo_long is None:
-        return None
-    if ev.action_geo_lat == 0.0 and ev.action_geo_long == 0.0:  # null-island (WP-11)
-        return None
+def location_params_for(
+    ev: GDELTEventWrite,
+    spatial_index: SpatialNormalizationIndex,
+) -> dict[str, Any] | None:
     loc_key = build_location_id(
         ev.action_geo_feature_id or "",
         ev.action_geo_country_code or "",
@@ -122,13 +147,23 @@ def location_params_for(ev: GDELTEventWrite) -> dict[str, Any] | None:
     )
     if loc_key is None:
         return None
+    raw = RawLocationIdentity(
+        country_code=ev.action_geo_country_code or None,
+        country_code_system=(
+            CountryCodeSystem.GDELT_GEC if ev.action_geo_country_code else None
+        ),
+        latitude=ev.action_geo_lat,
+        longitude=ev.action_geo_long,
+    )
+    normalized = normalize_location(raw, spatial_index)
     return {
         "event_id": ev.event_id,
         "loc_key": loc_key,
         "name": ev.action_geo_fullname,
         "country": ev.action_geo_country_code,
-        "lat": ev.action_geo_lat,
-        "lon": ev.action_geo_long,
+        "latitude": ev.action_geo_lat,
+        "longitude": ev.action_geo_long,
+        **spatial_property_parameters(normalized),
     }
 
 
@@ -179,8 +214,16 @@ def _validate_rows(rows: list[dict], model: type[BaseModel], stream: str) -> lis
 
 
 class Neo4jWriter:
-    def __init__(self, uri: str, user: str, password: str):
+    def __init__(
+        self,
+        uri: str,
+        user: str,
+        password: str,
+        *,
+        spatial_index: SpatialNormalizationIndex | None = None,
+    ):
         self._driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+        self._spatial_index = spatial_index
 
     async def close(self):
         await self._driver.close()
@@ -191,12 +234,29 @@ class Neo4jWriter:
         # combined into a single `async with X, Y` form.
         async with self._driver.session() as session:  # noqa: SIM117
             async with await session.begin_transaction() as tx:
-                for ev in events:
-                    await tx.run(MERGE_EVENT, render_event_params(ev))
-                    loc = location_params_for(ev)
-                    if loc is not None:
-                        await tx.run(MERGE_LOCATION, loc)
-                await tx.commit()
+                try:
+                    for ev in events:
+                        await tx.run(MERGE_EVENT, render_event_params(ev))
+                        if self._spatial_index is None:
+                            if build_location_id(
+                                ev.action_geo_feature_id or "",
+                                ev.action_geo_country_code or "",
+                                ev.action_geo_fullname or "",
+                            ) is not None:
+                                log.warning(
+                                    "spatial_location_writer_unsupported",
+                                    lane="gdelt_raw",
+                                    cause="normalization_index_unavailable",
+                                    event_id=ev.event_id,
+                                )
+                            continue
+                        loc = location_params_for(ev, self._spatial_index)
+                        if loc is not None:
+                            await tx.run(MERGE_LOCATION, loc)
+                    await tx.commit()
+                except BaseException:
+                    await tx.rollback()
+                    raise
 
     async def write_docs(self, docs: list[GDELTDocumentWrite]):
         async with self._driver.session() as session:  # noqa: SIM117
