@@ -118,4 +118,32 @@ describe("timeline API spatial contract", () => {
     await expect(getTimeWindow({ tStart: "a", tEnd: "b", spatialScope: SCOPE }))
       .rejects.toThrow(/spatial_application/i);
   });
+
+  it("accepts additive spatial application fields from a newer backend", async () => {
+    mockJson({
+      ...WINDOW,
+      spatial_application: {
+        ...APPLICATION,
+        excluded_boundary_uncertain_count: 4,
+        future_coverage_note: "additive-v1-field",
+      },
+    });
+
+    const response = await getTimeWindow({ tStart: "a", tEnd: "b", spatialScope: SCOPE });
+
+    expect(response.spatial_application.mode).toBe("bbox_approximate");
+  });
+
+  it("still rejects missing required fields and unknown schema versions", async () => {
+    const missingBoundaryPolicy = Object.fromEntries(
+      Object.entries(APPLICATION).filter(([key]) => key !== "boundary_policy"),
+    );
+    mockJson({ ...WINDOW, spatial_application: missingBoundaryPolicy });
+    await expect(getTimeWindow({ tStart: "a", tEnd: "b", spatialScope: SCOPE }))
+      .rejects.toThrow(/spatial_application/i);
+
+    mockJson({ ...WINDOW, spatial_application: { ...APPLICATION, schema_version: 2 } });
+    await expect(getTimeWindow({ tStart: "a", tEnd: "b", spatialScope: SCOPE }))
+      .rejects.toThrow(/spatial_application/i);
+  });
 });

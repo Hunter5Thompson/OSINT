@@ -143,7 +143,7 @@ async def _resolve_spatial_filter(
             recoverable=True,
         )
     assert catalog_revision is not None
-    log.info(
+    log.debug(
         "spatial_filter_requested",
         consumer="chronik",
         scope_key=scope_key,
@@ -156,6 +156,7 @@ async def _resolve_spatial_filter(
 def _spatial_application(
     *,
     spatial_filter: CompiledSpatialFilter,
+    requested_scope_key: str | None,
     relation: Literal["occurs-in", "intersects"],
     included_count: int,
     excluded_unlocated_count: int,
@@ -167,7 +168,7 @@ def _spatial_application(
     )
     is_global = spatial_filter.query_id is TimelineSpatialQueryId.GLOBAL
     return SpatialApplicationV1(
-        requested_scope_key=token.scope_key if token is not None else None,
+        requested_scope_key=requested_scope_key if token is not None else None,
         catalog_revision=token.catalog_revision if token is not None else None,
         derivation_revision=token.derivation_revision if token is not None else None,
         boundary_policy=token.boundary_policy if token is not None else None,
@@ -273,6 +274,16 @@ CALL {
 RETURN total, excluded_unlocated_count
 """
 
+_EVENTS_UNLOCATED_COUNT_QUERY = """
+MATCH (ev:Event)
+WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
+OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
+WITH ev, [location IN collect(l) WHERE
+  location.lat IS NOT NULL AND location.lon IS NOT NULL] AS located
+WHERE size(located) = 0
+RETURN count(ev) AS excluded_unlocated_count
+"""
+
 
 @router.get("/window", response_model=WindowResponse)
 async def get_window(
@@ -324,7 +335,13 @@ async def get_window(
         return spatial_problem_response(spatial_filter)
 
     if domain == "events":
-        result = await _events_window(t_start, t_end, spatial_filter, limit)
+        result = await _events_window(
+            t_start,
+            t_end,
+            spatial_filter,
+            limit,
+            requested_scope_key=scope_key,
+        )
         _emit_filter_applied(result.spatial_application, started)
         return result
 
@@ -337,6 +354,7 @@ async def get_window(
         limit,
         start=start,
         end=end,
+        requested_scope_key=scope_key,
     )
     _emit_filter_applied(result.spatial_application, started)
     return result
@@ -347,6 +365,8 @@ async def _events_window(
     t_end: str,
     spatial_filter: CompiledSpatialFilter,
     limit: int,
+    *,
+    requested_scope_key: str | None,
 ) -> WindowResponse:
     params = {
         "t_start": t_start,
@@ -385,6 +405,7 @@ async def _events_window(
         samples=samples, total_count=total, truncated=total > len(samples),
         spatial_application=_spatial_application(
             spatial_filter=spatial_filter,
+            requested_scope_key=requested_scope_key,
             relation="occurs-in",
             included_count=total,
             excluded_unlocated_count=excluded_unlocated,
@@ -450,6 +471,7 @@ async def _movements_window(
     *,
     start: datetime,
     end: datetime,
+    requested_scope_key: str | None,
 ) -> WindowResponse:
     if movement_kind is None:
         raise HTTPException(status_code=422, detail="movement_kind required for domain=movements")
@@ -495,6 +517,7 @@ async def _movements_window(
         samples=samples, total_count=total, truncated=total > len(samples),
         spatial_application=_spatial_application(
             spatial_filter=spatial_filter,
+            requested_scope_key=requested_scope_key,
             relation="intersects",
             included_count=total,
             excluded_unlocated_count=excluded_unlocated,
@@ -567,7 +590,11 @@ async def get_histogram(
 
     try:
         rows = await read_query(_HISTOGRAM_QUERY, params)
-        count_rows = await read_query(_EVENTS_COUNT_QUERY, params)
+        unlocated_rows = (
+            await read_query(_EVENTS_UNLOCATED_COUNT_QUERY, params)
+            if spatial_filter.query_id is not TimelineSpatialQueryId.GLOBAL
+            else []
+        )
     except Exception as exc:
         log.error("timeline_histogram_neo4j_query_failed", error=str(exc))
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
@@ -618,9 +645,11 @@ async def get_histogram(
         log.error("timeline_histogram_aux_neo4j_query_failed", error=str(exc))
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
 
-    total, excluded_unlocated = _count_accounting(
-        count_rows,
-        fallback_total=len(rows),
+    total = len(rows)
+    excluded_unlocated = (
+        int(unlocated_rows[0].get("excluded_unlocated_count", 0))
+        if unlocated_rows
+        else 0
     )
     response = HistogramResponse(
         t_start=t_start, t_end=t_end, bucket_ms=bucket_ms, buckets=bucket_list,
@@ -628,6 +657,7 @@ async def get_histogram(
         geo_located_count=geo_count, geo_truncated=geo_trunc,
         spatial_application=_spatial_application(
             spatial_filter=spatial_filter,
+            requested_scope_key=scope_key,
             relation="occurs-in",
             included_count=total,
             excluded_unlocated_count=excluded_unlocated,

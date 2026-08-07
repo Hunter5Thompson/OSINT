@@ -90,6 +90,11 @@ jeweiligen Endpoint definierten Track. `samples.length` ist dagegen die tatsäch
 zurückgegebene Seitenlänge. Ein Event mit mehreren passenden Locations erhöht
 `included_count` genau einmal.
 
+`requested_scope_key` spiegelt den validierten Request-Wert wörtlich. Der intern
+aufgelöste Katalog-Key bleibt kanonisch im `SpatialScopeTokenV1`; er darf das
+Echo-Feld nicht umdeuten. Dadurch bleiben auch reviewte Alias- oder
+Normalisierungsübergänge vergleichbar, ohne den Feldnamen semantisch zu überladen.
+
 Definitionen:
 
 - `semantic_key`: Datensatz besitzt einen kanonischen materialisierten Scope-Key der angeforderten Relation.
@@ -210,5 +215,10 @@ dass bei vorhandenem `spatialScope`
 `response.spatial_application.requested_scope_key` und `catalog_revision` zum Request
 passen. Ein semantisch falsch etikettiertes Backend-Resultat wird als Contract-Fehler
 verworfen.
+
+Der V1-Decoder verlangt alle normativen Felder und bekannten Enum-Werte, toleriert
+aber additive unbekannte Felder derselben `schema_version`. So bleiben getrennte
+Frontend-/Backend-Rollouts vorwärtskompatibel; unbekannte Enum- oder Schemawerte
+bleiben weiterhin harte Contract-Fehler.
 
 ---

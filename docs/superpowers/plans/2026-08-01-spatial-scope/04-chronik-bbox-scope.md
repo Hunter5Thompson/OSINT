@@ -81,6 +81,17 @@ request as a mutually exclusive AOI mode.
 - [x] **VERIFY:** Run full backend and frontend quality commands.
 - [x] **COMMIT:** `feat(worldview): expose chronik spatial precision`
 
+## Review follow-up — 2026-08-07
+
+- [x] Histogram totals reuse the already deduplicated result rows; only non-global
+  requests issue one additional unlocated-record scan.
+- [x] Frontend V1 decoding requires normative fields and enums while tolerating
+  additive response fields for independent frontend/backend rollout.
+- [x] `requested_scope_key` echoes the validated request literally while the internal
+  catalog token remains canonical.
+- [x] Requested-filter telemetry moved to debug; the provisional layer matrix is
+  tracked in `TASK-123`, and hook refs are published after React commit.
+
 ## Exit gate
 
 Every non-global CHRONIK request is server-resolved and fail-closed. Dateline scopes

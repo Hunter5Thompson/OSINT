@@ -486,7 +486,7 @@ interface TimelineSpatialQuery {
   readonly bbox?: readonly [number, number, number, number];
 }
 
-const SPATIAL_APPLICATION_FIELDS = new Set<string>([
+const REQUIRED_SPATIAL_APPLICATION_FIELDS = [
   "schema_version",
   "requested_scope_key",
   "catalog_revision",
@@ -499,7 +499,7 @@ const SPATIAL_APPLICATION_FIELDS = new Set<string>([
   "excluded_unlocated_count",
   "excluded_conflict_count",
   "excluded_stale_revision_count",
-]);
+] as const;
 const SPATIAL_FILTER_MODES = new Set<SpatialApplicationV1["mode"]>([
   "global",
   "semantic_key",
@@ -533,10 +533,8 @@ function invalidSpatialApplication(): never {
 
 function decodeSpatialApplication(value: unknown): SpatialApplicationV1 {
   if (!isRecord(value)) invalidSpatialApplication();
-  const keys = Object.keys(value);
   if (
-    keys.length !== SPATIAL_APPLICATION_FIELDS.size
-    || keys.some((key) => !SPATIAL_APPLICATION_FIELDS.has(key))
+    REQUIRED_SPATIAL_APPLICATION_FIELDS.some((key) => !Object.hasOwn(value, key))
     || value.schema_version !== 1
     || !isNullableString(value.requested_scope_key)
     || !isNullableString(value.catalog_revision)
