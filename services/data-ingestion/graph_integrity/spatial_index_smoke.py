@@ -22,15 +22,7 @@ class SpatialIndexSmoke:
     index_name: str
     sample_scope_key: str
     sample_revision: str
-
-    @property
-    def query(self) -> str:
-        return (
-            "EXPLAIN MATCH (l:Location) "
-            f"WHERE l.{self.scope_property} = $scope_key "
-            "AND l.spatial_derivation_revision = $revision "
-            "RETURN l LIMIT 1"
-        )
+    query: str
 
 
 _SAMPLE_REVISION = "spatial-derive-v1-plan-smoke"
@@ -41,6 +33,12 @@ SPATIAL_INDEX_SMOKES = (
         index_name="location_country_scope_derivation",
         sample_scope_key="country:UKR",
         sample_revision=_SAMPLE_REVISION,
+        query=(
+            "EXPLAIN MATCH (l:Location) "
+            "WHERE l.country_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision = $revision "
+            "RETURN l LIMIT 1"
+        ),
     ),
     SpatialIndexSmoke(
         scope_kind="admin1",
@@ -48,6 +46,12 @@ SPATIAL_INDEX_SMOKES = (
         index_name="location_admin1_scope_derivation",
         sample_scope_key="admin1:iso3166-2:UA-30",
         sample_revision=_SAMPLE_REVISION,
+        query=(
+            "EXPLAIN MATCH (l:Location) "
+            "WHERE l.admin1_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision = $revision "
+            "RETURN l LIMIT 1"
+        ),
     ),
     SpatialIndexSmoke(
         scope_kind="admin2",
@@ -55,6 +59,12 @@ SPATIAL_INDEX_SMOKES = (
         index_name="location_admin2_scope_derivation",
         sample_scope_key="admin2:gbopen:UKR.1.1",
         sample_revision=_SAMPLE_REVISION,
+        query=(
+            "EXPLAIN MATCH (l:Location) "
+            "WHERE l.admin2_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision = $revision "
+            "RETURN l LIMIT 1"
+        ),
     ),
 )
 
