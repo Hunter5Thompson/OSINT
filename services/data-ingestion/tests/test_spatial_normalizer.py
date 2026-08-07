@@ -384,3 +384,28 @@ def test_catalog_and_derivation_revisions_remain_separate(
     assert result.spatial_catalog_revision == "spatial-v1-e76a16bff799"
     assert result.spatial_derivation_revision == "spatial-derive-v1-d30efa07e141"
     assert result.spatial_catalog_revision != result.spatial_derivation_revision
+
+
+def test_index_tracks_only_reviewed_compatible_derivation_revisions() -> None:
+    current = "spatial-derive-v1-111111111111"
+    compatible = "spatial-derive-v1-000000000000"
+    index = build_normalization_index(
+        catalog_revision="spatial-v1-111111111111",
+        country_crosswalk=load_country_crosswalk(CROSSWALK_PATH),
+        scope_parents={"country:UKR": None},
+        scope_derivation_revisions={"country:UKR": current},
+        scope_compatible_derivation_revisions={
+            "country:UKR": (current, compatible),
+        },
+        containment={},
+    )
+
+    assert index.is_compatible_derivation("country:UKR", current) is True
+    assert index.is_compatible_derivation("country:UKR", compatible) is True
+    assert (
+        index.is_compatible_derivation(
+            "country:UKR",
+            "spatial-derive-v1-ffffffffffff",
+        )
+        is False
+    )

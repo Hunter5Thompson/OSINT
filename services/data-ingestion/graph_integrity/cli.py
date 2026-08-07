@@ -4,16 +4,30 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from pathlib import Path
+from typing import Any
 
 from graph_integrity import (
+    backfill_spatial_scope,
     cleanup_null_island,
     geo_gdelt,
     geo_incident,
+    reenrich_spatial_scope,
     rekey_incident_locations,
     report,
     spatial_index_smoke,
 )
 from graph_integrity.neo4j_client import Neo4jClient
+from graph_integrity.spatial_batch import (
+    SUPPORTED_LOCATION_LANES,
+    JsonCheckpointStore,
+    report_fingerprint,
+    validate_dry_run_approval,
+)
+from graph_integrity.spatial_normalizer import (
+    load_active_normalization_index,
+    load_normalization_index,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,7 +43,30 @@ def build_parser() -> argparse.ArgumentParser:
     cn = sub.add_parser("cleanup-null-island")
     cn.add_argument("--dry-run", action="store_true")
     sub.add_parser("spatial-index-smoke")
+    spatial_backfill = sub.add_parser("backfill-spatial-scope")
+    spatial_backfill.add_argument("--lane", choices=SUPPORTED_LOCATION_LANES, required=True)
+    spatial_backfill.add_argument("--target-derivation-revision", required=True)
+    _add_spatial_batch_arguments(spatial_backfill)
+    spatial_reenrich = sub.add_parser("reenrich-spatial-scope")
+    spatial_reenrich.add_argument("--previous-catalog", type=Path, required=True)
+    spatial_reenrich.add_argument(
+        "--lane",
+        action="append",
+        choices=SUPPORTED_LOCATION_LANES,
+        dest="lanes",
+    )
+    _add_spatial_batch_arguments(spatial_reenrich)
     return p
+
+
+def _add_spatial_batch_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--batch-size", type=int, default=500)
+    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--report-out", type=Path)
+    parser.add_argument("--approved-report", type=Path)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--apply", action="store_true")
 
 
 async def _amain(args: argparse.Namespace) -> None:
@@ -79,12 +116,95 @@ async def _amain(args: argparse.Namespace) -> None:
             print(json.dumps(evidence, sort_keys=True, separators=(",", ":")))
             if not evidence["all_expected_indexes_used"]:
                 raise RuntimeError("one or more spatial indexes were not selected")
+        elif args.command == "backfill-spatial-scope":
+            spatial_index = load_active_normalization_index(
+                cfg.spatial_catalog_path,
+                crosswalk_path=cfg.spatial_country_crosswalk_path,
+            )
+            checkpoints = JsonCheckpointStore(args.checkpoint)
+
+            async def run_backfill(*, dry_run: bool) -> dict[str, Any]:
+                return await backfill_spatial_scope.run(
+                    client,
+                    spatial_index,
+                    checkpoints,
+                    lane=args.lane,
+                    target_derivation_revision=args.target_derivation_revision,
+                    batch_size=args.batch_size,
+                    dry_run=dry_run,
+                )
+
+            result = await _run_reviewed(run_backfill, args)
+            _emit_report(result, args.report_out)
+        elif args.command == "reenrich-spatial-scope":
+            current_index = load_active_normalization_index(
+                cfg.spatial_catalog_path,
+                crosswalk_path=cfg.spatial_country_crosswalk_path,
+            )
+            previous_index = load_normalization_index(
+                args.previous_catalog,
+                crosswalk_path=cfg.spatial_country_crosswalk_path,
+            )
+            jobs = reenrich_spatial_scope.plan_reenrichment_jobs(
+                reenrich_spatial_scope.derivation_revision_map(previous_index),
+                reenrich_spatial_scope.derivation_revision_map(current_index),
+                lanes=args.lanes or SUPPORTED_LOCATION_LANES,
+                batch_size=args.batch_size,
+            )
+            checkpoints = JsonCheckpointStore(args.checkpoint)
+
+            async def run_reenrichment(*, dry_run: bool) -> dict[str, Any]:
+                return await reenrich_spatial_scope.run_jobs(
+                    client,
+                    current_index,
+                    checkpoints,
+                    jobs,
+                    dry_run=dry_run,
+                )
+
+            result = await _run_reviewed(run_reenrichment, args)
+            _emit_report(result, args.report_out)
     finally:
         await client.close()
 
 
 def main() -> None:
     asyncio.run(_amain(build_parser().parse_args()))
+
+
+async def _run_reviewed(runner, args: argparse.Namespace) -> dict[str, Any]:
+    if args.dry_run:
+        if args.approved_report is not None:
+            raise ValueError("--approved-report is only valid with --apply")
+        return await runner(dry_run=True)
+    if args.approved_report is None:
+        raise ValueError("--apply requires --approved-report from a reviewed dry-run")
+    approved = _load_json_object(args.approved_report)
+    fresh = await runner(dry_run=True)
+    validate_dry_run_approval(approved, fresh)
+    return await runner(dry_run=False)
+
+
+def _load_json_object(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("approved report must be a regular file")
+    value = json.loads(path.read_text())
+    if not isinstance(value, dict):
+        raise ValueError("approved report must contain a JSON object")
+    return value
+
+
+def _emit_report(report: dict[str, Any], path: Path | None) -> None:
+    if report.get("report_fingerprint") != report_fingerprint(report):
+        raise ValueError("refusing to emit a report with an invalid fingerprint")
+    encoded = json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if path is None:
+        print(encoded)
+        return
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise ValueError("report output must be a regular file")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{encoded}\n")
 
 
 if __name__ == "__main__":

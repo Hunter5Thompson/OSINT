@@ -134,6 +134,7 @@ class _ScopeRecord:
     kind: ScopeKind
     parent_key: str | None
     derivation_revision: str
+    compatible_derivation_revisions: tuple[str, ...]
     containment: BoundaryGeometry | None
 
 
@@ -182,6 +183,13 @@ class SpatialNormalizationIndex:
             None,
         )
 
+    def is_compatible_derivation(self, scope_key: str, revision: str) -> bool:
+        record = self.scopes.get(scope_key)
+        return (
+            record is not None
+            and revision in record.compatible_derivation_revisions
+        )
+
 
 def _require_pair(left: object, right: object, label: str) -> None:
     if (left is None) != (right is None):
@@ -194,6 +202,7 @@ def build_normalization_index(
     country_crosswalk: CountryCrosswalk,
     scope_parents: Mapping[str, str | None],
     scope_derivation_revisions: Mapping[str, str],
+    scope_compatible_derivation_revisions: Mapping[str, tuple[str, ...]] | None = None,
     containment: Mapping[str, BoundaryGeometry],
 ) -> SpatialNormalizationIndex:
     """Build immutable allowlisted indexes from reviewed catalog inputs."""
@@ -202,17 +211,31 @@ def build_normalization_index(
         raise ValueError("scope parents and derivation revisions must cover the same scopes")
     if not set(containment).issubset(scope_parents):
         raise ValueError("containment references an unknown scope")
+    compatible_by_scope = scope_compatible_derivation_revisions or {
+        scope_key: (revision,)
+        for scope_key, revision in scope_derivation_revisions.items()
+    }
+    if set(compatible_by_scope) != set(scope_parents):
+        raise ValueError("compatible revisions must cover the same scopes")
 
     records: dict[str, _ScopeRecord] = {}
     for scope_key, parent_key in scope_parents.items():
         parsed = parse_scope_key(scope_key)
         if parent_key is not None and parent_key not in scope_parents:
             raise ValueError(f"unknown parent scope: {parent_key}")
+        compatible_revisions = compatible_by_scope[scope_key]
+        if (
+            not compatible_revisions
+            or len(set(compatible_revisions)) != len(compatible_revisions)
+            or scope_derivation_revisions[scope_key] not in compatible_revisions
+        ):
+            raise ValueError(f"invalid compatible revisions for scope: {scope_key}")
         records[scope_key] = _ScopeRecord(
             key=scope_key,
             kind=parsed.kind,
             parent_key=parent_key,
             derivation_revision=scope_derivation_revisions[scope_key],
+            compatible_derivation_revisions=compatible_revisions,
             containment=containment.get(scope_key),
         )
 
@@ -337,6 +360,10 @@ def load_normalization_index(
         scope_parents={scope.scope.key: scope.scope.parent_key for scope in manifest.scopes},
         scope_derivation_revisions={
             scope.scope.key: scope.derivation_revision for scope in manifest.scopes
+        },
+        scope_compatible_derivation_revisions={
+            scope.scope.key: scope.compatible_derivation_revisions
+            for scope in manifest.scopes
         },
         containment=containment,
     )

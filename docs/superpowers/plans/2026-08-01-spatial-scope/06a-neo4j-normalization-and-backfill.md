@@ -71,18 +71,22 @@ catalog's crosswalk and containment artifacts—do not create a second geo model
 
 ## Work order 4 — Backfill and recurring re-enrichment
 
-- [ ] **RED:** Test dry-run zero writes, apply idempotency, stable cursor resume,
+- [x] **RED:** Test dry-run zero writes, apply idempotency, stable cursor resume,
   lane+target-revision checkpointing, conflict/unresolved preservation, configurable
   batches, report accounting, interrupted restart, new derivation scheduling, and
   catalog carry-forward producing no rewrite.
-- [ ] **GREEN:** Implement CLI jobs with explicit `--dry-run/--apply`, checkpoint and
+- [x] **GREEN:** Implement CLI jobs with explicit `--dry-run/--apply`, checkpoint and
   machine-readable report. Apply only deterministic results and retain old fields.
   Re-enrichment is triggered per affected lane for a new derivation revision.
-- [ ] **REFACTOR:** Share batch engine/report schema between initial backfill and
+- [x] **REFACTOR:** Share batch engine/report schema between initial backfill and
   recurring re-enrichment; isolate deterministic parameterized Cypher constants.
 - [ ] **VERIFY:** Run focused tests, then dry-run against staging and review total,
   already-normalized, resolvable, unresolved, conflict, invalid and by-source/system.
-- [ ] **COMMIT:** `feat(graph-integrity): backfill spatial scope revisions`
+- [x] **COMMIT:** `feat(graph-integrity): backfill spatial scope revisions`
+
+> Hermetischer Stand: 1.336 Tests bestanden, 1 dokumentierter Skip und 17 deselected;
+> Ruff ist grün. Der **VERIFY**-Punkt bleibt bis zum freigegebenen Staging-Dry-run
+> und dessen reviewtem Accounting offen; es wurde kein Graph mutiert.
 
 ## Exit gate and handoff
 
