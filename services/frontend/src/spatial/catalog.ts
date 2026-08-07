@@ -783,12 +783,18 @@ export interface BoundaryAssetStoreOptions {
 
 export interface BoundaryAssetStoreDiagnostics {
   readonly activeLeases: number;
+  readonly cacheHits: number;
+  readonly cacheMisses: number;
   readonly decodedBytes: number;
   readonly decodedEntries: number;
   readonly disposed: boolean;
+  readonly evictions: number;
+  readonly highWaterDecodedBytes: number;
+  readonly highWaterDecodedEntries: number;
   readonly inflightLoads: number;
   readonly maxDecodedBytes: number;
   readonly maxEntries: number;
+  readonly prefetchedEntries: number;
 }
 
 interface DecodedAsset {
@@ -800,6 +806,7 @@ interface AssetCacheEntry extends DecodedAsset {
   readonly descriptor: AssetDescriptor;
   leases: number;
   lastUsed: number;
+  prefetched: boolean;
 }
 
 interface InflightAsset {
@@ -814,6 +821,7 @@ interface InflightAsset {
 interface AssetRetryPolicy {
   network: boolean;
   busy: boolean;
+  foreground: boolean;
 }
 
 interface GeometryCounts {
@@ -836,8 +844,8 @@ const LOD_VERTEX_BUDGET: Readonly<Record<GeometryLod, number>> = {
   regional: 50_000,
   local: 120_000,
 };
-const DEFAULT_DECODED_CACHE_BYTES = 32 * 1024 * 1024;
-const DEFAULT_DECODED_CACHE_ENTRIES = 32;
+const DEFAULT_DECODED_CACHE_BYTES = 64 * 1024 * 1024;
+const DEFAULT_DECODED_CACHE_ENTRIES = 8;
 
 const browserClock: SpatialCatalogClock = {
   now: () => Date.now(),
@@ -907,14 +915,7 @@ function assertDescriptorMatch(left: AssetDescriptor, right: AssetDescriptor): v
     left.mediaType !== right.mediaType ||
     left.byteLength !== right.byteLength ||
     left.vertexCount !== right.vertexCount ||
-    left.featureCount !== right.featureCount ||
-    left.role !== right.role ||
-    (left.role === "render" && right.role === "render" && left.lod !== right.lod) ||
-    (
-      left.role === "containment" &&
-      right.role === "containment" &&
-      left.maxErrorMeters !== right.maxErrorMeters
-    )
+    left.featureCount !== right.featureCount
   ) {
     throw geometryError("Asset descriptor changed for one content address.", left.assetId);
   }
@@ -956,6 +957,11 @@ export class BoundaryAssetStore {
   private readonly maxDecodedBytes: number;
   private readonly cache = new Map<string, AssetCacheEntry>();
   private readonly inflight = new Map<string, InflightAsset>();
+  private cacheHits = 0;
+  private cacheMisses = 0;
+  private evictions = 0;
+  private highWaterDecodedBytes = 0;
+  private highWaterDecodedEntries = 0;
   private disposed = false;
 
   constructor(options: BoundaryAssetStoreOptions = {}) {
@@ -980,17 +986,32 @@ export class BoundaryAssetStore {
   async acquire(
     descriptor: AssetDescriptor,
     signal: AbortSignal,
+    policy: AssetRetryPolicy = { network: true, busy: true, foreground: true },
   ): Promise<BoundaryAssetLease> {
-    return this.acquireWithPolicy(descriptor, signal, { network: true, busy: true });
+    return this.acquireWithPolicy(descriptor, signal, policy);
   }
 
   async prefetch(descriptor: AssetDescriptor, signal: AbortSignal): Promise<void> {
-    const lease = await this.acquireWithPolicy(
-      descriptor,
-      signal,
-      { network: false, busy: false },
-    );
+    const lease = await this.acquireForPrefetch(descriptor, signal);
     lease.release();
+  }
+
+  async acquireForPrefetch(
+    descriptor: AssetDescriptor,
+    signal: AbortSignal,
+    policy: AssetRetryPolicy = { network: false, busy: false, foreground: false },
+  ): Promise<BoundaryAssetLease> {
+    return this.acquireWithPolicy(descriptor, signal, policy);
+  }
+
+  async acquireForSharedLoad(
+    descriptor: AssetDescriptor,
+    signal: AbortSignal,
+    policy: AssetRetryPolicy,
+  ): Promise<BoundaryAssetLease> {
+    return policy.foreground
+      ? this.acquire(descriptor, signal, policy)
+      : this.acquireForPrefetch(descriptor, signal, policy);
   }
 
   dispose(): void {
@@ -1005,15 +1026,21 @@ export class BoundaryAssetStore {
     const entries = [...this.cache.values()];
     return freezeSpatialValue({
       activeLeases: entries.reduce((total, entry) => total + entry.leases, 0),
+      cacheHits: this.cacheHits,
+      cacheMisses: this.cacheMisses,
       decodedBytes: entries.reduce(
         (total, entry) => total + entry.estimatedHeapBytes,
         0,
       ),
       decodedEntries: entries.length,
       disposed: this.disposed,
+      evictions: this.evictions,
+      highWaterDecodedBytes: this.highWaterDecodedBytes,
+      highWaterDecodedEntries: this.highWaterDecodedEntries,
       inflightLoads: this.inflight.size,
       maxDecodedBytes: this.maxDecodedBytes,
       maxEntries: this.maxEntries,
+      prefetchedEntries: entries.filter((entry) => entry.prefetched).length,
     });
   }
 
@@ -1027,14 +1054,17 @@ export class BoundaryAssetStore {
     if (signal.aborted) throw abortError();
     const cached = this.cache.get(descriptor.assetId);
     if (cached !== undefined) {
+      this.cacheHits += 1;
       assertDescriptorMatch(cached.descriptor, descriptor);
-      return this.lease(cached);
+      if (policy.foreground) cached.prefetched = false;
+      return this.lease(cached, policy.foreground);
     }
+    this.cacheMisses += 1;
 
     let load = this.inflight.get(descriptor.assetId);
     if (load === undefined) {
       const controller = new AbortController();
-      const retryPolicy = { ...policy };
+      const retryPolicy = policy;
       load = {
         descriptor,
         controller,
@@ -1053,6 +1083,7 @@ export class BoundaryAssetStore {
       assertDescriptorMatch(load.descriptor, descriptor);
       load.retryPolicy.network ||= policy.network;
       load.retryPolicy.busy ||= policy.busy;
+      load.retryPolicy.foreground ||= policy.foreground;
     }
 
     load.consumers += 1;
@@ -1061,7 +1092,8 @@ export class BoundaryAssetStore {
       if (signal.aborted) throw abortError();
       const entry = this.cache.get(descriptor.assetId);
       if (entry === undefined) throw geometryError("Decoded asset was not cached.", descriptor.assetId);
-      return this.lease(entry);
+      if (policy.foreground) entry.prefetched = false;
+      return this.lease(entry, policy.foreground);
     } finally {
       load.consumers -= 1;
       if (load.consumers === 0 && !load.settled) load.controller.abort();
@@ -1079,13 +1111,17 @@ export class BoundaryAssetStore {
       descriptor: freezeSpatialValue({ ...load.descriptor }),
       leases: 0,
       lastUsed: this.clock.now(),
+      prefetched: !load.retryPolicy.foreground,
     });
   }
 
-  private lease(entry: AssetCacheEntry): BoundaryAssetLease {
+  private lease(entry: AssetCacheEntry, foreground: boolean): BoundaryAssetLease {
     entry.leases += 1;
     entry.lastUsed = this.clock.now();
-    this.evict();
+    if (foreground) {
+      this.evict();
+      this.updateHighWater();
+    }
     let released = false;
     return freezeSpatialValue({
       asset: entry.asset,
@@ -1095,8 +1131,21 @@ export class BoundaryAssetStore {
         entry.leases -= 1;
         entry.lastUsed = this.clock.now();
         this.evict();
+        this.updateHighWater();
       },
     });
+  }
+
+  private updateHighWater(): void {
+    const entries = [...this.cache.values()];
+    this.highWaterDecodedEntries = Math.max(
+      this.highWaterDecodedEntries,
+      entries.length,
+    );
+    this.highWaterDecodedBytes = Math.max(
+      this.highWaterDecodedBytes,
+      entries.reduce((total, candidate) => total + candidate.estimatedHeapBytes, 0),
+    );
   }
 
   private evict(): void {
@@ -1105,9 +1154,14 @@ export class BoundaryAssetStore {
     while (this.cache.size > this.maxEntries || decodedBytes > this.maxDecodedBytes) {
       const candidate = [...this.cache.entries()]
         .filter(([, entry]) => entry.leases === 0)
-        .sort((left, right) => left[1].lastUsed - right[1].lastUsed)[0];
+        .sort((left, right) => (
+          Number(right[1].prefetched) - Number(left[1].prefetched)
+          || left[1].lastUsed - right[1].lastUsed
+          || left[0].localeCompare(right[0])
+        ))[0];
       if (candidate === undefined) return;
       this.cache.delete(candidate[0]);
+      this.evictions += 1;
       decodedBytes -= candidate[1].estimatedHeapBytes;
     }
   }
@@ -1531,7 +1585,15 @@ async function errorFromResponse(response: Response): Promise<SpatialCatalogErro
   }
 }
 
-async function readScopeJson(response: Response, signal: AbortSignal): Promise<unknown> {
+interface DecodedScopeJson {
+  readonly byteLength: number;
+  readonly value: unknown;
+}
+
+async function readScopeJson(
+  response: Response,
+  signal: AbortSignal,
+): Promise<DecodedScopeJson> {
   const declaredLength = response.headers.get("Content-Length");
   if (
     declaredLength !== null &&
@@ -1545,7 +1607,8 @@ async function readScopeJson(response: Response, signal: AbortSignal): Promise<u
   }
   const text = await response.text();
   if (signal.aborted) throw abortError();
-  if (new TextEncoder().encode(text).byteLength > MAX_SCOPE_METADATA_BYTES) {
+  const byteLength = new TextEncoder().encode(text).byteLength;
+  if (byteLength > MAX_SCOPE_METADATA_BYTES) {
     throw new SpatialCatalogError({
       code: "CATALOG_UNAVAILABLE",
       message: "Scope metadata exceeded its streaming byte budget.",
@@ -1553,7 +1616,7 @@ async function readScopeJson(response: Response, signal: AbortSignal): Promise<u
     });
   }
   try {
-    return JSON.parse(text) as unknown;
+    return { byteLength, value: JSON.parse(text) as unknown };
   } catch (error: unknown) {
     throw new SpatialCatalogError({
       code: "CATALOG_UNAVAILABLE",
@@ -1750,7 +1813,25 @@ export interface HttpSpatialCatalogOptions {
   readonly fetch?: SpatialFetch;
   readonly assetStore?: BoundaryAssetStore;
   readonly clock?: SpatialCatalogClock;
+  readonly maxScopeBytes?: number;
+  readonly maxScopeEntries?: number;
   readonly random?: () => number;
+}
+
+export interface HttpSpatialCatalogDiagnostics {
+  readonly disposed: boolean;
+  readonly inflightMetadataLoads: number;
+  readonly maxScopeBytes: number;
+  readonly maxScopeEntries: number;
+  readonly metadataBytes: number;
+  readonly metadataEntries: number;
+  readonly metadataEvictions: number;
+  readonly metadataHighWaterBytes: number;
+  readonly metadataHighWater: number;
+  readonly metadataHits: number;
+  readonly metadataMisses: number;
+  readonly metadataRevalidations: number;
+  readonly negativeEntries: number;
 }
 
 interface DecodedScopeBundle {
@@ -1766,15 +1847,37 @@ interface DecodedScopeBundle {
 }
 
 interface ScopeCacheEntry {
+  readonly byteLength: number;
   readonly etag: string;
   readonly resolved: ResolvedScope;
-  readonly descriptors: readonly AssetDescriptor[];
+  readonly extentAssetId: string | null;
+  readonly prefetchDescriptors: readonly AssetDescriptor[];
+  lastUsed: number;
+  validatedAt: number;
 }
 
 interface NegativeScopeEntry {
   readonly expiresAt: number;
   readonly error: SpatialCatalogError;
+  lastUsed: number;
 }
+
+interface ScopeLoadPolicy {
+  allowRetry: boolean;
+  readonly asset: AssetRetryPolicy;
+}
+
+interface InflightScopeLoad {
+  readonly controller: AbortController;
+  readonly policy: ScopeLoadPolicy;
+  readonly promise: Promise<ResolvedScope>;
+  consumers: number;
+  settled: boolean;
+}
+
+const DEFAULT_SCOPE_CACHE_ENTRIES = 256;
+const DEFAULT_SCOPE_CACHE_BYTES = DEFAULT_SCOPE_CACHE_ENTRIES * MAX_SCOPE_METADATA_BYTES;
+const SCOPE_METADATA_FRESH_MILLISECONDS = 60_000;
 
 function parseWireScopeSummary(value: unknown, context: string): ScopeSummary {
   const record = asRecord(value, context);
@@ -1937,19 +2040,39 @@ function decodeScopeBundle(
   });
 }
 
-function descriptorsForScope(bundle: DecodedScopeBundle): readonly AssetDescriptor[] {
+function effectivePresentationLod(bundle: DecodedScopeBundle): GeometryLod | null {
+  if (bundle.preferredLod !== null) return bundle.preferredLod;
+  for (const lod of ["regional", "overview", "local"] as const) {
+    if (bundle.outlineLods[lod] !== undefined) return lod;
+  }
+  return null;
+}
+
+function prefetchDescriptorsForScope(
+  bundle: DecodedScopeBundle,
+): readonly AssetDescriptor[] {
   const byId = new Map<string, AssetDescriptor>();
-  for (const descriptor of [
-    ...Object.values(bundle.outlineLods),
-    ...Object.values(bundle.childrenLods),
-    bundle.containment,
-  ]) {
+  const lod = effectivePresentationLod(bundle);
+  for (const descriptor of lod === null
+    ? []
+    : [bundle.outlineLods[lod], bundle.childrenLods[lod]]) {
     if (descriptor === undefined || descriptor === null) continue;
     const existing = byId.get(descriptor.assetId);
     if (existing !== undefined) assertDescriptorMatch(existing, descriptor);
     else byId.set(descriptor.assetId, descriptor);
   }
   return [...byId.values()];
+}
+
+function extentDescriptorForScope(
+  bundle: DecodedScopeBundle,
+): AssetDescriptor | null {
+  const lod = effectivePresentationLod(bundle);
+  if (lod === null) return null;
+  return bundle.outlineLods[lod]
+    ?? bundle.childrenLods[lod]
+    ?? bundle.containment
+    ?? null;
 }
 
 function geometryValues(asset: BoundaryAsset): readonly BoundaryGeometryV1[] {
@@ -2017,10 +2140,11 @@ async function resolvedFromBundle(
   bundle: DecodedScopeBundle,
   assetStore: BoundaryAssetStore,
   signal: AbortSignal,
-  prefetchOnly: boolean,
+  assetPolicy: AssetRetryPolicy,
 ): Promise<ResolvedScope> {
   let presentation: ResolvedPresentation;
-  if (bundle.scope.presentation === "semantic-only" || bundle.preferredLod === null) {
+  const presentationLod = effectivePresentationLod(bundle);
+  if (bundle.scope.presentation === "semantic-only" || presentationLod === null) {
     presentation = semanticPresentation(bundle, new SpatialCatalogError({
       code: "GEOMETRY_UNAVAILABLE",
       target: bundle.scope.key,
@@ -2028,18 +2152,19 @@ async function resolvedFromBundle(
       recoverable: false,
     }));
   } else {
-    const descriptor = bundle.outlineLods[bundle.preferredLod]
-      ?? bundle.containment
-      ?? bundle.childrenLods[bundle.preferredLod];
-    if (descriptor === undefined) {
+    const descriptor = extentDescriptorForScope(bundle);
+    if (descriptor === null) {
       presentation = semanticPresentation(bundle, geometryError(
         "No descriptor can produce a camera extent.",
         bundle.scope.key,
       ));
     } else {
       try {
-        if (prefetchOnly) await assetStore.prefetch(descriptor, signal);
-        const lease = await assetStore.acquire(descriptor, signal);
+        const lease = await assetStore.acquireForSharedLoad(
+          descriptor,
+          signal,
+          assetPolicy,
+        );
         try {
           if (
             "parentScopeKey" in lease.asset &&
@@ -2052,7 +2177,7 @@ async function resolvedFromBundle(
             mode: "boundary",
             scopeKey: bundle.scope.key,
             catalogRevision: bundle.catalogRevision,
-            preferredLod: bundle.preferredLod,
+            preferredLod: presentationLod,
             outlineLods: bundle.outlineLods,
             childrenLods: bundle.childrenLods,
             cameraExtent: extentFromAsset(lease.asset, bundle.scope.key),
@@ -2085,16 +2210,43 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
   private readonly fetcher: SpatialFetch;
   private readonly assetStore: BoundaryAssetStore;
   private readonly clock: SpatialCatalogClock;
+  private readonly maxScopeBytes: number;
+  private readonly maxScopeEntries: number;
   private readonly random: () => number;
   private readonly scopes = new Map<string, ScopeCacheEntry>();
   private readonly negativeScopes = new Map<string, NegativeScopeEntry>();
+  private readonly inflightScopes = new Map<string, InflightScopeLoad>();
+  private metadataEvictions = 0;
+  private metadataHighWater = 0;
+  private metadataHighWaterBytes = 0;
+  private metadataHits = 0;
+  private metadataMisses = 0;
+  private metadataRevalidations = 0;
   private pinnedRevision: CatalogRevision | null = null;
   private disposed = false;
 
   constructor(options: HttpSpatialCatalogOptions = {}) {
     this.fetcher = options.fetch ?? defaultFetch;
     this.clock = options.clock ?? browserClock;
+    this.maxScopeBytes = options.maxScopeBytes ?? DEFAULT_SCOPE_CACHE_BYTES;
+    this.maxScopeEntries = options.maxScopeEntries ?? DEFAULT_SCOPE_CACHE_ENTRIES;
     this.random = options.random ?? Math.random;
+    if (
+      !Number.isSafeInteger(this.maxScopeBytes)
+      || this.maxScopeBytes < 1
+      || this.maxScopeBytes > DEFAULT_SCOPE_CACHE_BYTES
+    ) {
+      throw new RangeError(
+        `maxScopeBytes must be an integer between 1 and ${DEFAULT_SCOPE_CACHE_BYTES}`,
+      );
+    }
+    if (
+      !Number.isSafeInteger(this.maxScopeEntries)
+      || this.maxScopeEntries < 1
+      || this.maxScopeEntries > DEFAULT_SCOPE_CACHE_ENTRIES
+    ) {
+      throw new RangeError("maxScopeEntries must be an integer between 1 and 256");
+    }
     this.assetStore = options.assetStore ?? new BoundaryAssetStore({
       fetch: this.fetcher,
       clock: this.clock,
@@ -2173,19 +2325,42 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
     }
     const key = this.scopeKey(scopeKey, revision);
     let entry = this.scopes.get(key);
+    let loadedForPrefetch = false;
     if (entry === undefined) {
       await this.loadScope(scopeKey, revision, signal, false, true);
       entry = this.scopes.get(key);
+      loadedForPrefetch = true;
     }
     if (entry === undefined) throw geometryError("Prefetch scope cache is unavailable.", scopeKey);
-    for (const descriptor of entry.descriptors) {
+    for (const descriptor of entry.prefetchDescriptors) {
+      if (loadedForPrefetch && descriptor.assetId === entry.extentAssetId) continue;
       await this.assetStore.prefetch(descriptor, signal);
     }
+  }
+
+  diagnostics(): HttpSpatialCatalogDiagnostics {
+    return freezeSpatialValue({
+      disposed: this.disposed,
+      inflightMetadataLoads: this.inflightScopes.size,
+      maxScopeBytes: this.maxScopeBytes,
+      maxScopeEntries: this.maxScopeEntries,
+      metadataBytes: this.metadataBytes(),
+      metadataEntries: this.scopes.size,
+      metadataEvictions: this.metadataEvictions,
+      metadataHighWaterBytes: this.metadataHighWaterBytes,
+      metadataHighWater: this.metadataHighWater,
+      metadataHits: this.metadataHits,
+      metadataMisses: this.metadataMisses,
+      metadataRevalidations: this.metadataRevalidations,
+      negativeEntries: this.negativeScopes.size,
+    });
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    for (const load of this.inflightScopes.values()) load.controller.abort();
+    this.inflightScopes.clear();
     this.scopes.clear();
     this.negativeScopes.clear();
     this.assetStore.dispose();
@@ -2199,19 +2374,88 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
     prefetchOnly: boolean,
   ): Promise<ResolvedScope> {
     if (signal.aborted) throw abortError();
+    const key = this.scopeKey(scopeKey, revision);
+    let load = this.inflightScopes.get(key);
+    if (load === undefined) {
+      const controller = new AbortController();
+      const foreground = !prefetchOnly;
+      const policy: ScopeLoadPolicy = {
+        allowRetry,
+        asset: {
+          network: foreground,
+          busy: foreground,
+          foreground,
+        },
+      };
+      load = {
+        controller,
+        policy,
+        promise: this.performScopeLoad(scopeKey, revision, controller.signal, policy),
+        consumers: 0,
+        settled: false,
+      };
+      this.inflightScopes.set(key, load);
+      const ownedLoad = load;
+      ownedLoad.promise.then(
+        () => this.settleScopeLoad(key, ownedLoad),
+        () => this.settleScopeLoad(key, ownedLoad),
+      );
+    } else if (!prefetchOnly) {
+      load.policy.allowRetry ||= allowRetry;
+      load.policy.asset.network = true;
+      load.policy.asset.busy = true;
+      load.policy.asset.foreground = true;
+    }
+
+    load.consumers += 1;
+    try {
+      return await waitForPromise(load.promise, signal);
+    } finally {
+      load.consumers -= 1;
+      if (load.consumers === 0 && !load.settled) load.controller.abort();
+    }
+  }
+
+  private settleScopeLoad(key: string, load: InflightScopeLoad): void {
+    load.settled = true;
+    if (this.inflightScopes.get(key) === load) this.inflightScopes.delete(key);
+  }
+
+  private async performScopeLoad(
+    scopeKey: ScopeKey,
+    revision: CatalogRevision | null,
+    signal: AbortSignal,
+    policy: ScopeLoadPolicy,
+  ): Promise<ResolvedScope> {
+    if (signal.aborted) throw abortError();
     const cacheKey = this.scopeKey(scopeKey, revision);
+    const now = this.clock.now();
+    this.pruneExpiredNegativeScopes(now);
     const negative = this.negativeScopes.get(cacheKey);
     if (negative !== undefined) {
-      if (negative.expiresAt > this.clock.now()) throw negative.error;
+      if (negative.expiresAt > now) {
+        negative.lastUsed = now;
+        throw negative.error;
+      }
       this.negativeScopes.delete(cacheKey);
     }
     const cached = this.scopes.get(cacheKey);
+    if (
+      cached !== undefined
+      && now - cached.validatedAt < SCOPE_METADATA_FRESH_MILLISECONDS
+    ) {
+      cached.lastUsed = now;
+      this.metadataHits += 1;
+      return cached.resolved;
+    }
+    if (cached === undefined) this.metadataMisses += 1;
+    else this.metadataRevalidations += 1;
     const response = await this.fetchScopeResponse(
       scopeKey,
       revision,
       cached?.etag,
       signal,
-      allowRetry,
+      policy,
     );
     if (response.status === 304) {
       if (cached === undefined) {
@@ -2221,6 +2465,9 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
           message: "Scope returned 304 without a cached representation.",
         });
       }
+      cached.lastUsed = this.clock.now();
+      cached.validatedAt = cached.lastUsed;
+      this.metadataHits += 1;
       return cached.resolved;
     }
     if (!response.ok) {
@@ -2229,7 +2476,9 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
         this.negativeScopes.set(cacheKey, {
           expiresAt: this.clock.now() + 30_000,
           error,
+          lastUsed: this.clock.now(),
         });
+        this.evictNegativeScopes();
       }
       throw error;
     }
@@ -2248,27 +2497,77 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
         message: "Scope response has no valid ETag.",
       });
     }
-    const value = await readScopeJson(response, signal);
+    const decodedJson = await readScopeJson(response, signal);
     if (signal.aborted) throw abortError();
-    const bundle = decodeScopeBundle(value, scopeKey, revision);
+    const bundle = decodeScopeBundle(decodedJson.value, scopeKey, revision);
     const resolved = await resolvedFromBundle(
       bundle,
       this.assetStore,
       signal,
-      prefetchOnly,
+      policy.asset,
     );
-    const entry: ScopeCacheEntry = freezeSpatialValue({
+    const cachedAt = this.clock.now();
+    const entry: ScopeCacheEntry = {
+      byteLength: decodedJson.byteLength,
       etag,
       resolved,
-      descriptors: descriptorsForScope(bundle),
-    });
+      extentAssetId: extentDescriptorForScope(bundle)?.assetId ?? null,
+      prefetchDescriptors: freezeSpatialValue(prefetchDescriptorsForScope(bundle)),
+      lastUsed: cachedAt,
+      validatedAt: cachedAt,
+    };
     const canonicalKey = this.scopeKey(scopeKey, bundle.catalogRevision);
     this.scopes.set(canonicalKey, entry);
-    this.scopes.set(cacheKey, entry);
     if (revision === null && this.pinnedRevision === null) {
       this.pinnedRevision = bundle.catalogRevision;
     }
+    this.evictScopes();
+    this.metadataHighWater = Math.max(this.metadataHighWater, this.scopes.size);
+    this.metadataHighWaterBytes = Math.max(
+      this.metadataHighWaterBytes,
+      this.metadataBytes(),
+    );
     return resolved;
+  }
+
+  private evictScopes(): void {
+    while (
+      this.scopes.size > this.maxScopeEntries
+      || this.metadataBytes() > this.maxScopeBytes
+    ) {
+      const candidate = [...this.scopes.entries()].sort((left, right) => (
+        left[1].lastUsed - right[1].lastUsed
+        || left[0].localeCompare(right[0])
+      ))[0];
+      if (candidate === undefined) return;
+      this.scopes.delete(candidate[0]);
+      this.metadataEvictions += 1;
+    }
+  }
+
+  private metadataBytes(): number {
+    return [...this.scopes.values()].reduce(
+      (total, entry) => total + entry.byteLength,
+      0,
+    );
+  }
+
+  private evictNegativeScopes(): void {
+    this.pruneExpiredNegativeScopes(this.clock.now());
+    while (this.negativeScopes.size > this.maxScopeEntries) {
+      const candidate = [...this.negativeScopes.entries()].sort((left, right) => (
+        left[1].lastUsed - right[1].lastUsed
+        || left[0].localeCompare(right[0])
+      ))[0];
+      if (candidate === undefined) return;
+      this.negativeScopes.delete(candidate[0]);
+    }
+  }
+
+  private pruneExpiredNegativeScopes(now: number): void {
+    for (const [key, entry] of this.negativeScopes) {
+      if (entry.expiresAt <= now) this.negativeScopes.delete(key);
+    }
   }
 
   private async fetchScopeResponse(
@@ -2276,7 +2575,7 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
     revision: CatalogRevision | null,
     etag: string | undefined,
     signal: AbortSignal,
-    allowRetry: boolean,
+    policy: ScopeLoadPolicy,
   ): Promise<Response> {
     const parameters = new URLSearchParams({ scope_key: scopeKey });
     if (revision !== null) parameters.set("catalog_revision", revision);
@@ -2296,7 +2595,7 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
         });
       } catch (error: unknown) {
         if (signal.aborted || isAbortFailure(error)) throw abortError();
-        if (!allowRetry || retries >= 1) {
+        if (!policy.allowRetry || retries >= 1) {
           throw new SpatialCatalogError({
             code: "CATALOG_UNAVAILABLE",
             target: scopeKey,
@@ -2312,7 +2611,7 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
       if (
         response.status >= 500 &&
         response.status <= 599 &&
-        allowRetry &&
+        policy.allowRetry &&
         retries < 1
       ) {
         retries += 1;

@@ -1744,7 +1744,7 @@ Observation-Producer.
 # ══════════════════════════════════════════
 # TASK-121: Gebundene HttpSpatialCatalog-Metadaten-Caches
 # ══════════════════════════════════════════
-# Status: OFFEN | Priorität: P1
+# Status: DONE ✅ (2026-08-07) | Priorität: P1
 # Owner: Spatial Slice 05 (Admin1/Admin2) + Frontend Catalog Adapter
 # Blocked by: nichts
 # Blocks: belastbare Aktivierung großer Admin1-/Admin2-Kataloge
@@ -1770,6 +1770,19 @@ Observation-Producer.
 #      durch Eviction nicht beschädigt; Superseded/Abort bleibt still und leak-frei.
 #   5. `dispose()` leert alle Metadatenzustände deterministisch. Spatial-Suite,
 #      TypeScript, ESLint und Produktionsbuild bleiben grün.
+#
+# Abschluss:
+#   - Scope-Metadaten besitzen ein deterministisches LRU mit 256 Einträgen und
+#     128 MiB Aggregatbudget; einzelne Responses bleiben auf 512 KiB begrenzt.
+#   - Freshness/ETag/304 bleiben bei 60 Sekunden erhalten. Negative 404-Einträge
+#     leben exakt 30 Sekunden und werden aktiv bereinigt; andere Fehler werden nicht
+#     negativ gecacht.
+#   - Erfolgreiches Revision-Pinning entfernt den aktiven Alias. Ref-counted
+#     In-flight-Loads lassen Hover und Click dieselbe Metadaten-/Asset-Anfrage teilen,
+#     ohne dass der Abort eines Consumers die verbleibende Lease vergiftet.
+#   - Cache-, In-flight- und High-Water-Diagnosen sind im Dev-Canary sichtbar;
+#     `dispose()` leert und abortet alle Zustände. 551 Frontend-Tests liefen flag-off
+#     und flag-on grün; TypeScript, ESLint und beide Produktionsbuilds sind grün.
 
 
 # ══════════════════════════════════════════

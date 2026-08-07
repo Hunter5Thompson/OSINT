@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogRevision": "spatial-v1-fe9828dcda05",
+  "catalogRevision": "spatial-v1-e76a16bff799",
   "boundaryPolicy": "odin-reference-v1",
   "scopeKeyVectors": {
     "accepted": [
@@ -38,7 +38,7 @@
     "accepted": [
       "spatial-v1-001122334455",
       "spatial-v12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "spatial-v1-fe9828dcda05"
+      "spatial-v1-e76a16bff799"
     ],
     "rejected": [
       "spatial-v1-placeholder",
@@ -71,13 +71,13 @@
       "query": {
         "schemaVersion": 1,
         "scopeKey": "world",
-        "catalogRevision": "spatial-v1-fe9828dcda05",
+        "catalogRevision": "spatial-v1-e76a16bff799",
         "boundaryPolicy": "odin-reference-v1"
       },
       "presentation": {
         "mode": "boundary",
         "scopeKey": "world",
-        "catalogRevision": "spatial-v1-fe9828dcda05",
+        "catalogRevision": "spatial-v1-e76a16bff799",
         "preferredLod": "overview",
         "outlineLods": {},
         "childrenLods": {
@@ -129,13 +129,13 @@
       "query": {
         "schemaVersion": 1,
         "scopeKey": "country:UKR",
-        "catalogRevision": "spatial-v1-fe9828dcda05",
+        "catalogRevision": "spatial-v1-e76a16bff799",
         "boundaryPolicy": "odin-reference-v1"
       },
       "presentation": {
         "mode": "boundary",
         "scopeKey": "country:UKR",
-        "catalogRevision": "spatial-v1-fe9828dcda05",
+        "catalogRevision": "spatial-v1-e76a16bff799",
         "preferredLod": "regional",
         "outlineLods": {
           "regional": {
@@ -183,7 +183,7 @@
         "shortLabel": "Donetsk",
         "parentKey": "country:UKR",
         "childrenAvailable": false,
-        "presentation": "semantic-only"
+        "presentation": "boundary"
       },
       "path": [
         {
@@ -211,29 +211,46 @@
           "shortLabel": "Donetsk",
           "parentKey": "country:UKR",
           "childrenAvailable": false,
-          "presentation": "semantic-only"
+          "presentation": "boundary"
         }
       ],
       "query": {
         "schemaVersion": 1,
         "scopeKey": "admin1:iso3166-2:UA-14",
-        "catalogRevision": "spatial-v1-fe9828dcda05",
+        "catalogRevision": "spatial-v1-e76a16bff799",
         "boundaryPolicy": "odin-reference-v1"
       },
       "presentation": {
-        "mode": "semantic-only",
+        "mode": "boundary",
         "scopeKey": "admin1:iso3166-2:UA-14",
-        "catalogRevision": "spatial-v1-fe9828dcda05",
-        "problem": {
-          "severity": "warning",
-          "code": "GEOMETRY_UNAVAILABLE",
-          "target": "admin1:iso3166-2:UA-14",
-          "recoverable": false,
-          "message": "Boundary presentation is unavailable.",
-          "activeCatalogRevision": null
+        "catalogRevision": "spatial-v1-e76a16bff799",
+        "preferredLod": "regional",
+        "outlineLods": {
+          "regional": {
+            "assetId": "a7c85e0208cf628a320a2f4642e3589168e2da34a573f7d2daaebed220017123",
+            "mediaType": "application/vnd.odin.boundary+json;v=1",
+            "byteLength": 27996,
+            "vertexCount": 1414,
+            "role": "render",
+            "lod": "regional"
+          }
+        },
+        "childrenLods": {},
+        "cameraExtent": {
+          "kind": "segments",
+          "south": 46.68768,
+          "north": 49.23388,
+          "longitude": [{ "west": 36.54195, "east": 39.09144 }]
         }
       },
-      "containment": null,
+      "containment": {
+        "assetId": "9fc3c14626254871f0758a87596b84b4430c9076c1c36960a92174aed1db879e",
+        "mediaType": "application/vnd.odin.boundary+json;v=1",
+        "byteLength": 133797,
+        "vertexCount": 6143,
+        "role": "containment",
+        "maxErrorMeters": 0
+      },
       "canonicalizedFrom": null
     }
   ]

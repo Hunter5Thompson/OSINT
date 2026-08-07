@@ -374,7 +374,11 @@ afterEach(() => {
 
 describe("SpatialScopeController hydration and hierarchy", () => {
   it("hydrates a deep link without ever publishing a world query flash", async () => {
-    const { catalog, controller } = setup({ initialScopeCandidate: DONETSK });
+    const presentation = new ControlledPresentation();
+    const { catalog, controller } = setup({
+      initialScopeCandidate: DONETSK,
+      presentation,
+    });
     const gate = catalog.deferNextResolve(DONETSK);
     const publishedQueries: Array<ScopeKey | null> = [];
     controller.subscribe(() => {
@@ -393,6 +397,11 @@ describe("SpatialScopeController hydration and hierarchy", () => {
       WORLD_SCOPE_KEY,
       UKRAINE,
       DONETSK,
+    ]);
+    expect(presentation.calls).toEqual([
+      expect.objectContaining({
+        input: expect.objectContaining({ scopeKey: DONETSK, mode: "boundary" }),
+      }),
     ]);
   });
 
@@ -566,7 +575,7 @@ describe("SpatialScopeController generations and failures", () => {
     expect(controller.getSnapshot().current?.key).toBe(WORLD_SCOPE_KEY);
   });
 
-  it("shares one in-flight resolve between prefetch and foreground enter", async () => {
+  it("keeps hover on the prefetch port while foreground performs one resolve", async () => {
     const { catalog, controller } = setup();
     await startAtWorld(controller);
     const gate = catalog.deferNextResolve(UKRAINE);
@@ -586,6 +595,7 @@ describe("SpatialScopeController generations and failures", () => {
     await expect(prefetch).resolves.toEqual({ outcome: "prefetched", target: UKRAINE });
     await expect(enter).resolves.toMatchObject({ outcome: "committed" });
     expect(catalog.resolveCalls.filter((call) => call.scopeKey === UKRAINE)).toHaveLength(1);
+    expect(catalog.prefetchCalls).toHaveLength(1);
   });
 
   it("maps catalog failure into a result and never rejects or changes the query", async () => {
@@ -752,22 +762,22 @@ describe("SpatialScopeController semantic and presentation lifetimes", () => {
     await startAtWorld(controller);
     const result = await controller.dispatch({
       type: "enter",
-      target: DONETSK,
+      target: VINNYTSIA,
       cause: "programmatic",
     });
 
     expect(result.outcome).toBe("committed");
     expect(controller.getSnapshot()).toMatchObject({
       phase: "ready",
-      current: { key: DONETSK },
-      query: { scopeKey: DONETSK },
+      current: { key: VINNYTSIA },
+      query: { scopeKey: VINNYTSIA },
       problem: { code: "GEOMETRY_UNAVAILABLE" },
       visual: {
         phase: "unavailable",
         problem: { code: "GEOMETRY_UNAVAILABLE" },
       },
     });
-    expect(presentation.calls.map((call) => call.input.scopeKey)).not.toContain(DONETSK);
+    expect(presentation.calls.map((call) => call.input.scopeKey)).not.toContain(VINNYTSIA);
   });
 
   it("ignores presentation completion for a stale stateRevision", async () => {
@@ -833,11 +843,14 @@ describe("SpatialScopeController semantic and presentation lifetimes", () => {
     });
   });
 
-  it("caches snapshot identity until the next publication", async () => {
-    const { controller } = setup();
+  it("keeps prefetch side-effect free for state, URL, and presentation", async () => {
+    const presentation = new ControlledPresentation();
+    const { catalog, controller, navigation } = setup({ presentation });
     expect(controller.getSnapshot()).toBe(controller.getSnapshot());
     await startAtWorld(controller);
     const ready = controller.getSnapshot();
+    const writesBefore = navigation.writes.length;
+    const presentationsBefore = presentation.calls.length;
     expect(controller.getSnapshot()).toBe(ready);
     await controller.dispatch({
       type: "prefetch",
@@ -845,5 +858,11 @@ describe("SpatialScopeController semantic and presentation lifetimes", () => {
       priority: "anticipated",
     });
     expect(controller.getSnapshot()).toBe(ready);
+    expect(navigation.writes).toHaveLength(writesBefore);
+    expect(presentation.calls).toHaveLength(presentationsBefore);
+    expect(catalog.resolveCalls.filter((call) => call.scopeKey === UKRAINE)).toHaveLength(0);
+    expect(catalog.prefetchCalls).toEqual([
+      { scopeKey: UKRAINE, catalogRevision: ACTIVE_REVISION, priority: "anticipated" },
+    ]);
   });
 });

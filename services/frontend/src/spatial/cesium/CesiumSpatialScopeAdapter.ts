@@ -196,6 +196,22 @@ export interface CesiumSpatialScopeAdapterOptions {
   readonly prefersReducedMotion?: () => boolean;
 }
 
+export interface CesiumSpatialScopeDiagnostics {
+  readonly activeContainers: number;
+  readonly buildChunks: number;
+  readonly cameraListeners: number;
+  readonly disposed: boolean;
+  readonly highWaterContainers: number;
+  readonly highWaterPrimitives: number;
+  readonly maxBuildChunkDurationMs: number;
+  readonly over50MsBuildChunks: number;
+  readonly postRenderChecks: number;
+  readonly postRenderWaiters: number;
+  readonly primitiveCount: number;
+  readonly readyPrimitiveCount: number;
+  readonly stagingContainers: number;
+}
+
 function abortError(): DOMException {
   return new DOMException("The operation was aborted.", "AbortError");
 }
@@ -232,8 +248,8 @@ function renderDescriptorForHeight(
   const candidates: readonly GeometryLod[] = target === "local"
     ? ["local", "regional", "overview"]
     : target === "regional"
-      ? ["regional", "overview"]
-      : ["overview"];
+      ? ["regional", "overview", "local"]
+      : ["overview", "regional", "local"];
   for (const lod of candidates) {
     const descriptor = lods[lod];
     if (descriptor !== undefined) return descriptor;
@@ -246,12 +262,20 @@ export class CesiumSpatialScopeAdapter {
   private readonly runtime: SpatialCesiumRuntime;
   private readonly buildPrimitives: ScopePrimitiveBuilder;
   private readonly prefersReducedMotion: () => boolean;
+  private readonly staging = new Map<SpatialPrimitiveContainer, number>();
   private active: ActivePresentation | null = null;
   private presentationController: AbortController | null = null;
   private lodController: AbortController | null = null;
   private removeCameraListener: (() => void) | null = null;
   private generation = 0;
   private lodGeneration = 0;
+  private postRenderChecks = 0;
+  private postRenderWaiters = 0;
+  private buildChunks = 0;
+  private maxBuildChunkDurationMs = 0;
+  private over50MsBuildChunks = 0;
+  private highWaterContainers = 0;
+  private highWaterPrimitives = 0;
   private disposed = false;
 
   constructor(options: CesiumSpatialScopeAdapterOptions) {
@@ -303,16 +327,22 @@ export class CesiumSpatialScopeAdapter {
         stateRevision,
         includePickSurface: true,
         signal: controller.signal,
+        onChunk: (chunk) => this.recordBuildChunk(chunk.durationMs),
       });
       this.assertPresentationCurrent(generation, controller.signal);
 
       staging = this.runtime.createContainer();
-      staging.show = false;
+      // PrimitiveCollection skips update entirely while hidden. Keep the
+      // collection updating so Cesium can compile its children, while each
+      // primitive remains hidden until the generation-safe swap below.
+      staging.show = true;
       for (const primitive of [...build.renderPrimitives, ...build.pickPrimitives]) {
         primitive.show = false;
         staging.add(primitive);
       }
       this.runtime.mount(staging);
+      this.staging.set(staging, staging.primitives.length);
+      this.updateHighWater();
       await this.waitUntilReady(
         [...build.renderPrimitives, ...build.pickPrimitives],
         controller.signal,
@@ -326,6 +356,7 @@ export class CesiumSpatialScopeAdapter {
       if (previous !== null && this.active === previous) {
         this.runtime.unmount(previous.container);
       }
+      this.staging.delete(staging);
       this.active = {
         container: staging,
         input,
@@ -334,6 +365,7 @@ export class CesiumSpatialScopeAdapter {
         renderPrimitives: build.renderPrimitives,
         renderLod: renderDescriptor?.lod ?? input.preferredLod,
       };
+      this.updateHighWater();
       staging = null;
       this.runtime.flyToBoundingSphere(
         build.cameraPositions,
@@ -343,7 +375,11 @@ export class CesiumSpatialScopeAdapter {
         void this.swapCameraLod().catch(() => undefined);
       });
     } catch (error: unknown) {
-      if (staging !== null) this.runtime.unmount(staging);
+      if (staging !== null) {
+        staging.show = false;
+        this.staging.delete(staging);
+        this.runtime.unmount(staging);
+      }
       if (
         this.generation === generation
         && previous !== null
@@ -377,7 +413,26 @@ export class CesiumSpatialScopeAdapter {
       this.runtime.unmount(this.active.container);
       this.active = null;
     }
+    this.staging.clear();
     this.runtime.dispose();
+  }
+
+  diagnostics(): CesiumSpatialScopeDiagnostics {
+    return Object.freeze({
+      activeContainers: this.active === null ? 0 : 1,
+      buildChunks: this.buildChunks,
+      cameraListeners: this.removeCameraListener === null ? 0 : 1,
+      disposed: this.disposed,
+      highWaterContainers: this.highWaterContainers,
+      highWaterPrimitives: this.highWaterPrimitives,
+      maxBuildChunkDurationMs: this.maxBuildChunkDurationMs,
+      over50MsBuildChunks: this.over50MsBuildChunks,
+      postRenderChecks: this.postRenderChecks,
+      postRenderWaiters: this.postRenderWaiters,
+      primitiveCount: this.currentPrimitiveCount(),
+      readyPrimitiveCount: this.currentReadyPrimitiveCount(),
+      stagingContainers: this.staging.size,
+    });
   }
 
   private async swapCameraLod(): Promise<void> {
@@ -407,6 +462,7 @@ export class CesiumSpatialScopeAdapter {
         stateRevision: active.stateRevision,
         includePickSurface: false,
         signal: controller.signal,
+        onChunk: (chunk) => this.recordBuildChunk(chunk.durationMs),
       });
       this.assertLodCurrent(active, lodGeneration, controller.signal);
       staged = build.renderPrimitives;
@@ -414,6 +470,7 @@ export class CesiumSpatialScopeAdapter {
         primitive.show = false;
         active.container.add(primitive);
       }
+      this.updateHighWater();
       await this.waitUntilReady(
         staged,
         controller.signal,
@@ -425,6 +482,7 @@ export class CesiumSpatialScopeAdapter {
       active.renderPrimitives = staged;
       active.renderLod = descriptor.lod;
       staged = [];
+      this.updateHighWater();
     } catch (error: unknown) {
       for (const primitive of staged) active.container.remove(primitive);
       if (!isAbortError(error)) throw error;
@@ -478,15 +536,18 @@ export class CesiumSpatialScopeAdapter {
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       let removePostRender: () => void = () => undefined;
+      this.postRenderWaiters += 1;
       const finish = (callback: () => void) => {
         if (settled) return;
         settled = true;
+        this.postRenderWaiters -= 1;
         signal.removeEventListener("abort", onAbort);
         removePostRender();
         callback();
       };
       const onAbort = () => finish(() => reject(abortError()));
       const check = () => {
+        this.postRenderChecks += 1;
         if (signal.aborted || !isCurrent()) {
           onAbort();
         } else if (primitives.every((primitive) => primitive.ready)) {
@@ -528,6 +589,39 @@ export class CesiumSpatialScopeAdapter {
     if (source.aborted) destination.abort();
     else source.addEventListener("abort", abort, { once: true });
     return () => source.removeEventListener("abort", abort);
+  }
+
+  private currentPrimitiveCount(): number {
+    return (this.active?.container.primitives.length ?? 0)
+      + [...this.staging.values()].reduce((total, count) => total + count, 0);
+  }
+
+  private recordBuildChunk(durationMs: number): void {
+    this.buildChunks += 1;
+    this.maxBuildChunkDurationMs = Math.max(
+      this.maxBuildChunkDurationMs,
+      durationMs,
+    );
+    if (durationMs > 50) this.over50MsBuildChunks += 1;
+  }
+
+  private currentReadyPrimitiveCount(): number {
+    const active = this.active?.container.primitives ?? [];
+    const staging = [...this.staging.keys()].flatMap(
+      (container) => [...container.primitives],
+    );
+    return [...active, ...staging].filter((primitive) => primitive.ready).length;
+  }
+
+  private updateHighWater(): void {
+    this.highWaterContainers = Math.max(
+      this.highWaterContainers,
+      (this.active === null ? 0 : 1) + this.staging.size,
+    );
+    this.highWaterPrimitives = Math.max(
+      this.highWaterPrimitives,
+      this.currentPrimitiveCount(),
+    );
   }
 }
 

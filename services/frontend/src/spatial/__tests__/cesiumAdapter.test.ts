@@ -285,12 +285,12 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
     expect(destroy).toHaveBeenCalledOnce();
   });
 
-  it("hides the old semantic container immediately and swaps only after ready", async () => {
+  it("keeps staging collections updating while primitives stay hidden until ready", async () => {
     const { adapter, assets, runtime } = setup();
     const first = adapter.present(presentation(world, "1"), 1, new AbortController().signal);
     await waitForMounted(runtime, 1);
     const firstContainer = runtime.mounted[0]!;
-    expect(firstContainer.show).toBe(false);
+    expect(firstContainer.show).toBe(true);
     expect(firstContainer.primitives.every((primitive) => !primitive.show)).toBe(true);
     await readyPresentation(runtime, first);
     expect(firstContainer.show).toBe(true);
@@ -299,7 +299,8 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
     expect(firstContainer.show).toBe(false);
     await waitForMounted(runtime, 2);
     const secondContainer = runtime.mounted[1]!;
-    expect(secondContainer.show).toBe(false);
+    expect(secondContainer.show).toBe(true);
+    expect(secondContainer.primitives.every((primitive) => !primitive.show)).toBe(true);
     await readyPresentation(runtime, second);
 
     expect(runtime.mounted).toEqual([secondContainer]);
@@ -339,6 +340,45 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
     expect(sphere.center.x).toBeLessThan(0);
   });
 
+  it("falls back to the only reviewed outline when camera height requests another LOD", async () => {
+    const { adapter, assets, runtime, fakeBuilder } = setup();
+    runtime.cameraHeight = 15_000_000;
+    const regionalOnly: ResolvedPresentationInput = {
+      ...presentation(parseScopeKeyCandidate("admin1:iso3166-2:UA-14")),
+      preferredLod: "regional",
+      outlineLods: { regional },
+      childrenLods: {},
+    };
+
+    const current = adapter.present(regionalOnly, 1, new AbortController().signal);
+    await readyPresentation(runtime, current);
+
+    expect(assets.acquired).toBe(1);
+    expect(fakeBuilder.calls[0]).toMatchObject({ childAsset: null });
+    expect(runtime.mounted).toHaveLength(1);
+    expect(adapter.diagnostics()).toMatchObject({
+      activeContainers: 1,
+      primitiveCount: 2,
+    });
+  });
+
+  it("records builder chunk durations for the real-browser performance gate", async () => {
+    const { adapter, runtime, fakeBuilder } = setup();
+    const current = adapter.present(presentation(), 1, new AbortController().signal);
+    await readyPresentation(runtime, current);
+
+    const recordChunk = fakeBuilder.calls[0]?.onChunk;
+    expect(recordChunk).toBeDefined();
+    recordChunk?.({ vertices: 8_000, durationMs: 12 });
+    recordChunk?.({ vertices: 8_000, durationMs: 51 });
+
+    expect(adapter.diagnostics()).toMatchObject({
+      buildChunks: 2,
+      maxBuildChunkDurationMs: 51,
+      over50MsBuildChunks: 1,
+    });
+  });
+
   it("removes render/camera listeners and all containers on dispose", async () => {
     const { adapter, runtime } = setup();
     const current = adapter.present(presentation(), 1, new AbortController().signal);
@@ -369,6 +409,11 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
       expect(runtime.mounted[0]?.primitives).toHaveLength(2);
       expect(runtime.postRenderListeners.size).toBe(0);
       expect(runtime.cameraListeners.size).toBe(1);
+      expect(adapter.diagnostics()).toMatchObject({
+        activeContainers: 1,
+        primitiveCount: 2,
+        stagingContainers: 0,
+      });
     }
 
     expect(assets.acquired).toBe(200);
@@ -378,6 +423,15 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
     expect(runtime.postRenderListeners.size).toBe(0);
     expect(runtime.cameraListeners.size).toBe(0);
     expect(assets.released).toBe(assets.acquired);
+    expect(adapter.diagnostics()).toMatchObject({
+      activeContainers: 0,
+      cameraListeners: 0,
+      disposed: true,
+      primitiveCount: 0,
+      stagingContainers: 0,
+    });
+    expect(adapter.diagnostics().highWaterContainers).toBeLessThanOrEqual(2);
+    expect(adapter.diagnostics().highWaterPrimitives).toBeLessThanOrEqual(4);
   });
 
   it("keeps the preferred pick primitive across 100 camera LOD swaps", async () => {
