@@ -135,11 +135,25 @@ SET l.source_country_code = $source_country_code,
 MERGE (ev)-[:OCCURRED_AT]->(l)
 """
 
+MERGE_RAW_LOCATION = """
+MATCH (ev:GDELTEvent {event_id: $event_id})
+MERGE (l:Location {loc_key: $loc_key})
+  ON CREATE SET l.name = $name, l.country = $country,
+                l.lat = $latitude, l.lon = $longitude,
+                l.geo_basis = CASE WHEN $latitude IS NULL THEN NULL ELSE 'gdelt_actiongeo' END
+SET l.geo = CASE
+  WHEN $latitude IS NULL OR $longitude IS NULL THEN l.geo
+  ELSE point({longitude: $longitude, latitude: $latitude})
+END
+MERGE (ev)-[:OCCURRED_AT]->(l)
+"""
 
-def location_params_for(
-    ev: GDELTEventWrite,
-    spatial_index: SpatialNormalizationIndex,
-) -> dict[str, Any] | None:
+
+def raw_location_params_for(ev: GDELTEventWrite) -> dict[str, Any] | None:
+    """Project GDELT's raw location identity, rejecting its 0/0 sentinel."""
+
+    if ev.action_geo_lat == 0.0 and ev.action_geo_long == 0.0:
+        return None
     loc_key = build_location_id(
         ev.action_geo_feature_id or "",
         ev.action_geo_country_code or "",
@@ -147,22 +161,39 @@ def location_params_for(
     )
     if loc_key is None:
         return None
-    raw = RawLocationIdentity(
-        country_code=ev.action_geo_country_code or None,
-        country_code_system=(
-            CountryCodeSystem.GDELT_GEC if ev.action_geo_country_code else None
-        ),
-        latitude=ev.action_geo_lat,
-        longitude=ev.action_geo_long,
-    )
-    normalized = normalize_location(raw, spatial_index)
+    latitude = ev.action_geo_lat
+    longitude = ev.action_geo_long
+    if (latitude is None) != (longitude is None):
+        latitude = None
+        longitude = None
     return {
         "event_id": ev.event_id,
         "loc_key": loc_key,
         "name": ev.action_geo_fullname,
         "country": ev.action_geo_country_code,
-        "latitude": ev.action_geo_lat,
-        "longitude": ev.action_geo_long,
+        "latitude": latitude,
+        "longitude": longitude,
+    }
+
+
+def location_params_for(
+    ev: GDELTEventWrite,
+    spatial_index: SpatialNormalizationIndex,
+) -> dict[str, Any] | None:
+    raw_parameters = raw_location_params_for(ev)
+    if raw_parameters is None:
+        return None
+    raw = RawLocationIdentity(
+        country_code=ev.action_geo_country_code or None,
+        country_code_system=(
+            CountryCodeSystem.GDELT_GEC if ev.action_geo_country_code else None
+        ),
+        latitude=raw_parameters["latitude"],
+        longitude=raw_parameters["longitude"],
+    )
+    normalized = normalize_location(raw, spatial_index)
+    return {
+        **raw_parameters,
         **spatial_property_parameters(normalized),
     }
 
@@ -238,17 +269,15 @@ class Neo4jWriter:
                     for ev in events:
                         await tx.run(MERGE_EVENT, render_event_params(ev))
                         if self._spatial_index is None:
-                            if build_location_id(
-                                ev.action_geo_feature_id or "",
-                                ev.action_geo_country_code or "",
-                                ev.action_geo_fullname or "",
-                            ) is not None:
+                            raw_location = raw_location_params_for(ev)
+                            if raw_location is not None:
                                 log.warning(
                                     "spatial_location_writer_unsupported",
                                     lane="gdelt_raw",
                                     cause="normalization_index_unavailable",
                                     event_id=ev.event_id,
                                 )
+                                await tx.run(MERGE_RAW_LOCATION, raw_location)
                             continue
                         loc = location_params_for(ev, self._spatial_index)
                         if loc is not None:

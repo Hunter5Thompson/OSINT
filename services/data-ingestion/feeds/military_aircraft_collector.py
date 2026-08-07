@@ -110,13 +110,20 @@ def classify_region(lat: float, lon: float) -> str:
 def build_aircraft_location_statement(
     aircraft: dict[str, Any],
     spatial_index: SpatialNormalizationIndex,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Build one observation-keyed, parameterized Location write."""
+
+    latitude = aircraft.get("latitude")
+    longitude = aircraft.get("longitude")
+    if latitude is None or longitude is None:
+        return None
+    if latitude == 0.0 and longitude == 0.0:
+        return None
 
     normalized = normalize_location(
         RawLocationIdentity(
-            latitude=aircraft["latitude"],
-            longitude=aircraft["longitude"],
+            latitude=latitude,
+            longitude=longitude,
         ),
         spatial_index,
     )
@@ -145,8 +152,8 @@ def build_aircraft_location_statement(
             "loc_key": f"aircraft-observation:{aircraft['dedup_key']}",
             "name": aircraft["region"],
             "region": aircraft["region"],
-            "latitude": aircraft["latitude"],
-            "longitude": aircraft["longitude"],
+            "latitude": latitude,
+            "longitude": longitude,
             **spatial_property_parameters(normalized),
         },
     }
@@ -236,13 +243,18 @@ class MilitaryAircraftCollector(BaseCollector):
     # ------------------------------------------------------------------
 
     async def _write_aircraft_neo4j(self, ac: dict) -> None:
-        """Write a single aircraft observation to Neo4j with 3 statements:
+        """Write an aircraft and, when positioned, its observation atomically:
         1. MERGE MilitaryAircraft node
-        2. MERGE Location node
-        3. MERGE SPOTTED_AT relationship with observation metadata
+        2. optionally MERGE Location node
+        3. optionally MERGE SPOTTED_AT relationship with observation metadata
         """
+        has_position = not (
+            ac.get("latitude") is None
+            or ac.get("longitude") is None
+            or (ac["latitude"] == 0.0 and ac["longitude"] == 0.0)
+        )
         spatial_index = self._spatial_index
-        if spatial_index is None:
+        if has_position and spatial_index is None:
             try:
                 spatial_index = load_active_normalization_index(
                     self.settings.spatial_catalog_path,
@@ -258,7 +270,11 @@ class MilitaryAircraftCollector(BaseCollector):
                 raise RuntimeError("spatial normalization index unavailable") from exc
             self._spatial_index = spatial_index
 
-        location_write = build_aircraft_location_statement(ac, spatial_index)
+        location_write = (
+            build_aircraft_location_statement(ac, spatial_index)
+            if has_position and spatial_index is not None
+            else None
+        )
         statements = [
             # 1. MilitaryAircraft node
             {
@@ -278,36 +294,41 @@ class MilitaryAircraftCollector(BaseCollector):
                     "military_branch": ac["military_branch"],
                 },
             },
-            # 2. Observation-keyed Location node
-            location_write,
-            # 3. SPOTTED_AT relationship
-            {
-                "statement": (
-                    "MATCH (a:MilitaryAircraft {icao24: $icao24}) "
-                    "MATCH (l:Location {loc_key: $loc_key}) "
-                    "MERGE (a)-[r:SPOTTED_AT {dedup_key: $dedup_key}]->(l) "
-                    "SET r.latitude = $latitude, "
-                    "    r.longitude = $longitude, "
-                    "    r.altitude_m = $altitude_m, "
-                    "    r.speed_ms = $speed_ms, "
-                    "    r.heading = $heading, "
-                    "    r.timestamp = $timestamp, "
-                    "    r.source = $source"
-                ),
-                "parameters": {
-                    "icao24": ac["icao24"],
-                    "loc_key": location_write["parameters"]["loc_key"],
-                    "dedup_key": ac["dedup_key"],
-                    "latitude": ac["latitude"],
-                    "longitude": ac["longitude"],
-                    "altitude_m": ac["altitude_m"],
-                    "speed_ms": ac["speed_ms"],
-                    "heading": ac["heading"],
-                    "timestamp": ac["timestamp"],
-                    "source": ac["source"],
-                },
-            },
         ]
+        if location_write is not None:
+            statements.extend(
+                [
+                    # 2. Observation-keyed Location node
+                    location_write,
+                    # 3. SPOTTED_AT relationship
+                    {
+                        "statement": (
+                            "MATCH (a:MilitaryAircraft {icao24: $icao24}) "
+                            "MATCH (l:Location {loc_key: $loc_key}) "
+                            "MERGE (a)-[r:SPOTTED_AT {dedup_key: $dedup_key}]->(l) "
+                            "SET r.latitude = $latitude, "
+                            "    r.longitude = $longitude, "
+                            "    r.altitude_m = $altitude_m, "
+                            "    r.speed_ms = $speed_ms, "
+                            "    r.heading = $heading, "
+                            "    r.timestamp = $timestamp, "
+                            "    r.source = $source"
+                        ),
+                        "parameters": {
+                            "icao24": ac["icao24"],
+                            "loc_key": location_write["parameters"]["loc_key"],
+                            "dedup_key": ac["dedup_key"],
+                            "latitude": ac["latitude"],
+                            "longitude": ac["longitude"],
+                            "altitude_m": ac["altitude_m"],
+                            "speed_ms": ac["speed_ms"],
+                            "heading": ac["heading"],
+                            "timestamp": ac["timestamp"],
+                            "source": ac["source"],
+                        },
+                    },
+                ]
+            )
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(

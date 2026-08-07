@@ -21,6 +21,7 @@ def test_explain_queries_cover_each_exact_composite_index_without_interpolation(
         assert smoke.query.startswith("EXPLAIN ")
         assert f"l.{smoke.scope_property} = $scope_key" in smoke.query
         assert "l.spatial_derivation_revision = $revision" in smoke.query
+        assert "l.spatial_conflict = false" in smoke.query
         assert smoke.sample_scope_key not in smoke.query
         assert smoke.sample_revision not in smoke.query
 

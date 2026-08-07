@@ -154,7 +154,7 @@ def test_aircraft_location_is_observation_keyed_and_spatially_normalized(
     assert "country:UKR" not in write["statement"]
 
 
-def test_aircraft_real_zero_zero_remains_a_point(spatial_index) -> None:
+def test_aircraft_null_island_sentinel_has_no_location_write(spatial_index) -> None:
     aircraft = {
         "dedup_key": "000001|1712000000",
         "region": "unknown",
@@ -164,6 +164,23 @@ def test_aircraft_real_zero_zero_remains_a_point(spatial_index) -> None:
 
     write = build_aircraft_location_statement(aircraft, spatial_index)
 
-    assert write["parameters"]["latitude"] == 0.0
-    assert write["parameters"]["longitude"] == 0.0
-    assert write["parameters"]["spatial_precision"] == "point"
+    assert write is None
+
+
+@pytest.mark.parametrize(
+    ("latitude", "longitude"),
+    ((None, None), (48.5, None), (None, 35.2)),
+)
+def test_aircraft_incomplete_position_has_no_location_write(
+    spatial_index,
+    latitude: float | None,
+    longitude: float | None,
+) -> None:
+    aircraft = {
+        "dedup_key": "000001|1712000000",
+        "region": "unknown",
+        "latitude": latitude,
+        "longitude": longitude,
+    }
+
+    assert build_aircraft_location_statement(aircraft, spatial_index) is None

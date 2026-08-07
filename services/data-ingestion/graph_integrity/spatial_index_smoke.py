@@ -37,6 +37,7 @@ SPATIAL_INDEX_SMOKES = (
             "EXPLAIN MATCH (l:Location) "
             "WHERE l.country_scope_key = $scope_key "
             "AND l.spatial_derivation_revision = $revision "
+            "AND l.spatial_conflict = false "
             "RETURN l LIMIT 1"
         ),
     ),
@@ -50,6 +51,7 @@ SPATIAL_INDEX_SMOKES = (
             "EXPLAIN MATCH (l:Location) "
             "WHERE l.admin1_scope_key = $scope_key "
             "AND l.spatial_derivation_revision = $revision "
+            "AND l.spatial_conflict = false "
             "RETURN l LIMIT 1"
         ),
     ),
@@ -63,6 +65,7 @@ SPATIAL_INDEX_SMOKES = (
             "EXPLAIN MATCH (l:Location) "
             "WHERE l.admin2_scope_key = $scope_key "
             "AND l.spatial_derivation_revision = $revision "
+            "AND l.spatial_conflict = false "
             "RETURN l LIMIT 1"
         ),
     ),
