@@ -465,6 +465,14 @@ def _verify_descriptor(
     expected: GeometryDescriptor | ContainmentDescriptor,
     emitted: EmittedAsset,
 ) -> None:
+    # role, lod, and max_error_m describe each manifest reference. The immutable
+    # asset itself is identified by its digest, media type, and decoded counts.
+    if expected.asset_id != emitted.asset_id:
+        raise CatalogVerificationError(f"DESCRIPTOR_ASSET_MISMATCH: {expected.asset_id}")
+    if expected.media_type != emitted.media_type:
+        raise CatalogVerificationError(
+            f"DESCRIPTOR_MEDIA_TYPE_MISMATCH: {expected.asset_id}"
+        )
     actual = emitted.descriptor
     expected_counts = (
         expected.byte_length,
@@ -476,11 +484,7 @@ def _verify_descriptor(
         actual.vertex_count,
         getattr(actual, "feature_count", None),
     )
-    if (
-        expected_counts != actual_counts
-        or expected.asset_id != emitted.asset_id
-        or expected.media_type != emitted.media_type
-    ):
+    if expected_counts != actual_counts:
         raise CatalogVerificationError(f"DESCRIPTOR_COUNT_MISMATCH: {expected.asset_id}")
 
 

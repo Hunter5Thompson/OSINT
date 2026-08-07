@@ -19,6 +19,7 @@ from spatial_catalog.audit import (
     CatalogVerificationError,
     ContainmentFeasibilityRecord,
     WorldChildPackRecord,
+    _verify_descriptor,
     audit_catalog,
     build_feasibility_report,
     verify_catalog,
@@ -43,6 +44,8 @@ from spatial_catalog.manifest import (
 )
 from spatial_catalog.models import (
     CatalogProvenance,
+    ContainmentDescriptor,
+    GeometryDescriptor,
     Lod,
     ScopeKind,
     ScopeNode,
@@ -169,6 +172,72 @@ def test_verify_detects_missing_corrupt_and_descriptor_drift(tmp_path: Path) -> 
     asset_path.unlink()
     with pytest.raises(CatalogVerificationError, match="ASSET_MISSING"):
         verify_catalog(catalog)
+
+
+def test_descriptor_verification_separates_content_from_reference_semantics() -> None:
+    asset = emit_render_boundary(_geometry(), lod=Lod.OVERVIEW)
+    regional = GeometryDescriptor(
+        asset_id=asset.asset_id,
+        media_type=asset.media_type,
+        byte_length=asset.counts.byte_length,
+        vertex_count=asset.counts.vertex_count,
+        role="render",
+        lod=Lod.REGIONAL,
+    )
+    containment = ContainmentDescriptor(
+        asset_id=asset.asset_id,
+        media_type=asset.media_type,
+        byte_length=asset.counts.byte_length,
+        vertex_count=asset.counts.vertex_count,
+        role="containment",
+        max_error_m=50,
+    )
+
+    _verify_descriptor(regional, asset)
+    _verify_descriptor(containment, asset)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error_code"),
+    (
+        ("asset_id", "f" * 64, "DESCRIPTOR_ASSET_MISMATCH"),
+        ("byte_length", 1, "DESCRIPTOR_COUNT_MISMATCH"),
+        ("vertex_count", 1, "DESCRIPTOR_COUNT_MISMATCH"),
+    ),
+)
+def test_descriptor_verification_rejects_content_identity_drift(
+    field: str,
+    value: str | int,
+    error_code: str,
+) -> None:
+    asset = emit_render_boundary(_geometry(), lod=Lod.OVERVIEW)
+    drifted = asset.descriptor.model_copy(update={field: value})
+
+    with pytest.raises(CatalogVerificationError, match=error_code):
+        _verify_descriptor(drifted, asset)
+
+
+def test_descriptor_verification_rejects_media_type_drift() -> None:
+    asset = emit_render_boundary(_geometry(), lod=Lod.OVERVIEW)
+    drifted = asset.descriptor.model_copy(
+        update={"media_type": "application/vnd.odin.boundary-pack+json;v=1"}
+    )
+
+    with pytest.raises(CatalogVerificationError, match="DESCRIPTOR_MEDIA_TYPE_MISMATCH"):
+        _verify_descriptor(drifted, asset)
+
+
+def test_descriptor_verification_rejects_pack_feature_count_drift() -> None:
+    asset = emit_boundary_pack(
+        parent_scope_key="world",
+        lod=Lod.OVERVIEW,
+        allowed_child_scope_keys=frozenset({"country:UKR"}),
+        features=(ScopePackFeature("country:UKR", "Ukraine", _geometry()),),
+    )
+    drifted = asset.descriptor.model_copy(update={"feature_count": 2})
+
+    with pytest.raises(CatalogVerificationError, match="DESCRIPTOR_COUNT_MISMATCH"):
+        _verify_descriptor(drifted, asset)
 
 
 def test_verify_rejects_missing_or_unbound_attribution_release(tmp_path: Path) -> None:

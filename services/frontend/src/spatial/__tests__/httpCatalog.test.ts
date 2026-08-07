@@ -3,6 +3,7 @@ import {
   parseCatalogRevision,
   parseScopeKeyCandidate,
   type AssetDescriptor,
+  type ContainmentAssetDescriptor,
   type RenderAssetDescriptor,
   type SpatialQueryRef,
 } from "../contracts";
@@ -420,6 +421,29 @@ describe("HttpSpatialCatalog wire contract", () => {
     expect(assets.prefetched).toHaveLength(2);
   });
 
+  it("rejects containment error claims outside the wire-contract budget", async () => {
+    const wire = scopeWire();
+    wire.containment = {
+      asset_id: BOUNDARY_ID,
+      media_type: boundaryDescriptor.mediaType,
+      byte_length: boundaryDescriptor.byteLength,
+      vertex_count: boundaryDescriptor.vertexCount,
+      role: "containment",
+      max_error_m: 5_000,
+    };
+    const fetcher = vi.fn<typeof fetch>(async () => metadataResponse(wire));
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher });
+
+    await expect(catalog.resolve(
+      parseScopeKeyCandidate("country:UKR"),
+      REVISION,
+      new AbortController().signal,
+    )).rejects.toMatchObject({
+      code: "CATALOG_UNAVAILABLE",
+      message: "containment.maxErrorMeters is outside the contract budget",
+    });
+  });
+
   it("shares an in-flight hover load with click while cancelling only hover", async () => {
     let scopeRequests = 0;
     let assetRequests = 0;
@@ -468,6 +492,49 @@ describe("HttpSpatialCatalog wire contract", () => {
       activeLeases: 0,
       prefetchedEntries: 0,
     });
+  });
+
+  it("promotes an in-flight hover retry when click joins after the asset request starts", async () => {
+    const clock = createClock();
+    let assetRequests = 0;
+    let releaseFirstAsset: ((response: Response) => void) | undefined;
+    const firstAsset = new Promise<Response>((resolve) => {
+      releaseFirstAsset = resolve;
+    });
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      if (url.startsWith("/api/spatial/scope")) return metadataResponse(scopeWire());
+      if (url === `/api/spatial/assets/${BOUNDARY_ID}`) {
+        assetRequests += 1;
+        return assetRequests === 1
+          ? firstAsset
+          : assetResponse(BOUNDARY_ID);
+      }
+      if (url === `/api/spatial/assets/${PACK_ID}`) return assetResponse(PACK_ID);
+      throw new Error(`unexpected URL: ${url}`);
+    });
+    const store = createStore(fetcher, { clock });
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: store, clock });
+    const scopeKey = parseScopeKeyCandidate("country:UKR");
+
+    const hover = catalog.prefetch(
+      scopeKey,
+      REVISION,
+      "hover",
+      new AbortController().signal,
+    );
+    await vi.waitFor(() => expect(assetRequests).toBe(1));
+    const click = catalog.resolve(
+      scopeKey,
+      REVISION,
+      new AbortController().signal,
+    );
+    releaseFirstAsset?.(assetResponse(BOUNDARY_ID, { status: 429, retryAfter: "1" }));
+
+    await expect(hover).resolves.toBeUndefined();
+    await expect(click).resolves.toMatchObject({ scope: { key: scopeKey } });
+    expect(assetRequests).toBe(2);
+    expect(clock.sleeps).toEqual([1_000]);
   });
 
   it("bounds scope metadata with a 256-entry LRU and exposes high-water counters", async () => {
@@ -966,8 +1033,8 @@ describe("BoundaryAssetStore", () => {
       decodedEntries: 1,
       disposed: false,
       evictions: 1,
-      highWaterDecodedBytes: 1_728,
-      highWaterDecodedEntries: 1,
+      highWaterDecodedBytes: 3_200,
+      highWaterDecodedEntries: 2,
       inflightLoads: 0,
       maxDecodedBytes: 64 * 1024 * 1024,
       maxEntries: 1,
@@ -985,6 +1052,93 @@ describe("BoundaryAssetStore", () => {
       maxEntries: 1,
       prefetchedEntries: 0,
     });
+  });
+
+  it("records the transient decoded peak on the prefetch path before eviction", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const id = urlOf(input).split("/").at(-1) ?? "";
+      return assetResponse(id);
+    });
+    const store = createStore(fetcher, { maxEntries: 1 });
+
+    const foreground = await store.acquire(
+      boundaryDescriptor,
+      new AbortController().signal,
+    );
+    foreground.release();
+    const prefetched = await store.acquireForPrefetch(
+      packDescriptor,
+      new AbortController().signal,
+    );
+
+    expect(store.diagnostics()).toMatchObject({
+      decodedBytes: 3_200,
+      decodedEntries: 2,
+      highWaterDecodedBytes: 3_200,
+      highWaterDecodedEntries: 2,
+      prefetchedEntries: 1,
+    });
+
+    prefetched.release();
+    expect(store.diagnostics()).toMatchObject({
+      decodedBytes: 1_472,
+      decodedEntries: 1,
+      evictions: 1,
+      highWaterDecodedBytes: 3_200,
+      highWaterDecodedEntries: 2,
+    });
+  });
+
+  it("shares one decoded asset across render and containment semantics", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => assetResponse(BOUNDARY_ID));
+    const store = createStore(fetcher);
+    const containmentDescriptor: ContainmentAssetDescriptor = {
+      assetId: boundaryDescriptor.assetId,
+      mediaType: boundaryDescriptor.mediaType,
+      byteLength: boundaryDescriptor.byteLength,
+      vertexCount: boundaryDescriptor.vertexCount,
+      role: "containment",
+      maxErrorMeters: 50,
+    };
+
+    const render = await store.acquire(
+      boundaryDescriptor,
+      new AbortController().signal,
+    );
+    render.release();
+    const containment = await store.acquire(
+      containmentDescriptor,
+      new AbortController().signal,
+    );
+
+    expect(containment.asset).toBe(render.asset);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    containment.release();
+  });
+
+  it.each([
+    ["byte length", { ...boundaryDescriptor, byteLength: boundaryDescriptor.byteLength + 1 }],
+    ["vertex count", { ...boundaryDescriptor, vertexCount: boundaryDescriptor.vertexCount + 1 }],
+    ["media type", {
+      ...packDescriptor,
+      assetId: boundaryDescriptor.assetId,
+      byteLength: boundaryDescriptor.byteLength,
+      vertexCount: boundaryDescriptor.vertexCount,
+    }],
+  ])("rejects cached content-address %s drift", async (_name, changedDescriptor) => {
+    const fetcher = vi.fn<typeof fetch>(async () => assetResponse(BOUNDARY_ID));
+    const store = createStore(fetcher);
+    const original = await store.acquire(
+      boundaryDescriptor,
+      new AbortController().signal,
+    );
+    original.release();
+
+    await expect(store.acquire(
+      changedDescriptor,
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: "GEOMETRY_UNAVAILABLE" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("evicts a prefetched entry before an older foreground entry", async () => {

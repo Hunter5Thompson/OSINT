@@ -909,7 +909,10 @@ function geometryError(message: string, target: string | null): SpatialCatalogEr
   });
 }
 
-function assertDescriptorMatch(left: AssetDescriptor, right: AssetDescriptor): void {
+function assertAssetContentMatch(left: AssetDescriptor, right: AssetDescriptor): void {
+  // role, lod and maxErrorMeters belong to a manifest reference, not to the
+  // content-addressed bytes cached here. Wire decoding validates those fields;
+  // this guard locks the byte representation and decoded shape for one assetId.
   if (
     left.assetId !== right.assetId ||
     left.mediaType !== right.mediaType ||
@@ -1055,7 +1058,7 @@ export class BoundaryAssetStore {
     const cached = this.cache.get(descriptor.assetId);
     if (cached !== undefined) {
       this.cacheHits += 1;
-      assertDescriptorMatch(cached.descriptor, descriptor);
+      assertAssetContentMatch(cached.descriptor, descriptor);
       if (policy.foreground) cached.prefetched = false;
       return this.lease(cached, policy.foreground);
     }
@@ -1064,6 +1067,8 @@ export class BoundaryAssetStore {
     let load = this.inflight.get(descriptor.assetId);
     if (load === undefined) {
       const controller = new AbortController();
+      // Keep a live shared policy: a foreground consumer may join after the
+      // request starts and still promote a prefetch retry before response handling.
       const retryPolicy = policy;
       load = {
         descriptor,
@@ -1080,7 +1085,7 @@ export class BoundaryAssetStore {
         () => this.finishLoad(ownedLoad),
       );
     } else {
-      assertDescriptorMatch(load.descriptor, descriptor);
+      assertAssetContentMatch(load.descriptor, descriptor);
       load.retryPolicy.network ||= policy.network;
       load.retryPolicy.busy ||= policy.busy;
       load.retryPolicy.foreground ||= policy.foreground;
@@ -1113,14 +1118,16 @@ export class BoundaryAssetStore {
       lastUsed: this.clock.now(),
       prefetched: !load.retryPolicy.foreground,
     });
+    // Sample insertion before either foreground or prefetch release can evict.
+    this.updateHighWater();
   }
 
   private lease(entry: AssetCacheEntry, foreground: boolean): BoundaryAssetLease {
     entry.leases += 1;
     entry.lastUsed = this.clock.now();
+    this.updateHighWater();
     if (foreground) {
       this.evict();
-      this.updateHighWater();
     }
     let released = false;
     return freezeSpatialValue({
@@ -1130,8 +1137,8 @@ export class BoundaryAssetStore {
         released = true;
         entry.leases -= 1;
         entry.lastUsed = this.clock.now();
-        this.evict();
         this.updateHighWater();
+        this.evict();
       },
     });
   }
@@ -2058,7 +2065,7 @@ function prefetchDescriptorsForScope(
     : [bundle.outlineLods[lod], bundle.childrenLods[lod]]) {
     if (descriptor === undefined || descriptor === null) continue;
     const existing = byId.get(descriptor.assetId);
-    if (existing !== undefined) assertDescriptorMatch(existing, descriptor);
+    if (existing !== undefined) assertAssetContentMatch(existing, descriptor);
     else byId.set(descriptor.assetId, descriptor);
   }
   return [...byId.values()];

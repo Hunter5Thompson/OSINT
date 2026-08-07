@@ -3,11 +3,16 @@
 Date: 2026-08-07
 Catalog revision: `spatial-v1-e76a16bff799`
 Configuration: `VITE_SPATIAL_SCOPE_ENABLED=true`
+Browser mode: Vite development server (`import.meta.env.DEV=true`)
 
 This is the local Slice-5 acceptance run for the reviewed Admin-1 catalog,
 shared hover/click loads, bounded caches, and the real Cesium presentation path.
 It permits Phase C/default-on review; it does not authorize Plan-05D legacy
 deletion. The browser run used Firefox 153.0.3 on Linux with WebGL2.
+`SpatialCanaryProbe` is DEV-gated, so these measurements include the development
+bundle and React StrictMode behavior. Both production artifacts were build-validated,
+but the production bundle was not counter-instrumented and these timings must not be
+attributed to it.
 
 ## Catalog evidence
 
@@ -71,17 +76,25 @@ The 100-transition soak returned every retained counter to its warmed baseline:
 | Post-render waiters | 0 | 0 |
 | Staging containers | 0 | 0 |
 
-Observed high-water stayed bounded: 8 decoded entries across the cold run
-(configured maximum 8), 4,181,632 decoded bytes (64-MiB maximum), 28 metadata
-entries/38,109 bytes in the all-Admin-1 cold run (256 entries/128-MiB maximum),
-two Cesium containers, and five primitives during an atomic swap. No monotonic
-lease, cache, primitive, listener, waiter, or staging growth was observed.
+The original DEV canary recorded 8 decoded entries and 4,181,632 decoded bytes,
+but its cache high-water sampler ran after eviction and only on foreground
+lease/release. Those figures describe retained samples; they do not prove the
+transient resident peak. Post-review instrumentation now samples every decoded
+insertion before eviction on both foreground and prefetch paths. Its regression gate
+with `maxEntries=1` observes the permitted transient peak of 2 entries/3,200 bytes,
+then 1 entry/1,472 bytes after prefetch release. The real-browser canary was not rerun
+with that corrected counter, so this report makes no browser transient-peak claim.
+
+The all-Admin-1 cold run also recorded 28 metadata entries/38,109 bytes (256
+entries/128-MiB retained maximum), two Cesium containers, and five primitives during
+an atomic swap. No monotonic lease, cache, primitive, listener, waiter, or staging
+growth was observed.
 
 ## Quality gates
 
 - Backend: 505 tests passed; Ruff and strict Mypy passed.
-- Data ingestion: 1,259 passed, 1 explicitly skipped, 17 deselected; Ruff passed.
-- Frontend: 551/551 tests passed both flag-off and flag-on; ESLint and TypeScript
+- Data ingestion: 1,265 passed, 1 explicitly skipped, 17 deselected; Ruff passed.
+- Frontend: 559/559 tests passed both flag-off and flag-on; ESLint and TypeScript
   passed; both production builds completed.
 
 The frontend install reported the repository's existing npm audit findings
