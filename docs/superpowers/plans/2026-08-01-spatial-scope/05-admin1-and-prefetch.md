@@ -14,6 +14,9 @@ warm the same ref-counted catalog/asset load later adopted by click, but cannot 
 semantic state, URL, camera, or foreground generation. A direct Admin-1 deep link
 resolves without prior parent navigation.
 
+> **Commit record (2026-08-07):** The four work-order checkpoints were consolidated
+> after the full independent exit-gate review in baseline commit `6a929a3`.
+
 ## File surface
 
 Extend the Slice-0 catalog plan/assets and existing builder fixtures. Modify frontend
@@ -33,7 +36,7 @@ client.
 - [x] **REFACTOR:** Theater coverage remains declarative in `catalog-plan.json`; no
   country list enters frontend/backend code.
 - [x] **VERIFY:** Run the full spatial-catalog suite and byte-identical double build.
-- [ ] **COMMIT:** `data(spatial-catalog): add selected admin1 theaters`
+- [x] **COMMIT:** `data(spatial-catalog): add selected admin1 theaters`
 
 ## Work order 2 — Prefetch scheduler and shared leases
 
@@ -48,7 +51,7 @@ client.
 - [x] **REFACTOR:** Keep scheduling separate from cache ownership. Aborts remove only
   that consumer and never cancel another live lease.
 - [x] **VERIFY:** Run controller/catalog tests with fake timers; no real sleeps.
-- [ ] **COMMIT:** `feat(frontend): prefetch spatial children with bounded leases`
+- [x] **COMMIT:** `feat(frontend): prefetch spatial children with bounded leases`
 
 ## Work order 3 — Admin-1 picking, drill and direct links
 
@@ -63,7 +66,7 @@ client.
 - [x] **REFACTOR:** Country and Admin-1 use one adapter path parameterized by validated
   bundle descriptors—no `if country === ...` theater code.
 - [x] **VERIFY:** Run Cesium adapter, pick, controller, router, and page tests.
-- [ ] **COMMIT:** `feat(worldview): drill into catalog admin1 scopes`
+- [x] **COMMIT:** `feat(worldview): drill into catalog admin1 scopes`
 
 ## Work order 4 — Input capability and soak gates
 
@@ -78,7 +81,7 @@ client.
 - [x] **VERIFY:** Run frontend full quality commands and record the real Cesium soak,
   catalog audit, cache high-water, cached commit under 50 ms, cold local p95 under
   800 ms, no task over 50 ms, and no-growth evidence.
-- [ ] **COMMIT:** `test(worldview): gate admin1 prefetch and soak`
+- [x] **COMMIT:** `test(worldview): gate admin1 prefetch and soak`
 
 ## Exit gate
 

@@ -362,6 +362,32 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
     });
   });
 
+  it("does not jump from a globe request to a local-only outline", async () => {
+    const { adapter, assets, runtime } = setup();
+    runtime.cameraHeight = 15_000_000;
+    const localOnly: ResolvedPresentationInput = {
+      ...presentation(parseScopeKeyCandidate("admin1:iso3166-2:UA-14")),
+      preferredLod: "local",
+      outlineLods: { local },
+      childrenLods: {},
+    };
+
+    const current = adapter.present(localOnly, 1, new AbortController().signal);
+    let settled = false;
+    void current.finally(() => {
+      settled = true;
+    }).catch(() => undefined);
+    await waitUntil(() => settled || runtime.mounted.length > 0);
+    if (runtime.mounted.length > 0) {
+      runtime.makePendingReady();
+      runtime.firePostRender();
+    }
+
+    await expect(current).rejects.toThrow("Spatial presentation has no renderable descriptor.");
+    expect(assets.acquired).toBe(0);
+    expect(runtime.mounted).toHaveLength(0);
+  });
+
   it("records builder chunk durations for the real-browser performance gate", async () => {
     const { adapter, runtime, fakeBuilder } = setup();
     const current = adapter.present(presentation(), 1, new AbortController().signal);

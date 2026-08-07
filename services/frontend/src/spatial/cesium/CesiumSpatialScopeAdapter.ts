@@ -246,10 +246,10 @@ function renderDescriptorForHeight(
 ): RenderAssetDescriptor | null {
   const target = desiredLod(height);
   const candidates: readonly GeometryLod[] = target === "local"
-    ? ["local", "regional", "overview"]
+    ? ["local", "regional"]
     : target === "regional"
       ? ["regional", "overview", "local"]
-      : ["overview", "regional", "local"];
+      : ["overview", "regional"];
   for (const lod of candidates) {
     const descriptor = lods[lod];
     if (descriptor !== undefined) return descriptor;
