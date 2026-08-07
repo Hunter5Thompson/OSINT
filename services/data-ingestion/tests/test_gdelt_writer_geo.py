@@ -4,9 +4,16 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import structlog
 
 from gdelt_raw.schemas import GDELTEventWrite
-from gdelt_raw.writers.neo4j_writer import MERGE_LOCATION, Neo4jWriter, location_params_for
+from gdelt_raw.writers.neo4j_writer import (
+    MERGE_EVENT,
+    MERGE_LOCATION,
+    MERGE_RAW_LOCATION,
+    Neo4jWriter,
+    location_params_for,
+)
 from graph_integrity.spatial_normalizer import load_normalization_index
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -117,7 +124,7 @@ def test_location_params_supports_country_only_without_invented_point(spatial_in
     assert params["spatial_precision"] == "country"
 
 
-def test_location_params_preserves_real_zero_zero_when_source_has_identity(
+def test_location_params_rejects_gdelt_null_island_even_with_source_identity(
     spatial_index,
 ) -> None:
     params = location_params_for(
@@ -131,10 +138,7 @@ def test_location_params_preserves_real_zero_zero_when_source_has_identity(
         spatial_index,
     )
 
-    assert params is not None
-    assert params["latitude"] == 0.0
-    assert params["longitude"] == 0.0
-    assert params["spatial_precision"] == "point"
+    assert params is None
 
 
 def test_location_params_marks_source_coordinate_contradiction(spatial_index) -> None:
@@ -202,6 +206,43 @@ async def test_write_events_commits_event_and_location_in_one_transaction(
     assert [call.args[0] for call in tx.run.await_args_list][-1] == MERGE_LOCATION
     tx.commit.assert_awaited_once()
     tx.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_missing_spatial_index_preserves_raw_location_and_reports_lane() -> None:
+    tx = MagicMock(run=AsyncMock(), commit=AsyncMock(), rollback=AsyncMock())
+    writer = _writer_with_transaction(None, tx)
+
+    with structlog.testing.capture_logs() as logs:
+        await writer.write_events([_event()])
+
+    calls = tx.run.await_args_list
+    assert [call.args[0] for call in calls] == [MERGE_EVENT, MERGE_RAW_LOCATION]
+    raw_parameters = calls[1].args[1]
+    assert raw_parameters["loc_key"] == "gdelt:loc:-1044367"
+    assert raw_parameters["latitude"] == 48.0
+    assert raw_parameters["longitude"] == 37.8
+    assert "country_scope_key" not in raw_parameters
+    assert any(
+        entry["event"] == "spatial_location_writer_unsupported"
+        and entry["lane"] == "gdelt_raw"
+        and entry["cause"] == "normalization_index_unavailable"
+        for entry in logs
+    )
+    tx.commit.assert_awaited_once()
+    tx.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_gdelt_null_island_never_writes_a_location_without_index() -> None:
+    tx = MagicMock(run=AsyncMock(), commit=AsyncMock(), rollback=AsyncMock())
+    writer = _writer_with_transaction(None, tx)
+
+    await writer.write_events(
+        [_event(action_geo_lat=0.0, action_geo_long=0.0)]
+    )
+
+    assert [call.args[0] for call in tx.run.await_args_list] == [MERGE_EVENT]
 
 
 @pytest.mark.asyncio

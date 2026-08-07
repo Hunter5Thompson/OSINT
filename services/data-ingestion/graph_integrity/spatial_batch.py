@@ -130,6 +130,7 @@ FOREACH (_ IN CASE WHEN row.action = 'resolved' THEN [1] ELSE [] END |
 )
 FOREACH (_ IN CASE WHEN row.action = 'conflict' THEN [1] ELSE [] END |
   SET l.spatial_catalog_revision = row.spatial_catalog_revision,
+      l.spatial_derivation_revision = row.spatial_derivation_revision,
       l.spatial_conflict = true,
       l.spatial_conflict_scope_keys = row.spatial_conflict_scope_keys
 )
@@ -443,6 +444,7 @@ def _plan_update(
             "record_id": row["record_id"],
             "action": "conflict",
             "spatial_catalog_revision": result.spatial_catalog_revision,
+            "spatial_derivation_revision": None,
             "spatial_conflict_scope_keys": list(result.spatial_conflict_scope_keys),
         }
     if not _targets_job(result, job):
@@ -463,6 +465,8 @@ def _plan_update(
 
 
 def _raw_identity(row: dict[str, Any], lane: str) -> RawLocationIdentity:
+    if _is_source_null_island(row, lane):
+        raise ValueError("source null-island sentinel")
     code = row.get("source_country_code")
     system_value = row.get("source_country_code_system")
     if code is None and lane == "gdelt_raw":
@@ -512,6 +516,8 @@ def _has_invalid_coordinate(row: dict[str, Any], lane: str) -> bool:
         return False
     latitude = row.get("lat")
     longitude = row.get("lon")
+    if _is_source_null_island(row, lane):
+        return True
     if (latitude is None) != (longitude is None):
         return True
     if latitude is None:
@@ -526,6 +532,12 @@ def _has_invalid_coordinate(row: dict[str, Any], lane: str) -> bool:
         and math.isfinite(longitude)
         and -180 <= longitude <= 180
     )
+
+
+def _is_source_null_island(row: dict[str, Any], lane: str) -> bool:
+    if lane not in {"gdelt_raw", "military_aircraft", "backend_incident"}:
+        return False
+    return row.get("lat") == 0.0 and row.get("lon") == 0.0
 
 
 def _targets_job(result: SpatialNormalizationResult, job: BatchJob) -> bool:
@@ -565,6 +577,7 @@ def _conflict_is_current(
 ) -> bool:
     return (
         row.get("spatial_catalog_revision") == result.spatial_catalog_revision
+        and row.get("spatial_derivation_revision") is None
         and row.get("spatial_conflict") is True
         and (row.get("spatial_conflict_scope_keys") or [])
         == list(result.spatial_conflict_scope_keys)

@@ -1,5 +1,10 @@
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from gdelt_raw.migrations.apply import (
     SOURCE_DUP_PREFLIGHT_QUERY,
+    apply_phase2,
     read_cypher_file,
 )
 
@@ -24,3 +29,22 @@ def test_phase2_file_contains_indexes():
 def test_source_preflight_query_is_parameterless():
     assert "name, count" in SOURCE_DUP_PREFLIGHT_QUERY or \
            "count(*)" in SOURCE_DUP_PREFLIGHT_QUERY
+
+
+@pytest.mark.asyncio
+async def test_phase2_runner_applies_gdelt_and_spatial_indexes() -> None:
+    session = MagicMock(run=AsyncMock())
+    session_context = MagicMock()
+    session_context.__aenter__ = AsyncMock(return_value=session)
+    session_context.__aexit__ = AsyncMock(return_value=False)
+    driver = MagicMock()
+    driver.session.return_value = session_context
+
+    await apply_phase2(driver)
+
+    statements = [call.args[0] for call in session.run.await_args_list]
+    assert any("event_source_date" in statement for statement in statements)
+    assert any("location_country_scope_derivation" in statement for statement in statements)
+    assert any("location_admin1_scope_derivation" in statement for statement in statements)
+    assert any("location_admin2_scope_derivation" in statement for statement in statements)
+    assert any("location_geo" in statement for statement in statements)

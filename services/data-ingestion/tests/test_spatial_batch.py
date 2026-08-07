@@ -140,6 +140,9 @@ class FakeClient:
                     stored["has_geo"] = update["latitude"] is not None
                 else:
                     stored["spatial_catalog_revision"] = update["spatial_catalog_revision"]
+                    stored["spatial_derivation_revision"] = update[
+                        "spatial_derivation_revision"
+                    ]
                     stored["spatial_conflict"] = True
                     stored["spatial_conflict_scope_keys"] = update["spatial_conflict_scope_keys"]
             return [{"updated": len(batch)}]
@@ -252,6 +255,7 @@ async def test_conflict_is_marked_and_unresolved_record_is_not_mutated(spatial_i
         lat=37.0,
         lon=-95.0,
         country_scope_key="country:LEGACY",
+        spatial_derivation_revision=target,
     )
     client = FakeClient(
         [
@@ -276,8 +280,33 @@ async def test_conflict_is_marked_and_unresolved_record_is_not_mutated(spatial_i
         "country:UKR",
         "country:USA",
     ]
+    assert client.apply_calls[0][0]["spatial_derivation_revision"] is None
     assert client.rows["gdelt:loc:1"]["country_scope_key"] == "country:LEGACY"
+    assert client.rows["gdelt:loc:1"]["spatial_derivation_revision"] is None
     assert client.rows["gdelt:loc:2"] == unresolved
+
+
+@pytest.mark.parametrize("lane", ("gdelt_raw", "military_aircraft", "backend_incident"))
+@pytest.mark.asyncio
+async def test_source_null_island_is_invalid_and_never_backfilled(
+    spatial_index,
+    lane: str,
+) -> None:
+    target = _target_revision(spatial_index)
+    client = FakeClient([_row("gdelt:loc:null-island", lat=0.0, lon=0.0)])
+
+    report = await run_spatial_batch(
+        client,
+        spatial_index,
+        MemoryCheckpointStore(),
+        BatchJob("backfill", lane, target, batch_size=10),
+        dry_run=False,
+    )
+
+    assert report["invalid_coordinate"] == 1
+    assert report["resolvable"] == 0
+    assert report["writes_applied"] == 0
+    assert client.apply_calls == []
 
 
 @pytest.mark.asyncio
@@ -445,6 +474,9 @@ def test_cypher_is_static_parameterized_and_preserves_raw_properties() -> None:
         assert "ORDER BY l.loc_key" in query
     assert "$rows" in APPLY_SPATIAL_BATCH
     assert "point({longitude: row.longitude, latitude: row.latitude})" in (APPLY_SPATIAL_BATCH)
+    assert APPLY_SPATIAL_BATCH.count(
+        "l.spatial_derivation_revision = row.spatial_derivation_revision"
+    ) == 2
     for raw_property in ("name", "country", "lat", "lon", "geo_basis", "loc_key"):
         assert f"l.{raw_property} =" not in APPLY_SPATIAL_BATCH
 

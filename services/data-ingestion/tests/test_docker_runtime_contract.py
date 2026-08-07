@@ -83,6 +83,10 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert "COPY services/data-ingestion/uv.lock ." in dockerfile
     assert "COPY services/data-ingestion/canonicalize.py ." in dockerfile
     assert "COPY services/data-ingestion/graph_integrity/ graph_integrity/" in dockerfile
+    assert (
+        "COPY services/data-ingestion/migrations/location_spatial_scope_indexes.cypher "
+        "migrations/location_spatial_scope_indexes.cypher"
+    ) in dockerfile
     assert "COPY services/data-ingestion/qdrant_doctor/ qdrant_doctor/" in dockerfile
     assert "COPY services/data-ingestion/infra_atlas/ infra_atlas/" in dockerfile
     assert "COPY services/backend/data/spatial/ data/spatial/" in dockerfile
@@ -107,7 +111,7 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert 'CMD ["python", "scheduler.py"]' in dockerfile
     assert "uv run" not in dockerfile
     assert "COPY . ." not in dockerfile
-    assert "migrations/" not in dockerfile
+    assert "COPY services/data-ingestion/migrations/ migrations/" not in dockerfile
 
 
 def test_spatial_normalizer_dependencies_are_available_at_runtime():
@@ -153,6 +157,8 @@ def test_built_wheel_imports_infra_atlas_with_identity_but_without_compiler(
     }
     assert packaged_spatial == SPATIAL_RUNTIME_FILES
     assert "graph_integrity/spatial_normalizer.py" in members
+    assert "gdelt_raw/migrations/phase2_indexes.cypher" in members
+    assert "migrations/location_spatial_scope_indexes.cypher" in members
     assert not SPATIAL_COMPILER_FILES & members
     assert not any(
         name.startswith("spatial_catalog/tools/") or name.endswith(".tgz")
