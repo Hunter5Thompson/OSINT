@@ -1427,6 +1427,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "qdrant-client" },
     { name = "redis" },
+    { name = "shapely" },
     { name = "structlog" },
     { name = "telethon" },
 ]
@@ -1482,6 +1483,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qdrant-client", specifier = ">=1.13.0,<1.14.0" },
     { name = "redis", specifier = ">=5.0" },
+    { name = "shapely", specifier = ">=2.1,<2.2" },
     { name = "shapely", marker = "extra == 'spatial-catalog'", specifier = ">=2.1,<2.2" },
     { name = "structlog", specifier = ">=24.1" },
     { name = "telethon", specifier = ">=1.36" },

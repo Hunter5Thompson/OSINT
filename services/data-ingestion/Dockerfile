@@ -28,9 +28,12 @@ COPY services/data-ingestion/spatial_catalog/__init__.py spatial_catalog/__init_
 COPY services/data-ingestion/spatial_catalog/identity.py spatial_catalog/identity.py
 COPY services/data-ingestion/spatial_catalog/manifest.py spatial_catalog/manifest.py
 COPY services/data-ingestion/spatial_catalog/models.py spatial_catalog/models.py
+COPY services/data-ingestion/spatial_catalog/normalize.py spatial_catalog/normalize.py
 COPY services/data-ingestion/spatial_catalog/source_lock.py spatial_catalog/source_lock.py
+COPY services/data-ingestion/spatial_catalog/topology.py spatial_catalog/topology.py
 COPY services/data-ingestion/spatial_catalog/catalog-plan.json spatial_catalog/catalog-plan.json
 COPY services/data-ingestion/spatial_catalog/data/country_crosswalk.json spatial_catalog/data/country_crosswalk.json
+COPY services/backend/data/spatial/ data/spatial/
 COPY services/data-ingestion/suv_structured/ suv_structured/
 COPY services/data-ingestion/qdrant_doctor/ qdrant_doctor/
 COPY services/intelligence/codebook/event_codebook.yaml runtime_contracts/event_codebook.yaml

@@ -1,3 +1,5 @@
+import json
+
 from graph_integrity.report import (
     ACTOR_RELS,
     COORD_DISAGREEMENT,
@@ -5,6 +7,7 @@ from graph_integrity.report import (
     GEO_COVERAGE,
     NULL_ISLAND,
     ORPHAN_BY_LABEL,
+    location_writer_inventory,
     shape_report,
 )
 
@@ -67,3 +70,42 @@ def test_shape_report_includes_geo_health_sections():
     )
     assert out["coord_disagreements"] == [{"coord_disagreements": 0}]
     assert out["null_island"] == [{"null_island_locations": 0, "attached_nodes": 0}]
+
+
+def test_location_writer_inventory_enumerates_supported_and_unsupported_lanes():
+    inventory = location_writer_inventory()
+    lanes = {lane["lane"]: lane for lane in inventory["lanes"]}
+
+    assert inventory["schema_version"] == 1
+    assert [lane["lane"] for lane in inventory["lanes"]] == sorted(lanes)
+    assert {
+        "gdelt_raw",
+        "rss_pipeline",
+        "military_aircraft",
+        "backend_incident",
+        "intelligence_link_event_location",
+        "graph_integrity_geo_gdelt",
+        "graph_integrity_geo_incident",
+        "graph_integrity_rekey_incident_locations",
+    } == set(lanes)
+    assert {
+        lane["lane"]
+        for lane in lanes.values()
+        if lane["active"] and lane["normalization"] == "shared_spatial_normalizer"
+    } == {"gdelt_raw", "rss_pipeline", "military_aircraft"}
+    assert lanes["backend_incident"] == {
+        "lane": "backend_incident",
+        "path": "services/backend/app/cypher/incident_write.py",
+        "active": True,
+        "normalization": "unsupported",
+        "reason": "cross_service_normalizer_not_integrated",
+    }
+    assert lanes["intelligence_link_event_location"]["active"] is False
+    assert lanes["intelligence_link_event_location"]["reason"] == "no_production_call_sites"
+    assert json.loads(json.dumps(inventory)) == inventory
+
+
+def test_shape_report_embeds_machine_readable_location_writer_inventory():
+    out = shape_report(orphans=[], geo=[], dup_edges=[])
+
+    assert out["location_writer_inventory"] == location_writer_inventory()

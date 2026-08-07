@@ -13,6 +13,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, Literal
@@ -341,6 +342,38 @@ def load_normalization_index(
     )
 
 
+@lru_cache(maxsize=4)
+def load_active_normalization_index(
+    catalog_root: Path,
+    *,
+    crosswalk_path: Path,
+) -> SpatialNormalizationIndex:
+    """Resolve the newest installed immutable catalog using backend ordering."""
+
+    if (catalog_root / "manifest.json").is_file():
+        return load_normalization_index(
+            catalog_root,
+            crosswalk_path=crosswalk_path,
+        )
+    catalogs_root = catalog_root / "catalogs"
+    if catalogs_root.is_symlink() or not catalogs_root.is_dir():
+        raise FileNotFoundError("spatial catalog root is missing")
+    candidates = tuple(
+        candidate
+        for candidate in catalogs_root.iterdir()
+        if candidate.is_dir()
+        and not candidate.is_symlink()
+        and (candidate / "manifest.json").is_file()
+    )
+    if not candidates:
+        raise FileNotFoundError("no spatial catalog revision is installed")
+    active = max(
+        candidates,
+        key=lambda candidate: (candidate.stat().st_mtime_ns, candidate.name),
+    )
+    return load_normalization_index(active, crosswalk_path=crosswalk_path)
+
+
 def normalize_location(
     raw: RawLocationIdentity,
     index: SpatialNormalizationIndex,
@@ -416,6 +449,39 @@ def normalize_location(
         conflict_scope_keys=tuple(sorted(conflicts)),
         unresolved_codes=(),
     )
+
+
+def spatial_property_parameters(
+    result: SpatialNormalizationResult,
+) -> dict[str, object]:
+    """Project one result onto the fixed additive ``:Location`` property set."""
+
+    return {
+        "source_country_code": result.source_country_code,
+        "source_country_code_system": (
+            result.source_country_code_system.value
+            if result.source_country_code_system is not None
+            else None
+        ),
+        "country_iso3": result.country_iso3,
+        "admin1_code": result.admin1_code,
+        "admin2_code": result.admin2_code,
+        "country_scope_key": result.country_scope_key,
+        "admin1_scope_key": result.admin1_scope_key,
+        "admin2_scope_key": result.admin2_scope_key,
+        "spatial_basis": (
+            result.spatial_basis.value if result.spatial_basis is not None else None
+        ),
+        "spatial_precision": (
+            result.spatial_precision.value
+            if result.spatial_precision is not None
+            else None
+        ),
+        "spatial_catalog_revision": result.spatial_catalog_revision,
+        "spatial_derivation_revision": result.spatial_derivation_revision,
+        "spatial_conflict": result.spatial_conflict,
+        "spatial_conflict_scope_keys": list(result.spatial_conflict_scope_keys),
+    }
 
 
 def _resolve_country_code(

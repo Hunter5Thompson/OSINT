@@ -72,7 +72,7 @@ class TestProcessItem:
                 "timestamp": "2026-03-30T10:00:00Z",
             }],
             entities=[{"name": "NATO", "type": "organization", "confidence": 0.8}],
-            locations=[{"name": "Odessa", "country": "Ukraine"}],
+            locations=[{"name": "Odessa", "country": "UA"}],
         )
         neo4j_resp = _mock_neo4j_response()
 

@@ -148,3 +148,36 @@ async def test_run_once_closes_all_owned_clients_when_forward_fails():
     fake_neo4j.close.assert_awaited_once()
     fake_qdrant.close.assert_awaited_once()
     fake_redis.aclose.assert_awaited_once()
+
+
+async def test_run_once_passes_active_spatial_index_to_gdelt_writer():
+    fake_index = object()
+    fake_neo4j = MagicMock(close=AsyncMock())
+    neo4j_writer = MagicMock(return_value=fake_neo4j)
+    fake_qdrant = MagicMock(close=AsyncMock())
+
+    with (
+        patch(
+            "feeds.gdelt_raw_collector.aioredis.from_url",
+            return_value=MagicMock(aclose=AsyncMock()),
+        ),
+        patch("feeds.gdelt_raw_collector.GDELTState", return_value=MagicMock()),
+        patch("feeds.gdelt_raw_collector.Neo4jWriter", neo4j_writer),
+        patch("feeds.gdelt_raw_collector.AsyncQdrantClient", return_value=MagicMock()),
+        patch("feeds.gdelt_raw_collector.QdrantWriter", return_value=fake_qdrant),
+        patch("feeds.gdelt_raw_collector.run_forward", new=AsyncMock()),
+        patch(
+            "feeds.gdelt_raw_collector.load_active_normalization_index",
+            return_value=fake_index,
+        ) as load_index,
+    ):
+        from config import settings as project_settings
+        from feeds.gdelt_raw_collector import run_once
+
+        await run_once()
+
+    load_index.assert_called_once_with(
+        project_settings.spatial_catalog_path,
+        crosswalk_path=project_settings.spatial_country_crosswalk_path,
+    )
+    assert neo4j_writer.call_args.kwargs["spatial_index"] is fake_index

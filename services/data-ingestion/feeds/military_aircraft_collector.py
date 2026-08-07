@@ -17,6 +17,13 @@ import structlog
 
 from config import Settings
 from feeds.base import BaseCollector
+from graph_integrity.spatial_normalizer import (
+    RawLocationIdentity,
+    SpatialNormalizationIndex,
+    load_active_normalization_index,
+    normalize_location,
+    spatial_property_parameters,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -100,11 +107,63 @@ def classify_region(lat: float, lon: float) -> str:
     return "unknown"
 
 
+def build_aircraft_location_statement(
+    aircraft: dict[str, Any],
+    spatial_index: SpatialNormalizationIndex,
+) -> dict[str, Any]:
+    """Build one observation-keyed, parameterized Location write."""
+
+    normalized = normalize_location(
+        RawLocationIdentity(
+            latitude=aircraft["latitude"],
+            longitude=aircraft["longitude"],
+        ),
+        spatial_index,
+    )
+    return {
+        "statement": (
+            "MERGE (l:Location {loc_key: $loc_key}) "
+            "ON CREATE SET l.name = $name, l.type = 'aircraft_observation', "
+            "              l.region = $region, "
+            "              l.lat = $latitude, l.lon = $longitude "
+            "SET l.source_country_code = $source_country_code, "
+            "    l.source_country_code_system = $source_country_code_system, "
+            "    l.country_iso3 = $country_iso3, "
+            "    l.admin1_code = $admin1_code, l.admin2_code = $admin2_code, "
+            "    l.country_scope_key = $country_scope_key, "
+            "    l.admin1_scope_key = $admin1_scope_key, "
+            "    l.admin2_scope_key = $admin2_scope_key, "
+            "    l.spatial_basis = $spatial_basis, "
+            "    l.spatial_precision = $spatial_precision, "
+            "    l.spatial_catalog_revision = $spatial_catalog_revision, "
+            "    l.spatial_derivation_revision = $spatial_derivation_revision, "
+            "    l.spatial_conflict = $spatial_conflict, "
+            "    l.spatial_conflict_scope_keys = $spatial_conflict_scope_keys, "
+            "    l.geo = point({longitude: $longitude, latitude: $latitude})"
+        ),
+        "parameters": {
+            "loc_key": f"aircraft-observation:{aircraft['dedup_key']}",
+            "name": aircraft["region"],
+            "region": aircraft["region"],
+            "latitude": aircraft["latitude"],
+            "longitude": aircraft["longitude"],
+            **spatial_property_parameters(normalized),
+        },
+    }
+
+
 class MilitaryAircraftCollector(BaseCollector):
     """Collect military aircraft positions from adsb.fi, write to Neo4j."""
 
-    def __init__(self, settings: Settings, redis_client: Any | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        redis_client: Any | None = None,
+        *,
+        spatial_index: SpatialNormalizationIndex | None = None,
+    ) -> None:
         super().__init__(settings, redis_client)
+        self._spatial_index = spatial_index
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -182,6 +241,24 @@ class MilitaryAircraftCollector(BaseCollector):
         2. MERGE Location node
         3. MERGE SPOTTED_AT relationship with observation metadata
         """
+        spatial_index = self._spatial_index
+        if spatial_index is None:
+            try:
+                spatial_index = load_active_normalization_index(
+                    self.settings.spatial_catalog_path,
+                    crosswalk_path=self.settings.spatial_country_crosswalk_path,
+                )
+            except (OSError, ValueError) as exc:
+                log.warning(
+                    "spatial_location_writer_unsupported",
+                    lane="military_aircraft",
+                    cause="normalization_index_unavailable",
+                    error=str(exc),
+                )
+                raise RuntimeError("spatial normalization index unavailable") from exc
+            self._spatial_index = spatial_index
+
+        location_write = build_aircraft_location_statement(ac, spatial_index)
         statements = [
             # 1. MilitaryAircraft node
             {
@@ -201,19 +278,13 @@ class MilitaryAircraftCollector(BaseCollector):
                     "military_branch": ac["military_branch"],
                 },
             },
-            # 2. Location node
-            {
-                "statement": (
-                    "MERGE (l:Location {name: $region}) "
-                    "SET l.type = 'geopolitical_hotspot'"
-                ),
-                "parameters": {"region": ac["region"]},
-            },
+            # 2. Observation-keyed Location node
+            location_write,
             # 3. SPOTTED_AT relationship
             {
                 "statement": (
                     "MATCH (a:MilitaryAircraft {icao24: $icao24}) "
-                    "MATCH (l:Location {name: $region}) "
+                    "MATCH (l:Location {loc_key: $loc_key}) "
                     "MERGE (a)-[r:SPOTTED_AT {dedup_key: $dedup_key}]->(l) "
                     "SET r.latitude = $latitude, "
                     "    r.longitude = $longitude, "
@@ -225,7 +296,7 @@ class MilitaryAircraftCollector(BaseCollector):
                 ),
                 "parameters": {
                     "icao24": ac["icao24"],
-                    "region": ac["region"],
+                    "loc_key": location_write["parameters"]["loc_key"],
                     "dedup_key": ac["dedup_key"],
                     "latitude": ac["latitude"],
                     "longitude": ac["longitude"],
@@ -248,6 +319,7 @@ class MilitaryAircraftCollector(BaseCollector):
             errors = resp.json().get("errors", [])
             if errors:
                 log.warning("military_aircraft_neo4j_errors", icao24=ac["icao24"], errors=errors)
+                raise RuntimeError("Neo4j rejected the atomic aircraft write")
 
     # ------------------------------------------------------------------
     # Fetch methods
