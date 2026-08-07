@@ -94,3 +94,9 @@ Forward writers are deployed before apply. Backup/restore point exists. Per lane
 recognized codes are either normalized or conflict; no unknown defaults; country
 coverage is at least 95%; stale compatible-revision rate is at most 1%; query plans use
 the indexes. Hand Plan 06B the approved coverage report and exact property contract.
+
+> **Stand 2026-08-07:** Code und hermetische Tests sind abgeschlossen (18/20
+> Checkboxen). Es erfolgten weder Deployment noch Neo4j-Migration, Staging-`EXPLAIN`,
+> Staging-Dry-run, Backup/Restore-Punkt oder Live-Backfill. Damit bleiben beide
+> **VERIFY**-Checkboxen und das operative Exit-Gate ausdrücklich offen; exact CHRONIK
+> bleibt deaktiviert.
