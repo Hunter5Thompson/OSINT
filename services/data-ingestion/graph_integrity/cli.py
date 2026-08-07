@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 
 from graph_integrity import (
     cleanup_null_island,
@@ -10,6 +11,7 @@ from graph_integrity import (
     geo_incident,
     rekey_incident_locations,
     report,
+    spatial_index_smoke,
 )
 from graph_integrity.neo4j_client import Neo4jClient
 
@@ -26,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     rk.add_argument("--dry-run", action="store_true")
     cn = sub.add_parser("cleanup-null-island")
     cn.add_argument("--dry-run", action="store_true")
+    sub.add_parser("spatial-index-smoke")
     return p
 
 
@@ -71,6 +74,11 @@ async def _amain(args: argparse.Namespace) -> None:
             n = await cleanup_null_island.run(client, dry_run=args.dry_run)
             suffix = "(dry-run)" if args.dry_run else "deleted"
             print(f"cleanup-null-island: {n} (0,0) locations {suffix}")
+        elif args.command == "spatial-index-smoke":
+            evidence = await spatial_index_smoke.collect_spatial_index_plan_evidence(client)
+            print(json.dumps(evidence, sort_keys=True, separators=(",", ":")))
+            if not evidence["all_expected_indexes_used"]:
+                raise RuntimeError("one or more spatial indexes were not selected")
     finally:
         await client.close()
 

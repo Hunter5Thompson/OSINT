@@ -18,7 +18,7 @@ def test_phase2_file_contains_indexes():
     text = read_cypher_file("phase2_indexes.cypher")
     assert "event_source_date" in text
     assert "event_cameo_root" in text
-    assert "location_geo" in text
+    assert "location_geo" not in text  # consolidated into the Plan-06A migration
 
 
 def test_source_preflight_query_is_parameterless():
