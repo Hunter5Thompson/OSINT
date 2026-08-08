@@ -67,12 +67,15 @@ catalog's crosswalk and containment artifacts—do not create a second geo model
 - [x] **GREEN:** Add the deterministic migration and consolidate the existing
   `location_geo` declaration instead of duplicating it.
 - [x] **REFACTOR:** Migration is additive and independently deployable before writers.
-- [ ] **VERIFY:** Run migration tests; attach Neo4j plan evidence to the slice record.
+- [x] **VERIFY:** Run migration tests; attach Neo4j plan evidence to the slice record.
 - [x] **COMMIT:** `build(neo4j): add spatial location indexes`
 
-> Hermetischer Stand: Migrationstests und der read-only `EXPLAIN`-Evidence-Collector
-> sind grün. Der **VERIFY**-Punkt bleibt bis zum freigegebenen Staging-Lauf samt
-> realer Neo4j-Plan-Evidence offen.
+> Operationaler Nachweis 2026-08-08: Die additive Migration lief gegen den vom
+> Operator bestimmten persistenten ODIN-Compose-Graphen (Neo4j 5.26.23). Alle drei
+> Composite-Indizes und der Point-Index stehen `ONLINE`; der read-only `EXPLAIN`-
+> Smoke meldet `all_expected_indexes_used=true` und je Scope-Kind einen
+> `NodeIndexSeek`. Vollständige Evidence:
+> [Plan-06A Neo4j verification](../../../reports/2026-08-08-spatial-plan06a-neo4j-verification.md).
 >
 > Review-Fix `2aee913`: `apply_phase2()` führt GDELT- und Spatial-Indexdatei gemeinsam
 > aus; Wheel und Container enthalten die zentrale Migration. Exact-Smokes schließen
@@ -90,14 +93,16 @@ catalog's crosswalk and containment artifacts—do not create a second geo model
   Re-enrichment is triggered per affected lane for a new derivation revision.
 - [x] **REFACTOR:** Share batch engine/report schema between initial backfill and
   recurring re-enrichment; isolate deterministic parameterized Cypher constants.
-- [ ] **VERIFY:** Run focused tests, then dry-run against staging and review total,
+- [x] **VERIFY:** Run focused tests, then dry-run against staging and review total,
   already-normalized, resolvable, unresolved, conflict, invalid and by-source/system.
 - [x] **COMMIT:** `feat(graph-integrity): backfill spatial scope revisions`
 
-> Hermetischer Stand nach Review-Fix: 1.345 Tests bestanden, 1 dokumentierter Skip
-> und 17 deselected;
-> Ruff ist grün. Der **VERIFY**-Punkt bleibt bis zum freigegebenen Staging-Dry-run
-> und dessen reviewtem Accounting offen; es wurde kein Graph mutiert.
+> Operationaler Nachweis 2026-08-08: Die fokussierten Migration-/Smoke-/Batch-/CLI-
+> Suites bestanden 27/27. Anschließend liefen alle vier Lanes mit Batchgröße 500
+> gegen einen eingefrorenen Graph-Snapshot im `--dry-run`; `writes_applied=0`, kein
+> Checkpoint wurde geschrieben. GDELT erreichte 99,61 % und RSS 100 % Country-
+> Coverage der addressierbaren Records. Das reviewte Accounting und seine weiterhin
+> blockierenden Befunde stehen im verlinkten Evidence-Report.
 
 ## Exit gate and handoff
 
@@ -106,8 +111,11 @@ recognized codes are either normalized or conflict; no unknown defaults; country
 coverage is at least 95%; stale compatible-revision rate is at most 1%; query plans use
 the indexes. Hand Plan 06B the approved coverage report and exact property contract.
 
-> **Stand 2026-08-07:** Code und hermetische Tests sind abgeschlossen (18/20
-> Checkboxen). Es erfolgten weder Deployment noch Neo4j-Migration, Staging-`EXPLAIN`,
-> Staging-Dry-run, Backup/Restore-Punkt oder Live-Backfill. Damit bleiben beide
-> **VERIFY**-Checkboxen und das operative Exit-Gate ausdrücklich offen; exact CHRONIK
-> bleibt deaktiviert.
+> **Stand 2026-08-08:** Plan 06A steht nach dem operatorautorisierten Lauf gegen den
+> persistenten lokalen ODIN-Compose-Graphen bei 20/20 Checkboxen. Migration, reale
+> `EXPLAIN`-Pläne und ein reviewter Zero-Write-Dry-run sind belegt. Das operative
+> Exit-Gate bleibt dennoch geschlossen: neun Legacy-Aircraft-Locations besitzen keine
+> stabile ID, `backend_incident` ist als Forward-Writer nicht integriert, nur eine
+> repräsentative der 204 Ziel-Derivationsrevisionen wurde trocken geprüft, und es gibt
+> weder Backup/Restore-Punkt noch Backfill-Apply oder Production-Deployment. Exact
+> CHRONIK bleibt deaktiviert.
