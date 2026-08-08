@@ -15,15 +15,23 @@
 ## Kurzstand
 
 Plan 06A ist im Code vollständig und testgetrieben implementiert. Auf die vier
-vorgesehenen Work-Order-Commits folgt der Review-Fix `2aee913`. Der Plan steht ehrlich
-bei **18/20 Checkboxen**: Die beiden VERIFY-Punkte benötigen reale
-Staging-/Betriebsnachweise. Beim Review war weder ein eindeutiges Staging-Ziel
-konfiguriert noch ein ODIN-Neo4j-Container aktiv.
+vorgesehenen Work-Order-Commits folgt der Review-Fix `2aee913`. Ein
+operatorautorisierter Nachlauf am 2026-08-08 hat die beiden vormals offenen VERIFY-
+Punkte geschlossen; der Plan steht damit bei **20/20 Checkboxen**.
 
-Es wurden insbesondere **keine** Neo4j-Migration, kein Deployment, kein Staging-
-`EXPLAIN`, kein Staging-Dry-run, kein Backup und kein Backfill gegen einen echten Graph
-ausgeführt. Exact CHRONIK wurde nicht aktiviert. Plan 06B darf keine Lane exact
-schalten, bevor die unten genannten Exit-Gates belegt und reviewt sind.
+Als Ziel diente der persistente lokale ODIN-Compose-Graph mit Neo4j 5.26.23. Die
+additive Indexmigration wurde angewandt, alle vorgesehenen Indizes stehen `ONLINE`,
+und reale `EXPLAIN`-Pläne wählen je Scope-Kind den Composite-Index. Ein eingefrorener
+Graph-Snapshot wurde anschließend für alle vier Lanes mit `--dry-run` und null
+angewandten Writes geprüft. Der vollständige Nachweis steht in
+[Plan-06A Neo4j verification](../reports/2026-08-08-spatial-plan06a-neo4j-verification.md).
+
+Das ist weiterhin **keine** Backfill- oder Exact-Freigabe. Es wurden weder ein
+Backup/Restore-Punkt noch ein Daten-Apply oder Production-Deployment ausgeführt;
+`backend_incident`, instabile Legacy-Aircraft-IDs und die vollständige
+Multi-Revisionsfreigabe bleiben offen. Exact CHRONIK wurde nicht aktiviert. Plan 06B
+darf keine Lane exact schalten, bevor die unten genannten Exit-Gates belegt und
+reviewt sind.
 
 ## Pflichtstart für den nächsten Chat
 
@@ -201,6 +209,8 @@ Grüne Nachweise:
 - WO3 Migration/Plan-Smoke fokussiert: **14 bestanden**.
 - Graph-/Spatial-Fokus nach WO4: **109 bestanden**.
 - Review-Fokus: **57 bestanden** in vier getrennten Läufen.
+- Operationaler VERIFY-Fokus am 2026-08-08: **27 bestanden**
+  (Migration, Plan-Smoke, Batch und CLI).
 - Vollständiger Data-Ingestion-Lauf nach Review-Fix:
   **1.345 bestanden, 1 bedingter Integration-Skip, 17 `live` deselected**.
 - `uv run ruff check .`: **grün**.
@@ -210,22 +220,30 @@ Dev-Compose-Services. Die 17 deselected Tests tragen den expliziten `live`-Marke
 
 ## Offene 06A-Betriebsgates — blockieren exact
 
-Folgende Nachweise existieren noch nicht:
+Indexmigration und reale `EXPLAIN`-Evidence sind seit dem Nachlauf belegt. Der
+repräsentative Dry-run belegt außerdem 99,61 % GDELT- und 100 % RSS-Country-Coverage
+der addressierbaren Records sowie 0 % stale-compatible für alle vier Jobs. Er hat
+jedoch folgende verbleibende Gates sichtbar gemacht:
 
-1. Forward-Writer-Deployment vor Apply;
-2. Backup/Restore-Punkt für den Zielgraph;
-3. Anwendung der Indexmigration in Staging;
-4. reale `EXPLAIN`-Evidence je Country/Admin-1/Admin-2;
-5. vollständiger Staging-Dry-run und reviewtes Accounting je Lane/Revision;
-6. 100 % erkannte Codes entweder normalisiert oder Conflict;
-7. keine unbekannten Defaults;
-8. Country-Coverage mindestens 95 % je Lane;
-9. stale-compatible Rate höchstens 1 % je Lane;
-10. Entscheidung/Integration für `backend_incident` und stabile IDs für etwaige
-    Legacy-Aircraft-Locations;
-11. reviewtes Coverage-Report als Freigabe-Artefakt für Plan 06B.
+1. Forward-Writer-Deployment in der vorgesehenen Zielumgebung vor Apply;
+2. Backup/Restore-Punkt für den Zielgraph vor Apply;
+3. vollständige, reviewte Dry-runs für jede tatsächlich anzuwendende Lane/
+   Ziel-Derivationsrevision; bisher wurde repräsentativ
+   `spatial-derive-v1-4d1de888e0c7` geprüft;
+4. Outcome-Review für 140 unresolved GDELT- und 10 unresolved RSS-Locations, bevor
+   die 100-%-Recognized-Code- und No-Unknown-Default-Gates als bestanden gelten;
+5. Entscheidung/Integration für `backend_incident`; der Zwei-Record-Snapshot ist
+   keine Exact-Promotion-Evidence;
+6. stabile IDs beziehungsweise explizite Disposition für neun Legacy-Aircraft-
+   Locations. Der Aircraft-Report ist dadurch `complete=false`; sieben keyed
+   Beobachtungen sind im aktuellen Containment-Katalog unresolved;
+7. content-adressierte Apply-Freigabereports, Daten-Apply und anschließendes
+   Response-Accounting je zu aktivierender Lane;
+8. explizite Exact-Aktivierungsentscheidung für Plan 06B.
 
-Ohne ausdrückliche Freigabe keine dieser Operationen gegen Staging/Live ausführen.
+Die Nutzerfreigabe vom 2026-08-08 deckte den lokalen Stackstart, die additive
+Indexmigration und Zero-Write-Dry-runs ab. Sie deckt keinen Backup-Eingriff, kein
+Backfill-Apply, kein Production-Deployment und keine Exact-Aktivierung ab.
 
 ## TASK-123
 
