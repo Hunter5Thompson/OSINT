@@ -499,6 +499,7 @@ const REQUIRED_SPATIAL_APPLICATION_FIELDS = [
   "excluded_unlocated_count",
   "excluded_conflict_count",
   "excluded_stale_revision_count",
+  "excluded_unsupported_count",
 ] as const;
 const SPATIAL_FILTER_MODES = new Set<SpatialApplicationV1["mode"]>([
   "global",
@@ -547,6 +548,7 @@ function decodeSpatialApplication(value: unknown): SpatialApplicationV1 {
     || !isNonNegativeInteger(value.excluded_unlocated_count)
     || !isNonNegativeInteger(value.excluded_conflict_count)
     || !isNonNegativeInteger(value.excluded_stale_revision_count)
+    || !isNonNegativeInteger(value.excluded_unsupported_count)
   ) {
     invalidSpatialApplication();
   }

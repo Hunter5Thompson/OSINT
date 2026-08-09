@@ -57,6 +57,11 @@ class Settings(BaseSettings):
         ChronikExactSpatialActivationV1,
         ...,
     ] = ()
+    chronik_exact_max_stale_revision_ratio: float = Field(
+        default=0.01,
+        ge=0.0,
+        le=1.0,
+    )
 
     # External APIs
     opensky_api_url: str = "https://opensky-network.org/api/states/all"
@@ -87,11 +92,17 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def exact_spatial_activations_are_unique(self) -> Settings:
         keys = [
-            (activation.lane, activation.scope_kind)
+            (
+                activation.lane,
+                activation.scope_kind,
+                activation.derivation_revision,
+            )
             for activation in self.chronik_exact_spatial_activations
         ]
         if len(keys) != len(set(keys)):
-            raise ValueError("exact spatial activation lane/kind entries must be unique")
+            raise ValueError(
+                "exact spatial activation lane/kind/derivation entries must be unique"
+            )
         return self
 
 

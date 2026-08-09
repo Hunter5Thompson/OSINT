@@ -25,6 +25,38 @@ async def test_read_query_uses_read_access_session() -> None:
 
 
 @pytest.mark.asyncio
+async def test_read_queries_share_one_managed_read_transaction() -> None:
+    transaction = MagicMock()
+    transaction.run = AsyncMock(side_effect=[
+        _async_iter([{"id": "event-1"}]),
+        _async_iter([{"candidate_count": 1}]),
+    ])
+    mock_session = MagicMock()
+
+    async def execute_read(callback):
+        return await callback(transaction)
+
+    mock_session.execute_read = AsyncMock(side_effect=execute_read)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+    mock_driver = MagicMock()
+    mock_driver.session = MagicMock(return_value=mock_session)
+
+    queries = (
+        ("MATCH (ev:Event) RETURN ev.id AS id", {"scope_key": "country:UKR"}),
+        ("MATCH (ev:Event) RETURN count(ev) AS candidate_count", {}),
+    )
+    with patch.object(nc, "get_graph_client", AsyncMock(return_value=mock_driver)):
+        result_sets = await nc.read_queries(queries)
+
+    assert result_sets == [[{"id": "event-1"}], [{"candidate_count": 1}]]
+    mock_session.execute_read.assert_awaited_once()
+    assert transaction.run.await_args_list[0].args == queries[0]
+    assert transaction.run.await_args_list[1].args == queries[1]
+    assert mock_driver.session.call_args.kwargs["default_access_mode"] == nc.neo4j.READ_ACCESS
+
+
+@pytest.mark.asyncio
 async def test_write_query_uses_write_access_session() -> None:
     mock_session = MagicMock()
     mock_session.run = AsyncMock(return_value=_async_iter([{"ok": 1}]))

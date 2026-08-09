@@ -191,11 +191,33 @@ def test_exact_histogram_reuses_static_event_rows_and_shared_accounting(client):
         coverage_revision="coverage-fixture-a",
         coverage_complete=True,
     )
-    exact_rows = [{
+    histogram_rows = [{
+        "time": "2026-06-01T00:30:00Z",
+        "codebook_type": "military.airstrike",
+        "severity": "high",
+    }]
+    notable_rows = [{
         "id": "event-1",
         "time": "2026-06-01T00:30:00Z",
         "time_basis": "indexed",
         "title": "Reviewed event",
+        "codebook_type": "military.airstrike",
+        "severity": "high",
+        "lat": 50.0,
+        "lon": 30.0,
+    }]
+    incident_rows = [{
+        "id": "incident-1",
+        "time": "2026-06-01T00:45:00Z",
+        "time_basis": "occurred",
+        "title": "Reviewed incident",
+        "severity": "critical",
+        "lat": 50.1,
+        "lon": 30.1,
+    }]
+    geo_rows = [{
+        "id": "event-1",
+        "time": "2026-06-01T00:30:00Z",
         "codebook_type": "military.airstrike",
         "severity": "high",
         "lat": 50.0,
@@ -211,17 +233,19 @@ def test_exact_histogram_reuses_static_event_rows_and_shared_accounting(client):
             "app.routers.timeline._select_event_spatial_query",
             return_value=exact,
         ),
-        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.read_queries", new_callable=AsyncMock) as read_many,
     ):
-        read.side_effect = [
-            exact_rows,
+        read_many.return_value = [
+            histogram_rows,
+            notable_rows,
+            incident_rows,
+            geo_rows,
             [{
-                "total": 4,
+                "candidate_count": 4,
                 "included_count": 1,
-                "excluded_unlocated_count": 1,
                 "excluded_conflict_count": 1,
                 "excluded_stale_revision_count": 1,
-                "excluded_unsupported_count": 0,
+                "excluded_unsupported_count": 1,
             }],
         ]
         response = client.get(
@@ -232,21 +256,40 @@ def test_exact_histogram_reuses_static_event_rows_and_shared_accounting(client):
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 1
-    assert body["notables"][0]["id"] == "event-1"
+    assert body["notables"][0]["id"] == "incident-1"
+    assert body["notables"][0]["is_incident"] is True
     assert body["geo_located_count"] == 1
     assert body["geo_events"][0]["id"] == "event-1"
     assert body["spatial_application"]["mode"] == "semantic_key"
     assert body["spatial_application"]["included_count"] == 1
-    assert body["spatial_application"]["excluded_unlocated_count"] == 1
+    assert body["spatial_application"]["excluded_unlocated_count"] == 0
     assert body["spatial_application"]["excluded_conflict_count"] == 1
     assert body["spatial_application"]["excluded_stale_revision_count"] == 1
-    assert len(read.await_args_list) == 2
-    histogram_query, histogram_parameters = read.await_args_list[0].args
-    accounting_query, accounting_parameters = read.await_args_list[1].args
+    assert body["spatial_application"]["excluded_unsupported_count"] == 1
+    read_many.assert_awaited_once()
+    query_specs = read_many.await_args.args[0]
+    assert len(query_specs) == 5
+    histogram_query, histogram_parameters = query_specs[0]
+    notable_query, notable_parameters = query_specs[1]
+    incident_query, incident_parameters = query_specs[2]
+    geo_query, geo_parameters = query_specs[3]
+    accounting_query, accounting_parameters = query_specs[4]
     assert "l.country_scope_key = $scope_key" in histogram_query
     assert "LIMIT $limit" not in histogram_query
+    assert "LIMIT 400" in notable_query
+    assert "(i:Incident)" in incident_query
+    assert "l.lat IS NOT NULL AND l.lon IS NOT NULL" in geo_query
     assert "excluded_conflict_count" in accounting_query
-    assert histogram_parameters == accounting_parameters
+    assert all(
+        parameters == histogram_parameters
+        for parameters in (
+            histogram_parameters,
+            notable_parameters,
+            incident_parameters,
+            geo_parameters,
+            accounting_parameters,
+        )
+    )
 
 
 def test_active_exact_histogram_failure_never_retries_bbox(client):
@@ -255,6 +298,7 @@ def test_active_exact_histogram_failure_never_retries_bbox(client):
     compiled = _catalog_filter()
     deployment_settings = SimpleNamespace(
         chronik_exact_spatial_activations=(_activation(),),
+        chronik_exact_max_stale_revision_ratio=0.01,
     )
     with (
         patch(
@@ -263,9 +307,9 @@ def test_active_exact_histogram_failure_never_retries_bbox(client):
             return_value=compiled,
         ),
         patch("app.routers.timeline.settings", deployment_settings),
-        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.read_queries", new_callable=AsyncMock) as read_many,
     ):
-        read.side_effect = RuntimeError("exact histogram unavailable")
+        read_many.side_effect = RuntimeError("exact histogram unavailable")
         response = client.get(
             f"/api/timeline/histogram{W}&scope_key=country:UKR"
             "&catalog_revision=spatial-v1-0123456789ab"
@@ -273,9 +317,10 @@ def test_active_exact_histogram_failure_never_retries_bbox(client):
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "SPATIAL_FILTER_UNAVAILABLE"
-    read.assert_awaited_once()
-    assert "l.country_scope_key = $scope_key" in read.await_args.args[0]
-    assert "$bbox_off" not in read.await_args.args[0]
+    read_many.assert_awaited_once()
+    query_specs = read_many.await_args.args[0]
+    assert all("l.country_scope_key = $scope_key" in query for query, _ in query_specs)
+    assert all("$bbox_off" not in query for query, _ in query_specs)
 
 
 def test_histogram_neo4j_down_503(client):

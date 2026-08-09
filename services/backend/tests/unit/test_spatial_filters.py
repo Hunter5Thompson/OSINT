@@ -41,6 +41,7 @@ CATALOG_A = "spatial-v1-aaaaaaaaaaaa"
 CATALOG_B = "spatial-v1-bbbbbbbbbbbb"
 DERIVATION_A = "spatial-derive-v1-aaaaaaaaaaaa"
 DERIVATION_B = "spatial-derive-v1-bbbbbbbbbbbb"
+MAX_STALE_RATIO = 0.01
 
 
 _EXACT_SCOPE_PROPERTY = {
@@ -62,7 +63,14 @@ def test_exact_event_occurrence_contract_excludes_conflicts_and_binds_identity(
     )
     property_name = _EXACT_SCOPE_PROPERTY[scope_kind]
 
-    for query in (templates.samples, templates.count):
+    for query in (
+        templates.samples,
+        templates.histogram,
+        templates.notables,
+        templates.incidents,
+        templates.geo,
+        templates.count,
+    ):
         assert f"l.{property_name} = $scope_key" in query
         assert "l.spatial_derivation_revision IN $compatible_revisions" in query
         assert "l.spatial_conflict = false" in query
@@ -106,6 +114,48 @@ def test_exact_event_occurrence_collapses_duplicate_locations_before_limit(
     assert distinct_events[:2] == ["ev-1", "ev-2"]
 
 
+@pytest.mark.parametrize("scope_kind", tuple(_EXACT_SCOPE_PROPERTY))
+def test_exact_histogram_splits_buckets_notables_incidents_and_geo(
+    scope_kind: ScopeKind,
+):
+    templates = exact_event_query_templates(
+        scope_kind,
+        EventSpatialRelation.OCCURS_IN,
+    )
+    property_name = _EXACT_SCOPE_PROPERTY[scope_kind]
+
+    assert "WITH DISTINCT ev" in templates.histogram
+    assert " AS id" not in templates.histogram
+    assert " AS title" not in templates.histogram
+    assert " AS lat" not in templates.histogram
+    assert " AS lon" not in templates.histogram
+    assert "LIMIT" not in templates.histogram
+
+    assert "MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)" in templates.notables
+    assert "LIMIT 400" in templates.notables
+    assert "MATCH (l:Location)<-[:OCCURRED_AT]-(i:Incident)" in templates.incidents
+    assert f"l.{property_name} = $scope_key" in templates.incidents
+    assert "LIMIT 200" in templates.incidents
+    assert "l.lat IS NOT NULL AND l.lon IS NOT NULL" in templates.geo
+
+
+@pytest.mark.parametrize("scope_kind", tuple(_EXACT_SCOPE_PROPERTY))
+def test_exact_representative_location_prefers_coordinates(scope_kind: ScopeKind):
+    templates = exact_event_query_templates(
+        scope_kind,
+        EventSpatialRelation.OCCURS_IN,
+    )
+    preference = (
+        "CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC"
+    )
+
+    for query in (templates.samples, templates.notables, templates.incidents):
+        assert preference in query
+        assert query.index(preference) < query.index(
+            "coalesce(l.id, l.location_id, l.name, elementId(l)) ASC"
+        )
+
+
 def test_exact_event_registry_is_closed_and_antimeridian_independent():
     queries = {
         kind: exact_event_query_templates(kind, EventSpatialRelation.OCCURS_IN)
@@ -116,7 +166,14 @@ def test_exact_event_registry_is_closed_and_antimeridian_independent():
     for scope_kind, templates in queries.items():
         expected_property = _EXACT_SCOPE_PROPERTY[scope_kind]
         other_properties = set(_EXACT_SCOPE_PROPERTY.values()) - {expected_property}
-        combined = f"{templates.samples}\n{templates.count}"
+        combined = "\n".join((
+            templates.samples,
+            templates.histogram,
+            templates.notables,
+            templates.incidents,
+            templates.geo,
+            templates.count,
+        ))
         assert all(f"l.{name}" not in combined for name in other_properties)
         assert all(
             parameter not in combined
@@ -141,19 +198,27 @@ def test_exact_accounting_templates_partition_distinct_event_exclusions(
     ).count
     property_name = _EXACT_SCOPE_PROPERTY[scope_kind]
 
-    assert query.count("count(DISTINCT ev)") == 4
+    # The first count is an independent scope-relative reference population;
+    # the remaining four queries partition exactly that population.
+    assert query.count("count(DISTINCT ev)") == 5
+    assert "AS candidate_count" in query
     assert f"l.{property_name} = $scope_key" in query
     assert "l.spatial_conflict = true" in query
     assert "l.spatial_conflict = false" in query
     assert "l.spatial_derivation_revision IN $compatible_revisions" in query
     assert "NOT l.spatial_derivation_revision IN $compatible_revisions" in query
+    assert "l.spatial_conflict IS NULL" in query
+    assert "NOT l.spatial_conflict IN [true, false]" in query
+    assert "CALL () {" in query
+    assert "MATCH (ev:Event)" not in query
+    assert "0 AS excluded_unsupported_count" not in query
+    assert " AS total" not in query
     for field in (
+        "candidate_count",
         "included_count",
-        "excluded_unlocated_count",
         "excluded_conflict_count",
         "excluded_stale_revision_count",
         "excluded_unsupported_count",
-        "total",
     ):
         assert field in query
 
@@ -198,9 +263,8 @@ async def test_exact_parameters_are_pinned_to_the_resolved_token_not_bbox_or_ali
 def test_exact_accounting_distinguishes_samples_and_reconciles_all_categories():
     accounting = parse_exact_event_accounting(
         [{
-            "total": 10,
+            "candidate_count": 8,
             "included_count": 3,
-            "excluded_unlocated_count": 2,
             "excluded_conflict_count": 1,
             "excluded_stale_revision_count": 3,
             "excluded_unsupported_count": 1,
@@ -208,10 +272,10 @@ def test_exact_accounting_distinguishes_samples_and_reconciles_all_categories():
         sample_count=2,
     )
 
-    assert accounting.total == 10
+    assert accounting.candidate_count == 8
     assert accounting.included_count == 3
     assert accounting.sample_count == 2
-    assert accounting.excluded_unlocated_count == 2
+    assert accounting.excluded_unlocated_count == 0
     assert accounting.excluded_conflict_count == 1
     assert accounting.excluded_stale_revision_count == 3
     assert accounting.excluded_unsupported_count == 1
@@ -219,9 +283,8 @@ def test_exact_accounting_distinguishes_samples_and_reconciles_all_categories():
     with pytest.raises(ValueError, match="reconcile"):
         parse_exact_event_accounting(
             [{
-                "total": 11,
+                "candidate_count": 9,
                 "included_count": 3,
-                "excluded_unlocated_count": 2,
                 "excluded_conflict_count": 1,
                 "excluded_stale_revision_count": 3,
                 "excluded_unsupported_count": 1,
@@ -288,12 +351,45 @@ def test_exact_activation_selects_only_a_fully_eligible_lane_kind_revision():
         _gate_filter(),
         lane=ChronikSpatialLane.EVENT_OCCURRENCE,
         activations=(_activation(),),
+        max_stale_revision_ratio=MAX_STALE_RATIO,
     )
 
     assert decision.plan is not None
     assert decision.cause is None
     assert decision.plan.coverage_revision == "coverage-fixture-a"
     assert decision.plan.coverage_complete is True
+
+
+def test_exact_activation_selects_scope_revision_from_lane_kind_set():
+    decision = select_exact_event_activation(
+        _gate_filter(derivation_revision=DERIVATION_B),
+        lane=ChronikSpatialLane.EVENT_OCCURRENCE,
+        activations=(
+            _activation(),
+            _activation(
+                derivation_revision=DERIVATION_B,
+                coverage_revision="coverage-fixture-b",
+            ),
+        ),
+        max_stale_revision_ratio=MAX_STALE_RATIO,
+    )
+
+    assert decision.plan is not None
+    assert decision.cause is None
+    assert decision.activation is not None
+    assert decision.activation.derivation_revision == DERIVATION_B
+    assert decision.plan.coverage_revision == "coverage-fixture-b"
+
+
+def test_exact_activation_uses_deployment_stale_revision_threshold():
+    decision = select_exact_event_activation(
+        _gate_filter(),
+        lane=ChronikSpatialLane.EVENT_OCCURRENCE,
+        activations=(_activation(stale_revision_ratio=0.015),),
+        max_stale_revision_ratio=0.02,
+    )
+
+    assert decision.plan is not None
 
 
 @pytest.mark.parametrize(
@@ -360,6 +456,7 @@ def test_exact_activation_rejections_are_explicit_and_return_the_bbox_plan(
         spatial_filter,
         lane=lane,
         activations=activations,
+        max_stale_revision_ratio=MAX_STALE_RATIO,
     )
 
     assert decision.plan is None
@@ -373,11 +470,13 @@ def test_exact_activation_rollback_removes_the_plan_without_unfiltering():
         spatial_filter,
         lane=ChronikSpatialLane.EVENT_OCCURRENCE,
         activations=(_activation(),),
+        max_stale_revision_ratio=MAX_STALE_RATIO,
     )
     rolled_back = select_exact_event_activation(
         spatial_filter,
         lane=ChronikSpatialLane.EVENT_OCCURRENCE,
         activations=(),
+        max_stale_revision_ratio=MAX_STALE_RATIO,
     )
 
     assert active.plan is not None

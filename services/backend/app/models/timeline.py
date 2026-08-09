@@ -77,10 +77,11 @@ class SpatialApplicationV1(BaseModel):
     completeness: SpatialCompleteness
     included_count: StrictInt = Field(ge=0)
     excluded_unlocated_count: StrictInt = Field(ge=0)
-    # BBox V1 cannot observe derived-key conflicts or stale derivation revisions;
-    # these counters stay zero until an exact lane actually measures them.
+    # BBox V1 cannot observe derived-key conflicts, stale revisions, or unsupported
+    # normalization states; these counters stay zero until exact measures them.
     excluded_conflict_count: StrictInt = Field(ge=0)
     excluded_stale_revision_count: StrictInt = Field(ge=0)
+    excluded_unsupported_count: StrictInt = Field(ge=0)
 
 
 class EventSample(BaseModel):
