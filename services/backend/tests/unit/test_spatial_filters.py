@@ -16,9 +16,12 @@ from app.services.spatial_filters import (
     LongitudeSpan,
     TimelineSpatialQueryId,
     UnsupportedExactSpatialQueryError,
+    compile_exact_event_query_plan,
     compile_extent_filter,
+    exact_event_parameters,
     exact_event_query_templates,
     extent_from_boundary_geometry,
+    parse_exact_event_accounting,
     resolve_catalog_filter,
 )
 
@@ -114,6 +117,105 @@ def test_exact_event_registry_is_closed_and_antimeridian_independent():
         exact_event_query_templates(ScopeKind.COUNTRY, EventSpatialRelation.INTERSECTS)
     with pytest.raises(UnsupportedExactSpatialQueryError):
         exact_event_query_templates("district", EventSpatialRelation.OCCURS_IN)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("scope_kind", tuple(_EXACT_SCOPE_PROPERTY))
+def test_exact_accounting_templates_partition_distinct_event_exclusions(
+    scope_kind: ScopeKind,
+):
+    query = exact_event_query_templates(
+        scope_kind,
+        EventSpatialRelation.OCCURS_IN,
+    ).count
+    property_name = _EXACT_SCOPE_PROPERTY[scope_kind]
+
+    assert query.count("count(DISTINCT ev)") == 4
+    assert f"l.{property_name} = $scope_key" in query
+    assert "l.spatial_conflict = true" in query
+    assert "l.spatial_conflict = false" in query
+    assert "l.spatial_derivation_revision IN $compatible_revisions" in query
+    assert "NOT l.spatial_derivation_revision IN $compatible_revisions" in query
+    for field in (
+        "included_count",
+        "excluded_unlocated_count",
+        "excluded_conflict_count",
+        "excluded_stale_revision_count",
+        "excluded_unsupported_count",
+        "total",
+    ):
+        assert field in query
+
+
+async def test_exact_parameters_are_pinned_to_the_resolved_token_not_bbox_or_alias():
+    resolved = _resolved(
+        revision=CATALOG_A,
+        scope_key="country:UKR",
+        kind=ScopeKind.COUNTRY,
+        derivation=DERIVATION_A,
+        parent_key="world",
+        containment_asset_id="asset-a",
+    )
+    loader = _FakeLoader({CATALOG_A: resolved})
+    loader.asset_payloads["asset-a"] = _geometry([_box(20, 40, 41, 53)])
+
+    # Resolution remains async and catalog-pinned; compilation only consumes its token.
+    compiled = await resolve_catalog_filter(loader, "country:ukr", CATALOG_A)
+    assert not isinstance(compiled, SpatialCatalogProblem)
+    exact = compile_exact_event_query_plan(
+        compiled,
+        coverage_revision="coverage-a",
+        coverage_complete=True,
+    )
+    parameters = exact_event_parameters(
+        exact,
+        t_start="2026-05-01T00:00:00Z",
+        t_end="2026-05-02T00:00:00Z",
+        limit=25,
+    )
+
+    assert parameters == {
+        "scope_key": "country:UKR",
+        "compatible_revisions": [DERIVATION_A],
+        "t_start": "2026-05-01T00:00:00Z",
+        "t_end": "2026-05-02T00:00:00Z",
+        "limit": 25,
+    }
+    assert {"west", "east", "south", "north", "bbox_off"}.isdisjoint(parameters)
+
+
+def test_exact_accounting_distinguishes_samples_and_reconciles_all_categories():
+    accounting = parse_exact_event_accounting(
+        [{
+            "total": 10,
+            "included_count": 3,
+            "excluded_unlocated_count": 2,
+            "excluded_conflict_count": 1,
+            "excluded_stale_revision_count": 3,
+            "excluded_unsupported_count": 1,
+        }],
+        sample_count=2,
+    )
+
+    assert accounting.total == 10
+    assert accounting.included_count == 3
+    assert accounting.sample_count == 2
+    assert accounting.excluded_unlocated_count == 2
+    assert accounting.excluded_conflict_count == 1
+    assert accounting.excluded_stale_revision_count == 3
+    assert accounting.excluded_unsupported_count == 1
+
+    with pytest.raises(ValueError, match="reconcile"):
+        parse_exact_event_accounting(
+            [{
+                "total": 11,
+                "included_count": 3,
+                "excluded_unlocated_count": 2,
+                "excluded_conflict_count": 1,
+                "excluded_stale_revision_count": 3,
+                "excluded_unsupported_count": 1,
+            }],
+            sample_count=2,
+        )
 
 
 def _geometry(polygons: object) -> bytes:
