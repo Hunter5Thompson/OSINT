@@ -41,18 +41,18 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
 
 ## Work order 1 — Payload/index contract
 
-- [ ] **RED:** Require every Spec-09 keyword/geo/bool index from the shared contract
+- [x] **RED:** Require every Spec-09 keyword/geo/bool index from the shared contract
   and reject wrong Qdrant
   types. Test current corpus-policy fields remain present. Test the migration creates
   only missing indexes, waits for completion, is idempotent, and search preflight is
   read-only.
-- [ ] **GREEN:** Extend `PAYLOAD_INDEXES` and the existing authorized
+- [x] **GREEN:** Extend `PAYLOAD_INDEXES` and the existing authorized
   `ensure_payload_indexes` path. Mirror expectations in ingestion's doctor through a
   shared JSON contract fixture, not runtime cross-service imports.
-- [ ] **REFACTOR:** Keep one migration writer; retriever/writers only validate and
+- [x] **REFACTOR:** Keep one migration writer; retriever/writers only validate and
   report missing schema.
-- [ ] **VERIFY:** Run intelligence Qdrant schema/index tests and ingestion doctor tests.
-- [ ] **COMMIT:** `build(qdrant): add spatial payload indexes`
+- [x] **VERIFY:** Run intelligence Qdrant schema/index tests and ingestion doctor tests.
+- [x] **COMMIT:** `build(qdrant): add spatial payload indexes`
 
 ## Work order 2 — Deterministic payload projection
 

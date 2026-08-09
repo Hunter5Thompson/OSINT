@@ -14,9 +14,45 @@ is detected early, not at query-time.
 
 from __future__ import annotations
 
-from qdrant_client.models import CollectionInfo, Distance, VectorParams
+from collections.abc import Mapping
 
-__all__ = ["QdrantSchemaMismatch", "validate_collection_schema"]
+from qdrant_client.models import (
+    CollectionInfo,
+    Distance,
+    PayloadIndexInfo,
+    PayloadSchemaType,
+    VectorParams,
+)
+
+__all__ = [
+    "PAYLOAD_INDEXES",
+    "QdrantSchemaMismatch",
+    "missing_payload_indexes",
+    "validate_collection_schema",
+    "validate_payload_index_schema",
+]
+
+PAYLOAD_INDEXES: dict[str, str] = {
+    "source": "keyword",
+    "telegram_channel": "keyword",
+    "notebook_id": "keyword",
+    "feed_name": "keyword",
+    "url": "keyword",
+    "fulltext_article_id": "keyword",
+    "fulltext_status": "keyword",
+    "superseded_by_fulltext": "bool",
+    "fulltext_retry_epoch": "float",
+    "spatial_about_scope_revision_tokens": "keyword",
+    "spatial_occurrence_scope_revision_tokens": "keyword",
+    "geo": "geo",
+    "spatial_basis": "keyword",
+    "spatial_precision": "keyword",
+    "spatial_catalog_revision": "keyword",
+    "spatial_projection_revision": "keyword",
+    "spatial_derivation_version": "keyword",
+    "spatial_conflict": "bool",
+    "spatial_conflict_scope_keys": "keyword",
+}
 
 EXPECTED_DENSE_SIZE = 1024
 EXPECTED_DISTANCE = Distance.COSINE
@@ -54,6 +90,50 @@ def validate_collection_schema(
         _validate_hybrid(vectors, sparse_vectors)
     else:
         _validate_dense_only(vectors)
+    validate_payload_index_schema(info)
+
+
+def missing_payload_indexes(info: object) -> list[str]:
+    """Return required payload-index fields absent from the collection."""
+
+    existing = set((getattr(info, "payload_schema", None) or {}).keys())
+    return [field for field in PAYLOAD_INDEXES if field not in existing]
+
+
+def validate_payload_index_schema(info: object) -> list[str]:
+    """Reject wrong existing types and report missing indexes without writing."""
+
+    payload_schema = getattr(info, "payload_schema", None) or {}
+    if not isinstance(payload_schema, Mapping):
+        raise QdrantSchemaMismatch("Qdrant payload schema is not a field mapping")
+
+    mismatches: list[str] = []
+    for field, expected in PAYLOAD_INDEXES.items():
+        if field not in payload_schema:
+            continue
+        actual = _payload_index_type(payload_schema[field])
+        if actual != expected:
+            mismatches.append(f"{field}: existing {actual}, expected {expected}")
+    if mismatches:
+        raise QdrantSchemaMismatch(
+            "Qdrant payload index type mismatch: " + "; ".join(mismatches)
+        )
+    return missing_payload_indexes(info)
+
+
+def _payload_index_type(value: object) -> str:
+    data_type: object
+    if isinstance(value, PayloadIndexInfo):
+        data_type = value.data_type
+    elif isinstance(value, Mapping):
+        data_type = value.get("data_type")
+    else:
+        data_type = getattr(value, "data_type", None)
+    if isinstance(data_type, PayloadSchemaType):
+        return data_type.value
+    if isinstance(data_type, str):
+        return data_type
+    return f"unrecognized({type(value).__name__})"
 
 
 # ---------------------------------------------------------------------------

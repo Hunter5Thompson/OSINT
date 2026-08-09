@@ -12,7 +12,7 @@ import asyncio
 import structlog
 
 from config import settings
-from rag.qdrant_schema import PAYLOAD_INDEXES
+from rag.qdrant_schema import PAYLOAD_INDEXES, validate_payload_index_schema
 
 log = structlog.get_logger(__name__)
 
@@ -25,6 +25,7 @@ async def ensure_indexes(*, client=None, collection: str | None = None) -> list[
     collection = collection or settings.qdrant_collection
     try:
         info = await client.get_collection(collection)
+        validate_payload_index_schema(info)
         existing = set((info.payload_schema or {}).keys())
         created: list[str] = []
         for field, schema in PAYLOAD_INDEXES.items():

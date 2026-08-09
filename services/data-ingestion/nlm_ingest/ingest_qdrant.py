@@ -11,7 +11,7 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from feeds.provenance import provenance_fields
 from nlm_ingest.schemas import Extraction, claim_hash
-from qdrant_doctor.schema import validate_collection_schema
+from qdrant_doctor.schema import missing_payload_indexes, validate_collection_schema
 
 log = structlog.get_logger()
 
@@ -89,6 +89,13 @@ async def ensure_collection(
     else:
         info = await asyncio.to_thread(lambda: qdrant.get_collection(collection))
         validate_collection_schema(info, enable_hybrid=enable_hybrid)
+        missing = missing_payload_indexes(info)
+        if missing:
+            log.warning(
+                "qdrant_payload_indexes_missing",
+                collection=collection,
+                fields=missing,
+            )
 
 
 async def ingest_to_qdrant(

@@ -74,6 +74,9 @@ async def test_ensure_collection_validates_when_exists(monkeypatch):
         def get_collection(self, name):
             return {"name": name}
 
+        def create_payload_index(self, *args, **kwargs):
+            raise AssertionError("writer must not create payload indexes")
+
     monkeypatch.setattr(iq, "validate_collection_schema",
                         lambda info, enable_hybrid: seen.setdefault("validated", True))
     await iq.ensure_collection(FakeQ(), "odin_intel", 1024)

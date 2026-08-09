@@ -18,7 +18,7 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from feeds.provenance import provenance_fields
 from gdelt_raw.ids import qdrant_point_id_for_doc
-from qdrant_doctor.schema import validate_collection_schema
+from qdrant_doctor.schema import missing_payload_indexes, validate_collection_schema
 
 log = structlog.get_logger(__name__)
 
@@ -117,6 +117,13 @@ class QdrantWriter:
                 info,
                 enable_hybrid=self._enable_hybrid,
             )
+            missing = missing_payload_indexes(info)
+            if missing:
+                log.warning(
+                    "qdrant_payload_indexes_missing",
+                    collection=self._collection,
+                    fields=missing,
+                )
             log.debug(
                 "qdrant_schema_validated",
                 collection=self._collection,
