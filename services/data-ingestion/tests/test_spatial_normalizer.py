@@ -287,6 +287,7 @@ def test_shared_boundary_keeps_common_ancestor_and_all_candidates(
     assert result.country_scope_key == "country:UKR"
     assert result.admin1_scope_key is None
     assert result.spatial_conflict is True
+    assert result.spatial_derivation_revision is None
     assert result.spatial_conflict_scope_keys == (
         "admin1:gbopen:TEST.LEFT",
         "admin1:gbopen:TEST.RIGHT",
