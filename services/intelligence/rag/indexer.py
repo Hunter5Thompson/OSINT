@@ -8,8 +8,37 @@ import structlog
 from config import settings
 from rag.chunker import chunk_text
 from rag.embedder import embed_text
+from spatial import unavailable_spatial_payload
 
 logger = structlog.get_logger()
+
+
+def build_document_payload(
+    *,
+    title: str,
+    content: str,
+    source: str,
+    region: str | None,
+    hotspot_ids: list[str] | None,
+    published_at: str | None,
+    chunk_index: int,
+    total_chunks: int,
+) -> dict[str, object]:
+    """Build a legacy payload while making spatial unavailability explicit."""
+
+    return {
+        "title": title,
+        "content": content,
+        "source": source,
+        "region": region or "",
+        "hotspot_ids": hotspot_ids or [],
+        "published_at": published_at or "",
+        "chunk_index": chunk_index,
+        "total_chunks": total_chunks,
+        **unavailable_spatial_payload(
+            "legacy region string is not reviewed spatial evidence"
+        ),
+    }
 
 
 async def ensure_collection() -> None:
@@ -57,16 +86,16 @@ async def ingest_document(
         points.append({
             "id": point_id,
             "vector": embedding,
-            "payload": {
-                "title": title,
-                "content": chunk,
-                "source": source,
-                "region": region or "",
-                "hotspot_ids": hotspot_ids or [],
-                "published_at": published_at or "",
-                "chunk_index": i,
-                "total_chunks": len(chunks),
-            },
+            "payload": build_document_payload(
+                title=title,
+                content=chunk,
+                source=source,
+                region=region,
+                hotspot_ids=hotspot_ids,
+                published_at=published_at,
+                chunk_index=i,
+                total_chunks=len(chunks),
+            ),
         })
 
     if not points:

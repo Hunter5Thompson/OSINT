@@ -155,6 +155,7 @@ async def test_run_once_passes_active_spatial_index_to_gdelt_writer():
     fake_neo4j = MagicMock(close=AsyncMock())
     neo4j_writer = MagicMock(return_value=fake_neo4j)
     fake_qdrant = MagicMock(close=AsyncMock())
+    qdrant_writer = MagicMock(return_value=fake_qdrant)
 
     with (
         patch(
@@ -164,7 +165,7 @@ async def test_run_once_passes_active_spatial_index_to_gdelt_writer():
         patch("feeds.gdelt_raw_collector.GDELTState", return_value=MagicMock()),
         patch("feeds.gdelt_raw_collector.Neo4jWriter", neo4j_writer),
         patch("feeds.gdelt_raw_collector.AsyncQdrantClient", return_value=MagicMock()),
-        patch("feeds.gdelt_raw_collector.QdrantWriter", return_value=fake_qdrant),
+        patch("feeds.gdelt_raw_collector.QdrantWriter", qdrant_writer),
         patch("feeds.gdelt_raw_collector.run_forward", new=AsyncMock()),
         patch(
             "feeds.gdelt_raw_collector.load_active_normalization_index",
@@ -181,3 +182,4 @@ async def test_run_once_passes_active_spatial_index_to_gdelt_writer():
         crosswalk_path=project_settings.spatial_country_crosswalk_path,
     )
     assert neo4j_writer.call_args.kwargs["spatial_index"] is fake_index
+    assert qdrant_writer.call_args.kwargs["spatial_index"] is fake_index

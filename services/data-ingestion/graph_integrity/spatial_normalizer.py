@@ -145,6 +145,15 @@ class _ResolvedCode:
 
 
 @dataclass(frozen=True, slots=True)
+class ScopeDerivationAssignment:
+    """One public, relation-neutral scope/revision assignment."""
+
+    scope_key: str
+    derivation_revision: str
+    depth: int
+
+
+@dataclass(frozen=True, slots=True)
 class _CoordinateResolution:
     scope_key: str | None
     conflict_scope_keys: tuple[str, ...]
@@ -188,6 +197,32 @@ class SpatialNormalizationIndex:
         return (
             record is not None
             and revision in record.compatible_derivation_revisions
+        )
+
+    def scope_derivation_assignments(
+        self,
+        scope_key: str,
+    ) -> tuple[ScopeDerivationAssignment, ...]:
+        """Return non-global ancestors paired with each scope's own revision."""
+
+        return tuple(
+            ScopeDerivationAssignment(
+                scope_key=ancestor,
+                derivation_revision=self.scopes[ancestor].derivation_revision,
+                depth=depth,
+            )
+            for depth, ancestor in enumerate(self.lineage(scope_key))
+            if self.scopes[ancestor].kind is not ScopeKind.WORLD
+        )
+
+    def scope_derivation_revision_items(self) -> tuple[tuple[str, str], ...]:
+        """Return the complete, canonical scope-to-revision input set."""
+
+        return tuple(
+            sorted(
+                (scope_key, record.derivation_revision)
+                for scope_key, record in self.scopes.items()
+            )
         )
 
 

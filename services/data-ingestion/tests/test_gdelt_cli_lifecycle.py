@@ -28,13 +28,14 @@ async def test_get_clients_passes_active_spatial_index_to_gdelt_writer() -> None
 
     fake_index = object()
     neo4j_writer = MagicMock(return_value=MagicMock())
+    qdrant_writer = MagicMock(return_value=MagicMock())
 
     with (
         patch("gdelt_raw.cli.aioredis.from_url", return_value=MagicMock()),
         patch("gdelt_raw.cli.GDELTState", return_value=MagicMock()),
         patch("gdelt_raw.cli.Neo4jWriter", neo4j_writer),
         patch("gdelt_raw.cli.AsyncQdrantClient", return_value=MagicMock()),
-        patch("gdelt_raw.cli.QdrantWriter", return_value=MagicMock()),
+        patch("gdelt_raw.cli.QdrantWriter", qdrant_writer),
         patch(
             "gdelt_raw.cli.load_active_normalization_index",
             return_value=fake_index,
@@ -47,3 +48,4 @@ async def test_get_clients_passes_active_spatial_index_to_gdelt_writer() -> None
         crosswalk_path=settings.spatial_country_crosswalk_path,
     )
     assert neo4j_writer.call_args.kwargs["spatial_index"] is fake_index
+    assert qdrant_writer.call_args.kwargs["spatial_index"] is fake_index

@@ -30,6 +30,24 @@ class SpatialContractError(ValueError):
     """A value cannot cross the spatial payload seam safely."""
 
 
+def unavailable_spatial_payload(reason: str) -> dict[str, object]:
+    """Mark an unsupported writer lane without inventing a spatial assignment."""
+
+    if not isinstance(reason, str) or not reason.strip():
+        raise SpatialContractError("unavailable reason must be non-empty")
+    return {
+        "spatial_about_scope_revision_tokens": [],
+        "spatial_occurrence_scope_revision_tokens": [],
+        "spatial_basis": [],
+        "spatial_derivation_version": "spatial-deriver-v1",
+        "spatial_conflict": False,
+        "spatial_conflict_scope_keys": [],
+        "spatial_derivation_status": "unavailable",
+        "spatial_derivation_unavailable_reason": reason,
+        "spatial_derivations": [],
+    }
+
+
 def encode_scope_revision_token(scope_key: str, derivation_revision: str) -> str:
     """Return the injective V1 keyword for one scope/revision assignment.
 
@@ -56,4 +74,5 @@ __all__ = [
     "SCOPE_REVISION_TOKEN_SEPARATOR",
     "SpatialContractError",
     "encode_scope_revision_token",
+    "unavailable_spatial_payload",
 ]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import unicodedata
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -10,8 +11,21 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from feeds.provenance import provenance_fields
-from nlm_ingest.schemas import Extraction, claim_hash
+from graph_integrity.spatial_normalizer import (
+    RawLocationIdentity,
+    SpatialNormalizationIndex,
+    normalize_location,
+)
+from nlm_ingest.schemas import Claim, Entity, Extraction, claim_hash
 from qdrant_doctor.schema import missing_payload_indexes, validate_collection_schema
+from qdrant_spatial import (
+    ReviewedGeoNameCrosswalk,
+    SpatialEvidenceKind,
+    SpatialEvidenceV1,
+    SpatialRelation,
+    project_spatial_payload,
+    unavailable_spatial_payload,
+)
 
 log = structlog.get_logger()
 
@@ -31,6 +45,8 @@ def build_claim_points(
     *,
     source_name: str = "unknown",
     now_iso: str | None = None,
+    spatial_index: SpatialNormalizationIndex | None = None,
+    reviewed_geo_crosswalk: ReviewedGeoNameCrosswalk | None = None,
 ) -> list[PointStruct]:
     """One point per non-rejected claim. `embed` maps text -> vector."""
     ts = now_iso or datetime.now(UTC).isoformat()
@@ -39,6 +55,12 @@ def build_claim_points(
         if claim.confidence <= 0.0:
             continue
         chash = claim_hash(claim.statement)
+        spatial_payload = _claim_spatial_payload(
+            extraction,
+            claim,
+            spatial_index=spatial_index,
+            reviewed_geo_crosswalk=reviewed_geo_crosswalk,
+        )
         payload = {
             **provenance_fields(
                 source_type="notebooklm",
@@ -58,6 +80,7 @@ def build_claim_points(
             "content_hash": chash,
             "ingested_at": ts,
             "ingested_epoch": datetime.fromisoformat(ts).timestamp(),
+            **spatial_payload,
         }
         points.append(PointStruct(
             id=_point_id(
@@ -67,6 +90,51 @@ def build_claim_points(
             payload=payload,
         ))
     return points
+
+
+def _claim_spatial_payload(
+    extraction: Extraction,
+    claim: Claim,
+    *,
+    spatial_index: SpatialNormalizationIndex | None,
+    reviewed_geo_crosswalk: ReviewedGeoNameCrosswalk | None,
+) -> dict[str, object]:
+    if spatial_index is None or reviewed_geo_crosswalk is None:
+        return unavailable_spatial_payload(
+            "NLM spatial normalization index or reviewed crosswalk is unavailable"
+        )
+
+    entities_by_name: dict[str, list[Entity]] = {}
+    for entity in extraction.entities:
+        entities_by_name.setdefault(_exact_entity_key(entity.name), []).append(entity)
+
+    evidence: list[SpatialEvidenceV1] = []
+    for involved_name in sorted(set(claim.entities_involved), key=_exact_entity_key):
+        candidates = entities_by_name.get(_exact_entity_key(involved_name), [])
+        if len(candidates) != 1:
+            continue
+        entity = candidates[0]
+        if entity.type not in {"COUNTRY", "LOCATION", "REGION"}:
+            continue
+        raw, crosswalk_status = reviewed_geo_crosswalk.resolve(entity.name)
+        if raw is None:
+            raw = RawLocationIdentity(source_country_name=entity.name)
+        evidence.append(
+            SpatialEvidenceV1(
+                relation=SpatialRelation.ABOUT,
+                evidence_kind=SpatialEvidenceKind.EXTRACTED_GEO_ENTITY,
+                evidence_id=f"nlm:entity:{entity.name}",
+                normalization=normalize_location(raw, spatial_index),
+                confidence=entity.confidence,
+                crosswalk_status=crosswalk_status,
+            )
+        )
+    return project_spatial_payload(evidence, spatial_index)
+
+
+def _exact_entity_key(name: str) -> str:
+    normalized = unicodedata.normalize("NFKC", name).casefold().strip()
+    return " ".join(normalized.split())
 
 
 async def ensure_collection(

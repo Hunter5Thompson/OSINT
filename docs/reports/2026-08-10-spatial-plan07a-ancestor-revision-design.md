@@ -73,6 +73,12 @@ Scope→Derivationsrevisionsmenge. Er steuert Checkpointing und Idempotenz, wird
 gegen einen Request-Token gefiltert. Ein reiner Catalog-Carry-forward verändert ihn
 nicht und löst keinen Corpus-Rewrite aus.
 
+Work Order 2 konkretisierte die zuvor noch nicht codierte Canonicalization: sortiertes
+kompaktes JSON, Gate-Revision
+`about-gate-v1-unique-reviewed-crosswalk-confidence-gte-0.80` und vollständige
+sortierte Scope-/Revisionspaare. Für den aktiven 204-Scope-Katalog ergibt das
+`spatial-projection-v1-a5ce3a4f4657`.
+
 Der eingecheckte sprach-/service-neutrale Vertrag einschließlich Indexvektor und
 UA-14-Beispiel ist `contracts/qdrant-spatial-payload-v1.json`.
 

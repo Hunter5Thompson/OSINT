@@ -1,0 +1,60 @@
+{
+  "contract_version": 1,
+  "supported_writers": [
+    {
+      "lane": "gdelt_raw_gkg",
+      "payload_source": "gdelt_gkg",
+      "writer": "services/data-ingestion/gdelt_raw/writers/qdrant_writer.py",
+      "relations": ["occurrence"],
+      "evidence": "exact linked_event_ids join to canonical event parquet ActionGeo fields"
+    },
+    {
+      "lane": "notebooklm_claim",
+      "payload_source_type": "notebooklm",
+      "writer": "services/data-ingestion/nlm_ingest/ingest_qdrant.py",
+      "relations": ["about"],
+      "evidence": "exact claim entity reference to one typed extracted geo entity and one reviewed name crosswalk entry"
+    }
+  ],
+  "unavailable_writers": [
+    {
+      "lane": "intelligence_legacy_indexer",
+      "payload_sources": ["dynamic"],
+      "writer": "services/intelligence/rag/indexer.py",
+      "reason": "legacy region string is not reviewed spatial evidence"
+    },
+    {
+      "lane": "legacy_feed_collectors",
+      "payload_sources": [
+        "adsb.fi",
+        "eonet",
+        "firms",
+        "gdacs",
+        "gdelt",
+        "hapi",
+        "noaa_nhc",
+        "ofac",
+        "portwatch",
+        "rss",
+        "rss_fulltext",
+        "telegram",
+        "ucdp",
+        "usgs"
+      ],
+      "writers": [
+        "services/data-ingestion/feeds",
+        "services/data-ingestion/feeds/fulltext_collector.py"
+      ],
+      "reason": "not migrated in Plan 07A; source-specific structured evidence contract is unavailable"
+    },
+    {
+      "lane": "suv_structured",
+      "payload_sources": ["suv_structured"],
+      "writers": [
+        "services/data-ingestion/suv_structured/build_companies.py",
+        "services/data-ingestion/suv_structured/build_procurements.py"
+      ],
+      "reason": "not migrated in Plan 07A; no reviewed spatial evidence adapter"
+    }
+  ]
+}
