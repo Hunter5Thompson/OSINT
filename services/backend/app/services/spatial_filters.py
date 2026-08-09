@@ -7,7 +7,8 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal
+from types import MappingProxyType
+from typing import Final, Literal
 
 from app.models.spatial import (
     CatalogProblemCode,
@@ -38,6 +39,151 @@ class TimelineSpatialQueryId(StrEnum):
     GLOBAL = "timeline_global_v1"
     BBOX_SINGLE = "timeline_bbox_single_v1"
     BBOX_DATELINE = "timeline_bbox_dateline_v1"
+
+
+class EventSpatialRelation(StrEnum):
+    """Closed event relations supported by CHRONIK spatial templates."""
+
+    OCCURS_IN = "occurs-in"
+    INTERSECTS = "intersects"
+
+
+class UnsupportedExactSpatialQueryError(ValueError):
+    """The requested kind/relation pair has no reviewed static exact template."""
+
+
+@dataclass(frozen=True, slots=True)
+class ExactEventQueryTemplates:
+    """Complete, immutable Cypher statements for one exact event query shape."""
+
+    samples: str
+    count: str
+
+
+_EVENTS_COUNTRY_SCOPE_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.country_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
+WITH ev, l
+ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+WITH ev, collect(l)[0] AS l
+ORDER BY ev.timeline_at ASC,
+         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
+LIMIT $limit
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       ev.title AS title, ev.codebook_type AS codebook_type, ev.severity AS severity,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       l.name AS location_name, l.country AS country, l.lat AS lat, l.lon AS lon
+"""
+
+_EVENTS_COUNTRY_SCOPE_COUNT_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.country_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
+RETURN count(DISTINCT ev) AS included_count
+"""
+
+_EVENTS_ADMIN1_SCOPE_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.admin1_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
+WITH ev, l
+ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+WITH ev, collect(l)[0] AS l
+ORDER BY ev.timeline_at ASC,
+         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
+LIMIT $limit
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       ev.title AS title, ev.codebook_type AS codebook_type, ev.severity AS severity,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       l.name AS location_name, l.country AS country, l.lat AS lat, l.lon AS lon
+"""
+
+_EVENTS_ADMIN1_SCOPE_COUNT_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.admin1_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
+RETURN count(DISTINCT ev) AS included_count
+"""
+
+_EVENTS_ADMIN2_SCOPE_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.admin2_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
+WITH ev, l
+ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+WITH ev, collect(l)[0] AS l
+ORDER BY ev.timeline_at ASC,
+         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
+LIMIT $limit
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       ev.title AS title, ev.codebook_type AS codebook_type, ev.severity AS severity,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       l.name AS location_name, l.country AS country, l.lat AS lat, l.lon AS lon
+"""
+
+_EVENTS_ADMIN2_SCOPE_COUNT_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.admin2_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
+RETURN count(DISTINCT ev) AS included_count
+"""
+
+_EXACT_EVENT_QUERY_REGISTRY: Final[
+    Mapping[tuple[ScopeKind, EventSpatialRelation], ExactEventQueryTemplates]
+] = MappingProxyType(
+    {
+        (ScopeKind.COUNTRY, EventSpatialRelation.OCCURS_IN): ExactEventQueryTemplates(
+            samples=_EVENTS_COUNTRY_SCOPE_QUERY,
+            count=_EVENTS_COUNTRY_SCOPE_COUNT_QUERY,
+        ),
+        (ScopeKind.ADMIN1, EventSpatialRelation.OCCURS_IN): ExactEventQueryTemplates(
+            samples=_EVENTS_ADMIN1_SCOPE_QUERY,
+            count=_EVENTS_ADMIN1_SCOPE_COUNT_QUERY,
+        ),
+        (ScopeKind.ADMIN2, EventSpatialRelation.OCCURS_IN): ExactEventQueryTemplates(
+            samples=_EVENTS_ADMIN2_SCOPE_QUERY,
+            count=_EVENTS_ADMIN2_SCOPE_COUNT_QUERY,
+        ),
+    }
+)
+
+
+def exact_event_query_templates(
+    scope_kind: ScopeKind,
+    relation: EventSpatialRelation,
+) -> ExactEventQueryTemplates:
+    """Return only a reviewed complete template pair for enum-selected inputs."""
+
+    if not isinstance(scope_kind, ScopeKind) or not isinstance(
+        relation,
+        EventSpatialRelation,
+    ):
+        raise UnsupportedExactSpatialQueryError("exact spatial query is unsupported")
+    try:
+        return _EXACT_EVENT_QUERY_REGISTRY[(scope_kind, relation)]
+    except KeyError as exc:
+        raise UnsupportedExactSpatialQueryError(
+            f"exact event query is unsupported for {scope_kind.value}/{relation.value}"
+        ) from exc
 
 
 @dataclass(frozen=True, slots=True, order=True)

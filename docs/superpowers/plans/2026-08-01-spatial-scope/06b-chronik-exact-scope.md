@@ -21,18 +21,18 @@ LLM output.
 
 ## Work order 1 — Static template registry
 
-- [ ] **RED:** Test a closed registry for country/admin1/admin2 event occurrence;
+- [x] **RED:** Test a closed registry for country/admin1/admin2 event occurrence;
   parameter binding; compatible derivation revisions; conflict exclusion; no dynamic
   property names; unknown kind/relation unsupported; antimeridian irrelevant to exact
   key matching. Add an event with two matching `OCCURRED_AT` locations and require one
   top-level event.
-- [ ] **GREEN:** Add complete fixed Cypher templates. Collapse with deterministic
+- [x] **GREEN:** Add complete fixed Cypher templates. Collapse with deterministic
   `ORDER BY ... WITH ev, collect(l)[0] AS l` before `LIMIT`; count with
   `count(DISTINCT ev)`. Select the registry entry through enums only.
-- [ ] **REFACTOR:** Share predicates conceptually but keep full query strings static so
+- [x] **REFACTOR:** Share predicates conceptually but keep full query strings static so
   Neo4j can plan the matching composite index.
-- [ ] **VERIFY:** `cd services/backend && uv run pytest tests/unit/test_spatial_filters.py tests/unit/test_timeline_router.py -v`
-- [ ] **COMMIT:** `feat(backend): compile exact spatial event templates`
+- [x] **VERIFY:** `cd services/backend && uv run pytest tests/unit/test_spatial_filters.py tests/unit/test_timeline_router.py -v`
+- [x] **COMMIT:** `feat(backend): compile exact spatial event templates`
 
 ## Work order 2 — Accounting and mixed coverage
 
