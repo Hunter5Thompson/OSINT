@@ -755,7 +755,9 @@ def _result(
         spatial_precision=precision,
         spatial_catalog_revision=index.catalog_revision,
         spatial_derivation_revision=(
-            index.scopes[scope_key].derivation_revision if scope_key is not None else None
+            index.scopes[scope_key].derivation_revision
+            if scope_key is not None and not conflict
+            else None
         ),
         spatial_conflict=conflict,
         spatial_conflict_scope_keys=conflict_scope_keys,

@@ -154,6 +154,7 @@ def test_location_params_marks_source_coordinate_contradiction(spatial_index) ->
     assert params is not None
     assert params["country_scope_key"] == "country:UKR"
     assert params["spatial_conflict"] is True
+    assert params["spatial_derivation_revision"] is None
     assert params["spatial_conflict_scope_keys"] == ["country:UKR", "country:USA"]
 
 
