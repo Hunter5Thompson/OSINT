@@ -115,6 +115,7 @@ def test_events_window_returns_samples(client):
         "excluded_unlocated_count": 0,
         "excluded_conflict_count": 0,
         "excluded_stale_revision_count": 0,
+        "excluded_unsupported_count": 0,
     }
 
 
@@ -203,6 +204,7 @@ def test_scoped_event_window_echoes_catalog_token_and_distinct_accounting(
         "excluded_unlocated_count": 2,
         "excluded_conflict_count": 0,
         "excluded_stale_revision_count": 0,
+        "excluded_unsupported_count": 0,
     }
     resolve.assert_awaited_once_with(
         spatial_loader,
@@ -236,21 +238,20 @@ def test_exact_event_window_uses_one_pinned_token_and_reports_mixed_coverage(
             "app.routers.timeline._select_event_spatial_query",
             return_value=exact,
         ),
-        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.read_queries", new_callable=AsyncMock) as read_many,
     ):
-        read.side_effect = [
+        read_many.return_value = [
             [{
                 "id": "gdelt:event:1",
                 "time": "2026-05-01T06:00:00Z",
                 "time_basis": "indexed",
             }],
             [{
-                "total": 8,
+                "candidate_count": 8,
                 "included_count": 3,
-                "excluded_unlocated_count": 2,
                 "excluded_conflict_count": 1,
                 "excluded_stale_revision_count": 2,
-                "excluded_unsupported_count": 0,
+                "excluded_unsupported_count": 2,
             }],
         ]
         response = client.get(
@@ -274,12 +275,14 @@ def test_exact_event_window_uses_one_pinned_token_and_reports_mixed_coverage(
         "mode": "semantic_key",
         "completeness": "partial",
         "included_count": 3,
-        "excluded_unlocated_count": 2,
+        "excluded_unlocated_count": 0,
         "excluded_conflict_count": 1,
         "excluded_stale_revision_count": 2,
+        "excluded_unsupported_count": 2,
     }
-    samples_query, samples_parameters = read.await_args_list[0].args
-    count_query, count_parameters = read.await_args_list[1].args
+    query_specs = read_many.await_args.args[0]
+    samples_query, samples_parameters = query_specs[0]
+    count_query, count_parameters = query_specs[1]
     assert "l.country_scope_key = $scope_key" in samples_query
     assert "l.spatial_conflict = false" in samples_query
     assert "excluded_stale_revision_count" in count_query
@@ -319,14 +322,13 @@ def test_exact_complete_requires_lane_contract_and_zero_exclusions(
             "app.routers.timeline._select_event_spatial_query",
             return_value=exact,
         ),
-        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.read_queries", new_callable=AsyncMock) as read_many,
     ):
-        read.side_effect = [
+        read_many.return_value = [
             [],
             [{
-                "total": 0,
+                "candidate_count": 0,
                 "included_count": 0,
-                "excluded_unlocated_count": 0,
                 "excluded_conflict_count": 0,
                 "excluded_stale_revision_count": 0,
                 "excluded_unsupported_count": 0,
@@ -351,6 +353,7 @@ def test_server_activation_selects_exact_and_emits_revisioned_metric(
     compiled = _catalog_filter()
     deployment_settings = SimpleNamespace(
         chronik_exact_spatial_activations=(_exact_activation(),),
+        chronik_exact_max_stale_revision_ratio=0.01,
     )
     with (
         patch(
@@ -359,15 +362,14 @@ def test_server_activation_selects_exact_and_emits_revisioned_metric(
             return_value=compiled,
         ),
         patch("app.routers.timeline.settings", deployment_settings),
-        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.read_queries", new_callable=AsyncMock) as read_many,
         patch("app.routers.timeline.log") as logger,
     ):
-        read.side_effect = [
+        read_many.return_value = [
             [],
             [{
-                "total": 0,
+                "candidate_count": 0,
                 "included_count": 0,
-                "excluded_unlocated_count": 0,
                 "excluded_conflict_count": 0,
                 "excluded_stale_revision_count": 0,
                 "excluded_unsupported_count": 0,
@@ -405,6 +407,7 @@ def test_new_derivation_revision_rejects_exact_and_stays_explicit_bbox(
     )
     deployment_settings = SimpleNamespace(
         chronik_exact_spatial_activations=(_exact_activation(),),
+        chronik_exact_max_stale_revision_ratio=0.01,
     )
     with (
         patch(
@@ -430,7 +433,7 @@ def test_new_derivation_revision_rejects_exact_and_stays_explicit_bbox(
         if call.args[0] == "spatial_exact_activation_rejected"
     )
     assert rejected["cause"] == "derivation_revision_mismatch"
-    assert rejected["coverage_revision"] == "coverage-fixture-a"
+    assert rejected["coverage_revision"] is None
     assert "l.country_scope_key = $scope_key" not in read.await_args_list[0].args[0]
 
 
@@ -439,7 +442,10 @@ def test_client_cannot_enable_exact_when_server_registry_is_default_off(
     spatial_loader,
 ):
     compiled = _catalog_filter()
-    deployment_settings = SimpleNamespace(chronik_exact_spatial_activations=())
+    deployment_settings = SimpleNamespace(
+        chronik_exact_spatial_activations=(),
+        chronik_exact_max_stale_revision_ratio=0.01,
+    )
     with (
         patch(
             "app.routers.timeline.resolve_catalog_filter",
@@ -467,6 +473,7 @@ def test_active_exact_failure_returns_spatial_filter_unavailable_without_bbox_re
     compiled = _catalog_filter()
     deployment_settings = SimpleNamespace(
         chronik_exact_spatial_activations=(_exact_activation(),),
+        chronik_exact_max_stale_revision_ratio=0.01,
     )
     with (
         patch(
@@ -475,9 +482,9 @@ def test_active_exact_failure_returns_spatial_filter_unavailable_without_bbox_re
             return_value=compiled,
         ),
         patch("app.routers.timeline.settings", deployment_settings),
-        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.read_queries", new_callable=AsyncMock) as read_many,
     ):
-        read.side_effect = [[], RuntimeError("exact count unavailable")]
+        read_many.side_effect = RuntimeError("exact count unavailable")
         response = client.get(
             f"/api/timeline/window{W}&scope_key=country:UKR"
             "&catalog_revision=spatial-v1-0123456789ab"
@@ -486,12 +493,60 @@ def test_active_exact_failure_returns_spatial_filter_unavailable_without_bbox_re
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "SPATIAL_FILTER_UNAVAILABLE"
     assert response.headers["cache-control"] == "no-store"
-    assert len(read.await_args_list) == 2
+    read_many.assert_awaited_once()
+    query_specs = read_many.await_args.args[0]
+    assert len(query_specs) == 2
     assert all(
-        "l.country_scope_key = $scope_key" in call.args[0]
-        for call in read.await_args_list
+        "l.country_scope_key = $scope_key" in query
+        for query, _ in query_specs
     )
-    assert all("$bbox_off" not in call.args[0] for call in read.await_args_list)
+    assert all("$bbox_off" not in query for query, _ in query_specs)
+
+
+def test_exact_accounting_violation_is_not_logged_as_a_neo4j_query_failure(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    exact = compile_exact_event_query_plan(
+        compiled,
+        coverage_revision="coverage-fixture-a",
+        coverage_complete=True,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch(
+            "app.routers.timeline._select_event_spatial_query",
+            return_value=exact,
+        ),
+        patch(
+            "app.routers.timeline.read_queries",
+            new_callable=AsyncMock,
+            return_value=[
+                [{"id": "event-1", "time": "2026-05-01T06:00:00Z"}],
+                [{
+                    "candidate_count": 0,
+                    "included_count": 0,
+                    "excluded_conflict_count": 0,
+                    "excluded_stale_revision_count": 0,
+                    "excluded_unsupported_count": 0,
+                }],
+            ],
+        ),
+        patch("app.routers.timeline.log") as logger,
+    ):
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 503
+    events = [call.args[0] for call in logger.error.call_args_list]
+    assert events == ["timeline_exact_event_accounting_invalid"]
 
 
 def test_new_client_world_token_echoes_identity_while_using_global_query(

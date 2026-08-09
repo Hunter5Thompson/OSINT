@@ -24,6 +24,7 @@ const globalApplication: SpatialApplicationV1 = {
   excluded_unlocated_count: 0,
   excluded_conflict_count: 0,
   excluded_stale_revision_count: 0,
+  excluded_unsupported_count: 0,
 };
 const partialApplication: SpatialApplicationV1 = {
   ...globalApplication,
@@ -36,6 +37,7 @@ const partialApplication: SpatialApplicationV1 = {
   included_count: 207,
   excluded_unlocated_count: 2,
   excluded_conflict_count: 1,
+  excluded_unsupported_count: 2,
 };
 const base = {
   buckets, notables, rangeStartMs: Date.parse("2026-06-01T00:00:00Z"),
@@ -117,7 +119,8 @@ describe("ChronikTimeline", () => {
     render(<ChronikTimeline {...base} spatialApplication={partialApplication} />);
     const status = screen.getByTestId("chronik-spatial-status");
     expect(status).toHaveTextContent("occurs-in · bbox approx · partial");
-    expect(status).toHaveTextContent("excluded 3");
+    expect(status).toHaveTextContent("excluded 5");
+    expect(status).toHaveAttribute("title", expect.stringContaining("unsupported 2"));
   });
 
   it("shows scope unavailable on a request or contract failure", () => {

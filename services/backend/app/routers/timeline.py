@@ -34,7 +34,7 @@ from app.models.timeline import (
     WindowResponse,
 )
 from app.routers.spatial import spatial_problem_response
-from app.services.neo4j_client import read_query
+from app.services.neo4j_client import read_queries, read_query
 from app.services.severity import (
     category_of,
     dominant_category,
@@ -45,6 +45,7 @@ from app.services.spatial_catalog import SpatialCatalogLoader
 from app.services.spatial_filters import (
     CatalogFilterResolution,
     CompiledSpatialFilter,
+    ExactEventAccountingError,
     ExactEventQueryPlan,
     TimelineSpatialQueryId,
     compile_legacy_bbox_filter,
@@ -186,6 +187,7 @@ def _select_event_spatial_query(spatial_filter: CompiledSpatialFilter) -> EventS
         spatial_filter,
         lane=lane,
         activations=settings.chronik_exact_spatial_activations,
+        max_stale_revision_ratio=settings.chronik_exact_max_stale_revision_ratio,
     )
     constraint = spatial_filter.constraint
     if decision.plan is not None:
@@ -278,6 +280,7 @@ def _spatial_application(
         excluded_stale_revision_count=(
             0 if is_global else excluded_stale_revision_count
         ),
+        excluded_unsupported_count=(0 if is_global else excluded_unsupported_count),
     )
 
 
@@ -315,6 +318,7 @@ def _emit_filter_applied(application: SpatialApplicationV1, started: float) -> N
         excluded_unlocated_count=application.excluded_unlocated_count,
         excluded_conflict_count=application.excluded_conflict_count,
         excluded_stale_revision_count=application.excluded_stale_revision_count,
+        excluded_unsupported_count=application.excluded_unsupported_count,
     )
 
 
@@ -338,7 +342,7 @@ LIMIT $limit
 """
 
 _EVENTS_COUNT_QUERY = """
-CALL {
+CALL () {
   MATCH (ev:Event)
   WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
   OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
@@ -353,7 +357,7 @@ CALL {
               AND (location.lon >= $west OR location.lon <= $east)) ))
   RETURN count(ev) AS total
 }
-CALL {
+CALL () {
   MATCH (ev:Event)
   WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
   OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
@@ -487,18 +491,29 @@ async def _events_window(
         samples_query = _EVENTS_QUERY
         count_query = _EVENTS_COUNT_QUERY
     try:
-        rows = await read_query(samples_query, params)
-        count_rows = await read_query(count_query, params)
-        exact_accounting = (
-            parse_exact_event_accounting(count_rows, sample_count=len(rows))
-            if exact_plan is not None
-            else None
-        )
+        if exact_plan is not None:
+            rows, count_rows = await read_queries((
+                (samples_query, params),
+                (count_query, params),
+            ))
+        else:
+            rows = await read_query(samples_query, params)
+            count_rows = await read_query(count_query, params)
     except Exception as exc:
         log.error("timeline_events_neo4j_query_failed", error=str(exc))
         if exact_plan is not None:
             raise ExactSpatialFilterUnavailableError(exact_plan) from exc
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
+    try:
+        exact_accounting = (
+            parse_exact_event_accounting(count_rows, sample_count=len(rows))
+            if exact_plan is not None
+            else None
+        )
+    except ExactEventAccountingError as exc:
+        log.error("timeline_exact_event_accounting_invalid", error=str(exc))
+        assert exact_plan is not None
+        raise ExactSpatialFilterUnavailableError(exact_plan) from exc
     if exact_accounting is None:
         total, excluded_unlocated = _count_accounting(
             count_rows,
@@ -581,7 +596,7 @@ LIMIT $limit
 # DISTINCT in-window/in-bbox aircraft so total_count is the true pre-limit match
 # count (tracks, not points), per spec §5.
 _MIL_TRACKS_COUNT_QUERY = """
-CALL {
+CALL () {
   MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
   WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
     AND r.latitude IS NOT NULL AND r.longitude IS NOT NULL
@@ -594,7 +609,7 @@ CALL {
   WHERE size(inbox) >= 1
   RETURN count(DISTINCT a) AS total
 }
-CALL {
+CALL () {
   MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
   WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
   WITH a, collect(r) AS samples
@@ -746,19 +761,27 @@ async def get_histogram(
     bucket_ms = max(span // buckets, 1)
 
     try:
-        rows = await read_query(histogram_query, params)
         if is_exact:
             assert isinstance(event_spatial_query, ExactEventQueryPlan)
-            accounting_rows = await read_query(
-                event_spatial_query.templates.count,
-                params,
-            )
-            exact_accounting = parse_exact_event_accounting(
+            (
+                rows,
+                exact_notable_rows,
+                exact_incident_rows,
+                exact_geo_rows,
                 accounting_rows,
-                sample_count=len(rows),
-            )
+            ) = await read_queries((
+                (histogram_query, params),
+                (event_spatial_query.templates.notables, params),
+                (event_spatial_query.templates.incidents, params),
+                (event_spatial_query.templates.geo, params),
+                (event_spatial_query.templates.count, params),
+            ))
             unlocated_rows: list[dict[str, Any]] = []
         else:
+            rows = await read_query(histogram_query, params)
+            exact_notable_rows = []
+            exact_incident_rows = []
+            exact_geo_rows = []
             exact_accounting = None
             unlocated_rows = (
                 await read_query(_EVENTS_UNLOCATED_COUNT_QUERY, params)
@@ -771,6 +794,17 @@ async def get_histogram(
             unavailable = ExactSpatialFilterUnavailableError(event_spatial_query)
             return spatial_problem_response(unavailable.problem)
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
+    if is_exact:
+        assert isinstance(event_spatial_query, ExactEventQueryPlan)
+        try:
+            exact_accounting = parse_exact_event_accounting(
+                accounting_rows,
+                sample_count=len(rows),
+            )
+        except ExactEventAccountingError as exc:
+            log.error("timeline_exact_histogram_accounting_invalid", error=str(exc))
+            unavailable = ExactSpatialFilterUnavailableError(event_spatial_query)
+            return spatial_problem_response(unavailable.problem)
 
     # Bin in Python so the deterministic rules live in one tested place.
     cats: dict[int, list[object]] = {}
@@ -808,8 +842,11 @@ async def get_histogram(
     # The notable + geo reads hit Neo4j too — keep them inside a 503 guard so a failure
     # there returns the promised 503, not an unhandled 500 (review finding #1).
     if exact_accounting is not None:
-        notables = _rank_histogram_notables(rows, [])
-        geo_events, geo_count, geo_trunc = _geo_events_from_rows(rows)
+        notables = _rank_histogram_notables(
+            exact_notable_rows,
+            exact_incident_rows,
+        )
+        geo_events, geo_count, geo_trunc = _geo_events_from_rows(exact_geo_rows)
         total = exact_accounting.included_count
         excluded_unlocated = exact_accounting.excluded_unlocated_count
         excluded_conflict = exact_accounting.excluded_conflict_count

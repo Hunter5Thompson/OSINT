@@ -32,6 +32,7 @@ const APPLICATION = {
   excluded_unlocated_count: 1,
   excluded_conflict_count: 0,
   excluded_stale_revision_count: 0,
+  excluded_unsupported_count: 4,
 } as const;
 
 const WINDOW: WindowResponse = {
@@ -139,6 +140,13 @@ describe("timeline API spatial contract", () => {
       Object.entries(APPLICATION).filter(([key]) => key !== "boundary_policy"),
     );
     mockJson({ ...WINDOW, spatial_application: missingBoundaryPolicy });
+    await expect(getTimeWindow({ tStart: "a", tEnd: "b", spatialScope: SCOPE }))
+      .rejects.toThrow(/spatial_application/i);
+
+    const missingUnsupportedCount = Object.fromEntries(
+      Object.entries(APPLICATION).filter(([key]) => key !== "excluded_unsupported_count"),
+    );
+    mockJson({ ...WINDOW, spatial_application: missingUnsupportedCount });
     await expect(getTimeWindow({ tStart: "a", tEnd: "b", spatialScope: SCOPE }))
       .rejects.toThrow(/spatial_application/i);
 

@@ -75,6 +75,7 @@ class SpatialApplicationV1(BaseModel):
     excluded_unlocated_count: int = Field(ge=0)
     excluded_conflict_count: int = Field(ge=0)
     excluded_stale_revision_count: int = Field(ge=0)
+    excluded_unsupported_count: int = Field(ge=0)
 ```
 
 `WindowResponse`, `HistogramResponse` und relevante Detailantworten erhalten
@@ -106,7 +107,17 @@ Records aus einer für den angeforderten Scope nicht freigegebenen
 Derivationsrevision werden ebenfalls ausgeschlossen und separat über
 `excluded_stale_revision_count` gezählt.
 
-„Partial“ bedeutet niemals „global ergänzt“. Unlocated Records werden in einem nicht-globalen Scope ausgeschlossen und gezählt.
+`excluded_unsupported_count` zählt Records mit angefragtem materialisiertem
+Scope-Key, deren Normalisierungszustand weder valide, Conflict noch Stale ist. Das
+Feld ist Teil des V1-Wire-Vertrags und darf nicht nur intern berechnet und danach
+verworfen werden.
+
+„Partial“ bedeutet niemals „global ergänzt“. Ein Exact-Read darf unlocated Records
+nicht aus einem globalen Fenster einem einzelnen Scope zurechnen. Die
+scope-spezifische Aktivierung setzt deshalb vollständige Coverage-Evidenz voraus;
+ohne diese Evidenz bleibt der Scope `bbox_approximate + partial`. Ein aktivierter
+Exact-Scope meldet `excluded_unlocated_count=0`, während Conflict, Stale und
+Unsupported weiterhin pro Request gemessen werden.
 
 ### 14.3 Interne Auflösung
 
@@ -144,7 +155,8 @@ WHERE l.country_scope_key = $scope_key
   AND ev.timeline_at >= datetime($t_start)
   AND ev.timeline_at <= datetime($t_end)
 WITH ev, l
-ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+ORDER BY CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC,
+         coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
 WITH ev, collect(l)[0] AS l
 ORDER BY ev.timeline_at ASC,
          coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
@@ -158,10 +170,17 @@ Das verpflichtende `MATCH` ist Absicht: Exact-Scope-Queries beginnen bei der
 indexierten `Location(scope_key, spatial_derivation_revision)` und traversieren von
 dort zu Events. Die erste Sortierung wählt eine reproduzierbare Repräsentativ-
 Location; `collect(l)[0]` kollabiert anschließend alle passenden Locations vor dem
-Event-`LIMIT` auf genau eine Eventzeile. Die Count-Variante verwendet
-`count(DISTINCT ev)`. Unlocated Records werden durch separate Accounting-Queries
-gezählt, nicht über ein `OPTIONAL MATCH`, das den Index-Start erschwert und durch ein
-nachfolgendes Location-`WHERE` semantisch ohnehin wieder zum Pflicht-Match würde.
+Event-`LIMIT` auf genau eine Eventzeile und bevorzugt dabei eine koordinatentragende
+Location. Die Count-Variante misst zuerst unabhängig alle `DISTINCT ev` mit dem
+angefragten Scope-Key und reconciliert diese Referenzmenge anschließend gegen die
+disjunkten Kategorien Included, Conflict, Stale und Unsupported. Ein globaler
+Unlocated-Full-Window-Scan ist kein Exact-Accounting.
+
+Der Histogramm-Pfad verwendet getrennte statische Templates: ein schmales
+Bucket-Template mit `time`, `codebook_type`, `severity`, begrenzte Event- und
+Incident-Notable-Templates sowie ein schmales Geo-Template. Alle Reads samt
+Accounting laufen in derselben read-only Neo4j-Transaktion, damit Löschungen zwischen
+Sample und Count keinen falschen Storage-Fehler erzeugen.
 
 `$compatible_revisions` stammt aus der reviewten
 [Katalogmatrix (§7.5)](02-scope-identity-and-boundary-policy.md#75-katalogrevision-versus-daten-derivationsrevision),

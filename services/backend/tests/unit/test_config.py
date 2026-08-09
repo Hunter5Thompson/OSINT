@@ -84,6 +84,7 @@ class TestSettings:
         assert settings.spatial_asset_max_concurrency == 8
         assert settings.spatial_asset_acquire_timeout_s == 0.05
         assert settings.chronik_exact_spatial_activations == ()
+        assert settings.chronik_exact_max_stale_revision_ratio == 0.01
 
     def test_exact_spatial_activation_is_strict_server_side_deployment_data(self) -> None:
         activation = {
@@ -119,7 +120,7 @@ class TestSettings:
                 ],
             )
 
-    def test_exact_spatial_activation_rejects_duplicate_lane_kind_entries(self) -> None:
+    def test_exact_spatial_activation_allows_distinct_scope_derivations(self) -> None:
         activation = {
             "lane": "event_occurrence",
             "scope_kind": "country",
@@ -132,7 +133,35 @@ class TestSettings:
             "stale_revision_ratio": 0.0,
         }
 
-        with pytest.raises(ValidationError, match="lane/kind"):
+        settings = Settings(
+            _env_file=None,
+            neo4j_password="test-secret",
+            chronik_exact_spatial_activations=[
+                activation,
+                {
+                    **activation,
+                    "derivation_revision": "spatial-derive-v1-bbbbbbbbbbbb",
+                    "coverage_revision": "coverage-fixture-b",
+                },
+            ],
+        )
+
+        assert len(settings.chronik_exact_spatial_activations) == 2
+
+    def test_exact_spatial_activation_rejects_duplicate_lane_kind_derivation(self) -> None:
+        activation = {
+            "lane": "event_occurrence",
+            "scope_kind": "country",
+            "catalog_revision": "spatial-v1-0123456789ab",
+            "derivation_revision": "spatial-derive-v1-0123456789ab",
+            "coverage_revision": "coverage-fixture-a",
+            "enabled": True,
+            "coverage_complete": True,
+            "index_plan_verified": True,
+            "stale_revision_ratio": 0.0,
+        }
+
+        with pytest.raises(ValidationError, match="lane/kind/derivation"):
             Settings(
                 _env_file=None,
                 neo4j_password="test-secret",
@@ -146,6 +175,8 @@ class TestSettings:
             ("spatial_asset_max_concurrency", 65),
             ("spatial_asset_acquire_timeout_s", 0),
             ("spatial_asset_acquire_timeout_s", 5.1),
+            ("chronik_exact_max_stale_revision_ratio", -0.01),
+            ("chronik_exact_max_stale_revision_ratio", 1.01),
         ],
     )
     def test_spatial_resource_limits_are_bounded(self, name: str, value: float) -> None:

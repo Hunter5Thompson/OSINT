@@ -29,6 +29,7 @@ def _legacy_global_application() -> SpatialApplicationV1:
         excluded_unlocated_count=0,
         excluded_conflict_count=0,
         excluded_stale_revision_count=0,
+        excluded_unsupported_count=0,
     )
 
 
@@ -104,6 +105,7 @@ def test_new_client_world_token_is_echoed_without_becoming_legacy_tokenless_glob
         excluded_unlocated_count=0,
         excluded_conflict_count=0,
         excluded_stale_revision_count=0,
+        excluded_unsupported_count=0,
     )
 
     assert application.requested_scope_key == "world"
@@ -111,6 +113,14 @@ def test_new_client_world_token_is_echoed_without_becoming_legacy_tokenless_glob
     assert application.derivation_revision == DERIVATION_REVISION
     assert application.boundary_policy == "odin-reference-v1"
     assert application.mode is SpatialFilterMode.GLOBAL
+
+
+def test_spatial_application_requires_reported_unsupported_count():
+    payload = _legacy_global_application().model_dump(mode="json")
+    payload.pop("excluded_unsupported_count")
+
+    with pytest.raises(ValidationError):
+        SpatialApplicationV1.model_validate(payload)
 
 
 def test_legacy_tokenless_global_application_has_explicit_global_semantics():
@@ -135,6 +145,7 @@ def test_bbox_application_accounts_distinct_included_and_excluded_records():
         excluded_unlocated_count=3,
         excluded_conflict_count=2,
         excluded_stale_revision_count=1,
+        excluded_unsupported_count=4,
     )
 
     assert application.relation == "intersects"
@@ -142,6 +153,7 @@ def test_bbox_application_accounts_distinct_included_and_excluded_records():
     assert application.excluded_unlocated_count == 3
     assert application.excluded_conflict_count == 2
     assert application.excluded_stale_revision_count == 1
+    assert application.excluded_unsupported_count == 4
 
 
 @pytest.mark.parametrize(

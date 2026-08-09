@@ -11,7 +11,8 @@
 Promote eligible CHRONIK event lanes from catalog-bbox approximation to exact
 materialized scope-key queries. Static templates are selected by scope kind and
 relation, with revision compatibility and conflict/stale accounting. Activation is
-server-side per lane/kind; rollback explicitly returns to `bbox_approximate`.
+server-side per lane/kind/derivation revision; rollback explicitly returns to
+`bbox_approximate`.
 
 ## File surface
 
@@ -28,7 +29,8 @@ LLM output.
   top-level event.
 - [x] **GREEN:** Add complete fixed Cypher templates. Collapse with deterministic
   `ORDER BY ... WITH ev, collect(l)[0] AS l` before `LIMIT`; count with
-  `count(DISTINCT ev)`. Select the registry entry through enums only.
+  `count(DISTINCT ev)`. Histogram buckets, Event/Incident notables and geo rows use
+  separate fixed templates. Select the registry entry through enums only.
 - [x] **REFACTOR:** Share predicates conceptually but keep full query strings static so
   Neo4j can plan the matching composite index.
 - [x] **VERIFY:** `cd services/backend && uv run pytest tests/unit/test_spatial_filters.py tests/unit/test_timeline_router.py -v`
@@ -36,10 +38,12 @@ LLM output.
 
 ## Work order 2 — Accounting and mixed coverage
 
-- [x] **RED:** Fixture tests distinguish total, included distinct records, samples,
+- [x] **RED:** Fixture tests distinguish an independently measured candidate set,
+  included distinct records, samples,
   unlocated, conflict, stale revision and unsupported. Verify `complete` only when the
   lane contract permits it; multi-location rows never inflate counts.
-- [x] **GREEN:** Execute count/sample queries against one pinned token and map results
+- [x] **GREEN:** Execute count/sample queries against one pinned token and one
+  Neo4j read snapshot, then map results
   to `SpatialApplicationV1(mode=SpatialFilterMode.SEMANTIC_KEY)`. Echo
   scope/catalog/derivation compatibility and keep exclusions visible.
 - [x] **REFACTOR:** One response-accounting function serves window/histogram endpoints
@@ -56,8 +60,9 @@ LLM output.
   active, an execution failure returns `503/SPATIAL_FILTER_UNAVAILABLE`; it never
   retries as bbox or global inside that request.
 - [x] **GREEN:** Add an allowlisted activation registry tied to coverage revision and
-  derivation revision. Resolve a request once, choose exact or bbox explicitly, and
-  emit activation/rejection metrics.
+  derivation revision. Multiple scope-specific derivations may coexist for the same
+  lane/kind; the resolved token selects membership in that revision set. Resolve a
+  request once, choose exact or bbox explicitly, and emit activation/rejection metrics.
 - [x] **REFACTOR:** Gates are deployment config/data, not query parameters and never
   client-controlled.
 - [x] **VERIFY:** Run full backend tests/lint/mypy; execute staging `EXPLAIN` and
@@ -69,6 +74,17 @@ LLM output.
 > the still-open operational promotion gates. Therefore there was no promoted
 > lane/kind requiring a staging `EXPLAIN` or accounting smoke, and no live exact
 > activation or graph mutation occurred in Plan 06B.
+
+> Review remediation 2026-08-09: the activation key is now
+> `(lane, scope_kind, derivation_revision)`; accounting reconciles an independently
+> measured scope-relative candidate set and no longer scans global unlocated Events;
+> `excluded_unsupported_count` is reported through backend and frontend; Exact
+> Incident notables and coordinate-preferred representatives are retained; all Exact
+> result sets share one read transaction. Backend `553 passed`, frontend `559 passed`,
+> Ruff, strict MyPy, ESLint and TypeScript are clean. All 18 country/admin1/admin2
+> sample/bucket/notable/incident/geo/count templates passed live Neo4j `EXPLAIN` as
+> read-only and index-backed. This is not an operational promotion or accounting
+> smoke; the deployment registry remains empty.
 
 ## Exit gate
 

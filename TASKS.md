@@ -1846,8 +1846,9 @@ Observation-Producer.
 #   (Implementierungs-HEAD `51f15f9`, 18/20 Plan-Gates). Er erfüllt keines der neun
 #   untenstehenden Frontend-/Legacy-Cleanup-Kriterien; TASK-123 bleibt deshalb OFFEN.
 #   Plan 06B implementierte am 2026-08-09 die statischen Exact-Reads, reconciliertes
-#   CHRONIK-Accounting und die serverseitige Lane/Kind-Aktivierung. Die Registry ist
-#   bewusst default-leer; offene Backup-/Backfill-/Coverage-Gates verhindern jede
+#   CHRONIK-Accounting und die serverseitige Lane/Kind/Derivations-Aktivierung. Die
+#   Registry ist bewusst default-leer; offene Backup-/Backfill-/Coverage-Gates
+#   verhindern jede
 #   operative Exact-Promotion. Auch 06B erfüllt keines der neun folgenden Frontend-
 #   Kriterien und ändert den Status von TASK-123 daher nicht.
 #

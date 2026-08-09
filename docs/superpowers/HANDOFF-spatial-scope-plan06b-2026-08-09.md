@@ -100,11 +100,13 @@ Zusätzlich gelten:
 - `spatial_conflict = false` ist für jeden Exact-Read verpflichtend.
 - Nur freigegebene kompatible Derivationsrevisionen dürfen matchen.
 - Country-only-Daten bleiben punktlos; kein erfundener Centroid oder Admin-Key.
-- Konflikte, stale Revisionen, unlocated und unsupported bleiben getrennt sichtbar.
+- Konflikte, stale Revisionen, unlocated und unsupported bleiben getrennt sichtbar;
+  `unsupported` ist ein verpflichtendes Response-Feld.
 - Doppelte Locations dürfen weder Resultate noch Accounting aufblasen.
 - Ein Exact-Ausführungsfehler darf nicht im selben Request still auf BBox oder global
   zurückfallen; der Vertrag verlangt `503/SPATIAL_FILTER_UNAVAILABLE`.
-- Aktivierung ist serverseitig, allowlisted und pro Lane/Scope-Kind. Sie ist niemals
+- Aktivierung ist serverseitig, allowlisted und pro
+  Lane/Scope-Kind/Derivationsrevision. Sie ist niemals
   clientgesteuert.
 
 ## Final verifizierter Stand von Plan 06A

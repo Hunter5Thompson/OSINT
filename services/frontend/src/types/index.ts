@@ -147,6 +147,7 @@ export interface SpatialApplicationV1 {
   readonly excluded_unlocated_count: number;
   readonly excluded_conflict_count: number;
   readonly excluded_stale_revision_count: number;
+  readonly excluded_unsupported_count: number;
 }
 
 export interface WindowResponse {

@@ -56,6 +56,10 @@ class UnsupportedExactSpatialQueryError(ValueError):
     """The requested kind/relation pair has no reviewed static exact template."""
 
 
+class ExactEventAccountingError(ValueError):
+    """Exact query results violated the reviewed accounting contract."""
+
+
 class ExactActivationRejectionCause(StrEnum):
     """Stable observability reasons for keeping a request on approximation."""
 
@@ -79,6 +83,9 @@ class ExactEventQueryTemplates:
 
     samples: str
     histogram: str
+    notables: str
+    incidents: str
+    geo: str
     count: str
 
 
@@ -90,7 +97,8 @@ WHERE l.country_scope_key = $scope_key
   AND ev.timeline_at >= datetime($t_start)
   AND ev.timeline_at <= datetime($t_end)
 WITH ev, l
-ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+ORDER BY CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC,
+         coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
 WITH ev, collect(l)[0] AS l
 ORDER BY ev.timeline_at ASC,
          coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
@@ -102,7 +110,14 @@ RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
 """
 
 _EVENTS_COUNTRY_SCOPE_COUNT_QUERY = """
-CALL {
+CALL () {
+  MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+  WHERE l.country_scope_key = $scope_key
+    AND ev.timeline_at >= datetime($t_start)
+    AND ev.timeline_at <= datetime($t_end)
+  RETURN count(DISTINCT ev) AS candidate_count
+}
+CALL () {
   MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
   WHERE l.country_scope_key = $scope_key
     AND l.spatial_derivation_revision IN $compatible_revisions
@@ -111,7 +126,7 @@ CALL {
     AND ev.timeline_at <= datetime($t_end)
   RETURN count(DISTINCT ev) AS included_count
 }
-CALL {
+CALL () {
   MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
   WHERE l.country_scope_key = $scope_key
     AND l.spatial_conflict = true
@@ -125,7 +140,7 @@ CALL {
     }
   RETURN count(DISTINCT ev) AS excluded_conflict_count
 }
-CALL {
+CALL () {
   MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
   WHERE l.country_scope_key = $scope_key
     AND l.spatial_conflict = false
@@ -146,21 +161,34 @@ CALL {
     }
   RETURN count(DISTINCT ev) AS excluded_stale_revision_count
 }
-CALL {
-  MATCH (ev:Event)
-  WHERE ev.timeline_at >= datetime($t_start)
+CALL () {
+  MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+  WHERE l.country_scope_key = $scope_key
+    AND (l.spatial_conflict IS NULL
+         OR NOT l.spatial_conflict IN [true, false])
+    AND ev.timeline_at >= datetime($t_start)
     AND ev.timeline_at <= datetime($t_end)
     AND NOT EXISTS {
-      MATCH (ev)-[:OCCURRED_AT]->(l:Location)
-      WHERE l.country_scope_key IS NOT NULL
+      MATCH (valid:Location)<-[:OCCURRED_AT]-(ev)
+      WHERE valid.country_scope_key = $scope_key
+        AND valid.spatial_derivation_revision IN $compatible_revisions
+        AND valid.spatial_conflict = false
     }
-  RETURN count(DISTINCT ev) AS excluded_unlocated_count
+    AND NOT EXISTS {
+      MATCH (conflict:Location)<-[:OCCURRED_AT]-(ev)
+      WHERE conflict.country_scope_key = $scope_key
+        AND conflict.spatial_conflict = true
+    }
+    AND NOT EXISTS {
+      MATCH (stale:Location)<-[:OCCURRED_AT]-(ev)
+      WHERE stale.country_scope_key = $scope_key
+        AND stale.spatial_conflict = false
+        AND (stale.spatial_derivation_revision IS NULL
+             OR NOT stale.spatial_derivation_revision IN $compatible_revisions)
+    }
+  RETURN count(DISTINCT ev) AS excluded_unsupported_count
 }
-WITH included_count, excluded_unlocated_count, excluded_conflict_count,
-     excluded_stale_revision_count, 0 AS excluded_unsupported_count
-RETURN included_count + excluded_unlocated_count + excluded_conflict_count
-       + excluded_stale_revision_count + excluded_unsupported_count AS total,
-       included_count, excluded_unlocated_count, excluded_conflict_count,
+RETURN candidate_count, included_count, excluded_conflict_count,
        excluded_stale_revision_count, excluded_unsupported_count
 """
 
@@ -171,13 +199,67 @@ WHERE l.country_scope_key = $scope_key
   AND l.spatial_conflict = false
   AND ev.timeline_at >= datetime($t_start)
   AND ev.timeline_at <= datetime($t_end)
+WITH DISTINCT ev
+RETURN toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
+       ev.severity AS severity
+ORDER BY ev.timeline_at ASC,
+         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
+"""
+
+_EVENTS_COUNTRY_SCOPE_NOTABLES_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.country_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
+  AND ev.severity IS NOT NULL
+  AND toLower(trim(ev.severity)) IN ['high', 'elevated', 'critical', 'severe', 'extreme']
+WITH ev, l
+ORDER BY CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC,
+         coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+WITH ev, collect(l)[0] AS l
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       ev.severity AS severity, ev.title AS title, ev.codebook_type AS codebook_type,
+       l.lat AS lat, l.lon AS lon
+ORDER BY ev.timeline_at DESC,
+         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
+LIMIT 400
+"""
+
+_INCIDENTS_COUNTRY_SCOPE_NOTABLES_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(i:Incident)
+WHERE l.country_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND datetime(i.trigger_ts) >= datetime($t_start)
+  AND datetime(i.trigger_ts) <= datetime($t_end)
+WITH i, l
+ORDER BY CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC,
+         coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+WITH i, collect(l)[0] AS l
+RETURN coalesce(i.id, toString(elementId(i))) AS id,
+       toString(i.trigger_ts) AS time, 'occurred' AS time_basis,
+       i.severity AS severity, i.title AS title, l.lat AS lat, l.lon AS lon
+ORDER BY i.trigger_ts DESC, coalesce(i.id, toString(elementId(i))) ASC
+LIMIT 200
+"""
+
+_EVENTS_COUNTRY_SCOPE_GEO_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.country_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND l.lat IS NOT NULL AND l.lon IS NOT NULL
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
 WITH ev, l
 ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
 WITH ev, collect(l)[0] AS l
 RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
-       ev.title AS title, ev.codebook_type AS codebook_type, ev.severity AS severity,
-       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
-       l.name AS location_name, l.country AS country, l.lat AS lat, l.lon AS lon
+       toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
+       ev.severity AS severity, l.lat AS lat, l.lon AS lon
 ORDER BY ev.timeline_at ASC,
          coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
 """
@@ -190,7 +272,8 @@ WHERE l.admin1_scope_key = $scope_key
   AND ev.timeline_at >= datetime($t_start)
   AND ev.timeline_at <= datetime($t_end)
 WITH ev, l
-ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+ORDER BY CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC,
+         coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
 WITH ev, collect(l)[0] AS l
 ORDER BY ev.timeline_at ASC,
          coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
@@ -202,7 +285,14 @@ RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
 """
 
 _EVENTS_ADMIN1_SCOPE_COUNT_QUERY = """
-CALL {
+CALL () {
+  MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+  WHERE l.admin1_scope_key = $scope_key
+    AND ev.timeline_at >= datetime($t_start)
+    AND ev.timeline_at <= datetime($t_end)
+  RETURN count(DISTINCT ev) AS candidate_count
+}
+CALL () {
   MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
   WHERE l.admin1_scope_key = $scope_key
     AND l.spatial_derivation_revision IN $compatible_revisions
@@ -211,7 +301,7 @@ CALL {
     AND ev.timeline_at <= datetime($t_end)
   RETURN count(DISTINCT ev) AS included_count
 }
-CALL {
+CALL () {
   MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
   WHERE l.admin1_scope_key = $scope_key
     AND l.spatial_conflict = true
@@ -225,7 +315,7 @@ CALL {
     }
   RETURN count(DISTINCT ev) AS excluded_conflict_count
 }
-CALL {
+CALL () {
   MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
   WHERE l.admin1_scope_key = $scope_key
     AND l.spatial_conflict = false
@@ -246,21 +336,34 @@ CALL {
     }
   RETURN count(DISTINCT ev) AS excluded_stale_revision_count
 }
-CALL {
-  MATCH (ev:Event)
-  WHERE ev.timeline_at >= datetime($t_start)
+CALL () {
+  MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+  WHERE l.admin1_scope_key = $scope_key
+    AND (l.spatial_conflict IS NULL
+         OR NOT l.spatial_conflict IN [true, false])
+    AND ev.timeline_at >= datetime($t_start)
     AND ev.timeline_at <= datetime($t_end)
     AND NOT EXISTS {
-      MATCH (ev)-[:OCCURRED_AT]->(l:Location)
-      WHERE l.admin1_scope_key IS NOT NULL
+      MATCH (valid:Location)<-[:OCCURRED_AT]-(ev)
+      WHERE valid.admin1_scope_key = $scope_key
+        AND valid.spatial_derivation_revision IN $compatible_revisions
+        AND valid.spatial_conflict = false
     }
-  RETURN count(DISTINCT ev) AS excluded_unlocated_count
+    AND NOT EXISTS {
+      MATCH (conflict:Location)<-[:OCCURRED_AT]-(ev)
+      WHERE conflict.admin1_scope_key = $scope_key
+        AND conflict.spatial_conflict = true
+    }
+    AND NOT EXISTS {
+      MATCH (stale:Location)<-[:OCCURRED_AT]-(ev)
+      WHERE stale.admin1_scope_key = $scope_key
+        AND stale.spatial_conflict = false
+        AND (stale.spatial_derivation_revision IS NULL
+             OR NOT stale.spatial_derivation_revision IN $compatible_revisions)
+    }
+  RETURN count(DISTINCT ev) AS excluded_unsupported_count
 }
-WITH included_count, excluded_unlocated_count, excluded_conflict_count,
-     excluded_stale_revision_count, 0 AS excluded_unsupported_count
-RETURN included_count + excluded_unlocated_count + excluded_conflict_count
-       + excluded_stale_revision_count + excluded_unsupported_count AS total,
-       included_count, excluded_unlocated_count, excluded_conflict_count,
+RETURN candidate_count, included_count, excluded_conflict_count,
        excluded_stale_revision_count, excluded_unsupported_count
 """
 
@@ -271,13 +374,67 @@ WHERE l.admin1_scope_key = $scope_key
   AND l.spatial_conflict = false
   AND ev.timeline_at >= datetime($t_start)
   AND ev.timeline_at <= datetime($t_end)
+WITH DISTINCT ev
+RETURN toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
+       ev.severity AS severity
+ORDER BY ev.timeline_at ASC,
+         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
+"""
+
+_EVENTS_ADMIN1_SCOPE_NOTABLES_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.admin1_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
+  AND ev.severity IS NOT NULL
+  AND toLower(trim(ev.severity)) IN ['high', 'elevated', 'critical', 'severe', 'extreme']
+WITH ev, l
+ORDER BY CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC,
+         coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+WITH ev, collect(l)[0] AS l
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       ev.severity AS severity, ev.title AS title, ev.codebook_type AS codebook_type,
+       l.lat AS lat, l.lon AS lon
+ORDER BY ev.timeline_at DESC,
+         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
+LIMIT 400
+"""
+
+_INCIDENTS_ADMIN1_SCOPE_NOTABLES_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(i:Incident)
+WHERE l.admin1_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND datetime(i.trigger_ts) >= datetime($t_start)
+  AND datetime(i.trigger_ts) <= datetime($t_end)
+WITH i, l
+ORDER BY CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC,
+         coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+WITH i, collect(l)[0] AS l
+RETURN coalesce(i.id, toString(elementId(i))) AS id,
+       toString(i.trigger_ts) AS time, 'occurred' AS time_basis,
+       i.severity AS severity, i.title AS title, l.lat AS lat, l.lon AS lon
+ORDER BY i.trigger_ts DESC, coalesce(i.id, toString(elementId(i))) ASC
+LIMIT 200
+"""
+
+_EVENTS_ADMIN1_SCOPE_GEO_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.admin1_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND l.lat IS NOT NULL AND l.lon IS NOT NULL
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
 WITH ev, l
 ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
 WITH ev, collect(l)[0] AS l
 RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
-       ev.title AS title, ev.codebook_type AS codebook_type, ev.severity AS severity,
-       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
-       l.name AS location_name, l.country AS country, l.lat AS lat, l.lon AS lon
+       toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
+       ev.severity AS severity, l.lat AS lat, l.lon AS lon
 ORDER BY ev.timeline_at ASC,
          coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
 """
@@ -290,7 +447,8 @@ WHERE l.admin2_scope_key = $scope_key
   AND ev.timeline_at >= datetime($t_start)
   AND ev.timeline_at <= datetime($t_end)
 WITH ev, l
-ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+ORDER BY CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC,
+         coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
 WITH ev, collect(l)[0] AS l
 ORDER BY ev.timeline_at ASC,
          coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
@@ -302,7 +460,14 @@ RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
 """
 
 _EVENTS_ADMIN2_SCOPE_COUNT_QUERY = """
-CALL {
+CALL () {
+  MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+  WHERE l.admin2_scope_key = $scope_key
+    AND ev.timeline_at >= datetime($t_start)
+    AND ev.timeline_at <= datetime($t_end)
+  RETURN count(DISTINCT ev) AS candidate_count
+}
+CALL () {
   MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
   WHERE l.admin2_scope_key = $scope_key
     AND l.spatial_derivation_revision IN $compatible_revisions
@@ -311,7 +476,7 @@ CALL {
     AND ev.timeline_at <= datetime($t_end)
   RETURN count(DISTINCT ev) AS included_count
 }
-CALL {
+CALL () {
   MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
   WHERE l.admin2_scope_key = $scope_key
     AND l.spatial_conflict = true
@@ -325,7 +490,7 @@ CALL {
     }
   RETURN count(DISTINCT ev) AS excluded_conflict_count
 }
-CALL {
+CALL () {
   MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
   WHERE l.admin2_scope_key = $scope_key
     AND l.spatial_conflict = false
@@ -346,21 +511,34 @@ CALL {
     }
   RETURN count(DISTINCT ev) AS excluded_stale_revision_count
 }
-CALL {
-  MATCH (ev:Event)
-  WHERE ev.timeline_at >= datetime($t_start)
+CALL () {
+  MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+  WHERE l.admin2_scope_key = $scope_key
+    AND (l.spatial_conflict IS NULL
+         OR NOT l.spatial_conflict IN [true, false])
+    AND ev.timeline_at >= datetime($t_start)
     AND ev.timeline_at <= datetime($t_end)
     AND NOT EXISTS {
-      MATCH (ev)-[:OCCURRED_AT]->(l:Location)
-      WHERE l.admin2_scope_key IS NOT NULL
+      MATCH (valid:Location)<-[:OCCURRED_AT]-(ev)
+      WHERE valid.admin2_scope_key = $scope_key
+        AND valid.spatial_derivation_revision IN $compatible_revisions
+        AND valid.spatial_conflict = false
     }
-  RETURN count(DISTINCT ev) AS excluded_unlocated_count
+    AND NOT EXISTS {
+      MATCH (conflict:Location)<-[:OCCURRED_AT]-(ev)
+      WHERE conflict.admin2_scope_key = $scope_key
+        AND conflict.spatial_conflict = true
+    }
+    AND NOT EXISTS {
+      MATCH (stale:Location)<-[:OCCURRED_AT]-(ev)
+      WHERE stale.admin2_scope_key = $scope_key
+        AND stale.spatial_conflict = false
+        AND (stale.spatial_derivation_revision IS NULL
+             OR NOT stale.spatial_derivation_revision IN $compatible_revisions)
+    }
+  RETURN count(DISTINCT ev) AS excluded_unsupported_count
 }
-WITH included_count, excluded_unlocated_count, excluded_conflict_count,
-     excluded_stale_revision_count, 0 AS excluded_unsupported_count
-RETURN included_count + excluded_unlocated_count + excluded_conflict_count
-       + excluded_stale_revision_count + excluded_unsupported_count AS total,
-       included_count, excluded_unlocated_count, excluded_conflict_count,
+RETURN candidate_count, included_count, excluded_conflict_count,
        excluded_stale_revision_count, excluded_unsupported_count
 """
 
@@ -371,13 +549,67 @@ WHERE l.admin2_scope_key = $scope_key
   AND l.spatial_conflict = false
   AND ev.timeline_at >= datetime($t_start)
   AND ev.timeline_at <= datetime($t_end)
+WITH DISTINCT ev
+RETURN toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
+       ev.severity AS severity
+ORDER BY ev.timeline_at ASC,
+         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
+"""
+
+_EVENTS_ADMIN2_SCOPE_NOTABLES_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.admin2_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
+  AND ev.severity IS NOT NULL
+  AND toLower(trim(ev.severity)) IN ['high', 'elevated', 'critical', 'severe', 'extreme']
+WITH ev, l
+ORDER BY CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC,
+         coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+WITH ev, collect(l)[0] AS l
+RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
+       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
+       ev.severity AS severity, ev.title AS title, ev.codebook_type AS codebook_type,
+       l.lat AS lat, l.lon AS lon
+ORDER BY ev.timeline_at DESC,
+         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
+LIMIT 400
+"""
+
+_INCIDENTS_ADMIN2_SCOPE_NOTABLES_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(i:Incident)
+WHERE l.admin2_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND datetime(i.trigger_ts) >= datetime($t_start)
+  AND datetime(i.trigger_ts) <= datetime($t_end)
+WITH i, l
+ORDER BY CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC,
+         coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
+WITH i, collect(l)[0] AS l
+RETURN coalesce(i.id, toString(elementId(i))) AS id,
+       toString(i.trigger_ts) AS time, 'occurred' AS time_basis,
+       i.severity AS severity, i.title AS title, l.lat AS lat, l.lon AS lon
+ORDER BY i.trigger_ts DESC, coalesce(i.id, toString(elementId(i))) ASC
+LIMIT 200
+"""
+
+_EVENTS_ADMIN2_SCOPE_GEO_QUERY = """
+MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
+WHERE l.admin2_scope_key = $scope_key
+  AND l.spatial_derivation_revision IN $compatible_revisions
+  AND l.spatial_conflict = false
+  AND l.lat IS NOT NULL AND l.lon IS NOT NULL
+  AND ev.timeline_at >= datetime($t_start)
+  AND ev.timeline_at <= datetime($t_end)
 WITH ev, l
 ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
 WITH ev, collect(l)[0] AS l
 RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
-       ev.title AS title, ev.codebook_type AS codebook_type, ev.severity AS severity,
-       toString(ev.timeline_at) AS time, ev.time_basis AS time_basis,
-       l.name AS location_name, l.country AS country, l.lat AS lat, l.lon AS lon
+       toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
+       ev.severity AS severity, l.lat AS lat, l.lon AS lon
 ORDER BY ev.timeline_at ASC,
          coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
 """
@@ -389,16 +621,25 @@ _EXACT_EVENT_QUERY_REGISTRY: Final[
         (ScopeKind.COUNTRY, EventSpatialRelation.OCCURS_IN): ExactEventQueryTemplates(
             samples=_EVENTS_COUNTRY_SCOPE_QUERY,
             histogram=_EVENTS_COUNTRY_SCOPE_HISTOGRAM_QUERY,
+            notables=_EVENTS_COUNTRY_SCOPE_NOTABLES_QUERY,
+            incidents=_INCIDENTS_COUNTRY_SCOPE_NOTABLES_QUERY,
+            geo=_EVENTS_COUNTRY_SCOPE_GEO_QUERY,
             count=_EVENTS_COUNTRY_SCOPE_COUNT_QUERY,
         ),
         (ScopeKind.ADMIN1, EventSpatialRelation.OCCURS_IN): ExactEventQueryTemplates(
             samples=_EVENTS_ADMIN1_SCOPE_QUERY,
             histogram=_EVENTS_ADMIN1_SCOPE_HISTOGRAM_QUERY,
+            notables=_EVENTS_ADMIN1_SCOPE_NOTABLES_QUERY,
+            incidents=_INCIDENTS_ADMIN1_SCOPE_NOTABLES_QUERY,
+            geo=_EVENTS_ADMIN1_SCOPE_GEO_QUERY,
             count=_EVENTS_ADMIN1_SCOPE_COUNT_QUERY,
         ),
         (ScopeKind.ADMIN2, EventSpatialRelation.OCCURS_IN): ExactEventQueryTemplates(
             samples=_EVENTS_ADMIN2_SCOPE_QUERY,
             histogram=_EVENTS_ADMIN2_SCOPE_HISTOGRAM_QUERY,
+            notables=_EVENTS_ADMIN2_SCOPE_NOTABLES_QUERY,
+            incidents=_INCIDENTS_ADMIN2_SCOPE_NOTABLES_QUERY,
+            geo=_EVENTS_ADMIN2_SCOPE_GEO_QUERY,
             count=_EVENTS_ADMIN2_SCOPE_COUNT_QUERY,
         ),
     }
@@ -504,7 +745,7 @@ class ExactEventQueryPlan:
 class ExactEventAccounting:
     """Reconciled distinct-record accounting returned by one exact count query."""
 
-    total: int
+    candidate_count: int
     included_count: int
     sample_count: int
     excluded_unlocated_count: int
@@ -556,8 +797,9 @@ def select_exact_event_activation(
     *,
     lane: ChronikSpatialLane,
     activations: Sequence[ChronikExactSpatialActivationV1],
+    max_stale_revision_ratio: float,
 ) -> ExactEventActivationDecision:
-    """Select exact only when one server-side lane/kind evidence record matches."""
+    """Select one matching revision from the server-owned lane/kind set."""
 
     constraint = spatial_filter.constraint
     if constraint is None:
@@ -582,16 +824,29 @@ def select_exact_event_activation(
             ExactActivationRejectionCause.DEFAULT_OFF,
         )
 
-    matches = tuple(
+    lane_kind_matches = tuple(
         activation
         for activation in activations
         if activation.lane is lane and activation.scope_kind is token.kind
     )
-    if not matches:
+    if not lane_kind_matches:
         return _rejected_activation(
             spatial_filter,
             ExactActivationRejectionCause.LANE_KIND_NOT_ALLOWLISTED,
         )
+    enabled_derivation_revisions = {
+        activation.derivation_revision for activation in lane_kind_matches
+    }
+    if token.derivation_revision not in enabled_derivation_revisions:
+        return _rejected_activation(
+            spatial_filter,
+            ExactActivationRejectionCause.DERIVATION_REVISION_MISMATCH,
+        )
+    matches = tuple(
+        activation
+        for activation in lane_kind_matches
+        if activation.derivation_revision == token.derivation_revision
+    )
     if len(matches) != 1:
         return _rejected_activation(
             spatial_filter,
@@ -609,16 +864,12 @@ def select_exact_event_activation(
             ExactActivationRejectionCause.INDEX_PLAN_UNVERIFIED,
         ),
         (
-            activation.stale_revision_ratio <= 0.01,
+            activation.stale_revision_ratio <= max_stale_revision_ratio,
             ExactActivationRejectionCause.STALE_REVISION_COVERAGE,
         ),
         (
             activation.catalog_revision == token.catalog_revision,
             ExactActivationRejectionCause.CATALOG_REVISION_MISMATCH,
-        ),
-        (
-            activation.derivation_revision == token.derivation_revision,
-            ExactActivationRejectionCause.DERIVATION_REVISION_MISMATCH,
         ),
     )
     for accepted, cause in checks:
@@ -681,31 +932,40 @@ def parse_exact_event_accounting(
     """Validate that exact distinct-record categories are disjoint and complete."""
 
     if isinstance(sample_count, bool) or not isinstance(sample_count, int) or sample_count < 0:
-        raise ValueError("exact sample count must be a non-negative integer")
+        raise ExactEventAccountingError(
+            "exact sample count must be a non-negative integer"
+        )
     if len(rows) != 1:
-        raise ValueError("exact accounting must return exactly one row")
+        raise ExactEventAccountingError(
+            "exact accounting must return exactly one row"
+        )
     row = rows[0]
     counts = {
         field: _strict_non_negative_int(row.get(field), field)
         for field in (
-            "total",
+            "candidate_count",
             "included_count",
-            "excluded_unlocated_count",
             "excluded_conflict_count",
             "excluded_stale_revision_count",
             "excluded_unsupported_count",
         )
     }
-    reconciled = sum(value for field, value in counts.items() if field != "total")
-    if counts["total"] != reconciled:
-        raise ValueError("exact accounting categories do not reconcile")
+    reconciled = sum(
+        value for field, value in counts.items() if field != "candidate_count"
+    )
+    if counts["candidate_count"] != reconciled:
+        raise ExactEventAccountingError(
+            "exact accounting categories do not reconcile"
+        )
     if sample_count > counts["included_count"]:
-        raise ValueError("exact samples exceed distinct included records")
+        raise ExactEventAccountingError(
+            "exact samples exceed distinct included records"
+        )
     return ExactEventAccounting(
-        total=counts["total"],
+        candidate_count=counts["candidate_count"],
         included_count=counts["included_count"],
         sample_count=sample_count,
-        excluded_unlocated_count=counts["excluded_unlocated_count"],
+        excluded_unlocated_count=0,
         excluded_conflict_count=counts["excluded_conflict_count"],
         excluded_stale_revision_count=counts["excluded_stale_revision_count"],
         excluded_unsupported_count=counts["excluded_unsupported_count"],
@@ -714,7 +974,9 @@ def parse_exact_event_accounting(
 
 def _strict_non_negative_int(value: object, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(f"{field} must be a non-negative integer")
+        raise ExactEventAccountingError(
+            f"{field} must be a non-negative integer"
+        )
     return value
 
 
