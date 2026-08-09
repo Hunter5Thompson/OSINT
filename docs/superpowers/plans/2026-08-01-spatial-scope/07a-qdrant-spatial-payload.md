@@ -9,10 +9,11 @@
 
 ## Outcome and seam
 
-Add relation-specific spatial payloads, authorized payload-index migration, a pure
-Qdrant filter compiler, and restartable atomic re-enrichment. Existing analysis and
-realtime corpus policies remain the outer filter; spatial is an additional nested
-`must`. Search never creates indexes or falls back globally.
+Add relation-specific, atomically paired scope/revision payloads, authorized
+payload-index migration, a pure Qdrant filter compiler, and restartable atomic
+re-enrichment. Existing analysis and realtime corpus policies remain the outer
+filter; spatial is an additional nested `must`. Search never creates indexes or
+falls back globally.
 
 ## File surface
 
@@ -22,9 +23,26 @@ Create intelligence `spatial.py`, `rag/spatial_reenrich.py`, and tests
 Qdrant writers in `services/data-ingestion` (currently GDELT raw and NLM paths).
 Update service-local schema tests/doctor checks with one shared checked-in vector set.
 
+## Work order 0 — Ancestor-/revision contract
+
+- [x] **RED:** An Admin-1-derived occurrence must match both its Admin-1 token and
+  its Country-parent token, while a cross-pair poison point and incompatible
+  revisions must not match.
+- [x] **REVIEW:** Compare nested assignments, compound keywords and registry IDs.
+  Select two relation-specific `sr1|ScopeKey|DerivationRevision` keyword arrays.
+  The delimiter is excluded by both component grammars, so the encoding is
+  injective without a hash-collision domain.
+- [x] **GREEN:** Pin the representation and active UA-14 vector in
+  `contracts/qdrant-spatial-payload-v1.json`; add the strict pure encoder.
+- [x] **SPEC:** Correct Spec 02, Spec 09 and Slice 7 before defining final indexes.
+  Qdrant has no record-wide scalar derivation revision. A separate projection
+  fingerprint controls idempotent jobs and is never used for scope compatibility.
+- [x] **COMMIT:** `docs(spatial): pair qdrant ancestor revisions`
+
 ## Work order 1 — Payload/index contract
 
-- [ ] **RED:** Require every Spec-09 keyword/geo/bool index and reject wrong Qdrant
+- [ ] **RED:** Require every Spec-09 keyword/geo/bool index from the shared contract
+  and reject wrong Qdrant
   types. Test current corpus-policy fields remain present. Test the migration creates
   only missing indexes, waits for completion, is idempotent, and search preflight is
   read-only.
@@ -40,9 +58,10 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
 
 - [ ] **RED:** Test occurrence only from structured location/coordinate; about only
   from reviewed extracted entity and confidence gate; non-global ancestors only;
-  separate arrays; multiple bases/audit derivations; conflict exclusion; raw code
-  preservation; catalog/derivation/version separation; world omitted; and no substring
-  geography inference.
+  separate Pair-Token arrays with each Ancestor's own revision; multiple bases/audit
+  derivations; conflict exclusion; raw code preservation;
+  catalog/projection/deriver separation; world omitted; and no substring geography
+  inference.
 - [ ] **GREEN:** Add a pure projection from Plan-06A assignments/provenance to the
   Spec-09 payload. Migrate active writers to use it, preserving existing provenance
   and corpus-lane fields. Unsupported source lanes report unavailable spatial
@@ -55,7 +74,8 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
 ## Work order 3 — Filter compiler and policy composition
 
 - [ ] **RED:** Test world→`None`; about/occurrence/either exact model trees;
-  compatibility revisions; conflict/stale exclusion; corpus-policy nesting without
+  compatibility revisions encoded with the requested ScopeKey; cross-pair,
+  conflict and stale exclusion; corpus-policy nesting without
   mutation or weakened `should/must_not`; both analysis/realtime lanes; allowlisted
   field names only; and one/two-box AOI adapter fixtures.
 - [ ] **GREEN:** Implement `SpatialScopeTokenV1`, `RetrievalSpatialRelation`,
@@ -70,12 +90,14 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
 ## Work order 4 — Atomic recurring re-enrichment
 
 - [ ] **RED:** Test dry-run zero writes, full replacement of every `spatial_*` field in
-  one point update, cursor resume, idempotency, lane+target-revision checkpoint,
+  one point update, cursor resume, idempotency, lane+target-projection-revision checkpoint,
   conflict/stale accounting, interrupted batch, new derivation scheduling, and
   catalog carry-forward no-op.
 - [ ] **GREEN:** Implement `rag/spatial_reenrich.py` with explicit dry-run/apply and
   machine-readable per-lane coverage. Update points atomically; never mix arrays and
-  scalar revisions from different runs.
+  projection provenance from different runs. Derive the target projection revision
+  from the Pair-Token version, deriver version, About-Gate policy and complete sorted
+  Scope→Derivationsrevisions; catalog-only carry-forward keeps it stable.
 - [ ] **REFACTOR:** Reuse the batch/report semantics from Plan 06A through file-format
   contracts, while keeping service deployment independent.
 - [ ] **VERIFY:** Run focused tests, create indexes in staging before apply, execute

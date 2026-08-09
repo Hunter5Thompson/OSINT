@@ -95,11 +95,14 @@ spatial_conflict_scope_keys
 Dabei gelten unverändert:
 
 - `spatial_catalog_revision` ist Audit-Provenance des letzten Enrichments.
-- `spatial_derivation_revision` ist die Filterdimension.
+- Der Plan-06A-Scalar `spatial_derivation_revision` bezeichnet nur den terminal
+  ausgewählten Scope. Der Qdrant-Projector darf ihn nicht als recordweite
+  Filterdimension oder als Revision seiner Ancestors kopieren.
 - Query-Compiler vergleichen niemals Record-Katalogrevision mit der
   Request-Katalogrevision.
 - Kompatibilität wird pro Scope über die reviewte Menge kompatibler
-  Derivationsrevisionen entschieden.
+  Derivationsrevisionen und im Qdrant-Filter ausschließlich über atomare
+  Scope-/Revisions-Pair-Tokens entschieden.
 - Bei Conflicts bleibt `spatial_derivation_revision` null. Der 07A-Projector darf
   ihre Audit-Keys nur unter `spatial_conflict_scope_keys`, niemals in den
   filterbaren About-/Occurrence-Arrays publizieren.
@@ -113,13 +116,13 @@ Dabei gelten unverändert:
 Relationen bleiben getrennt:
 
 ```text
-spatial_about_scope_keys          keyword[]
-spatial_occurrence_scope_keys     keyword[]
+spatial_about_scope_revision_tokens       keyword[]
+spatial_occurrence_scope_revision_tokens  keyword[]
 geo                               geo point or geo point[]
 spatial_basis                     keyword[]
 spatial_precision                 keyword
 spatial_catalog_revision          keyword
-spatial_derivation_revision       keyword
+spatial_projection_revision       keyword
 spatial_derivation_version        keyword
 spatial_conflict                  bool
 spatial_conflict_scope_keys       keyword[]
@@ -197,6 +200,32 @@ Der gleiche scalar-Revision-/Ancestor-Key-Sachverhalt betrifft grundsätzlich au
 die spätere Neo4j-Country-Promotion für Locations, die tiefer als Country aufgelöst
 sind. Plan 06B bleibt inert; vor einer realen Promotion muss diese Population im
 Candidate/Stale-Smoke explizit enthalten sein oder der Vertrag korrigiert werden.
+
+### Design-Gate-Auflösung 2026-08-10
+
+Das Gate wurde mit drei unabhängigen Interface-Entwürfen sowie einem lokalen
+Qdrant-Contract-Proof reviewed. Normativ gilt nun Spec 09 in der korrigierten Form:
+
+```text
+spatial_about_scope_revision_tokens[]
+spatial_occurrence_scope_revision_tokens[]
+
+sr1|<canonical non-global ScopeKey>|<DerivationRevision>
+```
+
+Die Relation bleibt durch zwei getrennte Felder sichtbar; Scope und genau dessen
+Revision bleiben innerhalb jedes Keyword-Tokens atomar. `|` ist in beiden
+Komponentengrammatiken verboten, womit das Encoding injektiv ist. Der falsche
+Qdrant-Scalar `spatial_derivation_revision` entfällt. Ein separater
+`spatial_projection_revision`-Fingerprint dient ausschließlich restartbarer
+Job-/Idempotenzsteuerung und niemals der fachlichen Scope-Compatibility.
+
+Der erste RED enthielt einen gültigen UA-14-Point, einen vertauschten
+Parent-/Child-Poison-Point und einen inkompatiblen Point. Die gewählte Repräsentation
+findet nur den gültigen Point sowohl für `country:UKR` als auch für
+`admin1:iso3166-2:UA-14`. Der gemeinsame Vertrag ist
+`contracts/qdrant-spatial-payload-v1.json`. Diese Auflösung ersetzt die ursprüngliche
+scalar Payloadannahme und gibt Work Order 1 frei.
 
 ## Read-only Qdrant-Ausgangsbaseline
 
@@ -330,7 +359,7 @@ Vor einem späteren Qdrant-Apply gelten mindestens:
 
 1. autorisierte Indizes vor Re-Enrichment;
 2. reviewter Dry-run und machine-readable Coverage pro Corpus-Lane;
-3. restartbarer Cursor und lane+target-revision Checkpoint;
+3. restartbarer Cursor und lane+target-projection-revision Checkpoint;
 4. atomischer Ersatz aller `spatial_*`-Felder;
 5. sichtbares Conflict-/Stale-/Unsupported-Accounting;
 6. Stale-Anteil über 0 sichtbar, über 1 % promotionsblockierend;
