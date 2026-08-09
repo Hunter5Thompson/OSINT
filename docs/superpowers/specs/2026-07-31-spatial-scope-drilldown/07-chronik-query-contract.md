@@ -117,7 +117,9 @@ nicht aus einem globalen Fenster einem einzelnen Scope zurechnen. Die
 scope-spezifische Aktivierung setzt deshalb vollständige Coverage-Evidenz voraus;
 ohne diese Evidenz bleibt der Scope `bbox_approximate + partial`. Ein aktivierter
 Exact-Scope meldet `excluded_unlocated_count=0`, während Conflict, Stale und
-Unsupported weiterhin pro Request gemessen werden.
+Unsupported weiterhin pro Request gemessen werden. `completeness=complete` ist in
+diesem Modus damit eine durch Deployment-Evidenz attestierte Aussage und keine
+Request-Zeit-Messung des nicht scopebaren Rests.
 
 ### 14.3 Interne Auflösung
 

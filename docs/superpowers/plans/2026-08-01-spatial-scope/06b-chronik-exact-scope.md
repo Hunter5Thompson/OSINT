@@ -79,12 +79,14 @@ LLM output.
 > `(lane, scope_kind, derivation_revision)`; accounting reconciles an independently
 > measured scope-relative candidate set and no longer scans global unlocated Events;
 > `excluded_unsupported_count` is reported through backend and frontend; Exact
-> Incident notables and coordinate-preferred representatives are retained; all Exact
+> Incident notables have a static query path and coordinate-preferred representatives;
+> their production coverage is still a separate promotion gate. All Exact
 > result sets share one read transaction. Backend `553 passed`, frontend `559 passed`,
 > Ruff, strict MyPy, ESLint and TypeScript are clean. All 18 country/admin1/admin2
 > sample/bucket/notable/incident/geo/count templates passed live Neo4j `EXPLAIN` as
-> read-only and index-backed. This is not an operational promotion or accounting
-> smoke; the deployment registry remains empty.
+> read-only and index-backed. A later read-only production accounting smoke for
+> `country:USA` and `country:IND` reconciled; it is not promotion evidence. The
+> deployment registry remains empty, and no operational promotion occurred.
 
 ## Exit gate
 
@@ -95,3 +97,16 @@ responses report `semantic_key`. Disabling exact never yields an unfiltered quer
 
 The implementation exit is complete with all non-approved lanes explicitly remaining
 `bbox_approximate`. Operational promotion remains a separate, evidence-gated action.
+
+### Operational promotion gates still open
+
+- [ ] Measure and attest Incident-Location scope coverage separately from Event
+  coverage. Current production evidence is `0/11793` scope-keyed Incidents, so no
+  histogram-bearing scope may be promoted yet.
+- [ ] Record the unlocated-coverage attestation, expected candidate baseline and a
+  reconciled accounting smoke for each concrete lane/kind/derivation. Exact
+  `completeness=complete` is evidence-attested, not runtime-measured from unlocated
+  records.
+- [ ] `PROFILE` the unbounded Exact-Geo read with real promoted-scope parameters and
+  approve a transaction-duration/row-budget or add server-side aggregation/capping.
+  Current USA evidence is 13.156 Geo rows for a 200-dot response cap.
