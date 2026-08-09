@@ -11,10 +11,13 @@ import pytest
 
 from app.models.spatial import CatalogProblemCode, ScopeKind, SpatialCatalogProblem
 from app.services.spatial_filters import (
+    EventSpatialRelation,
     GeoExtent,
     LongitudeSpan,
     TimelineSpatialQueryId,
+    UnsupportedExactSpatialQueryError,
     compile_extent_filter,
+    exact_event_query_templates,
     extent_from_boundary_geometry,
     resolve_catalog_filter,
 )
@@ -23,6 +26,94 @@ CATALOG_A = "spatial-v1-aaaaaaaaaaaa"
 CATALOG_B = "spatial-v1-bbbbbbbbbbbb"
 DERIVATION_A = "spatial-derive-v1-aaaaaaaaaaaa"
 DERIVATION_B = "spatial-derive-v1-bbbbbbbbbbbb"
+
+
+_EXACT_SCOPE_PROPERTY = {
+    ScopeKind.COUNTRY: "country_scope_key",
+    ScopeKind.ADMIN1: "admin1_scope_key",
+    ScopeKind.ADMIN2: "admin2_scope_key",
+}
+
+
+@pytest.mark.parametrize("scope_kind", tuple(_EXACT_SCOPE_PROPERTY))
+def test_exact_event_occurrence_contract_excludes_conflicts_and_binds_identity(
+    scope_kind: ScopeKind,
+):
+    """Legacy conflicts remain unsafe unless every exact template filters them."""
+
+    templates = exact_event_query_templates(
+        scope_kind,
+        EventSpatialRelation.OCCURS_IN,
+    )
+    property_name = _EXACT_SCOPE_PROPERTY[scope_kind]
+
+    for query in (templates.samples, templates.count):
+        assert f"l.{property_name} = $scope_key" in query
+        assert "l.spatial_derivation_revision IN $compatible_revisions" in query
+        assert "l.spatial_conflict = false" in query
+        assert "country:UKR" not in query
+        assert DERIVATION_A not in query
+
+    # A conflict can carry the same key and compatible revision as a valid Location.
+    # The explicit boolean predicate, not revision nullability, is the exclusion gate.
+    matching_locations = [
+        {"scope_key": "country:UKR", "revision": DERIVATION_A, "conflict": False},
+        {"scope_key": "country:UKR", "revision": DERIVATION_A, "conflict": True},
+    ]
+    included = [
+        location
+        for location in matching_locations
+        if location["scope_key"] == "country:UKR"
+        and location["revision"] in (DERIVATION_A,)
+        and location["conflict"] is False
+    ]
+    assert included == [matching_locations[0]]
+
+
+@pytest.mark.parametrize("scope_kind", tuple(_EXACT_SCOPE_PROPERTY))
+def test_exact_event_occurrence_collapses_duplicate_locations_before_limit(
+    scope_kind: ScopeKind,
+):
+    templates = exact_event_query_templates(
+        scope_kind,
+        EventSpatialRelation.OCCURS_IN,
+    )
+
+    collapse = "WITH ev, collect(l)[0] AS l"
+    assert collapse in templates.samples
+    assert templates.samples.index(collapse) < templates.samples.index("LIMIT $limit")
+    assert "count(DISTINCT ev) AS included_count" in templates.count
+
+    # Fixture shape: ev-1 has two equally matching OCCURRED_AT Locations. The static
+    # collapse contract must yield one top-level row and consume one unit of LIMIT.
+    matches = [("ev-1", "location-a"), ("ev-1", "location-b"), ("ev-2", "location-c")]
+    distinct_events = list(dict.fromkeys(event_id for event_id, _ in matches))
+    assert distinct_events[:2] == ["ev-1", "ev-2"]
+
+
+def test_exact_event_registry_is_closed_and_antimeridian_independent():
+    queries = {
+        kind: exact_event_query_templates(kind, EventSpatialRelation.OCCURS_IN)
+        for kind in _EXACT_SCOPE_PROPERTY
+    }
+
+    assert set(queries) == {ScopeKind.COUNTRY, ScopeKind.ADMIN1, ScopeKind.ADMIN2}
+    for scope_kind, templates in queries.items():
+        expected_property = _EXACT_SCOPE_PROPERTY[scope_kind]
+        other_properties = set(_EXACT_SCOPE_PROPERTY.values()) - {expected_property}
+        combined = f"{templates.samples}\n{templates.count}"
+        assert all(f"l.{name}" not in combined for name in other_properties)
+        assert all(
+            parameter not in combined
+            for parameter in ("$west", "$east", "$south", "$north", "$bbox_off")
+        )
+
+    with pytest.raises(UnsupportedExactSpatialQueryError):
+        exact_event_query_templates(ScopeKind.WORLD, EventSpatialRelation.OCCURS_IN)
+    with pytest.raises(UnsupportedExactSpatialQueryError):
+        exact_event_query_templates(ScopeKind.COUNTRY, EventSpatialRelation.INTERSECTS)
+    with pytest.raises(UnsupportedExactSpatialQueryError):
+        exact_event_query_templates("district", EventSpatialRelation.OCCURS_IN)  # type: ignore[arg-type]
 
 
 def _geometry(polygons: object) -> bytes:
