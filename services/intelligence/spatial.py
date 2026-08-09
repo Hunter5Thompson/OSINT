@@ -7,8 +7,11 @@ revision that belongs to that scope.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import re
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import Annotated, Final, Literal
 
@@ -24,7 +27,13 @@ from pydantic import (
 from qdrant_client import models
 
 SCOPE_REVISION_TOKEN_PREFIX: Final = "sr1"
+SCOPE_REVISION_TOKEN_VERSION: Final = SCOPE_REVISION_TOKEN_PREFIX
 SCOPE_REVISION_TOKEN_SEPARATOR: Final = "|"
+SPATIAL_DERIVATION_VERSION: Final = "spatial-deriver-v1"
+ABOUT_GATE_REVISION: Final = (
+    "about-gate-v1-unique-reviewed-crosswalk-confidence-gte-0.80"
+)
+_PROJECTION_SCHEMA_VERSION: Final = 1
 
 _SCOPE_KEY = re.compile(
     r"^(?:"
@@ -220,13 +229,54 @@ def unavailable_spatial_payload(reason: str) -> dict[str, object]:
         "spatial_about_scope_revision_tokens": [],
         "spatial_occurrence_scope_revision_tokens": [],
         "spatial_basis": [],
-        "spatial_derivation_version": "spatial-deriver-v1",
+        "spatial_derivation_version": SPATIAL_DERIVATION_VERSION,
         "spatial_conflict": False,
         "spatial_conflict_scope_keys": [],
         "spatial_derivation_status": "unavailable",
         "spatial_derivation_unavailable_reason": reason,
         "spatial_derivations": [],
     }
+
+
+def derive_spatial_projection_revision(
+    scope_derivation_revisions: Mapping[str, str],
+) -> str:
+    """Fingerprint projection semantics and the complete scope revision map."""
+
+    if not isinstance(scope_derivation_revisions, Mapping):
+        raise SpatialContractError("scope derivation revisions must be a mapping")
+    canonical_pairs: list[tuple[str, str]] = []
+    for scope_key, revision in scope_derivation_revisions.items():
+        if not isinstance(scope_key, str):
+            raise SpatialContractError("scope derivation revision key must be a string")
+        try:
+            _scope_kind(scope_key)
+        except ValueError as error:
+            raise SpatialContractError("invalid canonical scope key") from error
+        if (
+            not isinstance(revision, str)
+            or _DERIVATION_REVISION.fullmatch(revision) is None
+        ):
+            raise SpatialContractError("invalid derivation revision")
+        canonical_pairs.append((scope_key, revision))
+    if not canonical_pairs:
+        raise SpatialContractError("scope derivation revisions must not be empty")
+
+    canonical_inputs = {
+        "schema_version": _PROJECTION_SCHEMA_VERSION,
+        "scope_revision_token_version": SCOPE_REVISION_TOKEN_VERSION,
+        "derivation_version": SPATIAL_DERIVATION_VERSION,
+        "about_gate_revision": ABOUT_GATE_REVISION,
+        "sorted_scope_derivation_revisions": sorted(canonical_pairs),
+    }
+    encoded = json.dumps(
+        canonical_inputs,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    digest = hashlib.sha256(encoded).hexdigest()[:12]
+    return f"spatial-projection-v1-{digest}"
 
 
 def encode_scope_revision_token(scope_key: str, derivation_revision: str) -> str:

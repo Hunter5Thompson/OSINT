@@ -89,20 +89,23 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
 
 ## Work order 4 — Atomic recurring re-enrichment
 
-- [ ] **RED:** Test dry-run zero writes, full replacement of every `spatial_*` field in
+- [x] **RED:** Test dry-run zero writes, full replacement of every `spatial_*` field in
   one point update, cursor resume, idempotency, lane+target-projection-revision checkpoint,
   conflict/stale accounting, interrupted batch, new derivation scheduling, and
   catalog carry-forward no-op.
-- [ ] **GREEN:** Implement `rag/spatial_reenrich.py` with explicit dry-run/apply and
+- [x] **GREEN:** Implement `rag/spatial_reenrich.py` with explicit dry-run/apply and
   machine-readable per-lane coverage. Update points atomically; never mix arrays and
   projection provenance from different runs. Derive the target projection revision
   from the Pair-Token version, deriver version, About-Gate policy and complete sorted
   Scope→Derivationsrevisions; catalog-only carry-forward keeps it stable.
-- [ ] **REFACTOR:** Reuse the batch/report semantics from Plan 06A through file-format
+- [x] **REFACTOR:** Reuse the batch/report semantics from Plan 06A through file-format
   contracts, while keeping service deployment independent.
-- [ ] **VERIFY:** Run focused tests, create indexes in staging before apply, execute
-  dry-run/reviewed apply, and capture lane coverage/stale snapshots.
-- [ ] **COMMIT:** `feat(qdrant): reenrich spatial payloads restartably`
+- [x] **VERIFY (code):** Run focused Intelligence/Ingestion tests and hermetic
+  Qdrant-adapter tests; capture the machine-readable report contract.
+- [ ] **VERIFY (authorized staging):** Create indexes in staging before apply, execute
+  dry-run/reviewed apply, and capture real lane coverage/stale snapshots. This remains
+  an explicit operational authorization gate and was not performed during implementation.
+- [x] **COMMIT:** `feat(qdrant): reenrich spatial payloads restartably`
 
 ## Exit gate and handoff
 
