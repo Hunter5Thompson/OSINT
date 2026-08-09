@@ -1,9 +1,13 @@
 """Application configuration loaded from environment variables."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
+
+from app.models.timeline import ChronikExactSpatialActivationV1
 
 
 class Settings(BaseSettings):
@@ -49,6 +53,10 @@ class Settings(BaseSettings):
     spatial_catalog_path: Path = Path("/app/data/spatial")
     spatial_asset_max_concurrency: int = Field(default=8, ge=1, le=64)
     spatial_asset_acquire_timeout_s: float = Field(default=0.05, gt=0, le=5.0)
+    chronik_exact_spatial_activations: tuple[
+        ChronikExactSpatialActivationV1,
+        ...,
+    ] = ()
 
     # External APIs
     opensky_api_url: str = "https://opensky-network.org/api/states/all"
@@ -75,6 +83,16 @@ class Settings(BaseSettings):
     signals_ring_buffer_size: int = 2000
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    @model_validator(mode="after")
+    def exact_spatial_activations_are_unique(self) -> Settings:
+        keys = [
+            (activation.lane, activation.scope_kind)
+            for activation in self.chronik_exact_spatial_activations
+        ]
+        if len(keys) != len(set(keys)):
+            raise ValueError("exact spatial activation lane/kind entries must be unique")
+        return self
 
 
 settings = Settings()  # type: ignore[call-arg]

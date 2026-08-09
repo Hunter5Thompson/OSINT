@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import Settings
+from app.models.timeline import ChronikExactSpatialActivationV1
 
 # Phase 1 contract: canonical collection name
 _CANONICAL_COLLECTION = "odin_intel"
@@ -82,6 +83,61 @@ class TestSettings:
         assert settings.spatial_catalog_path == Path("/app/data/spatial")
         assert settings.spatial_asset_max_concurrency == 8
         assert settings.spatial_asset_acquire_timeout_s == 0.05
+        assert settings.chronik_exact_spatial_activations == ()
+
+    def test_exact_spatial_activation_is_strict_server_side_deployment_data(self) -> None:
+        activation = {
+            "schema_version": 1,
+            "lane": "event_occurrence",
+            "scope_kind": "country",
+            "catalog_revision": "spatial-v1-0123456789ab",
+            "derivation_revision": "spatial-derive-v1-0123456789ab",
+            "coverage_revision": "coverage-fixture-a",
+            "enabled": True,
+            "coverage_complete": True,
+            "index_plan_verified": True,
+            "stale_revision_ratio": 0.0,
+        }
+
+        settings = Settings(
+            _env_file=None,
+            neo4j_password="test-secret",
+            chronik_exact_spatial_activations=[activation],
+        )
+
+        assert settings.chronik_exact_spatial_activations == (
+            ChronikExactSpatialActivationV1.model_validate(activation),
+        )
+
+        with pytest.raises(ValidationError):
+            Settings(
+                _env_file=None,
+                neo4j_password="test-secret",
+                chronik_exact_spatial_activations=[
+                    activation,
+                    {**activation, "unexpected": "client-controlled"},
+                ],
+            )
+
+    def test_exact_spatial_activation_rejects_duplicate_lane_kind_entries(self) -> None:
+        activation = {
+            "lane": "event_occurrence",
+            "scope_kind": "country",
+            "catalog_revision": "spatial-v1-0123456789ab",
+            "derivation_revision": "spatial-derive-v1-0123456789ab",
+            "coverage_revision": "coverage-fixture-a",
+            "enabled": True,
+            "coverage_complete": True,
+            "index_plan_verified": True,
+            "stale_revision_ratio": 0.0,
+        }
+
+        with pytest.raises(ValidationError, match="lane/kind"):
+            Settings(
+                _env_file=None,
+                neo4j_password="test-secret",
+                chronik_exact_spatial_activations=[activation, activation],
+            )
 
     @pytest.mark.parametrize(
         ("name", "value"),

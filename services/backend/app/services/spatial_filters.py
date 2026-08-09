@@ -20,7 +20,11 @@ from app.models.spatial import (
     SpatialCatalogProblem,
     SpatialScopeTokenV1,
 )
-from app.models.timeline import BBox
+from app.models.timeline import (
+    BBox,
+    ChronikExactSpatialActivationV1,
+    ChronikSpatialLane,
+)
 from app.services.spatial_catalog import ResolvedSpatialScope, SpatialCatalogLoader
 
 _EPSILON = 1e-12
@@ -50,6 +54,23 @@ class EventSpatialRelation(StrEnum):
 
 class UnsupportedExactSpatialQueryError(ValueError):
     """The requested kind/relation pair has no reviewed static exact template."""
+
+
+class ExactActivationRejectionCause(StrEnum):
+    """Stable observability reasons for keeping a request on approximation."""
+
+    NOT_CATALOG_SCOPED = "not_catalog_scoped"
+    DEFAULT_OFF = "default_off"
+    UNSUPPORTED_LANE = "unsupported_lane"
+    UNSUPPORTED_SCOPE_KIND = "unsupported_scope_kind"
+    LANE_KIND_NOT_ALLOWLISTED = "lane_kind_not_allowlisted"
+    CONFIGURATION_INVALID = "configuration_invalid"
+    DISABLED = "disabled"
+    COVERAGE_INCOMPLETE = "coverage_incomplete"
+    INDEX_PLAN_UNVERIFIED = "index_plan_unverified"
+    STALE_REVISION_COVERAGE = "stale_revision_coverage"
+    CATALOG_REVISION_MISMATCH = "catalog_revision_mismatch"
+    DERIVATION_REVISION_MISMATCH = "derivation_revision_mismatch"
 
 
 @dataclass(frozen=True, slots=True)
@@ -492,6 +513,16 @@ class ExactEventAccounting:
     excluded_unsupported_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class ExactEventActivationDecision:
+    """Fail-closed result of applying deployment data to one resolved request."""
+
+    approximate_filter: CompiledSpatialFilter
+    plan: ExactEventQueryPlan | None
+    cause: ExactActivationRejectionCause | None
+    activation: ChronikExactSpatialActivationV1 | None
+
+
 type CatalogFilterResolution = CompiledSpatialFilter | SpatialCatalogProblem
 
 
@@ -517,6 +548,105 @@ def compile_exact_event_query_plan(
         templates=templates,
         coverage_revision=coverage_revision,
         coverage_complete=coverage_complete,
+    )
+
+
+def select_exact_event_activation(
+    spatial_filter: CompiledSpatialFilter,
+    *,
+    lane: ChronikSpatialLane,
+    activations: Sequence[ChronikExactSpatialActivationV1],
+) -> ExactEventActivationDecision:
+    """Select exact only when one server-side lane/kind evidence record matches."""
+
+    constraint = spatial_filter.constraint
+    if constraint is None:
+        return _rejected_activation(
+            spatial_filter,
+            ExactActivationRejectionCause.NOT_CATALOG_SCOPED,
+        )
+    if lane is not ChronikSpatialLane.EVENT_OCCURRENCE:
+        return _rejected_activation(
+            spatial_filter,
+            ExactActivationRejectionCause.UNSUPPORTED_LANE,
+        )
+    token = constraint.token
+    if token.kind not in {ScopeKind.COUNTRY, ScopeKind.ADMIN1, ScopeKind.ADMIN2}:
+        return _rejected_activation(
+            spatial_filter,
+            ExactActivationRejectionCause.UNSUPPORTED_SCOPE_KIND,
+        )
+    if not activations:
+        return _rejected_activation(
+            spatial_filter,
+            ExactActivationRejectionCause.DEFAULT_OFF,
+        )
+
+    matches = tuple(
+        activation
+        for activation in activations
+        if activation.lane is lane and activation.scope_kind is token.kind
+    )
+    if not matches:
+        return _rejected_activation(
+            spatial_filter,
+            ExactActivationRejectionCause.LANE_KIND_NOT_ALLOWLISTED,
+        )
+    if len(matches) != 1:
+        return _rejected_activation(
+            spatial_filter,
+            ExactActivationRejectionCause.CONFIGURATION_INVALID,
+        )
+    activation = matches[0]
+    checks = (
+        (activation.enabled, ExactActivationRejectionCause.DISABLED),
+        (
+            activation.coverage_complete,
+            ExactActivationRejectionCause.COVERAGE_INCOMPLETE,
+        ),
+        (
+            activation.index_plan_verified,
+            ExactActivationRejectionCause.INDEX_PLAN_UNVERIFIED,
+        ),
+        (
+            activation.stale_revision_ratio <= 0.01,
+            ExactActivationRejectionCause.STALE_REVISION_COVERAGE,
+        ),
+        (
+            activation.catalog_revision == token.catalog_revision,
+            ExactActivationRejectionCause.CATALOG_REVISION_MISMATCH,
+        ),
+        (
+            activation.derivation_revision == token.derivation_revision,
+            ExactActivationRejectionCause.DERIVATION_REVISION_MISMATCH,
+        ),
+    )
+    for accepted, cause in checks:
+        if not accepted:
+            return _rejected_activation(spatial_filter, cause, activation)
+
+    return ExactEventActivationDecision(
+        approximate_filter=spatial_filter,
+        plan=compile_exact_event_query_plan(
+            spatial_filter,
+            coverage_revision=str(activation.coverage_revision),
+            coverage_complete=activation.coverage_complete,
+        ),
+        cause=None,
+        activation=activation,
+    )
+
+
+def _rejected_activation(
+    spatial_filter: CompiledSpatialFilter,
+    cause: ExactActivationRejectionCause,
+    activation: ChronikExactSpatialActivationV1 | None = None,
+) -> ExactEventActivationDecision:
+    return ExactEventActivationDecision(
+        approximate_filter=spatial_filter,
+        plan=None,
+        cause=cause,
+        activation=activation,
     )
 
 
