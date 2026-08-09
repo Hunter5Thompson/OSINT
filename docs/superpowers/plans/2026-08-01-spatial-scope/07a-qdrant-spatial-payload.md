@@ -97,7 +97,7 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
   machine-readable per-lane coverage. Update points atomically; never mix arrays and
   projection provenance from different runs. Derive the target projection revision
   from the Pair-Token version, deriver version, About-Gate policy and complete sorted
-  Scope→Derivationsrevisions; catalog-only carry-forward keeps it stable.
+  Scope→Derivationsrevisionen; catalog-only carry-forward keeps it stable.
 - [x] **REFACTOR:** Reuse the batch/report semantics from Plan 06A through file-format
   contracts, while keeping service deployment independent.
 - [x] **VERIFY (code):** Run focused Intelligence/Ingestion tests and hermetic

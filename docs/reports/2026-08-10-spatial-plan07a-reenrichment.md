@@ -104,6 +104,28 @@ Die fokussierten Ruff-Prüfungen beider Services sind grün. Alle Qdrant-Aufrufe
 diesen Tests laufen gegen hermetische Fakes beziehungsweise den lokalen In-Memory-
 Client; es gab keine externe Mutation.
 
+Der anschließende vollständige Service-Gate ergab:
+
+```text
+services/intelligence
+uv sync
+uv run pytest
+387 passed
+uv run ruff check .
+All checks passed
+
+services/data-ingestion
+uv sync
+uv run pytest
+1363 passed, 1 skipped, 17 deselected
+uv run ruff check .
+All checks passed
+```
+
+Die 17 Deselections entsprechen dem bestehenden `-m "not live"` aus `pytest.ini`.
+Der eine Skip ist der bereits vorhandene, umgebungsabhängige GDELT-Integrationstest
+für nicht laufende Dev-Compose-Services.
+
 ## Offenes operatives Gate
 
 Nicht ausgeführt wurden:

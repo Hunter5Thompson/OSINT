@@ -1,6 +1,7 @@
 # Spatial Scope — Implementation Plan Index
 
-> **Status:** IN PROGRESS — Slices 0–2 and 4 done, Plan 03 active (2026-08-06) · **Design gate:** PASS (2026-08-01)
+> **Status:** IN PROGRESS — Plans 00A–02, 04, 06A/06B and 07A done; Plan 03
+> remains active and 07B is next (2026-08-10) · **Design gate:** PASS (2026-08-01)
 >
 > **Normative source:** [Spatial-Scope-Spec](../specs/2026-07-31-spatial-scope-drilldown-design.md)
 
@@ -28,10 +29,10 @@ cleanup PR guarded by the Phase-D rollout decision.
 | [04](2026-08-01-spatial-scope/04-chronik-bbox-scope.md) | DONE | 4 | Honest bbox-scoped timeline with stale-data guards | 02, 03 |
 | [05](2026-08-01-spatial-scope/05-admin1-and-prefetch.md) | PLANNED | 5 | Admin-1 drilldown, bounded cache and hover prefetch | 03 |
 | [05D](2026-08-01-spatial-scope/05d-phase-d-legacy-cleanup.md) | PLANNED | Phase D | Remove legacy country identity/renderer and build flag | 05 + canary/default-on soak |
-| [06A](2026-08-01-spatial-scope/06a-neo4j-normalization-and-backfill.md) | PLANNED | 6 | Canonical Location fields, writers, indexes, repeatable jobs | 00B |
-| [06B](2026-08-01-spatial-scope/06b-chronik-exact-scope.md) | PLANNED | 6 | Static exact Cypher and per-lane activation | 04, 06A |
-| [07A](2026-08-01-spatial-scope/07a-qdrant-spatial-payload.md) | PLANNED | 7 | Spatial payload, indexes and repeatable re-enrichment | 06A |
-| [07B](2026-08-01-spatial-scope/07b-munin-scope-enforcement.md) | PLANNED | 7 | Immutable run scope and capability-bound tools | 06B, 07A |
+| [06A](2026-08-01-spatial-scope/06a-neo4j-normalization-and-backfill.md) | DONE | 6 | Canonical Location fields, writers, indexes, repeatable jobs | 00B |
+| [06B](2026-08-01-spatial-scope/06b-chronik-exact-scope.md) | DONE | 6 | Static exact Cypher and per-lane activation | 04, 06A |
+| [07A](2026-08-01-spatial-scope/07a-qdrant-spatial-payload.md) | DONE | 7 | Spatial payload, indexes and repeatable re-enrichment | 06A |
+| [07B](2026-08-01-spatial-scope/07b-munin-scope-enforcement.md) | NEXT | 7 | Immutable run scope and capability-bound tools | 06B, 07A |
 | [08](2026-08-01-spatial-scope/08-layers-admin2-and-3d.md) | PLANNED | 8 | Reviewed extra layers, Admin-2, truthful 3D metrics | V1 gates from 03–07B |
 
 `01` may start after 00A while 00B builds geometry. `06A` may proceed after Slice 0
