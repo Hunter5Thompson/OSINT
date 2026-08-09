@@ -18,6 +18,25 @@ CONTRACT_PATH = (
 )
 
 
+def _scope_token(
+    *,
+    scope_key: str = COUNTRY_SCOPE,
+    kind: str = "country",
+    derivation_revision: str = COUNTRY_REVISION,
+    compatible: tuple[str, ...] | None = None,
+):
+    from spatial import ScopeKind, SpatialScopeTokenV1
+
+    return SpatialScopeTokenV1(
+        scope_key=scope_key,
+        kind=ScopeKind(kind),
+        catalog_revision="spatial-v1-e76a16bff799",
+        derivation_revision=derivation_revision,
+        boundary_policy="odin-reference-v1",
+        compatible_derivation_revisions=compatible or (derivation_revision,),
+    )
+
+
 def _point(point_id: int, *, occurrence: list[str]) -> models.PointStruct:
     return models.PointStruct(
         id=point_id,
@@ -143,3 +162,199 @@ def test_shared_contract_pins_the_reviewed_ua14_pair_tokens() -> None:
         encode_scope_revision_token(COUNTRY_SCOPE, COUNTRY_REVISION),
         encode_scope_revision_token(ADMIN1_SCOPE, ADMIN1_REVISION),
     ]
+
+
+def test_world_scope_compiles_to_no_qdrant_filter() -> None:
+    from spatial import RetrievalSpatialRelation, compile_qdrant_scope_filter
+
+    token = _scope_token(scope_key="world", kind="world")
+
+    assert compile_qdrant_scope_filter(
+        token,
+        RetrievalSpatialRelation.EITHER,
+    ) is None
+
+
+@pytest.mark.parametrize(
+    ("relation", "relation_tree"),
+    [
+        (
+            "about",
+            {
+                "key": "spatial_about_scope_revision_tokens",
+                "match": {
+                    "any": [
+                        f"sr1|{COUNTRY_SCOPE}|{COUNTRY_REVISION}",
+                        f"sr1|{COUNTRY_SCOPE}|{INCOMPATIBLE_REVISION}",
+                    ]
+                },
+            },
+        ),
+        (
+            "occurrence",
+            {
+                "key": "spatial_occurrence_scope_revision_tokens",
+                "match": {
+                    "any": [
+                        f"sr1|{COUNTRY_SCOPE}|{COUNTRY_REVISION}",
+                        f"sr1|{COUNTRY_SCOPE}|{INCOMPATIBLE_REVISION}",
+                    ]
+                },
+            },
+        ),
+        (
+            "either",
+            {
+                "should": [
+                    {
+                        "key": "spatial_about_scope_revision_tokens",
+                        "match": {
+                            "any": [
+                                f"sr1|{COUNTRY_SCOPE}|{COUNTRY_REVISION}",
+                                f"sr1|{COUNTRY_SCOPE}|{INCOMPATIBLE_REVISION}",
+                            ]
+                        },
+                    },
+                    {
+                        "key": "spatial_occurrence_scope_revision_tokens",
+                        "match": {
+                            "any": [
+                                f"sr1|{COUNTRY_SCOPE}|{COUNTRY_REVISION}",
+                                f"sr1|{COUNTRY_SCOPE}|{INCOMPATIBLE_REVISION}",
+                            ]
+                        },
+                    },
+                ]
+            },
+        ),
+    ],
+)
+def test_scope_filter_model_tree_is_relation_specific_and_compatibility_paired(
+    relation: str,
+    relation_tree: dict[str, object],
+) -> None:
+    from spatial import RetrievalSpatialRelation, compile_qdrant_scope_filter
+
+    token = _scope_token(
+        compatible=(COUNTRY_REVISION, INCOMPATIBLE_REVISION),
+    )
+
+    compiled = compile_qdrant_scope_filter(
+        token,
+        RetrievalSpatialRelation(relation),
+    )
+
+    assert compiled is not None
+    assert compiled.model_dump(mode="json", exclude_none=True) == {
+        "must": [
+            relation_tree,
+            {
+                "key": "spatial_conflict",
+                "match": {"value": False},
+            },
+        ]
+    }
+
+
+def test_admin1_compiler_excludes_cross_pair_and_stale_points() -> None:
+    from spatial import RetrievalSpatialRelation, compile_qdrant_scope_filter
+
+    valid = _point(
+        1,
+        occurrence=[
+            f"sr1|{COUNTRY_SCOPE}|{COUNTRY_REVISION}",
+            f"sr1|{ADMIN1_SCOPE}|{ADMIN1_REVISION}",
+        ],
+    )
+    cross_pair = _point(
+        2,
+        occurrence=[f"sr1|{ADMIN1_SCOPE}|{COUNTRY_REVISION}"],
+    )
+    stale = _point(
+        3,
+        occurrence=[f"sr1|{ADMIN1_SCOPE}|{INCOMPATIBLE_REVISION}"],
+    )
+    client = QdrantClient(":memory:")
+    try:
+        client.create_collection(
+            collection_name="spatial-contract",
+            vectors_config=models.VectorParams(size=2, distance=models.Distance.COSINE),
+        )
+        client.upsert(
+            collection_name="spatial-contract",
+            points=[valid, cross_pair, stale],
+        )
+        compiled = compile_qdrant_scope_filter(
+            _scope_token(
+                scope_key=ADMIN1_SCOPE,
+                kind="admin1",
+                derivation_revision=ADMIN1_REVISION,
+            ),
+            RetrievalSpatialRelation.OCCURRENCE,
+        )
+        assert compiled is not None
+        assert _matching_ids(client, compiled) == [1]
+    finally:
+        client.close()
+
+
+def test_compiler_rejects_non_allowlisted_relation_and_field_injection() -> None:
+    from pydantic import ValidationError
+
+    from spatial import (
+        SpatialContractError,
+        compile_qdrant_scope_filter,
+    )
+
+    with pytest.raises(ValueError):
+        _scope_token(scope_key="country:UKR|payload.poison")
+    with pytest.raises(SpatialContractError, match="relation"):
+        compile_qdrant_scope_filter(_scope_token(), "payload.poison")  # type: ignore[arg-type]
+
+    with pytest.raises(ValidationError):
+        _scope_token(
+            compatible=(COUNTRY_REVISION,)
+            + tuple(
+                f"spatial-derive-v1-{value:012x}"
+                for value in range(8)
+            ),
+        )
+
+
+def test_one_and_two_box_aoi_adapters_build_non_wrapping_geo_filters() -> None:
+    from spatial import QdrantAoiBoxV1, compile_qdrant_aoi_filter
+
+    west = QdrantAoiBoxV1(west=170.0, south=-10.0, east=180.0, north=10.0)
+    east = QdrantAoiBoxV1(west=-180.0, south=-10.0, east=-170.0, north=10.0)
+
+    single = compile_qdrant_aoi_filter((west,))
+    segmented = compile_qdrant_aoi_filter((west, east))
+
+    assert single.model_dump(mode="json", exclude_none=True) == {
+        "must": [
+            {
+                "key": "geo",
+                "geo_bounding_box": {
+                    "top_left": {"lon": 170.0, "lat": 10.0},
+                    "bottom_right": {"lon": 180.0, "lat": -10.0},
+                },
+            },
+            {"key": "spatial_conflict", "match": {"value": False}},
+        ]
+    }
+    segmented_tree = segmented.model_dump(mode="json", exclude_none=True)
+    assert segmented_tree["must"][0] == {
+        "should": [
+            single.model_dump(mode="json", exclude_none=True)["must"][0],
+            {
+                "key": "geo",
+                "geo_bounding_box": {
+                    "top_left": {"lon": -180.0, "lat": 10.0},
+                    "bottom_right": {"lon": -170.0, "lat": -10.0},
+                },
+            },
+        ]
+    }
+
+    with pytest.raises(ValueError, match="non-wrapping"):
+        QdrantAoiBoxV1(west=170.0, south=-10.0, east=-170.0, north=10.0)

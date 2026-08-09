@@ -3,7 +3,7 @@ from rag import corpus_policy as cp
 
 class TestLaneFilters:
     def test_analysis_filter_shape(self):
-        f = cp.analysis_filter()
+        f = cp.analysis_filter().model_dump(mode="json", exclude_none=True)
         should = f["should"]
         # source ∈ ANALYSIS_SOURCES (match any, extensible to future "nlm")
         assert {"key": "source", "match": {"any": sorted(cp.ANALYSIS_SOURCES)}} in should
@@ -11,7 +11,7 @@ class TestLaneFilters:
         assert {"must_not": [{"is_empty": {"key": "notebook_id"}}]} in should
 
     def test_realtime_filter_shape(self):
-        f = cp.realtime_filter()
+        f = cp.realtime_filter().model_dump(mode="json", exclude_none=True)
         must = f["must"]
         assert {"key": "source", "match": {"value": "telegram"}} in must
         chan = next(c for c in must if c["key"] == "telegram_channel")
@@ -152,7 +152,7 @@ class TestFulltextReadPath:
         assert frozenset({"rss", "rss_fulltext", "suv_structured"}) == cp.ANALYSIS_SOURCES
 
     def test_analysis_filter_allows_fulltext_and_excludes_superseded(self):
-        f = cp.analysis_filter()
+        f = cp.analysis_filter().model_dump(mode="json", exclude_none=True)
         assert {"key": "source", "match": {"any": sorted(cp.ANALYSIS_SOURCES)}} in f["should"]
         assert {"key": "superseded_by_fulltext", "match": {"value": True}} in f["must_not"]
 

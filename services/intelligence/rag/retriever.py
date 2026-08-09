@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 import httpx
 import structlog
-from qdrant_client import AsyncQdrantClient
+from qdrant_client import AsyncQdrantClient, models
 
 from config import settings
 from graph.client import GraphClient
@@ -17,6 +17,7 @@ from rag.qdrant_schema import (
     validate_payload_index_schema,
 )
 from rag.reranker import rerank as _rerank_fn
+from spatial import SpatialCoverageSnapshotV1, combine_filters
 
 # Lazy singleton GraphClient for graph context injection
 _graph_client: GraphClient | None = None
@@ -86,7 +87,8 @@ async def search(
     region: str | None = None,
     source: str | None = None,
     score_threshold: float = 0.3,
-    query_filter: dict | None = None,
+    query_filter: models.Filter | None = None,
+    coverage_snapshot: SpatialCoverageSnapshotV1 | None = None,
 ) -> list[dict]:
     """Search the knowledge base with optional filters.
 
@@ -115,24 +117,35 @@ async def search(
     }
 
     # Build filter conditions
-    must_conditions: list[dict] = []
+    must_conditions: list[models.FieldCondition] = []
     if region:
-        must_conditions.append({"key": "region", "match": {"value": region}})
+        must_conditions.append(
+            models.FieldCondition(
+                key="region",
+                match=models.MatchValue(value=region),
+            )
+        )
     if source:
-        must_conditions.append({"key": "source", "match": {"value": source}})
+        must_conditions.append(
+            models.FieldCondition(
+                key="source",
+                match=models.MatchValue(value=source),
+            )
+        )
 
-    filt: dict = {}
+    effective_filter = query_filter
     if must_conditions:
-        filt["must"] = must_conditions
-    if query_filter:
-        for k, v in query_filter.items():
-            if k == "must":
-                # Qdrant `must` is a list; tolerate a single-condition dict.
-                filt["must"] = filt.get("must", []) + (v if isinstance(v, list) else [v])
-            else:
-                filt[k] = v
-    if filt:
-        search_body["filter"] = filt
+        legacy_filter = models.Filter(must=must_conditions)
+        effective_filter = (
+            legacy_filter
+            if effective_filter is None
+            else combine_filters(legacy_filter, effective_filter)
+        )
+    if effective_filter is not None:
+        search_body["filter"] = effective_filter.model_dump(
+            mode="json",
+            exclude_none=True,
+        )
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -153,6 +166,13 @@ async def search(
                 **r.get("payload", {}),
             })
 
+        if coverage_snapshot is not None:
+            logger.info(
+                "spatial_coverage_snapshot",
+                snapshot=coverage_snapshot.model_dump(mode="json"),
+                result_count=len(results),
+            )
+
         return results
     except Exception as e:
         logger.warning("retriever_search_failed", error=str(e))
@@ -165,10 +185,11 @@ async def enhanced_search(
     region: str | None = None,
     source: str | None = None,
     score_threshold: float = 0.3,
-    query_filter: dict | None = None,
+    query_filter: models.Filter | None = None,
     pool: int | None = None,
     post_rerank: Callable[[list[dict]], list[dict]] | None = None,
     *,
+    coverage_snapshot: SpatialCoverageSnapshotV1 | None = None,
     enable_hybrid: bool | None = None,
     enable_rerank: bool | None = None,
     enable_graph_context: bool | None = None,
@@ -203,6 +224,7 @@ async def enhanced_search(
     results = await search(
         query, limit=overfetch, region=region,
         source=source, score_threshold=score_threshold, query_filter=query_filter,
+        coverage_snapshot=coverage_snapshot,
     )
 
     if not results:
