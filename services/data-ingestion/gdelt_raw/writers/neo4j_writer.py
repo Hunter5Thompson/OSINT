@@ -16,9 +16,8 @@ from pydantic import BaseModel, ValidationError
 
 from gdelt_raw.ids import build_location_id
 from gdelt_raw.schemas import GDELTDocumentWrite, GDELTEventWrite
+from gdelt_raw.spatial import raw_location_identity_for_event
 from graph_integrity.spatial_normalizer import (
-    CountryCodeSystem,
-    RawLocationIdentity,
     SpatialNormalizationIndex,
     normalize_location,
     spatial_property_parameters,
@@ -183,14 +182,9 @@ def location_params_for(
     raw_parameters = raw_location_params_for(ev)
     if raw_parameters is None:
         return None
-    raw = RawLocationIdentity(
-        country_code=ev.action_geo_country_code or None,
-        country_code_system=(
-            CountryCodeSystem.GDELT_GEC if ev.action_geo_country_code else None
-        ),
-        latitude=raw_parameters["latitude"],
-        longitude=raw_parameters["longitude"],
-    )
+    raw = raw_location_identity_for_event(ev)
+    if raw is None:
+        return None
     normalized = normalize_location(raw, spatial_index)
     return {
         **raw_parameters,

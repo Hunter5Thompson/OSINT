@@ -392,6 +392,7 @@ def ingest(notebook_id: str | None):
 
         from qdrant_client import QdrantClient
 
+        from graph_integrity.spatial_normalizer import load_active_normalization_index
         from nlm_ingest.candidates import write_candidates
         from nlm_ingest.ingest_neo4j import ingest_extraction
         from nlm_ingest.ingest_qdrant import (
@@ -401,8 +402,17 @@ def ingest(notebook_id: str | None):
         )
         from nlm_ingest.relation_validator import validate_relations
         from nlm_ingest.schemas import Extraction
+        from qdrant_spatial import build_reviewed_country_name_crosswalk
+        from spatial_catalog.identity import load_country_crosswalk
         db = _get_db()
         qdrant = QdrantClient(url=settings.qdrant_url)
+        spatial_index = load_active_normalization_index(
+            settings.spatial_catalog_path,
+            crosswalk_path=settings.spatial_country_crosswalk_path,
+        )
+        reviewed_geo_crosswalk = build_reviewed_country_name_crosswalk(
+            load_country_crosswalk(settings.spatial_country_crosswalk_path)
+        )
         try:
             await ensure_collection(
                 qdrant,
@@ -469,6 +479,8 @@ def ingest(notebook_id: str | None):
                                     notebook_title=_title,
                                     embed=lambda _t, _v=vec: _v,
                                     source_name=_source,
+                                    spatial_index=spatial_index,
+                                    reviewed_geo_crosswalk=reviewed_geo_crosswalk,
                                 )
                             await ingest_to_qdrant(qdrant, settings.qdrant_collection, points)
 

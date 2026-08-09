@@ -27,10 +27,14 @@ spatial_projection_revision       keyword
 spatial_derivation_version        keyword
 spatial_conflict                  bool
 spatial_conflict_scope_keys       keyword[]
-source_country_code               keyword
-source_country_code_system        keyword
-country_iso3                      keyword
-admin1_code                       keyword
+spatial_derivation_status         unindexed keyword audit
+spatial_derivation_unavailable_reason unindexed text audit
+spatial_derivations               unindexed object[] audit
+source_country_code               unindexed keyword[] audit
+source_country_code_system        unindexed keyword[] audit
+country_iso3                      unindexed keyword[] audit
+admin1_code                       unindexed keyword[] audit
+admin2_code                       unindexed keyword[] audit
 ```
 
 `about` und `occurrence` werden absichtlich in getrennten Feldern gespeichert. Ein
@@ -56,6 +60,17 @@ Scope→Derivationsrevisionsmenge. Er ist **keine** fachliche Filterdimension. E
 Catalog-Carry-forward mit identischer Scope→Revision-Menge behält denselben
 Projektionsfingerprint. `spatial_derivation_version` bezeichnet die Version des
 Normalizer-/Projector-Codes. Diese Felder sind nicht austauschbar.
+
+V1 serialisiert diese Eingaben als UTF-8-JSON mit lexikografisch sortierten
+Objektschlüsseln, Komma-/Doppelpunkt-Separators ohne Whitespace und lexikografisch
+sortierten `[ScopeKey, DerivationRevision]`-Paaren. Die About-Gate-Revision lautet
+`about-gate-v1-unique-reviewed-crosswalk-confidence-gte-0.80`. Die drei
+`spatial_derivation_*`-Auditfelder werden nicht indiziert; `unavailable` ist ein
+expliziter Lane-Status und niemals eine globale Zuordnung.
+Die normalisierten Code-Auditfelder enthalten alle unterschiedlichen Werte eines
+Records. Ihre korrelierte Rohform bleibt zusätzlich je Ableitung unter
+`spatial_derivations[].raw_location` erhalten; die Arrays sind keine alternative
+Scope-/Revisionsrepräsentation und werden vom Scope-Compiler nicht gelesen.
 
 Einen Qdrant-weiten scalar `spatial_derivation_revision` gibt es nicht: Schon ein
 einzelnes Child-Assignment besitzt für Parent und Child unterschiedliche Revisionen,
@@ -107,7 +122,7 @@ Beispiel für ein punktgenaues Event in Admin-1:
   "spatial_basis": ["coordinate"],
   "spatial_precision": "point",
   "spatial_catalog_revision": "spatial-v1-e76a16bff799",
-  "spatial_projection_revision": "spatial-projection-v1-1f7233edbacc",
+  "spatial_projection_revision": "spatial-projection-v1-a5ce3a4f4657",
   "spatial_derivation_version": "spatial-deriver-v1",
   "spatial_conflict": false,
   "spatial_conflict_scope_keys": []

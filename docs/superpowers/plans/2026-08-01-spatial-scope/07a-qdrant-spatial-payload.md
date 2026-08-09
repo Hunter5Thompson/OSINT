@@ -56,20 +56,20 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
 
 ## Work order 2 — Deterministic payload projection
 
-- [ ] **RED:** Test occurrence only from structured location/coordinate; about only
+- [x] **RED:** Test occurrence only from structured location/coordinate; about only
   from reviewed extracted entity and confidence gate; non-global ancestors only;
   separate Pair-Token arrays with each Ancestor's own revision; multiple bases/audit
   derivations; conflict exclusion; raw code preservation;
   catalog/projection/deriver separation; world omitted; and no substring geography
   inference.
-- [ ] **GREEN:** Add a pure projection from Plan-06A assignments/provenance to the
+- [x] **GREEN:** Add a pure projection from Plan-06A assignments/provenance to the
   Spec-09 payload. Migrate active writers to use it, preserving existing provenance
   and corpus-lane fields. Unsupported source lanes report unavailable spatial
   derivation rather than inventing keys.
-- [ ] **REFACTOR:** Source extractors produce evidence; one deterministic projector
+- [x] **REFACTOR:** Source extractors produce evidence; one deterministic projector
   decides filterable keys. Keep test vectors identical across ingestion/intelligence.
-- [ ] **VERIFY:** Run GDELT writer, NLM ingest, indexer and new projection tests.
-- [ ] **COMMIT:** `feat(qdrant): write relation-specific spatial payloads`
+- [x] **VERIFY:** Run GDELT writer, NLM ingest, indexer and new projection tests.
+- [x] **COMMIT:** `feat(qdrant): write relation-specific spatial payloads`
 
 ## Work order 3 — Filter compiler and policy composition
 

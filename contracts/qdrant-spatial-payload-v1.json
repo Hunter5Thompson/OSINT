@@ -10,6 +10,8 @@
   "projection_revision": {
     "prefix": "spatial-projection-v1-",
     "hash": "sha256-first-12",
+    "canonical_json": "UTF-8 JSON, sorted object keys, separators comma/colon, scope pairs sorted lexically",
+    "about_gate_revision": "about-gate-v1-unique-reviewed-crosswalk-confidence-gte-0.80",
     "canonical_inputs": [
       "schema_version",
       "scope_revision_token_version",
@@ -18,6 +20,11 @@
       "sorted_scope_derivation_revisions"
     ]
   },
+  "unindexed_audit_fields": [
+    "spatial_derivation_status",
+    "spatial_derivation_unavailable_reason",
+    "spatial_derivations"
+  ],
   "payload_indexes": [
     {"field": "source", "schema": "keyword", "group": "corpus"},
     {"field": "telegram_channel", "schema": "keyword", "group": "corpus"},
@@ -76,7 +83,7 @@
         "spatial_basis": ["coordinate"],
         "spatial_precision": "point",
         "spatial_catalog_revision": "spatial-v1-e76a16bff799",
-        "spatial_projection_revision": "spatial-projection-v1-1f7233edbacc",
+        "spatial_projection_revision": "spatial-projection-v1-a5ce3a4f4657",
         "spatial_derivation_version": "spatial-deriver-v1",
         "spatial_conflict": false,
         "spatial_conflict_scope_keys": []

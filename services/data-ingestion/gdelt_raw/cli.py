@@ -63,6 +63,7 @@ async def _get_clients():
         collection=settings.qdrant_collection,
         embedding_dimensions=settings.embedding_dimensions,
         enable_hybrid=settings.enable_hybrid,
+        spatial_index=spatial_index,
     )
     return state, neo4j, qdrant
 
