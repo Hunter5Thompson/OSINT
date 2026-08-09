@@ -11,6 +11,7 @@ from app.services.spatial_filters import (
     GeoExtent,
     LongitudeSpan,
     ResolvedSpatialConstraint,
+    compile_exact_event_query_plan,
     compile_extent_filter,
 )
 
@@ -163,6 +164,73 @@ def test_scoped_histogram_uses_catalog_bbox_and_echoes_partial_accounting(client
         assert "country:UKR" not in query
         assert parameters["west"] == 20
         assert parameters["east"] == 41
+
+
+def test_exact_histogram_reuses_static_event_rows_and_shared_accounting(client):
+    loader = SpatialCatalogLoader(Path("/catalog-not-read-by-this-router-test"))
+    app.state.spatial_catalog = loader
+    compiled = _catalog_filter()
+    exact = compile_exact_event_query_plan(
+        compiled,
+        coverage_revision="coverage-fixture-a",
+        coverage_complete=True,
+    )
+    exact_rows = [{
+        "id": "event-1",
+        "time": "2026-06-01T00:30:00Z",
+        "time_basis": "indexed",
+        "title": "Reviewed event",
+        "codebook_type": "military.airstrike",
+        "severity": "high",
+        "lat": 50.0,
+        "lon": 30.0,
+    }]
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch(
+            "app.routers.timeline._select_event_spatial_query",
+            return_value=exact,
+        ),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [
+            exact_rows,
+            [{
+                "total": 4,
+                "included_count": 1,
+                "excluded_unlocated_count": 1,
+                "excluded_conflict_count": 1,
+                "excluded_stale_revision_count": 1,
+                "excluded_unsupported_count": 0,
+            }],
+        ]
+        response = client.get(
+            f"/api/timeline/histogram{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_count"] == 1
+    assert body["notables"][0]["id"] == "event-1"
+    assert body["geo_located_count"] == 1
+    assert body["geo_events"][0]["id"] == "event-1"
+    assert body["spatial_application"]["mode"] == "semantic_key"
+    assert body["spatial_application"]["included_count"] == 1
+    assert body["spatial_application"]["excluded_unlocated_count"] == 1
+    assert body["spatial_application"]["excluded_conflict_count"] == 1
+    assert body["spatial_application"]["excluded_stale_revision_count"] == 1
+    assert len(read.await_args_list) == 2
+    histogram_query, histogram_parameters = read.await_args_list[0].args
+    accounting_query, accounting_parameters = read.await_args_list[1].args
+    assert "l.country_scope_key = $scope_key" in histogram_query
+    assert "LIMIT $limit" not in histogram_query
+    assert "excluded_conflict_count" in accounting_query
+    assert histogram_parameters == accounting_parameters
 
 
 def test_histogram_neo4j_down_503(client):

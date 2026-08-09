@@ -16,6 +16,7 @@ from app.services.spatial_filters import (
     GeoExtent,
     LongitudeSpan,
     ResolvedSpatialConstraint,
+    compile_exact_event_query_plan,
     compile_extent_filter,
 )
 
@@ -196,6 +197,134 @@ def test_scoped_event_window_echoes_catalog_token_and_distinct_accounting(
         assert "country:UKR" not in query
         assert parameters["west"] == 20
         assert parameters["east"] == 41
+
+
+def test_exact_event_window_uses_one_pinned_token_and_reports_mixed_coverage(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    exact = compile_exact_event_query_plan(
+        compiled,
+        coverage_revision="coverage-fixture-a",
+        coverage_complete=True,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch(
+            "app.routers.timeline._select_event_spatial_query",
+            return_value=exact,
+        ),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [
+            [{
+                "id": "gdelt:event:1",
+                "time": "2026-05-01T06:00:00Z",
+                "time_basis": "indexed",
+            }],
+            [{
+                "total": 8,
+                "included_count": 3,
+                "excluded_unlocated_count": 2,
+                "excluded_conflict_count": 1,
+                "excluded_stale_revision_count": 2,
+                "excluded_unsupported_count": 0,
+            }],
+        ]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab&limit=1"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bbox"] is None
+    assert body["total_count"] == 3
+    assert len(body["samples"]) == 1
+    assert body["truncated"] is True
+    assert body["spatial_application"] == {
+        "schema_version": 1,
+        "requested_scope_key": "country:UKR",
+        "catalog_revision": "spatial-v1-0123456789ab",
+        "derivation_revision": "spatial-derive-v1-0123456789ab",
+        "boundary_policy": "odin-reference-v1",
+        "relation": "occurs-in",
+        "mode": "semantic_key",
+        "completeness": "partial",
+        "included_count": 3,
+        "excluded_unlocated_count": 2,
+        "excluded_conflict_count": 1,
+        "excluded_stale_revision_count": 2,
+    }
+    samples_query, samples_parameters = read.await_args_list[0].args
+    count_query, count_parameters = read.await_args_list[1].args
+    assert "l.country_scope_key = $scope_key" in samples_query
+    assert "l.spatial_conflict = false" in samples_query
+    assert "excluded_stale_revision_count" in count_query
+    assert samples_parameters == count_parameters
+    assert samples_parameters["scope_key"] == "country:UKR"
+    assert samples_parameters["compatible_revisions"] == [
+        "spatial-derive-v1-0123456789ab"
+    ]
+    assert {"bbox_off", "west", "east", "south", "north"}.isdisjoint(
+        samples_parameters
+    )
+
+
+@pytest.mark.parametrize(
+    ("coverage_complete", "expected_completeness"),
+    [(False, "partial"), (True, "complete")],
+)
+def test_exact_complete_requires_lane_contract_and_zero_exclusions(
+    client,
+    spatial_loader,
+    coverage_complete,
+    expected_completeness,
+):
+    compiled = _catalog_filter()
+    exact = compile_exact_event_query_plan(
+        compiled,
+        coverage_revision="coverage-fixture-a",
+        coverage_complete=coverage_complete,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch(
+            "app.routers.timeline._select_event_spatial_query",
+            return_value=exact,
+        ),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [
+            [],
+            [{
+                "total": 0,
+                "included_count": 0,
+                "excluded_unlocated_count": 0,
+                "excluded_conflict_count": 0,
+                "excluded_stale_revision_count": 0,
+                "excluded_unsupported_count": 0,
+            }],
+        ]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 200
+    assert (
+        response.json()["spatial_application"]["completeness"]
+        == expected_completeness
+    )
 
 
 def test_new_client_world_token_echoes_identity_while_using_global_query(

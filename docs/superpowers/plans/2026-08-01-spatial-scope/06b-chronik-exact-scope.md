@@ -36,16 +36,16 @@ LLM output.
 
 ## Work order 2 — Accounting and mixed coverage
 
-- [ ] **RED:** Fixture tests distinguish total, included distinct records, samples,
+- [x] **RED:** Fixture tests distinguish total, included distinct records, samples,
   unlocated, conflict, stale revision and unsupported. Verify `complete` only when the
   lane contract permits it; multi-location rows never inflate counts.
-- [ ] **GREEN:** Execute count/sample queries against one pinned token and map results
+- [x] **GREEN:** Execute count/sample queries against one pinned token and map results
   to `SpatialApplicationV1(mode=SpatialFilterMode.SEMANTIC_KEY)`. Echo
   scope/catalog/derivation compatibility and keep exclusions visible.
-- [ ] **REFACTOR:** One response-accounting function serves window/histogram endpoints
+- [x] **REFACTOR:** One response-accounting function serves window/histogram endpoints
   and prevents divergent count semantics.
-- [ ] **VERIFY:** Run timeline model/router/histogram suites.
-- [ ] **COMMIT:** `feat(backend): report exact chronik coverage`
+- [x] **VERIFY:** Run timeline model/router/histogram suites.
+- [x] **COMMIT:** `feat(backend): report exact chronik coverage`
 
 ## Work order 3 — Per-lane activation and rollback
 
