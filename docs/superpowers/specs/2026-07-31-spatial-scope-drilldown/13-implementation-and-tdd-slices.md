@@ -368,9 +368,12 @@ Rollback; danach erfolgt Rollback per vorherigem Frontend-Artefakt.
 
 **Red Tests:**
 
+- ein Admin-1-Assignment ist mit seiner eigenen Revision und mit der separaten
+  Country-Revision seines Ancestors auffindbar; vertauschte oder inkompatible
+  Scope-/Revisionspaare matchen nicht;
 - Schema-Validator verlangt neue Keyword-/Geo-Indizes;
 - Qdrant-Re-Enrichment ersetzt alle `spatial_*`-Felder atomar und ist nach Cursor-
-  Resume idempotent;
+  Resume anhand der Projection-Revision idempotent;
 - `about`, `occurrence`, `either` compilen erwartete Filter zusätzlich zur Corpus-Policy;
 - Modell-Tool-Schema enthält `query`, aber keinen Scope/Region-Override;
 - scoped Tool-Binding enthält weder GDELT noch RSS; ein dennoch konstruierter direkter

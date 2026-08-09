@@ -1,0 +1,120 @@
+{
+  "contract_version": 1,
+  "scope_revision_token": {
+    "prefix": "sr1",
+    "separator": "|",
+    "maximum_ascii_bytes": 229,
+    "about_field": "spatial_about_scope_revision_tokens",
+    "occurrence_field": "spatial_occurrence_scope_revision_tokens"
+  },
+  "projection_revision": {
+    "prefix": "spatial-projection-v1-",
+    "hash": "sha256-first-12",
+    "canonical_inputs": [
+      "schema_version",
+      "scope_revision_token_version",
+      "derivation_version",
+      "about_gate_revision",
+      "sorted_scope_derivation_revisions"
+    ]
+  },
+  "payload_indexes": [
+    {"field": "source", "schema": "keyword", "group": "corpus"},
+    {"field": "telegram_channel", "schema": "keyword", "group": "corpus"},
+    {"field": "notebook_id", "schema": "keyword", "group": "corpus"},
+    {"field": "feed_name", "schema": "keyword", "group": "corpus"},
+    {"field": "url", "schema": "keyword", "group": "corpus"},
+    {"field": "fulltext_article_id", "schema": "keyword", "group": "corpus"},
+    {"field": "fulltext_status", "schema": "keyword", "group": "corpus"},
+    {"field": "superseded_by_fulltext", "schema": "bool", "group": "corpus"},
+    {"field": "fulltext_retry_epoch", "schema": "float", "group": "corpus"},
+    {
+      "field": "spatial_about_scope_revision_tokens",
+      "schema": "keyword",
+      "group": "spatial"
+    },
+    {
+      "field": "spatial_occurrence_scope_revision_tokens",
+      "schema": "keyword",
+      "group": "spatial"
+    },
+    {"field": "geo", "schema": "geo", "group": "spatial"},
+    {"field": "spatial_basis", "schema": "keyword", "group": "spatial"},
+    {"field": "spatial_precision", "schema": "keyword", "group": "spatial"},
+    {
+      "field": "spatial_catalog_revision",
+      "schema": "keyword",
+      "group": "spatial"
+    },
+    {
+      "field": "spatial_projection_revision",
+      "schema": "keyword",
+      "group": "spatial"
+    },
+    {
+      "field": "spatial_derivation_version",
+      "schema": "keyword",
+      "group": "spatial"
+    },
+    {"field": "spatial_conflict", "schema": "bool", "group": "spatial"},
+    {
+      "field": "spatial_conflict_scope_keys",
+      "schema": "keyword",
+      "group": "spatial"
+    }
+  ],
+  "vectors": [
+    {
+      "name": "ua14-occurrence-parent-child",
+      "payload": {
+        "spatial_about_scope_revision_tokens": [],
+        "spatial_occurrence_scope_revision_tokens": [
+          "sr1|country:UKR|spatial-derive-v1-d30efa07e141",
+          "sr1|admin1:iso3166-2:UA-14|spatial-derive-v1-4d1de888e0c7"
+        ],
+        "geo": {"lon": 37.8, "lat": 48.0},
+        "spatial_basis": ["coordinate"],
+        "spatial_precision": "point",
+        "spatial_catalog_revision": "spatial-v1-e76a16bff799",
+        "spatial_projection_revision": "spatial-projection-v1-1f7233edbacc",
+        "spatial_derivation_version": "spatial-deriver-v1",
+        "spatial_conflict": false,
+        "spatial_conflict_scope_keys": []
+      },
+      "queries": [
+        {
+          "relation": "occurrence",
+          "scope_key": "country:UKR",
+          "compatible_derivation_revisions": [
+            "spatial-derive-v1-d30efa07e141"
+          ],
+          "matches": true
+        },
+        {
+          "relation": "occurrence",
+          "scope_key": "admin1:iso3166-2:UA-14",
+          "compatible_derivation_revisions": [
+            "spatial-derive-v1-4d1de888e0c7"
+          ],
+          "matches": true
+        },
+        {
+          "relation": "occurrence",
+          "scope_key": "country:UKR",
+          "compatible_derivation_revisions": [
+            "spatial-derive-v1-000000000000"
+          ],
+          "matches": false
+        },
+        {
+          "relation": "about",
+          "scope_key": "country:UKR",
+          "compatible_derivation_revisions": [
+            "spatial-derive-v1-d30efa07e141"
+          ],
+          "matches": false
+        }
+      ]
+    }
+  ]
+}

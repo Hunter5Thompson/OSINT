@@ -109,10 +109,27 @@ stabilen Fingerprint genau der Crosswalk-/Containment-Eingaben, die materialisie
 Scope-Zuordnungen erzeugen. Ein reines Label-, Attribution- oder Render-LOD-Release
 behält dieselbe Derivationsrevision und verbraucht keinen Kompatibilitätseintrag.
 
-Neo4j-/Qdrant-Records speichern beides: `spatial_catalog_revision` als Audit-Provenance
-des letzten Enrichments und `spatial_derivation_revision` als Filterdimension. Query-
-Compiler vergleichen niemals die Katalogrevision eines Records mit der Request-
-Katalogrevision.
+`derivation_revision` gehört semantisch zu genau einem kanonischen Scope-Assignment,
+nicht pauschal zu einem Record. Sobald ein Child und seine Ancestors gemeinsam
+materialisiert werden, muss die persistierte Filterrepräsentation deshalb jedes
+`(scope_key, derivation_revision)`-Paar korreliert halten. Getrennte Scope- und
+Revisionsarrays oder ein einziger recordweiter Scalar dürfen nicht als Exact-Vertrag
+verwendet werden.
+
+Neo4j-/Qdrant-Records speichern `spatial_catalog_revision` als Audit-Provenance des
+letzten Enrichments. Qdrant speichert die Filterdimension in den versionierten,
+relation-spezifischen Pair-Tokens aus Spec 09. Sein
+`spatial_projection_revision` ist nur Job-/Idempotenzprovenance und keine fachliche
+Compatibility-Dimension. Der bestehende Neo4j-Scalar
+`spatial_derivation_revision` bezeichnet höchstens die Revision des terminal
+ausgewählten Scopes. Ein Exact-Read darf ihn nur mit genau diesem Scope paaren;
+Parent-Promotionen über tiefer aufgelöste Locations bleiben bis zu einem eigenen
+gepaarten Neo4j-Vertrag geschlossen.
+
+Query-Compiler vergleichen niemals die Katalogrevision oder den
+Projektionsfingerprint eines Records mit der Request-Katalogrevision. Sie lösen die
+Compatibility-Menge für den angefragten Scope auf und vergleichen ausschließlich
+gegen die mit genau diesem Scope korrelierten Derivationsrevisionen.
 
 Der Katalog führt deshalb eine explizite Kompatibilitätsmatrix:
 
