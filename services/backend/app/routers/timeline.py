@@ -10,6 +10,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Query, Request
 from starlette.responses import Response
 
+from app.config import settings
 from app.models.spatial import (
     CatalogProblemCode,
     SpatialCatalogProblem,
@@ -18,6 +19,7 @@ from app.models.spatial import (
 )
 from app.models.timeline import (
     BBox,
+    ChronikSpatialLane,
     EventDetail,
     EventSample,
     GeoEvent,
@@ -49,6 +51,7 @@ from app.services.spatial_filters import (
     exact_event_parameters,
     parse_exact_event_accounting,
     resolve_catalog_filter,
+    select_exact_event_activation,
 )
 
 log = structlog.get_logger(__name__)
@@ -61,6 +64,23 @@ _SUPPORTED_MOVEMENT_KINDS = {"mil_aircraft", "civil_aircraft", "ship", "satellit
 _IMPLEMENTED_MOVEMENT_KINDS = {"mil_aircraft"}
 
 type EventSpatialQuery = CompiledSpatialFilter | ExactEventQueryPlan
+
+
+class ExactSpatialFilterUnavailableError(RuntimeError):
+    """An activated exact plan failed and must never retry approximately."""
+
+    def __init__(self, plan: ExactEventQueryPlan) -> None:
+        constraint = plan.spatial_filter.constraint
+        assert constraint is not None
+        token = constraint.token
+        self.problem = SpatialCatalogProblem(
+            code=CatalogProblemCode.SPATIAL_FILTER_UNAVAILABLE,
+            message="Spatial timeline filter is unavailable",
+            target=str(token.scope_key),
+            recoverable=True,
+            active_catalog_revision=token.catalog_revision,
+        )
+        super().__init__(self.problem.message)
 
 
 def _parse_iso_utc(value: str) -> datetime:
@@ -159,9 +179,47 @@ async def _resolve_spatial_filter(
 
 
 def _select_event_spatial_query(spatial_filter: CompiledSpatialFilter) -> EventSpatialQuery:
-    """Keep exact default-off until a reviewed activation registry selects it."""
+    """Apply server-owned activation data once after catalog resolution."""
 
-    return spatial_filter
+    lane = ChronikSpatialLane.EVENT_OCCURRENCE
+    decision = select_exact_event_activation(
+        spatial_filter,
+        lane=lane,
+        activations=settings.chronik_exact_spatial_activations,
+    )
+    constraint = spatial_filter.constraint
+    if decision.plan is not None:
+        assert constraint is not None
+        token = constraint.token
+        log.info(
+            "spatial_exact_activation_selected",
+            consumer="chronik",
+            lane=lane.value,
+            scope_key=str(token.scope_key),
+            scope_kind=token.kind.value,
+            catalog_revision=str(token.catalog_revision),
+            derivation_revision=str(token.derivation_revision),
+            coverage_revision=decision.plan.coverage_revision,
+        )
+        return decision.plan
+    if constraint is not None:
+        token = constraint.token
+        log.info(
+            "spatial_exact_activation_rejected",
+            consumer="chronik",
+            lane=lane.value,
+            scope_key=str(token.scope_key),
+            scope_kind=token.kind.value,
+            catalog_revision=str(token.catalog_revision),
+            derivation_revision=str(token.derivation_revision),
+            coverage_revision=(
+                str(decision.activation.coverage_revision)
+                if decision.activation is not None
+                else None
+            ),
+            cause=decision.cause.value if decision.cause is not None else None,
+        )
+    return decision.approximate_filter
 
 
 def _spatial_application(
@@ -369,13 +427,16 @@ async def get_window(
 
     if domain == "events":
         event_spatial_query = _select_event_spatial_query(spatial_filter)
-        result = await _events_window(
-            t_start,
-            t_end,
-            event_spatial_query,
-            limit,
-            requested_scope_key=scope_key,
-        )
+        try:
+            result = await _events_window(
+                t_start,
+                t_end,
+                event_spatial_query,
+                limit,
+                requested_scope_key=scope_key,
+            )
+        except ExactSpatialFilterUnavailableError as exc:
+            return spatial_problem_response(exc.problem)
         _emit_filter_applied(result.spatial_application, started)
         return result
 
@@ -435,6 +496,8 @@ async def _events_window(
         )
     except Exception as exc:
         log.error("timeline_events_neo4j_query_failed", error=str(exc))
+        if exact_plan is not None:
+            raise ExactSpatialFilterUnavailableError(exact_plan) from exc
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
     if exact_accounting is None:
         total, excluded_unlocated = _count_accounting(
@@ -704,6 +767,9 @@ async def get_histogram(
             )
     except Exception as exc:
         log.error("timeline_histogram_neo4j_query_failed", error=str(exc))
+        if isinstance(event_spatial_query, ExactEventQueryPlan):
+            unavailable = ExactSpatialFilterUnavailableError(event_spatial_query)
+            return spatial_problem_response(unavailable.problem)
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
 
     # Bin in Python so the deterministic rules live in one tested place.

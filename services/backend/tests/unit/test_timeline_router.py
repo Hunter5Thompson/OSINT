@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -11,6 +12,7 @@ from app.models.spatial import (
     SpatialCatalogProblem,
     SpatialScopeTokenV1,
 )
+from app.models.timeline import ChronikExactSpatialActivationV1
 from app.services.spatial_catalog import SpatialCatalogLoader
 from app.services.spatial_filters import (
     GeoExtent,
@@ -32,10 +34,10 @@ def _catalog_filter(
     *,
     scope_key: str = "country:UKR",
     catalog_revision: str = "spatial-v1-0123456789ab",
+    derivation_revision: str = "spatial-derive-v1-0123456789ab",
     kind: ScopeKind = ScopeKind.COUNTRY,
     extent: GeoExtent | None = None,
 ):
-    derivation_revision = "spatial-derive-v1-0123456789ab"
     token = SpatialScopeTokenV1(
         scope_key=scope_key,
         kind=kind,
@@ -58,6 +60,21 @@ def _catalog_filter(
         admin2_scope_key=None,
     )
     return compile_extent_filter(selected_extent, constraint=constraint)
+
+
+def _exact_activation(**overrides: object) -> ChronikExactSpatialActivationV1:
+    return ChronikExactSpatialActivationV1.model_validate({
+        "lane": "event_occurrence",
+        "scope_kind": "country",
+        "catalog_revision": "spatial-v1-0123456789ab",
+        "derivation_revision": "spatial-derive-v1-0123456789ab",
+        "coverage_revision": "coverage-fixture-a",
+        "enabled": True,
+        "coverage_complete": True,
+        "index_plan_verified": True,
+        "stale_revision_ratio": 0.0,
+        **overrides,
+    })
 
 
 @pytest.fixture
@@ -325,6 +342,156 @@ def test_exact_complete_requires_lane_contract_and_zero_exclusions(
         response.json()["spatial_application"]["completeness"]
         == expected_completeness
     )
+
+
+def test_server_activation_selects_exact_and_emits_revisioned_metric(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    deployment_settings = SimpleNamespace(
+        chronik_exact_spatial_activations=(_exact_activation(),),
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.settings", deployment_settings),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.log") as logger,
+    ):
+        read.side_effect = [
+            [],
+            [{
+                "total": 0,
+                "included_count": 0,
+                "excluded_unlocated_count": 0,
+                "excluded_conflict_count": 0,
+                "excluded_stale_revision_count": 0,
+                "excluded_unsupported_count": 0,
+            }],
+        ]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["spatial_application"]["mode"] == "semantic_key"
+    selected = next(
+        call.kwargs
+        for call in logger.info.call_args_list
+        if call.args[0] == "spatial_exact_activation_selected"
+    )
+    assert selected == {
+        "consumer": "chronik",
+        "lane": "event_occurrence",
+        "scope_key": "country:UKR",
+        "scope_kind": "country",
+        "catalog_revision": "spatial-v1-0123456789ab",
+        "derivation_revision": "spatial-derive-v1-0123456789ab",
+        "coverage_revision": "coverage-fixture-a",
+    }
+
+
+def test_new_derivation_revision_rejects_exact_and_stays_explicit_bbox(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter(
+        derivation_revision="spatial-derive-v1-bbbbbbbbbbbb",
+    )
+    deployment_settings = SimpleNamespace(
+        chronik_exact_spatial_activations=(_exact_activation(),),
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.settings", deployment_settings),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.log") as logger,
+    ):
+        read.side_effect = [[], [{"total": 0, "excluded_unlocated_count": 0}]]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["spatial_application"]["mode"] == "bbox_approximate"
+    rejected = next(
+        call.kwargs
+        for call in logger.info.call_args_list
+        if call.args[0] == "spatial_exact_activation_rejected"
+    )
+    assert rejected["cause"] == "derivation_revision_mismatch"
+    assert rejected["coverage_revision"] == "coverage-fixture-a"
+    assert "l.country_scope_key = $scope_key" not in read.await_args_list[0].args[0]
+
+
+def test_client_cannot_enable_exact_when_server_registry_is_default_off(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    deployment_settings = SimpleNamespace(chronik_exact_spatial_activations=())
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.settings", deployment_settings),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [[], [{"total": 0, "excluded_unlocated_count": 0}]]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab&exact=true"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["spatial_application"]["mode"] == "bbox_approximate"
+    assert "l.country_scope_key = $scope_key" not in read.await_args_list[0].args[0]
+
+
+def test_active_exact_failure_returns_spatial_filter_unavailable_without_bbox_retry(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    deployment_settings = SimpleNamespace(
+        chronik_exact_spatial_activations=(_exact_activation(),),
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.settings", deployment_settings),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [[], RuntimeError("exact count unavailable")]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "SPATIAL_FILTER_UNAVAILABLE"
+    assert response.headers["cache-control"] == "no-store"
+    assert len(read.await_args_list) == 2
+    assert all(
+        "l.country_scope_key = $scope_key" in call.args[0]
+        for call in read.await_args_list
+    )
+    assert all("$bbox_off" not in call.args[0] for call in read.await_args_list)
 
 
 def test_new_client_world_token_echoes_identity_while_using_global_query(

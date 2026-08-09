@@ -9,11 +9,22 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.models.spatial import CatalogProblemCode, ScopeKind, SpatialCatalogProblem
+from app.models.spatial import (
+    CatalogProblemCode,
+    ScopeKind,
+    SpatialCatalogProblem,
+    SpatialScopeTokenV1,
+)
+from app.models.timeline import (
+    ChronikExactSpatialActivationV1,
+    ChronikSpatialLane,
+)
 from app.services.spatial_filters import (
     EventSpatialRelation,
+    ExactActivationRejectionCause,
     GeoExtent,
     LongitudeSpan,
+    ResolvedSpatialConstraint,
     TimelineSpatialQueryId,
     UnsupportedExactSpatialQueryError,
     compile_exact_event_query_plan,
@@ -23,6 +34,7 @@ from app.services.spatial_filters import (
     extent_from_boundary_geometry,
     parse_exact_event_accounting,
     resolve_catalog_filter,
+    select_exact_event_activation,
 )
 
 CATALOG_A = "spatial-v1-aaaaaaaaaaaa"
@@ -216,6 +228,162 @@ def test_exact_accounting_distinguishes_samples_and_reconciles_all_categories():
             }],
             sample_count=2,
         )
+
+
+def _gate_filter(
+    *,
+    scope_kind: ScopeKind = ScopeKind.COUNTRY,
+    catalog_revision: str = CATALOG_A,
+    derivation_revision: str = DERIVATION_A,
+):
+    scope_key = {
+        ScopeKind.COUNTRY: "country:UKR",
+        ScopeKind.ADMIN1: "admin1:iso3166-2:UA-14",
+        ScopeKind.ADMIN2: "admin2:geoboundaries:UKR.ADM2.1",
+    }[scope_kind]
+    token = SpatialScopeTokenV1(
+        scope_key=scope_key,
+        kind=scope_kind,
+        catalog_revision=catalog_revision,
+        derivation_revision=derivation_revision,
+        boundary_policy="odin-reference-v1",
+        compatible_derivation_revisions=(derivation_revision,),
+    )
+    extent = GeoExtent(
+        kind="segments",
+        south=40,
+        north=53,
+        longitude=(LongitudeSpan(20, 41),),
+    )
+    return compile_extent_filter(
+        extent,
+        constraint=ResolvedSpatialConstraint(
+            token=token,
+            extent=extent,
+            country_scope_key="country:UKR",
+            admin1_scope_key=(scope_key if scope_kind is ScopeKind.ADMIN1 else None),
+            admin2_scope_key=(scope_key if scope_kind is ScopeKind.ADMIN2 else None),
+        ),
+    )
+
+
+def _activation(**overrides: object) -> ChronikExactSpatialActivationV1:
+    payload = {
+        "lane": "event_occurrence",
+        "scope_kind": "country",
+        "catalog_revision": CATALOG_A,
+        "derivation_revision": DERIVATION_A,
+        "coverage_revision": "coverage-fixture-a",
+        "enabled": True,
+        "coverage_complete": True,
+        "index_plan_verified": True,
+        "stale_revision_ratio": 0.0,
+        **overrides,
+    }
+    return ChronikExactSpatialActivationV1.model_validate(payload)
+
+
+def test_exact_activation_selects_only_a_fully_eligible_lane_kind_revision():
+    decision = select_exact_event_activation(
+        _gate_filter(),
+        lane=ChronikSpatialLane.EVENT_OCCURRENCE,
+        activations=(_activation(),),
+    )
+
+    assert decision.plan is not None
+    assert decision.cause is None
+    assert decision.plan.coverage_revision == "coverage-fixture-a"
+    assert decision.plan.coverage_complete is True
+
+
+@pytest.mark.parametrize(
+    ("activations", "spatial_filter", "lane", "expected_cause"),
+    [
+        ((), _gate_filter(), ChronikSpatialLane.EVENT_OCCURRENCE, "default_off"),
+        (
+            (_activation(scope_kind="admin1"),),
+            _gate_filter(),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "lane_kind_not_allowlisted",
+        ),
+        (
+            (_activation(enabled=False),),
+            _gate_filter(),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "disabled",
+        ),
+        (
+            (_activation(coverage_complete=False),),
+            _gate_filter(),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "coverage_incomplete",
+        ),
+        (
+            (_activation(index_plan_verified=False),),
+            _gate_filter(),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "index_plan_unverified",
+        ),
+        (
+            (_activation(stale_revision_ratio=0.0101),),
+            _gate_filter(),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "stale_revision_coverage",
+        ),
+        (
+            (_activation(),),
+            _gate_filter(catalog_revision=CATALOG_B),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "catalog_revision_mismatch",
+        ),
+        (
+            (_activation(),),
+            _gate_filter(derivation_revision=DERIVATION_B),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "derivation_revision_mismatch",
+        ),
+        (
+            (_activation(),),
+            _gate_filter(),
+            ChronikSpatialLane.MOVEMENT_TRACK,
+            "unsupported_lane",
+        ),
+    ],
+)
+def test_exact_activation_rejections_are_explicit_and_return_the_bbox_plan(
+    activations,
+    spatial_filter,
+    lane,
+    expected_cause,
+):
+    decision = select_exact_event_activation(
+        spatial_filter,
+        lane=lane,
+        activations=activations,
+    )
+
+    assert decision.plan is None
+    assert decision.cause is ExactActivationRejectionCause(expected_cause)
+
+
+def test_exact_activation_rollback_removes_the_plan_without_unfiltering():
+    spatial_filter = _gate_filter()
+
+    active = select_exact_event_activation(
+        spatial_filter,
+        lane=ChronikSpatialLane.EVENT_OCCURRENCE,
+        activations=(_activation(),),
+    )
+    rolled_back = select_exact_event_activation(
+        spatial_filter,
+        lane=ChronikSpatialLane.EVENT_OCCURRENCE,
+        activations=(),
+    )
+
+    assert active.plan is not None
+    assert rolled_back.plan is None
+    assert rolled_back.approximate_filter is spatial_filter
+    assert rolled_back.approximate_filter.query_id is TimelineSpatialQueryId.BBOX_SINGLE
 
 
 def _geometry(polygons: object) -> bytes:

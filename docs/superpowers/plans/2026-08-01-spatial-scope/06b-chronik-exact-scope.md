@@ -49,20 +49,26 @@ LLM output.
 
 ## Work order 3 — Per-lane activation and rollback
 
-- [ ] **RED:** Test default-off exact gate, eligible lane/kind on, ineligible lane
+- [x] **RED:** Test default-off exact gate, eligible lane/kind on, ineligible lane
   remaining bbox with explicit mode, missing/stale coverage blocking promotion, new
   derivation revision automatically disabling exact until re-enrichment, and rollback
   returning visibly to approximation without global fallback. Once an exact lane is
   active, an execution failure returns `503/SPATIAL_FILTER_UNAVAILABLE`; it never
   retries as bbox or global inside that request.
-- [ ] **GREEN:** Add an allowlisted activation registry tied to coverage revision and
+- [x] **GREEN:** Add an allowlisted activation registry tied to coverage revision and
   derivation revision. Resolve a request once, choose exact or bbox explicitly, and
   emit activation/rejection metrics.
-- [ ] **REFACTOR:** Gates are deployment config/data, not query parameters and never
+- [x] **REFACTOR:** Gates are deployment config/data, not query parameters and never
   client-controlled.
-- [ ] **VERIFY:** Run full backend tests/lint/mypy; execute staging `EXPLAIN` and
+- [x] **VERIFY:** Run full backend tests/lint/mypy; execute staging `EXPLAIN` and
   accounting smoke for every promoted lane/kind.
-- [ ] **COMMIT:** `feat(chronik): activate exact scope per covered lane`
+- [x] **COMMIT:** `feat(chronik): activate exact scope per covered lane`
+
+> Verification 2026-08-09: Backend `539 passed`; Ruff and strict MyPy are clean.
+> The deployment registry remains empty/default-off because no lane/kind has passed
+> the still-open operational promotion gates. Therefore there was no promoted
+> lane/kind requiring a staging `EXPLAIN` or accounting smoke, and no live exact
+> activation or graph mutation occurred in Plan 06B.
 
 ## Exit gate
 
@@ -70,3 +76,6 @@ Approved lanes meet Spec-08 coverage and index-plan gates; duplicate locations d
 duplicate events or consume row limit; all exclusion counts reconcile; non-approved
 lanes remain honestly approximate. `exact` names only the activation gate; successful
 responses report `semantic_key`. Disabling exact never yields an unfiltered query.
+
+The implementation exit is complete with all non-approved lanes explicitly remaining
+`bbox_approximate`. Operational promotion remains a separate, evidence-gated action.

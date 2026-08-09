@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -6,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models.spatial import ScopeKind, SpatialScopeTokenV1
+from app.models.timeline import ChronikExactSpatialActivationV1
 from app.services.spatial_catalog import SpatialCatalogLoader
 from app.services.spatial_filters import (
     GeoExtent,
@@ -48,6 +50,20 @@ def _catalog_filter():
             admin1_scope_key=None,
             admin2_scope_key=None,
         ),
+    )
+
+
+def _activation() -> ChronikExactSpatialActivationV1:
+    return ChronikExactSpatialActivationV1(
+        lane="event_occurrence",
+        scope_kind="country",
+        catalog_revision="spatial-v1-0123456789ab",
+        derivation_revision="spatial-derive-v1-0123456789ab",
+        coverage_revision="coverage-fixture-a",
+        enabled=True,
+        coverage_complete=True,
+        index_plan_verified=True,
+        stale_revision_ratio=0.0,
     )
 
 
@@ -231,6 +247,35 @@ def test_exact_histogram_reuses_static_event_rows_and_shared_accounting(client):
     assert "LIMIT $limit" not in histogram_query
     assert "excluded_conflict_count" in accounting_query
     assert histogram_parameters == accounting_parameters
+
+
+def test_active_exact_histogram_failure_never_retries_bbox(client):
+    loader = SpatialCatalogLoader(Path("/catalog-not-read-by-this-router-test"))
+    app.state.spatial_catalog = loader
+    compiled = _catalog_filter()
+    deployment_settings = SimpleNamespace(
+        chronik_exact_spatial_activations=(_activation(),),
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.settings", deployment_settings),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = RuntimeError("exact histogram unavailable")
+        response = client.get(
+            f"/api/timeline/histogram{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "SPATIAL_FILTER_UNAVAILABLE"
+    read.assert_awaited_once()
+    assert "l.country_scope_key = $scope_key" in read.await_args.args[0]
+    assert "$bbox_off" not in read.await_args.args[0]
 
 
 def test_histogram_neo4j_down_503(client):
