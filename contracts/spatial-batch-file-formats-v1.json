@@ -1,0 +1,61 @@
+{
+  "contract_version": 1,
+  "semantics": {
+    "dry_run_writes": 0,
+    "checkpoint_after": "complete-confirmed-batch",
+    "report_fingerprint": "sha256-canonical-json-excluding-self"
+  },
+  "neo4j_plan06a": {
+    "checkpoint_schema_version": 1,
+    "checkpoint_key_components": [
+      "job_kind",
+      "lane",
+      "target_derivation_revision"
+    ],
+    "checkpoint_entry_fields": [
+      "job_key",
+      "last_record_id"
+    ],
+    "cursor_semantics": "last-confirmed-record-id"
+  },
+  "qdrant_plan07a": {
+    "checkpoint_schema_version": 1,
+    "checkpoint_key_components": [
+      "lane",
+      "target_projection_revision"
+    ],
+    "checkpoint_entry_fields": [
+      "job_key",
+      "cursor",
+      "complete"
+    ],
+    "cursor_semantics": "opaque-next-page-cursor",
+    "point_write": "full-point-upsert-preserving-vector-and-nonspatial-payload",
+    "projection_owned_payload": {
+      "prefixes": [
+        "spatial_"
+      ],
+      "exact_fields": [
+        "geo",
+        "source_country_code",
+        "source_country_code_system",
+        "country_iso3",
+        "admin1_code",
+        "admin2_code"
+      ]
+    },
+    "coverage_snapshot_fields": [
+      "total_points",
+      "filterable_points",
+      "conflict_points",
+      "stale_points",
+      "unsupported_points"
+    ],
+    "report_rate_fields": [
+      "stale_rate",
+      "projected_stale_rate"
+    ],
+    "report_schema_version": 1,
+    "report_cursor_range": "start-inclusive-scan-suffix-to-end"
+  }
+}

@@ -27,6 +27,28 @@ from graph_integrity.spatial_normalizer import (
 from spatial_catalog.identity import load_country_crosswalk
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+BATCH_CONTRACT_PATH = REPOSITORY_ROOT / "contracts/spatial-batch-file-formats-v1.json"
+
+
+def test_plan06a_batch_semantics_match_shared_file_format_contract() -> None:
+    contract = json.loads(BATCH_CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    assert contract["contract_version"] == 1
+    assert contract["semantics"] == {
+        "dry_run_writes": 0,
+        "checkpoint_after": "complete-confirmed-batch",
+        "report_fingerprint": "sha256-canonical-json-excluding-self",
+    }
+    assert contract["neo4j_plan06a"] == {
+        "checkpoint_schema_version": 1,
+        "checkpoint_key_components": [
+            "job_kind",
+            "lane",
+            "target_derivation_revision",
+        ],
+        "checkpoint_entry_fields": ["job_key", "last_record_id"],
+        "cursor_semantics": "last-confirmed-record-id",
+    }
 
 
 @pytest.fixture(scope="module")
