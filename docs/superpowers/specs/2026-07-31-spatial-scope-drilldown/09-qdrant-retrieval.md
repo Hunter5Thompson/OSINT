@@ -258,4 +258,12 @@ Der Coverage-Snapshot weist den Stale-Anteil pro Lane aus. Jeder Wert über null
 beobachtbar; über 1 % blockiert die Promotion einer neuen Exact-Capability und löst
 den Re-Enrichment-Alarm aus.
 
+Der service-lokale V1-Vertrag koppelt jeden Snapshot an genau eine
+`target_projection_revision` und enthält pro eindeutiger Lane die nichtnegativen
+Zähler `total_points`, `filterable_points`, `conflict_points`, `stale_points` und
+`unsupported_points`. Die vier Statuszähler dürfen zusammen `total_points` nicht
+überschreiten; der Rest ist fehlend/unangereichert. Retriever-Aufrufe nehmen diesen
+Snapshot zusätzlich zum kompilierten `Filter` entgegen. Work Order 4 ist der
+Besitzer seiner Erzeugung und Checkpoint-Provenance.
+
 ---

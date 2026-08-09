@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import Counter
 
 import structlog
+from qdrant_client import models
 
 from config import settings
 from rag.content_quality import content_junk_reason
@@ -34,24 +35,46 @@ FINAL_K: int = settings.rag_final_k
 TELEGRAM_MAX: int = settings.rag_telegram_max
 
 
-def analysis_filter() -> dict:
+def analysis_filter() -> models.Filter:
     """Qdrant filter: source ∈ ANALYSIS_SOURCES OR notebook_id present (NLM);
     never a superseded teaser. min_should=1 (Qdrant default)."""
-    return {
-        "should": [
-            {"key": "source", "match": {"any": sorted(ANALYSIS_SOURCES)}},
-            {"must_not": [{"is_empty": {"key": "notebook_id"}}]},
+    return models.Filter(
+        should=[
+            models.FieldCondition(
+                key="source",
+                match=models.MatchAny(any=sorted(ANALYSIS_SOURCES)),
+            ),
+            models.Filter(
+                must_not=[
+                    models.IsEmptyCondition(
+                        is_empty=models.PayloadField(key="notebook_id")
+                    )
+                ]
+            ),
         ],
-        "must_not": [{"key": "superseded_by_fulltext", "match": {"value": True}}],
-    }
+        must_not=[
+            models.FieldCondition(
+                key="superseded_by_fulltext",
+                match=models.MatchValue(value=True),
+            )
+        ],
+    )
 
 
-def realtime_filter() -> dict:
+def realtime_filter() -> models.Filter:
     """Qdrant filter: vetted Telegram channels."""
-    return {"must": [
-        {"key": "source", "match": {"value": "telegram"}},
-        {"key": "telegram_channel", "match": {"any": sorted(TELEGRAM_ALLOWLIST)}},
-    ]}
+    return models.Filter(
+        must=[
+            models.FieldCondition(
+                key="source",
+                match=models.MatchValue(value="telegram"),
+            ),
+            models.FieldCondition(
+                key="telegram_channel",
+                match=models.MatchAny(any=sorted(TELEGRAM_ALLOWLIST)),
+            ),
+        ]
+    )
 
 
 def credibility_of(payload: dict) -> float:

@@ -73,19 +73,19 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
 
 ## Work order 3 — Filter compiler and policy composition
 
-- [ ] **RED:** Test world→`None`; about/occurrence/either exact model trees;
+- [x] **RED:** Test world→`None`; about/occurrence/either exact model trees;
   compatibility revisions encoded with the requested ScopeKey; cross-pair,
   conflict and stale exclusion; corpus-policy nesting without
   mutation or weakened `should/must_not`; both analysis/realtime lanes; allowlisted
   field names only; and one/two-box AOI adapter fixtures.
-- [ ] **GREEN:** Implement `SpatialScopeTokenV1`, `RetrievalSpatialRelation`,
+- [x] **GREEN:** Implement `SpatialScopeTokenV1`, `RetrievalSpatialRelation`,
   `compile_qdrant_scope_filter`, and `combine_filters` with qdrant-client model
   objects. Extend retriever calls to accept the compiled filter and coverage snapshot,
   not region strings.
-- [ ] **REFACTOR:** Filter construction is pure and independent of network/search.
+- [x] **REFACTOR:** Filter construction is pure and independent of network/search.
   Existing lane validation/reranking remains after retrieval.
-- [ ] **VERIFY:** `cd services/intelligence && uv run pytest tests/test_spatial.py tests/test_hybrid_retriever.py -v`
-- [ ] **COMMIT:** `feat(intelligence): compile qdrant spatial filters`
+- [x] **VERIFY:** `cd services/intelligence && uv run pytest tests/test_spatial.py tests/test_hybrid_retriever.py -v`
+- [x] **COMMIT:** `feat(intelligence): compile qdrant spatial filters`
 
 ## Work order 4 — Atomic recurring re-enrichment
 
