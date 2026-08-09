@@ -45,8 +45,9 @@
   - beide Partitionen reconciliert
 - Keine Mutation, kein Backfill-Apply, keine Registry-Aktivierung
 
-ADMIN2 bleibt operativ nicht promotierbar: syntaktische und indexseitige Evidenz
-ersetzt keine Daten-Coverage.
+ADMIN1 ist mit nur 27 scope-keyed Locations über 15 Scopes ebenfalls nicht
+promotierbar. ADMIN2 bleibt operativ nicht promotierbar: syntaktische und
+indexseitige Evidenz ersetzt keine Daten-Coverage.
 
 ## Offene Promotionsgates
 
