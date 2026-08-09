@@ -4,12 +4,14 @@ Date: 2026-08-08
 Catalog revision: `spatial-v1-e76a16bff799`
 Representative target derivation revision: `spatial-derive-v1-4d1de888e0c7`
 Code under test: `9c98376` including the Plan-06A review fix `2aee913`
+Forward-conflict follow-up: `c947dd9`
 
 This is the operator-authorized verification run against the persistent local ODIN
 Compose graph selected for Plan 06A. It closes the two previously outstanding
 verification activities: applying the additive index migration and collecting real
 Neo4j plans, then running and reviewing the spatial backfill in dry-run mode. It does
-not approve a data backfill, exact CHRONIK activation, or a production deployment.
+not approve a data backfill, exact CHRONIK activation, or a deployment beyond the
+selected ODIN target.
 
 ## Target and stack
 
@@ -18,6 +20,9 @@ before the run predated the Plan-06A CLI and migration runner, so
 `data-ingestion-spark` was rebuilt from the current branch and recreated before the
 verification. The final `./odin.sh smoke` result was 14 passed, 0 failed and 1
 skipped; all ten containers belonging to the profile were running afterward.
+That recreation deployed the Plan-06A GDELT, RSS and military-aircraft forward
+writers into this ODIN environment. The scheduler remained active after the
+verification and has continuously materialized additive spatial fields since then.
 
 The selected graph was:
 
@@ -26,9 +31,12 @@ The selected graph was:
 - persistent volume `osint_neo4j-data` mounted at `/data`.
 
 With the ingestion scheduler stopped for a stable snapshot, the graph contained
-1,404,220 nodes, 14,996 `:Location` nodes and 351,772 `:Event` nodes. The scheduler
-was restarted after the evidence was collected, so these are snapshot counts rather
-than permanent high-water marks.
+1,404,220 nodes, 14,996 `:Location` nodes and 351,772 `:Event` nodes. This is the
+**pre-continuous-forward-writer-accumulation snapshot**: the current writer image had
+been installed, but continuous ingestion had not yet accumulated normalized GDELT
+Locations. The scheduler was restarted after the evidence was collected, so the
+counts and every `Already = 0` value below are historical baselines, not current graph
+state or evidence that the backfill removed data.
 
 ## Migration and query-plan evidence
 
@@ -54,9 +62,14 @@ two-column RANGE index for each probe:
 | Admin-2 | `location_admin2_scope_derivation` | `admin2_scope_key`, `spatial_derivation_revision` |
 
 `spatial_conflict = false` remained a post-seek `Filter`; the composite seek itself
-was driven by scope key plus derivation revision. Conflicts additionally carry a null
-derivation revision and therefore cannot satisfy either exact composite predicate.
-The probes used `EXPLAIN`, so they executed neither a data read nor a write.
+was driven by scope key plus derivation revision. That filter is the authoritative
+conflict exclusion and is mandatory in the exact read contract. A later live check
+found five conflicts written by the original forward path with a non-null derivation
+revision, so the initial claim that every conflict was independently excluded by a
+null revision was incorrect. Follow-up `c947dd9` makes the shared normalizer project
+null for new forward-written conflicts, matching the batch path, but the read filter
+must remain. The probes used `EXPLAIN`, so they executed neither a data read nor a
+write.
 
 The focused migration, plan-smoke, batch and CLI suites also passed 27/27 immediately
 before the operational run.
@@ -108,6 +121,32 @@ job: the immutable catalog contains 204 independently derived scope revisions, w
 the selected target belongs to `admin1:iso3166-2:UA-14`. They are not silently
 treated as writes for another revision.
 
+## Live forward-writer follow-up
+
+At `2026-08-09T20:57:07+02:00`, after roughly 36 hours of live ingestion with the
+Plan-06A image, the same graph had advanced to 17,344 Locations and 6,114 GDELT
+Locations. A direct `l.lat = 0.0 AND l.lon = 0.0` query returned zero rows. This is
+live evidence that the source-specific Null-Island guard holds; an independent
+`l.geo = point({longitude: 0.0, latitude: 0.0})` query also returned zero, so no
+matching legacy Location remains.
+
+The current catalog revision was present on 1,418 Locations:
+
+| Basis/state | Count | Interpretation |
+|---|---:|---|
+| `crosswalk`, scoped, non-conflict | 921 | Scope plus derivation revision |
+| no basis, unscoped | 438 | Unresolved; catalog stamp only |
+| `coordinate`, scoped | 32 | Scope plus derivation revision |
+| `coordinate`, unscoped | 22 | Fail-closed; no invented scope |
+| `crosswalk`, conflict | 5 | Written before `c947dd9`; non-null revision remains |
+
+Of the GDELT Locations, 877 carried a derivation revision. The five conflicts all
+carried a non-null revision before the follow-up deployment; no graph repair was
+performed. The rebuilt `data-ingestion-spark` container now returns
+`spatial_derivation_revision=null` for the same source/coordinate contradiction, so
+new writes follow the batch invariant. Existing rows remain protected only by the
+mandatory `spatial_conflict = false` read predicate until an approved repair applies.
+
 ## Gate decision
 
 The operational evidence is sufficient to close both Plan-06A VERIFY checkboxes:
@@ -125,8 +164,11 @@ The remaining blockers are explicit:
   outcome review before lane promotion;
 - only one representative target revision was dry-run; a real initial apply requires
   reviewed jobs for every intended target revision;
-- no backup/restore point was created and no data apply was attempted;
-- no production writer deployment or exact CHRONIK activation occurred.
+- no backup/restore point was created before the forward-writer deployment. The graph
+  has therefore already received additive writer mutations; a current backup is still
+  required before any backfill apply;
+- the forward writers are deployed in the selected ODIN environment, but no
+  deployment beyond that target, backfill apply or exact CHRONIK activation occurred.
 
 The additive indexes remain installed, the full ODIN stack is running again, and the
 exact activation gate remains closed.

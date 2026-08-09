@@ -117,5 +117,13 @@ the indexes. Hand Plan 06B the approved coverage report and exact property contr
 > Exit-Gate bleibt dennoch geschlossen: neun Legacy-Aircraft-Locations besitzen keine
 > stabile ID, `backend_incident` ist als Forward-Writer nicht integriert, nur eine
 > repräsentative der 204 Ziel-Derivationsrevisionen wurde trocken geprüft, und es gibt
-> weder Backup/Restore-Punkt noch Backfill-Apply oder Production-Deployment. Exact
-> CHRONIK bleibt deaktiviert.
+> weder Backup/Restore-Punkt noch Backfill-Apply. Die Plan-06A-Forward-Writer sind im
+> ausgewählten ODIN-Compose-Ziel deployt; ein Deployment in eine weitere Umgebung
+> erfolgte nicht. Exact CHRONIK bleibt deaktiviert.
+>
+> **Pre-06B-Nachtrag 2026-08-09:** `c947dd9` gleicht den Forward-Pfad an die bereits
+> bestehende Batch-Invariante an: neue Conflicts tragen keine
+> `spatial_derivation_revision`. Das ist ein Gate vor Plan 06B und öffnet oder
+> revidiert die akzeptierten 20/20 von Plan 06A nicht. Fünf bestehende Pre-Fix-
+> Conflicts bleiben bis zu einem genehmigten Repair erhalten; exact Reads müssen
+> `spatial_conflict = false` weiterhin zwingend binden.

@@ -2,13 +2,15 @@
 
 **Datum:** 2026-08-07
 
+**Operationaler Nachtrag:** 2026-08-09
+
 **Nächster Chat:** Plan 06B — exact CHRONIK erst nach den offenen 06A-Betriebsgates
 
 **Branch:** `feat/spatial-plan03` (auf `origin` gepusht, kein PR, kein Merge)
 
 **Arbeitsverzeichnis:** `/home/deadpool-ultra/ODIN/OSINT`
 
-**Plan-06A-Code-HEAD nach Review:** `2aee913`
+**Pre-06B-Runtime-HEAD:** `c947dd9`
 
 **Basis:** `origin/main` bei `7704d8e`
 
@@ -26,12 +28,18 @@ Graph-Snapshot wurde anschließend für alle vier Lanes mit `--dry-run` und null
 angewandten Writes geprüft. Der vollständige Nachweis steht in
 [Plan-06A Neo4j verification](../reports/2026-08-08-spatial-plan06a-neo4j-verification.md).
 
-Das ist weiterhin **keine** Backfill- oder Exact-Freigabe. Es wurden weder ein
-Backup/Restore-Punkt noch ein Daten-Apply oder Production-Deployment ausgeführt;
-`backend_incident`, instabile Legacy-Aircraft-IDs und die vollständige
-Multi-Revisionsfreigabe bleiben offen. Exact CHRONIK wurde nicht aktiviert. Plan 06B
-darf keine Lane exact schalten, bevor die unten genannten Exit-Gates belegt und
-reviewt sind.
+Der Snapshot entstand vor der anschließenden kontinuierlichen Writer-Akkumulation;
+seine `Already = 0`-Werte sind keine aktuelle Graph-Baseline. Der neu gebaute
+`data-ingestion-spark`-Container deployte die GDELT-, RSS- und Aircraft-Forward-
+Writer in genau diese ODIN-Umgebung und lief danach weiter. Am 2026-08-09 hielt der
+Null-Island-Guard bei 17.344 Locations weiterhin mit null `(0,0)`-Treffern.
+
+Das ist weiterhin **keine** Backfill- oder Exact-Freigabe. Vor dem Writer-Deployment
+wurde kein Backup/Restore-Punkt dokumentiert; ein aktueller Backup-Punkt bleibt vor
+jedem Daten-Apply Pflicht. `backend_incident`, instabile Legacy-Aircraft-IDs und die
+vollständige Multi-Revisionsfreigabe bleiben offen. Exact CHRONIK wurde nicht
+aktiviert. Plan 06B darf keine Lane exact schalten, bevor die unten genannten
+Exit-Gates belegt und reviewt sind.
 
 ## Pflichtstart für den nächsten Chat
 
@@ -60,6 +68,7 @@ reviewt sind.
 | 3 — Indizes | `cfe20b2` | Additive Migration und read-only Plan-Smoke |
 | 4 — Backfill | `51f15f9` | Restartbarer Dry-run/Apply- und Re-Enrichment-Pfad |
 | Review-Fix | `2aee913` | Source-Sentinel-Guards, Runner-Ownership und Conflict-Ausschluss |
+| Pre-06B-Fix | `c947dd9` | Forward-Conflicts tragen keine Derivationsrevision mehr |
 
 ## Implementierter Vertrag
 
@@ -74,6 +83,8 @@ reviewt sind.
 - Freie Namen bleiben Rohprovenienz und werden niemals Scope-Identität.
 - Source-Code-Präzedenz, coordinate-only Containment, Boundary-Konflikte und
   widersprüchliche Quellen sind deterministisch und fail-closed.
+- Conflict-Ergebnisse behalten Audit-Scope und Kandidaten, tragen aber keine
+  `spatial_derivation_revision`; dadurch stimmen Forward- und Batch-Pfad überein.
 - Katalogrevision, aktuelle Derivationsrevision und reviewte kompatible
   Derivationsrevisionen bleiben getrennt.
 
@@ -100,8 +111,10 @@ spatial_conflict_scope_keys
 ```
 
 Country-only-Datensätze besitzen keinen erfundenen Punkt und keinen erfundenen
-Admin-1-Key. Exakte Queries müssen `spatial_conflict=true` ausschließen und die
-freigegebene Derivationsrevision binden.
+Admin-1-Key. Exakte Queries müssen immer `spatial_conflict = false` fordern und die
+freigegebene Derivationsrevision binden. Die Nullung der Revision ist Defense-in-
+Depth, kein Ersatz für diesen Read-Filter: fünf vor `c947dd9` forward-geschriebene
+Conflicts tragen im bestehenden Graph weiterhin eine nicht-null Revision.
 
 ### Forward-Writer-Inventar
 
@@ -116,6 +129,12 @@ Der Graph-Integrity-Report enthält ein versioniertes, JSON-fähiges Inventar:
   integrierter Cross-Service-Normalisierung;
 - `intelligence_link_event_location` — inaktiv, keine Produktionsaufrufer;
 - drei alte Graph-Integrity-Writer — als Migration-only ausgewiesen.
+
+GDELT, RSS und Military-Aircraft laufen im neu gebauten `data-ingestion-spark`-
+Container der ausgewählten ODIN-Umgebung. 36 Stunden Live-GDELT erzeugten bei mehr
+als 17.000 Locations keinen Null-Island-Treffer. Der aktuelle Container wurde nach
+`c947dd9` erneut gebaut und projiziert neue Conflicts mit null Derivationsrevision.
+Die fünf bestehenden Pre-Fix-Conflicts wurden nicht ohne Apply-/Backup-Gate repariert.
 
 Der aktive Backend-Incident-Writer ist damit ein echtes offenes Lane-Gate. Er darf in
 Plan 06B nicht still als exact-fähig behandelt werden.
@@ -147,8 +166,9 @@ uv run python -m graph_integrity.cli spatial-index-smoke
 
 Er gibt maschinenlesbare `EXPLAIN`-Evidence aus und failt, wenn ein vorgesehener
 Composite-Index nicht gewählt wird. Jede Probe bindet Scope und Derivationsrevision
-und fordert zusätzlich `spatial_conflict = false`. Er wurde nicht gegen Staging
-ausgeführt.
+und fordert zusätzlich `spatial_conflict = false`. Der reale Lauf gegen Neo4j 5.26.23
+meldete `all_expected_indexes_used=true` und für Country, Admin-1 und Admin-2 jeweils
+einen `NodeIndexSeek`; der Conflict-Ausdruck blieb der verbindliche Post-Seek-Filter.
 
 ### Backfill und Re-Enrichment
 
@@ -160,8 +180,9 @@ ausgeführt.
   fortgeschrieben; Wiederholung nach Crash ist idempotent.
 - Konflikte erhalten nur Audit-/Conflict-Felder; bestehende Roh-/Scope-Felder bleiben
   unangetastet. Eine eventuell alte `spatial_derivation_revision` wird entfernt,
-  sodass Konflikte nicht in den Composite-Indizes verbleiben. Unresolved/invalid
-  werden nicht geschrieben.
+  sodass der Batch-Pfad sie nicht in den Composite-Indizes belässt. Seit `c947dd9`
+  gilt dieselbe Nullung für neue Forward-Writes; bestehende Pre-Fix-Zeilen bleiben bis
+  zu einem genehmigten Repair sichtbar. Unresolved/invalid werden nicht geschrieben.
 - Source-Null-Island-Sentinels werden als `invalid_coordinate` gezählt und niemals als
   resolvable oder als Write ausgewiesen.
 - Legacy-RSS-Centroids werden country-only normalisiert, ohne ihren synthetischen
@@ -211,6 +232,11 @@ Grüne Nachweise:
 - Review-Fokus: **57 bestanden** in vier getrennten Läufen.
 - Operationaler VERIFY-Fokus am 2026-08-08: **27 bestanden**
   (Migration, Plan-Smoke, Batch und CLI).
+- Pre-06B-Conflict-Fix am 2026-08-09: RED mit **2 fehlgeschlagen**, danach
+  **76 bestanden** im betroffenen Normalizer-/Writer-/Batch-Fokus.
+- Vollständiger Data-Ingestion-Lauf nach dem Pre-06B-Fix:
+  **1.365 bestanden, 1 bedingter Integration-Skip, 17 `live` deselected**;
+  Ruff grün.
 - Vollständiger Data-Ingestion-Lauf nach Review-Fix:
   **1.345 bestanden, 1 bedingter Integration-Skip, 17 `live` deselected**.
 - `uv run ruff check .`: **grün**.
@@ -225,25 +251,28 @@ repräsentative Dry-run belegt außerdem 99,61 % GDELT- und 100 % RSS-Country-Co
 der addressierbaren Records sowie 0 % stale-compatible für alle vier Jobs. Er hat
 jedoch folgende verbleibende Gates sichtbar gemacht:
 
-1. Forward-Writer-Deployment in der vorgesehenen Zielumgebung vor Apply;
-2. Backup/Restore-Punkt für den Zielgraph vor Apply;
-3. vollständige, reviewte Dry-runs für jede tatsächlich anzuwendende Lane/
+1. aktueller Backup/Restore-Punkt für den bereits durch Forward-Writer mutierten
+   Zielgraph vor jedem Backfill-Apply;
+2. vollständige, reviewte Dry-runs für jede tatsächlich anzuwendende Lane/
    Ziel-Derivationsrevision; bisher wurde repräsentativ
    `spatial-derive-v1-4d1de888e0c7` geprüft;
-4. Outcome-Review für 140 unresolved GDELT- und 10 unresolved RSS-Locations, bevor
+3. Outcome-Review für 140 unresolved GDELT- und 10 unresolved RSS-Locations, bevor
    die 100-%-Recognized-Code- und No-Unknown-Default-Gates als bestanden gelten;
-5. Entscheidung/Integration für `backend_incident`; der Zwei-Record-Snapshot ist
+4. Entscheidung/Integration für `backend_incident`; der Zwei-Record-Snapshot ist
    keine Exact-Promotion-Evidence;
-6. stabile IDs beziehungsweise explizite Disposition für neun Legacy-Aircraft-
+5. stabile IDs beziehungsweise explizite Disposition für neun Legacy-Aircraft-
    Locations. Der Aircraft-Report ist dadurch `complete=false`; sieben keyed
    Beobachtungen sind im aktuellen Containment-Katalog unresolved;
-7. content-adressierte Apply-Freigabereports, Daten-Apply und anschließendes
+6. content-adressierte Apply-Freigabereports, Daten-Apply und anschließendes
    Response-Accounting je zu aktivierender Lane;
+7. explizite Disposition der fünf bestehenden Pre-Fix-Conflicts; unabhängig davon
+   bleibt `spatial_conflict = false` im Read-Contract verpflichtend;
 8. explizite Exact-Aktivierungsentscheidung für Plan 06B.
 
-Die Nutzerfreigabe vom 2026-08-08 deckte den lokalen Stackstart, die additive
-Indexmigration und Zero-Write-Dry-runs ab. Sie deckt keinen Backup-Eingriff, kein
-Backfill-Apply, kein Production-Deployment und keine Exact-Aktivierung ab.
+Die Nutzerfreigabe vom 2026-08-08 deckte Stackstart, Image-Rebuild/-Recreate, die
+additive Indexmigration und Zero-Write-Dry-runs in der ausgewählten ODIN-Umgebung ab.
+Sie deckt keinen Backup-Eingriff, kein Backfill-Apply, kein Deployment in eine weitere
+Umgebung und keine Exact-Aktivierung ab.
 
 ## TASK-123
 
@@ -264,6 +293,6 @@ Sie wurden in keinem Plan-06A-Commit gestaged, verändert oder zurückgesetzt.
 
 - Remote: `git@github.com:Hunter5Thompson/OSINT.git`
 - Feature-Branch: `feat/spatial-plan03`
-- Review-Code-HEAD: `2aee913`; der nachfolgende Dokumentationscommit ändert keinen
-  Runtime-Code.
+- Pre-06B-Runtime-HEAD: `c947dd9`; der Fix ist im laufenden
+  `data-ingestion-spark`-Container der ausgewählten ODIN-Umgebung verifiziert.
 - Es wurde kein PR erstellt und nichts nach `main` gemerged.
