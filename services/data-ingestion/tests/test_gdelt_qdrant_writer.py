@@ -120,6 +120,7 @@ async def test_qdrant_writer_validates_existing_collection_only_once():
 
     validate.assert_called_once_with(info, enable_hybrid=False)
     client.get_collections.assert_awaited_once()
+    client.create_payload_index.assert_not_called()
 
 
 @pytest.mark.asyncio

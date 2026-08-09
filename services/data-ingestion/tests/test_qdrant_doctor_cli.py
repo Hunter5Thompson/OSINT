@@ -12,6 +12,8 @@ from qdrant_client.models import (
     CollectionInfo,
     CollectionParams,
     Distance,
+    PayloadIndexInfo,
+    PayloadSchemaType,
     SparseIndexParams,
     SparseVectorParams,
     VectorParams,
@@ -116,6 +118,31 @@ class TestDoctorHappyPath:
 
 
 class TestDoctorFailureCases:
+    def test_wrong_payload_index_type_fails_without_index_mutation(self, capsys):
+        """Doctor reports schema drift and never creates or repairs indexes."""
+        from qdrant_doctor.cli import run_doctor
+
+        info = _dense_only_info()
+        info.payload_schema = {
+            "spatial_conflict": PayloadIndexInfo(
+                data_type=PayloadSchemaType.KEYWORD,
+                points=1,
+            )
+        }
+        mock_client = _mock_qdrant_with_collection(info)
+        with patch("qdrant_doctor.cli.QdrantClient", return_value=mock_client):
+            exit_code = run_doctor(
+                qdrant_url="http://localhost:6333",
+                collection_name="odin_intel",
+                enable_hybrid=False,
+            )
+
+        assert exit_code == 1
+        assert "spatial_conflict" in capsys.readouterr().out
+        assert not hasattr(mock_client, "create_payload_index") or (
+            mock_client.create_payload_index.call_count == 0
+        )
+
     def test_collection_missing_dense_only_fails(self):
         """Primary collection missing in dense-only mode → non-zero exit."""
         from qdrant_doctor.cli import run_doctor

@@ -290,13 +290,20 @@ class TestStartupIndexPreflight:
         from types import SimpleNamespace
         from unittest.mock import AsyncMock, patch
 
+        from qdrant_client.models import PayloadIndexInfo, PayloadSchemaType
+
         import rag.retriever as retr
 
         client = SimpleNamespace(
             get_collections=AsyncMock(return_value=SimpleNamespace(
                 collections=[SimpleNamespace(name=retr.settings.qdrant_collection)])),
             get_collection=AsyncMock(return_value=SimpleNamespace(
-                payload_schema={"source": 1})),   # telegram_channel + notebook_id missing
+                payload_schema={
+                    "source": PayloadIndexInfo(
+                        data_type=PayloadSchemaType.KEYWORD,
+                        points=1,
+                    )
+                })),
             create_payload_index=AsyncMock(),
             close=AsyncMock(),
         )
