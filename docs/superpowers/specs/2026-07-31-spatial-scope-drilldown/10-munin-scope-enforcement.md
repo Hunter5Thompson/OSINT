@@ -98,6 +98,14 @@ Report-Run schreibt das Feld; ein ungescopter Run schreibt explizit `null` und l
 damit einen älteren scoped Snapshot. Schlägt dieses Update fehl, werden weder die neue
 Munin-Message noch ein Result-Event unter dem alten Snapshot veröffentlicht.
 
+Der stateless Browser-Endpunkt `POST /almanac/countries/{id}/briefing/save` ist kein
+trusted Run-Pfad. Er verwirft `analysis.spatial_application` auch dann, wenn dessen
+Scope-Identität zum serverseitig aufgelösten Token passt: Consumer-Status,
+Completeness und Coverage wären weiterhin vom Client fabrizierbar. Der Hydration-Patch
+setzt den Snapshot daher explizit auf `null`. Trusted Attribution darf nur über einen
+serverseitig kontrollierten Run-Pfad oder einen späteren authentisierten Run-Receipt
+persistiert werden.
+
 `IntelAnalysis` erhält optional:
 
 ```ts

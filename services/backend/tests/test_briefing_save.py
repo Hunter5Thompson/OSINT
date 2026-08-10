@@ -11,9 +11,14 @@ from app.config import settings
 from app.main import app
 from app.models.almanac import BriefingSaveRequest
 from app.models.intel import IntelAnalysis, SpatialRunApplicationV1
-from app.models.report import ReportMessage, ReportRecord
+from app.models.report import ReportMessage, ReportRecord, ReportUpdateRequest
 from app.routers import almanac as almanac_router
-from app.services.spatial_catalog import CatalogReadyState, SpatialCatalogLoader
+from app.services.spatial_catalog import (
+    CatalogReadyState,
+    ResolvedSpatialScope,
+    SpatialCatalogLoader,
+)
+from app.services.spatial_filters import spatial_scope_token_from_resolution
 
 ADMIN_HEADERS = {"X-Admin-Token": "reports-secret"}
 
@@ -52,39 +57,59 @@ def test_hydration_mapping_overrides_defaults():
     assert len(patch.metrics) == 3 and patch.metrics[0].label == "Threat"
 
 
-def test_hydration_preserves_original_run_application_without_country_relabel() -> None:
-    from app.services.report_store import build_hydration_patch
-
-    application = SpatialRunApplicationV1.model_validate({
+def _application(
+    *,
+    scope_key: str,
+    catalog_revision: str,
+    derivation_revision: str,
+    boundary_policy: str,
+    coverage_revision: str | None = None,
+) -> SpatialRunApplicationV1:
+    return SpatialRunApplicationV1.model_validate({
         "schema_version": 1,
         "scope": {
             "schema_version": 1,
-            "scope_key": "country:UKR",
-            "catalog_revision": "spatial-v1-e76a16bff799",
-            "derivation_revision": "spatial-derive-v1-d30efa07e141",
-            "boundary_policy": "odin-reference-v1",
+            "scope_key": scope_key,
+            "catalog_revision": catalog_revision,
+            "derivation_revision": derivation_revision,
+            "boundary_policy": boundary_policy,
         },
         "relation": "either",
         "qdrant": {
             "status": "applied",
             "mode": "semantic-key",
-            "completeness": "partial",
+            "completeness": "complete",
         },
         "neo4j": {
-            "status": "not-called",
+            "status": "applied",
             "mode": "semantic-key",
-            "completeness": "unknown",
+            "completeness": "complete",
         },
-        "blocked_tools": ["gdelt_query", "rss_fetch"],
-        "coverage_revision": None,
+        "blocked_tools": [],
+        "coverage_revision": coverage_revision,
     })
+
+
+def test_hydration_preserves_trusted_internal_application_without_relabel() -> None:
+    from app.services.report_store import build_hydration_patch
+
+    application = _application(
+        scope_key="country:UKR",
+        catalog_revision="spatial-v1-e76a16bff799",
+        derivation_revision="spatial-derive-v1-d30efa07e141",
+        boundary_policy="odin-reference-v1",
+    )
     analysis = IntelAnalysis(
         query="q",
         analysis="Pinned Ukraine result",
         spatial_application=application,
     )
 
-    patch = build_hydration_patch(analysis, country_name="Poland")
+    patch = build_hydration_patch(
+        analysis,
+        country_name="Poland",
+        trusted_spatial_application=application,
+    )
 
     assert patch.spatial_application == application
     assert patch.spatial_application.scope.scope_key == "country:UKR"
@@ -101,6 +126,58 @@ def _rec(scope_key: str) -> ReportRecord:
         created_at=now,
         updated_at=now,
     )
+
+
+@pytest.mark.asyncio
+async def test_save_discards_browser_application_even_when_scope_identity_matches(
+    monkeypatch,
+):
+    loader = app.state.spatial_catalog
+    assert isinstance(loader, SpatialCatalogLoader)
+    resolved = loader.resolve_country_identifiers(("276", "DEU"))
+    assert isinstance(resolved, ResolvedSpatialScope)
+    token = spatial_scope_token_from_resolution(resolved)
+    forged_application = _application(
+        scope_key=token.scope_key,
+        catalog_revision=token.catalog_revision,
+        derivation_revision=token.derivation_revision,
+        boundary_policy=token.boundary_policy,
+        coverage_revision="spatial-projection-v1-aaaaaaaaaaaa",
+    )
+    captured: dict[str, ReportUpdateRequest] = {}
+
+    async def fake_goc(scope_key, title, location, coords, *, legacy_aliases=()):
+        return _rec(scope_key)
+
+    async def fake_update(rid, patch):
+        captured["patch"] = patch
+        return _rec(token.scope_key)
+
+    async def fake_append(rid, payload):
+        return ReportMessage(id="m1", role="munin", text=payload.text)
+
+    monkeypatch.setattr(almanac_router, "get_or_create_report_by_scope", fake_goc)
+    monkeypatch.setattr(almanac_router, "update_report", fake_update)
+    monkeypatch.setattr(almanac_router, "append_report_message", fake_append)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://t") as ac:
+        app.state.report_schema_ready = True
+        response = await ac.post(
+            "/api/almanac/countries/276/briefing/save",
+            headers=ADMIN_HEADERS,
+            json={
+                "analysis": {
+                    "query": "q",
+                    "analysis": "Browser supplied briefing",
+                    "spatial_application": forged_application.model_dump(mode="json"),
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    patch = captured["patch"]
+    assert "spatial_application" in patch.model_fields_set
+    assert patch.spatial_application is None
 
 
 @pytest.mark.asyncio
