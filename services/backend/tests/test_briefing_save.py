@@ -1,6 +1,7 @@
 """Tests for the stateless POST /almanac/countries/{id}/briefing/save endpoint."""
 
 import datetime as _dt
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -12,13 +13,17 @@ from app.models.almanac import BriefingSaveRequest
 from app.models.intel import IntelAnalysis
 from app.models.report import ReportMessage, ReportRecord
 from app.routers import almanac as almanac_router
+from app.services.spatial_catalog import CatalogReadyState, SpatialCatalogLoader
 
 ADMIN_HEADERS = {"X-Admin-Token": "reports-secret"}
 
 
 @pytest.fixture(autouse=True)
-def _report_admin_token(monkeypatch: pytest.MonkeyPatch) -> None:
+async def _report_admin_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "reports_admin_token", "reports-secret")
+    loader = SpatialCatalogLoader(Path(__file__).parents[1] / "data" / "spatial")
+    assert isinstance(await loader.load(), CatalogReadyState)
+    app.state.spatial_catalog = loader
 
 
 def test_empty_analysis_rejected():
@@ -64,7 +69,7 @@ def _rec(scope_key: str) -> ReportRecord:
 async def test_save_requires_schema_and_truncates_with_marker(monkeypatch):
     captured: dict = {}
 
-    async def fake_goc(scope_key, title, location, coords):
+    async def fake_goc(scope_key, title, location, coords, *, legacy_aliases=()):
         return _rec(scope_key)
 
     async def fake_update(rid, patch):
@@ -131,7 +136,7 @@ async def test_save_maps_storage_failure_to_503(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_save_503_when_hydration_returns_none(monkeypatch):
-    async def fake_goc(scope_key, title, location, coords):
+    async def fake_goc(scope_key, title, location, coords, *, legacy_aliases=()):
         return _rec(scope_key)
 
     async def fake_update(rid, patch):
@@ -155,7 +160,7 @@ async def test_save_503_when_hydration_returns_none(monkeypatch):
 async def test_save_invalid_confidence_is_422_without_store_write(monkeypatch):
     called = {"goc": False}
 
-    async def fake_goc(scope_key, title, location, coords):
+    async def fake_goc(scope_key, title, location, coords, *, legacy_aliases=()):
         called["goc"] = True
         return _rec(scope_key)
 
@@ -176,7 +181,7 @@ async def test_save_invalid_confidence_is_422_without_store_write(monkeypatch):
 async def test_save_fails_closed_without_report_admin_token(monkeypatch):
     called = {"goc": False}
 
-    async def fake_goc(scope_key, title, location, coords):
+    async def fake_goc(scope_key, title, location, coords, *, legacy_aliases=()):
         called["goc"] = True
         return _rec(scope_key)
 

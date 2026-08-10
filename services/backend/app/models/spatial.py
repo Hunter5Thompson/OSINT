@@ -65,6 +65,17 @@ class ScopeKind(StrEnum):
     ADMIN2 = "admin2"
 
 
+class SpatialQueryRef(StrictFrozenModel):
+    """Caller-owned catalog reference; never a caller-owned retrieval token."""
+
+    schema_version: Literal[1] = 1
+    scope_key: ScopeKey
+    # The loader owns revision grammar/problem semantics so invalid caller values
+    # become the same structured problem as the catalog HTTP adapter.
+    catalog_revision: StrictStr = Field(min_length=1, max_length=96)
+    boundary_policy: PolicyIdentifier
+
+
 class SpatialScopeTokenV1(StrictFrozenModel):
     """Backend-owned scope identity resolved from one immutable catalog revision."""
 

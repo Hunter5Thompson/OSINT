@@ -15,8 +15,9 @@ import httpx
 import structlog
 
 from app.config import settings
-from app.models.intel import IntelAnalysis
+from app.models.intel import IntelAnalysis, RetrievalSpatialRelation
 from app.models.report import ReportMessageCreate
+from app.models.spatial import SpatialScopeTokenV1
 from app.services import report_store
 from app.services.briefing import truncate_message
 
@@ -27,6 +28,8 @@ async def stream_intel_query(
     *,
     query: str,
     region: str | None = None,
+    spatial_scope: SpatialScopeTokenV1 | None = None,
+    spatial_relation: RetrievalSpatialRelation = RetrievalSpatialRelation.EITHER,
     image_url: str | None = None,
     use_legacy: bool = False,
     grounding_context: str | None = None,
@@ -80,6 +83,10 @@ async def stream_intel_query(
         payload: dict[str, Any] = {
             "query": query,
             "region": region,
+            "spatial_scope": (
+                spatial_scope.model_dump(mode="json") if spatial_scope is not None else None
+            ),
+            "spatial_relation": spatial_relation.value,
             "image_url": image_url,
             "use_legacy": use_legacy,
         }

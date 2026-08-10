@@ -8,7 +8,7 @@ import hashlib
 import math
 import re
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -341,6 +341,59 @@ class SpatialCatalogLoader:
             cache_status="hit",
         )
         return resolved
+
+    def resolve_country_identifiers(
+        self,
+        identifiers: Sequence[str],
+        catalog_revision: str | None = None,
+    ) -> ResolveLookup:
+        """Resolve a validated Almanac identity against catalog-owned country keys."""
+
+        normalized = {
+            value.strip().casefold()
+            for value in identifiers
+            if isinstance(value, str) and 0 < len(value.strip().encode("utf-8")) <= 128
+        }
+        if not normalized:
+            return SpatialCatalogProblem(
+                code=CatalogProblemCode.INVALID_SCOPE_KEY,
+                message="Invalid country identity",
+                recoverable=False,
+                active_catalog_revision=self._active_revision(),
+            )
+        if not isinstance(self._state, CatalogReadyState):
+            return _GENERIC_UNAVAILABLE
+        revision = catalog_revision or self._state.active_catalog_revision
+        try:
+            revision = validate_catalog_revision_candidate(revision)
+        except ValueError:
+            return SpatialCatalogProblem(
+                code=CatalogProblemCode.INVALID_CATALOG_REVISION,
+                message="Invalid spatial catalog revision",
+                recoverable=False,
+                active_catalog_revision=self._active_revision(),
+            )
+        catalog = self._catalogs.get(revision)
+        if catalog is None:
+            return self._revision_problem(revision)
+
+        matches = []
+        for record in catalog.scopes.values():
+            parsed = parse_scope_key(record.scope.key)
+            if (
+                parsed.kind is ScopeKind.COUNTRY
+                and parsed.canonical_code is not None
+                and parsed.canonical_code.casefold() in normalized
+            ):
+                matches.append(record.scope.key)
+        if len(matches) != 1:
+            return SpatialCatalogProblem(
+                code=CatalogProblemCode.UNKNOWN_SCOPE,
+                message="Country identity has no unique spatial scope",
+                recoverable=False,
+                active_catalog_revision=self._active_revision(),
+            )
+        return self.resolve_scope(matches[0], revision)
 
     def get_asset_by_id(self, asset_id: str) -> AssetLookup:
         try:

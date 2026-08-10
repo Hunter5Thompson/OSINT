@@ -7,10 +7,15 @@ import httpx
 import structlog
 from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
+from starlette.responses import Response
 
 from app.models.intel import IntelAnalysis, IntelQuery
+from app.models.spatial import CatalogProblemCode, SpatialCatalogProblem
+from app.routers.spatial import spatial_problem_response
 from app.services.intel_stream import stream_intel_query
 from app.services.proxy_service import ProxyService
+from app.services.spatial_catalog import SpatialCatalogLoader
+from app.services.spatial_filters import resolve_spatial_scope_token
 
 log = structlog.get_logger(__name__)
 
@@ -25,14 +30,32 @@ def _shared_http_client(request: Request) -> httpx.AsyncClient | None:
     return proxy.client if isinstance(proxy, ProxyService) else None
 
 
-@router.post("/query")
-async def query_intel(query: IntelQuery, request: Request) -> EventSourceResponse:
+@router.post("/query", response_model=None)
+async def query_intel(query: IntelQuery, request: Request) -> EventSourceResponse | Response:
     """Run intelligence analysis via LangGraph pipeline, streaming results via SSE."""
+
+    spatial_scope = None
+    if query.spatial_scope is not None:
+        candidate = getattr(request.app.state, "spatial_catalog", None)
+        if not isinstance(candidate, SpatialCatalogLoader):
+            return spatial_problem_response(
+                SpatialCatalogProblem(
+                    code=CatalogProblemCode.CATALOG_UNAVAILABLE,
+                    message="Spatial catalog is unavailable",
+                    recoverable=True,
+                )
+            )
+        resolved = resolve_spatial_scope_token(candidate, query.spatial_scope)
+        if isinstance(resolved, SpatialCatalogProblem):
+            return spatial_problem_response(resolved)
+        spatial_scope = resolved
 
     async def event_generator() -> AsyncIterator[dict[str, Any]]:
         async for ev in stream_intel_query(
             query=query.query,
             region=query.region,
+            spatial_scope=spatial_scope,
+            spatial_relation=query.spatial_relation,
             image_url=query.image_url,
             use_legacy=query.use_legacy,
             report_id=query.report_id.strip() if query.report_id else None,
@@ -52,7 +75,7 @@ async def query_intel(query: IntelQuery, request: Request) -> EventSourceRespons
 @router.post("/hotspot/{hotspot_id}")
 async def query_hotspot_intel(
     hotspot_id: str, request: Request
-) -> EventSourceResponse:
+) -> EventSourceResponse | Response:
     """Run intelligence analysis focused on a specific hotspot."""
     query = IntelQuery(
         query=f"Intelligence analysis for hotspot: {hotspot_id}",
