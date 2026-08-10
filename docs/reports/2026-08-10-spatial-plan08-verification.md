@@ -8,6 +8,8 @@
 
 **Implementierung:** `4d4010a feat(worldview): scope registered point layers`
 
+**Review-Remediation:** `66e4cbf refactor(worldview): enforce spatial capability invariants`
+
 **Status:** Work Order 1 abgeschlossen; Work Order 2 gestoppt; Admin-2 blockiert;
 3D deferred; keine operative Capability-Promotion
 
@@ -163,6 +165,15 @@ largest asset: 820,372 wire bytes / 2,654,336 estimated heap bytes
 
 Die Audit-Limits bleiben 4 MiB Wire, 16 MiB Heap, 256 Features, 2.048 Ringe und
 16.384 Vertices pro Ring. Es wurde kein Katalog gebaut, publiziert oder verändert.
+
+`spatial-v1-e76a16bff799` bleibt im Mandatory Start Record korrekt als historischer
+Plan-05-Canary-Nachweis genannt. Der aktuelle veröffentlichte Katalog
+`spatial-v1-fe9828dcda05` enthält dieselben 38 Containment-Deskriptoren für die
+38/38 Gates; die Änderung von 68 auf 41 Assets betrifft Render-LODs und nicht die
+Containment-Fläche. Der historische Canary maß maximal 0 m Ableitungsfehler; für den
+aktuellen Katalog liefen hier `verify` und `audit`, keine neue Fehlermessung. Der
+Runtime-Adapter liest das jeweilige `maxErrorMeters` aus dem Deskriptor und schließt
+das resultierende Fehlerband konservativ als `boundary-uncertain` aus.
 
 Die vorhandene
 [Neo4j-Evidenz](2026-08-09-spatial-plan06b-review-remediation.md) bleibt bei 18/18
