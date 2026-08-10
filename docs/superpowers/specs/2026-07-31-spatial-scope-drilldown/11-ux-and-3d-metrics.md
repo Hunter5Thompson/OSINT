@@ -140,9 +140,11 @@ Katalog; kein externer Autoren-Handle wird in generierte Source-Dateien injizier
 Der Scope macht ODIN bereits räumlich „3D“, weil er auf dem Cesium-Globus, Terrain und Photoreal Tiles liegt. Extrudierte Administrativeinheiten sind ein separater `SpatialMetricLayer`, nicht Teil des Scope-Cores.
 
 ```ts
+type SpatialMetricId = "chronik.events.count";
+
 interface SpatialMetricDefinition {
   readonly definitionRevision: string;
-  readonly metricId: string;
+  readonly metricId: SpatialMetricId;
   readonly label: string;
   readonly unit: string;
   readonly aggregation: "sum" | "mean" | "max" | "count";
@@ -156,9 +158,10 @@ interface SpatialMetricDefinition {
     | {
         readonly kind: "fixed-grid";
         readonly revision: string;
+        readonly projection: "EPSG:6933";
         readonly cellSizeMeters: number;
-        readonly originLongitude: number;
-        readonly originLatitude: number;
+        readonly originEastingMeters: number;
+        readonly originNorthingMeters: number;
       };
 }
 
@@ -190,7 +193,7 @@ interface SpatialMetricPort {
   load(
     request: {
       readonly query: SpatialQueryRef;
-      readonly metricId: string;
+      readonly metricId: SpatialMetricId;
       readonly definitionRevision: string;
       readonly childScopeKeys: readonly ScopeKey[];
       readonly window: { readonly start: string; readonly end: string };
@@ -219,6 +222,9 @@ Regeln:
   validiert; `metricId` muss in der geschlossenen Metric-Registry stehen.
   `dataRevision` wird schema-validiert und generation-gebunden. Ein Mismatch ist
   unavailable und darf keinen alten Snapshot behalten.
+- Das V1-Fixed-Grid liegt im allowlisteten Equal-Area-CRS `EPSG:6933`; Ursprung und
+  Zellmaß sind projizierte Meterwerte. Ein anderes CRS oder geographische Grad-Zellen
+  benötigen einen Contract-Delta und einen Transformations-/Flächen-Evidenzrecord.
 - Die Definition wird erst aktiviert, wenn Domain, optionaler Höhenbereich,
   Transport, Coverage, Accounting und bei Extrusion Base-Height-/Build-Budget in
   einem reviewten Promotion-Record belegt sind.

@@ -1,8 +1,8 @@
 # Cinematic WorldView — Cesium Scene and Scoped Data Visualization
 
 - **Spec-Datum:** 2026-08-10
-- **Status:** Draft — Required Fixes aus adversarialem Review eingearbeitet;
-  Abschluss-Re-Review erforderlich, nicht umsetzungsfreigegeben
+- **Status:** Draft — Required Fixes aus zwei adversarialen Review-Runden
+  eingearbeitet; unabhängiger Abschluss-PASS erforderlich, nicht umsetzungsfreigegeben
 - **Betroffene Systeme:** Hlíðskjalf/WorldView, Spatial Scope, CHRONIK, Backend-Spatial-Adapter und Spatial-Catalog-Build
 - **Technischer Rahmen:** React 19, TypeScript strict, CesiumJS 1.142, vorhandene CSS-/SVG-/Canvas-Werkzeuge
 - **Entwurfsart:** Clean-room. Das externe `three-scope-map-skill` dient nur als Referenz für die allgemeine visuelle Grammatik aus Licht, Tiefe, Bewegung und hierarchischem Drilldown. Quellcode, Assets, Shader, Daten, Texte, Komponentenstruktur und Framework-Entscheidungen werden nicht übernommen.
@@ -30,17 +30,19 @@ Three.js-WorldView-Pfad ein.
 
 Der freigegebene
 [Spatial-Scope-Spec-Satz](2026-07-31-spatial-scope-drilldown-design.md) bleibt
-normativ. Die Required Fixes des ersten adversarialen Reviews wurden in ihren
-einzigen normativen Heimaten gelandet:
+normativ. Die Required Fixes beider adversarialer Reviews wurden in ihren einzigen
+normativen Heimaten gelandet:
 
 - `01 §4.2` besitzt die globale Trennung zwischen Clean-room-Stagecraft und
   quantitativer Datenkodierung;
-- `06 §12.1` besitzt Presentation-Port, einzigen Cesium-Root, Scene-State-Lease und
-  Post-Process-Ownership;
+- `06 §12.1/§13` besitzt Presentation-Port, einzigen Cesium-Root, Scene-State-Lease,
+  Viewer-langlebige Post-Process-Ownership und Point-Containment-Accounting;
+- `07 §14.2` besitzt `SpatialApplicationV1` einschließlich unveränderter CHRONIK-
+  Szenenprojektion und aller vier Exclusion-Counter;
 - `11 §18.2/§18.5/§19` besitzt Keyboard-Äquivalenz, Motion-Policy und
   Spatial-Metric-Verträge;
-- `14 §26/§28` besitzt Mode-Matrix, Rollback und die eng gefassten abgelehnten
-  Alternativen;
+- `14 §26/§28` besitzt Shared-Refactor-Stufe, Mode-Matrix, beide Rollback-Domänen
+  und die eng gefassten abgelehnten Alternativen;
 - der Spatial-Index registriert diese Verträge und diese Erweiterungs-Spec.
 
 Diese Spec besitzt ausschließlich die neuen Cinematic-Scene-, Frame-, Lens- und
@@ -207,8 +209,9 @@ Der World-Scope zeigt:
   tatsächlich vorhandene Track-Geometrien;
 - ruhiges HUD ohne automatisch geöffneten Inspector.
 
-Photorealistic 3D Tiles sind auf Globe-/Country-Höhe verborgen oder stark gedimmt.
-Sie werden erst in lokalen Ansichten als Kontext eingeblendet.
+Photorealistic 3D Tiles sind auf Globe-/Country-Höhe verborgen. Sie werden erst in
+lokalen Ansichten als Kontext eingeblendet; V1 versucht dort kein Dimming parallel
+zum bereits vorhandenen `customShader`.
 
 ### 6.2 Target Acquisition
 
@@ -289,6 +292,10 @@ SpatialScopeModule ────────────────────�
                                                         ▼           ▼
                                              RecordingSceneAdapter  ViewerSpatialCesiumRuntime
                                                                      └─ one root/state lease
+
+GlobeViewer ── WorldviewPostProcessController (viewer lifetime)
+                         ▲
+                         └─ allowlisted strategy slots
 ```
 
 ### 7.1 Besitz
@@ -304,9 +311,12 @@ Catalog-Revision und Query-Token.
 - visuelle Diagnostics und Rendering-Fehler.
 
 `ViewerSpatialCesiumRuntime` besitzt gemäß Spatial `06 §12.1` als einziges Module
-Scene-Root, Primitive-Gruppen, Scene-State-Lease, Clock und Post-Process-Lifecycle.
-Operational und Cinematic sind darin wechselseitige Strategien. Ein Mode-Wechsel
-erzeugt weder eine zweite Root noch eine zweite Scope-State-Machine.
+Scene-Root, Primitive-Gruppen, Scene-State-Lease und Clock. Operational und
+Cinematic sind darin wechselseitige Strategien. `GlobeViewer` besitzt unabhängig
+von Spatial-Flag und Mode genau einen langlebigen `WorldviewPostProcessController`;
+die aktive Strategie besitzt nur ihren allowlisteten Slot. Ein Mode-Wechsel erzeugt
+weder eine zweite Root, einen zweiten Stage-Owner noch eine zweite Scope-State-
+Machine.
 
 Das `CinematicWorldviewModule` darf weder `dispatch(enter)` aufrufen noch Scope-Keys
 aus Labels, Geometrie, Kamera oder Pick-Koordinaten ableiten.
@@ -350,22 +360,11 @@ type WorldviewLensId =
   | "mobility"
   | "infrastructure";
 
-interface SceneSnapshotAccounting {
-  readonly relation: "occurs-in";
-  readonly precision: "semantic-key" | "point-in-boundary" | "bbox-approximate";
-  readonly completeness: "complete" | "partial";
-  readonly candidateCount: number;
-  readonly includedCount: number;
-  readonly excludedUnlocatedCount: number;
-  readonly excludedConflictCount: number;
-  readonly excludedBoundaryUncertainCount: number;
-}
-
 interface ChronikSceneSnapshot {
   readonly kind: "chronik-events";
   readonly dataRevision: string;
   readonly observedAt: string;
-  readonly accounting: SceneSnapshotAccounting;
+  readonly spatialApplication: SpatialApplicationV1;
   readonly records: readonly {
     readonly eventId: string;
     readonly longitude: number;
@@ -378,15 +377,14 @@ interface EarthquakeSceneSnapshot {
   readonly kind: "earthquakes";
   readonly dataRevision: string;
   readonly observedAt: string;
-  readonly accounting: SceneSnapshotAccounting;
-  readonly records: readonly {
+  readonly application: StrictPointLayerApplication<{
     readonly earthquakeId: string;
     readonly longitude: number;
     readonly latitude: number;
     readonly occurredAt: string;
     readonly magnitude: number;
     readonly depthKm: number;
-  }[];
+  }>;
 }
 
 interface WorldviewSceneFrame {
@@ -409,6 +407,16 @@ interface WorldviewSceneFrame {
   };
 }
 ```
+
+`ChronikSceneSnapshot.spatialApplication` ist keine neu benannte Teilmenge: Es ist
+die vollständig decodierte `SpatialApplicationV1` derselben Response-Generation aus
+Spatial `07 §14.2`, einschließlich `global`, `intersects` und aller vier Exclusion-
+Counter. Der Frame behauptet deshalb keinen auf dem Wire nicht vorhandenen
+`candidateCount`. `EarthquakeSceneSnapshot.application` importiert dagegen das
+`StrictPointLayerApplication<T>` aus Spatial `06 §13`; nur diese
+Containment-Quelle besitzt `excludedBoundaryUncertainCount`. Es gibt keine
+vereinheitlichende Accounting-Struktur, die Felder zwischen beiden Quellen verliert
+oder erfindet.
 
 Alle ISO-Zeitstrings, Koordinaten, Counts, Magnitude und Depth werden vor dem Frame
 validiert und gefroren. `null` bedeutet „für diesen Frame nicht aktiviert“, nie
@@ -498,10 +506,11 @@ Metrische Extrusion lebt nach eigenem Promotion-Gate in einer separaten Gruppe. 
 verwendet ausschließlich Samples des `SpatialMetricPort` und die Regeln aus Spatial
 `11 §19`. `extrudedHeight` wird einmal pro Metric-Revision auf Endhöhe gebaut und
 niemals pro Frame oder Camera-Move animiert. Reveal darf nur ein unterstütztes
-Color-Alpha-Attribut ändern; dafür darf ausschließlich die Metric-Primitive ihre
-Geometry-Instances gezielt behalten. Ist das nicht belegbar, setzt sie
-`releaseGeometryInstances: true` und erscheint statisch. Vor Höhenfreigabe muss ein
-Base-Height-Record für Terrain und
+Color-Alpha-Attribut nach `ready` über `getGeometryInstanceAttributes` ändern. Dieser
+Zugriff wird nicht an `releaseGeometryInstances: false` gekoppelt; CPU-Geometrie
+bleibt nur für einen separat belegten Consumer erhalten. Ist die Attributmutation in
+Cesium 1.142 nicht im Browser-Harness belegt, setzt die Primitive
+`releaseGeometryInstances: true` und erscheint statisch. Vor Höhenfreigabe muss ein Base-Height-Record für Terrain und
 `verticalExaggeration` sowie das Chunk-/Build-Budget bestanden sein. Ohne diesen
 Record bleibt dieselbe Metrik als flache Color-/Hatch-Fläche sichtbar. Fehlende,
 stale oder inkompatible Samples erzeugen keine variable Darstellung.
@@ -521,10 +530,12 @@ jsdom zulässig und müssen in Tests bytegleich zum jeweiligen kanonischen Token
 gepinnt sein; sie sind keine zweite Farbwahrheit. Der externe Cyan/Green-Look wird
 nicht kopiert.
 
-Auf World-/Country-Höhe wird Photoreal Content verborgen oder gedimmt, damit
-Kartographie und Datenmarks die visuelle Hierarchie besitzen. Im Admin-1-Scope darf
-Photoreal/Terrain nach dem Reveal wieder sichtbar werden. Neue Basemap-Assets
-benötigen Source Lock, Lizenznachweis und Same-origin-Auslieferung.
+Auf World-/Country-Höhe wird Photoreal Content über `show` verborgen, damit
+Kartographie und Datenmarks die visuelle Hierarchie besitzen. V1 kombiniert keine
+`Cesium3DTileStyle` mit dem bestehenden `customShader` und ersetzt diesen nicht. Im
+Admin-1-Scope darf Photoreal/Terrain nach dem Reveal wieder sichtbar werden. Neue
+Starfield-/Basemap-Assets benötigen Source Lock, Lizenznachweis und Same-origin-
+Auslieferung.
 
 ### 8.6 Post-Processing
 
@@ -532,12 +543,15 @@ Bloom wird mild und global eingesetzt; selektiver Glow entsteht primär durch
 geschichtete Geometrie und emissive Materialien. So hängt die Lesbarkeit nicht von
 einem fragilen Screen-Space-Maskenpfad ab.
 
-Der `WorldviewPostProcessController` aus Spatial `06 §12.1` besitzt ein einziges
-`PostProcessStageComposite` an stabiler Collection-Position. Cinematic, CRT, Night
-Vision und FLIR registrieren allowlistete Slots; der Controller baut deren interne
-Reihenfolge deterministisch neu. `shaderUtils.ts` darf keine WorldView-Stage mehr
-direkt entfernen oder anhängen. Bloom läuft über denselben Scene-State-Lease. Kein
-Shadertext stammt aus Daten, Konfiguration oder LLM-Ausgabe.
+Der von `GlobeViewer` über die gesamte Viewer-Lebensdauer besessene
+`WorldviewPostProcessController` aus Spatial `06 §12.1` existiert auch in der
+Flag-off-Legacy-Zeile und besitzt ein einziges `PostProcessStageComposite` an
+stabiler Collection-Position. Cinematic, CRT, Night Vision und FLIR registrieren
+allowlistete Slots; der Controller baut deren interne Reihenfolge deterministisch
+neu. `shaderUtils.ts` darf keine WorldView-Stage oder Bloom-Property mehr direkt
+mutieren. Im Cinematic-Mode wird Bloom über den aktiven Scene-State-Lease
+restaurierbar vermittelt. Kein Shadertext stammt aus Daten, Konfiguration oder LLM-
+Ausgabe.
 
 ### 8.7 Gemeinsamer Animation Clock
 
@@ -638,8 +652,9 @@ Im Admin-1-Scope dürfen georeferenzierte Records innerhalb des aktiven festen
 Containments in lokale Zellen aggregiert werden. Die Zellen sind reine
 Visualisierung, keine neuen Scopes.
 
-- Zellgröße, Ursprung und Projektion stammen aus der versionierten
-  `SpatialMetricDefinition.binning` und bleiben über Zoom/Camera-LOD konstant.
+- Zellgröße, Ursprung und das in V1 geschlossene Equal-Area-CRS `EPSG:6933` stammen
+  aus der versionierten `SpatialMetricDefinition.binning`; Ursprung und Zellmaß sind
+  projizierte Meterwerte und bleiben über Zoom/Camera-LOD konstant.
 - Camera-LOD darf nur Marks/Labels cullen, niemals Zellgrenzen oder Zellwerte ändern;
   Legende und Tooltip zeigen das feste Zellmaß.
 - Nur `inside` zählt als strict; `boundary-uncertain` wird ausgeschlossen und gezählt.
@@ -748,14 +763,17 @@ erhöht Qualität stufenweise und baut keine stabile Pick-Surface neu.
 
 ### 12.2 Budgets
 
-- Ziel auf der reviewten Desktop-Workstation: Median mindestens 55 FPS und p95
-  Frame-Time höchstens 25 ms über eine deterministische 60-Sekunden-Szene. Ein
-  begrenzter Frame-Delta-Ring misst Median und p95; der heutige reine Callback-Zähler
-  reicht nicht als Evidenz.
-- Degradation startet vor dem Hard Gate: rolling p95 über 25 ms für zwei Sekunden
-  oder weniger als 45 FPS für eine Sekunde senkt genau einen Tier. Erst wenn nach
-  fünf Sekunden Settle auf Tier 4 weiterhin mehr als zwei Sekunden unter 30 FPS
-  auftreten, schlägt das Hard Gate fehl.
+- Default-on-Gate auf der reviewten Desktop-Workstation: Median mindestens 55 FPS
+  **und** p95 Frame-Time höchstens 25 ms über eine deterministische 60-Sekunden-
+  Tier-0-Szene. Median 48 FPS bei p95 20 ms ist ein Gate-Fehler. Ein begrenzter
+  Frame-Delta-Ring misst beide Werte; der heutige reine Callback-Zähler reicht nicht
+  als Evidenz.
+- Degradation startet vor dem Hard Gate: rolling p95 über 25 ms für zwei Sekunden,
+  rolling Median unter 55 FPS für fünf Sekunden oder weniger als 45 FPS für eine
+  Sekunde senkt genau einen Tier. Erst wenn nach fünf Sekunden Settle auf Tier 4
+  weiterhin mehr als zwei Sekunden unter 30 FPS auftreten, schlägt das Hard Gate
+  fehl. Die Laufzeit-Degradation macht einen fehlgeschlagenen Tier-0-Release-
+  Benchmark nicht nachträglich grün.
 - Der reproduzierbare Browser-Benchmark muss diese initialen Schwellen vor
   Default-on bestätigen; ein verfehlter Wert führt zu einem reviewten Spec-Delta
   oder kleinerem visuellen Budget, nicht zu Testtoleranz-Erhöhung.
@@ -877,7 +895,7 @@ interface CinematicWorldviewDiagnostics {
   };
   readonly metric: {
     readonly status: "inactive" | "ready" | "partial" | "unavailable";
-    readonly metricId: "chronik.events.count" | null;
+    readonly metricId: SpatialMetricId | null;
   };
   readonly sceneStateLease: {
     readonly active: boolean;
@@ -898,7 +916,18 @@ bei den Legacy-Diagnostics unterdrückt gezählt statt unbegrenzt ausgegeben.
 
 ## 15. Rollout, Kompatibilität und Plan 05D
 
-### 15.1 Presentation-Mode
+### 15.1 Vorgelagerte Shared-Refactor-Stufe
+
+Die in Spatial `14 §26.1` besessene Stufe S landet und canaryt vor der ersten
+Cinematic-Zeile die gemeinsam genutzten Änderungen: `PresentationOutcome`-Parität,
+Viewer-langlebigen Post-Process-Controller, gemeinsamen Layer-/Performance-Clock und
+Camera-Flight-Cancel. Dieses separat rückrollbare Artefakt enthält weder
+`CinematicWorldviewModule` noch eine neue Scene-Strategie oder visuelle Claims. Es
+muss Flag-off-Legacy und Flag-on-Operational mit eigenem TDD-, Canary-, Soak- und
+Artefakt-Rollback-Record belegen. Ein kombinierter späterer Cinematic-Testlauf
+ersetzt diesen Record nicht.
+
+### 15.2 Presentation-Mode
 
 Der cineastische Presenter verwendet den in Spatial `14 §26.1` besessenen Modus:
 
@@ -915,19 +944,26 @@ definiert.
 Ein Mode-Wechsel verändert weder URL-Scope noch Katalog- oder Datenrevision. Beide
 Presenter verwenden denselben `SpatialScopeModule`, Catalog und Layer-Snapshots.
 
-### 15.2 Rollback
+### 15.3 Zwei Rollback-Domänen
 
-Rollback bedeutet ausschließlich:
+Shared-Refactor-Rollback deployt das unmittelbar vor Stufe S gebaute Frontend-
+Artefakt. Der Presentation-Mode behauptet nicht, Port-, Clock-, Controller- oder
+Camera-Input-Migrationen zurückzunehmen.
 
-- Cinematic-Strategie, Stages, Clock und Listener deterministisch disposen;
+Cinematic-Rollback arbeitet ausschließlich auf der bestandenen Post-S-Baseline:
+
+- Cinematic-Strategie, Controller-Slot, Clock-Clients und Listener deterministisch
+  disposen;
 - alle vom `SceneStateLease` besessenen Properties auf die aktuelle Baseline
   restaurieren und Wertgleichheit diagnostizieren;
 - anschließend die operationale Strategie derselben einzigen Runtime attachen;
 - committed Scope, Zeit, Selection und Daten unverändert bewahren.
 
-Kein Schema-, Datenbank-, Catalog- oder Ingestion-Rollback ist dafür erforderlich.
+Für keine der beiden Domänen ist ein Schema-, Datenbank-, Catalog- oder Ingestion-
+Rollback erforderlich. Die jeweiligen Frontend-Artefakte und Records bleiben jedoch
+getrennt; der Runtime-Mode ist kein Ersatz für Artefakt-Rollback.
 
-### 15.3 Plan 05D
+### 15.4 Plan 05D
 
 Diese Spec entsperrt Plan 05D nicht. Legacy-Renderer, `CountryTarget`,
 `useCountryHitTest`, `_topoIndex` und `VITE_SPATIAL_SCOPE_ENABLED` bleiben bis zu den
@@ -970,6 +1006,11 @@ Chromium-Harness mit fixer Version, Viewport, Device Scale, Uhr, lokaler Datenfi
 und kontrolliertem WebGL-Modus eingerichtet. Hero-Baselines verwenden keine
 variablen Remote-Tiles. Bis dieser Harness selbst als service-lokales Gate grün und
 flake-frei ist, gelten manuelle Screenshots nicht als automatisierte Release-Evidenz.
+
+Die Freigabereihenfolge ist nicht komprimierbar: erst grüner Browser-Harness, dann
+Shared-Refactor-Stufe S mit beiden operationalen Canaries und Artefakt-Rollback,
+danach Cinematic-TDD und Cinematic-Canary. Eine gemeinsame Endsuite ohne die beiden
+getrennten Records beweist die Rollback-Isolation nicht.
 
 Danach gelten:
 
@@ -1085,6 +1126,7 @@ geschrieben werden.
 - [Spatial Scope — modularer Spec-Index](2026-07-31-spatial-scope-drilldown-design.md)
 - [Spatial 01 — Architektur und Invarianten](2026-07-31-spatial-scope-drilldown/01-architecture-and-invariants.md)
 - [Spatial 06 — Cesium und Layer-Semantik](2026-07-31-spatial-scope-drilldown/06-cesium-and-layer-semantics.md)
+- [Spatial 07 — CHRONIK-Query-Vertrag](2026-07-31-spatial-scope-drilldown/07-chronik-query-contract.md)
 - [Spatial 11 — UX und 3D-Metriken](2026-07-31-spatial-scope-drilldown/11-ux-and-3d-metrics.md)
 - [Spatial 12 — Fehler, Security und Observability](2026-07-31-spatial-scope-drilldown/12-errors-security-and-observability.md)
 - [Spatial 14 — Rollout und Abnahme](2026-07-31-spatial-scope-drilldown/14-rollout-and-acceptance.md)
@@ -1097,6 +1139,8 @@ geschrieben werden.
 - `services/frontend/src/spatial/cesium/CesiumSpatialScopeAdapter.ts`
 - `services/frontend/src/spatial/cesium/buildScopePrimitives.ts`
 - `services/frontend/src/spatial/layerScopePolicy.ts`
+- `services/frontend/src/spatial/pointLayerSpatialAdapter.ts`
+- `services/frontend/src/types/index.ts`
 
 ### Extern, nur technische Primärdokumentation
 
@@ -1136,3 +1180,23 @@ Status bleibt bis zu einem unabhängigen Abschluss-Re-Review blockiert.
 | `INFO-001/002` | `rust` ersetzt das nicht existente `ember`; SSR/jsdom-Fallbacks müssen token-identisch testgepinnt sein. |
 | `INFO-003/004` | Hero-Scope ist `UA-14`; Domain/Höhe werden erst aus Verteilung und Occlusion-Evidenz kalibriert. |
 | `INFO-005/006/007` | Tier 3 folgt dem Codevertrag; Flag-/Mode-Matrix und exakte Full/Reduced/Static-Semantik liegen in ihren normativen Heimaten. |
+
+---
+
+## 21. Disposition des Abschluss-Re-Reviews, Runde 2
+
+Auch Runde 2 endete `PASS WITH REQUIRED FIXES`; ihr Autor war zugleich Reviewer der
+ersten Runde. Dieser Record verlinkt nur die Korrekturen in ihren normativen Heimaten
+und ist kein unabhängiges Votum. Die Spec bleibt bis zum PASS eines unbelasteten
+Reviewers blockiert.
+
+| Finding | Disposition |
+|---|---|
+| `CRIT-005` | `ChronikSceneSnapshot` importiert die vollständige `SpatialApplicationV1` aus `07 §14.2`; alle vier Wire-Exclusion-Counter, `global` und `intersects` bleiben erhalten, `candidateCount` entfällt. Point-Containment importiert separat `StrictPointLayerApplication<T>` aus `06 §13`. |
+| `WARN-011` | `06 §12.1` schließt SkyBox, Sky-/Ground-Atmosphere, Dynamic Lighting und Light-/Night-Fade ein; Photoreal wird in V1 nur über `show` verborgen, der bestehende `customShader` bleibt unberührt, Restore wertgleich. |
+| `WARN-012` | Der einzige Post-Process-Controller gehört dem `GlobeViewer` über dessen gesamte Lebensdauer und existiert damit auch in der Flag-off-Legacy-Zeile. Runtime-Strategien besitzen nur Slots. |
+| `WARN-013` | `14 §26` besitzt die separat releasbare Shared-Refactor-Stufe S mit Operational-/Legacy-Canaries und eigenem Artefakt-Rollback; Cinematic-Runtime-Rollback beginnt erst auf dieser bestandenen Baseline. |
+| `INFO-008` | Fixed-Grid-Binning besitzt das geschlossene Equal-Area-CRS `EPSG:6933` sowie Ursprung und Zellmaß in projizierten Metern. |
+| `INFO-009` | Per-Instance-Attributzugriff hängt an `ready`, nicht an `releaseGeometryInstances: false`; CPU-Geometrie bleibt nur für einen belegten Consumer erhalten. |
+| `INFO-010` | Diagnostics und Metric-Port importieren `SpatialMetricId` aus der geschlossenen Registry in `11 §19`. |
+| `INFO-011` | Median ≥ 55 FPS ist explizites Tier-0-Default-on-Gate und Laufzeit-Degradationsschwelle; Median 48/p95 20 ist ausdrücklich kein Pass. |

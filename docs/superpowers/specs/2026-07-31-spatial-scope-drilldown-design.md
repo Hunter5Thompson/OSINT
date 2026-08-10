@@ -3,13 +3,14 @@
 - **Erstfassung:** 2026-07-31
 - **Modularisiert:** 2026-08-01
 - **Freigegeben:** 2026-08-01
-- **Status:** Spatial Core umsetzungsfreigegeben; Cinematic-Erweiterungsdeltas Draft
-  und bis zu ihrem Abschluss-Re-Review blockiert
+- **Status:** Spatial Core umsetzungsfreigegeben; zweites Cinematic-Required-Fixes-
+  Set eingearbeitet, unabhängiger Abschluss-PASS ausstehend
 - **Betroffene Systeme:** Hlidskjalf/WorldView, Backend, CHRONIK, Neo4j, Qdrant, Munin/Intelligence und Data Ingestion
 - **Entwurfsart:** Clean-room. Aus dem externen Repository stammt ausschließlich die allgemeine Idee hierarchischer räumlicher Scopes. Quellcode, Assets, Daten, Prompts, Gestaltung, Attributionen und Lizenztexte werden nicht übernommen.
 - **Ausführungspläne:** [Implementation-Plan-Index](../plans/2026-08-01-spatial-scope-implementation.md)
 - **Cinematic-Erweiterung:** [Cinematic WorldView](2026-08-10-cinematic-worldview-design.md),
-  Draft nach adversarialem Review; bis zum Abschluss-PASS nicht umsetzungsfreigegeben
+  Draft nach zwei adversarialen Review-Runden; bis zum unabhängigen Abschluss-PASS
+  nicht umsetzungsfreigegeben
 
 Diese Datei ist bewusst nur Einstieg, Navigationskarte und Präzedenzregel. Die
 normativen Verträge liegen in den verlinkten Teil-Specs. Ein Agent soll nicht den
@@ -33,10 +34,10 @@ Security-Gate. Alle zehn Findings sind geschlossen. Dieser Spec-Satz ist die
 freigegebene Implementierungsgrundlage für die TDD-Slices aus `13`.
 
 Die am 2026-08-10 in ihren normativen Heimaten ergänzten Cinematic-Deltas ändern
-diesen Core-Status nicht, sind selbst aber noch nicht aktiv: Ihr Erst-Review endete
-`PASS WITH REQUIRED FIXES`; die Fixes sind eingearbeitet, ein unabhängiger
-Abschluss-Re-Review steht aus. Sie autorisieren bis dahin weder Cinematic-Code noch
-einen Implementierungsplan.
+diesen Core-Status nicht, sind selbst aber noch nicht aktiv: Zwei Review-Runden
+endeten `PASS WITH REQUIRED FIXES`; beide Fix-Sätze sind eingearbeitet, ein
+unabhängiger Abschluss-PASS steht aus. Sie autorisieren bis dahin weder Cinematic-
+Code noch einen Implementierungsplan.
 
 Protokollhinweise ohne aktuellen Blocker: `03` und `04` liegen nahe am Wortbudget;
 ihre nächste inhaltliche Erweiterung erfordert die Seam-Prüfung aus dem
@@ -119,12 +120,12 @@ Abhängigkeiten, keine zweite Heimat derselben Regel.
 | Scope-Key-Grammatik, Kinds als Semantik, Revisionsmodell | `02` |
 | TypeScript `ScopeKey`, `ScopeKind`, `SpatialQueryRef` | `03` / `spatial/contracts.ts` |
 | Backend `SpatialScopeTokenV1`, Katalog-/Derivationstypen | `04` |
-| `SpatialApplicationV1` und CHRONIK-Zählsemantik | `07` |
+| `SpatialApplicationV1`, CHRONIK-Zählsemantik und unveränderte CHRONIK-Szenenprojektion | `07` |
 | Qdrant-Payload und Filter-Compiler | `09` |
 | `SpatialRunApplicationV1` | `10` |
-| `SpatialPresentationPort`, `PresentationOutcome`, `ViewerSpatialCesiumRuntime`, `SceneStateLease`, `WorldviewPostProcessController` | `06` |
-| `WorldviewMotionSnapshot`, `WorldviewMotionStore`, `SpatialMetricDefinition`, `SpatialMetricSample`, `SpatialMetricSnapshot`, `SpatialMetricPort` | `11` |
-| `worldview_presentation_mode` und Operational-/Cinematic-Mode-Matrix | `14` |
+| `SpatialPresentationPort`, `PresentationOutcome`, `ViewerSpatialCesiumRuntime`, `SceneStateLease`, `WorldviewPostProcessController`, `StrictPointLayerApplication<T>` | `06` |
+| `WorldviewMotionSnapshot`, `WorldviewMotionStore`, `SpatialMetricId`, `SpatialMetricDefinition`, `SpatialMetricSample`, `SpatialMetricSnapshot`, `SpatialMetricPort` | `11` |
+| `worldview_presentation_mode`, Shared-Refactor-Stufe und Operational-/Cinematic-Mode-Matrix | `14` |
 | `CinematicWorldviewModule`, `WorldviewSceneFrame`, `WorldviewLensId`, `CinematicWorldviewDiagnostics` | [Cinematic WorldView](2026-08-10-cinematic-worldview-design.md), erst nach Abschluss-PASS aktiv |
 
 Andere Teile importieren, verlinken oder zeigen nur Benutzung. Sie dürfen diese
