@@ -6,6 +6,8 @@
 
 **Code-Commit:** `f41d43d fix(spatial): harden Plan 07A review gates`
 
+**Re-Review-Commit:** `c8571ba fix(spatial): close Plan 07A re-review gaps`
+
 **Status:** Alle fünf Reviewpunkte code-/vertragsseitig geschlossen; operative
 Qdrant-Promotion bleibt offen und nicht autorisiert
 
@@ -39,15 +41,17 @@ stale_points
 unsupported_points
 unprojected_points
 audit_only_points
+inconsistent_points
 ```
 
-Die sechs Statuszähler müssen exakt `total_points` ergeben. Nie projizierte Points
+Die sieben Statuszähler müssen exakt `total_points` ergeben. Nie projizierte Points
 und aktuelle, aber tokenlose Audit-Projektionen sind damit nicht länger ein
-unbenannter Rest. Der promotionswirksame `stale_rate` ist
-`(stale_points + unprojected_points) / total_points`; ein vollständig
-unangereicherter Korpus meldet daher 100 statt 0 Prozent Gap. Die konstruktiv stets
-null bleibende `projected_stale_rate` entfiel zugunsten expliziter Filterable- und
-Unprojected-Raten.
+unbenannter Rest; aktuelle intern widersprüchliche Payloads heißen explizit
+`inconsistent_points`. Der promotionswirksame `stale_rate` ist
+`(stale_points + unprojected_points + inconsistent_points) / total_points`; ein
+vollständig unangereicherter Korpus meldet daher 100 statt 0 Prozent Gap. Die
+konstruktiv stets null bleibende `projected_stale_rate` entfiel zugunsten expliziter
+Filterable- und Unprojected-Raten.
 
 ### 3. Conflict-Admission ist relations- und scopespezifisch
 
@@ -80,15 +84,28 @@ Beide service-lokalen Encoder weisen Pair-Tokens über 229 ASCII-Bytes mit einem
 Domainfehler ab. Der gemeinsame JSON-Vertrag bindet denselben Grenzwert und beide
 Services testen ihn unabhängig.
 
+## Kosmetischer Re-Review
+
+- Der JSON-Checkpoint-Codec ist symmetrisch: Ein pristine `Checkpoint()` mit
+  null-Fingerprint roundtrippt. Ein legacy pristine Eintrag wird gelesen und beim
+  nächsten Save auf das neue Feldformat gehoben; ein alter durable Cursor- oder
+  Complete-State ohne Approval bleibt fail-closed.
+- `_coverage_status` liefert keine optionale Kategorie mehr. Aktuelle, aber intern
+  widersprüchliche Payloads landen in `inconsistent_points`, das auch in den
+  Promotions-Gap eingeht.
+- Der Projector verlangt, dass Normalizer-Status, `spatial_conflict` und das
+  Vorhandensein von Conflict-Keys dieselbe Wahrheit ausdrücken. Abweichungen werden
+  vor jeder Token-/Geo-Ausgabe abgewiesen.
+
 ## Verifikation
 
 ```text
 services/intelligence
-395 passed
+398 passed
 ruff check .: green
 
 services/data-ingestion
-1366 passed, 1 skipped, 17 deselected
+1368 passed, 1 skipped, 17 deselected
 ruff check .: green
 ```
 

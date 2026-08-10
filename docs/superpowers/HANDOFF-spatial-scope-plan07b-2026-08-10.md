@@ -10,7 +10,7 @@
 
 **Plan-07A-Abschluss-HEAD vor diesem Handoff:** `48a72e5`
 
-**Plan-07A-Review-Remediation:** `f41d43d`
+**Plan-07A-Review-Remediation:** `c8571ba`
 
 **Remote:** `origin/feat/spatial-plan03` bei `bd3c10b`
 
@@ -68,6 +68,7 @@ d186a40 docs(spatial): pair qdrant ancestor revisions
 24bc336 feat(intelligence): compile qdrant spatial filters
 48a72e5 feat(qdrant): reenrich spatial payloads restartably
 f41d43d fix(spatial): harden Plan 07A review gates
+c8571ba fix(spatial): close Plan 07A re-review gaps
 ```
 
 Der Plan-07A-Start-Handoff ist `a0f730a docs(spatial): hand off Plan 07A`.
@@ -146,11 +147,11 @@ genau einen Search-Call und löst keinen ungefilterten Retry aus.
 
 Der V1-Snapshot ist an genau eine `target_projection_revision` gekoppelt und weist
 pro Lane `total`, `filterable`, `conflict`, `stale`, `unsupported`, `unprojected` und
-`audit_only` aus. Die sechs Statuszähler ergeben exakt `total`; es gibt keinen
-unbenannten Rest. `unavailable` Legacy-Points zählen als unsupported. Der wirksame
-Promotions-Stale-Gap ist `(stale + unprojected) / total`; über 1 % blockiert.
-Fehlend, partial, stale, no-hit und Qdrant-Ausfall dürfen niemals einen globalen
-Retry auslösen.
+`audit_only` sowie `inconsistent` aus. Die sieben Statuszähler ergeben exakt `total`;
+es gibt keinen unbenannten Rest. `unavailable` Legacy-Points zählen als unsupported.
+Der wirksame Promotions-Stale-Gap ist `(stale + unprojected + inconsistent) / total`;
+über 1 % blockiert. Fehlend, partial, stale, no-hit und Qdrant-Ausfall dürfen niemals
+einen globalen Retry auslösen.
 
 Der aktive Projektionsfingerprint lautet
 `spatial-projection-v1-47fec701a2a2` mit `spatial-deriver-v2`. Die gemeinsame
@@ -172,6 +173,9 @@ genehmigten vollständigen Dry-run, validiert vor dem ersten Write einen frische
 Vollscan und bindet dessen Fingerprint für jeden Resume im dauerhaften Checkpoint.
 Es gibt keine öffentliche Apply-API mit frei wählbarem Mode-Flag. Plan 07B oder ein
 späterer Operator-Einstiegspunkt darf ausschließlich diese Funktion verwenden.
+Ein persistierter pristine Checkpoint darf einen null-Fingerprint tragen und
+roundtrippt; ein alter durable Cursor-/Complete-State ohne Approval-Fingerprint wird
+bewusst abgelehnt.
 
 Der unabhängige read-only Review-Snapshot vom 2026-08-10 zählte 1.025.197 Points,
 nur die neun Corpus-/Fulltext-Indizes und keine Spatial-Payloads. Scoped Retrieval
@@ -214,11 +218,11 @@ minimal GREEN, Refactor, service-lokal verifizieren und separat committen.
 
 ```text
 services/intelligence
-395 passed
+398 passed
 ruff check .: green
 
 services/data-ingestion
-1366 passed, 1 skipped, 17 deselected
+1368 passed, 1 skipped, 17 deselected
 ruff check .: green
 ```
 

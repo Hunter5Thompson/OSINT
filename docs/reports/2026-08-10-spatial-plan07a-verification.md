@@ -6,7 +6,7 @@
 
 **Implementierungs-HEAD:** `48a72e5`
 
-**Review-Remediation-HEAD:** `f41d43d`
+**Review-Remediation-HEAD:** `c8571ba`
 
 **Status:** Plan 07A code-seitig abgeschlossen; operative Qdrant-Promotion offen
 
@@ -95,7 +95,7 @@ Zielprojektion gebundenen `SpatialCoverageSnapshotV1` mitführen.
 - vollständigen Point-Upsert mit erhaltenem Vektor/Non-Spatial-Payload;
 - Entfernung aller alten `spatial_*`-, `geo`- und Raw-Code-Projektionsfelder;
 - exakte per-Lane Coverage vor und nach Projektion inklusive benanntem
-  Unprojected-/Audit-only-Anteil und wirksamem Stale-Gap;
+  Unprojected-/Audit-only-/Inconsistent-Anteil und wirksamem Stale-Gap;
 - kanonischen Report-Fingerprint und Driftprüfung eines reviewten Dry-runs;
 - Scheduling nur bei verändertem Projektionsfingerprint; Catalog-Carry-forward mit
   unveränderter Scope→Revisionsmenge ist ein No-op.
@@ -109,6 +109,7 @@ d186a40 docs(spatial): pair qdrant ancestor revisions
 24bc336 feat(intelligence): compile qdrant spatial filters
 48a72e5 feat(qdrant): reenrich spatial payloads restartably
 f41d43d fix(spatial): harden Plan 07A review gates
+c8571ba fix(spatial): close Plan 07A re-review gaps
 ```
 
 Der vorausgehende Handoff-Commit ist
@@ -120,14 +121,14 @@ Der vorausgehende Handoff-Commit ist
 cd services/intelligence
 uv sync
 uv run pytest
-395 passed
+398 passed
 uv run ruff check .
 All checks passed
 
 cd services/data-ingestion
 uv sync
 uv run pytest
-1366 passed, 1 skipped, 17 deselected
+1368 passed, 1 skipped, 17 deselected
 uv run ruff check .
 All checks passed
 ```

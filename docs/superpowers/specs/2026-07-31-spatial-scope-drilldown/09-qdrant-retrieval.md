@@ -270,17 +270,20 @@ den Re-Enrichment-Alarm aus.
 Der service-lokale V1-Vertrag koppelt jeden Snapshot an genau eine
 `target_projection_revision` und enthält pro eindeutiger Lane die nichtnegativen
 Zähler `total_points`, `filterable_points`, `conflict_points`, `stale_points`,
-`unsupported_points`, `unprojected_points` und `audit_only_points`. Diese sechs
+`unsupported_points`, `unprojected_points`, `audit_only_points` und
+`inconsistent_points`. Diese sieben
 Statuszähler ergeben **exakt** `total_points`; es gibt keinen unbenannten Rest.
 Mixed-Conflict-Records mit zugelassenen Pair-Tokens zählen als `filterable`, nicht
-als `conflict`.
+als `conflict`. Ein Payload mit aktueller Projektionsrevision, dessen Status,
+Token- und Conflict-Felder sich widersprechen, zählt als `inconsistent`.
 
 Für das Promotionsgate ist `stale_rate` der wirksame Zielprojektions-Gap
-`(stale_points + unprojected_points) / total_points`. Damit kann ein nie projizierter
-Korpus nicht als `0 % stale` erscheinen. `filterable_rate`, `unprojected_rate` und die
-vorhergesagte `projected_filterable_rate` bleiben separat sichtbar; ein Stale-Gap
-über 1 % blockiert. Retriever-Aufrufe nehmen diesen Snapshot zusätzlich zum
-kompilierten `Filter` entgegen. Work Order 4 ist der Besitzer seiner Erzeugung und
+`(stale_points + unprojected_points + inconsistent_points) / total_points`. Damit
+kann weder ein nie projizierter noch ein intern widersprüchlicher Korpus als
+`0 % stale` erscheinen. `filterable_rate`, `unprojected_rate` und die vorhergesagte
+`projected_filterable_rate` bleiben separat sichtbar; ein Stale-Gap über 1 %
+blockiert. Retriever-Aufrufe nehmen diesen Snapshot zusätzlich zum kompilierten
+`Filter` entgegen. Work Order 4 ist der Besitzer seiner Erzeugung und
 Checkpoint-Provenance.
 
 ---

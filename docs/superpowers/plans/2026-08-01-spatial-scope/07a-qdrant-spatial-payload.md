@@ -116,10 +116,12 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
   verlangt `approved_report`; der interne Mode-Switch ist keine öffentliche API.
   Resume akzeptiert ausschließlich denselben im Checkpoint gespeicherten
   Report-Fingerprint.
-- [x] Coverage benennt `unprojected_points` und `audit_only_points`; alle sechs
+- [x] Coverage benennt `unprojected_points`, `audit_only_points` und
+  `inconsistent_points`; alle sieben
   Statuszähler ergeben exakt `total_points`. Der Promotions-Stale-Gap zählt alte
-  **und** nie projizierte Points, sodass ein leerer Spatial-Korpus nicht `0 %`
-  meldet. Die vorher konstruktiv immer null bleibende `projected_stale_rate` entfällt.
+  nie projizierte **und** intern widersprüchliche Points, sodass ein leerer oder
+  kaputter Spatial-Korpus nicht `0 %` meldet. Die vorher konstruktiv immer null
+  bleibende `projected_stale_rate` entfällt.
 - [x] Pair-Tokens sind die positive Retrieval-Berechtigung. Conflict-Evidenz erzeugt
   keine Tokens/Geo; ein Conflict unterdrückt nur denselben Scope derselben Relation.
   Andere valide Scopes/Relationen bleiben auffindbar. Die beiden recordweiten
@@ -130,6 +132,11 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
 - [x] Der dokumentierte Grenzwert von 229 ASCII-Bytes wird in beiden unabhängigen
   Pair-Token-Encodern erzwungen.
 - [x] **COMMIT:** `f41d43d fix(spatial): harden Plan 07A review gates`
+- [x] **RE-REVIEW:** Pristine Checkpoints roundtrippen und alte durable States ohne
+  Approval bleiben fail-closed; inkonsistente aktuelle Payloads besitzen einen
+  eigenen Coverage-Bucket; Conflict-Status, -Flag und -Keys werden am Projector-Seam
+  als eine Invariante validiert.
+- [x] **COMMIT:** `c8571ba fix(spatial): close Plan 07A re-review gaps`
 
 ## Exit gate and handoff
 
