@@ -8,18 +8,21 @@
 
 **Repo:** `/home/deadpool-ultra/ODIN/OSINT`
 
-**Plan-07A-Abschluss-HEAD vor diesem Handoff:** `48a72e5`
+**Plan-07A-Abschluss-HEAD vor diesem Handoff:** `1129342`
 
-**Plan-07A-Review-Remediation:** `c8571ba`
+**Plan-07A-finaler Code:** `c8571ba`
 
-**Remote:** `origin/feat/spatial-plan03` bei `bd3c10b`
+**Plan-07A-finaler Dokumentationsstand:** `1129342`
 
-**Divergenz vor diesem Handoff:** ahead 6, behind 0
+**Remote-Basis vor Abschluss-Push:** `origin/feat/spatial-plan03` bei `bd3c10b`
 
-**Status:** Plan 07A ist code-seitig abgeschlossen und vollständig service-lokal
-verifiziert. Canonical Slice 7 bleibt offen, bis Plan 07B abgeschlossen ist. Es gab
-keinen Push, keine Qdrant-Indexmutation, kein Re-Enrichment-Apply und keine
-Exact-Promotion.
+**Divergenz vor diesem Handoff-Commit:** ahead 12, behind 0
+
+**Status:** Plan 07A ist code-seitig abgeschlossen, unabhängig final reviewed und
+vollständig service-lokal verifiziert. Der Branch wird mit diesem Handoff an
+`origin/feat/spatial-plan03` übergeben. Canonical Slice 7 bleibt offen, bis Plan 07B
+abgeschlossen ist. Es gab keine Qdrant-Indexmutation, kein Re-Enrichment-Apply und
+keine Exact-Promotion.
 
 ## Pflichtstart im nächsten Chat
 
@@ -68,7 +71,10 @@ d186a40 docs(spatial): pair qdrant ancestor revisions
 24bc336 feat(intelligence): compile qdrant spatial filters
 48a72e5 feat(qdrant): reenrich spatial payloads restartably
 f41d43d fix(spatial): harden Plan 07A review gates
+4711e9e docs(spatial): record Plan 07A review remediation
 c8571ba fix(spatial): close Plan 07A re-review gaps
+ca08646 docs(spatial): close Plan 07A re-review
+1129342 docs(spatial): note approval version binding
 ```
 
 Der Plan-07A-Start-Handoff ist `a0f730a docs(spatial): hand off Plan 07A`.
@@ -177,6 +183,13 @@ Ein persistierter pristine Checkpoint darf einen null-Fingerprint tragen und
 roundtrippt; ein alter durable Cursor-/Complete-State ohne Approval-Fingerprint wird
 bewusst abgelehnt.
 
+Approval und Apply müssen innerhalb derselben deployten Codeversion stattfinden.
+Der Report-Fingerprint umfasst codegeprägte Coverage-Felder; ein Deployment zwischen
+beiden Schritten lässt `validate_dry_run_approval` daher mit `approved dry-run
+drifted from the current Qdrant lane` fail-closed abbrechen. Diese Meldung kann
+Code- statt Qdrant-Datendrift bedeuten und verlangt einen neuen Dry-run samt Review,
+keinen Override.
+
 Der unabhängige read-only Review-Snapshot vom 2026-08-10 zählte 1.025.197 Points,
 nur die neun Corpus-/Fulltext-Indizes und keine Spatial-Payloads. Scoped Retrieval
 bleibt daher bis zum autorisierten Re-Enrichment korrekt leer/fail-closed.
@@ -224,6 +237,9 @@ ruff check .: green
 services/data-ingestion
 1368 passed, 1 skipped, 17 deselected
 ruff check .: green
+
+git diff --check: clean
+Live-Qdrant: 9 Corpus-/Fulltext-Indizes, 0 Spatial-Indizes, keine Mutation
 ```
 
 Die 17 standardmäßig deselecteten Tests sind `live`; der vorhandene GDELT-
@@ -234,5 +250,7 @@ Integrationstest wurde ohne laufende Dev-Compose-Services übersprungen.
 Plan 07B darf testgetrieben implementiert werden. Eine tatsächliche Exact-Promotion
 bleibt dennoch blockiert, bis für Qdrant in Staging die Payload-Indizes erstellt,
 ein vollständiger Dry-run reviewed, das Apply autorisiert und reale
-Analysis-/Realtime-Coverage-/Stale-Snapshots erfasst wurden. Stale über 1 % blockiert
-die Promotion. Kein Unit-Test- oder In-Memory-Snapshot ersetzt diese Evidenz.
+Analysis-/Realtime-Coverage-/Stale-Snapshots erfasst wurden. Der wirksame Gap
+`(stale + unprojected + inconsistent) / total` über 1 % blockiert die Promotion und
+liegt auf dem unangereicherten Korpus derzeit bei 100 %. Kein Unit-Test- oder
+In-Memory-Snapshot ersetzt diese Evidenz.
