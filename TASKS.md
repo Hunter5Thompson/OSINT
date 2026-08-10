@@ -1855,6 +1855,11 @@ Observation-Producer.
 #   Containment-Index produktiv und macht die geschlossene Layer-Matrix zum Runtime-
 #   Gate sowie Badge-Consumer. Damit sind ausschließlich Kriterien 6 und 9 erfüllt;
 #   Kriterien 1–5, 7 und 8 sowie der Plan-05D-Blocker bleiben offen.
+#   Das Plan-08-Abschluss-Handoff vom 2026-08-10 führt deshalb nicht unmittelbar in
+#   die Legacy-Löschung. Die nächste Session inventarisiert und schließt zuerst genau
+#   die Kriterien 1–5, 7 und 8 und erstellt danach einen Plan-05D-Readiness-Record.
+#   Default-on-Release, vereinbarter Soak, Artefakt-Rollback und explizite Phase-D-
+#   Entscheidung bleiben zusätzliche externe Freigabegates.
 #
 # Verbleibende Akzeptanzkriterien / RED-Gates:
 #   1. Der Spatial-Country-Inspector erhält Signal-Liste und Munin-Briefing über
