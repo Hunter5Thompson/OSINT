@@ -19,6 +19,7 @@ from rag.corpus_policy import (
 )
 from rag.evidence import neutralize_evidence_markers, pack_with_lineage, to_evidence_item
 from rag.retriever import enhanced_search
+from spatial import combine_filters, compile_qdrant_scope_filter
 
 logger = structlog.get_logger()
 
@@ -71,21 +72,25 @@ async def qdrant_search(
         by Title/Excerpt lines, optionally followed by a deduplicated [Graph Context]
         block. Sorted by relevance; bounded by an internal character budget.
     """
-    _ = runtime
+    scope = runtime.state["spatial_scope"]
+    relation = runtime.state["spatial_relation"]
+    spatial_filter = (
+        compile_qdrant_scope_filter(scope, relation) if scope is not None else None
+    )
     try:
         analysis = await enhanced_search(
             query, limit=FINAL_K, pool=ANALYSIS_POOL,
-            query_filter=analysis_filter(),
+            query_filter=combine_filters(analysis_filter(), spatial_filter),
             post_rerank=apply_tier_boost,
         )
         try:
             realtime = await enhanced_search(
                 query, limit=TELEGRAM_MAX, pool=REALTIME_POOL,
-                query_filter=realtime_filter(),
+                query_filter=combine_filters(realtime_filter(), spatial_filter),
                 post_rerank=apply_tier_boost, score_threshold=RT_SCORE_THRESHOLD,
             )
         except Exception as e:  # realtime is best-effort; never fail the analysis lane
-            logger.warning("realtime_lane_failed", query=query, error=str(e))
+            logger.warning("realtime_lane_failed", error=str(e))
             realtime = []
 
         analysis = validate_lane(analysis, "analysis")
@@ -94,7 +99,6 @@ async def qdrant_search(
 
         logger.info(
             "qdrant_search_executed",
-            query=query,
             analysis_count=len(analysis),
             realtime_count=len(realtime),
             result_count=len(results),

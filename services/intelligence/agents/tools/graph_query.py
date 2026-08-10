@@ -17,10 +17,12 @@ from langgraph.prebuilt import ToolRuntime
 from agents.tools.graph_templates import (
     build_cypher_from_template,
     inject_limit,
+    select_scoped_template,
     select_template,
 )
 from graph.read_queries import validate_cypher_readonly
 from graph.state import AgentState
+from spatial import ScopeKind, SpatialScopeTokenV1
 
 log = structlog.get_logger(__name__)
 
@@ -117,6 +119,51 @@ async def execute_graph_query(
         return f"Graph query failed: {e}"
 
 
+async def execute_scoped_graph_query(
+    template_id: str,
+    params: dict[str, object],
+    token: SpatialScopeTokenV1,
+    graph_client: Any = None,
+) -> str:
+    """Execute one complete allowlisted scope template with trusted parameters."""
+
+    client = graph_client or _graph_client
+    if client is None:
+        return "Graph database not available. Cannot query knowledge graph."
+    selected = select_scoped_template(template_id, token.kind, params)
+    if selected is None:
+        return f"SPATIAL_SCOPE_UNSUPPORTED: graph template {template_id}"
+    query_cypher, merged_params = selected
+    merged_params.update(
+        {
+            "scope_key": token.scope_key,
+            "compatible_revisions": list(token.compatible_derivation_revisions),
+        }
+    )
+    start = time.monotonic()
+    try:
+        rows = await client.run_query(query_cypher, merged_params, read_only=True)
+        log.info(
+            "graph_query_executed",
+            mode="scoped_template",
+            template_id=template_id,
+            scope_key=token.scope_key,
+            duration_ms=int((time.monotonic() - start) * 1000),
+            result_count=len(rows),
+        )
+        return _format_results(rows)
+    except Exception as e:
+        log.warning(
+            "graph_query_failed",
+            mode="scoped_template",
+            template_id=template_id,
+            scope_key=token.scope_key,
+            error=str(e),
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+        return f"Graph query failed: {e}"
+
+
 def _format_results(rows: list[dict], max_rows: int = 15) -> str:
     """Format Neo4j result rows as readable text for the agent."""
     if not rows:
@@ -177,8 +224,21 @@ async def query_knowledge_graph(
     Returns:
         Formatted graph results (up to 15 rows per query).
     """
-    _ = runtime
     template_id, params = _match_intent(question)
+
+    scope = runtime.state["spatial_scope"]
+    relation = runtime.state["spatial_relation"]
+    if scope is not None and scope.kind is not ScopeKind.WORLD:
+        if template_id is None:
+            return "SPATIAL_SCOPE_UNSUPPORTED: no scoped graph template"
+        log.info(
+            "spatial_filter_applied",
+            consumer="neo4j",
+            scope_key=scope.scope_key,
+            relation=relation.value,
+            filter_mode="semantic-key",
+        )
+        return await execute_scoped_graph_query(template_id, params, scope)
 
     if template_id:
         return await execute_graph_query(template_id=template_id, params=params)
@@ -206,6 +266,10 @@ def _match_intent(question: str) -> tuple[str | None, dict]:
     ):
         return "top_connected", {}
 
+    # Match the longer entity intent before the "events in" location prefix.
+    if entity and any(kw in q for kw in ("events involving", "events about", "events for")):
+        return "events_by_entity", {"name": entity}
+
     if any(kw in q for kw in ("timeline", "events in", "events at")):
         location = entity or question.split("in ")[-1].split("at ")[-1].strip(" ?.")
         return "event_timeline", {"location": location}
@@ -217,9 +281,6 @@ def _match_intent(question: str) -> tuple[str | None, dict]:
 
     if entity and any(kw in q for kw in ("sources for", "evidence", "reported by", "source")):
         return "source_backed", {"name": entity}
-
-    if entity and any(kw in q for kw in ("events involving", "events about", "events for")):
-        return "events_by_entity", {"name": entity}
 
     if entity and any(kw in q for kw in ("network", "2-hop", "connections around")):
         return "two_hop_network", {"name": entity}
