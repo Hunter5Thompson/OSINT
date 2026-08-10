@@ -1,6 +1,8 @@
 # Spatial Scope 03 — Cesium Country Migration
 
-> **Status:** IN PROGRESS (2026-08-06) · **Canonical slice:** 3 · **Requires:** Plans 01 and 02
+> **Status:** DONE — Implementierung/Canary; separates `TASK-123`-Readiness-Paket
+> bleibt vor 05D offen (2026-08-10) · **Canonical slice:** 3 · **Requires:**
+> Plans 01 und 02
 >
 > **Load with:** [Spec 06 §§12–13](../../specs/2026-07-31-spatial-scope-drilldown/06-cesium-and-layer-semantics.md),
 > [Spec 11 §18](../../specs/2026-07-31-spatial-scope-drilldown/11-ux-and-3d-metrics.md),

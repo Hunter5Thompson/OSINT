@@ -1,7 +1,8 @@
 # Spatial Scope — Implementation Plan Index
 
-> **Status:** IN PROGRESS — Plans 00A–02, 04, 06A/06B and 07A done; Plan 03
-> remains active and 07B is next (2026-08-10) · **Design gate:** PASS (2026-08-01)
+> **Status:** IN PROGRESS — alle regulären Pläne 00A–08 sind innerhalb ihrer
+> akzeptierten Grenzen implementiert; ausschließlich der Sonderplan 05D bleibt
+> blockiert offen (2026-08-10) · **Design gate:** PASS (2026-08-01)
 >
 > **Normative source:** [Spatial-Scope-Spec](../specs/2026-07-31-spatial-scope-drilldown-design.md)
 
@@ -25,19 +26,33 @@ cleanup PR guarded by the Phase-D rollout decision.
 | [00B](2026-08-01-spatial-scope/00b-boundary-builder-and-feasibility.md) | DONE | 0 | Deterministic assets, LODs, antimeridian, feasibility gate | 00A |
 | [01](2026-08-01-spatial-scope/01-frontend-core-and-navigation.md) | DONE | 1 | Framework-free command store, URL port, React seam | 00A contract fixtures |
 | [02](2026-08-01-spatial-scope/02-backend-catalog-and-http.md) | DONE | 2 | Runtime catalog service, safe HTTP, frontend adapter | 00B, 01 contracts |
-| [03](2026-08-01-spatial-scope/03-cesium-country-migration.md) | IN PROGRESS | 3 | World→country rendering, picking, breadcrumb, almanac | 01, 02 |
+| [03](2026-08-01-spatial-scope/03-cesium-country-migration.md) | DONE | 3 | World→country rendering, picking, breadcrumb, almanac | 01, 02 |
 | [04](2026-08-01-spatial-scope/04-chronik-bbox-scope.md) | DONE | 4 | Honest bbox-scoped timeline with stale-data guards | 02, 03 |
-| [05](2026-08-01-spatial-scope/05-admin1-and-prefetch.md) | PLANNED | 5 | Admin-1 drilldown, bounded cache and hover prefetch | 03 |
-| [05D](2026-08-01-spatial-scope/05d-phase-d-legacy-cleanup.md) | PLANNED | Phase D | Remove legacy country identity/renderer and build flag | 05 + canary/default-on soak |
+| [05](2026-08-01-spatial-scope/05-admin1-and-prefetch.md) | DONE | 5 | Admin-1 drilldown, bounded cache and hover prefetch | 03 |
+| [05D](2026-08-01-spatial-scope/05d-phase-d-legacy-cleanup.md) | BLOCKED | Phase D | Remove legacy country identity/renderer and build flag | TASK-123 + default-on release/soak/rollback decision |
 | [06A](2026-08-01-spatial-scope/06a-neo4j-normalization-and-backfill.md) | DONE | 6 | Canonical Location fields, writers, indexes, repeatable jobs | 00B |
 | [06B](2026-08-01-spatial-scope/06b-chronik-exact-scope.md) | DONE | 6 | Static exact Cypher and per-lane activation | 04, 06A |
 | [07A](2026-08-01-spatial-scope/07a-qdrant-spatial-payload.md) | DONE | 7 | Spatial payload, indexes and repeatable re-enrichment | 06A |
-| [07B](2026-08-01-spatial-scope/07b-munin-scope-enforcement.md) | NEXT | 7 | Immutable run scope and capability-bound tools | 06B, 07A |
-| [08](2026-08-01-spatial-scope/08-layers-admin2-and-3d.md) | PLANNED | 8 | Reviewed extra layers, Admin-2, truthful 3D metrics | V1 gates from 03–07B |
+| [07B](2026-08-01-spatial-scope/07b-munin-scope-enforcement.md) | DONE | 7 | Immutable run scope and capability-bound tools | 06B, 07A |
+| [08](2026-08-01-spatial-scope/08-layers-admin2-and-3d.md) | DONE (BOUNDED) | 8 | Registry plus one strict point layer; unproved branches stopped/deferred | V1 gates from 03–07B |
 
 `01` may start after 00A while 00B builds geometry. `06A` may proceed after Slice 0
 while UI Slices 1–5 run, but exact activation still waits for `04` and its coverage
 report. No other dependency is relaxed by parallel development.
+
+## Verbleibender Planstand
+
+Der kanonische Satz endet bei Plan 08. Genau ein Plan ist noch nicht ausgeführt:
+Plan 05D. Er ist kein automatisch nächster Feature-Slice, sondern der gesperrte
+Phase-D-Deployment-Cleanup.
+
+Vor seiner Freigabe müssen die sieben noch offenen Kriterien 1–5, 7 und 8 aus
+`TASK-123`, ein abgeschlossener Default-on-Release, der vereinbarte Soak, ein
+getesteter Artefakt-Rollback und die explizite Phase-D-Entscheidung vorliegen. Dieses
+Readiness-Paket ist kein zusätzlicher Plan 09. Die in Plan 08 belegbar gestoppt,
+blockiert oder deferred gebliebenen Work Orders werden ebenfalls nicht als offene
+Planpflichten umetikettiert; jede spätere Aktivierung braucht eine neue ausdrückliche
+Produkt-/Evidenzentscheidung.
 
 ## Normative-spec coverage
 
