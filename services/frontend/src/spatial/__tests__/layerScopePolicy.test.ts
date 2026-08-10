@@ -45,17 +45,63 @@ describe("closed layer spatial capability matrix", () => {
     );
   });
 
-  it("declares every required truthfulness and stale field", () => {
+  it("keeps each behavior coupled to its support, precision, and stale claims", () => {
     for (const layerId of ALL_LAYER_KEYS) {
-      expect(layerSpatialCapability(layerId)).toMatchObject({
-        layerId,
-        relation: expect.any(String),
-        behavior: expect.any(String),
-        precision: expect.any(String),
-        supportedKinds: expect.any(Array),
-        stalePolicy: expect.any(String),
-        unsupportedBehavior: expect.any(String),
-      });
+      const capability = layerSpatialCapability(layerId);
+      expect(capability.layerId).toBe(layerId);
+
+      switch (capability.behavior) {
+        case "unsupported":
+          expect(capability).toMatchObject({
+            supportedKinds: ["world"],
+            precision: "global",
+            stalePolicy: "not-applicable",
+            unsupportedBehavior: "hide",
+          });
+          break;
+        case "global-context":
+          expect(capability).toMatchObject({
+            relation: "context",
+            supportedKinds: ["world", "country", "admin1", "admin2"],
+            precision: "global",
+            stalePolicy: "not-applicable",
+            unsupportedBehavior: "label-global-context",
+          });
+          break;
+        case "scope-presentation":
+          expect(capability).toMatchObject({
+            relation: "context",
+            supportedKinds: ["world", "country", "admin1", "admin2"],
+            precision: "global",
+            stalePolicy: "scope-presentation-generation",
+            unsupportedBehavior: "label-scope-presentation",
+          });
+          break;
+        case "strict":
+          expect(capability).toMatchObject({
+            relation: "occurs-in",
+            supportedKinds: ["world", "country", "admin1", "admin2"],
+            unsupportedBehavior: "hide",
+          });
+          if (capability.precision === "point-in-boundary") {
+            expect(capability.stalePolicy).toBe("invalidate-on-semantic-commit");
+          } else {
+            expect(capability.precision).toBe("bbox-approximate");
+            expect(capability.stalePolicy).toBe("response-scope-token");
+          }
+          break;
+        case "dim-outside":
+          expect.unreachable(`${layerId} has no accepted dim-outside contract`);
+      }
+    }
+  });
+
+  it("surfaces the declared relation in every runtime claim", () => {
+    for (const layerId of ALL_LAYER_KEYS) {
+      const capability = layerSpatialCapability(layerId);
+      const status = layerSpatialStatus(layerId, "world", readyContainment);
+
+      expect(status.title).toContain(capability.relation);
     }
   });
 
