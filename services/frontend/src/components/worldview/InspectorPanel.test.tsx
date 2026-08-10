@@ -43,7 +43,7 @@ describe("InspectorPanel", () => {
       />,
     );
     expect(screen.getByRole("region", { name: /Inspector/i })).toBeInTheDocument();
-    expect(screen.getByText(/12.340 N, 56.780 E/)).toBeInTheDocument();
+    expect(screen.getByText(/12.340N · 56.780E/)).toBeInTheDocument();
     expect(screen.getByText(/FIRMS hotspot · VIIRS/)).toBeInTheDocument();
   });
 
@@ -99,7 +99,7 @@ describe("InspectorPanel", () => {
       "https://example.test/sabine-pass.jpg",
     );
     expect(screen.getByText("lng terminal")).toBeInTheDocument();
-    expect(screen.getByText(/29.754 N, 93.874 W/)).toBeInTheDocument();
+    expect(screen.getByText(/29.754N · 93.874W/)).toBeInTheDocument();
     expect(screen.getByText("Coordinates exact per GEM")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /source/i })).toHaveAttribute(
       "href",
@@ -236,7 +236,7 @@ describe("InspectorPanel", () => {
     );
 
     expect(screen.getByText("Canonical Ukraine")).toBeInTheDocument();
-    expect(await screen.findByText("Kyiv · 50.45N 30.52E")).toBeInTheDocument();
+    expect(await screen.findByText("Kyiv · 50.45N · 30.52E")).toBeInTheDocument();
     expect(screen.getByText("Hryvnia")).toBeInTheDocument();
     for (const tab of ["Profile", "People", "Gov", "Economy", "Security"]) {
       expect(screen.getByRole("button", { name: tab })).toBeInTheDocument();

@@ -34,10 +34,18 @@ export function SpatialScopeBreadcrumb() {
   if (scope.phase === "hydrating") {
     return (
       <nav aria-label="Spatial scope" style={navStyle}>
-        <span>Loading spatial scope</span>
+        <span role="status" aria-live="polite" aria-atomic="true">
+          Loading spatial scope
+        </span>
       </nav>
     );
   }
+
+  const statusMessage = scope.pending !== null
+    ? "Opening spatial scope…"
+    : scope.visual.phase === "unavailable"
+      ? "Boundary unavailable"
+      : "";
 
   return (
     <nav aria-label="Spatial scope" style={navStyle}>
@@ -71,12 +79,9 @@ export function SpatialScopeBreadcrumb() {
           Eine Ebene hoch
         </button>
       ) : null}
-      {scope.pending !== null ? (
-        <span role="status">Opening {scope.pending}…</span>
-      ) : null}
-      {scope.visual.phase === "unavailable" ? (
-        <span role="status">Boundary unavailable</span>
-      ) : null}
+      <span key="scope-status" role="status" aria-live="polite" aria-atomic="true">
+        {statusMessage}
+      </span>
     </nav>
   );
 }

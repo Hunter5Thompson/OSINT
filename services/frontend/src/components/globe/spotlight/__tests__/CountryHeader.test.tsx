@@ -75,6 +75,7 @@ describe("CountryHeader", () => {
 
     expect(screen.getByText(/Greece/)).toBeInTheDocument();
     expect(screen.getByText(/Athens/)).toBeInTheDocument();
+    expect(screen.getByText("Athens · 37.90N · 23.70E")).toBeInTheDocument();
     expect(screen.queryByText(/S2\.5 coming soon/i)).not.toBeInTheDocument();
 
     expect(await screen.findByText(/WorldReport/i)).toBeInTheDocument();
@@ -116,6 +117,7 @@ describe("CountryHeader", () => {
 
     expect(screen.getByText("Canonical Ukraine")).toBeInTheDocument();
     expect(await screen.findByText(/Euro \(EUR\)/)).toBeInTheDocument();
+    expect(screen.getByText("Athens · 37.98N · 23.73E")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Greece" })).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/almanac/country?scope_key=country%3AUKR"
@@ -134,5 +136,58 @@ describe("CountryHeader", () => {
     for (const capability of ["Hugin", "Signalia", "Vectorium", "Memoria", "Fenestra"]) {
       expect(within(capabilityList).getByText(capability)).toBeInTheDocument();
     }
+  });
+
+  it("uses the shared south/west formatter in Legacy and Spatial headers", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/signals")) {
+        return new Response(JSON.stringify({ country_id: "ARG", items: [] }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({
+        id: "ARG",
+        iso3: "ARG",
+        m49: "032",
+        name: "Argentina",
+        region: "Americas",
+        subregion: "South America",
+        capital: { name: "Buenos Aires", lat: -34.6, lon: -58.4 },
+        facts: {
+          profile: [],
+          people: [],
+          government: [],
+          economy: [],
+          security: [],
+        },
+        updated_at: "2026-08-10",
+        source_note: "fixture",
+      }), { status: 200 });
+    });
+    const scopeKey = parseScopeKeyCandidate("country:ARG");
+
+    render(
+      <>
+        <CountryHeader
+          name="Argentina"
+          iso3="ARG"
+          m49="032"
+          capital={{ name: "Buenos Aires", coords: { lon: -58.4, lat: -34.6 } }}
+        />
+        <SpatialCountryHeader
+          selection={{ scopeKey, label: "Canonical Argentina" }}
+          query={{
+            schemaVersion: 1,
+            scopeKey,
+            catalogRevision: parseCatalogRevision("spatial-v1-fe9828dcda05"),
+            boundaryPolicy: "odin-reference-v1",
+          }}
+        />
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Buenos Aires · 34.60S · 58.40W")).toHaveLength(2);
+    });
   });
 });

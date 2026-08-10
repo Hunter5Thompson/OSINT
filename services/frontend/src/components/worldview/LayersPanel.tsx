@@ -154,10 +154,15 @@ const spatialStatusColor: Readonly<Record<LayerSpatialStatus["tone"], string>> =
 };
 
 const policyLink: CSSProperties = {
+  background: "transparent",
+  border: 0,
   color: "var(--amber)",
+  cursor: "pointer",
   fontFamily: '"Martian Mono", ui-monospace, monospace',
   fontSize: "0.64rem",
   letterSpacing: "0.04em",
+  padding: 0,
+  textAlign: "left",
   textDecorationColor: "var(--granite)",
   textUnderlineOffset: "0.18rem",
 };
@@ -185,76 +190,72 @@ function CartographyProvenance({
   return (
     <div style={{ marginTop: "0.65rem" }}>
       <div style={{ ...groupTitle, marginBottom: "0.3rem" }}>§ Cartography</div>
-      <a
-        href={`#${detailsId}`}
+      <button
+        type="button"
         aria-controls={detailsId}
         aria-expanded={expanded}
-        onClick={(event) => {
-          event.preventDefault();
-          setExpanded((value) => !value);
-        }}
+        onClick={() => setExpanded((value) => !value)}
         style={policyLink}
       >
         Data / Boundary policy
-      </a>
-      {expanded ? (
-        <div
-          id={detailsId}
-          role="region"
-          aria-label="Boundary data and policy"
-          style={policyDetails}
-        >
-          {state.status === "ready" ? (
-            <>
-              <dl style={{ display: "grid", gap: "0.25rem", margin: 0 }}>
-                <div>
-                  <dt style={{ color: "var(--ash)" }}>Boundary policy</dt>
-                  <dd style={{ color: "var(--bone)", margin: 0 }}>
-                    {state.data.boundaryPolicy}
-                  </dd>
-                </div>
-                <div>
-                  <dt style={{ color: "var(--ash)" }}>Catalog revision</dt>
-                  <dd style={{ color: "var(--bone)", margin: 0 }}>
-                    {state.data.catalogRevision}
-                  </dd>
-                </div>
-                <div>
-                  <dt style={{ color: "var(--ash)" }}>Representation / disputes</dt>
-                  <dd style={{ color: "var(--bone)", margin: 0 }}>
-                    {state.data.representationNote}
-                  </dd>
-                </div>
-              </dl>
-              <ul
-                aria-label="Boundary source attributions"
-                style={{
-                  display: "grid",
-                  gap: "0.55rem",
-                  listStyle: "none",
-                  margin: 0,
-                  padding: 0,
-                }}
-              >
-                {state.data.sources.map((source) => (
-                  <li key={source.sourceId}>
-                    <div style={{ color: "var(--bone)" }}>{source.text}</div>
-                    <div>
-                      {source.sourceId} · release {source.release} · {source.licenseId}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : state.status === "loading" ? (
-            <div role="status">Loading reviewed boundary provenance…</div>
-          ) : state.status === "error" ? (
-            <div role="alert">Boundary provenance unavailable.</div>
-          ) : (
-            <div>Waiting for a committed catalog revision.</div>
-          )}
-        </div>
-      ) : null}
+      </button>
+      <div
+        id={detailsId}
+        role="region"
+        aria-label="Boundary data and policy"
+        hidden={!expanded}
+        style={policyDetails}
+      >
+        {state.status === "ready" ? (
+          <>
+            <dl style={{ display: "grid", gap: "0.25rem", margin: 0 }}>
+              <div>
+                <dt style={{ color: "var(--ash)" }}>Boundary policy</dt>
+                <dd style={{ color: "var(--bone)", margin: 0 }}>
+                  {state.data.boundaryPolicy}
+                </dd>
+              </div>
+              <div>
+                <dt style={{ color: "var(--ash)" }}>Catalog revision</dt>
+                <dd style={{ color: "var(--bone)", margin: 0 }}>
+                  {state.data.catalogRevision}
+                </dd>
+              </div>
+              <div>
+                <dt style={{ color: "var(--ash)" }}>Representation / disputes</dt>
+                <dd style={{ color: "var(--bone)", margin: 0 }}>
+                  {state.data.representationNote}
+                </dd>
+              </div>
+            </dl>
+            <ul
+              aria-label="Boundary source attributions"
+              style={{
+                display: "grid",
+                gap: "0.55rem",
+                listStyle: "none",
+                margin: 0,
+                padding: 0,
+              }}
+            >
+              {state.data.sources.map((source) => (
+                <li key={source.sourceId}>
+                  <div style={{ color: "var(--bone)" }}>{source.text}</div>
+                  <div>
+                    {source.sourceId} · release {source.release} · {source.licenseId}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : state.status === "loading" ? (
+          <div role="status">Loading reviewed boundary provenance…</div>
+        ) : state.status === "error" ? (
+          <div role="alert">Boundary provenance unavailable.</div>
+        ) : (
+          <div>Waiting for a committed catalog revision.</div>
+        )}
+      </div>
     </div>
   );
 }

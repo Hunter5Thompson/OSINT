@@ -12,6 +12,7 @@ import { OverlayPanel } from "../hlidskjalf/OverlayPanel";
 import type { CountryHit } from "../globe/hooks/useCountryHitTest";
 import type { CountrySelection } from "../../spatial/selection";
 import type { SpatialQueryRef } from "../../spatial/contracts";
+import { formatCoords } from "../../lib/coords";
 import {
   CountryHeader,
   SpatialCountryHeader,
@@ -77,12 +78,6 @@ const sourceLinkStyle: CSSProperties = {
   textDecoration: "none",
 };
 
-function formatCoord(lat: number, lon: number): string {
-  const ns = lat >= 0 ? "N" : "S";
-  const ew = lon >= 0 ? "E" : "W";
-  return `${Math.abs(lat).toFixed(3)} ${ns}, ${Math.abs(lon).toFixed(3)} ${ew}`;
-}
-
 function Property({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -142,7 +137,7 @@ function AircraftInspector({
       <Property label="§ Track Points" value={`${track.points.length}`} />
       <Property
         label="§ Last Position"
-        value={lastPoint ? formatCoord(lastPoint.lat, lastPoint.lon) : "-"}
+        value={lastPoint ? formatCoords([lastPoint.lat, lastPoint.lon]) : "-"}
       />
       <Property
         label="§ Altitude"
@@ -201,7 +196,7 @@ function InspectorBody({
       return (
         <>
           <div style={titleStyle}>{`FIRMS hotspot · ${h.satellite}`}</div>
-          <Property label="§ Coordinates" value={formatCoord(h.latitude, h.longitude)} />
+          <Property label="§ Coordinates" value={formatCoords([h.latitude, h.longitude])} />
           <Property label="§ FRP" value={`${h.frp.toFixed(1)} MW`} />
           <Property label="§ Brightness" value={`${h.brightness.toFixed(1)} K`} />
           <Property label="§ Region" value={h.bbox_name || "-"} />
@@ -248,7 +243,7 @@ function InspectorBody({
           <Property label="§ Operator" value={r.operator || "-"} />
           <Property label="§ Capacity" value={capacity} />
           {r.latitude != null && r.longitude != null ? (
-            <Property label="§ Coordinates" value={formatCoord(r.latitude, r.longitude)} />
+            <Property label="§ Coordinates" value={formatCoords([r.latitude, r.longitude])} />
           ) : null}
           <Property label="§ Country" value={r.country || "-"} />
           <Property label="§ Status" value={r.status || "-"} />
@@ -268,7 +263,7 @@ function InspectorBody({
           <div style={titleStyle}>{e.title}</div>
           <Property label="§ Category" value={e.category || "-"} />
           <Property label="§ Status" value={e.status || "-"} />
-          <Property label="§ Coordinates" value={formatCoord(e.latitude, e.longitude)} />
+          <Property label="§ Coordinates" value={formatCoords([e.latitude, e.longitude])} />
           <Property label="§ Date" value={e.event_date.slice(0, 10)} />
         </>
       );
@@ -282,7 +277,7 @@ function InspectorBody({
           <Property label="§ Alert" value={g.alert_level || "-"} />
           <Property label="§ Severity" value={Number.isFinite(g.severity) ? `${g.severity}` : "-"} />
           <Property label="§ Country" value={g.country || "-"} />
-          <Property label="§ Coordinates" value={formatCoord(g.latitude, g.longitude)} />
+          <Property label="§ Coordinates" value={formatCoords([g.latitude, g.longitude])} />
         </>
       );
     }

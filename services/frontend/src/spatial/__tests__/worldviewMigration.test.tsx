@@ -124,6 +124,11 @@ class InteractiveModule implements OwnedSpatialScopeModule {
     return { outcome: "unchanged", snapshot: this.snapshot };
   };
 
+  publish(snapshot: SpatialScopeSnapshot): void {
+    this.snapshot = snapshot;
+    this.listeners.forEach((listener) => listener());
+  }
+
   start(): void {}
   stop(): void {}
 }
@@ -312,6 +317,8 @@ describe("SpatialScopeBreadcrumb", () => {
       "location",
     );
     const worldButton = screen.getByRole("button", { name: "World" });
+    expect(worldButton.tagName).toBe("BUTTON");
+    expect(worldButton).toHaveAttribute("type", "button");
     worldButton.focus();
     fireEvent.click(worldButton);
 
@@ -325,15 +332,50 @@ describe("SpatialScopeBreadcrumb", () => {
     expect(worldButton).toHaveAttribute("aria-current", "location");
   });
 
-  it("shows pending truth and offers a separate semantic ascend action", () => {
+  it("keeps one polite live region across idle, pending, unavailable, and idle", () => {
     const pending = parseScopeKeyCandidate("admin1:iso3166-2:UA-14");
-    const module = new InteractiveModule(readySnapshot("ukraine", pending));
+    const module = new InteractiveModule(readySnapshot("ukraine"));
     render(
       <ScopeHarness module={module}>
         <SpatialScopeBreadcrumb />
       </ScopeHarness>,
     );
-    expect(screen.getByText(/Opening admin1:iso3166-2:UA-14/i)).toBeInTheDocument();
+
+    const liveRegion = screen.getByRole("status");
+    expect(liveRegion).toHaveAttribute("aria-live", "polite");
+    expect(liveRegion).toHaveTextContent("");
+
+    act(() => module.publish(readySnapshot("ukraine", pending)));
+    expect(screen.getByRole("status")).toBe(liveRegion);
+    expect(liveRegion).toHaveTextContent("Opening spatial scope…");
+    expect(liveRegion).not.toHaveTextContent("admin1:iso3166-2:UA-14");
+
+    const unavailable = readySnapshot("ukraine");
+    if (unavailable.phase === "hydrating") {
+      throw new Error("readySnapshot fixture unexpectedly returned hydration state");
+    }
+    act(() => module.publish(freezeSpatialScopeSnapshot({
+      ...unavailable,
+      visual: {
+        phase: "unavailable",
+        stateRevision: unavailable.stateRevision,
+        problem: {
+          severity: "warning",
+          code: "PRESENTATION_FAILED",
+          target: unavailable.current.key,
+          recoverable: true,
+          message: "fixture",
+          activeCatalogRevision: unavailable.query.catalogRevision,
+        },
+      },
+    } satisfies SpatialScopeSnapshot)));
+    expect(screen.getByRole("status")).toBe(liveRegion);
+    expect(liveRegion).toHaveTextContent("Boundary unavailable");
+
+    act(() => module.publish(readySnapshot("ukraine")));
+    expect(screen.getByRole("status")).toBe(liveRegion);
+    expect(liveRegion).toHaveTextContent("");
+
     fireEvent.click(screen.getByRole("button", { name: "Eine Ebene hoch" }));
     expect(module.commands.at(-1)).toEqual({ type: "ascend", cause: "breadcrumb" });
   });
