@@ -7,7 +7,15 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from agents.tools.qdrant_search import TOOL_OUTPUT_MAX_CHARS, qdrant_search
-from tests.tool_runtime import invoke_runtime_tool
+from rag.corpus_policy import analysis_filter, realtime_filter
+from spatial import (
+    RetrievalSpatialRelation,
+    ScopeKind,
+    SpatialScopeTokenV1,
+    combine_filters,
+    compile_qdrant_scope_filter,
+)
+from tests.tool_runtime import agent_state, invoke_runtime_tool
 
 
 def _prose(min_chars: int = 80) -> str:
@@ -19,6 +27,20 @@ def _prose(min_chars: int = 80) -> str:
     while len(out) < min_chars:
         out += s
     return out
+
+
+def _ukraine_token() -> SpatialScopeTokenV1:
+    return SpatialScopeTokenV1(
+        scope_key="country:UKR",
+        kind=ScopeKind.COUNTRY,
+        catalog_revision="spatial-v1-e76a16bff799",
+        derivation_revision="spatial-derive-v1-d30efa07e141",
+        boundary_policy="odin-reference-v1",
+        compatible_derivation_revisions=(
+            "spatial-derive-v1-d30efa07e141",
+            "spatial-derive-v1-aaaaaaaaaaaa",
+        ),
+    )
 
 
 class TestQdrantSearchTool:
@@ -200,3 +222,63 @@ class TestTwoLaneScoping:
             out = await invoke_runtime_tool(qs, {"query": "x"})
 
         assert out.index("TANKVIEW") < out.index("LOCALVIEW")
+
+
+class TestRuntimeSpatialScoping:
+    async def test_adds_scope_filter_without_weakening_either_lane_policy(self):
+        search = AsyncMock(side_effect=[[], []])
+        token = _ukraine_token()
+        state = agent_state(
+            spatial_scope=token,
+            spatial_relation=RetrievalSpatialRelation.EITHER,
+        )
+
+        with patch("agents.tools.qdrant_search.enhanced_search", search):
+            await invoke_runtime_tool(qdrant_search, {"query": "ukraine"}, state=state)
+
+        assert search.await_count == 2
+        spatial_filter = compile_qdrant_scope_filter(
+            token, RetrievalSpatialRelation.EITHER
+        )
+        assert search.await_args_list[0].kwargs["query_filter"] == combine_filters(
+            analysis_filter(), spatial_filter
+        )
+        assert search.await_args_list[1].kwargs["query_filter"] == combine_filters(
+            realtime_filter(), spatial_filter
+        )
+        assert all("region" not in call.kwargs for call in search.await_args_list)
+
+    @pytest.mark.parametrize(
+        "side_effect",
+        [
+            [[], []],
+            RuntimeError("qdrant down"),
+            [[], RuntimeError("realtime partial")],
+        ],
+    )
+    async def test_empty_partial_and_outage_never_retry_without_scope(
+        self,
+        side_effect,
+    ):
+        search = AsyncMock(side_effect=side_effect)
+        token = _ukraine_token()
+        state = agent_state(
+            spatial_scope=token,
+            spatial_relation=RetrievalSpatialRelation.OCCURRENCE,
+        )
+
+        with patch("agents.tools.qdrant_search.enhanced_search", search):
+            await invoke_runtime_tool(qdrant_search, {"query": "ukraine"}, state=state)
+
+        expected_spatial = compile_qdrant_scope_filter(
+            token, RetrievalSpatialRelation.OCCURRENCE
+        )
+        expected_filters = {
+            repr(combine_filters(analysis_filter(), expected_spatial)),
+            repr(combine_filters(realtime_filter(), expected_spatial)),
+        }
+        assert search.await_count <= 2
+        assert all(
+            repr(call.kwargs["query_filter"]) in expected_filters
+            for call in search.await_args_list
+        )
