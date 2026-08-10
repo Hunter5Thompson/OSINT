@@ -18,6 +18,7 @@ from app.models.spatial import (
     ScopeKind,
     ScopeNode,
     SpatialCatalogProblem,
+    SpatialQueryRef,
     SpatialScopeTokenV1,
 )
 from app.models.timeline import (
@@ -1121,15 +1122,7 @@ async def resolve_catalog_filter(
     if isinstance(resolved, SpatialCatalogProblem):
         return resolved
 
-    record = resolved.record
-    token = SpatialScopeTokenV1(
-        scope_key=record.scope.key,
-        kind=record.scope.kind,
-        catalog_revision=resolved.catalog_revision,
-        derivation_revision=record.derivation_revision,
-        boundary_policy=resolved.boundary_policy,
-        compatible_derivation_revisions=record.compatible_derivation_revisions,
-    )
+    token = spatial_scope_token_from_resolution(resolved)
     if token.kind is ScopeKind.WORLD:
         extent = GeoExtent(kind="world")
         constraint = _constraint(token, extent, resolved.path)
@@ -1146,6 +1139,42 @@ async def resolve_catalog_filter(
         return compile_extent_filter(extent_or_problem, constraint=constraint)
     except ValueError:
         return _filter_unavailable(scope_key, catalog_revision)
+
+
+def spatial_scope_token_from_resolution(
+    resolved: ResolvedSpatialScope,
+) -> SpatialScopeTokenV1:
+    """Build the sole backend-owned retrieval token from reviewed catalog data."""
+
+    record = resolved.record
+    return SpatialScopeTokenV1(
+        scope_key=record.scope.key,
+        kind=record.scope.kind,
+        catalog_revision=resolved.catalog_revision,
+        derivation_revision=record.derivation_revision,
+        boundary_policy=resolved.boundary_policy,
+        compatible_derivation_revisions=record.compatible_derivation_revisions,
+    )
+
+
+def resolve_spatial_scope_token(
+    loader: SpatialCatalogLoader,
+    reference: SpatialQueryRef,
+) -> SpatialScopeTokenV1 | SpatialCatalogProblem:
+    """Resolve a caller reference without accepting token provenance from it."""
+
+    resolved = loader.resolve_scope(reference.scope_key, reference.catalog_revision)
+    if isinstance(resolved, SpatialCatalogProblem):
+        return resolved
+    if resolved.boundary_policy != reference.boundary_policy:
+        return SpatialCatalogProblem(
+            code=CatalogProblemCode.INVALID_SCOPE_KEY,
+            message="Spatial boundary policy does not match the catalog",
+            target=reference.scope_key,
+            recoverable=False,
+            active_catalog_revision=resolved.catalog_revision,
+        )
+    return spatial_scope_token_from_resolution(resolved)
 
 
 async def _resolve_non_global_extent(

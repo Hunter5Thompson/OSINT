@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Sequence
 from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import structlog
 from neo4j.exceptions import ConstraintError
 
 from app.cypher.report_read import (
     REPORT_BY_ID,
-    REPORT_BY_SCOPE,
+    REPORT_BY_SCOPE_KEYS,
     REPORT_COUNT,
     REPORT_LIST,
     REPORT_MESSAGES_BY_REPORT_ID,
@@ -41,6 +43,8 @@ from app.models.report import (
 )
 from app.services.briefing import parse_munin_report
 from app.services.neo4j_client import read_query, write_query
+
+log = structlog.get_logger(__name__)
 
 _DEFAULT_FINDINGS = [
     "Initial signal basket created. Add first confirmed indicator.",
@@ -331,14 +335,47 @@ async def bootstrap_report_schema() -> None:
 
 
 async def get_report_by_scope(scope_key: str) -> ReportRecord | None:
-    rows = await read_query(REPORT_BY_SCOPE, {"scope_key": scope_key})
-    return _row_to_report(rows[0]) if rows else None
+    return await get_report_by_scope_keys(scope_key)
+
+
+async def get_report_by_scope_keys(
+    canonical_scope_key: str,
+    legacy_aliases: Sequence[str] = (),
+) -> ReportRecord | None:
+    scope_keys = list(dict.fromkeys((canonical_scope_key, *legacy_aliases)))
+    rows = await read_query(
+        REPORT_BY_SCOPE_KEYS,
+        {
+            "canonical_scope_key": canonical_scope_key,
+            "scope_keys": scope_keys,
+        },
+    )
+    if not rows:
+        return None
+    rank = {scope_key: index for index, scope_key in enumerate(scope_keys)}
+    ordered = sorted(
+        rows,
+        key=lambda row: (rank.get(str(row.get("scope_key")), len(rank)), str(row.get("id"))),
+    )
+    if len(ordered) > 1:
+        log.warning(
+            "report_scope_duplicate_conflict",
+            canonical_scope_key=canonical_scope_key,
+            matched_scope_keys=[str(row.get("scope_key")) for row in ordered],
+            report_ids=[str(row.get("id")) for row in ordered],
+        )
+    return _row_to_report(ordered[0])
 
 
 async def get_or_create_report_by_scope(
-    scope_key: str, title: str, location: str, coords: str
+    scope_key: str,
+    title: str,
+    location: str,
+    coords: str,
+    *,
+    legacy_aliases: Sequence[str] = (),
 ) -> ReportRecord:
-    existing = await get_report_by_scope(scope_key)
+    existing = await get_report_by_scope_keys(scope_key, legacy_aliases)
     if existing is not None:
         return existing
     try:
@@ -348,7 +385,7 @@ async def get_or_create_report_by_scope(
             )
         )
     except ConstraintError:
-        winner = await get_report_by_scope(scope_key)
+        winner = await get_report_by_scope_keys(scope_key, legacy_aliases)
         if winner is None:
             raise
         return winner
