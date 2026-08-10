@@ -114,7 +114,8 @@ export type SpatialScopeSnapshot =
 Timeline-, Cesium- und Intelligence-Frontend-Code importieren diese Typen; die
 semantisch erlaubten Kinds besitzt [§7.2](02-scope-identity-and-boundary-policy.md#72-unterstützte-kinds).
 
-Die diskriminierte Hydration verhindert einen kurzen globalen CHRONIK-/Munin-Request, während ein Deep Link noch aufgelöst wird. Caller müssen `query === null` explizit behandeln und dürfen dann nicht laden.
+Während `hydrating` ist `query=null`; Caller laden nicht. So entsteht vor Deep-Link-
+Resolve kein globaler CHRONIK-/Munin-Request.
 
 ### 8.2 Commands und Ergebnisse
 
@@ -169,9 +170,9 @@ interface OwnedSpatialScopeModule extends SpatialScopeModule {
 }
 ```
 
-Das ist die vollständige primäre Caller-Interface. Nur der Provider besitzt zusätzlich
-den Lifecycle `start/stop`; Context-Consumer sehen ihn nicht. Es gibt keine öffentliche
-Methode für BBox, GeoJSON, Cesium, History-Push oder Qdrant-Filter.
+`SpatialScopeModule` ist das vollständige Caller-Interface; nur der Provider sieht
+zusätzlich `start/stop`. BBox, GeoJSON, Cesium, History-Push und Qdrant-Filter sind
+nicht öffentlich.
 
 `activeCatalogRevision` ist ausschließlich strukturierter Vertrag und wird niemals
 aus `message` extrahiert. `rehydrate` besitzt absichtlich keine Caller-Parameter: Der
@@ -211,10 +212,9 @@ return useSyncExternalStore(
 );
 ```
 
-`getStableHydratingSnapshot` liefert immer denselben eingefrorenen Singleton. Das
-Module cached auch sein aktuelles Snapshot-Objekt und gibt bis zur nächsten
-Publikation dieselbe Referenz zurück. Damit entstehen weder ein verlorenes `this`,
-Endlos-Rendern noch Tearing durch bei jedem Read neu erzeugte Objekte.
+`getStableHydratingSnapshot` ist ein eingefrorener Singleton; auch das aktuelle
+Snapshot-Objekt bleibt bis zur nächsten Publikation referenzstabil. Das verhindert
+verlorenes `this`, Endlos-Rendern und Read-bedingtes Tearing.
 
 ### 8.4 Snapshot-Invarianten
 
@@ -289,22 +289,16 @@ Feinregeln:
 
 - Vor und nach jedem `await` wird Generation plus Abort geprüft.
 - Ein neues Foreground-Intent abortet das alte. Das alte darf danach weder Store noch URL noch Cesium mutieren.
-- Der Resolve-Signal-Lifetime endet mit dem Transition-Intent. Nach dem Commit besitzt
-  die Darstellung einen separaten, vom Controller gehaltenen AbortController. Er wird
-  erst beim nächsten semantischen Commit oder bei `stop()` abgebrochen; ein Caller,
-  der seinen Dispatch-Signal nach erfolgreicher Rückgabe abbricht, darf die committed
-  Darstellung nicht zerstören.
-- Ein bloß begonnener Resolve für den nächsten Scope lässt die Darstellung des noch
-  committed Scope weiterlaufen. Erst der nächste Commit versteckt/abortet sie.
+- Das Resolve-Signal endet mit dem Intent. Nach Commit lebt die Darstellung unter
+  einem Controller-Signal bis zum nächsten Commit oder `stop()`; späterer Caller-
+  Abort zerstört sie nicht. Ein neuer Resolve lässt sie bis zu seinem Commit laufen.
 - `enter(current.key)` ist `unchanged` und schreibt keinen History-Eintrag.
 - `ascend()` berechnet das Ziel aus dem committed Parent. Während eines pending Drilldowns steigt es nicht aus dessen noch uncommitted Lineage auf.
 - `ascend()` am Root ist `unchanged`; es cancelt aber einen eventuell pending Drilldown.
 - Zwei Resolver für dasselbe Ziel dürfen den HTTP-Request teilen. Transition-Intent und History-Semantik werden trotzdem nicht zusammengelegt.
-- URL-Writes laufen über den React-Router-Adapter und können asynchron abschließen.
-  Wird ein Intent nach erfolgreichem URL-Write superseded, repariert der
-  Navigation-Coordinator die URL per Replace auf den letzten committed oder bereits
-  neueren gewünschten Scope. Ein stale Write darf nicht als externer Hydrate-Intent
-  zurück in den Controller gespiegelt werden.
+- Asynchrone URL-Writes laufen über den React-Router-Adapter. Einen erfolgreichen,
+  anschließend supersedeten Write ersetzt der Coordinator durch den letzten committed
+  oder neueren gewünschten Scope; stale Writes werden nicht extern hydriert.
 - Prefetch besitzt keine Commit-Rechte, keine Foreground-Generation und keine URL-/Kamera-Wirkung.
 - Prefetch und Navigation teilen einen ref-counted In-flight-Load. Das Abbrechen des Hover-Consumers beendet den Request nicht, wenn der Click-Consumer ihn übernommen hat.
 - Operationelle Fehler rejecten das Promise nicht. Nur Programmierfehler wie ein Hook außerhalb des Providers dürfen werfen.
@@ -312,11 +306,10 @@ Feinregeln:
   übergebenen Caller-Signal oder `stop()` ohne neueren Intent liefert `cancelled`.
 - Ungültige Lineage, unbekannter Scope oder Katalogausfall lassen State und URL unverändert.
 - Fehlende Geometrie ist ein semantisch erfolgreicher Commit mit `presentation: "semantic-only"` und Warning.
-- Ein Revisions-409 publiziert die typisierte aktive Revision, committet nichts und
-  retryt nicht. Erst der parameterlose, sichtbare `rehydrate`-Command löst den aktuell
-  committed Scope über `SpatialCatalogPort.rehydrate` gegen diese Revision auf,
-  ersetzt den Router-State und committet anschließend Scope, Query und Revision
-  gemeinsam. 404, erneuter 409 und Katalogfehler bleiben sichtbar und fail-closed.
+- Ein Revisions-409 publiziert die typisierte aktive Revision ohne Commit oder Retry.
+  Erst sichtbares, parameterloses `rehydrate` löst den committed Scope über
+  `SpatialCatalogPort.rehydrate`, ersetzt Router-State und committet Scope, Query und
+  Revision gemeinsam. 404, erneuter 409 und Katalogfehler bleiben fail-closed sichtbar.
 - Auch Rehydrate prüft Foreground-Generation und Abort vor und nach jedem Await. Ein
   bereits abgebrochener Command ruft den Adapter nicht auf; eine verspätete Antwort
   besitzt keine Commit-, URL- oder Presentation-Rechte.
@@ -337,12 +330,10 @@ Der Store-Commit ist lokal atomar. Cesium, CHRONIK und Munin sind keine verteilt
 
 Damit entsteht Konvergenz mit expliziten Revision Guards statt einer falschen Behauptung globaler Atomizität.
 
-`start()` und `stop()` sind idempotent und wechselweise mehrfach aufrufbar, damit
-React-StrictMode-Effect-Replay denselben Controller nicht in einen irreversibel
-disposed Zustand bringt. `stop()` abortet Foreground/Prefetch/Presentation, entfernt
-Router-/Cesium-Listener, leert ref-counted Leases und publiziert wieder den stabilen
-Hydration-Snapshot. Ein nachfolgendes `start()` initialisiert aus der aktuellen Router-
-Location neu.
+`start()`/`stop()` sind für React-StrictMode-Replay idempotent wiederholbar. `stop()`
+abortet Foreground/Prefetch/Presentation, entfernt Router-/Cesium-Listener, leert
+ref-counted Leases und publiziert den stabilen Hydration-Snapshot; späteres `start()`
+hydriert aus der aktuellen Router-Location.
 
 ---
 
@@ -407,19 +398,14 @@ interface ScopeNavigationPort {
 }
 ```
 
-Produktion nutzt `ReactRouterScopeNavigation`; Tests nutzen
-`MemoryScopeNavigation`. Der Produktionsadapter wird an den vorhandenen
-`createBrowserRouter` gebunden, verwendet dessen Navigate/Subscribe-Mechanismus und
-schreibt nicht direkt an React Router vorbei in `window.history`. Er erhält alle
-fremden Search-Parameter, `pathname`, `hash` und vorhandenen Location-State; im State
-ergänzt er nur eine eindeutige `odinSpatialNavigationId` und die dazugehörige
-`odinSpatialCatalogRevision`.
+Produktion nutzt `ReactRouterScopeNavigation`, Tests `MemoryScopeNavigation`. Der
+Produktionsadapter bindet `createBrowserRouter` über Navigate/Subscribe statt
+`window.history`, erhält fremde Search-Parameter, `pathname`, `hash` und Location-
+State und ergänzt nur `odinSpatialNavigationId` plus `odinSpatialCatalogRevision`.
 
-Zur Vermeidung eines Importzyklus importiert `spatial/navigation.ts` nicht den
-Router-Singleton (dessen Route bereits `WorldviewPage` importiert). Ein kleiner Bridge-
-Teil in `spatial/react.tsx` liest `useLocation`, schreibt über `useNavigate` und meldet
-Änderungen aus einem Effect an den Adapter. Der Adapter selbst bleibt in Tests ohne
-React Router instanziierbar.
+Gegen den Importzyklus zum Router-Singleton bridged `spatial/react.tsx`
+`useLocation`/`useNavigate` per Effect; `spatial/navigation.ts` bleibt ohne React
+Router testbar.
 
 Reads liefern absichtlich einen untrusted `string`-Candidate, keinen gebrandeten
 `ScopeKey`. Erst `parseScopeKeyCandidate()` normalisiert/validiert und erzeugt den

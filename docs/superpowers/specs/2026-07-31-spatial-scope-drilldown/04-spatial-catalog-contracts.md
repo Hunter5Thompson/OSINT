@@ -28,7 +28,9 @@ services/backend/data/spatial/
         <sha256>.json
 ```
 
-Der Backend-Docker-Build kopiert `data/`, und Compose mountet `services/backend/data:/app/data`; das passt zum bestehenden Deployment. Intelligence braucht keine Boundary-Geometrie. Es erhält einen vom Backend aufgelösten, strukturierten Scope-Token und filtert auf exakt dieselben materialisierten Scope-Keys.
+Docker kopiert `data/`; Compose mountet `services/backend/data:/app/data`.
+Intelligence erhält statt Boundary-Geometrie den Backend-validierten Scope-Token und
+filtert dieselben materialisierten Scope-Keys.
 
 ### 10.2 Keine Runtime-Abhängigkeit von Drittquellen
 
@@ -42,11 +44,9 @@ GET /api/spatial/scope?scope_key=<encoded>&catalog_revision=<optional>
 GET /api/spatial/assets/{asset_id}
 ```
 
-`scope_key` ist bewusst ein Query-Parameter statt ein Path-Segment: selbst encoded
-Slash/Backslash erreicht dadurch deterministisch die Validierung und wird als `422`
-abgewiesen, statt vom Router als anderer Pfad interpretiert zu werden. `asset_id` ist
-ausschließlich ein 64-stelliger lowercase SHA-256-Hexwert; der Server schlägt ihn im
-Manifest nach und concateniert niemals untrusted Input zu einem Pfad.
+Als Query-Parameter erreicht auch ein encoded Slash/Backslash in `scope_key` die
+Validierung und wird `422`, statt den Routerpfad zu ändern. `asset_id` ist 64-stelliges
+lowercase SHA-256-Hex, wird im Manifest nachgeschlagen und nie an Pfade concateniert.
 
 Statuscodes:
 
@@ -78,9 +78,8 @@ unstrukturiertem Exception-Text:
 }
 ```
 
-`code` ist geschlossen; Programmlogik parst `message` nie. Interne Pfade, Source-URLs
-und Stacktraces bleiben serverintern; der Frontend-Adapter mappt Code/Status auf
-`ScopeProblem`.
+`code` ist geschlossen; `message` wird nie geparst. Pfade, Source-URLs und
+Stacktraces bleiben intern; der Frontend-Adapter mappt Code/Status auf `ScopeProblem`.
 
 ### 10.4 Catalog Bootstrap
 
@@ -112,19 +111,16 @@ und Stacktraces bleiben serverintern; der Frontend-Adapter mappt Code/Status auf
 }
 ```
 
-`attributions` enthält je bedienter Revision genau eine validierte Projektion aus
-deren `attribution.json` (1–2 Einträge): 1–32 Sources; Note 1–500,
-`source_id`/`license_id` 1–96, Release 1–128 und Text 1–300 Zeichen. HTML,
-Extra-Felder, fehlende, doppelte oder übergroße Werte sind ungültig.
+`attributions` enthält je bedienter Revision genau eine validierte Projektion ihrer
+`attribution.json` (1–2 Einträge, 1–32 Sources). Grenzen: Note 1–500,
+`source_id`/`license_id` 1–96, Release 1–128, Text 1–300 Zeichen. HTML sowie fehlende,
+doppelte, zusätzliche oder übergroße Werte sind ungültig.
 
-Jede Source in `attribution.json` besitzt ihren eigenen verpflichtenden `release`.
-Die kanonisch nach `source_id` sortierte `sources`-Liste wird als
-`attribution_sources_sha256` im Manifest gebunden; dieser Hash ist Teil der
-Katalogrevisionsableitung. Damit erzeugt auch ein reiner Attribution-/Tool-Release-
-Wechsel eine neue Revision. Die aktive Revision muss mit Source-Menge, Release,
-Lizenz und Text exakt dem aktuellen `source-lock.json` entsprechen. Eine vorherige
-Revision wird dagegen ausschließlich aus ihrem eigenen Manifest und ihrer eigenen
-Attribution validiert und leiht niemals Werte aus dem aktuellen Source-Lock.
+Jede Source besitzt ein `release`. Die nach `source_id` sortierte Liste wird über
+`attribution_sources_sha256` revisionsbildend ans Manifest gebunden; auch reine
+Attribution-/Tool-Releases erzeugen eine Revision. Die aktive Revision muss
+Source-Menge, Release, Lizenz und Text des aktuellen `source-lock.json` treffen. Die vorherige Revision
+validiert nur ihr Manifest/Attribution und leiht nichts aus dem aktuellen Lock.
 
 ### 10.5 Scope-Bundle
 
@@ -207,9 +203,9 @@ Attribution validiert und leiht niemals Werte aus dem aktuellen Source-Lock.
 }
 ```
 
-`path` ist vollständig und serverseitig validiert; URL oder Assets dürfen keine Parent-
-Kette liefern. Bei `children_available=true` muss `preferred_lod` in `children_lods`
-liegen; ein Pick-LOD-Fallback ist verboten.
+`path` ist vollständig servervalidiert; URL/Assets liefern keine Parent-Kette. Bei
+`children_available=true` liegt `preferred_lod` zwingend in `children_lods`; Pick-
+LOD-Fallback ist verboten.
 
 `containment` darf `null` sein und ist der einzige Descriptor für clientseitiges
 Point-in-Boundary. Render-LODs ändern niemals die Datenmenge.
@@ -251,29 +247,26 @@ interface BoundaryPackV1 {
 }
 ```
 
-`BoundaryPackV1` trägt bewusst keine `catalog_revision`: Sein SHA-256 ist selbst Teil
-des Manifests, aus dessen Hash die Revision entsteht. Die Revisionsbindung erfolgt
-stattdessen ohne Selbstreferenz über Asset-ID, Manifest und revisionsgebundenen
-Scope-Bundle-/HTTP-Kontext.
+`BoundaryPackV1` trägt keine `catalog_revision`: Sein SHA-256 fließt bereits in den
+Manifest-Hash. Asset-ID, Manifest und Scope-Bundle-/HTTP-Kontext binden die Revision
+ohne Selbstreferenz.
 
 Jedes Asset wird vor Cesium-Konvertierung gegen Schema, Scope-Key-Grammatik,
 Koordinatenbereiche, Ringabschluss, Ringgröße, Featurezahl, Vertexzahl und Bytebudget
 validiert. Labels sind 1–120 Unicode-Codepoints und werden nur als Text gerendert;
 `non_scope_reason` ist eine geschlossene Reason-Code-Enum, kein HTML-/Promptfeld.
 
-V1 führt dafür keine neue Schema-Library ein. Nach dem byte-gecappten Fetch gilt
-`const raw: unknown = JSON.parse(text)`. Kleine Type-Guard-Bausteine (`isRecord`,
-`expectExactKeys`, `expectFiniteNumber`, `expectString`) dekodieren Metadaten; ein
-iterativer Geometry-Walker zählt Features/Ringe/Vertices während der Dekodierung und
-bricht beim ersten Budgetverstoß ab. `JSON.parse`-`any` darf niemals direkt gecastet
-oder in State/Cache gelegt werden. Tests mutieren jede Ebene mit fehlenden, zusätzlichen,
-falsch typisierten und nicht-endlichen Werten.
+V1 nutzt keine neue Schema-Library. Nach byte-gecapptem Fetch gilt
+`const raw: unknown = JSON.parse(text)`. `isRecord`, `expectExactKeys`,
+`expectFiniteNumber` und `expectString` dekodieren Metadaten; ein
+iterativer Walker zählt Features/Ringe/Vertices und bricht am ersten Budgetverstoß
+ab. `JSON.parse`-`any` gelangt nie per Cast in State/Cache. Tests mutieren jede Ebene
+mit fehlenden, zusätzlichen, falschen und nicht-endlichen Werten.
 
-Nur `kind="scope"` erhält eine Child-Fill-GeometryInstance und Pick-ID. Ein reviewtes
-`kind="context"` darf abhängig von der Boundary-Policy in der nicht pickbaren Outline
-erscheinen, besitzt aber keine Drill-Affordance und keinen erfundenen Query-Scope.
-Jeder `scope_key` muss kanonisch und ein direkter Manifest-Child sein; ausschließlich
-dieses validierte Feld speist `SpatialChildPickId`, niemals ein Frontend-Crosswalk.
+Nur `kind="scope"` erhält Child-Fill und Pick-ID. Reviewtes `kind="context"` darf
+policyabhängig nicht pickbar umrissen werden, aber weder Drill-Affordance noch Query-
+Scope besitzen. Jeder `scope_key` ist kanonischer direkter Manifest-Child; nur dieses
+Feld speist `SpatialChildPickId`, nie ein Frontend-Crosswalk.
 
 ### 10.7 HTTP-Caching
 
@@ -358,10 +351,10 @@ class SpatialScopeTokenV1(BaseModel):
         return self
 ```
 
-Die lexikalische `ScopeKey`-Constraint ist nur die erste Schranke. Ein zentraler
-`normalize_scope_key_candidate()` kanonisiert ausschließlich die bekannten ISO-
-Segmente; danach matched `parse_scope_key()` gegen eine geschlossene Pattern-Tabelle und liefert
-`ParsedScopeKey(kind, namespace, canonical_code)`. V1-Pattern:
+Die lexikalische Constraint ist nur die erste Schranke.
+`normalize_scope_key_candidate()` kanonisiert bekannte ISO-Segmente;
+`parse_scope_key()` matched danach diese geschlossene V1-Tabelle und liefert
+`ParsedScopeKey(kind, namespace, canonical_code)`:
 
 ```py
 _SCOPE_KEY_PATTERNS: Final[tuple[tuple[ScopeKind, re.Pattern[str]], ...]] = (
@@ -387,20 +380,20 @@ _SCOPE_KEY_PATTERNS: Final[tuple[tuple[ScopeKind, re.Pattern[str]], ...]] = (
 )
 ```
 
-Die tatsächliche Implementierung importiert `re` und `Final`, iteriert die Tabelle
-und liefert bei keinem Match `INVALID_SCOPE_KEY/422`. Katalog-„nicht gefunden“ ist
-erst nach erfolgreichem semantischem Parse ein `UNKNOWN_SCOPE/404`. Frontend und
-Backend teilen Testvektoren, nicht kopierte Parserimplementierung.
+Kein Match liefert `INVALID_SCOPE_KEY/422`; erst nach erfolgreichem Parse bedeutet
+Katalog-„nicht gefunden“ `UNKNOWN_SCOPE/404`. Frontend und Backend teilen
+Testvektoren, keine Parserimplementierung.
 
-Die konkreten Response-Modelle spiegeln das Wire-Format. `extra="forbid"` gilt für Build-Manifeste und interne Tokens; öffentliches Response-Decoding im Frontend ignoriert nichts still, sondern validiert explizit.
+Response-Modelle spiegeln das Wire-Format. `extra="forbid"` gilt für Build-Manifeste
+und interne Tokens; Frontend-Decoding validiert öffentliche Responses explizit und
+ignoriert nichts still.
 
-Die Compatibility-Liste wird ausschließlich vom Backend aus dem geladenen Manifest
-erzeugt. Der Browser sendet sie nicht. Sie enthält stabile Derivationsrevisionen aus
+Das Backend erzeugt die Compatibility-Liste aus dem Manifest; der Browser sendet sie
+nicht. Sie enthält stabile Derivationsrevisionen aus
 [§7.5](02-scope-identity-and-boundary-policy.md#75-katalogrevision-versus-daten-derivationsrevision),
-keine Catalog-Releases. Intelligence besitzt bewusst keine Boundary-Auflösung und
-validiert Länge, Eindeutigkeit, Syntax sowie Einschluss der aktuellen
-`derivation_revision` erneut. Der Katalog-Build failt, statt mehr als acht Werte
-abzuschneiden.
+keine Catalog-Releases. Intelligence validiert ohne Boundary-Auflösung Länge,
+Eindeutigkeit, Syntax und Einschluss der aktuellen `derivation_revision`. Mehr als
+acht Werte lassen den Build failen statt abgeschnitten zu werden.
 
 ### 10.9 Frontend-Catalog-Port und interne Resolve-Form
 
@@ -503,39 +496,30 @@ interface SpatialContainmentPort {
 ```
 
 `HttpSpatialCatalog` und `MemorySpatialCatalog` sind die einzigen V1-Adapter. HTTP
-nutzt nur feste `/api/spatial/...`-Pfade, validiert vor Cache-Aufnahme und erzwingt die
+nutzt feste `/api/spatial/...`-Pfade, validiert vor Cache-Aufnahme und erzwingt die
 [§11.4 definierten Budgets](05-boundary-build-and-antimeridian.md#114-lod-und-harte-budgets).
-Der Memory-Adapter ermöglicht deterministische Deferred-Promise-/Race-Tests.
+Memory ermöglicht deterministische Deferred-Promise-/Race-Tests.
 
-`BoundaryAssetStore` bleibt intern. Produktion und Presenter teilen seine ref-counted
-Instanz:
-`prefetch` lädt/dekodiert und gibt seine Lease danach frei; der LRU-Eintrag bleibt.
-`present` hält eine Lease bis die Cesium-Primitives `ready` sind und gibt sie danach
-frei. Eine LRU-Eviction entfernt niemals einen Eintrag mit aktiver Lease. Tests nutzen
-einen Memory-Store und können damit Release-/Abort-Verhalten ohne WebGL beweisen.
+Der interne, ref-counted `BoundaryAssetStore` wird geteilt. `prefetch` gibt nach
+Decode frei, `present` nach Primitive-`ready`; der LRU-Eintrag bleibt und wird mit
+aktiver Lease nie evicted. Ein Memory-Store testet Release/Abort ohne WebGL.
 
-`containment` ist absichtlich kein Render-LOD. Ein interner Containment-Adapter hält
-für den committed Scope eine feste, katalogrevisiongebundene Boundary plus RBush-
-Index. Beim Scope-Commit wird der alte Index sofort ungültig und der Status
-`building`; strikte Punktlayer verbergen ihre alten Filterresultate bis `ready`.
-Kamera-/LOD-Wechsel berühren diesen Index nie. `world` besitzt einen synthetischen
-ready-Index, der jeden validen WGS84-Punkt einschließt. Fehlt das Asset, ist der
-Layer-Consumer `unsupported` statt BBox-Fallback.
+`containment` ist kein Render-LOD. Der Adapter hält Boundary und RBush-Index des
+committed Scope samt Katalogrevision. Commit invalidiert den alten Index als
+`building`; strikte Punktlayer verbergen alte Resultate bis `ready`. Kamera/LOD
+berühren ihn nie. `world` enthält jeden validen WGS84-Punkt synthetisch; ohne Asset
+ist der Consumer `unsupported`, nie BBox-Fallback.
 
-`SpatialContainmentPort` bleibt registrierten imperativen Punktlayer-Adaptern
-vorbehalten. `boundary-uncertain` umfasst jeden Punkt, dessen
-geodesischer Abstand zur Containment-Kante höchstens `maxErrorMeters` plus numerischem
-Epsilon beträgt. Ein strict Layer schließt ihn aus und zählt ihn separat; ein
-`dim-outside`-Layer darf ihn markiert dimmen. Er wird niemals in semantische
-Neo4j/Qdrant-Keys zurückgeschrieben.
+`SpatialContainmentPort` dient nur registrierten Punktlayer-Adaptern. Ein Punkt ist
+`boundary-uncertain`, wenn sein geodesischer Kantenabstand höchstens
+`maxErrorMeters + epsilon` beträgt: strict schließt und zählt ihn, `dim-outside` darf
+ihn markieren. Er wird nie in Neo4j/Qdrant-Keys zurückgeschrieben.
 
-Initiale Hydration übergibt `catalogRevision=null` und erhält die aktive Revision.
-Jeder spätere `enter`/`ascend`/`prefetch` wird gegen die Revision des committed Query-
-Tokens aufgelöst. So kann ein Deployment nicht Country aus Revision A mit Admin-1 aus
-Revision B mischen. Wird A nicht mehr bedient, folgt 409 und eine sichtbare, explizite
-Rehydrate-Entscheidung auf die strukturierte aktive Revision; der Controller retryt
-nicht heimlich. Erst ein erfolgreiches `rehydrate` pinnt den HTTP-Adapter neu. Bis
-dahin bleiben dessen Revision, der committed Query-Token und Router-State unverändert.
+Initiale Hydration sendet `catalogRevision=null` und erhält die aktive Revision; späteres
+`enter`/`ascend`/`prefetch` pinnt die committed Query-Revision. Ein Deployment mischt
+damit nicht Country A und Admin-1 B. Bei 409 entscheidet sichtbares `rehydrate` über
+die strukturierte aktive Revision; ohne Erfolg bleiben Adapter, Query und Router-
+State unverändert, ohne heimlichen Retry.
 
 ### 10.10 Backend-Lifecycle
 
