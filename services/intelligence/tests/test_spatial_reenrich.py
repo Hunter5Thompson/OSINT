@@ -21,8 +21,9 @@ def _projection(
     target_revision: str,
     *,
     status: str = "filterable",
+    conflict: bool | None = None,
 ) -> dict[str, object]:
-    conflict = status == "conflict"
+    has_conflict = status == "conflict" if conflict is None else conflict
     filterable = status == "filterable"
     return {
         "spatial_about_scope_revision_tokens": [],
@@ -35,9 +36,11 @@ def _projection(
         "spatial_precision": "country",
         "spatial_catalog_revision": "spatial-v1-e76a16bff799",
         "spatial_projection_revision": target_revision,
-        "spatial_derivation_version": "spatial-deriver-v1",
-        "spatial_conflict": conflict,
-        "spatial_conflict_scope_keys": ["country:UKR", "country:USA"] if conflict else [],
+        "spatial_derivation_version": "spatial-deriver-v2",
+        "spatial_conflict": has_conflict,
+        "spatial_conflict_scope_keys": (
+            ["country:UKR", "country:USA"] if has_conflict else []
+        ),
         "spatial_derivation_status": status,
         "spatial_derivations": [],
         "source_country_code": ["UKR"],
@@ -122,30 +125,80 @@ def _old_payload(*, projection_revision: str | None = None) -> dict[str, object]
 @pytest.mark.asyncio
 async def test_dry_run_plans_replacements_but_performs_zero_writes() -> None:
     from rag.spatial_reenrich import (
-        MemoryCheckpointStore,
         ReenrichmentJob,
-        ReenrichmentMode,
-        run_spatial_reenrichment,
+        preview_spatial_reenrichment,
     )
 
-    target = "spatial-projection-v1-a5ce3a4f4657"
+    target = "spatial-projection-v1-47fec701a2a2"
     store = FakeStore([_old_payload(), _old_payload()])
-    checkpoints = MemoryCheckpointStore()
-
-    report = await run_spatial_reenrichment(
+    report = await preview_spatial_reenrichment(
         store,
         FakeProjector(),
-        checkpoints,
         ReenrichmentJob(lane="analysis", target_projection_revision=target, batch_size=1),
-        mode=ReenrichmentMode.DRY_RUN,
     )
 
     assert report["mode"] == "dry-run"
     assert report["writes_planned"] == 2
     assert report["writes_applied"] == 0
     assert store.replace_calls == []
-    assert checkpoints.values == {}
     assert report["report_fingerprint"]
+
+
+@pytest.mark.asyncio
+async def test_public_apply_interface_requires_an_approved_dry_run() -> None:
+    from rag.spatial_reenrich import (
+        MemoryCheckpointStore,
+        ReenrichmentJob,
+        apply_spatial_reenrichment,
+    )
+
+    target = "spatial-projection-v1-47fec701a2a2"
+    with pytest.raises(TypeError, match="approved_report"):
+        await apply_spatial_reenrichment(
+            FakeStore([_old_payload()]),
+            FakeProjector(),
+            MemoryCheckpointStore(),
+            ReenrichmentJob(
+                lane="analysis",
+                target_projection_revision=target,
+            ),
+        )
+
+
+def test_unguarded_mode_switch_is_not_a_public_interface() -> None:
+    import rag.spatial_reenrich as reenrichment
+
+    assert not hasattr(reenrichment, "ReenrichmentMode")
+    assert not hasattr(reenrichment, "run_spatial_reenrichment")
+
+
+@pytest.mark.asyncio
+async def test_apply_rejects_approval_drift_before_any_write() -> None:
+    from rag.spatial_reenrich import (
+        MemoryCheckpointStore,
+        ReenrichmentJob,
+        apply_spatial_reenrichment,
+        preview_spatial_reenrichment,
+    )
+
+    target = "spatial-projection-v1-47fec701a2a2"
+    store = FakeStore([_old_payload()])
+    projector = FakeProjector()
+    job = ReenrichmentJob(lane="analysis", target_projection_revision=target)
+    approved = await preview_spatial_reenrichment(store, projector, job)
+    store.points[0].payload.clear()
+    store.points[0].payload.update(_projection(target))
+
+    with pytest.raises(ValueError, match="drifted"):
+        await apply_spatial_reenrichment(
+            store,
+            projector,
+            MemoryCheckpointStore(),
+            job,
+            approved_report=approved,
+        )
+
+    assert store.replace_calls == []
 
 
 @pytest.mark.asyncio
@@ -154,28 +207,30 @@ async def test_dry_run_always_scans_full_lane_and_ignores_apply_checkpoint() -> 
         Checkpoint,
         MemoryCheckpointStore,
         ReenrichmentJob,
-        ReenrichmentMode,
-        run_spatial_reenrichment,
+        preview_spatial_reenrichment,
     )
 
-    target = "spatial-projection-v1-a5ce3a4f4657"
+    target = "spatial-projection-v1-47fec701a2a2"
     job = ReenrichmentJob(lane="analysis", target_projection_revision=target)
     checkpoints = MemoryCheckpointStore()
-    checkpoints.save(job, Checkpoint(cursor=None, complete=True))
+    checkpoint = Checkpoint(
+        cursor=None,
+        complete=True,
+        approved_report_fingerprint="a" * 64,
+    )
+    checkpoints.save(job, checkpoint)
     store = FakeStore([_old_payload()])
 
-    report = await run_spatial_reenrichment(
+    report = await preview_spatial_reenrichment(
         store,
         FakeProjector(),
-        checkpoints,
         job,
-        mode=ReenrichmentMode.DRY_RUN,
     )
 
     assert report["start_cursor"] is None
     assert report["total_points"] == 1
     assert store.fetch_cursors == [None]
-    assert checkpoints.load(job) == Checkpoint(cursor=None, complete=True)
+    assert checkpoints.load(job) == checkpoint
 
 
 @pytest.mark.asyncio
@@ -183,18 +238,21 @@ async def test_apply_replaces_every_spatial_field_in_one_full_point_update() -> 
     from rag.spatial_reenrich import (
         MemoryCheckpointStore,
         ReenrichmentJob,
-        ReenrichmentMode,
-        run_spatial_reenrichment,
+        apply_spatial_reenrichment,
+        preview_spatial_reenrichment,
     )
 
-    target = "spatial-projection-v1-a5ce3a4f4657"
+    target = "spatial-projection-v1-47fec701a2a2"
     store = FakeStore([_old_payload()])
-    report = await run_spatial_reenrichment(
+    projector = FakeProjector()
+    job = ReenrichmentJob(lane="analysis", target_projection_revision=target)
+    approved = await preview_spatial_reenrichment(store, projector, job)
+    report = await apply_spatial_reenrichment(
         store,
-        FakeProjector(),
+        projector,
         MemoryCheckpointStore(),
-        ReenrichmentJob(lane="analysis", target_projection_revision=target),
-        mode=ReenrichmentMode.APPLY,
+        job,
+        approved_report=approved,
     )
 
     assert report["writes_applied"] == 1
@@ -219,26 +277,29 @@ async def test_apply_is_idempotent_with_a_fresh_checkpoint() -> None:
     from rag.spatial_reenrich import (
         MemoryCheckpointStore,
         ReenrichmentJob,
-        ReenrichmentMode,
-        run_spatial_reenrichment,
+        apply_spatial_reenrichment,
+        preview_spatial_reenrichment,
     )
 
-    target = "spatial-projection-v1-a5ce3a4f4657"
+    target = "spatial-projection-v1-47fec701a2a2"
     store = FakeStore([_old_payload()])
     job = ReenrichmentJob(lane="analysis", target_projection_revision=target)
-    first = await run_spatial_reenrichment(
+    projector = FakeProjector()
+    first_approval = await preview_spatial_reenrichment(store, projector, job)
+    first = await apply_spatial_reenrichment(
         store,
-        FakeProjector(),
+        projector,
         MemoryCheckpointStore(),
         job,
-        mode=ReenrichmentMode.APPLY,
+        approved_report=first_approval,
     )
-    second = await run_spatial_reenrichment(
+    second_approval = await preview_spatial_reenrichment(store, projector, job)
+    second = await apply_spatial_reenrichment(
         store,
-        FakeProjector(),
+        projector,
         MemoryCheckpointStore(),
         job,
-        mode=ReenrichmentMode.APPLY,
+        approved_report=second_approval,
     )
 
     assert first["writes_applied"] == 1
@@ -252,11 +313,11 @@ async def test_interrupted_batch_resumes_from_last_completed_cursor() -> None:
     from rag.spatial_reenrich import (
         MemoryCheckpointStore,
         ReenrichmentJob,
-        ReenrichmentMode,
-        run_spatial_reenrichment,
+        apply_spatial_reenrichment,
+        preview_spatial_reenrichment,
     )
 
-    target = "spatial-projection-v1-a5ce3a4f4657"
+    target = "spatial-projection-v1-47fec701a2a2"
     store = FakeStore(
         [_old_payload(), _old_payload(), _old_payload()],
         fail_replace_call=2,
@@ -267,32 +328,88 @@ async def test_interrupted_batch_resumes_from_last_completed_cursor() -> None:
         target_projection_revision=target,
         batch_size=2,
     )
+    projector = FakeProjector()
+    approved = await preview_spatial_reenrichment(store, projector, job)
 
     with pytest.raises(RuntimeError, match="interrupted replace"):
-        await run_spatial_reenrichment(
+        await apply_spatial_reenrichment(
             store,
-            FakeProjector(),
+            projector,
             checkpoints,
             job,
-            mode=ReenrichmentMode.APPLY,
+            approved_report=approved,
         )
 
     assert checkpoints.load(job).cursor == "2"
     assert checkpoints.load(job).complete is False
+    assert checkpoints.load(job).approved_report_fingerprint == (
+        approved["report_fingerprint"]
+    )
 
     store.fail_replace_call = None
-    resumed = await run_spatial_reenrichment(
+    resumed = await apply_spatial_reenrichment(
         store,
-        FakeProjector(),
+        projector,
         checkpoints,
         job,
-        mode=ReenrichmentMode.APPLY,
+        approved_report=approved,
     )
 
     assert resumed["start_cursor"] == "2"
     assert resumed["writes_applied"] == 1
     assert store.fetch_cursors[-1] == "2"
     assert checkpoints.load(job).complete is True
+
+
+@pytest.mark.asyncio
+async def test_resume_rejects_a_different_approval_before_read_or_write() -> None:
+    from rag.spatial_reenrich import (
+        MemoryCheckpointStore,
+        ReenrichmentJob,
+        apply_spatial_reenrichment,
+        preview_spatial_reenrichment,
+        report_fingerprint,
+    )
+
+    target = "spatial-projection-v1-47fec701a2a2"
+    store = FakeStore(
+        [_old_payload(), _old_payload(), _old_payload()],
+        fail_replace_call=2,
+    )
+    checkpoints = MemoryCheckpointStore()
+    job = ReenrichmentJob(
+        lane="analysis",
+        target_projection_revision=target,
+        batch_size=2,
+    )
+    projector = FakeProjector()
+    approved = await preview_spatial_reenrichment(store, projector, job)
+    with pytest.raises(RuntimeError, match="interrupted replace"):
+        await apply_spatial_reenrichment(
+            store,
+            projector,
+            checkpoints,
+            job,
+            approved_report=approved,
+        )
+
+    different = deepcopy(approved)
+    different["writes_planned"] = int(different["writes_planned"]) + 1
+    different["report_fingerprint"] = report_fingerprint(different)
+    fetch_count = len(store.fetch_cursors)
+    write_count = len(store.replace_calls)
+
+    with pytest.raises(ValueError, match="durable checkpoint"):
+        await apply_spatial_reenrichment(
+            store,
+            projector,
+            checkpoints,
+            job,
+            approved_report=different,
+        )
+
+    assert len(store.fetch_cursors) == fetch_count
+    assert len(store.replace_calls) == write_count
 
 
 def test_checkpoint_key_is_lane_plus_target_projection_revision() -> None:
@@ -316,7 +433,14 @@ def test_checkpoint_key_is_lane_plus_target_projection_revision() -> None:
         target_projection_revision="spatial-projection-v1-222222222222",
     )
     for index, job in enumerate((first, second, third)):
-        store.save(job, Checkpoint(cursor=str(index), complete=False))
+        store.save(
+            job,
+            Checkpoint(
+                cursor=str(index),
+                complete=False,
+                approved_report_fingerprint="a" * 64,
+            ),
+        )
 
     assert first.checkpoint_key == (
         "analysis|spatial-projection-v1-111111111111"
@@ -327,13 +451,11 @@ def test_checkpoint_key_is_lane_plus_target_projection_revision() -> None:
 @pytest.mark.asyncio
 async def test_report_separates_current_stale_conflict_and_unsupported_coverage() -> None:
     from rag.spatial_reenrich import (
-        MemoryCheckpointStore,
         ReenrichmentJob,
-        ReenrichmentMode,
-        run_spatial_reenrichment,
+        preview_spatial_reenrichment,
     )
 
-    target = "spatial-projection-v1-a5ce3a4f4657"
+    target = "spatial-projection-v1-47fec701a2a2"
     current_filterable = _projection(target)
     current_conflict = _projection(target, status="conflict")
     current_unsupported = _projection(target, status="unavailable")
@@ -349,12 +471,10 @@ async def test_report_separates_current_stale_conflict_and_unsupported_coverage(
         }
     )
 
-    report = await run_spatial_reenrichment(
+    report = await preview_spatial_reenrichment(
         store,
         projector,
-        MemoryCheckpointStore(),
         ReenrichmentJob(lane="analysis", target_projection_revision=target),
-        mode=ReenrichmentMode.DRY_RUN,
     )
 
     before = report["coverage_before"]["lanes"][0]
@@ -366,6 +486,8 @@ async def test_report_separates_current_stale_conflict_and_unsupported_coverage(
         "conflict_points": 1,
         "stale_points": 1,
         "unsupported_points": 1,
+        "unprojected_points": 0,
+        "audit_only_points": 0,
     }
     assert projected == {
         "lane": "analysis",
@@ -374,10 +496,78 @@ async def test_report_separates_current_stale_conflict_and_unsupported_coverage(
         "conflict_points": 1,
         "stale_points": 0,
         "unsupported_points": 1,
+        "unprojected_points": 0,
+        "audit_only_points": 0,
     }
     assert report["stale_points"] == 1
     assert report["stale_rate"] == 0.25
-    assert report["projected_stale_rate"] == 0.0
+    assert report["unprojected_rate"] == 0.0
+    assert report["filterable_rate"] == 0.25
+    assert report["projected_filterable_rate"] == 0.5
+    assert report["stale_gate_passed"] is False
+
+
+@pytest.mark.asyncio
+async def test_unprojected_points_fail_promotion_stale_gate_instead_of_hiding_in_total() -> None:
+    from rag.spatial_reenrich import (
+        ReenrichmentJob,
+        preview_spatial_reenrichment,
+    )
+
+    target = "spatial-projection-v1-47fec701a2a2"
+    audit_only = _projection(target, status="audit_only")
+    report = await preview_spatial_reenrichment(
+        FakeStore([_old_payload(), audit_only]),
+        FakeProjector({"point-2": "audit_only"}),
+        ReenrichmentJob(lane="analysis", target_projection_revision=target),
+    )
+
+    before = report["coverage_before"]["lanes"][0]
+    assert before["unprojected_points"] == 1
+    assert before["audit_only_points"] == 1
+    assert sum(
+        before[field]
+        for field in (
+            "filterable_points",
+            "conflict_points",
+            "stale_points",
+            "unsupported_points",
+            "unprojected_points",
+            "audit_only_points",
+        )
+    ) == before["total_points"]
+    assert report["stale_rate"] == 0.5
+    assert report["stale_gate_passed"] is False
+
+
+@pytest.mark.asyncio
+async def test_mixed_conflict_with_admitted_tokens_counts_as_filterable() -> None:
+    from rag.spatial_reenrich import (
+        ReenrichmentJob,
+        preview_spatial_reenrichment,
+    )
+
+    class MixedProjector(FakeProjector):
+        def project(self, point, job):
+            return _projection(
+                job.target_projection_revision,
+                status="filterable",
+                conflict=True,
+            )
+
+    target = "spatial-projection-v1-47fec701a2a2"
+    mixed = _projection(target, status="filterable", conflict=True)
+    report = await preview_spatial_reenrichment(
+        FakeStore([mixed]),
+        MixedProjector(),
+        ReenrichmentJob(lane="analysis", target_projection_revision=target),
+    )
+
+    before = report["coverage_before"]["lanes"][0]
+    projected = report["coverage_projected"]["lanes"][0]
+    assert before["filterable_points"] == 1
+    assert before["conflict_points"] == 0
+    assert projected["filterable_points"] == 1
 
 
 def test_projection_revision_and_scheduling_follow_derivation_changes_only() -> None:
@@ -442,7 +632,15 @@ def test_json_checkpoint_store_uses_atomic_service_independent_v1_format(
         target_projection_revision="spatial-projection-v1-111111111111",
     )
 
-    store.save(job, Checkpoint(cursor="page-2", complete=False))
+    fingerprint = "a" * 64
+    store.save(
+        job,
+        Checkpoint(
+            cursor="page-2",
+            complete=False,
+            approved_report_fingerprint=fingerprint,
+        ),
+    )
 
     assert json.loads(path.read_text(encoding="utf-8")) == {
         "schema_version": 1,
@@ -453,12 +651,14 @@ def test_json_checkpoint_store_uses_atomic_service_independent_v1_format(
                 ),
                 "cursor": "page-2",
                 "complete": False,
+                "approved_report_fingerprint": fingerprint,
             }
         ],
     }
     assert JsonCheckpointStore(path).load(job) == Checkpoint(
         cursor="page-2",
         complete=False,
+        approved_report_fingerprint=fingerprint,
     )
 
 
@@ -468,6 +668,7 @@ def test_shared_batch_contract_pins_plan06a_and_qdrant_semantics() -> None:
     assert contract["contract_version"] == 1
     assert contract["semantics"] == {
         "dry_run_writes": 0,
+        "apply_requires": "approved-complete-full-lane-dry-run",
         "checkpoint_after": "complete-confirmed-batch",
         "report_fingerprint": "sha256-canonical-json-excluding-self",
     }
@@ -479,6 +680,7 @@ def test_shared_batch_contract_pins_plan06a_and_qdrant_semantics() -> None:
         "job_key",
         "cursor",
         "complete",
+        "approved_report_fingerprint",
     ]
     assert contract["qdrant_plan07a"]["point_write"] == (
         "full-point-upsert-preserving-vector-and-nonspatial-payload"
@@ -496,7 +698,9 @@ def test_shared_batch_contract_pins_plan06a_and_qdrant_semantics() -> None:
     }
     assert contract["qdrant_plan07a"]["report_rate_fields"] == [
         "stale_rate",
-        "projected_stale_rate",
+        "unprojected_rate",
+        "filterable_rate",
+        "projected_filterable_rate",
     ]
 
 
@@ -583,10 +787,8 @@ async def test_qdrant_adapter_scrolls_with_lane_filter_and_full_upserts() -> Non
 @pytest.mark.asyncio
 async def test_projector_cannot_reintroduce_obsolete_scalar_revision() -> None:
     from rag.spatial_reenrich import (
-        MemoryCheckpointStore,
         ReenrichmentJob,
-        ReenrichmentMode,
-        run_spatial_reenrichment,
+        preview_spatial_reenrichment,
     )
 
     class PoisonProjector(FakeProjector):
@@ -597,18 +799,16 @@ async def test_projector_cannot_reintroduce_obsolete_scalar_revision() -> None:
             )
             return projection
 
-    target = "spatial-projection-v1-a5ce3a4f4657"
+    target = "spatial-projection-v1-47fec701a2a2"
     store = FakeStore([_old_payload()])
     with pytest.raises(ValueError, match="scalar derivation revision"):
-        await run_spatial_reenrichment(
+        await preview_spatial_reenrichment(
             store,
             PoisonProjector(),
-            MemoryCheckpointStore(),
             ReenrichmentJob(
                 lane="analysis",
                 target_projection_revision=target,
             ),
-            mode=ReenrichmentMode.DRY_RUN,
         )
 
     assert store.replace_calls == []
@@ -617,20 +817,16 @@ async def test_projector_cannot_reintroduce_obsolete_scalar_revision() -> None:
 @pytest.mark.asyncio
 async def test_reviewed_dry_run_validation_detects_report_drift() -> None:
     from rag.spatial_reenrich import (
-        MemoryCheckpointStore,
         ReenrichmentJob,
-        ReenrichmentMode,
-        run_spatial_reenrichment,
+        preview_spatial_reenrichment,
         validate_dry_run_approval,
     )
 
-    target = "spatial-projection-v1-a5ce3a4f4657"
-    report = await run_spatial_reenrichment(
+    target = "spatial-projection-v1-47fec701a2a2"
+    report = await preview_spatial_reenrichment(
         FakeStore([_old_payload()]),
         FakeProjector(),
-        MemoryCheckpointStore(),
         ReenrichmentJob(lane="analysis", target_projection_revision=target),
-        mode=ReenrichmentMode.DRY_RUN,
     )
     validate_dry_run_approval(report, deepcopy(report))
 

@@ -97,6 +97,22 @@ def test_occurrence_projection_matches_shared_parent_child_vector(
     ]
 
 
+def test_shared_contract_binds_token_limit_and_conflict_admission() -> None:
+    from qdrant_spatial import MAX_SCOPE_REVISION_TOKEN_ASCII_BYTES
+
+    contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+
+    assert contract["scope_revision_token"]["maximum_ascii_bytes"] == (
+        MAX_SCOPE_REVISION_TOKEN_ASCII_BYTES
+    )
+    assert contract["conflict_admission"] == {
+        "retrieval_authority": "positive-pair-tokens",
+        "suppression_granularity": "same-relation-and-exact-scope",
+        "record_conflict_fields": "unindexed-audit-only",
+        "mixed_status": "filterable-when-any-token-is-admitted",
+    }
+
+
 def test_about_gate_is_reviewed_exact_and_keeps_below_gate_audit(
     spatial_index: SpatialNormalizationIndex,
 ) -> None:
@@ -182,7 +198,7 @@ def test_conflict_is_audited_but_never_published_as_filterable(
     assert "geo" not in payload
 
 
-def test_one_conflict_suppresses_otherwise_valid_relation_assignments(
+def test_conflict_preserves_independent_valid_relation_assignments(
     spatial_index: SpatialNormalizationIndex,
 ) -> None:
     from qdrant_spatial import project_spatial_payload
@@ -215,13 +231,62 @@ def test_one_conflict_suppresses_otherwise_valid_relation_assignments(
         spatial_index,
     )
 
-    assert payload["spatial_about_scope_revision_tokens"] == []
+    assert payload["spatial_about_scope_revision_tokens"] == [
+        "sr1|country:UKR|spatial-derive-v1-d30efa07e141"
+    ]
     assert payload["spatial_occurrence_scope_revision_tokens"] == []
-    assert {item["filter_reason"] for item in payload["spatial_derivations"]} == {
-        "record_spatial_conflict",
-        "spatial_conflict",
+    assert payload["spatial_conflict"] is True
+    assert payload["spatial_derivation_status"] == "filterable"
+    derivations = {
+        item["evidence_id"]: item for item in payload["spatial_derivations"]
     }
-    assert not any(item["filterable"] for item in payload["spatial_derivations"])
+    assert derivations["about:Ukraine"]["filter_reason"] == "accepted"
+    assert derivations["about:Ukraine"]["filterable"] is True
+    assert (
+        derivations["occurrence:conflict"]["filter_reason"]
+        == "spatial_conflict"
+    )
+
+
+def test_conflict_suppresses_only_the_same_relation_scope(
+    spatial_index: SpatialNormalizationIndex,
+) -> None:
+    from qdrant_spatial import project_spatial_payload
+
+    valid_occurrence = _evidence(
+        RawLocationIdentity(
+            country_code="UKR",
+            country_code_system=CountryCodeSystem.ISO3,
+        ),
+        spatial_index,
+        evidence_id="occurrence:Ukraine",
+    )
+    conflicting_occurrence = _evidence(
+        RawLocationIdentity(
+            country_code="UP",
+            country_code_system=CountryCodeSystem.GDELT_GEC,
+            latitude=37.0,
+            longitude=-95.0,
+        ),
+        spatial_index,
+        evidence_id="occurrence:conflict",
+    )
+
+    payload = project_spatial_payload(
+        [valid_occurrence, conflicting_occurrence],
+        spatial_index,
+    )
+
+    assert payload["spatial_occurrence_scope_revision_tokens"] == []
+    assert payload["spatial_derivation_status"] == "conflict"
+    derivations = {
+        item["evidence_id"]: item for item in payload["spatial_derivations"]
+    }
+    admitted = derivations["occurrence:Ukraine"]
+    assert admitted["filterable"] is False
+    assert admitted["filter_reason"] == "relation_scope_conflict"
+    assert admitted["published_scope_assignments"] == []
+    assert admitted["withheld_conflict_scope_keys"] == ["country:UKR"]
 
 
 def test_projection_revision_uses_derivations_not_catalog_revision() -> None:
@@ -251,6 +316,30 @@ def test_projection_revision_uses_derivations_not_catalog_revision() -> None:
     assert derive_spatial_projection_revision(first) != (
         derive_spatial_projection_revision(changed)
     )
+
+
+def test_projection_rejects_pair_tokens_above_contract_byte_limit() -> None:
+    from qdrant_spatial import SpatialProjectionError, project_spatial_payload
+
+    oversized_revision = f"spatial-derive-v{'9' * 200}-{'a' * 12}"
+    crosswalk = load_country_crosswalk(CROSSWALK_PATH)
+    index = build_normalization_index(
+        catalog_revision="spatial-v1-111111111111",
+        country_crosswalk=crosswalk,
+        scope_parents={"country:UKR": None},
+        scope_derivation_revisions={"country:UKR": oversized_revision},
+        containment={},
+    )
+    evidence = _evidence(
+        RawLocationIdentity(
+            country_code="UKR",
+            country_code_system=CountryCodeSystem.ISO3,
+        ),
+        index,
+    )
+
+    with pytest.raises(SpatialProjectionError, match="229 ASCII bytes"):
+        project_spatial_payload([evidence], index)
 
 
 def test_unsupported_payload_is_explicit_and_has_no_filterable_keys() -> None:

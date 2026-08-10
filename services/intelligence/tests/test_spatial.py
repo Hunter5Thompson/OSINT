@@ -37,14 +37,19 @@ def _scope_token(
     )
 
 
-def _point(point_id: int, *, occurrence: list[str]) -> models.PointStruct:
+def _point(
+    point_id: int,
+    *,
+    occurrence: list[str],
+    conflict: bool = False,
+) -> models.PointStruct:
     return models.PointStruct(
         id=point_id,
         vector=[1.0, 0.0],
         payload={
             "spatial_about_scope_revision_tokens": [],
             "spatial_occurrence_scope_revision_tokens": occurrence,
-            "spatial_conflict": False,
+            "spatial_conflict": conflict,
         },
     )
 
@@ -105,11 +110,7 @@ def test_admin1_point_matches_child_and_parent_only_with_correlated_revision() -
                         match=models.MatchAny(
                             any=[encode_scope_revision_token(scope_key, revision)]
                         ),
-                    ),
-                    models.FieldCondition(
-                        key="spatial_conflict",
-                        match=models.MatchValue(value=False),
-                    ),
+                    )
                 ]
             )
 
@@ -142,10 +143,47 @@ def test_scope_revision_token_encoding_is_injective_and_strict() -> None:
         encode_scope_revision_token("country:UKR|poison", COUNTRY_REVISION)
     with pytest.raises(SpatialContractError, match="revision"):
         encode_scope_revision_token(COUNTRY_SCOPE, "spatial-v1-not-a-derivation")
+    oversized_revision = f"spatial-derive-v{'9' * 200}-{'a' * 12}"
+    with pytest.raises(SpatialContractError, match="229 ASCII bytes"):
+        encode_scope_revision_token(COUNTRY_SCOPE, oversized_revision)
+
+
+def test_lane_coverage_requires_named_exhaustive_accounting() -> None:
+    from pydantic import ValidationError
+
+    from spatial import SpatialLaneCoverageV1
+
+    coverage = SpatialLaneCoverageV1(
+        lane="analysis",
+        total_points=100,
+        filterable_points=50,
+        conflict_points=5,
+        stale_points=5,
+        unsupported_points=10,
+        unprojected_points=20,
+        audit_only_points=10,
+    )
+
+    assert coverage.unprojected_points == 20
+    assert coverage.audit_only_points == 10
+    with pytest.raises(ValidationError, match="must equal total points"):
+        SpatialLaneCoverageV1(
+            lane="analysis",
+            total_points=100,
+            filterable_points=50,
+            conflict_points=5,
+            stale_points=5,
+            unsupported_points=10,
+            unprojected_points=20,
+            audit_only_points=9,
+        )
 
 
 def test_shared_contract_pins_the_reviewed_ua14_pair_tokens() -> None:
-    from spatial import encode_scope_revision_token
+    from spatial import (
+        MAX_SCOPE_REVISION_TOKEN_ASCII_BYTES,
+        encode_scope_revision_token,
+    )
 
     contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
     token_contract = contract["scope_revision_token"]
@@ -157,6 +195,15 @@ def test_shared_contract_pins_the_reviewed_ua14_pair_tokens() -> None:
         "maximum_ascii_bytes": 229,
         "about_field": "spatial_about_scope_revision_tokens",
         "occurrence_field": "spatial_occurrence_scope_revision_tokens",
+    }
+    assert token_contract["maximum_ascii_bytes"] == (
+        MAX_SCOPE_REVISION_TOKEN_ASCII_BYTES
+    )
+    assert contract["conflict_admission"] == {
+        "retrieval_authority": "positive-pair-tokens",
+        "suppression_granularity": "same-relation-and-exact-scope",
+        "record_conflict_fields": "unindexed-audit-only",
+        "mixed_status": "filterable-when-any-token-is-admitted",
     }
     assert payload["spatial_occurrence_scope_revision_tokens"] == [
         encode_scope_revision_token(COUNTRY_SCOPE, COUNTRY_REVISION),
@@ -246,13 +293,7 @@ def test_scope_filter_model_tree_is_relation_specific_and_compatibility_paired(
 
     assert compiled is not None
     assert compiled.model_dump(mode="json", exclude_none=True) == {
-        "must": [
-            relation_tree,
-            {
-                "key": "spatial_conflict",
-                "match": {"value": False},
-            },
-        ]
+        "must": [relation_tree]
     }
 
 
@@ -290,6 +331,31 @@ def test_admin1_compiler_excludes_cross_pair_and_stale_points() -> None:
                 kind="admin1",
                 derivation_revision=ADMIN1_REVISION,
             ),
+            RetrievalSpatialRelation.OCCURRENCE,
+        )
+        assert compiled is not None
+        assert _matching_ids(client, compiled) == [1]
+    finally:
+        client.close()
+
+
+def test_scope_compiler_trusts_admitted_tokens_on_mixed_conflict_points() -> None:
+    from spatial import RetrievalSpatialRelation, compile_qdrant_scope_filter
+
+    mixed = _point(
+        1,
+        occurrence=[f"sr1|{COUNTRY_SCOPE}|{COUNTRY_REVISION}"],
+        conflict=True,
+    )
+    client = QdrantClient(":memory:")
+    try:
+        client.create_collection(
+            collection_name="spatial-contract",
+            vectors_config=models.VectorParams(size=2, distance=models.Distance.COSINE),
+        )
+        client.upsert(collection_name="spatial-contract", points=[mixed])
+        compiled = compile_qdrant_scope_filter(
+            _scope_token(),
             RetrievalSpatialRelation.OCCURRENCE,
         )
         assert compiled is not None
@@ -338,8 +404,7 @@ def test_one_and_two_box_aoi_adapters_build_non_wrapping_geo_filters() -> None:
                     "top_left": {"lon": 170.0, "lat": 10.0},
                     "bottom_right": {"lon": 180.0, "lat": -10.0},
                 },
-            },
-            {"key": "spatial_conflict", "match": {"value": False}},
+            }
         ]
     }
     segmented_tree = segmented.model_dump(mode="json", exclude_none=True)

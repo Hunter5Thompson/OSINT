@@ -29,7 +29,8 @@ from qdrant_client import models
 SCOPE_REVISION_TOKEN_PREFIX: Final = "sr1"
 SCOPE_REVISION_TOKEN_VERSION: Final = SCOPE_REVISION_TOKEN_PREFIX
 SCOPE_REVISION_TOKEN_SEPARATOR: Final = "|"
-SPATIAL_DERIVATION_VERSION: Final = "spatial-deriver-v1"
+MAX_SCOPE_REVISION_TOKEN_ASCII_BYTES: Final = 229
+SPATIAL_DERIVATION_VERSION: Final = "spatial-deriver-v2"
 ABOUT_GATE_REVISION: Final = (
     "about-gate-v1-unique-reviewed-crosswalk-confidence-gte-0.80"
 )
@@ -187,6 +188,8 @@ class SpatialLaneCoverageV1(StrictFrozenModel):
     conflict_points: StrictInt = Field(ge=0)
     stale_points: StrictInt = Field(ge=0)
     unsupported_points: StrictInt = Field(ge=0)
+    unprojected_points: StrictInt = Field(ge=0)
+    audit_only_points: StrictInt = Field(ge=0)
 
     @model_validator(mode="after")
     def validate_accounting(self) -> SpatialLaneCoverageV1:
@@ -195,9 +198,11 @@ class SpatialLaneCoverageV1(StrictFrozenModel):
             + self.conflict_points
             + self.stale_points
             + self.unsupported_points
+            + self.unprojected_points
+            + self.audit_only_points
         )
-        if accounted > self.total_points:
-            raise ValueError("lane accounting exceeds total points")
+        if accounted != self.total_points:
+            raise ValueError("lane accounting must equal total points")
         return self
 
 
@@ -294,10 +299,15 @@ def encode_scope_revision_token(scope_key: str, derivation_revision: str) -> str
         or _DERIVATION_REVISION.fullmatch(derivation_revision) is None
     ):
         raise SpatialContractError("invalid derivation revision")
-    return (
+    token = (
         f"{SCOPE_REVISION_TOKEN_PREFIX}{SCOPE_REVISION_TOKEN_SEPARATOR}"
         f"{scope_key}{SCOPE_REVISION_TOKEN_SEPARATOR}{derivation_revision}"
     )
+    if len(token.encode("ascii")) > MAX_SCOPE_REVISION_TOKEN_ASCII_BYTES:
+        raise SpatialContractError(
+            "scope revision token exceeds 229 ASCII bytes"
+        )
+    return token
 
 
 _RELATION_FIELDS: Final = {
@@ -334,9 +344,7 @@ def compile_qdrant_scope_filter(
         relation_condition = occurrence
     else:
         relation_condition = models.Filter(should=[about, occurrence])
-    return models.Filter(
-        must=[relation_condition, _non_conflict_condition()]
-    )
+    return models.Filter(must=[relation_condition])
 
 
 def compile_qdrant_aoi_filter(
@@ -352,7 +360,7 @@ def compile_qdrant_aoi_filter(
     geo_condition: models.FieldCondition | models.Filter = conditions[0]
     if len(conditions) == 2:
         geo_condition = models.Filter(should=conditions)
-    return models.Filter(must=[geo_condition, _non_conflict_condition()])
+    return models.Filter(must=[geo_condition])
 
 
 def combine_filters(
@@ -396,13 +404,6 @@ def _relation_condition(
     )
 
 
-def _non_conflict_condition() -> models.FieldCondition:
-    return models.FieldCondition(
-        key="spatial_conflict",
-        match=models.MatchValue(value=False),
-    )
-
-
 def _aoi_condition(box: QdrantAoiBoxV1) -> models.FieldCondition:
     return models.FieldCondition(
         key="geo",
@@ -414,6 +415,7 @@ def _aoi_condition(box: QdrantAoiBoxV1) -> models.FieldCondition:
 
 
 __all__ = [
+    "MAX_SCOPE_REVISION_TOKEN_ASCII_BYTES",
     "SCOPE_REVISION_TOKEN_PREFIX",
     "SCOPE_REVISION_TOKEN_SEPARATOR",
     "QdrantAoiBoxV1",

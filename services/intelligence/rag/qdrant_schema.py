@@ -49,8 +49,6 @@ PAYLOAD_INDEXES: dict[str, str] = {
     "spatial_catalog_revision": "keyword",
     "spatial_projection_revision": "keyword",
     "spatial_derivation_version": "keyword",
-    "spatial_conflict": "bool",
-    "spatial_conflict_scope_keys": "keyword",
 }
 REQUIRED_PAYLOAD_INDEXES = tuple(PAYLOAD_INDEXES)   # field names (back-compat)
 

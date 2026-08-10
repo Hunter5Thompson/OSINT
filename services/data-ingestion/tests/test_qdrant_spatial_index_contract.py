@@ -26,8 +26,15 @@ def _index(schema: str) -> PayloadIndexInfo:
 def test_local_index_contract_matches_shared_vector_exactly() -> None:
     from qdrant_doctor.schema import PAYLOAD_INDEXES
 
-    assert _contract_indexes() == PAYLOAD_INDEXES
-    assert len(PAYLOAD_INDEXES) == 19
+    expected = _contract_indexes()
+
+    assert expected == PAYLOAD_INDEXES
+    assert len(PAYLOAD_INDEXES) == 17
+    contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert {"spatial_conflict", "spatial_conflict_scope_keys"} <= set(
+        contract["unindexed_audit_fields"]
+    )
+    assert not set(contract["unindexed_audit_fields"]) & set(PAYLOAD_INDEXES)
 
 
 def test_ingestion_validator_reports_missing_indexes_read_only() -> None:

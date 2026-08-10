@@ -124,7 +124,7 @@ class TestDoctorFailureCases:
 
         info = _dense_only_info()
         info.payload_schema = {
-            "spatial_conflict": PayloadIndexInfo(
+            "geo": PayloadIndexInfo(
                 data_type=PayloadSchemaType.KEYWORD,
                 points=1,
             )
@@ -138,7 +138,7 @@ class TestDoctorFailureCases:
             )
 
         assert exit_code == 1
-        assert "spatial_conflict" in capsys.readouterr().out
+        assert "geo" in capsys.readouterr().out
         assert not hasattr(mock_client, "create_payload_index") or (
             mock_client.create_payload_index.call_count == 0
         )

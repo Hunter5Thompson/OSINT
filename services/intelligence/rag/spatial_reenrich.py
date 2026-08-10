@@ -32,6 +32,7 @@ _LANE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _PROJECTION_REVISION = re.compile(
     r"^spatial-projection-v[0-9]+-[a-f0-9]{12,64}$"
 )
+_MAX_PROMOTION_STALE_RATE: Final = 0.01
 _RAW_SPATIAL_FIELDS: Final = frozenset(
     {
         "geo",
@@ -65,8 +66,8 @@ type PointId = str | int
 type Cursor = str | int | None
 
 
-class ReenrichmentMode(StrEnum):
-    """Explicit mutation mode; dry-run is the safe default at call sites."""
+class _ReenrichmentMode(StrEnum):
+    """Private execution mode; the public apply interface is approval-gated."""
 
     DRY_RUN = "dry-run"
     APPLY = "apply"
@@ -109,6 +110,14 @@ class Checkpoint:
 
     cursor: Cursor = None
     complete: bool = False
+    approved_report_fingerprint: str | None = None
+
+    def __post_init__(self) -> None:
+        fingerprint = self.approved_report_fingerprint
+        if fingerprint is not None and re.fullmatch(r"[a-f0-9]{64}", fingerprint) is None:
+            raise ValueError("invalid approved report fingerprint")
+        if (self.cursor is not None or self.complete) and fingerprint is None:
+            raise ValueError("durable checkpoint requires an approved report fingerprint")
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,6 +202,9 @@ class JsonCheckpointStore:
                     "job_key": key,
                     "cursor": value.cursor,
                     "complete": value.complete,
+                    "approved_report_fingerprint": (
+                        value.approved_report_fingerprint
+                    ),
                 }
                 for key, value in sorted(values.items())
             ],
@@ -230,19 +242,26 @@ class JsonCheckpointStore:
                 "job_key",
                 "cursor",
                 "complete",
+                "approved_report_fingerprint",
             }:
                 raise ValueError("invalid Qdrant spatial checkpoint entry")
             key = entry["job_key"]
             cursor = entry["cursor"]
             complete = entry["complete"]
+            approved_fingerprint = entry["approved_report_fingerprint"]
             if (
                 not isinstance(key, str)
                 or not _valid_cursor(cursor)
                 or not isinstance(complete, bool)
+                or not isinstance(approved_fingerprint, str)
                 or key in values
             ):
                 raise ValueError("invalid Qdrant spatial checkpoint value")
-            values[key] = Checkpoint(cursor=cursor, complete=complete)
+            values[key] = Checkpoint(
+                cursor=cursor,
+                complete=complete,
+                approved_report_fingerprint=approved_fingerprint,
+            )
         return values
 
 
@@ -333,6 +352,8 @@ class _Coverage:
     conflict_points: int = 0
     stale_points: int = 0
     unsupported_points: int = 0
+    unprojected_points: int = 0
+    audit_only_points: int = 0
 
     def observe(self, payload: Mapping[str, object], target_revision: str) -> None:
         self.total_points += 1
@@ -349,13 +370,15 @@ class _Coverage:
             conflict_points=self.conflict_points,
             stale_points=self.stale_points,
             unsupported_points=self.unsupported_points,
+            unprojected_points=self.unprojected_points,
+            audit_only_points=self.audit_only_points,
         )
 
 
 @dataclass(slots=True)
 class _Report:
     job: ReenrichmentJob
-    mode: ReenrichmentMode
+    mode: _ReenrichmentMode
     start_cursor: Cursor
     end_cursor: Cursor
     complete: bool = False
@@ -383,13 +406,23 @@ class _Report:
             "writes_applied": self.writes_applied,
             "batches_completed": self.batches_completed,
             "stale_points": self.coverage_before.stale_points,
-            "stale_rate": _ratio(
-                self.coverage_before.stale_points,
+            "stale_rate": _promotion_stale_rate(self.coverage_before),
+            "unprojected_rate": _ratio(
+                self.coverage_before.unprojected_points,
                 self.coverage_before.total_points,
             ),
-            "projected_stale_rate": _ratio(
-                self.coverage_projected.stale_points,
+            "filterable_rate": _ratio(
+                self.coverage_before.filterable_points,
+                self.coverage_before.total_points,
+            ),
+            "projected_filterable_rate": _ratio(
+                self.coverage_projected.filterable_points,
                 self.coverage_projected.total_points,
+            ),
+            "stale_gate_passed": (
+                self.coverage_before.total_points > 0
+                and _promotion_stale_rate(self.coverage_before)
+                <= _MAX_PROMOTION_STALE_RATE
             ),
             "coverage_before": before.model_dump(mode="json"),
             "coverage_projected": projected.model_dump(mode="json"),
@@ -398,23 +431,67 @@ class _Report:
         return report
 
 
-async def run_spatial_reenrichment(
+async def preview_spatial_reenrichment(
+    store: ReenrichmentStore,
+    projector: SpatialProjector,
+    job: ReenrichmentJob,
+) -> dict[str, Any]:
+    """Produce one complete full-lane report without any mutation capability."""
+
+    return await _run_spatial_reenrichment(
+        store,
+        projector,
+        None,
+        job,
+        mode=_ReenrichmentMode.DRY_RUN,
+        checkpoint=Checkpoint(),
+        approved_report_fingerprint=None,
+    )
+
+
+async def apply_spatial_reenrichment(
     store: ReenrichmentStore,
     projector: SpatialProjector,
     checkpoints: CheckpointStore,
     job: ReenrichmentJob,
     *,
-    mode: ReenrichmentMode,
+    approved_report: Mapping[str, object],
 ) -> dict[str, Any]:
-    """Process one lane; checkpoint only pages whose full upsert was confirmed."""
+    """Apply only a reviewed full-lane dry-run, preserving approval on resume."""
 
-    if not isinstance(mode, ReenrichmentMode):
-        raise TypeError("re-enrichment mode must be explicit")
-    checkpoint = (
-        checkpoints.load(job)
-        if mode is ReenrichmentMode.APPLY
-        else Checkpoint()
+    approved_fingerprint = _validated_dry_run_fingerprint(
+        "approved",
+        approved_report,
     )
+    checkpoint = checkpoints.load(job)
+    if checkpoint.approved_report_fingerprint is None:
+        fresh = await preview_spatial_reenrichment(store, projector, job)
+        validate_dry_run_approval(approved_report, fresh)
+    elif checkpoint.approved_report_fingerprint != approved_fingerprint:
+        raise ValueError("approved dry-run does not match the durable checkpoint")
+    return await _run_spatial_reenrichment(
+        store,
+        projector,
+        checkpoints,
+        job,
+        mode=_ReenrichmentMode.APPLY,
+        checkpoint=checkpoint,
+        approved_report_fingerprint=approved_fingerprint,
+    )
+
+
+async def _run_spatial_reenrichment(
+    store: ReenrichmentStore,
+    projector: SpatialProjector,
+    checkpoints: CheckpointStore | None,
+    job: ReenrichmentJob,
+    *,
+    mode: _ReenrichmentMode,
+    checkpoint: Checkpoint,
+    approved_report_fingerprint: str | None,
+) -> dict[str, Any]:
+    """Internal runner; checkpoint only fully confirmed apply pages."""
+
     report = _Report(
         job=job,
         mode=mode,
@@ -432,8 +509,17 @@ async def run_spatial_reenrichment(
         if not page.points:
             report.complete = True
             report.end_cursor = page.next_cursor
-            if mode is ReenrichmentMode.APPLY:
-                checkpoints.save(job, Checkpoint(cursor=page.next_cursor, complete=True))
+            if mode is _ReenrichmentMode.APPLY:
+                if checkpoints is None or approved_report_fingerprint is None:
+                    raise RuntimeError("apply execution is missing approval state")
+                checkpoints.save(
+                    job,
+                    Checkpoint(
+                        cursor=page.next_cursor,
+                        complete=True,
+                        approved_report_fingerprint=approved_report_fingerprint,
+                    ),
+                )
             break
 
         replacements: list[ReenrichmentPoint] = []
@@ -454,7 +540,7 @@ async def run_spatial_reenrichment(
                 replacements.append(projected)
 
         report.writes_planned += len(replacements)
-        if mode is ReenrichmentMode.APPLY and replacements:
+        if mode is _ReenrichmentMode.APPLY and replacements:
             written = await store.replace_points(job.lane, replacements)
             if written != len(replacements):
                 raise RuntimeError(
@@ -466,10 +552,16 @@ async def run_spatial_reenrichment(
         cursor = page.next_cursor
         report.end_cursor = cursor
         report.complete = cursor is None
-        if mode is ReenrichmentMode.APPLY:
+        if mode is _ReenrichmentMode.APPLY:
+            if checkpoints is None or approved_report_fingerprint is None:
+                raise RuntimeError("apply execution is missing approval state")
             checkpoints.save(
                 job,
-                Checkpoint(cursor=cursor, complete=report.complete),
+                Checkpoint(
+                    cursor=cursor,
+                    complete=report.complete,
+                    approved_report_fingerprint=approved_report_fingerprint,
+                ),
             )
         if report.complete:
             break
@@ -520,21 +612,29 @@ def validate_dry_run_approval(
 ) -> None:
     """Require a complete, unchanged full-lane dry-run before an operator apply."""
 
-    for label, report in (
-        ("approved", approved_report),
-        ("fresh", fresh_dry_run),
-    ):
-        if report.get("mode") != ReenrichmentMode.DRY_RUN.value:
-            raise ValueError(f"{label} report is not a dry-run")
-        if report.get("complete") is not True or report.get("start_cursor") is not None:
-            raise ValueError(f"{label} dry-run is not a complete full-lane scan")
-        fingerprint = report.get("report_fingerprint")
-        if not isinstance(fingerprint, str) or fingerprint != report_fingerprint(report):
-            if label == "fresh":
-                raise ValueError("fresh dry-run drifted from its fingerprint")
-            raise ValueError("approved dry-run fingerprint is invalid")
-    if approved_report["report_fingerprint"] != fresh_dry_run["report_fingerprint"]:
+    approved_fingerprint = _validated_dry_run_fingerprint(
+        "approved",
+        approved_report,
+    )
+    fresh_fingerprint = _validated_dry_run_fingerprint("fresh", fresh_dry_run)
+    if approved_fingerprint != fresh_fingerprint:
         raise ValueError("approved dry-run drifted from the current Qdrant lane")
+
+
+def _validated_dry_run_fingerprint(
+    label: str,
+    report: Mapping[str, object],
+) -> str:
+    if report.get("mode") != _ReenrichmentMode.DRY_RUN.value:
+        raise ValueError(f"{label} report is not a dry-run")
+    if report.get("complete") is not True or report.get("start_cursor") is not None:
+        raise ValueError(f"{label} dry-run is not a complete full-lane scan")
+    fingerprint = report.get("report_fingerprint")
+    if not isinstance(fingerprint, str) or fingerprint != report_fingerprint(report):
+        if label == "fresh":
+            raise ValueError("fresh dry-run drifted from its fingerprint")
+        raise ValueError("approved dry-run fingerprint is invalid")
+    return fingerprint
 
 
 def _replacement(
@@ -600,13 +700,13 @@ def _validated_projection(
         "unavailable",
     }:
         raise ValueError("invalid spatial derivation status")
-    if status == "filterable" and (conflict or token_count == 0):
-        raise ValueError("filterable projection requires non-conflicting pair tokens")
+    if status == "filterable" and token_count == 0:
+        raise ValueError("filterable projection requires pair tokens")
     if status == "conflict" and (not conflict or token_count != 0):
         raise ValueError("conflict projection must suppress pair tokens")
     if status in {"audit_only", "unavailable"} and (conflict or token_count != 0):
         raise ValueError("non-filterable projection must suppress pair tokens")
-    if conflict and status != "conflict":
+    if conflict and status not in {"filterable", "conflict"}:
         raise ValueError("spatial conflict and derivation status disagree")
 
     conflict_keys = proposed["spatial_conflict_scope_keys"]
@@ -632,18 +732,20 @@ def _coverage_status(
     if payload.get("spatial_derivation_status") == "unavailable":
         return "unsupported"
     revision = payload.get("spatial_projection_revision")
-    if revision is not None and revision != target_revision:
-        return "stale"
+    if revision is None:
+        return "unprojected"
     if revision != target_revision:
-        return None
-    if payload.get("spatial_conflict") is True:
-        return "conflict"
+        return "stale"
     if any(
         isinstance(payload.get(field), list) and bool(payload[field])
         for field in _TOKEN_FIELDS
     ):
         return "filterable"
-    return None
+    if payload.get("spatial_conflict") is True:
+        return "conflict"
+    if payload.get("spatial_derivation_status") == "audit_only":
+        return "audit_only"
+    return "unprojected"
 
 
 def _coverage_snapshot(
@@ -716,6 +818,15 @@ def _ratio(numerator: int, denominator: int) -> float:
     return numerator / denominator if denominator else 0.0
 
 
+def _promotion_stale_rate(coverage: _Coverage) -> float:
+    """Treat absent current projections as stale for promotion purposes."""
+
+    return _ratio(
+        coverage.stale_points + coverage.unprojected_points,
+        coverage.total_points,
+    )
+
+
 def _canonical_json(payload: object) -> str:
     return json.dumps(
         payload,
@@ -723,3 +834,22 @@ def _canonical_json(payload: object) -> str:
         separators=(",", ":"),
         sort_keys=True,
     )
+
+
+__all__ = [
+    "Checkpoint",
+    "CheckpointStore",
+    "JsonCheckpointStore",
+    "MemoryCheckpointStore",
+    "QdrantReenrichmentStore",
+    "ReenrichmentJob",
+    "ReenrichmentPage",
+    "ReenrichmentPoint",
+    "ReenrichmentStore",
+    "SpatialProjector",
+    "apply_spatial_reenrichment",
+    "plan_spatial_reenrichment_jobs",
+    "preview_spatial_reenrichment",
+    "report_fingerprint",
+    "validate_dry_run_approval",
+]

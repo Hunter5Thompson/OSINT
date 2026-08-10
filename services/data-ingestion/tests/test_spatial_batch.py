@@ -36,6 +36,7 @@ def test_plan06a_batch_semantics_match_shared_file_format_contract() -> None:
     assert contract["contract_version"] == 1
     assert contract["semantics"] == {
         "dry_run_writes": 0,
+        "apply_requires": "approved-complete-full-lane-dry-run",
         "checkpoint_after": "complete-confirmed-batch",
         "report_fingerprint": "sha256-canonical-json-excluding-self",
     }

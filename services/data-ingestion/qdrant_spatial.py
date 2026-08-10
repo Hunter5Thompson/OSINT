@@ -25,7 +25,8 @@ from spatial_catalog.identity import CountryCrosswalk, parse_scope_key
 from spatial_catalog.models import ScopeKind
 
 SCOPE_REVISION_TOKEN_VERSION: Final = "sr1"
-SPATIAL_DERIVATION_VERSION: Final = "spatial-deriver-v1"
+MAX_SCOPE_REVISION_TOKEN_ASCII_BYTES: Final = 229
+SPATIAL_DERIVATION_VERSION: Final = "spatial-deriver-v2"
 ABOUT_CONFIDENCE_THRESHOLD: Final = 0.80
 ABOUT_GATE_REVISION: Final = (
     "about-gate-v1-unique-reviewed-crosswalk-confidence-gte-0.80"
@@ -176,11 +177,13 @@ def project_spatial_payload(
             item.evidence_kind.value,
         ),
     )
-    audits: list[dict[str, Any]] = []
-    filterable: list[tuple[SpatialEvidenceV1, list[dict[str, str]], str]] = []
+    candidates: list[tuple[SpatialEvidenceV1, list[dict[str, Any]], str]] = []
     bases: set[str] = set()
     precisions: set[str] = set()
     conflict_scope_keys: set[str] = set()
+    conflicts_by_relation: dict[SpatialRelation, set[str]] = {
+        relation: set() for relation in SpatialRelation
+    }
     source_country_codes: set[str] = set()
     source_country_code_systems: set[str] = set()
     country_iso3_codes: set[str] = set()
@@ -195,13 +198,12 @@ def project_spatial_payload(
             )
         assignments = _audit_assignments(result, index)
         reason = _filter_reason(item, assignments)
-        if reason == "accepted":
-            filterable.append((item, assignments, reason))
-        if result.spatial_basis is not None:
-            bases.add(result.spatial_basis.value)
-        if result.spatial_precision is not None:
-            precisions.add(result.spatial_precision.value)
+        candidates.append((item, assignments, reason))
         conflict_scope_keys.update(result.spatial_conflict_scope_keys)
+        if result.spatial_conflict:
+            conflicts_by_relation[item.relation].update(
+                result.spatial_conflict_scope_keys
+            )
         if result.source_country_code is not None:
             source_country_codes.add(result.source_country_code)
         if result.source_country_code_system is not None:
@@ -212,27 +214,41 @@ def project_spatial_payload(
             admin1_codes.add(result.admin1_code)
         if result.admin2_code is not None:
             admin2_codes.add(result.admin2_code)
-        audits.append(_audit_derivation(item, assignments, reason))
-
-    has_conflict = bool(conflict_scope_keys) or any(
-        item.normalization.spatial_conflict for item in ordered
-    )
-    if has_conflict:
-        for audit in audits:
-            if audit["filterable"]:
-                audit["filterable"] = False
-                audit["filter_reason"] = "record_spatial_conflict"
+    has_conflict = any(item.normalization.spatial_conflict for item in ordered)
     about_assignments: set[tuple[int, str, str]] = set()
     occurrence_assignments: set[tuple[int, str, str]] = set()
     points: set[tuple[float, float]] = set()
-    if not has_conflict:
-        for item, assignments, _reason in filterable:
+    audits: list[dict[str, Any]] = []
+    for item, assignments, reason in candidates:
+        published: list[dict[str, Any]] = []
+        withheld_conflict_scope_keys: list[str] = []
+        audit_reason = reason
+        if reason == "accepted":
+            relation_conflicts = conflicts_by_relation[item.relation]
+            published = [
+                assignment
+                for assignment in assignments
+                if assignment["scope_key"] not in relation_conflicts
+            ]
+            withheld_conflict_scope_keys = sorted(
+                {
+                    assignment["scope_key"]
+                    for assignment in assignments
+                    if assignment["scope_key"] in relation_conflicts
+                }
+            )
+            if not published:
+                audit_reason = "relation_scope_conflict"
+            elif withheld_conflict_scope_keys:
+                audit_reason = "accepted_partial_conflict"
+
+        if published:
             target = (
                 about_assignments
                 if item.relation is SpatialRelation.ABOUT
                 else occurrence_assignments
             )
-            for assignment in assignments:
+            for assignment in published:
                 target.add(
                     (
                         int(assignment["depth"]),
@@ -241,13 +257,28 @@ def project_spatial_payload(
                     )
                 )
             result = item.normalization
+            if result.spatial_basis is not None:
+                bases.add(result.spatial_basis.value)
+            if result.spatial_precision is not None:
+                precisions.add(result.spatial_precision.value)
             if result.latitude is not None and result.longitude is not None:
                 points.add((result.longitude, result.latitude))
+        audits.append(
+            _audit_derivation(
+                item,
+                assignments,
+                audit_reason,
+                published_assignments=published,
+                withheld_conflict_scope_keys=withheld_conflict_scope_keys,
+            )
+        )
 
     about_tokens = _assignment_tokens(about_assignments)
     occurrence_tokens = _assignment_tokens(occurrence_assignments)
-    status = "conflict" if has_conflict else (
-        "filterable" if about_tokens or occurrence_tokens else "audit_only"
+    status = (
+        "filterable"
+        if about_tokens or occurrence_tokens
+        else "conflict" if has_conflict else "audit_only"
     )
     payload: dict[str, Any] = {
         "spatial_about_scope_revision_tokens": about_tokens,
@@ -354,6 +385,9 @@ def _audit_derivation(
     evidence: SpatialEvidenceV1,
     assignments: Sequence[Mapping[str, Any]],
     reason: str,
+    *,
+    published_assignments: Sequence[Mapping[str, Any]],
+    withheld_conflict_scope_keys: Sequence[str],
 ) -> dict[str, Any]:
     result = evidence.normalization
     return {
@@ -363,7 +397,7 @@ def _audit_derivation(
         "confidence": evidence.confidence,
         "crosswalk_status": evidence.crosswalk_status.value,
         "normalization_status": result.status,
-        "filterable": reason == "accepted",
+        "filterable": bool(published_assignments),
         "filter_reason": reason,
         "scope_assignments": [
             {
@@ -372,6 +406,14 @@ def _audit_derivation(
             }
             for assignment in assignments
         ],
+        "published_scope_assignments": [
+            {
+                "scope_key": assignment["scope_key"],
+                "derivation_revision": assignment["derivation_revision"],
+            }
+            for assignment in published_assignments
+        ],
+        "withheld_conflict_scope_keys": list(withheld_conflict_scope_keys),
         "basis": result.spatial_basis.value if result.spatial_basis is not None else None,
         "precision": (
             result.spatial_precision.value
@@ -397,7 +439,12 @@ def _encode_scope_revision_token(scope_key: str, revision: str) -> str:
         raise SpatialProjectionError("world is never materialized in a pair token")
     if _DERIVATION_REVISION.fullmatch(revision) is None:
         raise SpatialProjectionError("invalid derivation revision")
-    return f"{SCOPE_REVISION_TOKEN_VERSION}|{scope_key}|{revision}"
+    token = f"{SCOPE_REVISION_TOKEN_VERSION}|{scope_key}|{revision}"
+    if len(token.encode("ascii")) > MAX_SCOPE_REVISION_TOKEN_ASCII_BYTES:
+        raise SpatialProjectionError(
+            "scope revision token exceeds 229 ASCII bytes"
+        )
+    return token
 
 
 def _finest_precision(precisions: set[str]) -> str | None:
@@ -410,6 +457,7 @@ def _finest_precision(precisions: set[str]) -> str | None:
 __all__ = [
     "ABOUT_CONFIDENCE_THRESHOLD",
     "ABOUT_GATE_REVISION",
+    "MAX_SCOPE_REVISION_TOKEN_ASCII_BYTES",
     "ReviewedGeoNameCrosswalk",
     "SPATIAL_DERIVATION_VERSION",
     "SpatialCrosswalkStatus",

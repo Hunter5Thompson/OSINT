@@ -50,8 +50,6 @@ PAYLOAD_INDEXES: dict[str, str] = {
     "spatial_catalog_revision": "keyword",
     "spatial_projection_revision": "keyword",
     "spatial_derivation_version": "keyword",
-    "spatial_conflict": "bool",
-    "spatial_conflict_scope_keys": "keyword",
 }
 
 EXPECTED_DENSE_SIZE = 1024

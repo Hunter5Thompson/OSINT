@@ -86,7 +86,7 @@ async def test_enhanced_search_propagates_coverage_snapshot_without_fallback() -
     from spatial import SpatialCoverageSnapshotV1, SpatialLaneCoverageV1
 
     snapshot = SpatialCoverageSnapshotV1(
-        target_projection_revision="spatial-projection-v1-a5ce3a4f4657",
+        target_projection_revision="spatial-projection-v1-47fec701a2a2",
         lanes=(
             SpatialLaneCoverageV1(
                 lane="analysis",
@@ -95,6 +95,8 @@ async def test_enhanced_search_propagates_coverage_snapshot_without_fallback() -
                 conflict_points=2,
                 stale_points=1,
                 unsupported_points=10,
+                unprojected_points=5,
+                audit_only_points=2,
             ),
         ),
     )
