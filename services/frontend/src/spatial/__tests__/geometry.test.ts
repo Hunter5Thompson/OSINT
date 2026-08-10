@@ -88,6 +88,17 @@ describe("classifyPointInGeometry", () => {
 });
 
 describe("BoundaryGeometryIndex", () => {
+  it("uses one minimal span for an ordinary polygon", () => {
+    const index = createBoundaryGeometryIndex([
+      { value: "square", geometry: square },
+    ]);
+
+    expect(index.indexedSpanCount).toBe(1);
+    expect(index.query(5, 5)).toEqual([
+      { value: "square", containment: "inside" },
+    ]);
+  });
+
   it("deduplicates a dateline feature represented by two RBush spans", () => {
     const dateline = geometry([
       [[[179, -2], [-179, -2], [-179, 2], [179, 2], [179, -2]]],

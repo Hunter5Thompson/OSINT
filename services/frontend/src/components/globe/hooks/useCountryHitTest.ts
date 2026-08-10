@@ -2,6 +2,11 @@ import RBush from "rbush";
 import { useEffect, useState } from "react";
 import { feature as topojsonFeature } from "topojson-client";
 
+import {
+  minimalLongitudeSpans,
+  type LongitudeSpan,
+} from "../../../spatial/geometry";
+
 type PreparedPosition = readonly [longitude: number, latitude: number];
 
 interface PreparedRing {
@@ -20,10 +25,12 @@ interface PreparedLegacyGeometry {
 
 interface PreparedCountryGeometry {
   readonly geometry: PreparedLegacyGeometry;
-  readonly minX: number;
-  readonly minY: number;
-  readonly maxX: number;
-  readonly maxY: number;
+  readonly indexSpans: readonly PreparedIndexSpan[];
+}
+
+interface PreparedIndexSpan extends LongitudeSpan {
+  readonly south: number;
+  readonly north: number;
 }
 
 const COORDINATE_EPSILON = 1e-12;
@@ -33,6 +40,32 @@ export interface CountryFeature {
   name: string;
   geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
 }
+
+export const COUNTRY_INDEX_REJECTION_DIAGNOSTIC_LIMIT = 10;
+
+export type CountryIndexDiagnostic =
+  | {
+      readonly code: "legacy_country_geometry_rejected";
+      readonly featureIndex: number;
+    }
+  | {
+      readonly code: "legacy_country_geometry_rejections_suppressed";
+      readonly suppressedCount: number;
+    };
+
+export interface CountryIndexDiagnostics {
+  report(event: CountryIndexDiagnostic): void;
+}
+
+const NOOP_COUNTRY_INDEX_DIAGNOSTICS: CountryIndexDiagnostics = {
+  report: () => undefined,
+};
+
+const CONSOLE_COUNTRY_INDEX_DIAGNOSTICS: CountryIndexDiagnostics = {
+  report: (event) => {
+    console.warn("Legacy country geometry index diagnostic", event);
+  },
+};
 
 interface BboxNode {
   minX: number;
@@ -114,11 +147,7 @@ function prepareLegacyGeometry(
     ? [geometry.coordinates]
     : geometry.coordinates;
   const polygons: PreparedPolygon[] = [];
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  let crossesDateline = false;
+  const indexSpans: PreparedIndexSpan[] = [];
 
   for (const rawPolygon of rawPolygons) {
     const rings: PreparedRing[] = [];
@@ -126,46 +155,51 @@ function prepareLegacyGeometry(
       const prepared = prepareRing(rawRing);
       if (prepared === null) return null;
       rings.push(prepared);
-      for (let index = 0; index < rawRing.length; index += 1) {
-        const position = rawRing[index];
-        if (position === undefined) return null;
-        const longitude = position[0];
-        const latitude = position[1];
-        if (typeof longitude !== "number" || typeof latitude !== "number") return null;
-        minX = Math.min(minX, longitude);
-        minY = Math.min(minY, latitude);
-        maxX = Math.max(maxX, longitude);
-        maxY = Math.max(maxY, latitude);
-        const next = rawRing[index + 1];
-        if (
-          next !== undefined
-          && typeof next[0] === "number"
-          && Math.abs(next[0] - longitude) > 180
-        ) {
-          crossesDateline = true;
-        }
-      }
     }
     const outer = rings[0];
     if (outer === undefined) return null;
     polygons.push({ outer, holes: rings.slice(1) });
+    const positions = rings.flatMap((ring) => ring.positions);
+    const latitudes = positions.map((position) => position[1]);
+    const south = Math.min(...latitudes);
+    const north = Math.max(...latitudes);
+    for (const span of minimalLongitudeSpans(
+      positions.map((position) => position[0]),
+    )) {
+      indexSpans.push({ ...span, south, north });
+    }
   }
-  if (
-    polygons.length === 0
-    || !Number.isFinite(minX)
-    || !Number.isFinite(minY)
-    || !Number.isFinite(maxX)
-    || !Number.isFinite(maxY)
-  ) {
+  if (polygons.length === 0 || indexSpans.length === 0) {
     return null;
   }
   return {
     geometry: { polygons },
-    minX: crossesDateline ? -180 : minX,
-    minY,
-    maxX: crossesDateline ? 180 : maxX,
-    maxY,
+    indexSpans,
   };
+}
+
+function prepareLegacyGeometryFailClosed(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): PreparedCountryGeometry | null {
+  try {
+    return prepareLegacyGeometry(geometry);
+  } catch {
+    return null;
+  }
+}
+
+function countryIndexNodes(
+  prepared: PreparedCountryGeometry,
+  index: number,
+): BboxNode[] {
+  return prepared.indexSpans.map((span) => ({
+    minX: span.west,
+    minY: span.south,
+    maxX: span.east,
+    maxY: span.north,
+    index,
+    geometry: prepared.geometry,
+  }));
 }
 
 function pointOnSegment(
@@ -233,21 +267,33 @@ function legacyGeometryContains(
   return false;
 }
 
-export function buildCountryIndex(features: CountryFeature[]): CountryIndex {
+export function buildCountryIndex(
+  features: CountryFeature[],
+  diagnostics: CountryIndexDiagnostics = NOOP_COUNTRY_INDEX_DIAGNOSTICS,
+): CountryIndex {
   const tree: CountryIndex = new RBush<BboxNode>();
   const items: BboxNode[] = [];
+  let rejectedCount = 0;
   features.forEach((feature, index) => {
-    const prepared = prepareLegacyGeometry(feature.geometry);
-    if (prepared === null) return;
-    items.push({
-      minX: prepared.minX,
-      minY: prepared.minY,
-      maxX: prepared.maxX,
-      maxY: prepared.maxY,
-      index,
-      geometry: prepared.geometry,
-    });
+    const prepared = prepareLegacyGeometryFailClosed(feature.geometry);
+    if (prepared === null) {
+      if (rejectedCount < COUNTRY_INDEX_REJECTION_DIAGNOSTIC_LIMIT) {
+        diagnostics.report({
+          code: "legacy_country_geometry_rejected",
+          featureIndex: index,
+        });
+      }
+      rejectedCount += 1;
+      return;
+    }
+    items.push(...countryIndexNodes(prepared, index));
   });
+  if (rejectedCount > COUNTRY_INDEX_REJECTION_DIAGNOSTIC_LIMIT) {
+    diagnostics.report({
+      code: "legacy_country_geometry_rejections_suppressed",
+      suppressedCount: rejectedCount - COUNTRY_INDEX_REJECTION_DIAGNOSTIC_LIMIT,
+    });
+  }
   tree.load(items);
   return tree;
 }
@@ -271,7 +317,10 @@ export function hitTestCountry(
     return null;
   }
   const candidates = index.search({ minX: lon, minY: lat, maxX: lon, maxY: lat });
+  const visitedFeatureIndexes = new Set<number>();
   for (const c of candidates) {
+    if (visitedFeatureIndexes.has(c.index)) continue;
+    visitedFeatureIndexes.add(c.index);
     const f = features[c.index];
     if (f === undefined || !legacyGeometryContains(c.geometry, lon, lat)) continue;
     const iso3 = topoIndex[f.m49] ?? null;
@@ -334,7 +383,7 @@ export function useCountryHitTest(enabled = true): LoaderState {
       if (cancelled) return;
       setState({
         features,
-        index: buildCountryIndex(features),
+        index: buildCountryIndex(features, CONSOLE_COUNTRY_INDEX_DIAGNOSTICS),
         topoIndex: endo._topoIndex,
         countries: endo.countries,
       });
