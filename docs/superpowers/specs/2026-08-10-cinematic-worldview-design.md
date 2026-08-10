@@ -1200,3 +1200,4 @@ Reviewers blockiert.
 | `INFO-009` | Per-Instance-Attributzugriff hängt an `ready`, nicht an `releaseGeometryInstances: false`; CPU-Geometrie bleibt nur für einen belegten Consumer erhalten. |
 | `INFO-010` | Diagnostics und Metric-Port importieren `SpatialMetricId` aus der geschlossenen Registry in `11 §19`. |
 | `INFO-011` | Median ≥ 55 FPS ist explizites Tier-0-Default-on-Gate und Laufzeit-Degradationsschwelle; Median 48/p95 20 ist ausdrücklich kein Pass. |
+| `INFO-012` | Die Index-Tabelle wurde vollständig gegen `wc -w` regeneriert. Die älteren Driftfälle `03`/`04` wurden ohne Änderung ihrer Codeblöcke, Überschriften oder Verträge redaktionell unter 2.000 Wörter verdichtet; Schritt 6 verlangt künftig Tabellenupdate im selben Commit. |

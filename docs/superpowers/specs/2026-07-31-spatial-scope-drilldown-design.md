@@ -39,29 +39,30 @@ endeten `PASS WITH REQUIRED FIXES`; beide Fix-Sätze sind eingearbeitet, ein
 unabhängiger Abschluss-PASS steht aus. Sie autorisieren bis dahin weder Cinematic-
 Code noch einen Implementierungsplan.
 
-Protokollhinweise ohne aktuellen Blocker: `03` und `04` liegen nahe am Wortbudget;
-ihre nächste inhaltliche Erweiterung erfordert die Seam-Prüfung aus dem
-Änderungsprotokoll. Landen vor Slice 3 relevante Frontend-Änderungen, wird der in
-`01 §3.1` dokumentierte Ist-Zustand kurz gegen den dann aktuellen Tree revalidiert.
+Protokollhinweise ohne aktuellen Blocker: `03`, `04`, `06` und `13` besitzen jeweils
+weniger als 200 Wörter Headroom; ihre nächste inhaltliche Erweiterung erfordert die
+Seam-Prüfung aus dem Änderungsprotokoll. Landen vor Slice 3 relevante Frontend-
+Änderungen, wird der in `01 §3.1` dokumentierte Ist-Zustand gegen den dann aktuellen
+Tree revalidiert.
 
 ## Teil-Specs
 
 | Teil | Normativer Besitz | Aktueller Umfang inkl. Navigationskopf |
 |---|---|---:|
 | [01 — Architektur und Invarianten](2026-07-31-spatial-scope-drilldown/01-architecture-and-invariants.md) | Entscheidung, Ist-Zustand, Ziele, Begriffe, globale Trennlinien, Interface-Auswahl | 1.641 Wörter |
-| [02 — Scope-Identität und Boundary-Policy](2026-07-31-spatial-scope-drilldown/02-scope-identity-and-boundary-policy.md) | Schlüsselgrammatik, Lineage, politische Representation, Katalog-/Derivationsrevision | 810 Wörter |
-| [03 — Frontend-Core und Navigation](2026-07-31-spatial-scope-drilldown/03-frontend-core-and-navigation.md) | TypeScript-Interface, State Machine, Races, Lifecycle, React-Hook, URL/History | 1.953 Wörter |
-| [04 — Spatial-Catalog-Verträge](2026-07-31-spatial-scope-drilldown/04-spatial-catalog-contracts.md) | Ownership, HTTP/Wire, Backend-Modelle, Frontend-Validator, Cache und Lifecycle | 1.968 Wörter |
-| [05 — Boundary-Build und Antimeridian](2026-07-31-spatial-scope-drilldown/05-boundary-build-and-antimeridian.md) | Quellen, Source Lock, Offline-Build, Topologie, LOD, Budgets, Datumsgrenze | 1.450 Wörter |
-| [06 — Cesium und Layer-Semantik](2026-07-31-spatial-scope-drilldown/06-cesium-and-layer-semantics.md) | Primitive-Lifecycle, Staging, Picking, Kamera, Prefetch, Layer-Capabilities | 1.701 Wörter |
-| [07 — CHRONIK-Query-Vertrag](2026-07-31-spatial-scope-drilldown/07-chronik-query-contract.md) | Timeline-Request, Response-Accounting, statische Query-Compiler, stale UI | 920 Wörter |
+| [02 — Scope-Identität und Boundary-Policy](2026-07-31-spatial-scope-drilldown/02-scope-identity-and-boundary-policy.md) | Schlüsselgrammatik, Lineage, politische Representation, Katalog-/Derivationsrevision | 929 Wörter |
+| [03 — Frontend-Core und Navigation](2026-07-31-spatial-scope-drilldown/03-frontend-core-and-navigation.md) | TypeScript-Interface, State Machine, Races, Lifecycle, React-Hook, URL/History | 1.922 Wörter |
+| [04 — Spatial-Catalog-Verträge](2026-07-31-spatial-scope-drilldown/04-spatial-catalog-contracts.md) | Ownership, HTTP/Wire, Backend-Modelle, Frontend-Validator, Cache und Lifecycle | 1.890 Wörter |
+| [05 — Boundary-Build und Antimeridian](2026-07-31-spatial-scope-drilldown/05-boundary-build-and-antimeridian.md) | Quellen, Source Lock, Offline-Build, Topologie, LOD, Budgets, Datumsgrenze | 1.664 Wörter |
+| [06 — Cesium und Layer-Semantik](2026-07-31-spatial-scope-drilldown/06-cesium-and-layer-semantics.md) | Primitive-Lifecycle, Staging, Picking, Kamera, Prefetch, Layer-Capabilities | 1.905 Wörter |
+| [07 — CHRONIK-Query-Vertrag](2026-07-31-spatial-scope-drilldown/07-chronik-query-contract.md) | Timeline-Request, Response-Accounting, statische Query-Compiler, stale UI | 1.189 Wörter |
 | [08 — Neo4j-Normalisierung](2026-07-31-spatial-scope-drilldown/08-neo4j-normalization.md) | Location-Schema, Indizes, Writer, Konflikte, Backfill und Coverage-Gate | 655 Wörter |
-| [09 — Qdrant-Retrieval](2026-07-31-spatial-scope-drilldown/09-qdrant-retrieval.md) | Payload-Schema, Indizes, Filter-Compiler und Partial Coverage | 792 Wörter |
-| [10 — Munin Scope Enforcement](2026-07-31-spatial-scope-drilldown/10-munin-scope-enforcement.md) | Request, Run-Snapshot, ToolRuntime, Graph-Templates und Tool-Matrix | 1.293 Wörter |
-| [11 — UX und 3D-Metriken](2026-07-31-spatial-scope-drilldown/11-ux-and-3d-metrics.md) | Breadcrumb, Click/Escape, Selection, stale Wahrheit, Attribution, spätere Extrusion | 1.228 Wörter |
-| [12 — Fehler, Security und Observability](2026-07-31-spatial-scope-drilldown/12-errors-security-and-observability.md) | Fehlerklassen, Retry, Fail-closed, Missbrauchsschutz, Logs und Metriken | 699 Wörter |
-| [13 — Umsetzung und TDD-Slices](2026-07-31-spatial-scope-drilldown/13-implementation-and-tdd-slices.md) | Dateiplan, neun vertikale Slices, Red Tests, Gates und Testkommandos | 1.813 Wörter |
-| [14 — Rollout und Abnahme](2026-07-31-spatial-scope-drilldown/14-rollout-and-acceptance.md) | Kompatibilität, Rollback, Stop-Regeln, Alternativen, DoD und Primärquellen | 1.109 Wörter |
+| [09 — Qdrant-Retrieval](2026-07-31-spatial-scope-drilldown/09-qdrant-retrieval.md) | Payload-Schema, Indizes, Filter-Compiler und Partial Coverage | 1.310 Wörter |
+| [10 — Munin Scope Enforcement](2026-07-31-spatial-scope-drilldown/10-munin-scope-enforcement.md) | Request, Run-Snapshot, ToolRuntime, Graph-Templates und Tool-Matrix | 1.420 Wörter |
+| [11 — UX und 3D-Metriken](2026-07-31-spatial-scope-drilldown/11-ux-and-3d-metrics.md) | Breadcrumb, Click/Escape, Selection, stale Wahrheit, Attribution, spätere Extrusion | 1.261 Wörter |
+| [12 — Fehler, Security und Observability](2026-07-31-spatial-scope-drilldown/12-errors-security-and-observability.md) | Fehlerklassen, Retry, Fail-closed, Missbrauchsschutz, Logs und Metriken | 731 Wörter |
+| [13 — Umsetzung und TDD-Slices](2026-07-31-spatial-scope-drilldown/13-implementation-and-tdd-slices.md) | Dateiplan, neun vertikale Slices, Red Tests, Gates und Testkommandos | 1.843 Wörter |
+| [14 — Rollout und Abnahme](2026-07-31-spatial-scope-drilldown/14-rollout-and-acceptance.md) | Kompatibilität, Rollback, Stop-Regeln, Alternativen, DoD und Primärquellen | 1.276 Wörter |
 
 Keine Teil-Spec überschreitet 2.000 Wörter einschließlich ihres Navigationskopfs. Die
 ursprünglichen Abschnittsnummern 1–30 bleiben stabil und jeder Abschnitt besitzt
@@ -140,8 +141,9 @@ Contract-Owner.
    tatsächlich ändert.
 4. Bei Verhaltensänderungen die passenden Red Tests/Gates in `13` aktualisieren.
 5. Bei Deployment- oder Abnahmewirkung zusätzlich `14` aktualisieren.
-6. Wortbudget prüfen. Wächst ein Teil über 2.000 Wörter, wird seine innere Seam erneut
-   bewertet, statt den Monolithen schleichend wiederherzustellen.
+6. Wortbudget per `wc -w` prüfen und die Tabelle im selben Commit aktualisieren.
+   Wächst ein Teil über 2.000 Wörter, wird seine innere Seam erneut bewertet, statt
+   den Monolithen schleichend wiederherzustellen.
 
 ## Präzedenz gegenüber älteren Specs
 
