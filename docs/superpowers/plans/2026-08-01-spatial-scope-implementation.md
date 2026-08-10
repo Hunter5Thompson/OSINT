@@ -54,6 +54,12 @@ blockiert oder deferred gebliebenen Work Orders werden ebenfalls nicht als offen
 Planpflichten umetikettiert; jede spätere Aktivierung braucht eine neue ausdrückliche
 Produkt-/Evidenzentscheidung.
 
+Die verbindliche TASK-123-Ausführung steht im
+[dedizierten Handoff](../HANDOFF-spatial-scope-task123-2026-08-10.md): ein
+Mandatory Start Record, vier Code-Work-Orders und ein Abschlussrecord innerhalb
+eines einzigen begrenzten Implementierungsplans. Plan 05D bleibt davon als echter
+Release-/Deployment-Seam getrennt.
+
 ## Normative-spec coverage
 
 | Spec part | Implemented primarily by plans |
