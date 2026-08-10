@@ -1858,6 +1858,10 @@ Observation-Producer.
 #   Das Plan-08-Abschluss-Handoff vom 2026-08-10 führt deshalb nicht unmittelbar in
 #   die Legacy-Löschung. Die nächste Session inventarisiert und schließt zuerst genau
 #   die Kriterien 1–5, 7 und 8 und erstellt danach einen Plan-05D-Readiness-Record.
+#   Das dedizierte Handoff
+#   `docs/superpowers/HANDOFF-spatial-scope-task123-2026-08-10.md` ist dafür die
+#   verbindliche Detailquelle: ein begrenzter Implementierungsplan mit vier
+#   Code-Work-Orders, kein Plan 09 und keine Folge mehrerer neuer Pläne.
 #   Default-on-Release, vereinbarter Soak, Artefakt-Rollback und explizite Phase-D-
 #   Entscheidung bleiben zusätzliche externe Freigabegates.
 #

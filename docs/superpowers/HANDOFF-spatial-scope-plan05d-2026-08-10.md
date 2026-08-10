@@ -28,6 +28,12 @@ Es gibt keinen Plan 09. Der nächste Arbeitsblock ist das verpflichtende
 Readiness-Paket vor
 [Plan 05D — Phase-D Legacy Cleanup](plans/2026-08-01-spatial-scope/05d-phase-d-legacy-cleanup.md):
 
+Die alleinige Detailquelle für die Umsetzung dieses Readiness-Pakets ist das
+[dedizierte TASK-123-Handoff](HANDOFF-spatial-scope-task123-2026-08-10.md). Es
+schneidet den Restumfang als einen Implementierungsplan mit vier Code-Work-Orders;
+die weiter unten stehende Reihenfolge ist nur die historische Kurzfassung. Bei
+Abweichungen gilt das dedizierte Handoff.
+
 1. den aktuellen Code gegen alle neun Kriterien von `TASK-123` neu inventarisieren;
 2. die bereits belegten Kriterien 6 und 9 unverändert erhalten;
 3. Kriterien 1–5, 7 und 8 testgetrieben schließen oder mit einer expliziten,
@@ -168,7 +174,7 @@ Der 30k-Point-Benchmark besitzt echtes Drei-Klassen-Accounting und blieb innerha
 seiner Zeit-/Heap-Budgets. Er ist ausdrücklich eine Node/Vitest-Filter-/Heap-Messung,
 keine GPU-/Production-Browser-Frame-Messung.
 
-## TASK-123 — verbindlicher Restumfang
+## TASK-123 — historischer Kurzstand
 
 Kriterien 6 und 9 sind durch Plan 08 erfüllt. Sie bleiben Regression-Gates, werden
 aber nicht neu implementiert:
@@ -223,7 +229,7 @@ einmalig und begrenzt diagnostiziert. Dateline-Features verwenden minimale getei
 Longitude-Spans im RBush statt `[-180, 180]`; Tests belegen beidseitige Treffer und
 Pruning außerhalb der realen Spans.
 
-## Empfohlene TDD-/Commit-Reihenfolge vor 05D
+## Historische Kurzfolge vor 05D
 
 ### Schritt 0 — Mandatory Readiness Record
 
