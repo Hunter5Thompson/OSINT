@@ -8,6 +8,7 @@ import type {
   Position2D,
 } from "../catalog";
 import type { ScopeKey } from "../contracts";
+import { spatialScopeColor } from "./hlidskjalfCesiumPalette";
 import type { SpatialChildPickId } from "./resolveWorldviewPick";
 
 const MAX_CHUNK_VERTICES = 8_000;
@@ -260,7 +261,7 @@ function outlineInstances(
           }),
           attributes: {
             color: Cesium.ColorGeometryInstanceAttribute.fromColor(
-              Cesium.Color.fromCssColorString("#85a8bb").withAlpha(0.72),
+              spatialScopeColor.scopeOutline(),
             ),
           },
         }));
@@ -303,7 +304,8 @@ function groundOutlines(
 
 export interface BuildScopePrimitivesOptions {
   readonly activeAsset: BoundaryAsset | null;
-  readonly childAsset: BoundaryPackV1 | null;
+  readonly childRenderAsset: BoundaryPackV1 | null;
+  readonly childPickAsset: BoundaryPackV1 | null;
   readonly stateRevision: number;
   readonly includePickSurface: boolean;
   readonly signal: AbortSignal;
@@ -311,12 +313,14 @@ export interface BuildScopePrimitivesOptions {
   readonly onChunk?: (chunk: ScopeBuildChunk) => void;
 }
 
-export async function buildScopePrimitives(
+function buildCesiumScopeGeometry(
+  activeAsset: BoundaryAsset | null,
+  childAsset: BoundaryPackV1 | null,
   options: BuildScopePrimitivesOptions,
-): Promise<ScopePrimitiveBuild> {
-  const geometryBuild = await buildScopeGeometry({
-    activeAsset: options.activeAsset,
-    childAsset: options.childAsset,
+): Promise<ScopeGeometryBuild<Cesium.Cartesian3>> {
+  return buildScopeGeometry({
+    activeAsset,
+    childAsset,
     stateRevision: options.stateRevision,
     signal: options.signal,
     convertPosition: ([longitude, latitude]) =>
@@ -324,13 +328,23 @@ export async function buildScopePrimitives(
     scheduler: options.scheduler,
     onChunk: options.onChunk,
   });
+}
+
+export async function buildScopePrimitives(
+  options: BuildScopePrimitivesOptions,
+): Promise<ScopePrimitiveBuild> {
+  const geometryBuild = await buildCesiumScopeGeometry(
+    options.activeAsset,
+    options.childRenderAsset,
+    options,
+  );
   assertNotAborted(options.signal);
 
   const renderPrimitives: ScopePrimitiveHandle[] = [];
   const activeFill = groundFill(
     polygonInstances(
       geometryBuild.activeFeatures,
-      Cesium.Color.fromCssColorString("#4d7388").withAlpha(0.09),
+      spatialScopeColor.activeFill(),
       options.stateRevision,
       false,
     ),
@@ -345,10 +359,18 @@ export async function buildScopePrimitives(
 
   const pickPrimitives: ScopePrimitiveHandle[] = [];
   if (options.includePickSurface) {
+    const pickFeatures = options.childPickAsset === options.childRenderAsset
+      ? geometryBuild.childFeatures
+      : (await buildCesiumScopeGeometry(
+          null,
+          options.childPickAsset,
+          options,
+        )).childFeatures;
+    assertNotAborted(options.signal);
     const childFill = groundFill(
       polygonInstances(
-        geometryBuild.childFeatures,
-        Cesium.Color.fromCssColorString("#7aa2b8").withAlpha(0.035),
+        pickFeatures,
+        spatialScopeColor.childPickSurface(),
         options.stateRevision,
         true,
       ),
