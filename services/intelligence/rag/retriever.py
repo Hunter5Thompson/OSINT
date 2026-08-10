@@ -89,6 +89,8 @@ async def search(
     score_threshold: float = 0.3,
     query_filter: models.Filter | None = None,
     coverage_snapshot: SpatialCoverageSnapshotV1 | None = None,
+    *,
+    raise_on_failure: bool = False,
 ) -> list[dict]:
     """Search the knowledge base with optional filters.
 
@@ -107,6 +109,8 @@ async def search(
 
     embedding = await embed_text(query)
     if not embedding:
+        if raise_on_failure:
+            raise RuntimeError("embedding service returned no vector")
         return []
 
     search_body: dict = {
@@ -155,6 +159,8 @@ async def search(
             )
             if resp.status_code == 404:
                 logger.warning("collection_not_found")
+                if raise_on_failure:
+                    raise RuntimeError("qdrant collection not found")
                 return []
             resp.raise_for_status()
             data = resp.json()
@@ -176,6 +182,8 @@ async def search(
         return results
     except Exception as e:
         logger.warning("retriever_search_failed", error=str(e))
+        if raise_on_failure:
+            raise
         return []
 
 
@@ -190,6 +198,7 @@ async def enhanced_search(
     post_rerank: Callable[[list[dict]], list[dict]] | None = None,
     *,
     coverage_snapshot: SpatialCoverageSnapshotV1 | None = None,
+    raise_on_failure: bool = False,
     enable_hybrid: bool | None = None,
     enable_rerank: bool | None = None,
     enable_graph_context: bool | None = None,
@@ -225,6 +234,7 @@ async def enhanced_search(
         query, limit=overfetch, region=region,
         source=source, score_threshold=score_threshold, query_filter=query_filter,
         coverage_snapshot=coverage_snapshot,
+        raise_on_failure=raise_on_failure,
     )
 
     if not results:

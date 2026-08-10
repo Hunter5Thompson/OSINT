@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.main import app
 from app.models.almanac import BriefingSaveRequest
-from app.models.intel import IntelAnalysis
+from app.models.intel import IntelAnalysis, SpatialRunApplicationV1
 from app.models.report import ReportMessage, ReportRecord
 from app.routers import almanac as almanac_router
 from app.services.spatial_catalog import CatalogReadyState, SpatialCatalogLoader
@@ -50,6 +50,44 @@ def test_hydration_mapping_overrides_defaults():
     assert patch.findings == ["A", "B"]
     assert patch.confidence == 0.8
     assert len(patch.metrics) == 3 and patch.metrics[0].label == "Threat"
+
+
+def test_hydration_preserves_original_run_application_without_country_relabel() -> None:
+    from app.services.report_store import build_hydration_patch
+
+    application = SpatialRunApplicationV1.model_validate({
+        "schema_version": 1,
+        "scope": {
+            "schema_version": 1,
+            "scope_key": "country:UKR",
+            "catalog_revision": "spatial-v1-e76a16bff799",
+            "derivation_revision": "spatial-derive-v1-d30efa07e141",
+            "boundary_policy": "odin-reference-v1",
+        },
+        "relation": "either",
+        "qdrant": {
+            "status": "applied",
+            "mode": "semantic-key",
+            "completeness": "partial",
+        },
+        "neo4j": {
+            "status": "not-called",
+            "mode": "semantic-key",
+            "completeness": "unknown",
+        },
+        "blocked_tools": ["gdelt_query", "rss_fetch"],
+        "coverage_revision": None,
+    })
+    analysis = IntelAnalysis(
+        query="q",
+        analysis="Pinned Ukraine result",
+        spatial_application=application,
+    )
+
+    patch = build_hydration_patch(analysis, country_name="Poland")
+
+    assert patch.spatial_application == application
+    assert patch.spatial_application.scope.scope_key == "country:UKR"
 
 
 def _rec(scope_key: str) -> ReportRecord:

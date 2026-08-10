@@ -24,6 +24,12 @@ class TestExternalServiceDefaults:
             s = Settings(_env_file=None)
             assert s.gdelt_api_url == "https://api.gdeltproject.org/api/v2/doc/doc"
 
+    def test_unpromoted_spatial_coverage_is_reported_unknown(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            s = Settings(_env_file=None)
+            assert s.spatial_coverage_revision is None
+            assert s.spatial_coverage_completeness == "unknown"
+
 
 class TestHybridFlagDefault:
     """enable_hybrid must default to False (Phase 2 gate: requires sparse vectors in Qdrant)."""

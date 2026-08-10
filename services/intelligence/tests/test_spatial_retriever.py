@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from qdrant_client import models
 
 
@@ -118,3 +119,25 @@ async def test_enhanced_search_propagates_coverage_snapshot_without_fallback() -
 
     assert results == []
     assert captured["coverage_snapshot"] is snapshot
+
+
+async def test_strict_search_surfaces_transport_failure_for_truthful_accounting() -> None:
+    from rag.retriever import search
+
+    class FailingClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback) -> None:
+            return None
+
+        async def post(self, _url: str, *, json: dict[str, object]):
+            raise RuntimeError("qdrant transport down")
+
+    with (
+        patch("rag.retriever._ensure_schema_validated", new=AsyncMock()),
+        patch("rag.retriever.embed_text", new=AsyncMock(return_value=[0.1, 0.2])),
+        patch("rag.retriever.httpx.AsyncClient", return_value=FailingClient()),
+        pytest.raises(RuntimeError, match="qdrant transport down"),
+    ):
+        await search("query", raise_on_failure=True)

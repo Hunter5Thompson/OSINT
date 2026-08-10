@@ -19,7 +19,7 @@ from agents.react_agent import (
 )
 from agents.synthesis_agent import create_synthesis_llm
 from agents.synthesis_agent import get_system_message as synthesis_sys
-from agents.tools import ALL_TOOLS, tools_for_state
+from agents.tools import ALL_TOOLS, blocked_tool_names, tools_for_state
 from agents.tools.graph_query import set_graph_client
 from config import settings
 from distill_capture import capture_synthesis_input
@@ -28,7 +28,14 @@ from graph.nodes import analyst_node, osint_node, router_node
 from graph.nodes import synthesis_node as legacy_synthesis_node
 from graph.state import AgentState
 from rag.evidence import format_evidence_pack, parse_evidence_refs, to_evidence_item
-from spatial import RetrievalSpatialRelation, SpatialScopeTokenV1
+from spatial import (
+    RetrievalSpatialRelation,
+    SpatialApplicationMarkerV1,
+    SpatialRunApplicationV1,
+    SpatialScopeTokenV1,
+    aggregate_spatial_application,
+    parse_spatial_application_marker,
+)
 
 logger = structlog.get_logger()
 
@@ -181,16 +188,34 @@ async def react_synthesis_node(state: AgentState) -> dict:
     """Deterministic synthesis node — produces structured intelligence report."""
     logger.info("react_synthesis_node")
 
+    spatial_application: SpatialRunApplicationV1 | None = None
     try:
         llm = create_synthesis_llm()
 
         # Collect all tool results from messages + derive sources_used from trace
-        tool_results = []
+        tool_results: list[str] = []
+        application_markers: list[SpatialApplicationMarkerV1] = []
         for msg in state.get("messages", []):
             if hasattr(msg, "content") and getattr(msg, "type", None) == "tool":
-                tool_results.append(
-                    msg.content if isinstance(msg.content, str) else str(msg.content)
+                content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                marker, research_text = parse_spatial_application_marker(
+                    content,
+                    actual_tool_name=getattr(msg, "name", None),
                 )
+                if marker is not None:
+                    application_markers.append(marker)
+                if research_text:
+                    tool_results.append(research_text)
+
+        scope = state.get("spatial_scope")
+        if scope is not None:
+            application = aggregate_spatial_application(
+                scope,
+                state["spatial_relation"],
+                application_markers,
+                blocked_tools=blocked_tool_names(state),
+            )
+            spatial_application = application
 
         # Prepend the deterministic grounding pack so it is part of the synthesis
         # research text AND counted first by derive_sources_used (sources_used).
@@ -263,6 +288,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
             "sources_used": derived_sources,
             "agent_chain": state.get("agent_chain", []) + ["synthesis"],
             "messages": [response],
+            "spatial_application": spatial_application,
         }
 
     except Exception as e:
@@ -273,6 +299,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
             "confidence": 0.0,
             "error": f"Synthesis failed: {e}",
             "agent_chain": state.get("agent_chain", []) + ["synthesis"],
+            "spatial_application": spatial_application,
         }
 
 
@@ -410,6 +437,7 @@ async def run_intelligence_query(
         "agent_chain": [],
         "tool_trace": [],
         "error": None,
+        "spatial_application": None,
     }
 
     try:
@@ -444,8 +472,15 @@ async def run_intelligence_query(
                 pinned_scope.model_dump(mode="json") if pinned_scope is not None else None
             ),
             "spatial_relation": pinned_relation.value,
+            "spatial_application": None,
         }
 
+    result_application = result.get("spatial_application")
+    serialized_application = (
+        result_application.model_dump(mode="json")
+        if isinstance(result_application, SpatialRunApplicationV1)
+        else result_application
+    )
     return {
         "query": query,
         "agent_chain": result.get("agent_chain", []),
@@ -460,6 +495,7 @@ async def run_intelligence_query(
             pinned_scope.model_dump(mode="json") if pinned_scope is not None else None
         ),
         "spatial_relation": pinned_relation.value,
+        "spatial_application": serialized_application,
     }
 
 

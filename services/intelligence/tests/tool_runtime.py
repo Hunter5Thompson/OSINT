@@ -32,6 +32,7 @@ def agent_state(**overrides: object) -> AgentState:
         "agent_chain": [],
         "tool_trace": [],
         "error": None,
+        "spatial_application": None,
     }
     state.update(overrides)  # type: ignore[typeddict-item]
     return state

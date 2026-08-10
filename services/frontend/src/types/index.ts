@@ -191,6 +191,32 @@ export interface IntelAnalysis {
   timestamp: string;
   tool_trace?: Array<{ tool_name: string; duration_ms?: number; success?: boolean }>;
   mode?: "react" | "legacy" | "error";
+  spatial_application?: SpatialRunApplicationV1 | null;
+}
+
+export interface SpatialRunScopeV1 {
+  readonly schema_version: 1;
+  readonly scope_key: string;
+  readonly catalog_revision: string;
+  readonly derivation_revision: string;
+  readonly boundary_policy: string;
+}
+
+export interface SpatialRunConsumerApplication {
+  readonly status: "applied" | "not-called" | "unsupported" | "failed";
+  readonly mode: "global" | "semantic-key" | "not-applicable";
+  readonly completeness: "complete" | "partial" | "unknown";
+  readonly detail_code?: string | null;
+}
+
+export interface SpatialRunApplicationV1 {
+  readonly schema_version: 1;
+  readonly scope: SpatialRunScopeV1;
+  readonly relation: "about" | "occurrence" | "either";
+  readonly qdrant: SpatialRunConsumerApplication;
+  readonly neo4j: SpatialRunConsumerApplication;
+  readonly blocked_tools: readonly string[];
+  readonly coverage_revision: string | null;
 }
 
 export interface IntelQuery {
@@ -200,6 +226,9 @@ export interface IntelQuery {
   use_legacy?: boolean;
   report_id?: string;
   report_message?: string;
+  spatialScope?: SpatialQueryRef;
+  spatialRelation?: "about" | "occurrence" | "either";
+  imageUrl?: string;
 }
 
 export type ReportStatus = "Draft" | "Published" | "Archived";
@@ -235,6 +264,7 @@ export interface ReportRecord {
   body_paragraphs: string[];
   margin: MarginEntry[];
   sources: string[];
+  spatial_application?: SpatialRunApplicationV1 | null;
   created_at: string;
   updated_at: string;
 }
@@ -252,6 +282,7 @@ export interface ReportCreateRequest {
   body_paragraphs?: string[];
   margin?: MarginEntry[];
   sources?: string[];
+  spatial_application?: SpatialRunApplicationV1 | null;
 }
 
 export interface ReportUpdateRequest extends ReportCreateRequest {}

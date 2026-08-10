@@ -14,6 +14,7 @@ from spatial import (
     SpatialScopeTokenV1,
     combine_filters,
     compile_qdrant_scope_filter,
+    parse_spatial_application_marker,
 )
 from tests.tool_runtime import agent_state, invoke_runtime_tool
 
@@ -204,6 +205,13 @@ class TestTwoLaneScoping:
 
         assert "CSIS" in out or "A" in out          # analysis lane survives
         assert '"source_class":"realtime"' not in out
+        marker, _ = parse_spatial_application_marker(
+            out,
+            actual_tool_name="qdrant_search",
+        )
+        assert marker is not None
+        assert marker.status == "applied"
+        assert marker.completeness == "partial"
 
     async def test_emitted_order_preserves_tier_rank_not_dense_score(self):
         from agents.tools import qdrant_search as qs
@@ -247,6 +255,31 @@ class TestRuntimeSpatialScoping:
             realtime_filter(), spatial_filter
         )
         assert all("region" not in call.kwargs for call in search.await_args_list)
+        assert all(call.kwargs["raise_on_failure"] is True for call in search.await_args_list)
+
+    async def test_analysis_outage_is_reported_failed(self):
+        state = agent_state(
+            spatial_scope=_ukraine_token(),
+            spatial_relation=RetrievalSpatialRelation.EITHER,
+        )
+        with patch(
+            "agents.tools.qdrant_search.enhanced_search",
+            AsyncMock(side_effect=RuntimeError("qdrant down")),
+        ):
+            output = await invoke_runtime_tool(
+                qdrant_search,
+                {"query": "ukraine"},
+                state=state,
+            )
+
+        marker, research = parse_spatial_application_marker(
+            output,
+            actual_tool_name="qdrant_search",
+        )
+        assert marker is not None
+        assert marker.status == "failed"
+        assert marker.completeness == "unknown"
+        assert "qdrant down" in research
 
     @pytest.mark.parametrize(
         "side_effect",
@@ -268,7 +301,11 @@ class TestRuntimeSpatialScoping:
         )
 
         with patch("agents.tools.qdrant_search.enhanced_search", search):
-            await invoke_runtime_tool(qdrant_search, {"query": "ukraine"}, state=state)
+            output = await invoke_runtime_tool(
+                qdrant_search,
+                {"query": "ukraine"},
+                state=state,
+            )
 
         expected_spatial = compile_qdrant_scope_filter(
             token, RetrievalSpatialRelation.OCCURRENCE
@@ -282,3 +319,9 @@ class TestRuntimeSpatialScoping:
             repr(call.kwargs["query_filter"]) in expected_filters
             for call in search.await_args_list
         )
+
+        marker, _ = parse_spatial_application_marker(
+            output,
+            actual_tool_name="qdrant_search",
+        )
+        assert marker is not None
