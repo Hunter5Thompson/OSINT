@@ -139,12 +139,23 @@ describe("LayersPanel", () => {
       />,
     );
 
-    const link = screen.getByRole("link", { name: "Data / Boundary policy" });
-    expect(link).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(link);
+    const disclosure = screen.getByRole("button", { name: "Data / Boundary policy" });
+    expect(disclosure).toHaveAttribute("type", "button");
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    const detailsId = disclosure.getAttribute("aria-controls");
+    expect(detailsId).toBeTruthy();
+    const closedDetails = document.getElementById(detailsId!);
+    expect(closedDetails).toBeInTheDocument();
+    expect(closedDetails).toHaveAttribute("hidden");
 
-    expect(link).toHaveAttribute("aria-expanded", "true");
+    disclosure.focus();
+    fireEvent.click(disclosure);
+
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    expect(document.activeElement).toBe(disclosure);
     const details = screen.getByRole("region", { name: "Boundary data and policy" });
+    expect(details).toBe(closedDetails);
+    expect(details).not.toHaveAttribute("hidden");
     expect(details).toHaveTextContent("odin-reference-v1");
     expect(details).toHaveTextContent("spatial-v1-fe9828dcda05");
     expect(details).toHaveTextContent(
@@ -178,7 +189,7 @@ describe("LayersPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("link", { name: "Data / Boundary policy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Data / Boundary policy" }));
     expect(screen.getByText("<strong>reviewed attribution</strong>")).toBeInTheDocument();
     expect(container.querySelector("strong")).toBeNull();
   });

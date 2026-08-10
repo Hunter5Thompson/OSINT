@@ -1,4 +1,5 @@
 import { useSpatialCountryAlmanac } from "../../../hooks/useSpatialCountryAlmanac";
+import { formatCoords } from "../../../lib/coords";
 import type { SpatialQueryRef } from "../../../spatial/contracts";
 import type { CountrySelection } from "../../../spatial/selection";
 import {
@@ -21,7 +22,7 @@ export function CountryHeader({ name, iso3, m49, capital }: Props) {
       {capital && (
         <dl className="country-grid">
           <dt>capital</dt>
-          <dd>{capital.name} · {capital.coords.lat.toFixed(2)}N {capital.coords.lon.toFixed(2)}E</dd>
+          <dd>{capital.name} · {formatCoords([capital.coords.lat, capital.coords.lon], 2)}</dd>
         </dl>
       )}
       <CountryAlmanacPanel iso3={iso3} m49={m49} />
@@ -47,7 +48,7 @@ export function SpatialCountryHeader({
       {capital !== null ? (
         <dl className="country-grid">
           <dt>capital</dt>
-          <dd>{capital.name} · {capital.lat.toFixed(2)}N {capital.lon.toFixed(2)}E</dd>
+          <dd>{capital.name} · {formatCoords([capital.lat, capital.lon], 2)}</dd>
         </dl>
       ) : null}
       <SpatialCountryAlmanacPanel facts={facts} query={committedQuery} />
