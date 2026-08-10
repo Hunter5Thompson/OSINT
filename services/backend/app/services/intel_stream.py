@@ -123,22 +123,14 @@ async def stream_intel_query(
         )
 
         if report_id:
-            if analysis.spatial_application is not None:
-                try:
-                    updated_report = await report_store.update_report(
-                        report_id,
-                        ReportUpdateRequest(
-                            spatial_application=analysis.spatial_application,
-                        ),
-                    )
-                    if updated_report is None:
-                        raise RuntimeError("report disappeared during application persistence")
-                except Exception as persist_exc:  # noqa: BLE001
-                    log.warning(
-                        "report_spatial_application_persist_failed",
-                        report_id=report_id,
-                        error=str(persist_exc),
-                    )
+            updated_report = await report_store.update_report(
+                report_id,
+                ReportUpdateRequest(
+                    spatial_application=analysis.spatial_application,
+                ),
+            )
+            if updated_report is None:
+                raise RuntimeError("report disappeared during application persistence")
             persisted_text = analysis.analysis.strip() or (
                 "no synthesis produced · agent returned empty content"
             )

@@ -119,6 +119,22 @@ async def test_spatial_application_roundtrips_and_survives_report_update(graph):
 
 
 @pytest.mark.asyncio
+async def test_spatial_application_can_be_explicitly_cleared(graph):
+    rec = await report_store.create_report(
+        _req(scope_key="country:UKR", spatial_application=_application())
+    )
+
+    updated = await report_store.update_report(
+        rec.id,
+        ReportUpdateRequest(spatial_application=None),
+    )
+
+    assert updated is not None
+    assert updated.spatial_application is None
+    assert graph.by_id[rec.id]["spatial_application_json"] is None
+
+
+@pytest.mark.asyncio
 async def test_get_or_create_is_idempotent_per_scope(graph):
     a = await report_store.get_or_create_report_by_scope(
         "country:FRA", title="F", location="F", coords="--"
