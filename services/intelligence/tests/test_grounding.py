@@ -102,6 +102,54 @@ def test_grounding_evidence_roundtrips_through_codec():
 
 
 @pytest.mark.asyncio
+async def test_grounding_pack_and_artifact_share_budget_and_order(monkeypatch):
+    """Only grounding blocks that fit the prompt budget may carry lineage."""
+    import graph.workflow as wf
+    from rag.evidence import source_refs_from_artifact
+
+    captured: dict = {}
+
+    class FakeGraph:
+        async def ainvoke(self, state):
+            captured["state"] = state
+            return {
+                "synthesis": "ok",
+                "sources_used": [],
+                "agent_chain": [],
+                "tool_trace": [],
+            }
+
+    monkeypatch.setattr(wf, "_ensure_graph_client", lambda: None)
+    monkeypatch.setattr(wf, "react_graph", FakeGraph())
+    scores = (0.1, 0.6, 0.2, 0.5, 0.3, 0.4)
+    grounding = [
+        {
+            "source_type": "dataset",
+            "provider": "odin-country-almanac",
+            "doc_id": f"grounding-{index}",
+            "title": f"Grounding {index}",
+            "content": "x" * 700,
+            "score": score,
+        }
+        for index, score in enumerate(scores)
+    ]
+
+    await wf.run_intelligence_query("budget parity", grounding_evidence=grounding)
+
+    state = captured["state"]
+    rendered_ids = [
+        ref.source_ref_id
+        for ref in parse_evidence_refs(state["grounding_evidence_pack"])
+    ]
+    artifact_ids = [
+        ref.source_ref_id
+        for ref in source_refs_from_artifact(state["grounding_evidence_artifact"])
+    ]
+    assert 0 < len(rendered_ids) < len(grounding)
+    assert artifact_ids == rendered_ids
+
+
+@pytest.mark.asyncio
 async def test_grounding_reaches_react_seed_and_synthesis_sources(monkeypatch):
     from langchain_core.messages import AIMessage
 

@@ -283,11 +283,27 @@ export function queryIntel(
   onDone: () => void,
 ): AbortController {
   const controller = new AbortController();
+  const { spatialScope, spatialRelation, imageUrl, ...baseQuery } = query;
+  const wireQuery = {
+    ...baseQuery,
+    ...(spatialScope === undefined
+      ? {}
+      : {
+          spatial_scope: {
+            schema_version: spatialScope.schemaVersion,
+            scope_key: spatialScope.scopeKey,
+            catalog_revision: spatialScope.catalogRevision,
+            boundary_policy: spatialScope.boundaryPolicy,
+          },
+        }),
+    ...(spatialRelation === undefined ? {} : { spatial_relation: spatialRelation }),
+    ...(imageUrl === undefined ? {} : { image_url: imageUrl }),
+  };
 
   fetch(`${BASE}/intel/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(query),
+    body: JSON.stringify(wireQuery),
     signal: controller.signal,
   })
     .then(async (res) => {

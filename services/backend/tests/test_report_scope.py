@@ -3,12 +3,39 @@ import pytest
 from neo4j.exceptions import ConstraintError
 
 from app.cypher.report_read import REPORT_BY_SCOPE_KEYS
+from app.models.intel import SpatialRunApplicationV1
 from app.models.report import ReportCreateRequest, ReportUpdateRequest
 from app.services import report_store
 
 
 def _req(**kw) -> ReportCreateRequest:
     return ReportCreateRequest(title="T", location="L", coords="--", **kw)
+
+
+def _application() -> SpatialRunApplicationV1:
+    return SpatialRunApplicationV1.model_validate({
+        "schema_version": 1,
+        "scope": {
+            "schema_version": 1,
+            "scope_key": "country:UKR",
+            "catalog_revision": "spatial-v1-e76a16bff799",
+            "derivation_revision": "spatial-derive-v1-d30efa07e141",
+            "boundary_policy": "odin-reference-v1",
+        },
+        "relation": "either",
+        "qdrant": {
+            "status": "applied",
+            "mode": "semantic-key",
+            "completeness": "partial",
+        },
+        "neo4j": {
+            "status": "not-called",
+            "mode": "semantic-key",
+            "completeness": "unknown",
+        },
+        "blocked_tools": ["gdelt_query", "rss_fetch"],
+        "coverage_revision": None,
+    })
 
 
 class _FakeGraph:
@@ -54,6 +81,7 @@ class _FakeGraph:
             "paragraph_num": p.get("paragraph_num", 0),
             "title": p.get("title", ""),
             "confidence": p.get("confidence", 0.0),
+            "spatial_application_json": p.get("spatial_application_json"),
         }
 
 
@@ -71,6 +99,23 @@ async def test_scope_key_roundtrips_and_survives_update(graph):
     assert rec.scope_key == "country:DEU"
     updated = await report_store.update_report(rec.id, ReportUpdateRequest(confidence=0.9))
     assert updated.scope_key == "country:DEU"  # survived the update
+
+
+@pytest.mark.asyncio
+async def test_spatial_application_roundtrips_and_survives_report_update(graph):
+    application = _application()
+    rec = await report_store.create_report(
+        _req(scope_key="country:UKR", spatial_application=application)
+    )
+
+    assert rec.spatial_application == application
+    updated = await report_store.update_report(
+        rec.id,
+        ReportUpdateRequest(confidence=0.9),
+    )
+    assert updated is not None
+    assert updated.spatial_application == application
+    assert updated.spatial_application.scope.scope_key == "country:UKR"
 
 
 @pytest.mark.asyncio

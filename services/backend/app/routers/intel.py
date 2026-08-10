@@ -72,7 +72,7 @@ async def query_intel(query: IntelQuery, request: Request) -> EventSourceRespons
     return EventSourceResponse(event_generator())
 
 
-@router.post("/hotspot/{hotspot_id}")
+@router.post("/hotspot/{hotspot_id}", response_model=None)
 async def query_hotspot_intel(
     hotspot_id: str, request: Request
 ) -> EventSourceResponse | Response:

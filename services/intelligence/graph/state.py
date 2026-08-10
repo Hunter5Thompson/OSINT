@@ -5,7 +5,11 @@ from typing import Annotated, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
-from spatial import RetrievalSpatialRelation, SpatialScopeTokenV1
+from spatial import (
+    RetrievalSpatialRelation,
+    SpatialRunApplicationV1,
+    SpatialScopeTokenV1,
+)
 
 
 class AgentState(TypedDict):
@@ -42,3 +46,4 @@ class AgentState(TypedDict):
     agent_chain: list[str]
     tool_trace: list[dict]
     error: str | None
+    spatial_application: SpatialRunApplicationV1 | None

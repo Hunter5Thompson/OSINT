@@ -8,7 +8,12 @@ import pytest
 
 from agents.tools.graph_query import query_knowledge_graph, set_graph_client
 from agents.tools.graph_templates import SCOPED_TEMPLATES
-from spatial import RetrievalSpatialRelation, ScopeKind, SpatialScopeTokenV1
+from spatial import (
+    RetrievalSpatialRelation,
+    ScopeKind,
+    SpatialScopeTokenV1,
+    parse_spatial_application_marker,
+)
 from tests.tool_runtime import agent_state, invoke_runtime_tool
 
 _SCOPE_FIELD = {
@@ -124,7 +129,12 @@ async def test_unsupported_and_free_cypher_paths_execute_zero_queries(
             state=state,
         )
 
-    assert result.startswith("SPATIAL_SCOPE_UNSUPPORTED")
+    marker, research = parse_spatial_application_marker(
+        result,
+        actual_tool_name="query_knowledge_graph",
+    )
+    assert marker is not None and marker.status == "unsupported"
+    assert research.startswith("SPATIAL_SCOPE_UNSUPPORTED")
     client.run_query.assert_not_awaited()
 
 

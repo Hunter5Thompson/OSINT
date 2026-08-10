@@ -6,6 +6,7 @@ echoed `query` argument — must never contribute a source to `sources_used`.
 """
 from __future__ import annotations
 
+import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
 from graph.workflow import collect_evidence_artifacts, derive_sources_used
@@ -103,3 +104,64 @@ def test_artifacts_are_ordered_first_seen_and_deduplicated():
 
     assert derive_sources_used(artifacts) == [
         "odin-country-almanac", "reuters.com", "usgs.gov"]
+
+
+@pytest.mark.asyncio
+async def test_synthesis_budget_keeps_rendered_evidence_and_lineage_identical(
+    monkeypatch,
+):
+    """The final research budget must drop provenance with omitted evidence."""
+    import graph.workflow as wf
+    from tests._evidence_text import parse_evidence_refs
+
+    captured: dict = {}
+
+    class FakeSynth:
+        async def ainvoke(self, messages):
+            captured["messages"] = messages
+            return AIMessage(content="MODERATE — moderate confidence")
+
+    def message(prefix: str, items: list[EvidenceItem]) -> ToolMessage:
+        pack = format_evidence_pack(items, budget=6500, preserve_order=True)
+        padding = "g" * max(6500 - len(pack) - len("\n[Graph Context]\n"), 0)
+        content = f"{pack}\n[Graph Context]\n{padding}"
+        return _tool_message(content, evidence_artifact(items)).model_copy(
+            update={"tool_call_id": prefix}
+        )
+
+    first = [_item("first.example", "first", excerpt="a" * 700)]
+    second = [_item("second.example", "second", excerpt="b" * 700)]
+    third = []
+    for index in range(6):
+        provider = f"third-{index}.example"
+        sentinel = f"END::{provider}"
+        third.append(
+            _item(
+                provider,
+                f"third-{index}",
+                excerpt="c" * (700 - len(sentinel)) + sentinel,
+            )
+        )
+    messages = [message("first", first), message("second", second), message("third", third)]
+
+    monkeypatch.setattr(wf, "create_synthesis_llm", lambda: FakeSynth())
+    result = await wf.react_synthesis_node(
+        {
+            "query": "budget parity",
+            "messages": messages,
+            "tool_trace": [],
+            "agent_chain": [],
+            "grounding_evidence_pack": "",
+            "grounding_evidence_artifact": [],
+        }
+    )
+
+    human = next(
+        msg for msg in captured["messages"] if getattr(msg, "type", None) == "human"
+    )
+    rendered_providers = [ref.provider for ref in parse_evidence_refs(human.content)]
+    assert 2 < len(rendered_providers) < len(first + second + third)
+    assert result["sources_used"] == rendered_providers
+    for provider in result["sources_used"]:
+        if provider.startswith("third-"):
+            assert f"END::{provider}" in human.content

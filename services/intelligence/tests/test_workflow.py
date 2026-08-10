@@ -1,6 +1,7 @@
 """Tests for the intelligence pipeline workflow graphs."""
 
 import asyncio
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -77,8 +78,11 @@ class TestWorkflowGraph:
 
         clipped = _clip_text(text, SYNTHESIS_RESEARCH_MAX_CHARS)
 
-        assert len(clipped) < len(text)
-        assert "truncated 100 chars" in clipped
+        assert len(clipped) == SYNTHESIS_RESEARCH_MAX_CHARS
+        match = re.search(r"\n\.\.\.\[truncated (\d+) chars\]$", clipped)
+        assert match is not None
+        prefix = clipped[:match.start()]
+        assert int(match.group(1)) == len(text) - len(prefix)
 
     def test_compact_tool_messages_preserves_recent_outputs(self) -> None:
         old_tool = ToolMessage(content="old " * 2000, tool_call_id="old")

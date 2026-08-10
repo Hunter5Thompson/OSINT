@@ -22,12 +22,53 @@ from agents.tools.graph_templates import (
 )
 from graph.read_queries import validate_cypher_readonly
 from graph.state import AgentState
-from spatial import ScopeKind, SpatialScopeTokenV1
+from spatial import (
+    ScopeKind,
+    SpatialApplicationMarkerV1,
+    SpatialScopeTokenV1,
+    format_spatial_application_marker,
+)
 
 log = structlog.get_logger(__name__)
 
 # Lazy singleton — set by the workflow before agent invocation
 _graph_client = None
+
+
+def _with_graph_application(
+    state: AgentState,
+    output: str,
+) -> str:
+    scope = state["spatial_scope"]
+    scoped = scope is not None and scope.kind is not ScopeKind.WORLD
+    if output.startswith("SPATIAL_SCOPE_UNSUPPORTED"):
+        status = "unsupported"
+        completeness = "unknown"
+        detail_code = "template-not-allowlisted"
+    elif output.startswith(
+        (
+            "Graph database not available",
+            "Graph query failed",
+            "Graph query generation failed",
+            "Could not generate a graph query",
+            "Query rejected",
+        )
+    ):
+        status = "failed"
+        completeness = "unknown"
+        detail_code = "neo4j-query-failed"
+    else:
+        status = "applied"
+        completeness = "complete"
+        detail_code = None
+    marker = SpatialApplicationMarkerV1(
+        consumer="neo4j",
+        status=status,
+        mode="semantic-key" if scoped else "global",
+        completeness=completeness,
+        detail_code=detail_code,
+    )
+    return format_spatial_application_marker(marker, output)
 
 
 def set_graph_client(client: Any) -> None:
@@ -230,7 +271,10 @@ async def query_knowledge_graph(
     relation = runtime.state["spatial_relation"]
     if scope is not None and scope.kind is not ScopeKind.WORLD:
         if template_id is None:
-            return "SPATIAL_SCOPE_UNSUPPORTED: no scoped graph template"
+            return _with_graph_application(
+                runtime.state,
+                "SPATIAL_SCOPE_UNSUPPORTED: no scoped graph template",
+            )
         log.info(
             "spatial_filter_applied",
             consumer="neo4j",
@@ -238,13 +282,15 @@ async def query_knowledge_graph(
             relation=relation.value,
             filter_mode="semantic-key",
         )
-        return await execute_scoped_graph_query(template_id, params, scope)
+        output = await execute_scoped_graph_query(template_id, params, scope)
+        return _with_graph_application(runtime.state, output)
 
     if template_id:
-        return await execute_graph_query(template_id=template_id, params=params)
+        output = await execute_graph_query(template_id=template_id, params=params)
     else:
         # No template matched — fallback to LLM-generated Cypher
-        return await _free_cypher_fallback(question)
+        output = await _free_cypher_fallback(question)
+    return _with_graph_application(runtime.state, output)
 
 
 def _match_intent(question: str) -> tuple[str | None, dict]:

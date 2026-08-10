@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from langchain_core.messages import ToolMessage
 from langgraph.prebuilt import ToolRuntime
 
 from graph.state import AgentState
@@ -32,6 +33,7 @@ def agent_state(**overrides: object) -> AgentState:
         "agent_chain": [],
         "tool_trace": [],
         "error": None,
+        "spatial_application": None,
     }
     state.update(overrides)  # type: ignore[typeddict-item]
     return state
@@ -58,3 +60,31 @@ async def invoke_runtime_tool(
         content, _artifact = result
         return content
     return result
+
+
+async def invoke_runtime_tool_message(
+    tool: Any,
+    arguments: dict[str, object],
+    *,
+    state: AgentState | None = None,
+) -> ToolMessage:
+    """Invoke a runtime-bound content-and-artifact tool as a ToolMessage."""
+    coroutine = tool.coroutine
+    assert coroutine is not None
+    runtime = ToolRuntime(
+        state=state or agent_state(),
+        context={},
+        config={},
+        stream_writer=lambda _chunk: None,
+        tool_call_id="test-call",
+        store=None,
+    )
+    result = await coroutine(**arguments, runtime=runtime)
+    assert isinstance(result, tuple)
+    content, artifact = result
+    return ToolMessage(
+        content=content,
+        artifact=artifact,
+        tool_call_id="test-call",
+        name=tool.name,
+    )
