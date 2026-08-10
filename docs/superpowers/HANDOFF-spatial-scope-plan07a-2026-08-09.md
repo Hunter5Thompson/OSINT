@@ -372,9 +372,9 @@ Vor einem späteren Qdrant-Apply gelten mindestens:
    den genehmigten Report-Fingerprint;
 4. atomischer Ersatz aller `spatial_*`-Felder;
 5. exaktes benanntes Filterable-/Conflict-/Stale-/Unsupported-/Unprojected-/
-   Audit-only-Accounting ohne Rest;
-6. wirksamer Stale-Gap `(stale + unprojected) / total` über 0 sichtbar, über 1 %
-   promotionsblockierend;
+   Audit-only-/Inconsistent-Accounting ohne Rest;
+6. wirksamer Stale-Gap `(stale + unprojected + inconsistent) / total` über 0
+   sichtbar, über 1 % promotionsblockierend;
 7. keine ungefilterte Retry- oder Fallback-Route.
 
 Eine reine Katalog-Carry-forward-Revision mit identischer Derivationsrevision darf

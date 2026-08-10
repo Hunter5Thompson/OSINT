@@ -77,16 +77,19 @@ Jeder Bericht enthält vor und nach der geplanten Projektion einen
 - `unsupported_points`
 - `unprojected_points`
 - `audit_only_points`
+- `inconsistent_points`
 
-Die sechs Statuszähler ergeben exakt `total_points`; fehlende beziehungsweise noch
+Die sieben Statuszähler ergeben exakt `total_points`; fehlende beziehungsweise noch
 nicht angereicherte Points heißen `unprojected_points`, und eine gültige aktuelle,
-aber tokenlose Ableitung heißt `audit_only_points`. Explizit `unavailable` markierte
-Legacy-Points zählen auch ohne alte Projektionsrevision als `unsupported`.
+aber tokenlose Ableitung heißt `audit_only_points`. Ein aktuelles Payload mit
+widersprüchlichen Status-/Token-/Conflict-Feldern heißt `inconsistent_points`.
+Explizit `unavailable` markierte Legacy-Points zählen auch ohne alte
+Projektionsrevision als `unsupported`.
 `stale_rate` ist für das Promotionsgate
-`(stale_points + unprojected_points) / total_points`; der heutige unangereicherte
-Korpus kann daher nicht als `0 % stale` erscheinen. Die konstruktiv stets null
-bleibende `projected_stale_rate` wurde durch getrennte Filterable-/Unprojected-Raten
-ersetzt.
+`(stale_points + unprojected_points + inconsistent_points) / total_points`; der
+heutige unangereicherte oder ein intern kaputter Korpus kann daher nicht als
+`0 % stale` erscheinen. Die konstruktiv stets null bleibende
+`projected_stale_rate` wurde durch getrennte Filterable-/Unprojected-Raten ersetzt.
 
 ## TDD- und Verifikationsevidenz
 
@@ -119,14 +122,14 @@ Der anschließende vollständige Service-Gate ergab:
 services/intelligence
 uv sync
 uv run pytest
-395 passed
+398 passed
 uv run ruff check .
 All checks passed
 
 services/data-ingestion
 uv sync
 uv run pytest
-1366 passed, 1 skipped, 17 deselected
+1368 passed, 1 skipped, 17 deselected
 uv run ruff check .
 All checks passed
 ```
