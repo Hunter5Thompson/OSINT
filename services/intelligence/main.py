@@ -1,17 +1,21 @@
 """Intelligence service FastAPI app — exposes LangGraph pipeline over HTTP."""
 
+from __future__ import annotations
+
+import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from config import settings
 from graph.workflow import run_intelligence_query, shutdown_graph_client
 from model_readiness import check_model_readiness
 from rag import retriever
+from spatial import RetrievalSpatialRelation, SpatialScopeTokenV1
 
 
 @asynccontextmanager
@@ -37,12 +41,39 @@ class GroundingEvidenceItem(BaseModel):
 
 
 class QueryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     query: str = Field(..., max_length=2000)
     region: str | None = None
+    spatial_scope: SpatialScopeTokenV1 | None = None
+    spatial_relation: RetrievalSpatialRelation
     image_url: str | None = None
     use_legacy: bool = False
     grounding_context: str | None = Field(default=None, max_length=4000)
     grounding_evidence: list[GroundingEvidenceItem] | None = Field(default=None, max_length=6)
+
+    @field_validator("spatial_scope", mode="before")
+    @classmethod
+    def validate_wire_scope(
+        cls,
+        value: object,
+    ) -> SpatialScopeTokenV1 | None:
+        if value is None or isinstance(value, SpatialScopeTokenV1):
+            return value
+        try:
+            return SpatialScopeTokenV1.model_validate_json(json.dumps(value))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("invalid spatial scope token") from exc
+
+    @model_validator(mode="after")
+    def reject_legacy_spatial_combinations(self) -> QueryRequest:
+        if self.spatial_scope is None:
+            return self
+        if self.region is not None:
+            raise ValueError("region and spatial_scope are mutually exclusive")
+        if self.use_legacy:
+            raise ValueError("SPATIAL_SCOPE_UNSUPPORTED_LEGACY")
+        return self
 
 
 @app.get("/health")
@@ -69,6 +100,8 @@ async def query_intelligence(req: QueryRequest) -> dict:
         req.region,
         req.image_url,
         req.use_legacy,
+        spatial_scope=req.spatial_scope,
+        spatial_relation=req.spatial_relation,
         grounding_context=req.grounding_context,
         grounding_evidence=(
             [e.model_dump() for e in req.grounding_evidence] if req.grounding_evidence else None

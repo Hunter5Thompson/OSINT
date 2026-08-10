@@ -5,6 +5,8 @@ from typing import Annotated, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
+from spatial import RetrievalSpatialRelation, SpatialScopeTokenV1
+
 
 class AgentState(TypedDict):
     """State shared between all agents in the intelligence pipeline."""
@@ -12,6 +14,8 @@ class AgentState(TypedDict):
     # Input
     query: str
     image_url: str | None
+    spatial_scope: SpatialScopeTokenV1 | None
+    spatial_relation: RetrievalSpatialRelation
 
     # Deterministic grounding (POSTed by the backend, e.g. country briefing)
     grounding_context: str
