@@ -204,7 +204,7 @@ export interface SpatialRunScopeV1 {
 
 export interface SpatialRunConsumerApplication {
   readonly status: "applied" | "not-called" | "unsupported" | "failed";
-  readonly mode: "global" | "semantic-key" | "not-applicable";
+  readonly mode: "global" | "semantic-key";
   readonly completeness: "complete" | "partial" | "unknown";
   readonly detail_code?: string | null;
 }

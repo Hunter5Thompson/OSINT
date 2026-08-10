@@ -1,7 +1,11 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models.intel import IntelQuery, RetrievalSpatialRelation
+from app.models.intel import (
+    IntelQuery,
+    RetrievalSpatialRelation,
+    SpatialRunConsumerApplication,
+)
 
 SPATIAL_REF = {
     "schema_version": 1,
@@ -38,6 +42,15 @@ def test_intel_query_defaults_spatial_relation_to_either() -> None:
     query = IntelQuery(query="analyze", spatial_scope=SPATIAL_REF)
 
     assert query.spatial_relation is RetrievalSpatialRelation.EITHER
+
+
+def test_spatial_run_consumer_rejects_unrepresented_not_applicable_mode() -> None:
+    with pytest.raises(ValidationError):
+        SpatialRunConsumerApplication(
+            status="applied",
+            mode="not-applicable",  # type: ignore[arg-type]
+            completeness="complete",
+        )
 
 
 @pytest.mark.parametrize(

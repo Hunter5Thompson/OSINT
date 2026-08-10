@@ -165,3 +165,35 @@ async def test_run_pins_scope_before_later_ui_scope_switch() -> None:
     assert result["spatial_scope"]["derivation_revision"] == (
         "spatial-derive-v1-d30efa07e141"
     )
+
+
+@pytest.mark.asyncio
+async def test_legacy_region_is_observable_without_logging_free_text() -> None:
+    legacy = MagicMock(
+        ainvoke=AsyncMock(
+            return_value={
+                "synthesis": "legacy",
+                "sources_used": [],
+                "agent_chain": [],
+                "tool_trace": [],
+            }
+        )
+    )
+    with (
+        patch("graph.workflow.legacy_graph", legacy),
+        patch("graph.workflow._ensure_graph_client"),
+        patch("graph.workflow.logger.info") as info,
+    ):
+        await run_intelligence_query(
+            "sensitive query text",
+            region="Eastern Europe",
+            use_legacy=True,
+        )
+
+    info.assert_called_once_with(
+        "intelligence_query_started",
+        scope_key="world",
+        catalog_revision=None,
+        mode="legacy",
+        deprecated_region_supplied=True,
+    )
