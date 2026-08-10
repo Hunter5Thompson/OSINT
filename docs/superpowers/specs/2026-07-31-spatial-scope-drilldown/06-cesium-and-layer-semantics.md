@@ -30,10 +30,33 @@ interface SpatialPresentationPort {
 }
 ```
 
-Der konkrete `CesiumSpatialScopeAdapter` erhält den gemeinsamen
-`BoundaryAssetStore`, besitzt exakt eine Root-`PrimitiveCollection` im Viewer und
-alle darunter erzeugten Scope-Primitives. `GlobeViewer` bleibt
+Der `ViewerSpatialCesiumRuntime` ist der einzige Eigentümer der Root-
+`PrimitiveCollection` im Viewer. Der konkrete `CesiumSpatialScopeAdapter` erhält den
+gemeinsamen `BoundaryAssetStore` und läuft darin als Presentation-Strategie.
+Operational und Cinematic sind strikt wechselseitige Strategien derselben Runtime,
+niemals zwei Roots oder zwei gleichzeitig attachte Presenter. `GlobeViewer` bleibt
 Renderer-Composition-Root und enthält keine Scope-State-Machine.
+
+Die Runtime besitzt außerdem einen exklusiven `SceneStateLease`. Beim Attach klont
+er exakt `scene.backgroundColor`, `globe.enableLighting`,
+`skyAtmosphere.brightnessShift`, `fog.enabled`, `fog.density`,
+`scene.verticalExaggeration`, `show/alpha/brightness/contrast/saturation/gamma` des
+explizit referenzierten Basemap-Layers,
+`show/alpha/brightness/contrast` des Border-Layers,
+`show/alpha/dayAlpha/nightAlpha/brightness/gamma` des Night-Layers,
+`show` des Photoreal-Tilesets und `postProcessStages.bloom.enabled`. V1 mutiert keine
+anderen Bloom-Uniforms. Nicht geladene optionale Layer werden als `absent` erfasst
+und bei spätem Load sofort an den aktiven Lease gebunden. Nur der Lease
+darf diese Werte während Cinematic mutieren; React-Props aktualisieren währenddessen
+den zu restaurierenden Baseline-Wunsch statt dieselben Cesium-Properties direkt zu
+schreiben. `dispose`, Attach-Fehler und Abort restaurieren die aktuelle Baseline
+genau einmal. Ein Integrationstest vergleicht alle Werte vor Attach und nach Dispose.
+
+Ein `WorldviewPostProcessController` besitzt alle anwendereigenen Stages und den
+Bloom-Lease. Er rekonstruiert eine feste, getestete Reihenfolge als ein Composite;
+CRT, Night Vision, FLIR und Cinematic registrieren nur allowlistete Slots. Kein
+Consumer verwendet `removeAll`. Ein Strategie-Wechsel disposet zunächst die aktive
+Strategie samt Stages/Listenern und attachiert erst danach die nächste.
 
 `ResolvedPresentationInput`, `AssetDescriptor` und `GeoExtent` sind interne,
 rendererfreie Katalogtypen. Sie verlassen das Module nicht in Richtung normaler

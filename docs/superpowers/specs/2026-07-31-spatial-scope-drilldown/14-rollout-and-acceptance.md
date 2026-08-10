@@ -33,6 +33,19 @@
 - Exact Neo4j/Qdrant-Filter besitzen separate serverseitige Activation Gates nach Coverage-Report.
 - UI zeigt nur Drill-Affordances, die der aktive Katalog wirklich besitzt.
 
+Ein Spatial-enabled Artefakt darf zusätzlich die validierte Runtime-Konfiguration
+`worldview_presentation_mode = operational | cinematic` besitzen. Die Mode-Matrix
+ist geschlossen:
+
+| `VITE_SPATIAL_SCOPE_ENABLED` | Mode | einziger Presenter |
+|---|---|---|
+| `false` | `operational` | Legacy-WorldView |
+| `false` | `cinematic` | ungültig; sichtbare `CINEMATIC_REQUIRES_SPATIAL`-Diagnose, Legacy bleibt operational |
+| `true` | `operational` | operationaler `ViewerSpatialCesiumRuntime` |
+| `true` | `cinematic` | Cinematic-Strategie derselben `ViewerSpatialCesiumRuntime` |
+
+Der Mode ist kein Query-Parameter und entsperrt weder Phase D noch Deployment.
+
 ### 26.2 Kompatibilität
 
 - Timeline-`bbox` bleibt bestehen.
@@ -52,6 +65,11 @@
 - exact Activation Gate aus: Endpoint meldet wieder explizit `bbox_approximate`, sofern dieser Pfad im jeweiligen Release weiterhin unterstützt wird; niemals still.
 - Katalog: vorherige Revision bleibt als served Revision verfügbar und kann wieder active gesetzt werden.
 - kein Rollback löscht Backfill-Rohdaten oder überschreibt Source-Codes.
+- Ein Cinematic→Operational-Wechsel disposet Strategie, Stages, Clock und Listener,
+  restauriert über den `SceneStateLease` sämtliche in `06 §12.1` benannten Werte und
+  attachiert erst danach Operational. Das Gate vergleicht den vollständigen
+  Scene-State vor Attach und nach Dispose auf Wertgleichheit sowie die Root-/Stage-
+  Anzahl auf ihre Baseline; Fehler stoppt Default-on.
 
 Der Parallelzeitraum ist auf Phase B plus eine Soak-Periode begrenzt und besitzt einen
 expliziten Lösch-Gate. „Parallel“ meint Codeverfügbarkeit, niemals gleichzeitiges
@@ -116,9 +134,12 @@ Abgelehnt: eine sichere generische Query-Rewrite-Schicht ist deutlich komplexer 
 
 Abgelehnt: Punkt, Track, Polygon, Raster, globales Referenzobjekt und semantisches Dokument benötigen verschiedene Relationen. Eine Capability-Matrix verhindert visuelle Lügen.
 
-### Dekorative Extrusion/Fly-Lines
+### Kopierte Showroom-Ästhetik, dekorative Extrusion und Fake-Lines
 
-Abgelehnt: Höhe und Bögen müssen echte Werte beziehungsweise Beziehungen kodieren. Scope-Navigation braucht keine Showroom-Animation.
+Abgelehnt: Quellcode, Assets, Shader und konkrete Gestaltung des Fundstücks werden
+nicht übernommen. Höhe und variable Intensität kodieren echte Werte; Bögen echte
+Beziehungen. Clean-room-Stagecraft darf dagegen flache Basisringe, Auswahlkonturen,
+Kontext-Dimming und zeitlich begrenzte Reveals gemäß `01 §4.2` verwenden.
 
 ---
 
