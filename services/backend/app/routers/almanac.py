@@ -45,6 +45,7 @@ router = APIRouter(prefix="/almanac", tags=["almanac"])
 
 @dataclass(frozen=True, slots=True)
 class _CountrySpatialContext:
+    country: CountryAlmanac
     token: SpatialScopeTokenV1
     legacy_scope_keys: tuple[str, ...]
 
@@ -75,7 +76,62 @@ def _country_spatial_context(
         else f"country:m49:{country.m49}"
     )
     legacy_scope_keys = () if previous_key == token.scope_key else (previous_key,)
-    return _CountrySpatialContext(token=token, legacy_scope_keys=legacy_scope_keys)
+    return _CountrySpatialContext(
+        country=country,
+        token=token,
+        legacy_scope_keys=legacy_scope_keys,
+    )
+
+
+def _resolve_committed_country_scope(
+    request: Request,
+    scope_key: str,
+    catalog_revision: str,
+) -> _CountrySpatialContext | Response:
+    """Resolve an exact browser-committed country query without identity fallback."""
+
+    loader = getattr(request.app.state, "spatial_catalog", None)
+    if not isinstance(loader, SpatialCatalogLoader):
+        return spatial_problem_response(
+            SpatialCatalogProblem(
+                code=CatalogProblemCode.CATALOG_UNAVAILABLE,
+                message="Spatial catalog is unavailable",
+                recoverable=True,
+            )
+        )
+
+    resolved = loader.resolve_scope(scope_key, catalog_revision)
+    if isinstance(resolved, SpatialCatalogProblem):
+        return spatial_problem_response(resolved)
+
+    parsed = parse_scope_key(resolved.record.scope.key)
+    if parsed.kind is not ScopeKind.COUNTRY or parsed.canonical_code is None:
+        return spatial_problem_response(
+            SpatialCatalogProblem(
+                code=CatalogProblemCode.INVALID_SCOPE_KEY,
+                message="Country almanac requires a country scope",
+                target=resolved.record.scope.key,
+                recoverable=False,
+                active_catalog_revision=resolved.catalog_revision,
+            )
+        )
+
+    country = get_country_almanac_store().get_country(parsed.canonical_code)
+    if country is None:
+        raise HTTPException(status_code=404, detail="country almanac not found")
+
+    token = spatial_scope_token_from_resolution(resolved)
+    previous_key = (
+        f"country:{country.iso3}"
+        if country.iso3
+        else f"country:m49:{country.m49}"
+    )
+    legacy_scope_keys = () if previous_key == token.scope_key else (previous_key,)
+    return _CountrySpatialContext(
+        country=country,
+        token=token,
+        legacy_scope_keys=legacy_scope_keys,
+    )
 
 
 def _require_report_admin(
@@ -105,37 +161,78 @@ async def get_spatial_country_almanac(
 ) -> CountryAlmanac | Response:
     """Resolve catalog identity before adapting it to existing almanac data."""
 
-    candidate = getattr(request.app.state, "spatial_catalog", None)
-    if not isinstance(candidate, SpatialCatalogLoader):
-        return spatial_problem_response(
-            SpatialCatalogProblem(
-                code=CatalogProblemCode.CATALOG_UNAVAILABLE,
-                message="Spatial catalog is unavailable",
-                recoverable=True,
-            )
-        )
+    context = _resolve_committed_country_scope(request, scope_key, catalog_revision)
+    return context if isinstance(context, Response) else context.country
 
-    resolved = candidate.resolve_scope(scope_key, catalog_revision)
-    if isinstance(resolved, SpatialCatalogProblem):
-        return spatial_problem_response(resolved)
 
-    parsed = parse_scope_key(resolved.record.scope.key)
-    if parsed.kind is not ScopeKind.COUNTRY or parsed.canonical_code is None:
-        return spatial_problem_response(
-            SpatialCatalogProblem(
-                code=CatalogProblemCode.INVALID_SCOPE_KEY,
-                message="Country almanac requires a country scope",
-                target=resolved.record.scope.key,
-                recoverable=False,
-                active_catalog_revision=resolved.catalog_revision,
-            )
-        )
-
+def _country_signal_response(
+    country: CountryAlmanac,
+    limit: int,
+) -> AlmanacSignalResponse:
     store = get_country_almanac_store()
-    country = store.get_country(parsed.canonical_code)
-    if country is None:
-        raise HTTPException(status_code=404, detail="country almanac not found")
-    return country
+    items = store.match_signals(
+        country.id,
+        get_signal_stream().snapshot(),
+        limit=limit,
+    )
+    return AlmanacSignalResponse(
+        country_id=country.iso3 or country.id,
+        items=items,
+    )
+
+
+def _country_briefing_response(
+    context: _CountrySpatialContext,
+) -> EventSourceResponse:
+    store = get_country_almanac_store()
+    signals = store.match_signals(
+        context.country.id,
+        get_signal_stream().snapshot(),
+        limit=5,
+    )
+    briefing = build_briefing_context(
+        context.country,
+        signals,
+        factbook_revision=store.factbook_revision,
+        refreshed_at=store.refreshed_at,
+    )
+
+    async def event_generator() -> AsyncIterator[dict[str, Any]]:
+        async for event in stream_intel_query(
+            query=briefing.task,
+            spatial_scope=context.token,
+            spatial_relation=RetrievalSpatialRelation.EITHER,
+            grounding_context=briefing.grounding_context,
+            grounding_evidence=briefing.grounding_evidence,
+        ):
+            yield event
+
+    return EventSourceResponse(event_generator())
+
+
+@router.get("/country/signals", response_model=AlmanacSignalResponse)
+async def get_spatial_country_signals(
+    request: Request,
+    scope_key: str = Query(),
+    catalog_revision: str = Query(),
+    limit: int = Query(default=5, ge=1, le=20),
+) -> AlmanacSignalResponse | Response:
+    context = _resolve_committed_country_scope(request, scope_key, catalog_revision)
+    if isinstance(context, Response):
+        return context
+    return _country_signal_response(context.country, limit)
+
+
+@router.post("/country/briefing", response_model=None)
+async def generate_spatial_country_briefing(
+    request: Request,
+    scope_key: str = Query(),
+    catalog_revision: str = Query(),
+) -> EventSourceResponse | Response:
+    context = _resolve_committed_country_scope(request, scope_key, catalog_revision)
+    if isinstance(context, Response):
+        return context
+    return _country_briefing_response(context)
 
 
 @router.get("/countries/{country_id}/signals", response_model=AlmanacSignalResponse)
@@ -147,10 +244,7 @@ async def get_country_signals(
     country = store.get_country(country_id)
     if country is None:
         raise HTTPException(status_code=404, detail="country almanac not found")
-    stream = get_signal_stream()
-    items = store.match_signals(country.id, stream.snapshot(), limit=limit)
-    # seed ids are UN M49 numerics; prefer iso3 for the response (frontend keys by iso3)
-    return AlmanacSignalResponse(country_id=country.iso3 or country.id, items=items)
+    return _country_signal_response(country, limit)
 
 
 @router.post("/countries/{country_id}/briefing", response_model=None)
@@ -165,49 +259,15 @@ async def generate_country_briefing(
     spatial = _country_spatial_context(request, country)
     if isinstance(spatial, Response):
         return spatial
-    stream = get_signal_stream()
-    signals = store.match_signals(country.id, stream.snapshot(), limit=5)
-    ctx = build_briefing_context(
-        country,
-        signals,
-        factbook_revision=store.factbook_revision,
-        refreshed_at=store.refreshed_at,
-    )
-
-    async def event_generator() -> AsyncIterator[dict[str, Any]]:
-        async for ev in stream_intel_query(
-            query=ctx.task,
-            spatial_scope=spatial.token,
-            spatial_relation=RetrievalSpatialRelation.EITHER,
-            grounding_context=ctx.grounding_context,
-            grounding_evidence=ctx.grounding_evidence,
-        ):
-            yield ev
-
-    return EventSourceResponse(event_generator())
+    return _country_briefing_response(spatial)
 
 
-# Router prefix is "/almanac" → full mounted path /api/almanac/countries/{id}/briefing/save
-@router.post(
-    "/countries/{country_id}/briefing/save",
-    response_model=ReportRecord,
-    dependencies=[Depends(_require_report_admin)],
-)
-async def save_country_briefing(
-    country_id: str, body: BriefingSaveRequest, request: Request
-) -> ReportRecord | Response:
-    if not getattr(request.app.state, "report_schema_ready", False):
-        raise HTTPException(
-            status_code=503, detail="report schema not bootstrapped; saves disabled"
-        )
-    store = get_country_almanac_store()
-    country = store.get_country(country_id)
-    if country is None:
-        raise HTTPException(status_code=404, detail="country almanac not found")
-    spatial = _country_spatial_context(request, country)
-    if isinstance(spatial, Response):
-        return spatial
-    scope_key = spatial.token.scope_key
+async def _save_resolved_country_briefing(
+    context: _CountrySpatialContext,
+    body: BriefingSaveRequest,
+) -> ReportRecord:
+    country = context.country
+    scope_key = context.token.scope_key
     coords = (
         f"{country.capital.lat:.2f},{country.capital.lon:.2f}" if country.capital else "--"
     )
@@ -229,7 +289,7 @@ async def save_country_briefing(
             title=f"{country.name} — Lagebild",
             location=country.name,
             coords=coords,
-            legacy_aliases=spatial.legacy_scope_keys,
+            legacy_aliases=context.legacy_scope_keys,
         )
         updated = await update_report(report.id, patch)
         if updated is None:  # dossier vanished between create and update — never false success
@@ -248,5 +308,48 @@ async def save_country_briefing(
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
-        log.warning("briefing_save_failed", country_id=country_id, error=str(exc))
+        log.warning("briefing_save_failed", scope_key=scope_key, error=str(exc))
         raise HTTPException(status_code=503, detail="report store unavailable") from exc
+
+
+@router.post(
+    "/country/briefing/save",
+    response_model=ReportRecord,
+    dependencies=[Depends(_require_report_admin)],
+)
+async def save_spatial_country_briefing(
+    body: BriefingSaveRequest,
+    request: Request,
+    scope_key: str = Query(),
+    catalog_revision: str = Query(),
+) -> ReportRecord | Response:
+    if not getattr(request.app.state, "report_schema_ready", False):
+        raise HTTPException(
+            status_code=503, detail="report schema not bootstrapped; saves disabled"
+        )
+    context = _resolve_committed_country_scope(request, scope_key, catalog_revision)
+    if isinstance(context, Response):
+        return context
+    return await _save_resolved_country_briefing(context, body)
+
+
+# Router prefix is "/almanac" → full mounted path /api/almanac/countries/{id}/briefing/save
+@router.post(
+    "/countries/{country_id}/briefing/save",
+    response_model=ReportRecord,
+    dependencies=[Depends(_require_report_admin)],
+)
+async def save_country_briefing(
+    country_id: str, body: BriefingSaveRequest, request: Request
+) -> ReportRecord | Response:
+    if not getattr(request.app.state, "report_schema_ready", False):
+        raise HTTPException(
+            status_code=503, detail="report schema not bootstrapped; saves disabled"
+        )
+    country = get_country_almanac_store().get_country(country_id)
+    if country is None:
+        raise HTTPException(status_code=404, detail="country almanac not found")
+    context = _country_spatial_context(request, country)
+    if isinstance(context, Response):
+        return context
+    return await _save_resolved_country_briefing(context, body)

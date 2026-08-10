@@ -1,9 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useCountryAlmanac } from "../../../hooks/useCountryAlmanac";
 import { useCountryBriefing } from "../../../hooks/useCountryBriefing";
+import { useSpatialCountryBriefing } from "../../../hooks/useSpatialCountryBriefing";
 import type { SpatialCountryAlmanacState } from "../../../hooks/useSpatialCountryAlmanac";
-import { saveCountryBriefing } from "../../../services/api";
+import { useSpatialCountrySignals } from "../../../hooks/useSpatialCountrySignals";
+import {
+  saveCountryBriefing,
+  saveSpatialCountryBriefing,
+} from "../../../services/api";
+import type { SpatialQueryRef } from "../../../spatial/contracts";
+import type { IntelAnalysis } from "../../../types";
 import type {
   AlmanacFact,
   AlmanacFacts,
@@ -31,79 +38,17 @@ export function CountryAlmanacPanel({ iso3, m49 }: Props) {
 
   const countryId = iso3 ?? m49;
   const briefing = useCountryBriefing(countryId);
-  const [saved, setSaved] = useState(false);
-  const [savedId, setSavedId] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  useEffect(() => {
-    // inspected country changed → drop any prior briefing result + save state so we never
-    // show or save country A's briefing under country B.
-    setSaved(false);
-    setSavedId(null);
-    setSaveError(null);
-    briefing.reset();
-  }, [countryId]);
 
   return (
     <section className="country-almanac" aria-label="WorldReport Almanac">
       <AlmanacFactsContent facts={facts} />
       <SignalList status={signals.status} items={signals.status === "ready" ? signals.data.items : []} />
-      <section className="country-almanac__briefing" aria-label="Munin briefing">
-        <button
-          type="button"
-          className="country-almanac__tab"
-          onClick={() => {
-            setSaved(false);
-            setSavedId(null);
-            setSaveError(null);
-            briefing.run();
-          }}
-        >
-          § Munin-Briefing erzeugen
-        </button>
-        {briefing.loading && (
-          <div className="country-almanac__muted">§ Munin · {briefing.currentAgent ?? "läuft"}</div>
-        )}
-        {briefing.error && <div className="country-almanac__muted">§ Munin · {briefing.error}</div>}
-        {briefing.result && (
-          <details className="country-almanac__report">
-            <summary>
-              {briefing.result.threat_assessment ?? "REPORT"} ·{" "}
-              {(briefing.result.confidence * 100).toFixed(0)}%
-            </summary>
-            <pre className="country-almanac__report-body">{briefing.result.analysis}</pre>
-            <button
-              type="button"
-              className="country-almanac__tab"
-              disabled={saved}
-              onClick={() => {
-                const r = briefing.result;
-                if (!r) return;
-                setSaveError(null);
-                saveCountryBriefing(countryId, r)
-                  .then((rec) => {
-                    setSaved(true);
-                    setSavedId(rec.id);
-                  })
-                  .catch((e: unknown) => setSaveError(e instanceof Error ? e.message : String(e)));
-              }}
-            >
-              {saved ? "✓ in Briefing Room" : "In Briefing Room speichern"}
-            </button>
-            {savedId && (
-              <a className="country-almanac__tab" href={`/briefing/${savedId}`}>
-                Im Briefing Room öffnen →
-              </a>
-            )}
-            {saveError && <div className="country-almanac__muted">§ Speichern · {saveError}</div>}
-          </details>
-        )}
-      </section>
-      <div className="country-almanac__capabilities" aria-label="ODIN capabilities">
-        {capabilities.map((capability) => (
-          <span key={capability}>{capability}</span>
-        ))}
-      </div>
+      <CountryBriefingContent
+        identity={`legacy:${countryId}`}
+        briefing={briefing}
+        save={(analysis) => saveCountryBriefing(countryId, analysis)}
+      />
+      <CapabilityList />
     </section>
   );
 }
@@ -116,13 +61,153 @@ type AlmanacFactsLoadState =
 
 export function SpatialCountryAlmanacPanel({
   facts,
+  query,
 }: {
   readonly facts: SpatialCountryAlmanacState;
+  readonly query: SpatialQueryRef | null;
 }) {
+  const signals = useSpatialCountrySignals(query);
+  const briefing = useSpatialCountryBriefing(query);
+  const identity = query === null
+    ? "spatial:none"
+    : `spatial:${query.scopeKey}\u0000${query.catalogRevision}`;
+
   return (
     <section className="country-almanac" aria-label="WorldReport Almanac">
       <AlmanacFactsContent facts={facts} />
+      <SignalList
+        status={signals.status}
+        items={signals.status === "ready" ? signals.data.items : []}
+      />
+      <CountryBriefingContent
+        identity={identity}
+        briefing={briefing}
+        save={query === null
+          ? null
+          : (analysis, signal) => saveSpatialCountryBriefing(query, analysis, signal)}
+      />
+      <CapabilityList />
     </section>
+  );
+}
+
+type BriefingController = ReturnType<typeof useCountryBriefing>;
+type SaveBriefing = (
+  analysis: IntelAnalysis,
+  signal: AbortSignal,
+) => Promise<{ readonly id: string }>;
+
+function CountryBriefingContent({
+  identity,
+  briefing,
+  save,
+}: {
+  readonly identity: string;
+  readonly briefing: BriefingController;
+  readonly save: SaveBriefing | null;
+}) {
+  const [saved, setSaved] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveControllerRef = useRef<AbortController | null>(null);
+  const activeIdentityRef = useRef(identity);
+  activeIdentityRef.current = identity;
+
+  useEffect(() => {
+    saveControllerRef.current?.abort();
+    saveControllerRef.current = null;
+    setSaved(false);
+    setSavedId(null);
+    setSaveError(null);
+    briefing.reset();
+    return () => saveControllerRef.current?.abort();
+  }, [briefing.reset, identity]);
+
+  return (
+    <section className="country-almanac__briefing" aria-label="Munin briefing">
+      <button
+        type="button"
+        className="country-almanac__tab"
+        onClick={() => {
+          saveControllerRef.current?.abort();
+          setSaved(false);
+          setSavedId(null);
+          setSaveError(null);
+          briefing.run();
+        }}
+      >
+        § Munin-Briefing erzeugen
+      </button>
+      {briefing.loading && (
+        <div className="country-almanac__muted">
+          § Munin · {briefing.currentAgent ?? "läuft"}
+        </div>
+      )}
+      {briefing.error && (
+        <div className="country-almanac__muted">§ Munin · {briefing.error}</div>
+      )}
+      {briefing.result && (
+        <details className="country-almanac__report">
+          <summary>
+            {briefing.result.threat_assessment ?? "REPORT"} ·{" "}
+            {(briefing.result.confidence * 100).toFixed(0)}%
+          </summary>
+          <pre className="country-almanac__report-body">{briefing.result.analysis}</pre>
+          <button
+            type="button"
+            className="country-almanac__tab"
+            disabled={saved || save === null}
+            onClick={() => {
+              const result = briefing.result;
+              if (result === null || save === null) return;
+              saveControllerRef.current?.abort();
+              const controller = new AbortController();
+              const requestedIdentity = identity;
+              saveControllerRef.current = controller;
+              setSaveError(null);
+              save(result, controller.signal)
+                .then((record) => {
+                  if (
+                    !controller.signal.aborted
+                    && activeIdentityRef.current === requestedIdentity
+                  ) {
+                    setSaved(true);
+                    setSavedId(record.id);
+                  }
+                })
+                .catch((error: unknown) => {
+                  if (
+                    !controller.signal.aborted
+                    && activeIdentityRef.current === requestedIdentity
+                  ) {
+                    setSaveError(error instanceof Error ? error.message : String(error));
+                  }
+                });
+            }}
+          >
+            {saved ? "✓ in Briefing Room" : "In Briefing Room speichern"}
+          </button>
+          {savedId && (
+            <a className="country-almanac__tab" href={`/briefing/${savedId}`}>
+              Im Briefing Room öffnen →
+            </a>
+          )}
+          {saveError && (
+            <div className="country-almanac__muted">§ Speichern · {saveError}</div>
+          )}
+        </details>
+      )}
+    </section>
+  );
+}
+
+function CapabilityList() {
+  return (
+    <div className="country-almanac__capabilities" aria-label="ODIN capabilities">
+      {capabilities.map((capability) => (
+        <span key={capability}>{capability}</span>
+      ))}
+    </div>
   );
 }
 

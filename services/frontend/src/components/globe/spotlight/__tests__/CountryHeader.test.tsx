@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -99,7 +99,7 @@ describe("CountryHeader", () => {
     expect(await screen.findByText(/unavailable for this country/i)).toBeInTheDocument();
   });
 
-  it("keeps canonical selection identity while using committed Spatial almanac data", async () => {
+  it("keeps canonical identity while exposing the complete Spatial inspector parity set", async () => {
     const fetchMock = mockCountryFetch();
     const scopeKey = parseScopeKeyCandidate("country:UKR");
     render(
@@ -122,7 +122,17 @@ describe("CountryHeader", () => {
         + "&catalog_revision=spatial-v1-fe9828dcda05",
       expect.any(Object),
     );
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/signals")))
-      .toBe(false);
+    expect(await screen.findByText(/Diplomatic statement indexed by Hugin/)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/almanac/country/signals?scope_key=country%3AUKR"
+        + "&catalog_revision=spatial-v1-fe9828dcda05&limit=5",
+      expect.any(Object),
+    );
+    expect(screen.getByRole("button", { name: /Munin-Briefing erzeugen/i }))
+      .toBeInTheDocument();
+    const capabilityList = screen.getByLabelText("ODIN capabilities");
+    for (const capability of ["Hugin", "Signalia", "Vectorium", "Memoria", "Fenestra"]) {
+      expect(within(capabilityList).getByText(capability)).toBeInTheDocument();
+    }
   });
 });
