@@ -137,6 +137,65 @@ export type LayerSpatialStatuses = Readonly<
   Record<LayerSpatialId, LayerSpatialStatus>
 >;
 
+function capabilityTitle(
+  capability: LayerSpatialCapability,
+  claim: string,
+): string {
+  return `${capability.layerId} (${capability.relation}) ${claim}`;
+}
+
+function unavailableCapabilityStatus(
+  capability: LayerSpatialCapability,
+  claim: string,
+): LayerSpatialStatus {
+  return {
+    render: false,
+    label: "scope unavailable",
+    title: capabilityTitle(capability, claim),
+    tone: "unavailable",
+  };
+}
+
+function globalContextStatus(
+  capability: LayerSpatialCapability,
+): LayerSpatialStatus {
+  return {
+    render: true,
+    label: "global context",
+    title: capabilityTitle(capability, "remains unfiltered global context"),
+    tone: "global",
+  };
+}
+
+function scopePresentationStatus(
+  capability: LayerSpatialCapability,
+): LayerSpatialStatus {
+  return {
+    render: true,
+    label: "scope presentation",
+    title: capabilityTitle(capability, "presents the committed scope boundary"),
+    tone: "presentation",
+  };
+}
+
+function unsupportedScopeStatus(
+  capability: LayerSpatialCapability,
+): LayerSpatialStatus {
+  switch (capability.unsupportedBehavior) {
+    case "hide":
+      return {
+        render: false,
+        label: "unavailable in scope",
+        title: capabilityTitle(capability, "is unavailable in this scope"),
+        tone: "unsupported",
+      };
+    case "label-global-context":
+      return globalContextStatus(capability);
+    case "label-scope-presentation":
+      return scopePresentationStatus(capability);
+  }
+}
+
 export function layerSpatialStatus(
   layerId: LayerSpatialId,
   scopeKind: ScopeKind | null,
@@ -144,83 +203,113 @@ export function layerSpatialStatus(
 ): LayerSpatialStatus {
   const capability = layerSpatialCapability(layerId);
   if (scopeKind === null) {
-    if (capability.behavior === "global-context") {
-      return {
-        render: true,
-        label: "global context",
-        title: `${layerId} remains unfiltered global context`,
-        tone: "global",
-      };
+    if (capability.unsupportedBehavior === "label-global-context") {
+      return globalContextStatus(capability);
     }
     return {
       render: false,
       label: "scope hydrating",
-      title: `${layerId} is hidden until the initial scope commits`,
+      title: capabilityTitle(capability, "is hidden until the initial scope commits"),
       tone: "loading",
     };
   }
-  if (!capability.supportedKinds.includes(scopeKind)) {
-    return {
-      render: false,
-      label: "unavailable in scope",
-      title: `${layerId} is unavailable outside world scope`,
-      tone: "unsupported",
-    };
+  if (
+    (capability.behavior === "unsupported" && scopeKind !== "world")
+    || !capability.supportedKinds.includes(scopeKind)
+  ) {
+    return unsupportedScopeStatus(capability);
   }
-  if (capability.behavior === "unsupported") {
-    return {
-      render: true,
-      label: "world only",
-      title: `${layerId} is available only at world scope`,
-      tone: "global",
-    };
-  }
-  if (capability.behavior === "global-context") {
-    return {
-      render: true,
-      label: "global context",
-      title: `${layerId} remains unfiltered global context`,
-      tone: "global",
-    };
-  }
-  if (capability.behavior === "scope-presentation") {
-    return {
-      render: true,
-      label: "scope presentation",
-      title: `${layerId} presents the committed scope boundary`,
-      tone: "presentation",
-    };
-  }
-  if (capability.precision === "point-in-boundary") {
-    if (containment.phase === "building") {
+
+  switch (capability.stalePolicy) {
+    case "invalidate-on-semantic-commit":
+      if (
+        capability.behavior !== "strict"
+        || capability.precision !== "point-in-boundary"
+      ) {
+        return unavailableCapabilityStatus(
+          capability,
+          "is hidden because its containment capability is inconsistent",
+        );
+      }
+      if (containment.phase === "building") {
+        return {
+          render: false,
+          label: "scope building",
+          title: capabilityTitle(
+            capability,
+            "is hidden while fixed containment is building",
+          ),
+          tone: "loading",
+        };
+      }
+      if (containment.phase === "unavailable") {
+        return unavailableCapabilityStatus(
+          capability,
+          "is hidden because fixed containment is unavailable",
+        );
+      }
       return {
-        render: false,
-        label: "scope building",
-        title: `${layerId} is hidden while fixed containment is building`,
-        tone: "loading",
+        render: true,
+        label: "strict · point boundary",
+        title: capabilityTitle(capability, "uses strict point-in-boundary containment"),
+        tone: "strict",
       };
-    }
-    if (containment.phase === "unavailable") {
+    case "response-scope-token":
+      if (
+        capability.behavior !== "strict"
+        || capability.precision !== "bbox-approximate"
+      ) {
+        return unavailableCapabilityStatus(
+          capability,
+          "is hidden because its response-scope capability is inconsistent",
+        );
+      }
       return {
-        render: false,
-        label: "scope unavailable",
-        title: `${layerId} is hidden because fixed containment is unavailable`,
-        tone: "unavailable",
+        render: true,
+        label: "strict · bbox approx",
+        title: capabilityTitle(
+          capability,
+          "uses a scope-token response with bbox approximation",
+        ),
+        tone: "approximate",
       };
-    }
-    return {
-      render: true,
-      label: "strict · point boundary",
-      title: `${layerId} uses strict point-in-boundary containment`,
-      tone: "strict",
-    };
+    case "scope-presentation-generation":
+      if (
+        capability.behavior !== "scope-presentation"
+        || capability.precision !== "global"
+        || capability.unsupportedBehavior !== "label-scope-presentation"
+      ) {
+        return unavailableCapabilityStatus(
+          capability,
+          "is hidden because its presentation capability is inconsistent",
+        );
+      }
+      return scopePresentationStatus(capability);
+    case "not-applicable":
+      if (
+        capability.behavior === "unsupported"
+        && capability.precision === "global"
+        && capability.unsupportedBehavior === "hide"
+      ) {
+        return {
+          render: true,
+          label: "world only",
+          title: capabilityTitle(capability, "is available only at world scope"),
+          tone: "global",
+        };
+      }
+      if (
+        capability.behavior === "global-context"
+        && capability.precision === "global"
+        && capability.unsupportedBehavior === "label-global-context"
+      ) {
+        return globalContextStatus(capability);
+      }
+      return unavailableCapabilityStatus(
+        capability,
+        "is hidden because its spatial capability is inconsistent",
+      );
   }
-  return {
-    render: true,
-    label: "strict · bbox approx",
-    title: `${layerId} uses a scope-token response with bbox approximation`,
-    tone: "approximate",
-  };
 }
 
 export function layerSpatialStatuses(
