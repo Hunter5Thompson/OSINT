@@ -100,3 +100,17 @@ class TestAnalyzeImageTool:
             )
 
         assert result.startswith("SPATIAL_SCOPE_UNSUPPORTED")
+
+    @pytest.mark.asyncio
+    async def test_malformed_runtime_image_is_blocked_without_assert_dependency(self):
+        with patch(
+            "agents.tools.vision._load_image",
+            side_effect=AssertionError("image load must not run"),
+        ):
+            result = await invoke_runtime_tool(
+                analyze_image,
+                {"question": "describe this"},
+                state=agent_state(image_url=42),
+            )
+
+        assert result.startswith("SPATIAL_SCOPE_UNSUPPORTED")

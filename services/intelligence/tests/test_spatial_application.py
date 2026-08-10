@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
+from pydantic import ValidationError
 
 from graph.workflow import react_synthesis_node
 from rag.evidence import EvidenceItem, SourceRef, evidence_artifact, format_evidence_pack
@@ -51,6 +52,16 @@ def _marker(
         detail_code=detail_code,
         coverage_revision=coverage_revision,
     )
+
+
+def test_marker_rejects_unrepresented_not_applicable_mode() -> None:
+    with pytest.raises(ValidationError):
+        SpatialApplicationMarkerV1(
+            consumer="qdrant",
+            status="applied",
+            mode="not-applicable",  # type: ignore[arg-type]
+            completeness="complete",
+        )
 
 
 def test_codec_accepts_only_the_first_line_and_matching_actual_tool() -> None:

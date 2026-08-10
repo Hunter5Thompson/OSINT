@@ -92,12 +92,18 @@ verändert den laufenden Run nicht. Ergebnis und gespeicherter Report tragen Sco
 Katalog- und Derivationsrevision. Die UI darf ein verspätetes Ergebnis unter neuem
 Scope nur mit seinem ursprünglichen Scope-Label anzeigen, niemals still umetikettieren.
 
+`Report.spatial_application` ist der Snapshot des zuletzt erfolgreich am Report
+persistierten Intelligence-Runs, nicht eine dauerhafte Eigenschaft des Dossiers. Jeder
+Report-Run schreibt das Feld; ein ungescopter Run schreibt explizit `null` und löscht
+damit einen älteren scoped Snapshot. Schlägt dieses Update fehl, werden weder die neue
+Munin-Message noch ein Result-Event unter dem alten Snapshot veröffentlicht.
+
 `IntelAnalysis` erhält optional:
 
 ```ts
 interface SpatialRunConsumerApplication {
   readonly status: "applied" | "not-called" | "unsupported" | "failed";
-  readonly mode: "global" | "semantic-key" | "not-applicable";
+  readonly mode: "global" | "semantic-key";
   readonly completeness: "complete" | "partial" | "unknown";
   readonly detail_code?: string;
 }
@@ -218,7 +224,7 @@ Tools; jedes wird klassifiziert:
 | `qdrant_search` | erlaubt | Runtime-gebundener About/Occurrence-Filter |
 | `query_knowledge_graph` | erlaubt, Teilmenge | scoped Template-Matrix; sonst unsupported |
 | `classify_event` | erlaubt | reine Transformation explizit übergebenen Texts, keine Retrieval-Quelle |
-| `analyze_image` | nur attached image | URL kommt aus `AgentState.image_url`, nicht vom Modell; Output `scope_not_applicable` |
+| `analyze_image` | nur attached image | URL kommt aus `AgentState.image_url`, nicht vom Modell; kein räumlicher Retrieval-Consumer |
 | `gdelt_query` | gesperrt | DOC-Keyword-Query garantiert keinen semantischen Raum |
 | `rss_fetch` | gesperrt | ein Feed besitzt keinen Scope-Constraint |
 
@@ -233,6 +239,8 @@ Toolnamen erzeugt. Es gibt dann keinen Network-Call und keinen Evidence-Block.
 Request validierte `state["image_url"]`. Ohne attached image wird es nicht gebunden und
 führt auch bei direktem Call nichts aus. Damit kann das Modell weder im scoped noch im
 globalen Run eine beliebige neue Bild-URL als Neben-Retrieval wählen.
+Vision belegt bewusst keinen Slot in `SpatialRunApplicationV1`: Der Vertrag beschreibt
+nur die räumliche Anwendung der beiden Retrieval-Consumer Qdrant und Neo4j.
 
 Der globale Run behält GDELT/RSS. Da `gdelt_query.py` in Slice 7 ohnehin geändert wird,
 wandert seine vorhandene externe URL in `config.py`; die AGENTS-Regel „keine

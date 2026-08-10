@@ -156,7 +156,7 @@ SPATIAL_APPLICATION_PREFIX: Final = "[SPATIAL_APPLICATION]"
 
 type SpatialApplicationConsumer = Literal["qdrant", "neo4j"]
 type SpatialApplicationStatus = Literal["applied", "not-called", "unsupported", "failed"]
-type SpatialApplicationMode = Literal["global", "semantic-key", "not-applicable"]
+type SpatialApplicationMode = Literal["global", "semantic-key"]
 type SpatialApplicationCompleteness = Literal["complete", "partial", "unknown"]
 type SpatialDetailCode = Annotated[
     StrictStr,

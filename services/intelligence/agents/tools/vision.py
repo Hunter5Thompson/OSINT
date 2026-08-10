@@ -141,8 +141,9 @@ async def analyze_image(
     if not tool_allowed_for_state("analyze_image", runtime.state):
         return "SPATIAL_SCOPE_UNSUPPORTED: analyze_image requires an attached image"
 
-    image_url = runtime.state["image_url"]
-    assert image_url is not None
+    image_url = runtime.state.get("image_url")
+    if not isinstance(image_url, str) or not image_url:
+        return "SPATIAL_SCOPE_UNSUPPORTED: analyze_image requires an attached image"
     if not validate_image_url(image_url):
         return (
             f"Image URL rejected: '{image_url}'. "

@@ -494,6 +494,7 @@ async def run_intelligence_query(
             pinned_scope.catalog_revision if pinned_scope is not None else None
         ),
         mode=mode,
+        deprecated_region_supplied=region is not None,
     )
 
     # Wire Neo4j client for graph_query tool (lazy singleton)

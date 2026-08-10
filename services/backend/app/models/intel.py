@@ -48,7 +48,7 @@ class SpatialRunScopeV1(_FrozenContractModel):
 
 class SpatialRunConsumerApplication(_FrozenContractModel):
     status: Literal["applied", "not-called", "unsupported", "failed"]
-    mode: Literal["global", "semantic-key", "not-applicable"]
+    mode: Literal["global", "semantic-key"]
     completeness: Literal["complete", "partial", "unknown"]
     detail_code: str | None = Field(
         default=None,
