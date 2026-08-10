@@ -214,6 +214,9 @@ async def save_country_briefing(
     # Build (and thereby validate) the hydration patch BEFORE any store access so an invalid
     # client payload (e.g. confidence outside [0,1]) returns 422 with no orphan dossier write.
     # build_hydration_patch is pure (no I/O), so this cannot itself cause a storage side effect.
+    # Its trusted_spatial_application default deliberately discards the browser field even when
+    # scope identity matches: consumer status and coverage could still be fabricated. Explicit
+    # None in the resulting patch also clears any stale report snapshot.
     try:
         patch = build_hydration_patch(body.analysis, country_name=country.name)
     except ValidationError as exc:

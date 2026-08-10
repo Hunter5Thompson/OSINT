@@ -332,8 +332,13 @@ _THREAT_TONE: dict[str, AccentTone] = {
 _DEFAULT_TONE: AccentTone = "sentinel"
 
 
-def build_hydration_patch(analysis: IntelAnalysis, country_name: str) -> ReportUpdateRequest:
-    """Map a finished Munin IntelAnalysis into a dossier hydration patch."""
+def build_hydration_patch(
+    analysis: IntelAnalysis,
+    country_name: str,
+    *,
+    trusted_spatial_application: SpatialRunApplicationV1 | None = None,
+) -> ReportUpdateRequest:
+    """Map analysis content, accepting run attribution only through an explicit trust seam."""
     parsed = parse_munin_report(analysis.analysis)
     threat = analysis.threat_assessment or "MODERATE"
     metrics = [
@@ -356,7 +361,7 @@ def build_hydration_patch(analysis: IntelAnalysis, country_name: str) -> ReportU
         body_paragraphs=parsed.body_paragraphs,
         sources=analysis.sources_used,
         metrics=metrics,
-        spatial_application=analysis.spatial_application,
+        spatial_application=trusted_spatial_application,
     )
 
 
