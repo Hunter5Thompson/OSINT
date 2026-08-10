@@ -12,6 +12,7 @@ from typing import Any
 
 import structlog
 from langchain_core.tools import tool
+from langgraph.prebuilt import ToolRuntime
 
 from agents.tools.graph_templates import (
     build_cypher_from_template,
@@ -19,6 +20,7 @@ from agents.tools.graph_templates import (
     select_template,
 )
 from graph.read_queries import validate_cypher_readonly
+from graph.state import AgentState
 
 log = structlog.get_logger(__name__)
 
@@ -133,7 +135,10 @@ def _format_results(rows: list[dict], max_rows: int = 15) -> str:
 
 
 @tool
-async def query_knowledge_graph(question: str) -> str:
+async def query_knowledge_graph(
+    question: str,
+    runtime: ToolRuntime[dict[str, object], AgentState],
+) -> str:
     """Query the Neo4j knowledge graph (entities, events, locations, sources).
 
     The graph is built from Qdrant's underlying documents — same content,
@@ -172,6 +177,7 @@ async def query_knowledge_graph(question: str) -> str:
     Returns:
         Formatted graph results (up to 15 rows per query).
     """
+    _ = runtime
     template_id, params = _match_intent(question)
 
     if template_id:

@@ -2,7 +2,9 @@
 
 import structlog
 from langchain_core.tools import tool
+from langgraph.prebuilt import ToolRuntime
 
+from graph.state import AgentState
 from rag.corpus_policy import (
     ANALYSIS_POOL,
     FINAL_K,
@@ -33,7 +35,10 @@ def _clip_text(text: str, max_chars: int) -> str:
 
 
 @tool
-async def qdrant_search(query: str, region: str = "") -> str:
+async def qdrant_search(
+    query: str,
+    runtime: ToolRuntime[dict[str, object], AgentState],
+) -> str:
     """Semantic vector search across the OSINT knowledge base.
 
     Index content — VETTED ANALYSIS PROSE only (1024-dim cosine):
@@ -60,27 +65,23 @@ async def qdrant_search(query: str, region: str = "") -> str:
         query: Search query in any language. Multi-word phrases work better
             than single keywords. English usually returns more hits than
             German because most feeds are English.
-        region: AVOID using this — the underlying index does not currently
-            populate region metadata, so any non-empty region filter returns
-            zero results. Leave as empty string unless you've explicitly
-            confirmed the index has region tags for your topic.
-
     Returns:
         A budgeted evidence pack: one `[EVIDENCE] {json}` metadata line per hit
         (provider, source_type, credibility_score, published_at, url, ...) followed
         by Title/Excerpt lines, optionally followed by a deduplicated [Graph Context]
         block. Sorted by relevance; bounded by an internal character budget.
     """
+    _ = runtime
     try:
         analysis = await enhanced_search(
             query, limit=FINAL_K, pool=ANALYSIS_POOL,
-            query_filter=analysis_filter(), region=region or None,
+            query_filter=analysis_filter(),
             post_rerank=apply_tier_boost,
         )
         try:
             realtime = await enhanced_search(
                 query, limit=TELEGRAM_MAX, pool=REALTIME_POOL,
-                query_filter=realtime_filter(), region=region or None,
+                query_filter=realtime_filter(),
                 post_rerank=apply_tier_boost, score_threshold=RT_SCORE_THRESHOLD,
             )
         except Exception as e:  # realtime is best-effort; never fail the analysis lane

@@ -9,6 +9,7 @@ from agents.tools.vision import (
     analyze_image,
     validate_image_url,
 )
+from tests.tool_runtime import agent_state, invoke_runtime_tool
 
 
 class TestUrlValidation:
@@ -57,18 +58,20 @@ class TestPrivateIpDetection:
 class TestAnalyzeImageTool:
     @pytest.mark.asyncio
     async def test_rejects_http_url(self):
-        result = await analyze_image.ainvoke({
-            "image_url": "http://evil.com/img.jpg",
-            "question": "what is this",
-        })
+        result = await invoke_runtime_tool(
+            analyze_image,
+            {"question": "what is this"},
+            state=agent_state(image_url="http://evil.com/img.jpg"),
+        )
         assert "rejected" in result.lower() or "invalid" in result.lower()
 
     @pytest.mark.asyncio
     async def test_rejects_private_path(self):
-        result = await analyze_image.ainvoke({
-            "image_url": "/etc/shadow",
-            "question": "what is this",
-        })
+        result = await invoke_runtime_tool(
+            analyze_image,
+            {"question": "what is this"},
+            state=agent_state(image_url="/etc/shadow"),
+        )
         assert "rejected" in result.lower() or "invalid" in result.lower()
 
     @pytest.mark.asyncio
@@ -76,8 +79,9 @@ class TestAnalyzeImageTool:
         with patch("agents.tools.vision._load_image") as mock_load:
             mock_load.side_effect = Exception("Connection refused")
 
-            result = await analyze_image.ainvoke({
-                "image_url": "https://example.com/img.jpg",
-                "question": "describe this",
-            })
+            result = await invoke_runtime_tool(
+                analyze_image,
+                {"question": "describe this"},
+                state=agent_state(image_url="https://example.com/img.jpg"),
+            )
             assert "failed" in result.lower()

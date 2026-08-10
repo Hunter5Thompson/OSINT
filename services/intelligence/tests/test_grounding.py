@@ -5,10 +5,21 @@ from pydantic import ValidationError
 from main import GroundingEvidenceItem, QueryRequest
 from rag.evidence import format_evidence_pack, parse_evidence_refs, to_evidence_item
 
+TOKEN_JSON = {
+    "schema_version": 1,
+    "scope_key": "country:UKR",
+    "kind": "country",
+    "catalog_revision": "spatial-v1-e76a16bff799",
+    "derivation_revision": "spatial-derive-v1-d30efa07e141",
+    "boundary_policy": "odin-reference-v1",
+    "compatible_derivation_revisions": ["spatial-derive-v1-d30efa07e141"],
+}
+
 
 def test_query_request_bounds_and_allowlist():
     QueryRequest(
         query="q",
+        spatial_relation="either",
         grounding_context="ctx",
         grounding_evidence=[
             GroundingEvidenceItem(
@@ -21,7 +32,7 @@ def test_query_request_bounds_and_allowlist():
         ],
     )
     with pytest.raises(ValidationError):
-        QueryRequest(query="q", grounding_context="x" * 4001)
+        QueryRequest(query="q", spatial_relation="either", grounding_context="x" * 4001)
     with pytest.raises(ValidationError):  # source_type not in allowlist
         GroundingEvidenceItem(
             source_type="rss", provider="odin-live-signal", doc_id="d", title="t", content="c"
@@ -46,7 +57,29 @@ def test_query_request_bounds_and_allowlist():
             title="t",
             content="c",
         )
-        QueryRequest(query="q", grounding_evidence=[ok] * 7)
+        QueryRequest(query="q", spatial_relation="either", grounding_evidence=[ok] * 7)
+
+
+def test_internal_query_requires_relation_and_validates_frozen_token() -> None:
+    with pytest.raises(ValidationError):
+        QueryRequest(query="q")
+
+    request = QueryRequest(
+        query="q",
+        spatial_scope=TOKEN_JSON,
+        spatial_relation="occurrence",
+    )
+
+    assert request.spatial_scope is not None
+    assert request.spatial_scope.scope_key == "country:UKR"
+    assert request.spatial_relation.value == "occurrence"
+
+    with pytest.raises(ValidationError):
+        QueryRequest(
+            query="q",
+            spatial_scope={**TOKEN_JSON, "unexpected": True},
+            spatial_relation="either",
+        )
 
 
 def test_grounding_evidence_roundtrips_through_codec():

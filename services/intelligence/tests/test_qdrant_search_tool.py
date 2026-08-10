@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from agents.tools.qdrant_search import TOOL_OUTPUT_MAX_CHARS, qdrant_search
+from tests.tool_runtime import invoke_runtime_tool
 
 
 def _prose(min_chars: int = 80) -> str:
@@ -43,7 +44,9 @@ class TestQdrantSearchTool:
             "agents.tools.qdrant_search.enhanced_search",
             AsyncMock(side_effect=[results, []]),
         ):
-            output = await qdrant_search.ainvoke({"query": "bundeswehr strategy"})
+            output = await invoke_runtime_tool(
+                qdrant_search, {"query": "bundeswehr strategy"}
+            )
 
         assert len(output) <= TOOL_OUTPUT_MAX_CHARS
         assert output.count("[Graph Context]") == 1
@@ -68,7 +71,7 @@ class TestQdrantSearchTool:
             "agents.tools.qdrant_search.enhanced_search",
             AsyncMock(side_effect=[results, []]),
         ):
-            out = await qdrant_search.ainvoke({"query": "baltic tanker"})
+            out = await invoke_runtime_tool(qdrant_search, {"query": "baltic tanker"})
         refs = parse_evidence_refs(out)
         assert {r.provider for r in refs} == {"reuters.com", "rusi commentary"}
         assert refs[0].provider == "reuters.com"  # higher score first
@@ -91,7 +94,7 @@ class TestQdrantSearchTool:
         ]
         with patch("agents.tools.qdrant_search.enhanced_search",
                    AsyncMock(side_effect=[results, []])):
-            out = await qdrant_search.ainvoke({"query": "q" * 100})
+            out = await invoke_runtime_tool(qdrant_search, {"query": "q" * 100})
         assert len(out) <= TOOL_OUTPUT_MAX_CHARS
 
 
@@ -112,7 +115,7 @@ class TestTwoLaneScoping:
         realtime = []  # nothing cleared the 0.45 bar
         with patch("agents.tools.qdrant_search.enhanced_search",
                    self._lane_mock(analysis, realtime)):
-            out = await qs.ainvoke({"query": "taiwan strait"})
+            out = await invoke_runtime_tool(qs, {"query": "taiwan strait"})
 
         assert "CSIS" in out or "Tank view" in out
         assert "gdelt_gkg" not in out
@@ -127,7 +130,7 @@ class TestTwoLaneScoping:
                      "title": "RT lead", "content": "raw", "score": 0.6}]
         with patch("agents.tools.qdrant_search.enhanced_search",
                    self._lane_mock(analysis, realtime)):
-            out = await qs.ainvoke({"query": "kharkiv"})
+            out = await invoke_runtime_tool(qs, {"query": "kharkiv"})
 
         assert out.count('"source_class":"realtime"') == 1
 
@@ -141,7 +144,7 @@ class TestTwoLaneScoping:
                      "title": "propaganda", "content": "raw", "score": 0.9}]
         with patch("agents.tools.qdrant_search.enhanced_search",
                    self._lane_mock(analysis, realtime)):
-            out = await qs.ainvoke({"query": "donbas"})
+            out = await invoke_runtime_tool(qs, {"query": "donbas"})
 
         assert "propaganda" not in out
         assert '"source_class":"realtime"' not in out
@@ -160,7 +163,7 @@ class TestTwoLaneScoping:
         ]
         with patch("agents.tools.qdrant_search.enhanced_search",
                    self._lane_mock(analysis, [])):
-            out = await qs.ainvoke({"query": "taiwan strait"})
+            out = await invoke_runtime_tool(qs, {"query": "taiwan strait"})
 
         assert "gdelt:gkg:9" not in out
         assert "thermal anomaly" not in out
@@ -175,7 +178,7 @@ class TestTwoLaneScoping:
             "agents.tools.qdrant_search.enhanced_search",
             AsyncMock(side_effect=[analysis, RuntimeError("realtime down")]),
         ):
-            out = await qs.ainvoke({"query": "kyiv"})
+            out = await invoke_runtime_tool(qs, {"query": "kyiv"})
 
         assert "CSIS" in out or "A" in out          # analysis lane survives
         assert '"source_class":"realtime"' not in out
@@ -194,6 +197,6 @@ class TestTwoLaneScoping:
         ]
         with patch("agents.tools.qdrant_search.enhanced_search",
                    self._lane_mock(analysis, [])):
-            out = await qs.ainvoke({"query": "x"})
+            out = await invoke_runtime_tool(qs, {"query": "x"})
 
         assert out.index("TANKVIEW") < out.index("LOCALVIEW")

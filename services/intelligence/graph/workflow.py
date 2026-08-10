@@ -28,6 +28,7 @@ from graph.nodes import analyst_node, osint_node, router_node
 from graph.nodes import synthesis_node as legacy_synthesis_node
 from graph.state import AgentState
 from rag.evidence import format_evidence_pack, parse_evidence_refs, to_evidence_item
+from spatial import RetrievalSpatialRelation, SpatialScopeTokenV1
 
 logger = structlog.get_logger()
 
@@ -110,14 +111,22 @@ async def react_agent_node(state: AgentState) -> dict:
             query = state["query"]
             image_note = ""
             if state.get("image_url"):
-                image_note = f"\n\nAn image has been provided for analysis: {state['image_url']}"
+                image_note = "\n\nAn attached image is available through the vision tool."
+
+            scope = state.get("spatial_scope")
+            scope_note = (
+                f"\n\nActive server-pinned scope: {scope.scope_key} "
+                f"({state['spatial_relation'].value})."
+                if scope is not None
+                else "\n\nActive server-pinned scope: global."
+            )
 
             grounding = state.get("grounding_context") or ""
             grounding_note = f"\n\n{grounding}" if grounding else ""
 
             initial_messages = [
                 SystemMessage(content=REACT_SYSTEM_PROMPT),
-                HumanMessage(content=f"{query}{image_note}{grounding_note}"),
+                HumanMessage(content=f"{query}{image_note}{scope_note}{grounding_note}"),
             ]
             messages = list(state.get("messages", [])) + initial_messages
         else:
@@ -352,13 +361,25 @@ async def run_intelligence_query(
     region: str | None = None,
     image_url: str | None = None,
     use_legacy: bool = False,
+    *,
+    spatial_scope: SpatialScopeTokenV1 | None = None,
+    spatial_relation: RetrievalSpatialRelation = RetrievalSpatialRelation.EITHER,
     grounding_context: str | None = None,
     grounding_evidence: list[dict] | None = None,
 ) -> dict:
     """Run intelligence analysis — ReAct by default (fail-closed on failure);
     the legacy pipeline runs only when use_legacy=True."""
     mode = "legacy" if use_legacy else "react"
-    logger.info("intelligence_query_started", query=query, region=region, mode=mode)
+    pinned_scope = spatial_scope.model_copy(deep=True) if spatial_scope is not None else None
+    pinned_relation = RetrievalSpatialRelation(spatial_relation)
+    logger.info(
+        "intelligence_query_started",
+        scope_key=pinned_scope.scope_key if pinned_scope is not None else "world",
+        catalog_revision=(
+            pinned_scope.catalog_revision if pinned_scope is not None else None
+        ),
+        mode=mode,
+    )
 
     # Wire Neo4j client for graph_query tool (lazy singleton)
     _ensure_graph_client()
@@ -371,6 +392,8 @@ async def run_intelligence_query(
     initial_state: AgentState = {
         "query": query,
         "image_url": image_url,
+        "spatial_scope": pinned_scope,
+        "spatial_relation": pinned_relation,
         "grounding_context": grounding_context or "",
         "grounding_evidence_pack": grounding_evidence_pack,
         "messages": [],
@@ -417,6 +440,10 @@ async def run_intelligence_query(
             "tool_trace": [],
             "timestamp": datetime.now(UTC).isoformat(),
             "mode": "error",
+            "spatial_scope": (
+                pinned_scope.model_dump(mode="json") if pinned_scope is not None else None
+            ),
+            "spatial_relation": pinned_relation.value,
         }
 
     return {
@@ -429,6 +456,10 @@ async def run_intelligence_query(
         "tool_trace": result.get("tool_trace", []),
         "timestamp": datetime.now(UTC).isoformat(),
         "mode": mode,
+        "spatial_scope": (
+            pinned_scope.model_dump(mode="json") if pinned_scope is not None else None
+        ),
+        "spatial_relation": pinned_relation.value,
     }
 
 

@@ -8,6 +8,7 @@ from agents.react_agent import (
     should_continue,
 )
 from graph.state import AgentState
+from spatial import RetrievalSpatialRelation
 
 
 def _make_state(**overrides) -> AgentState:
@@ -15,6 +16,8 @@ def _make_state(**overrides) -> AgentState:
     base: AgentState = {
         "query": "test",
         "image_url": None,
+        "spatial_scope": None,
+        "spatial_relation": RetrievalSpatialRelation.EITHER,
         "messages": [],
         "tool_calls_count": 0,
         "iteration": 0,
