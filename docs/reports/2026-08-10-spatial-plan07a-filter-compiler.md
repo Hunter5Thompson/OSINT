@@ -14,7 +14,9 @@ Scope-Pair-Tokens und explizite ein-/zweiteilige AOI-Boxen.
 - `world` kompiliert zu `None`.
 - `about` und `occurrence` lesen getrennte Pair-Token-Felder.
 - `either` kapselt beide Bedingungen in einem `should`-Unterfilter.
-- Jede nicht-globale Scope-Abfrage verlangt zusätzlich `spatial_conflict=false`.
+- Pair-Tokens sind die positive Retrieval-Berechtigung; ein recordweites
+  Conflict-Boolean wird nicht gelesen. Conflict-only-Points besitzen keine Tokens,
+  Mixed-Points behalten nur die vom Projector zugelassenen Scope-/Relationspaare.
 - Jede Compatibility-Revision wird mit dem angefragten Scope-Key neu gepaart;
   Cross-Pair- und stale Payloads matchen nicht.
 - AOI-Felder sind fest auf `geo` begrenzt. Ein Dateline-AOI kommt als zwei bereits
@@ -28,8 +30,9 @@ erzeugt keinen ungefilterten Retry.
 
 Der Retriever akzeptiert außerdem einen strikten
 `SpatialCoverageSnapshotV1(target_projection_revision, lanes)` mit den Zählern
-`total`, `filterable`, `conflict`, `stale` und `unsupported`. Work Order 4 erzeugt
-und persistiert diese Snapshots; Work Order 3 verändert keine Corpus-Daten.
+`total`, `filterable`, `conflict`, `stale`, `unsupported`, `unprojected` und
+`audit_only`. Work Order 4 erzeugt und persistiert diese Snapshots; Work Order 3
+verändert keine Corpus-Daten.
 
 ## TDD-Nachweis
 

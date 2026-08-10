@@ -4,7 +4,7 @@
 
 **Status:** Code-Gate bestanden; operatives Staging-/Apply-Gate bewusst offen
 
-**Zielrevision des aktiven Katalogs:** `spatial-projection-v1-a5ce3a4f4657`
+**Zielrevision des aktiven Katalogs:** `spatial-projection-v1-47fec701a2a2`
 
 ## Ergebnis
 
@@ -24,10 +24,14 @@ abgewiesen.
 
 ## Restart- und Freigabevertrag
 
-- Der Modus ist als `dry-run` oder `apply` explizit.
-- Ein Dry-run ignoriert vorhandene Apply-Checkpoints, scannt immer die vollständige
+- Die öffentliche Preview besitzt keine Mutationsfähigkeit. Die öffentliche
+  Apply-Funktion verlangt einen genehmigten vollständigen Dry-run als Pflichtargument;
+  ein frei wählbarer öffentlicher Mode-Switch existiert nicht.
+- Eine Preview ignoriert vorhandene Apply-Checkpoints, scannt immer die vollständige
   Lane und schreibt weder Qdrant noch Checkpoint.
 - Ein Apply-Checkpoint ist durch `lane|target_projection_revision` identifiziert.
+- Jeder persistierte Apply-Checkpoint trägt zusätzlich den Fingerprint des
+  genehmigten Reports; ein Resume mit einem anderen Report scheitert vor Read/Write.
 - Der gespeicherte Cursor bezeichnet die nächste Seite nach dem letzten vollständig
   bestätigten Batch. Bei einem Fehler bleibt er auf dem letzten bestätigten Stand.
 - Ein bereits als vollständig markierter Apply-Job wird idempotent nicht erneut
@@ -50,12 +54,12 @@ Der Intelligence-Vertrag berechnet die Zielrevision aus kanonischem JSON über:
 
 1. Projection-Schema-Version,
 2. Pair-Token-Version `sr1`,
-3. Deriver-Version `spatial-deriver-v1`,
+3. Deriver-Version `spatial-deriver-v2`,
 4. versioniertem About-Gate,
 5. vollständiger, lexikalisch sortierter Scope→Derivationsrevision-Menge.
 
 Der aktive 204-Scope-Manifestvektor ergibt weiterhin exakt
-`spatial-projection-v1-a5ce3a4f4657`. Eine veränderte Scope-Revision plant einen Job
+`spatial-projection-v1-47fec701a2a2`. Eine veränderte Scope-Revision plant einen Job
 je eindeutiger Lane. Ein Catalog-Carry-forward mit identischer vollständiger
 Scope→Revisionsmenge plant keinen Rewrite. Eine separat persistierte vorherige
 Projektionsrevision kann Änderungen an Token-/Deriver-/Gate-Semantik auch bei
@@ -71,13 +75,18 @@ Jeder Bericht enthält vor und nach der geplanten Projektion einen
 - `conflict_points`
 - `stale_points`
 - `unsupported_points`
+- `unprojected_points`
+- `audit_only_points`
 
-Fehlende beziehungsweise noch nicht angereicherte Points bleiben als Differenz zum
-Total sichtbar. Explizit `unavailable` markierte Legacy-Points zählen auch ohne alte
-Projektionsrevision als `unsupported`. Stale-Zahl und Stale-Rate sind separat
-sichtbar. Der hermetische Contract-Vektor weist vor der Projektion
-`4 / 1 / 1 / 1 / 1` und danach `4 / 2 / 1 / 0 / 1` aus; die Stale-Rate fällt von
-`0.25` auf `0.0`.
+Die sechs Statuszähler ergeben exakt `total_points`; fehlende beziehungsweise noch
+nicht angereicherte Points heißen `unprojected_points`, und eine gültige aktuelle,
+aber tokenlose Ableitung heißt `audit_only_points`. Explizit `unavailable` markierte
+Legacy-Points zählen auch ohne alte Projektionsrevision als `unsupported`.
+`stale_rate` ist für das Promotionsgate
+`(stale_points + unprojected_points) / total_points`; der heutige unangereicherte
+Korpus kann daher nicht als `0 % stale` erscheinen. Die konstruktiv stets null
+bleibende `projected_stale_rate` wurde durch getrennte Filterable-/Unprojected-Raten
+ersetzt.
 
 ## TDD- und Verifikationsevidenz
 
@@ -110,14 +119,14 @@ Der anschließende vollständige Service-Gate ergab:
 services/intelligence
 uv sync
 uv run pytest
-387 passed
+395 passed
 uv run ruff check .
 All checks passed
 
 services/data-ingestion
 uv sync
 uv run pytest
-1363 passed, 1 skipped, 17 deselected
+1366 passed, 1 skipped, 17 deselected
 uv run ruff check .
 All checks passed
 ```

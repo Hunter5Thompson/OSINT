@@ -25,8 +25,8 @@ spatial_precision                 keyword
 spatial_catalog_revision          keyword
 spatial_projection_revision       keyword
 spatial_derivation_version        keyword
-spatial_conflict                  bool
-spatial_conflict_scope_keys       keyword[]
+spatial_conflict                  unindexed bool audit
+spatial_conflict_scope_keys       unindexed keyword[] audit
 spatial_derivation_status         unindexed keyword audit
 spatial_derivation_unavailable_reason unindexed text audit
 spatial_derivations               unindexed object[] audit
@@ -64,7 +64,8 @@ Normalizer-/Projector-Codes. Diese Felder sind nicht austauschbar.
 V1 serialisiert diese Eingaben als UTF-8-JSON mit lexikografisch sortierten
 Objektschlüsseln, Komma-/Doppelpunkt-Separators ohne Whitespace und lexikografisch
 sortierten `[ScopeKey, DerivationRevision]`-Paaren. Die About-Gate-Revision lautet
-`about-gate-v1-unique-reviewed-crosswalk-confidence-gte-0.80`. Die drei
+`about-gate-v1-unique-reviewed-crosswalk-confidence-gte-0.80`. Die Felder
+`spatial_conflict`, `spatial_conflict_scope_keys` und die drei
 `spatial_derivation_*`-Auditfelder werden nicht indiziert; `unavailable` ist ein
 expliziter Lane-Status und niemals eine globale Zuordnung.
 Die normalisierten Code-Auditfelder enthalten alle unterschiedlichen Werte eines
@@ -93,8 +94,16 @@ Ableitungsregeln:
   Ancestors materialisiert, jeder mit der Derivationsrevision genau dieses Scopes.
   Damit funktionieren Country-Queries ohne Runtime-Hierarchiejoin. `world` bleibt
   implizit: globale Queries setzen ohnehin keinen Spatial-Filter.
-- Widersprüchliche Ableitungen setzen einen Conflict-Status und werden nicht in den
-  strikten Pair-Arrays publiziert.
+- Widersprüchliche Evidenz publiziert selbst weder Pair-Tokens noch `geo`. Conflict-
+  Keys werden vor der Tokenausgabe pro Relation gesammelt. Eine ansonsten akzeptierte
+  Ableitung publiziert genau die Assignments, deren Scope-Key nicht in der
+  Konfliktmenge derselben Relation liegt. Ein Conflict in einer anderen Relation oder
+  einem anderen Scope darf valide Pair-Tokens nicht recordweit löschen.
+- Die Pair-Arrays sind die alleinige positive Retrieval-Berechtigung. Ein
+  Conflict-only-Record besitzt keine Tokens und den Status `conflict`; ein gemischter
+  Record mit mindestens einem zugelassenen Token besitzt den Status `filterable`.
+  `spatial_conflict` und `spatial_conflict_scope_keys` bleiben in beiden Fällen reine
+  Audit-Zusammenfassungen.
 - Mehrere Ableitungsbasen werden als Keyword-Liste und zusätzlich in einem nicht
   indexierten Audit-Feld `spatial_derivations` mit Relation, Scope-Key, Basis und
   Confidence gespeichert. Der Retrieval-Filter vertraut nur den reviewten Pair-Arrays.
@@ -122,8 +131,8 @@ Beispiel für ein punktgenaues Event in Admin-1:
   "spatial_basis": ["coordinate"],
   "spatial_precision": "point",
   "spatial_catalog_revision": "spatial-v1-e76a16bff799",
-  "spatial_projection_revision": "spatial-projection-v1-a5ce3a4f4657",
-  "spatial_derivation_version": "spatial-deriver-v1",
+  "spatial_projection_revision": "spatial-projection-v1-47fec701a2a2",
+  "spatial_derivation_version": "spatial-deriver-v2",
   "spatial_conflict": false,
   "spatial_conflict_scope_keys": []
 }
@@ -143,16 +152,16 @@ PAYLOAD_INDEXES.update({
     "spatial_catalog_revision": "keyword",
     "spatial_projection_revision": "keyword",
     "spatial_derivation_version": "keyword",
-    "spatial_conflict": "bool",
-    "spatial_conflict_scope_keys": "keyword",
 })
 ```
 
-Das sind weiterhin zehn Spatial-Indizes. Die zwei Pair-Token-Indizes ersetzen die
+Das sind acht Spatial-Indizes. Die zwei Pair-Token-Indizes ersetzen die
 unkorrelierten Scope-Key-Indizes; der Projektionsindex ersetzt den sachlich falschen
 scalar Derivationsindex. Indizes werden ausschließlich über den vorhandenen
 autorisierten Migration-/Doctor-Pfad erzeugt, nicht während Search und nicht
 beiläufig durch einen Writer. Sie werden vor der räumlichen Reindexierung angelegt.
+Die beiden Conflict-Felder werden nicht indiziert, weil kein Query-Compiler sie als
+Retrieval-Autorität liest.
 
 ### 16.3 Deterministischer Filter-Compiler
 
@@ -216,11 +225,7 @@ def compile_qdrant_scope_filter(
     else:
         relation_condition = Filter(should=[about, occurrence])
 
-    non_conflict = FieldCondition(
-        key="spatial_conflict",
-        match=MatchValue(value=False),
-    )
-    return Filter(must=[relation_condition, non_conflict])
+    return Filter(must=[relation_condition])
 
 
 def combine_filters(base: Filter, spatial: Filter | None) -> Filter:
@@ -239,6 +244,10 @@ mutiert deren Objekt nicht. Dieselbe Funktion kombiniert beide Lanes.
   seiner kompatiblen Derivationsrevisionen. Ein vertauschtes Parent-/Child-Paar kann
   nicht matchen. Records ohne oder außerhalb dieser Menge werden nicht still
   akzeptiert und fließen in die Coverage-/Stale-Zählung ein.
+- Der Compiler prüft kein recordweites Conflict-Boolean. Zugelassene Pair-Tokens und
+  `geo` wurden bereits evidenz-, relations- und scopespezifisch vom deterministischen
+  Projector berechnet; ein Conflict-only-Record bleibt mangels positiver Tokens
+  strukturell ausgeschlossen.
 - Der User-Query-Text und das LLM liefern weder Feldnamen noch Scope-Key.
 - Antimeridian-BBox wird nur für explizite Geo-/AOI-Projektionen benötigt und als OR aus zwei nicht-wrapenden `GeoBoundingBox`-Filtern kompiliert.
 
@@ -260,10 +269,18 @@ den Re-Enrichment-Alarm aus.
 
 Der service-lokale V1-Vertrag koppelt jeden Snapshot an genau eine
 `target_projection_revision` und enthält pro eindeutiger Lane die nichtnegativen
-Zähler `total_points`, `filterable_points`, `conflict_points`, `stale_points` und
-`unsupported_points`. Die vier Statuszähler dürfen zusammen `total_points` nicht
-überschreiten; der Rest ist fehlend/unangereichert. Retriever-Aufrufe nehmen diesen
-Snapshot zusätzlich zum kompilierten `Filter` entgegen. Work Order 4 ist der
-Besitzer seiner Erzeugung und Checkpoint-Provenance.
+Zähler `total_points`, `filterable_points`, `conflict_points`, `stale_points`,
+`unsupported_points`, `unprojected_points` und `audit_only_points`. Diese sechs
+Statuszähler ergeben **exakt** `total_points`; es gibt keinen unbenannten Rest.
+Mixed-Conflict-Records mit zugelassenen Pair-Tokens zählen als `filterable`, nicht
+als `conflict`.
+
+Für das Promotionsgate ist `stale_rate` der wirksame Zielprojektions-Gap
+`(stale_points + unprojected_points) / total_points`. Damit kann ein nie projizierter
+Korpus nicht als `0 % stale` erscheinen. `filterable_rate`, `unprojected_rate` und die
+vorhergesagte `projected_filterable_rate` bleiben separat sichtbar; ein Stale-Gap
+über 1 % blockiert. Retriever-Aufrufe nehmen diesen Snapshot zusätzlich zum
+kompilierten `Filter` entgegen. Work Order 4 ist der Besitzer seiner Erzeugung und
+Checkpoint-Provenance.
 
 ---

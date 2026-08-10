@@ -10,6 +10,8 @@
 
 **Plan-07A-Abschluss-HEAD vor diesem Handoff:** `48a72e5`
 
+**Plan-07A-Review-Remediation:** `f41d43d`
+
 **Remote:** `origin/feat/spatial-plan03` bei `bd3c10b`
 
 **Divergenz vor diesem Handoff:** ahead 6, behind 0
@@ -37,6 +39,7 @@ Vor jeder Änderung vollständig lesen:
 12. [Plan 07A](plans/2026-08-01-spatial-scope/07a-qdrant-spatial-payload.md)
 13. [Plan-06B-Review-Remediation](../reports/2026-08-09-spatial-plan06b-review-remediation.md)
 14. [Plan-07A-Abschlussverifikation](../reports/2026-08-10-spatial-plan07a-verification.md)
+15. [Plan-07A-Review-Remediation](../reports/2026-08-10-spatial-plan07a-review-remediation.md)
 
 Dann Zustand neu prüfen:
 
@@ -64,6 +67,7 @@ d186a40 docs(spatial): pair qdrant ancestor revisions
 473b4c2 feat(qdrant): write relation-specific spatial payloads
 24bc336 feat(intelligence): compile qdrant spatial filters
 48a72e5 feat(qdrant): reenrich spatial payloads restartably
+f41d43d fix(spatial): harden Plan 07A review gates
 ```
 
 Der Plan-07A-Start-Handoff ist `a0f730a docs(spatial): hand off Plan 07A`.
@@ -127,10 +131,12 @@ SpatialLaneCoverageV1
 ```
 
 Die Compiler liefern qdrant-client-`models.Filter`, keine freien Dictionaries.
-`either` ist ein geschachteltes `should`; jeder nicht-globale Filter verlangt
-zusätzlich `spatial_conflict=false`. `combine_filters` verschachtelt die bestehende
-Analysis-/Realtime-Corpus-Policy als eigenes `must` und mutiert oder flacht deren
-`should`/`must_not` nicht ab.
+`either` ist ein geschachteltes `should`. Pair-Tokens sind die alleinige positive
+Retrieval-Berechtigung; der Compiler liest kein recordweites Conflict-Boolean.
+Conflict-only-Points besitzen keine Tokens, Mixed-Points behalten ausschließlich die
+vom Projector je Relation und Scope zugelassenen Tokens. `combine_filters`
+verschachtelt die bestehende Analysis-/Realtime-Corpus-Policy als eigenes `must` und
+mutiert oder flacht deren `should`/`must_not` nicht ab.
 
 `rag.retriever.enhanced_search` akzeptiert bereits `query_filter` und
 `coverage_snapshot`. Serialisierung erfolgt erst am HTTP-Seam. Ein Empty Result macht
@@ -139,17 +145,37 @@ genau einen Search-Call und löst keinen ungefilterten Retry aus.
 ### Coverage und partielle Lanes
 
 Der V1-Snapshot ist an genau eine `target_projection_revision` gekoppelt und weist
-pro Lane `total`, `filterable`, `conflict`, `stale` und `unsupported` aus. Die
-Differenz ist fehlend/unangereichert. `unavailable` Legacy-Points zählen als
-unsupported. Fehlend, partial, stale, no-hit und Qdrant-Ausfall dürfen niemals einen
-globalen Retry auslösen.
+pro Lane `total`, `filterable`, `conflict`, `stale`, `unsupported`, `unprojected` und
+`audit_only` aus. Die sechs Statuszähler ergeben exakt `total`; es gibt keinen
+unbenannten Rest. `unavailable` Legacy-Points zählen als unsupported. Der wirksame
+Promotions-Stale-Gap ist `(stale + unprojected) / total`; über 1 % blockiert.
+Fehlend, partial, stale, no-hit und Qdrant-Ausfall dürfen niemals einen globalen
+Retry auslösen.
 
 Der aktive Projektionsfingerprint lautet
-`spatial-projection-v1-a5ce3a4f4657`. Die gemeinsame Definition liegt in:
+`spatial-projection-v1-47fec701a2a2` mit `spatial-deriver-v2`. Die gemeinsame
+Definition liegt in:
 
 - `contracts/qdrant-spatial-payload-v1.json`
 - `contracts/qdrant-spatial-writer-lanes-v1.json`
 - `contracts/spatial-batch-file-formats-v1.json`
+
+Der Payload-Vertrag umfasst 17 Indizes: neun Corpus-/Fulltext- und acht Spatial-
+Indizes. `spatial_conflict` und `spatial_conflict_scope_keys` bleiben unindizierte
+Auditfelder.
+
+### Approval-Gate für spätere Operatorpfade
+
+`preview_spatial_reenrichment(...)` besitzt keine Mutationsfähigkeit.
+`apply_spatial_reenrichment(..., approved_report=...)` verlangt strukturell einen
+genehmigten vollständigen Dry-run, validiert vor dem ersten Write einen frischen
+Vollscan und bindet dessen Fingerprint für jeden Resume im dauerhaften Checkpoint.
+Es gibt keine öffentliche Apply-API mit frei wählbarem Mode-Flag. Plan 07B oder ein
+späterer Operator-Einstiegspunkt darf ausschließlich diese Funktion verwenden.
+
+Der unabhängige read-only Review-Snapshot vom 2026-08-10 zählte 1.025.197 Points,
+nur die neun Corpus-/Fulltext-Indizes und keine Spatial-Payloads. Scoped Retrieval
+bleibt daher bis zum autorisierten Re-Enrichment korrekt leer/fail-closed.
 
 ## Konkreter Ist-Zustand, den 07B ablösen muss
 
@@ -188,11 +214,11 @@ minimal GREEN, Refactor, service-lokal verifizieren und separat committen.
 
 ```text
 services/intelligence
-387 passed
+395 passed
 ruff check .: green
 
 services/data-ingestion
-1363 passed, 1 skipped, 17 deselected
+1366 passed, 1 skipped, 17 deselected
 ruff check .: green
 ```
 

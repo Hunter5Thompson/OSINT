@@ -54,6 +54,7 @@ Das Interface hält Relationen getrennt, benötigt nur zwei Pair-Indizes und kan
 Compatibility-Menge als ein Qdrant-`MatchAny` kompilieren. `|` ist weder in der
 ScopeKey- noch in der Derivationsrevisionsgrammatik erlaubt. Das Encoding ist damit
 reversibel und injektiv, ohne Hash-Collision. Die Maximallänge beträgt 229 ASCII-Byte.
+Beide unabhängigen Encoder erzwingen diesen Grenzwert vor der Ausgabe.
 
 Qdrant dokumentiert sowohl die Nested-Alternative als auch flache exakte Keywords
 für kategoriale Paarwerte:
@@ -77,7 +78,8 @@ Work Order 2 konkretisierte die zuvor noch nicht codierte Canonicalization: sort
 kompaktes JSON, Gate-Revision
 `about-gate-v1-unique-reviewed-crosswalk-confidence-gte-0.80` und vollständige
 sortierte Scope-/Revisionspaare. Für den aktiven 204-Scope-Katalog ergibt das
-`spatial-projection-v1-a5ce3a4f4657`.
+mit der nach Review eingeführten evidenzlokalen Admission-Semantik und
+`spatial-deriver-v2` den Fingerprint `spatial-projection-v1-47fec701a2a2`.
 
 Der eingecheckte sprach-/service-neutrale Vertrag einschließlich Indexvektor und
 UA-14-Beispiel ist `contracts/qdrant-spatial-payload-v1.json`.

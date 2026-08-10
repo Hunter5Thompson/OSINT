@@ -59,7 +59,8 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
 - [x] **RED:** Test occurrence only from structured location/coordinate; about only
   from reviewed extracted entity and confidence gate; non-global ancestors only;
   separate Pair-Token arrays with each Ancestor's own revision; multiple bases/audit
-  derivations; conflict exclusion; raw code preservation;
+  derivations; relation-/scopespezifische Conflict-Admission statt recordweitem
+  Recall-Verlust; raw code preservation;
   catalog/projection/deriver separation; world omitted; and no substring geography
   inference.
 - [x] **GREEN:** Add a pure projection from Plan-06A assignments/provenance to the
@@ -93,10 +94,12 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
   one point update, cursor resume, idempotency, lane+target-projection-revision checkpoint,
   conflict/stale accounting, interrupted batch, new derivation scheduling, and
   catalog carry-forward no-op.
-- [x] **GREEN:** Implement `rag/spatial_reenrich.py` with explicit dry-run/apply and
-  machine-readable per-lane coverage. Update points atomically; never mix arrays and
-  projection provenance from different runs. Derive the target projection revision
-  from the Pair-Token version, deriver version, About-Gate policy and complete sorted
+- [x] **GREEN:** Implement `rag/spatial_reenrich.py` mit einer mutationsfreien
+  öffentlichen Preview und einem Apply, der einen genehmigten vollständigen Dry-run
+  als Pflichtargument verlangt und dessen Fingerprint im Checkpoint bindet. Emit
+  machine-readable per-lane coverage. Update points atomically; never mix arrays and projection
+  provenance from different runs. Derive the target projection revision from the
+  Pair-Token version, deriver version, About-Gate policy and complete sorted
   Scope→Derivationsrevisionen; catalog-only carry-forward keeps it stable.
 - [x] **REFACTOR:** Reuse the batch/report semantics from Plan 06A through file-format
   contracts, while keeping service deployment independent.
@@ -106,6 +109,27 @@ Update service-local schema tests/doctor checks with one shared checked-in vecto
   dry-run/reviewed apply, and capture real lane coverage/stale snapshots. This remains
   an explicit operational authorization gate and was not performed during implementation.
 - [x] **COMMIT:** `feat(qdrant): reenrich spatial payloads restartably`
+
+## Review remediation — 2026-08-10
+
+- [x] Apply ist strukturell approval-gated: Die öffentliche mutierende Funktion
+  verlangt `approved_report`; der interne Mode-Switch ist keine öffentliche API.
+  Resume akzeptiert ausschließlich denselben im Checkpoint gespeicherten
+  Report-Fingerprint.
+- [x] Coverage benennt `unprojected_points` und `audit_only_points`; alle sechs
+  Statuszähler ergeben exakt `total_points`. Der Promotions-Stale-Gap zählt alte
+  **und** nie projizierte Points, sodass ein leerer Spatial-Korpus nicht `0 %`
+  meldet. Die vorher konstruktiv immer null bleibende `projected_stale_rate` entfällt.
+- [x] Pair-Tokens sind die positive Retrieval-Berechtigung. Conflict-Evidenz erzeugt
+  keine Tokens/Geo; ein Conflict unterdrückt nur denselben Scope derselben Relation.
+  Andere valide Scopes/Relationen bleiben auffindbar. Die beiden recordweiten
+  Conflict-Felder sind unindizierte Auditfelder und der Compiler liest sie nicht.
+- [x] Die geänderte Admission-Semantik ist als `spatial-deriver-v2` im
+  Projektionsfingerprint enthalten und erzwingt vor Promotion ein vollständiges
+  Re-Enrichment.
+- [x] Der dokumentierte Grenzwert von 229 ASCII-Bytes wird in beiden unabhängigen
+  Pair-Token-Encodern erzwungen.
+- [x] **COMMIT:** `f41d43d fix(spatial): harden Plan 07A review gates`
 
 ## Exit gate and handoff
 
