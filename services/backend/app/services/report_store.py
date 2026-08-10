@@ -303,12 +303,15 @@ async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRec
     if current is None:
         return None
 
-    # merge patch over current, then re-validate so DossierMetric/MarginEntry rebuild from dicts.
-    # exclude_none drops explicit-null patch fields (nulling a required field was never valid →
-    # ReportRecord forbids it) so a PATCH like {"title": null} is a NO-OP, not a 500. Zero/empty
-    # values (confidence=0.0, findings=[]) are not None → still applied.
+    # Merge patch over current, then re-validate so DossierMetric/MarginEntry rebuild from dicts.
+    # Explicit null remains a NO-OP for ordinary fields (for example title), while the optional
+    # run snapshot has a deliberate clear operation: a later global run must be able to remove
+    # the previous scoped run's application. Zero/empty values are still applied normally.
+    patch_values = patch.model_dump(exclude_unset=True, exclude_none=True)
+    if "spatial_application" in patch.model_fields_set:
+        patch_values["spatial_application"] = patch.spatial_application
     merged = ReportRecord.model_validate(
-        {**current.model_dump(), **patch.model_dump(exclude_unset=True, exclude_none=True)}
+        {**current.model_dump(), **patch_values}
     )
     rows = await write_query(
         REPORT_UPSERT,
