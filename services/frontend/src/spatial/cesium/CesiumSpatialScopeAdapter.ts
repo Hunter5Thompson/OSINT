@@ -180,12 +180,14 @@ interface ActivePresentation {
   readonly stateRevision: number;
   readonly pickPrimitives: readonly ScopePrimitiveHandle[];
   renderPrimitives: readonly ScopePrimitiveHandle[];
-  renderLod: GeometryLod;
+  activeRenderAssetId: string | null;
+  childRenderAssetId: string | null;
 }
 
 interface AcquiredAssets {
   readonly activeAsset: BoundaryAsset | null;
-  readonly childAsset: BoundaryPackV1 | null;
+  readonly childRenderAsset: BoundaryPackV1 | null;
+  readonly childPickAsset: BoundaryPackV1 | null;
   release(): void;
 }
 
@@ -246,7 +248,7 @@ function renderDescriptorForHeight(
 ): RenderAssetDescriptor | null {
   const target = desiredLod(height);
   const candidates: readonly GeometryLod[] = target === "local"
-    ? ["local", "regional"]
+    ? ["local", "regional", "overview"]
     : target === "regional"
       ? ["regional", "overview", "local"]
       : ["overview", "regional"];
@@ -306,23 +308,33 @@ export class CesiumSpatialScopeAdapter {
     let staging: SpatialPrimitiveContainer | null = null;
     let acquired: AcquiredAssets | null = null;
     try {
-      const renderDescriptor = renderDescriptorForHeight(
+      const activeRenderDescriptor = renderDescriptorForHeight(
         input.outlineLods,
         this.runtime.getCameraHeight(),
       );
+      const childRenderDescriptor = renderDescriptorForHeight(
+        input.childrenLods,
+        this.runtime.getCameraHeight(),
+      );
       const pickDescriptor = preferredChildDescriptor(input);
-      if (renderDescriptor === null && pickDescriptor === null) {
+      if (
+        activeRenderDescriptor === null
+        && childRenderDescriptor === null
+        && pickDescriptor === null
+      ) {
         throw new Error("Spatial presentation has no renderable descriptor.");
       }
       acquired = await this.acquireAssets(
-        renderDescriptor,
+        activeRenderDescriptor,
+        childRenderDescriptor,
         pickDescriptor,
         controller.signal,
       );
       this.assertPresentationCurrent(generation, controller.signal);
       const build = await this.buildPrimitives({
         activeAsset: acquired.activeAsset,
-        childAsset: acquired.childAsset,
+        childRenderAsset: acquired.childRenderAsset,
+        childPickAsset: acquired.childPickAsset,
         stateRevision,
         includePickSurface: true,
         signal: controller.signal,
@@ -362,7 +374,8 @@ export class CesiumSpatialScopeAdapter {
         stateRevision,
         pickPrimitives: build.pickPrimitives,
         renderPrimitives: build.renderPrimitives,
-        renderLod: renderDescriptor?.lod ?? input.preferredLod,
+        activeRenderAssetId: activeRenderDescriptor?.assetId ?? null,
+        childRenderAssetId: childRenderDescriptor?.assetId ?? null,
       };
       this.updateHighWater();
       staging = null;
@@ -457,11 +470,19 @@ export class CesiumSpatialScopeAdapter {
   private async swapCameraLod(): Promise<void> {
     const active = this.active;
     if (this.disposed || active === null) return;
-    const descriptor = renderDescriptorForHeight(
+    const activeRenderDescriptor = renderDescriptorForHeight(
       active.input.outlineLods,
       this.runtime.getCameraHeight(),
     );
-    if (descriptor === null || descriptor.lod === active.renderLod) return;
+    const childRenderDescriptor = renderDescriptorForHeight(
+      active.input.childrenLods,
+      this.runtime.getCameraHeight(),
+    );
+    if (activeRenderDescriptor === null && childRenderDescriptor === null) return;
+    if (
+      (activeRenderDescriptor?.assetId ?? null) === active.activeRenderAssetId
+      && (childRenderDescriptor?.assetId ?? null) === active.childRenderAssetId
+    ) return;
     this.lodController?.abort();
     const controller = new AbortController();
     this.lodController = controller;
@@ -470,14 +491,16 @@ export class CesiumSpatialScopeAdapter {
     let staged: readonly ScopePrimitiveHandle[] = [];
     try {
       acquired = await this.acquireAssets(
-        descriptor,
-        preferredChildDescriptor(active.input),
+        activeRenderDescriptor,
+        childRenderDescriptor,
+        null,
         controller.signal,
       );
       this.assertLodCurrent(active, lodGeneration, controller.signal);
       const build = await this.buildPrimitives({
         activeAsset: acquired.activeAsset,
-        childAsset: acquired.childAsset,
+        childRenderAsset: acquired.childRenderAsset,
+        childPickAsset: null,
         stateRevision: active.stateRevision,
         includePickSurface: false,
         signal: controller.signal,
@@ -499,7 +522,8 @@ export class CesiumSpatialScopeAdapter {
       for (const primitive of staged) primitive.show = true;
       for (const primitive of active.renderPrimitives) active.container.remove(primitive);
       active.renderPrimitives = staged;
-      active.renderLod = descriptor.lod;
+      active.activeRenderAssetId = activeRenderDescriptor?.assetId ?? null;
+      active.childRenderAssetId = childRenderDescriptor?.assetId ?? null;
       staged = [];
       this.updateHighWater();
     } catch (error: unknown) {
@@ -519,29 +543,41 @@ export class CesiumSpatialScopeAdapter {
   }
 
   private async acquireAssets(
-    renderDescriptor: RenderAssetDescriptor | null,
-    childDescriptor: RenderAssetDescriptor | null,
+    activeRenderDescriptor: RenderAssetDescriptor | null,
+    childRenderDescriptor: RenderAssetDescriptor | null,
+    childPickDescriptor: RenderAssetDescriptor | null,
     signal: AbortSignal,
   ): Promise<AcquiredAssets> {
     const leases = new Map<string, BoundaryAssetLease>();
     try {
-      for (const descriptor of [renderDescriptor, childDescriptor]) {
+      for (const descriptor of [
+        activeRenderDescriptor,
+        childRenderDescriptor,
+        childPickDescriptor,
+      ]) {
         if (descriptor === null || leases.has(descriptor.assetId)) continue;
         leases.set(descriptor.assetId, await this.assets.acquire(descriptor, signal));
       }
       if (signal.aborted) throw abortError();
-      const activeAsset = renderDescriptor === null
+      const activeAsset = activeRenderDescriptor === null
         ? null
-        : leases.get(renderDescriptor.assetId)?.asset ?? null;
-      const childValue = childDescriptor === null
+        : leases.get(activeRenderDescriptor.assetId)?.asset ?? null;
+      const childRenderValue = childRenderDescriptor === null
         ? null
-        : leases.get(childDescriptor.assetId)?.asset ?? null;
-      const childAsset = childValue === null || childDescriptor === null
+        : leases.get(childRenderDescriptor.assetId)?.asset ?? null;
+      const childPickValue = childPickDescriptor === null
         ? null
-        : asBoundaryPack(childValue, childDescriptor);
+        : leases.get(childPickDescriptor.assetId)?.asset ?? null;
+      const childRenderAsset = childRenderValue === null || childRenderDescriptor === null
+        ? null
+        : asBoundaryPack(childRenderValue, childRenderDescriptor);
+      const childPickAsset = childPickValue === null || childPickDescriptor === null
+        ? null
+        : asBoundaryPack(childPickValue, childPickDescriptor);
       return {
         activeAsset,
-        childAsset,
+        childRenderAsset,
+        childPickAsset,
         release: () => {
           for (const lease of leases.values()) lease.release();
         },
