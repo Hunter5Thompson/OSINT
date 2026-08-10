@@ -20,7 +20,7 @@ from agents.react_agent import (
 )
 from agents.synthesis_agent import create_synthesis_llm
 from agents.synthesis_agent import get_system_message as synthesis_sys
-from agents.tools import ALL_TOOLS
+from agents.tools import ALL_TOOLS, tools_for_state
 from agents.tools.graph_query import set_graph_client
 from config import settings
 from distill_capture import capture_synthesis_input
@@ -126,7 +126,7 @@ async def react_agent_node(state: AgentState) -> dict:
     logger.info("react_agent_node", iteration=state.get("iteration", 0))
 
     try:
-        llm = create_react_agent()
+        llm = create_react_agent(tools_for_state(state))
 
         # Build messages for LLM invocation
         if state.get("iteration", 0) == 0:

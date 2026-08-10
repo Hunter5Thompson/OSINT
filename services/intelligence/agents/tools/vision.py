@@ -18,6 +18,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import ToolRuntime
 from PIL import Image
 
+from agents.tools.capabilities import tool_allowed_for_state
 from config import settings
 from graph.state import AgentState
 
@@ -137,9 +138,11 @@ async def analyze_image(
     Args:
         question: Specific question about the image content.
     """
-    image_url = runtime.state.get("image_url")
-    if image_url is None:
-        return "No attached image is available for this run."
+    if not tool_allowed_for_state("analyze_image", runtime.state):
+        return "SPATIAL_SCOPE_UNSUPPORTED: analyze_image requires an attached image"
+
+    image_url = runtime.state["image_url"]
+    assert image_url is not None
     if not validate_image_url(image_url):
         return (
             f"Image URL rejected: '{image_url}'. "

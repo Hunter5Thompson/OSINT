@@ -109,7 +109,11 @@ async def test_react_failure_propagates_instead_of_silent_legacy_fallback() -> N
         patch("graph.workflow._ensure_graph_client"),
         pytest.raises(RuntimeError, match="react exploded"),
     ):
-        await run_intelligence_query("test query", use_legacy=False)
+        await run_intelligence_query(
+            "test query",
+            use_legacy=False,
+            spatial_scope=_token("country:UKR", "d30efa07e141"),
+        )
 
     # The ReAct path must not silently fall back to the legacy pipeline.
     legacy.ainvoke.assert_not_awaited()

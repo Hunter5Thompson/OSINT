@@ -114,7 +114,7 @@ async def test_grounding_reaches_react_seed_and_synthesis_sources(monkeypatch):
             captured["messages"] = messages
             return AIMessage(content="done")  # no tool_calls → routes to synthesis
 
-    monkeypatch.setattr(wf, "create_react_agent", lambda: FakeReact())
+    monkeypatch.setattr(wf, "create_react_agent", lambda _tools: FakeReact())
     seed_state = {
         "query": "Lage Iran",
         "image_url": None,
