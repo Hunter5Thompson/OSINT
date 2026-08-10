@@ -85,3 +85,18 @@ class TestAnalyzeImageTool:
                 state=agent_state(image_url="https://example.com/img.jpg"),
             )
             assert "failed" in result.lower()
+            mock_load.assert_awaited_once_with("https://example.com/img.jpg")
+
+    @pytest.mark.asyncio
+    async def test_without_attached_image_is_blocked_before_loading(self):
+        with patch(
+            "agents.tools.vision._load_image",
+            side_effect=AssertionError("image load must not run"),
+        ):
+            result = await invoke_runtime_tool(
+                analyze_image,
+                {"question": "describe this"},
+                state=agent_state(image_url=None),
+            )
+
+        assert result.startswith("SPATIAL_SCOPE_UNSUPPORTED")

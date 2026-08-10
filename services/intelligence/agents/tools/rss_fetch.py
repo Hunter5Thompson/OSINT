@@ -7,14 +7,20 @@ from urllib.parse import urlparse
 import httpx
 import structlog
 from langchain_core.tools import tool
+from langgraph.prebuilt import ToolRuntime
 
+from agents.tools.capabilities import tool_allowed_for_state
+from graph.state import AgentState
 from rag.evidence import format_evidence_pack, to_evidence_item
 
 logger = structlog.get_logger()
 
 
 @tool
-async def rss_fetch(feed_url: str) -> str:
+async def rss_fetch(
+    feed_url: str,
+    runtime: ToolRuntime[dict[str, object], AgentState],
+) -> str:
     """Fetch and parse an RSS feed to get recent articles.
 
     Args:
@@ -25,6 +31,9 @@ async def rss_fetch(feed_url: str) -> str:
         article (provider = article domain, source_type = rss, published_at from
         pubDate, url, ...) followed by Title/Excerpt lines. Newest-first.
     """
+    if not tool_allowed_for_state("rss_fetch", runtime.state):
+        return "SPATIAL_SCOPE_UNSUPPORTED: rss_fetch"
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(feed_url)

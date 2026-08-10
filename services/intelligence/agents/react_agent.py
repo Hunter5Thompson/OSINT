@@ -6,10 +6,12 @@ Guard logic enforces max_tool_calls and max_iterations.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import structlog
+from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 
-from agents.tools import ALL_TOOLS
 from config import settings
 from graph.state import AgentState
 
@@ -123,7 +125,7 @@ statt eine Zahl zu erfinden.
 """
 
 
-def create_react_agent() -> ChatOpenAI:
+def create_react_agent(tools: Sequence[BaseTool]) -> ChatOpenAI:
     """Create the ReAct agent LLM with tools bound."""
     llm = ChatOpenAI(
         base_url=settings.llm_base_url,
@@ -133,7 +135,7 @@ def create_react_agent() -> ChatOpenAI:
         max_tokens=2000,
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
-    return llm.bind_tools(ALL_TOOLS)
+    return llm.bind_tools(tools)
 
 
 def guard_check(state: AgentState) -> str:

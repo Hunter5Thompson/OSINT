@@ -3,16 +3,21 @@
 import httpx
 import structlog
 from langchain_core.tools import tool
+from langgraph.prebuilt import ToolRuntime
 
+from agents.tools.capabilities import tool_allowed_for_state
+from config import settings
+from graph.state import AgentState
 from rag.evidence import format_evidence_pack, to_evidence_item
 
 logger = structlog.get_logger()
 
-GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
-
-
 @tool
-async def gdelt_query(query: str, max_records: int = 20) -> str:
+async def gdelt_query(
+    query: str,
+    runtime: ToolRuntime[dict[str, object], AgentState],
+    max_records: int = 20,
+) -> str:
     """Query GDELT DOC-API for breaking news (last 24-72h coverage window).
 
     GDELT covers global news in 65+ languages updated every 15 minutes —
@@ -43,6 +48,9 @@ async def gdelt_query(query: str, max_records: int = 20) -> str:
         by Title/Excerpt lines. Ordered newest-first. Note: GDELT seendate is an
         observation timestamp, so published_at is intentionally null.
     """
+    if not tool_allowed_for_state("gdelt_query", runtime.state):
+        return "SPATIAL_SCOPE_UNSUPPORTED: gdelt_query"
+
     try:
         params = {
             "query": query,
@@ -53,7 +61,7 @@ async def gdelt_query(query: str, max_records: int = 20) -> str:
         }
 
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(GDELT_API_URL, params=params)
+            resp = await client.get(settings.gdelt_api_url, params=params)
             resp.raise_for_status()
             try:
                 data = resp.json()
