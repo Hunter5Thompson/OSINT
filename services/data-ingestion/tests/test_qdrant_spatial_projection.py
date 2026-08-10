@@ -198,6 +198,42 @@ def test_conflict_is_audited_but_never_published_as_filterable(
     assert "geo" not in payload
 
 
+@pytest.mark.parametrize(
+    ("spatial_conflict", "conflict_scope_keys"),
+    [
+        (False, ("country:UKR",)),
+        (True, ()),
+    ],
+)
+def test_projection_rejects_inconsistent_conflict_flag_and_keys(
+    spatial_index: SpatialNormalizationIndex,
+    spatial_conflict: bool,
+    conflict_scope_keys: tuple[str, ...],
+) -> None:
+    from qdrant_spatial import SpatialProjectionError, project_spatial_payload
+
+    evidence = _evidence(
+        RawLocationIdentity(
+            country_code="UKR",
+            country_code_system=CountryCodeSystem.ISO3,
+        ),
+        spatial_index,
+    )
+    poisoned = evidence.model_copy(
+        update={
+            "normalization": evidence.normalization.model_copy(
+                update={
+                    "spatial_conflict": spatial_conflict,
+                    "spatial_conflict_scope_keys": conflict_scope_keys,
+                }
+            )
+        }
+    )
+
+    with pytest.raises(SpatialProjectionError, match="conflict flag and scope keys"):
+        project_spatial_payload([poisoned], spatial_index)
+
+
 def test_conflict_preserves_independent_valid_relation_assignments(
     spatial_index: SpatialNormalizationIndex,
 ) -> None:

@@ -196,11 +196,19 @@ def project_spatial_payload(
             raise SpatialProjectionError(
                 "normalization catalog revision does not match projection index"
             )
+        has_conflict_keys = bool(result.spatial_conflict_scope_keys)
+        if (
+            result.spatial_conflict is not has_conflict_keys
+            or (result.status == "conflict") is not has_conflict_keys
+        ):
+            raise SpatialProjectionError(
+                "normalization conflict flag and scope keys disagree"
+            )
         assignments = _audit_assignments(result, index)
         reason = _filter_reason(item, assignments)
         candidates.append((item, assignments, reason))
-        conflict_scope_keys.update(result.spatial_conflict_scope_keys)
         if result.spatial_conflict:
+            conflict_scope_keys.update(result.spatial_conflict_scope_keys)
             conflicts_by_relation[item.relation].update(
                 result.spatial_conflict_scope_keys
             )
@@ -214,7 +222,7 @@ def project_spatial_payload(
             admin1_codes.add(result.admin1_code)
         if result.admin2_code is not None:
             admin2_codes.add(result.admin2_code)
-    has_conflict = any(item.normalization.spatial_conflict for item in ordered)
+    has_conflict = bool(conflict_scope_keys)
     about_assignments: set[tuple[int, str, str]] = set()
     occurrence_assignments: set[tuple[int, str, str]] = set()
     points: set[tuple[float, float]] = set()
