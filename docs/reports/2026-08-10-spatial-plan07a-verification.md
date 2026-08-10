@@ -6,6 +6,8 @@
 
 **Implementierungs-HEAD:** `48a72e5`
 
+**Review-Remediation-HEAD:** `f41d43d`
+
 **Status:** Plan 07A code-seitig abgeschlossen; operative Qdrant-Promotion offen
 
 ## Abgenommenes Ergebnis
@@ -35,8 +37,10 @@ Qdrant-weiten Scalar `spatial_derivation_revision` gibt es nicht.
 ### Payload und Indizes
 
 `contracts/qdrant-spatial-payload-v1.json` pinnt Pair-Token, aktiven UA-14-Vektor,
-Projektionsfingerprint und alle 19 Payload-Indizes: neun bestehende Corpus-/Fulltext-
-Indizes plus zehn Spatial-Indizes. Falsche Qdrant-Typen failen. Nur
+Projektionsfingerprint und alle 17 Payload-Indizes: neun bestehende Corpus-/Fulltext-
+Indizes plus acht Spatial-Indizes. `spatial_conflict` und
+`spatial_conflict_scope_keys` bleiben unindizierte Auditfelder. Falsche Qdrant-Typen
+failen. Nur
 `services/intelligence/scripts/ensure_payload_indexes.py` darf fehlende Indizes
 erstellen; Search und Writer validieren beziehungsweise melden ausschließlich.
 
@@ -52,11 +56,13 @@ explizit nicht unterstützten Writer-Lanes. Filterbare Projektion entsteht nur a
   `about`.
 
 Titel-, Theme-, Querytext-, Ortsnamen- oder Substring-Raten ist ausgeschlossen.
-Conflicts publizieren keine filterbaren Pair-Tokens. Nicht migrierte Lanes markieren
-die Ableitung explizit als `unavailable`.
+Conflict-Evidenz publiziert selbst keine filterbaren Pair-Tokens oder Geo. Sie
+unterdrückt nur denselben Scope derselben Relation; valide unabhängige Evidenz
+bleibt auffindbar. Nicht migrierte Lanes markieren die Ableitung explizit als
+`unavailable`.
 
 Der aktive vollständige 204-Scope-Katalog ergibt deterministisch
-`spatial-projection-v1-a5ce3a4f4657`. Der Fingerprint enthält Pair-Token-Version,
+`spatial-projection-v1-47fec701a2a2`. Der Fingerprint enthält Pair-Token-Version,
 Deriver-Version, About-Gate und die vollständige sortierte
 Scope→Derivationsrevision-Menge, nicht die Katalogprovenance.
 
@@ -67,7 +73,8 @@ Scope→Derivationsrevision-Menge, nicht die Katalogprovenance.
 - `world` → kein Spatial-Filter;
 - `about`/`occurrence` → exakter Match auf das jeweilige Pair-Token-Feld;
 - `either` → geschachteltes `should` über beide Relationen;
-- jeder nicht-globale Scope zusätzlich mit `spatial_conflict=false`;
+- jeder nicht-globale Scope ausschließlich über vom Projector zugelassene positive
+  Pair-Tokens; kein recordweites Conflict-Prädikat;
 - AOI nur über ein oder zwei vorsegmentierte, finite Bounding Boxes auf `geo`.
 
 Analysis-/Realtime-Corpus-Policy bleibt als unverändertes äußeres Filterobjekt
@@ -80,12 +87,15 @@ Zielprojektion gebundenen `SpatialCoverageSnapshotV1` mitführen.
 `contracts/spatial-batch-file-formats-v1.json` und
 `services/intelligence/rag/spatial_reenrich.py` definieren:
 
-- vollständige Dry-runs ohne Writes oder Checkpoint-Mutation;
-- Apply-Checkpoint `lane|target_projection_revision` nach bestätigtem Batch;
+- vollständige Previews ohne Writes oder Checkpoint-Mutation;
+- Apply nur mit genehmigtem vollständigem Dry-run als Pflichtargument;
+- Apply-Checkpoint `lane|target_projection_revision` plus genehmigtem
+  Report-Fingerprint nach bestätigtem Batch;
 - Cursor-Resume und idempotente Completed-Jobs;
 - vollständigen Point-Upsert mit erhaltenem Vektor/Non-Spatial-Payload;
 - Entfernung aller alten `spatial_*`-, `geo`- und Raw-Code-Projektionsfelder;
-- per-Lane Coverage vor und nach Projektion inklusive Stale-Rate;
+- exakte per-Lane Coverage vor und nach Projektion inklusive benanntem
+  Unprojected-/Audit-only-Anteil und wirksamem Stale-Gap;
 - kanonischen Report-Fingerprint und Driftprüfung eines reviewten Dry-runs;
 - Scheduling nur bei verändertem Projektionsfingerprint; Catalog-Carry-forward mit
   unveränderter Scope→Revisionsmenge ist ein No-op.
@@ -98,6 +108,7 @@ d186a40 docs(spatial): pair qdrant ancestor revisions
 473b4c2 feat(qdrant): write relation-specific spatial payloads
 24bc336 feat(intelligence): compile qdrant spatial filters
 48a72e5 feat(qdrant): reenrich spatial payloads restartably
+f41d43d fix(spatial): harden Plan 07A review gates
 ```
 
 Der vorausgehende Handoff-Commit ist
@@ -109,14 +120,14 @@ Der vorausgehende Handoff-Commit ist
 cd services/intelligence
 uv sync
 uv run pytest
-387 passed
+395 passed
 uv run ruff check .
 All checks passed
 
 cd services/data-ingestion
 uv sync
 uv run pytest
-1363 passed, 1 skipped, 17 deselected
+1366 passed, 1 skipped, 17 deselected
 uv run ruff check .
 All checks passed
 ```

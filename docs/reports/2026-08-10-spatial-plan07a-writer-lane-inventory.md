@@ -48,10 +48,11 @@ keinen Spatial-Index an, NLM besaß keinen reviewten Crosswalk-Seam und der
 Intelligence-Indexer keinen expliziten Unsupported-Payloadbuilder.
 
 Die grüne Projektion materialisiert je Relation atomare Parent-/Child-Pair-Tokens,
-behält rohe Codes je Audit-Ableitung, löscht bei einem Record-Conflict sämtliche
-filterbaren Relationen und trennt Katalog-, Projektions- und Deriver-Provenance. Der
-aktive 204-Scope-Vertrag ergibt mit der vollständig codierten V1-Canonicalization
-`spatial-projection-v1-a5ce3a4f4657`.
+behält rohe Codes je Audit-Ableitung und trennt Katalog-, Projektions- und
+Deriver-Provenance. Conflict-Evidenz erzeugt selbst keine Tokens oder Geo; die
+Admission unterdrückt nur denselben Scope derselben Relation und erhält unabhängige
+valide Tokens. Der aktive 204-Scope-Vertrag ergibt mit `spatial-deriver-v2`
+`spatial-projection-v1-47fec701a2a2`.
 
 Fokussierte Verifikation aus den Service-Verzeichnissen:
 

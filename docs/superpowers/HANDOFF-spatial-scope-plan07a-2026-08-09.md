@@ -124,20 +124,28 @@ spatial_precision                 keyword
 spatial_catalog_revision          keyword
 spatial_projection_revision       keyword
 spatial_derivation_version        keyword
-spatial_conflict                  bool
-spatial_conflict_scope_keys       keyword[]
+spatial_conflict                  unindexed bool audit
+spatial_conflict_scope_keys       unindexed keyword[] audit
 ```
 
 Zusätzlich bleiben die rohen, auditierbaren Codefelder aus Spec 09 erhalten. Die
-zehn oben genannten Felder besitzen gemäß Spec 09 §16.2 Payload-Indizes mit exakt
-den Typen Keyword/Geo/Bool. Bestehende neun Corpus-/Fulltext-Indizes dürfen bei der
-Erweiterung nicht verloren gehen.
+acht Retrieval-/Provenance-Felder besitzen gemäß Spec 09 §16.2 Payload-Indizes mit
+exakt den Typen Keyword/Geo. Die beiden Conflict-Felder werden vom Compiler nicht
+gelesen und bleiben unindiziert. Bestehende neun Corpus-/Fulltext-Indizes dürfen bei
+der Erweiterung nicht verloren gehen.
 
 `occurrence` darf nur aus einer strukturierten Event-/Sensor-Location oder einer
 belastbaren Koordinate entstehen. `about` darf nur aus einer explizit extrahierten,
 eindeutig gecrosswalkten Geo-Entität oberhalb des versionierten Confidence-Gates
 entstehen. Audit-Derivationen dürfen mehr enthalten als die filterbaren Arrays; der
 deterministische Projector entscheidet, nicht das Retrieval-LLM.
+
+Conflict-Admission ist relations- und scopespezifisch: Conflict-Evidenz publiziert
+selbst keine Pair-Tokens oder `geo`; sie darf aber valide Tokens eines anderen Scopes
+oder einer anderen Relation nicht recordweit löschen. Die Pair-Arrays sind die
+alleinige positive Retrieval-Berechtigung. Mixed-Records mit mindestens einem
+zugelassenen Token sind filterbar und behalten die recordweiten Conflict-Felder nur
+für Audit.
 
 Ein Re-Enrichment ersetzt **alle** `spatial_*`-Felder eines Points atomar. Es darf
 niemals Arrays aus Lauf A mit scalar Revisionen aus Lauf B mischen.
@@ -309,7 +317,7 @@ Services.
 Die ersten fehlschlagenden Tests müssen beweisen:
 
 1. Alle neun bestehenden Payload-Indizes bleiben erhalten.
-2. Alle zehn Spatial-Indizes aus Spec 09 §16.2 sind mit dem exakten Qdrant-Typ
+2. Alle acht Spatial-Indizes aus Spec 09 §16.2 sind mit dem exakten Qdrant-Typ
    vorhanden.
 3. Ein vorhandener Index mit falschem Typ wird fail-closed abgelehnt und nicht als
    „vorhanden“ akzeptiert.
@@ -358,11 +366,15 @@ Folgende Arbeiten sind ohne neue ausdrückliche Freigabe **nicht** Teil des Star
 Vor einem späteren Qdrant-Apply gelten mindestens:
 
 1. autorisierte Indizes vor Re-Enrichment;
-2. reviewter Dry-run und machine-readable Coverage pro Corpus-Lane;
-3. restartbarer Cursor und lane+target-projection-revision Checkpoint;
+2. reviewter vollständiger Dry-run als Pflichtargument des Apply-Pfads und
+   machine-readable Coverage pro Corpus-Lane;
+3. restartbarer Cursor und lane+target-projection-revision Checkpoint, gebunden an
+   den genehmigten Report-Fingerprint;
 4. atomischer Ersatz aller `spatial_*`-Felder;
-5. sichtbares Conflict-/Stale-/Unsupported-Accounting;
-6. Stale-Anteil über 0 sichtbar, über 1 % promotionsblockierend;
+5. exaktes benanntes Filterable-/Conflict-/Stale-/Unsupported-/Unprojected-/
+   Audit-only-Accounting ohne Rest;
+6. wirksamer Stale-Gap `(stale + unprojected) / total` über 0 sichtbar, über 1 %
+   promotionsblockierend;
 7. keine ungefilterte Retry- oder Fallback-Route.
 
 Eine reine Katalog-Carry-forward-Revision mit identischer Derivationsrevision darf
