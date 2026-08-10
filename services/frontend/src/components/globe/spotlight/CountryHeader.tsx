@@ -50,7 +50,7 @@ export function SpatialCountryHeader({
           <dd>{capital.name} · {capital.lat.toFixed(2)}N {capital.lon.toFixed(2)}E</dd>
         </dl>
       ) : null}
-      <SpatialCountryAlmanacPanel facts={facts} />
+      <SpatialCountryAlmanacPanel facts={facts} query={committedQuery} />
     </div>
   );
 }

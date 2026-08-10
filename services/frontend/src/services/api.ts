@@ -86,14 +86,20 @@ export async function getCountryAlmanac(
   return (await res.json()) as CountryAlmanac;
 }
 
+function spatialCountryParameters(
+  query: Pick<SpatialQueryRef, "scopeKey" | "catalogRevision">,
+): URLSearchParams {
+  return new URLSearchParams({
+    scope_key: query.scopeKey,
+    catalog_revision: query.catalogRevision,
+  });
+}
+
 export async function getSpatialCountryAlmanac(
   query: Pick<SpatialQueryRef, "scopeKey" | "catalogRevision">,
   signal?: AbortSignal,
 ): Promise<CountryAlmanac> {
-  const parameters = new URLSearchParams({
-    scope_key: query.scopeKey,
-    catalog_revision: query.catalogRevision,
-  });
+  const parameters = spatialCountryParameters(query);
   const res = await fetch(`/api/almanac/country?${parameters.toString()}`, {
     headers: { Accept: "application/json" },
     signal,
@@ -102,6 +108,23 @@ export async function getSpatialCountryAlmanac(
     throw new Error(`spatial country almanac failed: ${res.status} ${res.statusText}`);
   }
   return (await res.json()) as CountryAlmanac;
+}
+
+export async function getSpatialCountryAlmanacSignals(
+  query: Pick<SpatialQueryRef, "scopeKey" | "catalogRevision">,
+  limit = 5,
+  signal?: AbortSignal,
+): Promise<AlmanacSignalResponse> {
+  const parameters = spatialCountryParameters(query);
+  parameters.set("limit", String(limit));
+  const res = await fetch(`/api/almanac/country/signals?${parameters.toString()}`, {
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`spatial country signals failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as AlmanacSignalResponse;
 }
 
 export async function getCountryAlmanacSignals(
@@ -340,15 +363,28 @@ export function streamCountryBriefing(
   onError: SSEHandlers["onError"],
   onDone: SSEHandlers["onDone"],
 ): AbortController {
-  const controller = new AbortController();
-  fetch(
+  return streamCountryBriefingAt(
     `${BASE}/almanac/countries/${encodeURIComponent(countryId)}/briefing`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
-    },
-  )
+    onStatus,
+    onResult,
+    onError,
+    onDone,
+  );
+}
+
+function streamCountryBriefingAt(
+  url: string,
+  onStatus: SSEHandlers["onStatus"],
+  onResult: SSEHandlers["onResult"],
+  onError: SSEHandlers["onError"],
+  onDone: SSEHandlers["onDone"],
+): AbortController {
+  const controller = new AbortController();
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: controller.signal,
+  })
     .then(async (res) => {
       if (!res.ok || !res.body) {
         onError(`HTTP ${res.status}`);
@@ -364,6 +400,23 @@ export function streamCountryBriefing(
       }
     });
   return controller;
+}
+
+export function streamSpatialCountryBriefing(
+  query: SpatialQueryRef,
+  onStatus: SSEHandlers["onStatus"],
+  onResult: SSEHandlers["onResult"],
+  onError: SSEHandlers["onError"],
+  onDone: SSEHandlers["onDone"],
+): AbortController {
+  const parameters = spatialCountryParameters(query);
+  return streamCountryBriefingAt(
+    `${BASE}/almanac/country/briefing?${parameters.toString()}`,
+    onStatus,
+    onResult,
+    onError,
+    onDone,
+  );
 }
 
 /**
@@ -382,6 +435,25 @@ export async function saveCountryBriefing(
     },
   );
   if (!res.ok) throw new Error(`briefing save failed: ${res.status}`);
+  return (await res.json()) as ReportRecord;
+}
+
+export async function saveSpatialCountryBriefing(
+  query: SpatialQueryRef,
+  analysis: IntelAnalysis,
+  signal?: AbortSignal,
+): Promise<ReportRecord> {
+  const parameters = spatialCountryParameters(query);
+  const res = await fetch(
+    `${BASE}/almanac/country/briefing/save?${parameters.toString()}`,
+    {
+      method: "POST",
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ analysis }),
+      signal,
+    },
+  );
+  if (!res.ok) throw new Error(`spatial briefing save failed: ${res.status}`);
   return (await res.json()) as ReportRecord;
 }
 
