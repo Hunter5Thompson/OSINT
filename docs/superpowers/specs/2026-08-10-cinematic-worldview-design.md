@@ -1,7 +1,8 @@
 # Cinematic WorldView — Cesium Scene and Scoped Data Visualization
 
 - **Spec-Datum:** 2026-08-10
-- **Status:** Draft — adversariales Review erforderlich, nicht umsetzungsfreigegeben
+- **Status:** Draft — Required Fixes aus adversarialem Review eingearbeitet;
+  Abschluss-Re-Review erforderlich, nicht umsetzungsfreigegeben
 - **Betroffene Systeme:** Hlíðskjalf/WorldView, Spatial Scope, CHRONIK, Backend-Spatial-Adapter und Spatial-Catalog-Build
 - **Technischer Rahmen:** React 19, TypeScript strict, CesiumJS 1.142, vorhandene CSS-/SVG-/Canvas-Werkzeuge
 - **Entwurfsart:** Clean-room. Das externe `three-scope-map-skill` dient nur als Referenz für die allgemeine visuelle Grammatik aus Licht, Tiefe, Bewegung und hierarchischem Drilldown. Quellcode, Assets, Shader, Daten, Texte, Komponentenstruktur und Framework-Entscheidungen werden nicht übernommen.
@@ -27,20 +28,24 @@ Three.js-WorldView-Pfad ein.
 
 ## 2. Normative Präzedenz und Review-Gate
 
-Bis zu einem dokumentierten Review-PASS bleibt der freigegebene
-[Spatial-Scope-Spec-Satz](2026-07-31-spatial-scope-drilldown-design.md) normativ. Diese
-Draft-Spec ändert noch keinen bestehenden Vertrag.
+Der freigegebene
+[Spatial-Scope-Spec-Satz](2026-07-31-spatial-scope-drilldown-design.md) bleibt
+normativ. Die Required Fixes des ersten adversarialen Reviews wurden in ihren
+einzigen normativen Heimaten gelandet:
 
-Bei Freigabe ersetzt diese Spec ausschließlich folgende frühere Produktentscheidungen:
+- `01 §4.2` besitzt die globale Trennung zwischen Clean-room-Stagecraft und
+  quantitativer Datenkodierung;
+- `06 §12.1` besitzt Presentation-Port, einzigen Cesium-Root, Scene-State-Lease und
+  Post-Process-Ownership;
+- `11 §18.2/§18.5/§19` besitzt Keyboard-Äquivalenz, Motion-Policy und
+  Spatial-Metric-Verträge;
+- `14 §26/§28` besitzt Mode-Matrix, Rollback und die eng gefassten abgelehnten
+  Alternativen;
+- der Spatial-Index registriert diese Verträge und diese Erweiterungs-Spec.
 
-1. `01 §4.2` und `14 §28` verwerfen bisher jede Übernahme der visuellen Grammatik,
-   dekorative Extrusion und Fly-Lines. Künftig wird zwischen nicht-quantitativer
-   **Stagecraft** und quantitativer **Datenkodierung** unterschieden.
-2. `11 §18.5` verbietet bisher jede dauerlaufende dekorative Animation. Künftig sind
-   budgetierte, pausierbare Ambient-Bewegungen zulässig, sofern Reduced Motion und
-   die statische Qualitätsstufe semantisch vollständig bleiben.
-3. `11 §19` bleibt normative Grundlage datengetriebener 3D-Metriken und wird durch
-   diese Spec konkretisiert, nicht abgeschwächt.
+Diese Spec besitzt ausschließlich die neuen Cinematic-Scene-, Frame-, Lens- und
+Diagnostics-Verträge. Sie dupliziert die vorgenannten Regeln nicht als Override.
+Bis zum dokumentierten Abschluss-PASS sind auch ihre neuen Verträge Draft.
 
 Unverändert normativ bleiben insbesondere:
 
@@ -117,8 +122,9 @@ Transformation von Weltlage zu regionalem Lagebild.
    ihre textuellen Consumer.
 7. Ein zentraler Clock- und Quality-Pfad ersetzt unkoordinierte Daueranimationen.
 8. Die Szene bleibt über lange COP-Sitzungen performant, zugänglich und leak-frei.
-9. Ukraine und Deutschland bilden die erste reviewte Admin-1-Produktabdeckung; der
-   Renderer enthält keinerlei landesspezifischen Sondercode.
+9. Ukraine bildet die erste belegte Admin-1-Produktabdeckung. Deutschland folgt erst
+   nach eigenem Source-Lock-/Catalog-Promotion-Gate; der Renderer enthält keinerlei
+   landesspezifischen Sondercode.
 10. Der erste sichtbare End-to-End-Slice wird vor einer breiten Layer-Migration
     visuell abgenommen.
 
@@ -149,9 +155,8 @@ Transformation von Weltlage zu regionalem Lagebild.
 - Atmosphäre, Starfield, Grain und Graticule;
 - ein kurzer Target-Scan nach expliziter Auswahl;
 - Kameraeasing, Reveal und kontrolliertes Dimming des Kontexts;
-- ein deterministischer Selection-Lift, der ausschließlich Scope und Kameraextent
-  folgt und nie aus Datenwerten berechnet wird;
-- statische Basisringe oder ein Scope-Sockel als Auswahlrahmen;
+- flache, nicht pickbare Auswahlkonturen und statische Basisringe mit je Scope-Klasse
+  festen Parametern;
 - zeitlich begrenzter Glow und Bloom.
 
 Stagecraft darf nicht wie eine Legende, Skala oder Datenintensität aussehen. Sie ist
@@ -228,11 +233,12 @@ Der Standardflug besitzt drei visuelle Phasen:
 
 | Phase | Ziel | Richtwert |
 |---|---|---:|
-| Acquire | Kontext dimmen, Zielkontur aufbauen | 250–450 ms |
-| Travel | Bogenflug mit Heading/Pitch/Range-Easing | 1.2–2.2 s |
-| Reveal | regionale Flächen und Datenmarks einblenden | 300–700 ms |
+| Acquire | Kontext dimmen, Zielkontur aufbauen | 250–400 ms |
+| Travel | Bogenflug mit Heading/Pitch/Range-Easing | 1.2–2.0 s |
+| Reveal | regionale Flächen und Datenmarks einblenden | 300–600 ms |
 
-Die Gesamtdauer überschreitet im Normalfall 3,2 Sekunden nicht. Pointer-, Wheel- oder
+Die Phasen dauern höchstens `400 + 2.000 + 600 = 3.000 ms`; die Gesamtdauer
+überschreitet einschließlich Scheduling-Toleranz 3,2 Sekunden nicht. Pointer-, Wheel- oder
 Keyboard-Kameraeingabe beendet den Flug sofort, nicht aber den committed Scope.
 Reduced Motion verwendet dasselbe Endziel mit Dauer `0` und einen statischen Reveal.
 
@@ -245,9 +251,11 @@ Ein Country mit reviewten Children zeigt alle direkten Admin-1-Kinder vollständ
 Die Kamera endet in einer schrägen 2,5D-Perspektive. Der Hintergrund wird zu einer
 ruhigen dunklen kartographischen Bühne; Terrain und Gebäude sind hier sekundär.
 
-Ohne aktive Metrik besitzen alle Child-Surfaces dieselbe Basishöhe. Hover verwendet
+Ohne aktive Metrik sind alle Child-Surfaces flache Ground-Primitives mit identischen
+Styleparametern. Hover verwendet
 eine separate, kurzlebige Overlay-Primitive und verändert weder Pick-Geometrie noch
-Scope. Mit aktiver Metrik kodieren variable Höhe und Farbe genau diese eine Metrik.
+Scope. Mit aktiver Metrik kodiert zunächst Farbe genau diese eine Metrik; Höhe kommt
+nur nach dem separaten Extrusions-Promotion-Gate hinzu.
 
 Ein Country ohne Admin-1-Katalog bleibt ein Country-Leaf. Es gibt keine erfundene
 Unterteilung und keinen Legacy-Fallback.
@@ -259,9 +267,9 @@ Kamera. Terrain, Photorealistic/OSM Buildings und lokale Imagery dürfen kontrol
 zurückkehren. Daten erscheinen in getrennten Rendergruppen:
 
 - Punkt-/Cluster-Glyphs;
-- lokale Dichtezellen oder Säulen;
-- echte Track-/Relation-Arcs;
-- lineare Infrastruktur;
+- lokale Dichtezellen, nach Metric-Promotion optional Säulen;
+- nach Capability-Promotion echte Track-/Relation-Arcs;
+- nach Capability-Promotion lineare Infrastruktur;
 - priorisierte Labels und Leader-Callouts;
 - Inspector und Legende im DOM-HUD.
 
@@ -274,18 +282,13 @@ keine neue administrative Identität.
 ## 7. Modularchitektur und Seams
 
 ```text
-SpatialScopeModule ───────────────┐
-WorldviewTimePort ────────────────┤
-WorldviewSceneDataPort ───────────┼── CinematicWorldviewModule
-WorldviewLensPort ────────────────┤             │
-Performance / Motion Policy ──────┘             ▼
-                                      CesiumWorldviewSceneAdapter
-                                      ├─ visual style
-                                      ├─ scope surfaces
-                                      ├─ metric surfaces
-                                      ├─ glyphs/arcs/labels
-                                      ├─ camera/clock
-                                      └─ post-process/HUD state
+existing stores ── WorldviewSceneFrameAssembler ── WorldviewSceneFrame
+                                                        │
+SpatialScopeModule ──────────────────────────────────────┼─ CinematicWorldviewModule
+                                                        │           │
+                                                        ▼           ▼
+                                             RecordingSceneAdapter  ViewerSpatialCesiumRuntime
+                                                                     └─ one root/state lease
 ```
 
 ### 7.1 Besitz
@@ -297,12 +300,16 @@ Catalog-Revision und Query-Token.
 
 - Szenenkompilierung und generation-sichere visuelle Updates;
 - Camera-Choreografie als Best-Effort-Effekt;
-- Scene-Root, Primitive-Gruppen, Clock und Post-Process-Lifecycle;
 - Visual-Lens-, Motion- und Quality-Projektion;
 - visuelle Diagnostics und Rendering-Fehler.
 
-Es darf weder `dispatch(enter)` aufrufen noch Scope-Keys aus Labels, Geometrie,
-Kamera oder Pick-Koordinaten ableiten.
+`ViewerSpatialCesiumRuntime` besitzt gemäß Spatial `06 §12.1` als einziges Module
+Scene-Root, Primitive-Gruppen, Scene-State-Lease, Clock und Post-Process-Lifecycle.
+Operational und Cinematic sind darin wechselseitige Strategien. Ein Mode-Wechsel
+erzeugt weder eine zweite Root noch eine zweite Scope-State-Machine.
+
+Das `CinematicWorldviewModule` darf weder `dispatch(enter)` aufrufen noch Scope-Keys
+aus Labels, Geometrie, Kamera oder Pick-Koordinaten ableiten.
 
 ### 7.2 Kleines externes Interface
 
@@ -315,7 +322,7 @@ interface CinematicWorldviewModule {
     input: ResolvedPresentationInput,
     stateRevision: number,
     signal: AbortSignal,
-  ): Promise<void>;
+  ): Promise<PresentationOutcome>;
 
   update(frame: WorldviewSceneFrame): void;
   diagnostics(): CinematicWorldviewDiagnostics;
@@ -323,23 +330,89 @@ interface CinematicWorldviewModule {
 }
 ```
 
-`present` wird nur von der bestehenden Scope-Seam aufgerufen. `update` akzeptiert
-nur Frames, deren `scopeKey`, `catalogRevision` und `stateRevision` exakt zur letzten
+`present` besitzt exakt die Outcome-Semantik aus Spatial `06 §12.1`; die heute im
+Produktionscode vorhandene `Promise<void>`-Drift ist eine verpflichtende
+RED→GREEN-Vorbedingung des späteren Plans. `update` akzeptiert nur Frames, deren
+`query.scopeKey`, `query.catalogRevision` und `stateRevision` exakt zur letzten
 committed Presentation passen. Andere Frames werden verworfen und diagnostiziert;
 es gibt keinen permissiven Fallback.
 
 ### 7.3 Rendererfreier Frame
 
-`WorldviewSceneFrame` enthält keine Cesium-, React- oder DOM-Typen. Es enthält
-mindestens:
+`WorldviewSceneFrame` enthält keine Cesium-, React- oder DOM-Typen. V1 ist
+geschlossen; neue Felder, Layer oder freie String-IDs benötigen einen Spec-Delta:
 
-- `SpatialQueryRef` und `stateRevision`;
-- aktives Zeitfenster und Cursor;
-- aktive Datenlinse;
-- geschlossene, typisierte Layer-Snapshots;
-- Relation, Präzision, Completeness und Ausschlusszählungen je Snapshot;
-- Motion-Policy und Quality-Tier;
-- monotone Datenrevision beziehungsweise Observed-at-Zeit.
+```ts
+type WorldviewLensId =
+  | "situation"
+  | "environmental"
+  | "thermal"
+  | "mobility"
+  | "infrastructure";
+
+interface SceneSnapshotAccounting {
+  readonly relation: "occurs-in";
+  readonly precision: "semantic-key" | "point-in-boundary" | "bbox-approximate";
+  readonly completeness: "complete" | "partial";
+  readonly candidateCount: number;
+  readonly includedCount: number;
+  readonly excludedUnlocatedCount: number;
+  readonly excludedConflictCount: number;
+  readonly excludedBoundaryUncertainCount: number;
+}
+
+interface ChronikSceneSnapshot {
+  readonly kind: "chronik-events";
+  readonly dataRevision: string;
+  readonly observedAt: string;
+  readonly accounting: SceneSnapshotAccounting;
+  readonly records: readonly {
+    readonly eventId: string;
+    readonly longitude: number;
+    readonly latitude: number;
+    readonly occurredAt: string;
+  }[];
+}
+
+interface EarthquakeSceneSnapshot {
+  readonly kind: "earthquakes";
+  readonly dataRevision: string;
+  readonly observedAt: string;
+  readonly accounting: SceneSnapshotAccounting;
+  readonly records: readonly {
+    readonly earthquakeId: string;
+    readonly longitude: number;
+    readonly latitude: number;
+    readonly occurredAt: string;
+    readonly magnitude: number;
+    readonly depthKm: number;
+  }[];
+}
+
+interface WorldviewSceneFrame {
+  readonly query: SpatialQueryRef;
+  readonly stateRevision: number;
+  readonly frameRevision: number;
+  readonly time: {
+    readonly start: string;
+    readonly end: string;
+    readonly cursor: string;
+    readonly mode: "live" | "replay";
+  };
+  readonly lens: WorldviewLensId;
+  readonly motion: WorldviewMotionSnapshot;
+  readonly qualityTier: 0 | 1 | 2 | 3 | 4;
+  readonly layers: {
+    readonly chronik: ChronikSceneSnapshot | null;
+    readonly earthquakes: EarthquakeSceneSnapshot | null;
+    readonly metric: SpatialMetricSnapshot | null;
+  };
+}
+```
+
+Alle ISO-Zeitstrings, Koordinaten, Counts, Magnitude und Depth werden vor dem Frame
+validiert und gefroren. `null` bedeutet „für diesen Frame nicht aktiviert“, nie
+„verwende alte Daten“.
 
 Ein interner reiner `SceneCompiler` übersetzt den Frame in einen immutable
 `ScenePlan`. Der Cesium-Adapter übersetzt den Plan in GPU-Ressourcen. Tests verwenden
@@ -348,18 +421,24 @@ Presenter-Seam real und nicht hypothetisch.
 
 ### 7.4 Abhängigkeiten
 
-- Scope, Zeit, Lens und Performance sind in-process Snapshots.
+- Scope, Zeit, Lens, Motion und Performance sind vorhandene In-process-Stores. Ein
+  `WorldviewSceneFrameAssembler` ist deren einziger Frame-Caller; es gibt keine
+  neuen flachen `WorldviewTimePort`-/`WorldviewLensPort`-Pass-throughs. Assembler,
+  `ScenePlan` und Recording-Adapter sind private Implementation-Seams des Cinematic-
+  Modules, keine zusätzlich gemeinsam verwendeten Registry-Verträge.
 - Backend-/CHRONIK-Reads sind remote but owned und werden über bestehende
-  transportfreie Ports sowie HTTP-Adapter angebunden.
+  transportfreie Ports angebunden. Nur die neue Metrikabfrage verwendet den in
+  Spatial `11 §19` besessenen `SpatialMetricPort` mit HTTP- und In-memory-Adapter.
 - Cesium/Ion ist eine externe Renderabhängigkeit hinter dem Scene-Adapter.
 - Der Presenter führt keine eigenen ungeprüften Remote-Downloads aus.
 
 ### 7.5 React-Integration
 
-React komponiert Modul und Adapter, speist Daten-Snapshots und rendert HUD/Legende.
-Kein Animationsframe erzeugt React-State. Per-frame-Mutationen bleiben innerhalb des
-Cesium-Adapters. `WorldviewPage` erhält keine neue Layer-spezifische Orchestrierungs-
-Kaskade.
+React komponiert Runtime, Frame-Assembler und HUD/Legende. `WorldviewPage` übergibt
+nur die vorhandenen Stores an einen Composition-Root; es baut keine Frames und
+erhält keine neue Layer-Kaskade. Kein Animationsframe erzeugt React-State.
+Per-frame-Mutationen bleiben innerhalb der Runtime. Die Motion-Einstellung und
+`matchMedia`-Änderungen laufen über den live `WorldviewMotionStore` aus Spatial `11`.
 
 ---
 
@@ -367,8 +446,8 @@ Kaskade.
 
 ### 8.1 Scene-Root und Gruppen
 
-Der Cesium-Adapter besitzt genau eine WorldView-Scene-Root. Darunter liegen maximal
-folgende logische Gruppen:
+Die `ViewerSpatialCesiumRuntime` besitzt genau eine WorldView-Scene-Root. Darunter
+liegen maximal folgende logische Gruppen:
 
 1. Base Style und Atmosphere Controls;
 2. aktive Scope-Surface und Child-Outlines;
@@ -388,7 +467,7 @@ Frame verpflichtenden Gruppen ready und generation-current sind.
 | Visuelles Element | Cesium-Strategie |
 |---|---|
 | Ground Mask / Scope Fill | gebatchte `GroundPrimitive` |
-| feste oder metrische Extrusion | `Primitive` + `PolygonGeometry`/`WallGeometry` |
+| metrische Extrusion nach eigenem Promotion-Gate | `Primitive` + `PolygonGeometry`/`WallGeometry` |
 | Scope- und Glow-Outlines | geschichtete `GroundPolylinePrimitive` bzw. `PolylineGeometry` |
 | Track-/Relation-Arcs | `PolylineCollection` oder gebatchte `PolylineGeometry` |
 | hochvolumige Punkte | wenige große `BillboardCollection`s nach Update-Frequenz |
@@ -408,15 +487,24 @@ Die sichtbare Child-Surface ist getrennt. Operative Datenpicks behalten Priorit�
 `spatial-child`; Hover- und Stagecraft-Overlays sind nicht pickbar. Ein visueller
 Fehler darf keine Legacy-Identität aktivieren.
 
-### 8.4 Selection-Lift und metrische Extrusion
+### 8.4 Flache Selection und metrische Extrusion
 
-Der Selection-Lift ist eine deterministische Funktion aus Scope-Kind und
-Cameraextent, mit festen Min-/Max-Clamps. Er ist unabhängig von Datenwerten und wird
-als Auswahlrahmen beschrieben.
+Selection bleibt eine flache Ground-Surface plus Outline/Basisring. Weder Geometrie-
+höhe noch Styleparameter hängen von Cameraextent oder Zielgröße ab. Damit bleibt sie
+visuell von einer quantitativen Säule unterscheidbar und erfordert bei Camera-Moves
+keinen Geometrie-Neubau.
 
-Metrische Extrusion lebt in einer separaten Gruppe. Sie verwendet ausschließlich
-Samples des `SpatialMetricPort` und die Regeln aus Spatial-Spec `11 §19`. Bei
-fehlenden, stale oder inkompatiblen Samples wird keine variable Höhe gerendert.
+Metrische Extrusion lebt nach eigenem Promotion-Gate in einer separaten Gruppe. Sie
+verwendet ausschließlich Samples des `SpatialMetricPort` und die Regeln aus Spatial
+`11 §19`. `extrudedHeight` wird einmal pro Metric-Revision auf Endhöhe gebaut und
+niemals pro Frame oder Camera-Move animiert. Reveal darf nur ein unterstütztes
+Color-Alpha-Attribut ändern; dafür darf ausschließlich die Metric-Primitive ihre
+Geometry-Instances gezielt behalten. Ist das nicht belegbar, setzt sie
+`releaseGeometryInstances: true` und erscheint statisch. Vor Höhenfreigabe muss ein
+Base-Height-Record für Terrain und
+`verticalExaggeration` sowie das Chunk-/Build-Budget bestanden sein. Ohne diesen
+Record bleibt dieselbe Metrik als flache Color-/Hatch-Fläche sichtbar. Fehlende,
+stale oder inkompatible Samples erzeugen keine variable Darstellung.
 
 ### 8.5 Visual Style
 
@@ -425,11 +513,13 @@ Die Hlíðskjalf-Palette bleibt eigenständig:
 - `steel` für Atmosphäre und globalen Kontext;
 - `stone`/`bone` für Kartographie und neutrale Labels;
 - `amber` für explizite Analystenaktion und Selection;
-- `sentinel`/`ember` für Threat/Severity;
+- `sentinel`/`rust` für Threat/Severity;
 - `sage` für Umwelt- und Observation-Signale.
 
-Farben werden aus CSS-Tokens aufgelöst. Der Presenter besitzt keine zweite
-hardcodierte Farbwahrheit. Der externe Cyan/Green-Look wird nicht kopiert.
+Farben werden aus CSS-Tokens aufgelöst. Hex-Fallbacks sind ausschließlich für SSR/
+jsdom zulässig und müssen in Tests bytegleich zum jeweiligen kanonischen Token
+gepinnt sein; sie sind keine zweite Farbwahrheit. Der externe Cyan/Green-Look wird
+nicht kopiert.
 
 Auf World-/Country-Höhe wird Photoreal Content verborgen oder gedimmt, damit
 Kartographie und Datenmarks die visuelle Hierarchie besitzen. Im Admin-1-Scope darf
@@ -442,42 +532,61 @@ Bloom wird mild und global eingesetzt; selektiver Glow entsteht primär durch
 geschichtete Geometrie und emissive Materialien. So hängt die Lesbarkeit nicht von
 einem fragilen Screen-Space-Maskenpfad ab.
 
-Alle Stages besitzen eindeutige Ownership-Namen. Cinematic Stages, CRT, Night Vision
-und FLIR dürfen sich nicht gegenseitig über unspezifisches `removeAll` löschen. Die
-Stage-Reihenfolge ist deterministisch getestet. Kein Shadertext stammt aus Daten,
-Konfiguration oder LLM-Ausgabe.
+Der `WorldviewPostProcessController` aus Spatial `06 §12.1` besitzt ein einziges
+`PostProcessStageComposite` an stabiler Collection-Position. Cinematic, CRT, Night
+Vision und FLIR registrieren allowlistete Slots; der Controller baut deren interne
+Reihenfolge deterministisch neu. `shaderUtils.ts` darf keine WorldView-Stage mehr
+direkt entfernen oder anhängen. Bloom läuft über denselben Scene-State-Lease. Kein
+Shadertext stammt aus Daten, Konfiguration oder LLM-Ausgabe.
 
 ### 8.7 Gemeinsamer Animation Clock
 
 Genau ein `scene.preRender`-Listener steuert alle cineastischen Uniforms und
-registrierten animierten Marks. Bestehende Layer-Schleifen werden nur dann ersetzt,
-wenn ihre Verhaltensabdeckung am neuen Clock-Interface vorhanden ist; es entsteht
-keine zweite parallele Dauerschleife.
+registrierten animierten Marks. Cinematic darf erst aktiviert werden, nachdem die
+Schleifen aus `EventLayer`, `FIRMSLayer` und `EarthquakeLayer` entweder an diesem
+Clock registriert oder im jeweiligen Motion-Modus vollständig deaktiviert sind.
+Danach besitzen diese Layer keinen eigenen `requestAnimationFrame`-Loop mehr. Das
+ist ein verpflichtendes Verhaltens-/Disposal-Gate, keine spätere Optimierung.
 
-Der Clock läuft nur, wenn mindestens eine aktive Animation existiert. Stagecraft ist
-standardmäßig zeitlich begrenzt. Dauerbewegung ist nur für reale Live-Daten oder
-explizit erlaubte Ambient-Motion zulässig und muss pausierbar sein.
+Der eine `preRender`-Listener bleibt als Runtime-Frame-Monitor attached. Sein
+Animation-Clock mutiert nur, wenn mindestens ein Animationsclient aktiv ist.
+`reduced` deaktiviert Stagecraft-Interpolation; `static` registriert keine
+Animationsclients. Im statischen Fall misst derselbe Listener nur, mutiert keine
+visuellen Eigenschaften und fordert keinen zusätzlichen Render an.
+Stagecraft ist standardmäßig zeitlich begrenzt. Dauerbewegung ist nur für reale
+Live-Daten oder in `full` explizit erlaubte Ambient-Motion zulässig und pausierbar.
 
 ---
 
 ## 9. Datenlinsen und regionale Visualisierung
 
-### 9.1 Geschlossene V1-Linsen
+### 9.1 Geschlossene Lens-Registry und Aktivierung
 
-| Linse | Primäre Frage | Zulässige Marks |
-|---|---|---|
-| `situation` | Was geschieht im ausgewählten Raum und Zeitfenster? | Event-Dichte, Severity-Glyphs, zeitliche Änderung |
-| `thermal` | Wo liegen thermische Aktivität und Anomalien? | FIRMS-Punkte, Cluster, FRP-Intensität |
-| `mobility` | Welche Bewegungen schneiden den Scope? | reale Tracks, Trails, Kursvektoren |
-| `infrastructure` | Welche relevante Infrastruktur liegt im oder schneidet den Scope? | Facilities, Kabel, Pipelines |
-| `environmental` | Welche Natur- und Umweltereignisse liegen im Scope? | Erdbeben, GDACS, EONET, Observation-Glyphs |
+| Linse | Primäre Frage | Initialer Status | Zulässige initiale Marks |
+|---|---|---|---|
+| `situation` | Was geschieht im ausgewählten Raum und Zeitfenster? | aktivierbar | scope-accounted CHRONIK-Events |
+| `environmental` | Welche Naturereignisse liegen im Scope? | aktivierbar | scope-accounted Earthquakes |
+| `thermal` | Wo liegen thermische Aktivitäten? | blockiert | keine, bis FIRMS-Promotion |
+| `mobility` | Welche Bewegungen schneiden den Scope? | blockiert | keine, bis Track-Intersection-Promotion |
+| `infrastructure` | Welche Infrastruktur liegt im oder schneidet den Scope? | blockiert | keine, bis Facility-/Line-Promotion |
 
-`situation` ist die Default-Linse. Eine spätere Linse benötigt einen Spec-Delta und
-eine geschlossene Capability-Matrix; freie String-Linsen sind unzulässig.
+`situation` ist die Default-Linse. „Aktivierbar“ bedeutet weiterhin: nur bei einer
+passenden produktiven Capability-Zeile und einem Snapshot mit identischer Scope-
+Revision. FIRMS bleibt außerhalb `world` verborgen, bis Generation, Accounting,
+24-h-Containment und der produktive Cap von 5.000 in einem eigenen Promotion-Record
+belegt sind. Freie String-Linsen und ein UI-Toggle für blockierte Linsen sind
+unzulässig.
 
-### 9.2 Erste verbindliche Metrik
+### 9.2 Erste Kandidatenmetrik und Stop-Gate
 
-Der erste Country-Level-Hero-Slice verwendet:
+`chronik.events.count` ist die erste Kandidatenmetrik, aber noch nicht verbindlich
+aktivierbar. Der aktuelle Stand besitzt weder einen Per-Child-Aggregationsendpoint
+noch einen `SpatialMetricPort`-Produktionsadapter; die Plan-06B-Evidenz weist für
+histogrammtragende Incidents `0/11.793` scope-keyed Locations aus. Der erste
+erreichbare Cinematic-Slice hängt deshalb nicht von dieser Metrik ab.
+
+Die spätere Definition besitzt genau folgende fachliche Semantik; allein die beiden
+gekennzeichneten Kalibrierwerte werden im Promotion-Record ergänzt:
 
 ```text
 metricId:      chronik.events.count
@@ -485,38 +594,43 @@ label:         Ereignisse
 unit:          events
 aggregation:   count
 scale:         log
-domain:        [0, 1000]
-heightMeters:  [0, 80000]
+domain:        aus Metric-Promotion-Record
+heightMeters:  null bis separates Extrusions-Gate
 timeBasis:     window
 missingValue:  hatched
 ```
 
-Höhe und Flächenintensität kodieren denselben Count. Severity bleibt eine getrennte
-Punkt-/Glyph-Dimension und verändert die Flächenhöhe nicht. Tooltip und Legende
-zeigen Count, Zeitfenster, Scale, located/unlocated, Completeness und Präzision.
-
-Die Transformation lautet `log1p(count) / log1p(1000)` und wird auf `[0, 1]`
-geclampt. Ein echter Count `0` ist ein valider Nullwert auf Basishöhe; `null` ist
-Missing Data und wird ausschließlich über das Hatch-Muster dargestellt. Werte über
-1.000 bleiben im Tooltip exakt, werden visuell aber am dokumentierten Maximum
-geclampt. Domain und Höhenbereich sind Bestandteil der versionierten
-Metric-Definition und dürfen nicht pro Frame aus dem gerade sichtbaren Sample neu
-berechnet werden.
+Flächenintensität und eine später separat freigegebene Höhe kodieren denselben Count.
+Severity bleibt eine getrennte Punkt-/Glyph-Dimension. Tooltip und Legende zeigen
+Count, Zeitfenster, Scale, located/unlocated, Completeness und Präzision. Die
+Transformation lautet nach Kalibrierung
+`log1p(count) / log1p(definition.domain[1])`, geclampt auf `[0, 1]`. Ein echter Count
+`0` ist gültig; `null` ist Missing Data und wird ausschließlich per Hatch dargestellt.
+Domain und optionaler Höhenbereich werden aus einer eingefrorenen repräsentativen
+Verteilung plus Occlusion-/Interpretierbarkeitsmessung versioniert; sie werden weder
+hier erfunden noch pro sichtbarem Sample neu berechnet.
 
 Ein approximativer oder partieller Sample darf sichtbar sein, wenn Methode und
 Coverage unübersehbar beschriftet sind. Er darf nicht als „exact“ erscheinen.
 
 ### 9.3 Country-Level-Aggregation
 
-Country-Samples sind nach direkten Child-`scopeKey`s adressiert. Der Presenter
-berechnet keine administrative Zuordnung aus sichtbarer Render-LOD. Zulässig sind:
+Country-Samples sind nach dem vollständigen Satz direkter Child-`scopeKey`s
+adressiert. Vor einem Metrik-Slice muss ein `Metric Transport Promotion Record` genau
+eine Transportform wählen und mit Produktionsconsumer-Evidenz attestieren. Zulässig
+sind:
 
 1. serverseitige Aggregation über materialisierte kanonische Admin-1-Keys; oder
 2. ein zentraler Point-in-Child-Containment-Adapter über reviewte fixe Geometrie mit
    expliziter Präzision und Ausschlusszählung.
 
-Welche Transportform verwendet wird, gehört in den späteren Implementierungsplan.
-Beide Adapter müssen dasselbe `SpatialMetricSnapshot`-Interface erfüllen.
+Eine BBox-Abfrage pro Child ist ausdrücklich verboten, weil überlappende BBoxes
+doppelt zählen. Der semantische Pfad benötigt die bestehenden Plan-06B-Gates je
+Lane/Kind/Derivationsrevision, inklusive Incident-Coverage, reconciliertem Accounting
+und indexgestütztem Plan. Der Containment-Pfad benötigt georeferenzierte Records,
+das fixe reviewte Child-Pack und zählt `boundary-uncertain`, unlocated und conflicts
+separat. Beide Pfade erfüllen den `SpatialMetricSnapshot`-Vertrag aus Spatial `11`.
+Ohne bestandenen Record bleibt `chronik.events.count` im UI und in Hero-Gates aus.
 
 ### 9.4 Admin-1-Lokalaggregation ohne Admin-2
 
@@ -524,7 +638,10 @@ Im Admin-1-Scope dürfen georeferenzierte Records innerhalb des aktiven festen
 Containments in lokale Zellen aggregiert werden. Die Zellen sind reine
 Visualisierung, keine neuen Scopes.
 
-- Zellgröße folgt Camera-LOD und besitzt feste Min-/Max-Budgets.
+- Zellgröße, Ursprung und Projektion stammen aus der versionierten
+  `SpatialMetricDefinition.binning` und bleiben über Zoom/Camera-LOD konstant.
+- Camera-LOD darf nur Marks/Labels cullen, niemals Zellgrenzen oder Zellwerte ändern;
+  Legende und Tooltip zeigen das feste Zellmaß.
 - Nur `inside` zählt als strict; `boundary-uncertain` wird ausgeschlossen und gezählt.
 - Unlocated Records werden nie am Centroid erfunden.
 - Höhe/Farbe folgen derselben sichtbaren Metrikdefinition wie die Legende.
@@ -552,16 +669,19 @@ policy besitzen. Präsentationsreife ersetzt keine Datenreife.
 
 - World und vorhandene Countries bleiben global verfügbar.
 - Ukraine behält ihre 27 reviewten Admin-1-Scopes.
-- Deutschland erhält alle 16 Bundesländer als vollständiges Child-Set.
+- Deutschland bleibt bis zum nachfolgenden Promotion-Gate ein Country-Leaf.
 - Andere Countries ohne reviewten Admin-1-Katalog bleiben Blätter.
 - Admin-2 bleibt deaktiviert.
 
 ### 10.2 Deutschland
 
-Die Bundesländer verwenden die bestehende Admin-1-Quellenpolitik und kanonische
-ISO-3166-2-Keys, sofern der reviewte Crosswalk eindeutig ist. Source Lock,
-Attribution, politische Representation, Double-build, LOD-, Wire-, Heap-, Ring-,
-Vertex- und Containment-Feasibility-Gates gelten unverändert.
+Der aktuelle Source Lock enthält keine DEU-Admin-1-Quelle. Vor Planung oder
+Aktivierung müssen ein konkreter immutable Source-Release, Download-URL, Lizenz,
+SHA-256, Attribution und Representation-Entscheidung reviewt und in den Source Lock
+aufgenommen werden. Der kanonische Crosswalk muss alle 16 ISO-3166-2-Keys eindeutig
+abdecken und MultiPolygon-/Enklavenfälle wie Bremen sowie Berlin/Brandenburg explizit
+validieren. Danach gelten Double-build, LOD-, Wire-, Heap-, Ring-, Vertex- und
+Containment-Feasibility-Gates unverändert.
 
 Ein unvollständiges Child-Set stoppt die Deutschland-Aktivierung. Der Renderer darf
 nicht „die verfügbaren“ Bundesländer als vollständige administrative Wahrheit
@@ -581,22 +701,29 @@ Ländername in Renderlogik oder Tests ist nur als Fixture zulässig, nicht als B
   Semantik.
 - Scope-Click und operative Entity-Auswahl bleiben unterscheidbar; Entity-Pick hat
   Vorrang.
+- Das Country Situation Board rendert jedes direkte Child zusätzlich als
+  fokussierbaren DOM-Button. Tab/Enter/Space erreichen denselben kanonischen
+  `enter(childKey)`-Command wie der Globus-Pick; dies gilt auch ohne aktive Metrik.
 - Hover verändert nur temporäre Präsentation und Prefetch, niemals Scope oder Daten.
 - Jede Linse besitzt eine textuelle Überschrift, Legende und zugängliche Beschreibung.
 - Farbe ist niemals der einzige Informationsträger; Form, Label oder Muster ergänzen
   kategoriale und Missing-Value-Zustände.
 - Eine dauerhaft gemountete Live-Region meldet committed Scope, aktive Linse,
-  Presentation-Problem und Ladeabschluss, aber keine per-frame Änderungen.
-- Es gibt eine sichtbare Motion-Einstellung `full | reduced | static`.
-  `prefers-reduced-motion` startet mindestens in `reduced` und darf nicht automatisch
-  auf `full` hochgestuft werden.
-- `static` bewahrt alle Datenmarks, Legenden und Picks ohne nicht-essenzielle Bewegung.
+  Presentation-Problem und Ladeabschluss, aber keine per-frame Änderungen und
+  höchstens zwei Meldungen pro Sekunde.
+- Die sichtbare Motion-Einstellung verwendet exakt den `WorldviewMotionStore` aus
+  Spatial `11`: `full` erlaubt budgetierte Choreografie, `reduced` setzt Camera- und
+  Reveal-Dauer auf `0` und entfernt Ambient-Interpolation, `static` besitzt keinen
+  Animationsclient. `prefers-reduced-motion` initialisiert `reduced`; nur eine
+  explizite Nutzeraktion darf auf `full` hochstufen.
 - Keine Vollbildblitze. Pulse überschreiten 2 Hz nicht und bleiben flächenmäßig
   begrenzt.
-- Kameraanimation ist jederzeit abbrechbar. Fokus wird nach Child-Click oder Reveal
-  nicht unkontrolliert versetzt.
-- Für metrische Flächen existiert eine tabellarische/Inspector-Alternative mit
-  Scope-Label, Wert, Einheit, Zeit und Coverage.
+- Kameraanimation ist jederzeit durch Pointer-, Wheel- und Keyboard-Kameraeingabe
+  über `camera.cancelFlight()` abbrechbar. Da dieser Input-Pfad heute fehlt, ist sein
+  RED→GREEN-Nachweis eine Vorbedingung des ersten Cinematic-Slice. Fokus wird nach
+  Child-Click oder Reveal nicht unkontrolliert versetzt.
+- Die DOM-Child-Liste ist die Alternative für Navigation; bei metrischen Flächen
+  ergänzt sie Wert, Einheit, Zeit, Präzision und Coverage.
 
 ---
 
@@ -604,15 +731,17 @@ Ländername in Renderlogik oder Tests ist nur als Fixture zulässig, nicht als B
 
 ### 12.1 Quality-Tiers
 
-Der bestehende `PerformanceGuard` liefert die Qualitätsstufe:
+Der `PerformanceGuard` wird vor Cinematic-Aktivierung auf den einen Runtime-Frame-
+Monitor migriert, um echte Frame-Time-Verteilung und Hysterese erweitert und liefert
+dann die Qualitätsstufe; sein heutiger eigener rAF-Loop entfällt:
 
 | Tier | Verhalten |
 |---:|---|
-| 0 | volle Choreografie, budgetierte Partikel, Pulse und Trails |
-| 1 | weniger Partikel, kürzere Trails und weniger Labels |
-| 2 | Pulse nur für priorisierte/selektierte Ereignisse |
-| 3 | statische Arcs und keine Ambient-Motion |
-| 4 | vollständig statische, semantisch gleichwertige Szene |
+| 0 | volle Choreografie und bestehende volle Animationen |
+| 1 | verkürzte Trails, produktiv 10 statt 30 Positionen |
+| 2 | keine Pulse; statische Ringe |
+| 3 | keine Orbit-Arcs, Trails oder Ambient-Motion |
+| 4 | statische Punkte und semantisch gleichwertige Szene |
 
 Degradation verändert nie Scope, Query, Count, Coverage oder Pickbarkeit. Recovery
 erhöht Qualität stufenweise und baut keine stabile Pick-Surface neu.
@@ -620,26 +749,40 @@ erhöht Qualität stufenweise und baut keine stabile Pick-Surface neu.
 ### 12.2 Budgets
 
 - Ziel auf der reviewten Desktop-Workstation: Median mindestens 55 FPS und p95
-  Frame-Time höchstens 25 ms über eine deterministische 60-Sekunden-Szene.
-- Hard Gate: keine mehr als zwei Sekunden anhaltende Framerate unter 30 FPS.
+  Frame-Time höchstens 25 ms über eine deterministische 60-Sekunden-Szene. Ein
+  begrenzter Frame-Delta-Ring misst Median und p95; der heutige reine Callback-Zähler
+  reicht nicht als Evidenz.
+- Degradation startet vor dem Hard Gate: rolling p95 über 25 ms für zwei Sekunden
+  oder weniger als 45 FPS für eine Sekunde senkt genau einen Tier. Erst wenn nach
+  fünf Sekunden Settle auf Tier 4 weiterhin mehr als zwei Sekunden unter 30 FPS
+  auftreten, schlägt das Hard Gate fehl.
+- Der reproduzierbare Browser-Benchmark muss diese initialen Schwellen vor
+  Default-on bestätigen; ein verfehlter Wert führt zu einem reviewten Spec-Delta
+  oder kleinerem visuellen Budget, nicht zu Testtoleranz-Erhöhung.
 - Kein eigener Main-Thread-Task über 50 ms; Boundary-/Mark-Konvertierung bleibt
   gechunkt mit Ziel unter 8 ms pro Chunk.
-- Maximal 10.000 gleichzeitig animierte Marks; weitere Marks werden deterministisch
-  nach Relevanz, Frustum, Lens und LOD budgetiert.
+- Cinematic erhöht keinen produktiven Layer-Cap. Es respektiert insbesondere FIRMS
+  400, Earthquakes 250 sowie die getrennten Vessel-Load-/Render-Caps 3.000/200 und
+  verwendet für jeden weiteren Layer dessen registrierten bestehenden Cap. Ein
+  höherer Cap benötigt einen eigenen Benchmark- und Memory-Record.
 - Wenige große Billboard-/Polyline-Collections werden nach Update-Frequenz getrennt.
 - Maximal eine aktive und eine staging Scene-Generation.
-- Ein Scope-/Lens-Wechsel abortet alle veralteten Builds, Flights und Data-Frames.
+- Ein Scope-/Lens-Wechsel abortet alle veralteten Builds und Data-Frames und ruft für
+  einen aktiven Cesium-Flug `camera.cancelFlight()` auf.
 
 ### 12.3 Lifecycle-Gates
 
 - 100 Zyklen `world ↔ country ↔ admin1` ohne monotones Wachstum von Primitives,
   Collections, Post-Process-Stages, Clock-Callbacks, Event-Listenern oder Asset-Leases;
-- 100 Lens-Wechsel innerhalb desselben Scope ohne Pick-Surface-Rebuild;
+- 100 Wechsel zwischen den jeweils aktivierten Linsen innerhalb desselben Scope ohne
+  Pick-Surface-Rebuild; blockierte Lens-IDs bleiben unavailable und bauen keine Szene;
 - keine zerstörte Primitive, Stage oder Collection bleibt referenziert;
 - kein stale Frame erscheint unter neuer Scope-/Lens-Beschriftung;
 - Long-session-Soak mit Live-Daten, Timeline-Seek, Kamerainteraktion und
   Degradation/Recovery;
-- Runtime-Rollback auf den operationalen Presenter ohne Daten- oder Catalog-Rollback.
+- Runtime-Rollback auf den operationalen Presenter ohne Daten- oder Catalog-Rollback;
+- Scene-State, einzige Root und Stage-Reihenfolge entsprechen nach Dispose exakt der
+  vor Attach erfassten Baseline aus Spatial `06 §12.1`.
 
 ---
 
@@ -685,17 +828,68 @@ eingetragen.
 
 ## 14. Diagnostics und Observability
 
-`CinematicWorldviewDiagnostics` liefert mindestens:
+Der Vertrag ist geschlossen und enthält keine Rohrecords:
 
-- committed `scopeKey`, `catalogRevision`, `stateRevision` und Lens;
-- aktive/staging Scene-Generationen;
-- Primitive-, Collection-, Label-, Stage- und Clock-Callback-Zahlen;
-- High-water-Werte und aktive Asset-Leases;
-- Frame-Time/FPS und Quality-Tier;
-- gestartete, abgeschlossene, abgebrochene und verworfene Transitions;
-- akzeptierte und wegen Identity-Mismatch verworfene Frames;
-- Marks pro Lens/Layer sowie Degradation-/Culling-Zahlen;
-- Metric- und Coverage-Status ohne Rohrecords.
+```ts
+interface CinematicWorldviewDiagnostics {
+  readonly identity: {
+    readonly scopeKey: ScopeKey | null;
+    readonly catalogRevision: string | null;
+    readonly stateRevision: number | null;
+    readonly lens: WorldviewLensId | null;
+  };
+  readonly generations: {
+    readonly active: number | null;
+    readonly staging: number | null;
+  };
+  readonly resources: {
+    readonly primitives: number;
+    readonly collections: number;
+    readonly labels: number;
+    readonly stages: number;
+    readonly clockCallbacks: number;
+    readonly assetLeases: number;
+    readonly primitiveHighWater: number;
+    readonly collectionHighWater: number;
+    readonly leaseHighWater: number;
+  };
+  readonly performance: {
+    readonly fpsMedian: number | null;
+    readonly frameTimeP95Ms: number | null;
+    readonly qualityTier: 0 | 1 | 2 | 3 | 4;
+    readonly degradationCount: number;
+    readonly culledMarkCount: number;
+  };
+  readonly transitions: {
+    readonly started: number;
+    readonly completed: number;
+    readonly aborted: number;
+    readonly discarded: number;
+  };
+  readonly frames: {
+    readonly accepted: number;
+    readonly identityRejected: number;
+  };
+  readonly marks: {
+    readonly chronik: number;
+    readonly earthquakes: number;
+    readonly metricSurfaces: number;
+  };
+  readonly metric: {
+    readonly status: "inactive" | "ready" | "partial" | "unavailable";
+    readonly metricId: "chronik.events.count" | null;
+  };
+  readonly sceneStateLease: {
+    readonly active: boolean;
+    readonly restoreCount: number;
+    readonly lastRestoreEqual: boolean | null;
+  };
+  readonly errors: {
+    readonly emitted: number;
+    readonly suppressed: number;
+  };
+}
+```
 
 Produktionslogs sind aggregiert und bounded. Wiederholte identische Fehler werden wie
 bei den Legacy-Diagnostics unterdrückt gezählt statt unbegrenzt ausgegeben.
@@ -704,19 +898,19 @@ bei den Legacy-Diagnostics unterdrückt gezählt statt unbegrenzt ausgegeben.
 
 ## 15. Rollout, Kompatibilität und Plan 05D
 
-### 15.1 Unabhängiger Presentation-Schalter
+### 15.1 Presentation-Mode
 
-Der cineastische Presenter erhält einen vom Spatial-Scope-Flag unabhängigen
-Runtime-Modus:
+Der cineastische Presenter verwendet den in Spatial `14 §26.1` besessenen Modus:
 
 ```text
 worldview_presentation_mode = operational | cinematic
 ```
 
-Der Modus stammt im Produktionsbetrieb aus validierter Client-Konfiguration, nicht
-aus einem frei manipulierbaren Query-Parameter. Initial bleibt `operational` Default;
-Canary und Review nutzen `cinematic`. Nach visueller Abnahme, Performance-Gates,
-Soak und Rollback-Probe kann `cinematic` separat Default werden.
+Er ist nur in einem Spatial-enabled Artefakt gültig, stammt aus validierter
+Client-Konfiguration und nie aus einem Query-Parameter. Initial bleibt `operational`
+Default; Canary und Review nutzen `cinematic`. Die geschlossene Flag-/Mode-Matrix
+und die sichtbare Diagnose für eine ungültige Kombination werden hier nicht neu
+definiert.
 
 Ein Mode-Wechsel verändert weder URL-Scope noch Katalog- oder Datenrevision. Beide
 Presenter verwenden denselben `SpatialScopeModule`, Catalog und Layer-Snapshots.
@@ -725,8 +919,10 @@ Presenter verwenden denselben `SpatialScopeModule`, Catalog und Layer-Snapshots.
 
 Rollback bedeutet ausschließlich:
 
-- neue Scene-Root, Stages und Clock deterministisch disposen;
-- operationalen Cesium-Presenter wieder attachen;
+- Cinematic-Strategie, Stages, Clock und Listener deterministisch disposen;
+- alle vom `SceneStateLease` besessenen Properties auf die aktuelle Baseline
+  restaurieren und Wertgleichheit diagnostizieren;
+- anschließend die operationale Strategie derselben einzigen Runtime attachen;
 - committed Scope, Zeit, Selection und Daten unverändert bewahren.
 
 Kein Schema-, Datenbank-, Catalog- oder Ingestion-Rollback ist dafür erforderlich.
@@ -743,35 +939,50 @@ Präsentationsschicht langzeittauglich ist.
 
 ## 16. Abnahme- und Review-Evidenz
 
-### 16.1 Verbindliche Hero-Frames vor breiter Umsetzung
+### 16.1 Erreichbare und promotion-gebundene Hero-Frames
 
-Vor Migration weiterer Layer werden vier deterministische Zielzustände festgelegt
-und visuell abgenommen:
+Vor Migration weiterer Layer werden genau drei heute erreichbare Zielzustände
+festgelegt und visuell abgenommen:
 
-1. `world` — idle establishing scene;
-2. `country:UKR` — target acquisition und Country Situation Board;
-3. `country:UKR` — 27 Oblaste mit `chronik.events.count`;
-4. `admin1:iso3166-2:UA-71` oder ein reviewter Konflikt-Scope — regional tactical
-   scene mit CHRONIK und FIRMS.
+1. `world` — idle establishing scene mit ausschließlich global erlaubten Layern;
+2. `country:UKR` — target acquisition und flaches Country Situation Board mit allen
+   27 Children, ohne Metrikbehauptung;
+3. `admin1:iso3166-2:UA-14` — regional tactical scene mit scope-accounted CHRONIK
+   und Earthquakes; jede Approximation/Coverage ist sichtbar.
 
-Nach Deutschland-Catalog-Aktivierung folgt zusätzlich:
+Die folgenden Frames sind keine Abnahme des ersten Slice, sondern getrennte
+Promotion-Gates:
 
-5. `country:DEU` — vollständige 16 Bundesländer im identischen generischen Pfad.
+4. `country:UKR` mit `chronik.events.count` erst nach Metric Transport Promotion;
+5. `admin1:iso3166-2:UA-14` mit FIRMS erst nach FIRMS-Capability-Promotion;
+6. `country:DEU` mit allen 16 Bundesländern erst nach DEU-Source-/Catalog-Promotion.
 
 Jeder Frame verwendet fixe Viewportgröße, Camera, Uhrzeit, Datenfixture, Lens,
 Quality und Motion-Policy. Die Evidenz umfasst Screenshot, kurze Transition-Aufnahme,
 DOM-/Accessibility-Snapshot und Diagnostics.
 
-### 16.2 Automatisierte Gates
+### 16.2 Testinfrastruktur-Gate
 
-- reine SceneCompiler-Tests für alle Linsen, Missing-/Stale-/Coverage-Zustände;
+Der aktuelle Frontend-Stack besitzt Vitest/jsdom, aber keinen echten Browser-/WebGL-
+oder Image-Snapshot-Harness. Vor dem ersten Cesium-/Visual-RED wird deshalb
+Playwright als reine Dev-/Testabhängigkeit separat reviewt und ein reproduzierbarer
+Chromium-Harness mit fixer Version, Viewport, Device Scale, Uhr, lokaler Datenfixture
+und kontrolliertem WebGL-Modus eingerichtet. Hero-Baselines verwenden keine
+variablen Remote-Tiles. Bis dieser Harness selbst als service-lokales Gate grün und
+flake-frei ist, gelten manuelle Screenshots nicht als automatisierte Release-Evidenz.
+
+Danach gelten:
+
+- reine SceneCompiler-Tests für alle aktivierten Linsen sowie Missing-/Stale-/
+  Coverage-Zustände;
 - Recording-Adapter-Tests über das externe Modul-Interface;
-- Cesium-Integrationstests für Primitive-Typen, Pick-ID, Staging, Stage-Reihenfolge,
-  Camera-Cancel und Disposal;
-- Visual-Regression-Screenshots für alle Hero-Frames in full und static;
+- echte Browser-Cesium-Tests für Primitive-Typen, Pick-ID, Staging, feste
+  Post-Process-Reihenfolge, `camera.cancelFlight`, Scene-State-Restore und Disposal;
+- Visual-Regression-Screenshots für die erreichbaren Hero-Frames in full, reduced
+  und static; Promotion-Frames kommen erst mit ihrer Capability hinzu;
 - Accessibility-Tests für Motion, Live-Region, Legende, Keyboard und Tabellenersatz;
 - Point-, Track- und Metric-Truthfulness-Tests pro aktivierter Capability;
-- Katalog-Double-build und Feasibility für Deutschland;
+- Katalog-Double-build und Feasibility als Gate der Deutschland-Promotion;
 - 100-Scope-/100-Lens-Zyklen und Long-session-Soak;
 - vollständige Frontend-, Backend-, Intelligence- und Data-Ingestion-Gates vor
   Default-on, soweit der spätere Implementierungsplan diese Systeme verändert.
@@ -823,8 +1034,8 @@ verwenden feste Containment- oder kanonische serverseitige Zuordnung.
 
 ### Variable Showroom-Extrusion und Fake-Arcs
 
-Abgelehnt. Variable Höhe und Linien suggerieren Daten. Selection-Lift bleibt
-deterministische Stagecraft; alles Variable benötigt eine überprüfbare Kodierung.
+Abgelehnt. Variable Höhe und Linien suggerieren Daten. Selection bleibt flach;
+alles Variable benötigt eine überprüfbare Kodierung oder echte gerichtete Relation.
 
 ### Vollständiger globaler Admin-1-Rollout im ersten Slice
 
@@ -877,6 +1088,7 @@ geschrieben werden.
 - [Spatial 11 — UX und 3D-Metriken](2026-07-31-spatial-scope-drilldown/11-ux-and-3d-metrics.md)
 - [Spatial 12 — Fehler, Security und Observability](2026-07-31-spatial-scope-drilldown/12-errors-security-and-observability.md)
 - [Spatial 14 — Rollout und Abnahme](2026-07-31-spatial-scope-drilldown/14-rollout-and-acceptance.md)
+- [Plan 06B — CHRONIK Exact Scope](../plans/2026-08-01-spatial-scope/06b-chronik-exact-scope.md)
 - [Worldview Layer-Design — Hlíðskjalf Noir](2026-04-30-worldview-layer-design.md)
 - [Globe Layers Evolution](2026-04-05-globe-layers-evolution-design.md)
 - `services/frontend/src/pages/WorldviewPage.tsx`
@@ -896,3 +1108,31 @@ geschrieben werden.
 - [CesiumJS BillboardCollection](https://cesium.com/learn/cesiumjs/ref-doc/BillboardCollection.html)
 - [CesiumJS ParticleSystem](https://cesium.com/learn/cesiumjs/ref-doc/ParticleSystem.html)
 - [Visual inspiration only: three-scope-map-skill](https://github.com/songsummer920-dazzle/three-scope-map-skill)
+
+---
+
+## 20. Disposition des adversarialen Erst-Reviews
+
+Das Erst-Review endete `PASS WITH REQUIRED FIXES`. Dieser Record beschreibt nur,
+wo die Findings geschlossen wurden; er erzeugt keine zweite normative Heimat. Der
+Status bleibt bis zu einem unabhängigen Abschluss-Re-Review blockiert.
+
+| Finding | Disposition |
+|---|---|
+| `CRIT-001` | `01 §4.2`, `06 §12.1`, `11 §18/§19`, `14 §26/§28` und Index-Registry sind die normativen Eigentümer; §2 ist nur Navigationskarte. |
+| `CRIT-002` | FIRMS aus dem ersten Hero-Satz entfernt und als eigenes Capability-Promotion-Gate geführt. |
+| `CRIT-003` | `chronik.events.count` als aktuell blockierte Kandidatenmetrik mit Transport-/Coverage-/Accounting-Record und BBox-per-Child-Verbot geführt. |
+| `CRIT-004` | Ein `ViewerSpatialCesiumRuntime`, exklusiver `SceneStateLease`, vollständige Property-Liste und Before/After-Restore-Gate definiert. |
+| `WARN-001` | Bestehende drei rAF-Layer und der PerformanceGuard müssen vor Aktivierung auf einen Runtime-Clock/Motion-Store migrieren; `static` besitzt keine Animationsclients. |
+| `WARN-002` | Ein Post-Process-Owner und ein Composite mit fester Slot-Reihenfolge ersetzen direkte Stage-Mutation/`removeAll`. |
+| `WARN-003` | Selection ist flach; Metric-Höhe wird nicht animiert und bleibt bis Base-Height-/Build-Promotion flache Color-/Hatch-Fläche. |
+| `WARN-004` | 10k-Cap entfernt, produktive Layer-Caps gepinnt, Frame-p95-Instrumentierung/Hysterese ergänzt und Flight-Maximum auf 3.000 ms korrigiert. |
+| `WARN-005` | Zellraster ist versioniert und cameraunabhängig; Camera-LOD darf nur cullen. |
+| `WARN-006` | `present` liefert wieder `Promise<PresentationOutcome>`; die Code-Drift ist explizite RED→GREEN-Vorbedingung. |
+| `WARN-007` | Index-Registry erweitert; Frame, Diagnostics, Motion und Metric-Verträge sind geschlossen und besitzen je eine Heimat. |
+| `WARN-008` | Deutschland aus dem initialen Umfang entfernt und an konkretes Source-Lock-/16-Child-/Feasibility-Promotion-Gate gebunden. |
+| `WARN-009` | DOM-Child-Buttons definieren die vollständige Tastaturäquivalenz auch ohne Metrik. |
+| `WARN-010` | Playwright-/WebGL-Harness ist explizites Testinfrastruktur-Gate; `camera.cancelFlight` wird nicht als vorhanden behauptet. |
+| `INFO-001/002` | `rust` ersetzt das nicht existente `ember`; SSR/jsdom-Fallbacks müssen token-identisch testgepinnt sein. |
+| `INFO-003/004` | Hero-Scope ist `UA-14`; Domain/Höhe werden erst aus Verteilung und Occlusion-Evidenz kalibriert. |
+| `INFO-005/006/007` | Tier 3 folgt dem Codevertrag; Flag-/Mode-Matrix und exakte Full/Reduced/Static-Semantik liegen in ihren normativen Heimaten. |

@@ -40,6 +40,10 @@ WORLD / UKRAINE / DONETSK OBLAST
 - Blank globe: darf Selection/Spotlight löschen, aber Scope nicht verändern.
 - Nicht verfügbare Children besitzen keine Drill-Affordance.
 - Pin-/Such-Fokus setzt weiterhin Circle-Spotlight; ein Search-Result ändert Scope nur bei einer expliziten „Gebiet öffnen“-Action.
+- Jedes direkte Child ist zusätzlich in einer DOM-Liste mit kanonischem Label als
+  `<button type="button">` erreichbar. Tab fokussiert, Enter/Space dispatcht denselben
+  `enter(childKey)`-Command wie der Globus-Pick; Hover/Fokus synchronisieren nur die
+  nicht-semantische Hervorhebung. Damit ist der Globus nie der einzige Child-Pfad.
 
 Scope und Zeit bleiben orthogonal: Ein Scope-Commit bewahrt CHRONIK-Range, Cursor,
 Live/Replay und Playback-Speed; lediglich die Daten werden für denselben Zeitraum neu
@@ -96,7 +100,29 @@ Ein Keypress führt genau eine Action aus.
 
 ### 18.5 Reduced Motion und Langzeitsitzung
 
-`prefers-reduced-motion` deaktiviert Kameraanimation und alle nicht essenziellen Transitions. Scope-Outline darf statisch bleiben. Es gibt keine dauerlaufenden dekorativen Animationen. Der 100-Zyklen-Disposal-Test ist Release-Gate, weil ein COP viele Stunden geöffnet bleibt.
+```ts
+interface WorldviewMotionSnapshot {
+  readonly mode: "full" | "reduced" | "static";
+  readonly source: "default" | "media-query" | "user";
+  readonly revision: number;
+}
+
+interface WorldviewMotionStore {
+  getSnapshot(): WorldviewMotionSnapshot;
+  subscribe(listener: () => void): () => void;
+  setUserMode(mode: WorldviewMotionSnapshot["mode"]): void;
+}
+```
+
+`WorldviewMotionSnapshot` ist der eine live abonnierbare In-process-Zustand für
+`full | reduced | static`; kein Modul liest `matchMedia` als Modulkonstante.
+`prefers-reduced-motion` initialisiert `reduced`, eine sichtbare Einstellung darf auf
+`static` wechseln und nur eine explizite Nutzeraktion auf `full` hochstufen.
+`reduced` setzt Kamera-/Reveal-Dauer auf `0`, entfernt Ambient-Motion und aktualisiert
+reale Live-Daten ohne dekorative Interpolation. `static` besitzt keine dauerlaufende
+Animationsschleife, bewahrt aber Marks, Picks, Legenden und Datenupdates. Budgetierte,
+pausierbare Ambient-Motion ist nur in `full` zulässig. Alle Layer und Presenter
+konsumieren denselben Snapshot. Der 100-Zyklen-Disposal-Test bleibt Release-Gate.
 
 ### 18.6 Kartographische Provenance und Attribution
 
@@ -115,15 +141,25 @@ Der Scope macht ODIN bereits räumlich „3D“, weil er auf dem Cesium-Globus, 
 
 ```ts
 interface SpatialMetricDefinition {
+  readonly definitionRevision: string;
   readonly metricId: string;
   readonly label: string;
   readonly unit: string;
   readonly aggregation: "sum" | "mean" | "max" | "count";
   readonly scale: "linear" | "log";
   readonly domain: readonly [number, number];
-  readonly heightMeters: readonly [number, number];
+  readonly heightMeters: readonly [number, number] | null;
   readonly timeBasis: "instant" | "window";
   readonly missingValue: "transparent" | "hatched";
+  readonly binning:
+    | { readonly kind: "none" }
+    | {
+        readonly kind: "fixed-grid";
+        readonly revision: string;
+        readonly cellSizeMeters: number;
+        readonly originLongitude: number;
+        readonly originLatitude: number;
+      };
 }
 
 interface SpatialMetricSample {
@@ -132,18 +168,64 @@ interface SpatialMetricSample {
   readonly observedAt: string;
   readonly coverage: number;
 }
+
+interface SpatialMetricSnapshot {
+  readonly query: SpatialQueryRef;
+  readonly definition: SpatialMetricDefinition;
+  readonly dataRevision: string;
+  readonly samples: readonly SpatialMetricSample[];
+  readonly accounting: {
+    readonly relation: "occurs-in";
+    readonly precision: "semantic-key" | "point-in-boundary";
+    readonly completeness: "complete" | "partial";
+    readonly candidateCount: number;
+    readonly includedCount: number;
+    readonly excludedUnlocatedCount: number;
+    readonly excludedConflictCount: number;
+    readonly excludedBoundaryUncertainCount: number;
+  };
+}
+
+interface SpatialMetricPort {
+  load(
+    request: {
+      readonly query: SpatialQueryRef;
+      readonly metricId: string;
+      readonly definitionRevision: string;
+      readonly childScopeKeys: readonly ScopeKey[];
+      readonly window: { readonly start: string; readonly end: string };
+    },
+    signal: AbortSignal,
+  ): Promise<SpatialMetricSnapshot>;
+}
 ```
 
 Regeln:
 
 - jede Höhe kodiert eine benannte Metrik und Einheit;
 - Legende, Zeitbasis, Scale und Clamping sind immer sichtbar;
-- Null ist nicht Nullhöhe, sondern Missing-Value-Darstellung;
+- der numerische Wert `0` ist gültig; ausschließlich `value === null` ist Missing Data;
 - log scale wird explizit markiert;
 - Geometrie und Metric-Daten besitzen getrennte Revisionen;
 - keine Extrusion ohne Daten;
 - Arc/Fly-Line nur für echte gerichtete Beziehungen mit Richtung, Magnitude, Zeit und Confidence; keine dekorativen Capital-to-City-Bögen.
+- Country-Child-Werte dürfen nie durch eine BBox-Abfrage pro Child entstehen;
+  zulässig sind nur attestierte kanonische Keys oder fixes reviewtes Child-Containment.
+- Ein Snapshot enthält jeden angeforderten direkten Child-Key genau einmal und
+  sortiert; fehlende Messung ist ein explizites `value: null`, kein ausgelassener
+  Sample. `coverage` liegt endlich in `[0, 1]`, und `candidateCount` reconciliert
+  exakt mit included plus den drei disjunkten Exclusion-Countern.
+- Query-Identität, Child-Set und Definition-Revision werden gegen den Request
+  validiert; `metricId` muss in der geschlossenen Metric-Registry stehen.
+  `dataRevision` wird schema-validiert und generation-gebunden. Ein Mismatch ist
+  unavailable und darf keinen alten Snapshot behalten.
+- Die Definition wird erst aktiviert, wenn Domain, optionaler Höhenbereich,
+  Transport, Coverage, Accounting und bei Extrusion Base-Height-/Build-Budget in
+  einem reviewten Promotion-Record belegt sind.
 
-Dieser Adapter kann später `PolygonGeometry`/`Primitive` verwenden. Er darf den aktiven Scope lesen, aber niemals setzen.
+Der Port besitzt einen HTTP-Adapter für Produktion und einen In-memory-Adapter für
+Tests. Eine Flat-Color-Darstellung ist ohne Höhenfreigabe zulässig. Ein späterer
+Extrusionsadapter darf `PolygonGeometry`/`Primitive` verwenden, den aktiven Scope
+lesen, aber niemals setzen.
 
 ---
