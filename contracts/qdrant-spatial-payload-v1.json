@@ -20,7 +20,15 @@
       "sorted_scope_derivation_revisions"
     ]
   },
+  "conflict_admission": {
+    "retrieval_authority": "positive-pair-tokens",
+    "suppression_granularity": "same-relation-and-exact-scope",
+    "record_conflict_fields": "unindexed-audit-only",
+    "mixed_status": "filterable-when-any-token-is-admitted"
+  },
   "unindexed_audit_fields": [
+    "spatial_conflict",
+    "spatial_conflict_scope_keys",
     "spatial_derivation_status",
     "spatial_derivation_unavailable_reason",
     "spatial_derivations"
@@ -62,12 +70,6 @@
       "field": "spatial_derivation_version",
       "schema": "keyword",
       "group": "spatial"
-    },
-    {"field": "spatial_conflict", "schema": "bool", "group": "spatial"},
-    {
-      "field": "spatial_conflict_scope_keys",
-      "schema": "keyword",
-      "group": "spatial"
     }
   ],
   "vectors": [
@@ -83,8 +85,8 @@
         "spatial_basis": ["coordinate"],
         "spatial_precision": "point",
         "spatial_catalog_revision": "spatial-v1-e76a16bff799",
-        "spatial_projection_revision": "spatial-projection-v1-a5ce3a4f4657",
-        "spatial_derivation_version": "spatial-deriver-v1",
+        "spatial_projection_revision": "spatial-projection-v1-47fec701a2a2",
+        "spatial_derivation_version": "spatial-deriver-v2",
         "spatial_conflict": false,
         "spatial_conflict_scope_keys": []
       },

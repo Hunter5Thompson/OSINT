@@ -30,8 +30,13 @@ def test_local_index_contract_matches_shared_vector_exactly() -> None:
     expected = _contract_indexes()
 
     assert expected == PAYLOAD_INDEXES
-    assert len(PAYLOAD_INDEXES) == 19
-    assert sum(field.startswith("spatial_") or field == "geo" for field in expected) == 10
+    assert len(PAYLOAD_INDEXES) == 17
+    assert sum(field.startswith("spatial_") or field == "geo" for field in expected) == 8
+    contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert {"spatial_conflict", "spatial_conflict_scope_keys"} <= set(
+        contract["unindexed_audit_fields"]
+    )
+    assert not set(contract["unindexed_audit_fields"]) & set(PAYLOAD_INDEXES)
 
 
 def test_payload_validator_reports_missing_indexes_without_writing() -> None:
@@ -48,11 +53,11 @@ def test_payload_validator_rejects_existing_wrong_type() -> None:
     info = SimpleNamespace(
         payload_schema={
             "source": _index("keyword"),
-            "spatial_conflict": _index("keyword"),
+            "geo": _index("keyword"),
         }
     )
 
-    with pytest.raises(QdrantSchemaMismatch, match="spatial_conflict.*keyword.*bool"):
+    with pytest.raises(QdrantSchemaMismatch, match="geo.*keyword.*geo"):
         validate_payload_index_schema(info)
 
 
@@ -63,13 +68,13 @@ async def test_authorized_migration_rejects_wrong_type_before_any_write() -> Non
     client = SimpleNamespace(
         get_collection=AsyncMock(
             return_value=SimpleNamespace(
-                payload_schema={"spatial_conflict": _index("keyword")}
+                payload_schema={"geo": _index("keyword")}
             )
         ),
         create_payload_index=AsyncMock(),
     )
 
-    with pytest.raises(QdrantSchemaMismatch, match="spatial_conflict"):
+    with pytest.raises(QdrantSchemaMismatch, match="geo"):
         await ensure_indexes(client=client, collection="odin_intel")
 
     client.create_payload_index.assert_not_awaited()
