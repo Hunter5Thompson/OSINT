@@ -125,3 +125,8 @@ Vor einer Promotion bleiben autorisierte Indexmigration, genehmigter Full-Lane-
 Dry-run, Apply über das approval-gebundene Interface sowie ein nachfolgender realer
 Coverage-Snapshot erforderlich. Ein wirksamer Stale-/Unprojected-Gap über 1 Prozent
 blockiert.
+
+Dry-run-Approval und Apply müssen innerhalb derselben deployten Codeversion erfolgen;
+liegt ein Deployment dazwischen, kann `validate_dry_run_approval` mit „approved
+dry-run drifted from the current Qdrant lane“ auch Code- statt Qdrant-Datendrift
+melden.
