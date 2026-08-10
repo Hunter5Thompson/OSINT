@@ -5,6 +5,7 @@ import type { LayerVisibility } from "../../types";
 import type { SpatialBoundaryProvenanceState } from "../../hooks/useSpatialBoundaryProvenance";
 import type { SpatialBoundaryProvenance } from "../../spatial/catalog";
 import { parseCatalogRevision } from "../../spatial/contracts";
+import type { LayerSpatialStatus } from "../../spatial/layerScopePolicy";
 
 const allOff: LayerVisibility = {
   flights: false, satellites: false, earthquakes: false, vessels: false,
@@ -40,6 +41,43 @@ const readyProvenance: SpatialBoundaryProvenanceState = {
 };
 
 describe("LayersPanel", () => {
+  it("renders registry-owned scope behavior beside runtime layers", () => {
+    const spatialStatuses: Partial<Record<keyof LayerVisibility, LayerSpatialStatus>> = {
+      flights: {
+        render: false,
+        label: "unavailable in scope",
+        title: "Flights are unavailable outside world scope",
+        tone: "unsupported",
+      },
+      satellites: {
+        render: true,
+        label: "global context",
+        title: "Satellites remain global context",
+        tone: "global",
+      },
+    };
+    render(
+      <LayersPanel
+        layers={{ ...allOff, flights: true, satellites: true }}
+        onToggle={() => {}}
+        activeShader="none"
+        onShaderChange={() => {}}
+        spatialStatuses={spatialStatuses}
+      />,
+    );
+
+    expect(screen.getByTestId("layer-scope-flights")).toHaveTextContent(
+      "unavailable in scope",
+    );
+    expect(screen.getByTestId("layer-scope-satellites")).toHaveTextContent(
+      "global context",
+    );
+    expect(screen.getByTestId("layer-scope-flights")).toHaveAttribute(
+      "title",
+      "Flights are unavailable outside world scope",
+    );
+  });
+
   it("renders groups and marks active layer as pressed", () => {
     render(
       <LayersPanel

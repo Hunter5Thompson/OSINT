@@ -1851,6 +1851,10 @@ Observation-Producer.
 #   verhindern jede
 #   operative Exact-Promotion. Auch 06B erfüllt keines der neun folgenden Frontend-
 #   Kriterien und ändert den Status von TASK-123 daher nicht.
+#   Spatial Plan 08 verdrahtet am 2026-08-10 `spatial/geometry.ts` über den festen
+#   Containment-Index produktiv und macht die geschlossene Layer-Matrix zum Runtime-
+#   Gate sowie Badge-Consumer. Damit sind ausschließlich Kriterien 6 und 9 erfüllt;
+#   Kriterien 1–5, 7 und 8 sowie der Plan-05D-Blocker bleiben offen.
 #
 # Verbleibende Akzeptanzkriterien / RED-Gates:
 #   1. Der Spatial-Country-Inspector erhält Signal-Liste und Munin-Briefing über

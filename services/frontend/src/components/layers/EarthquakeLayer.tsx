@@ -9,6 +9,7 @@ import {
   bulkScaleByDistance,
   bulkTranslucencyByDistance,
 } from "../../lib/lod";
+import type { StrictPointLayerAdapter } from "../../spatial/pointLayerSpatialAdapter";
 
 const MAX_QUAKES = 250;
 const QUAKE_LABEL_ALTITUDE_M = 5_000_000;
@@ -17,6 +18,7 @@ interface EarthquakeLayerProps {
   viewer: Cesium.Viewer | null;
   earthquakes: Earthquake[];
   visible: boolean;
+  spatialAdapter?: StrictPointLayerAdapter<Earthquake>;
 }
 
 function magnitudeToColor(mag: number): Cesium.Color {
@@ -45,7 +47,12 @@ interface QuakePulse {
  * - M >= 5.0: 30-second pulse after event, then static
  * - M < 5.0: single ripple then static
  */
-export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLayerProps) {
+export function EarthquakeLayer({
+  viewer,
+  earthquakes,
+  visible,
+  spatialAdapter,
+}: EarthquakeLayerProps) {
   const collectionRef = useRef<Cesium.BillboardCollection | null>(null);
   const labelCollectionRef = useRef<Cesium.LabelCollection | null>(null);
   const pulsesRef = useRef<QuakePulse[]>([]);
@@ -58,6 +65,8 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
   earthquakesRef.current = earthquakes;
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
+  const spatialAdapterRef = useRef(spatialAdapter);
+  spatialAdapterRef.current = spatialAdapter;
 
   // Setup: create BillboardCollection + LabelCollection
   useEffect(() => {
@@ -94,9 +103,11 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
     pulsesRef.current = [];
     if (!visibleRef.current) return;
 
+    const spatiallyScoped = spatialAdapterRef.current?.apply(earthquakesRef.current).records
+      ?? earthquakesRef.current;
     const bounds = getViewBounds(viewer);
     const shown = selectVisible(
-      earthquakesRef.current,
+      spatiallyScoped,
       (q) => [q.longitude, q.latitude] as const,
       bounds,
       { cap: MAX_QUAKES, rank: (q) => q.magnitude },
@@ -156,7 +167,9 @@ export function EarthquakeLayer({ viewer, earthquakes, visible }: EarthquakeLaye
   // Re-render on data / visibility change
   useEffect(() => {
     renderVisible();
-  }, [earthquakes, visible, renderVisible]);
+  }, [earthquakes, visible, spatialAdapter, renderVisible]);
+
+  useEffect(() => spatialAdapter?.subscribe(renderVisible), [renderVisible, spatialAdapter]);
 
   // Re-render on camera move (viewport culling)
   useEffect(() => {

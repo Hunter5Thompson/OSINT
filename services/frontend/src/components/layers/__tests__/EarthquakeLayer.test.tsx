@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import * as Cesium from "cesium";
 import { EarthquakeLayer } from "../EarthquakeLayer";
 import type { Earthquake } from "../../../types";
+import type { StrictPointLayerAdapter } from "../../../spatial/pointLayerSpatialAdapter";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -51,6 +52,96 @@ const manyQuakes = (n: number, lon: number, lat: number): Earthquake[] =>
   Array.from({ length: n }, (_, i) => quake({ id: `q${i}`, longitude: lon, latitude: lat, magnitude: 3 + (i % 50) / 10 }));
 
 describe("EarthquakeLayer", () => {
+  it("applies strict containment to the full feed before viewport culling", () => {
+    const labelAdd = vi.spyOn(Cesium.LabelCollection.prototype, "add");
+    const viewer = fakeViewer();
+    const source = [
+      quake({ id: "outside", longitude: -120, latitude: 35 }),
+      quake({ id: "inside", longitude: 37, latitude: 45 }),
+    ];
+    const apply = vi.fn(() => ({
+      phase: "ready" as const,
+      stateRevision: 2,
+      records: [source[1]!],
+      inputCount: 2,
+      includedCount: 1,
+      excludedOutsideCount: 1,
+      excludedBoundaryUncertainCount: 0,
+      excludedInvalidCoordinateCount: 0,
+      withheldCount: 0,
+    }));
+    const spatialAdapter: StrictPointLayerAdapter<Earthquake> = {
+      apply,
+      subscribe: () => () => undefined,
+    };
+
+    render(
+      <EarthquakeLayer
+        viewer={viewer}
+        earthquakes={source}
+        visible={true}
+        spatialAdapter={spatialAdapter}
+      />,
+    );
+
+    expect(apply).toHaveBeenCalledWith(source);
+    expect(labelAdd).toHaveBeenCalledTimes(1);
+    expect(source.map((item) => item.id)).toEqual(["outside", "inside"]);
+  });
+
+  it("redraws imperatively when containment becomes ready", () => {
+    const labelAdd = vi.spyOn(Cesium.LabelCollection.prototype, "add");
+    const viewer = fakeViewer();
+    const source = [quake({ id: "inside" })];
+    let listener: () => void = () => undefined;
+    let ready = false;
+    const spatialAdapter: StrictPointLayerAdapter<Earthquake> = {
+      apply: () => ready
+        ? {
+            phase: "ready",
+            stateRevision: 2,
+            records: source,
+            inputCount: 1,
+            includedCount: 1,
+            excludedOutsideCount: 0,
+            excludedBoundaryUncertainCount: 0,
+            excludedInvalidCoordinateCount: 0,
+            withheldCount: 0,
+          }
+        : {
+            phase: "building",
+            stateRevision: 2,
+            records: [],
+            inputCount: 1,
+            includedCount: 0,
+            excludedOutsideCount: 0,
+            excludedBoundaryUncertainCount: 0,
+            excludedInvalidCoordinateCount: 0,
+            withheldCount: 1,
+          },
+      subscribe: (next) => {
+        listener = next;
+        return () => {
+          listener = () => undefined;
+        };
+      },
+    };
+
+    render(
+      <EarthquakeLayer
+        viewer={viewer}
+        earthquakes={source}
+        visible={true}
+        spatialAdapter={spatialAdapter}
+      />,
+    );
+    expect(labelAdd).not.toHaveBeenCalled();
+
+    ready = true;
+    listener();
+    expect(labelAdd).toHaveBeenCalledTimes(1);
+  });
+
   it("caps rendered quakes at 250 (one label each)", () => {
     const labelAdd = vi.spyOn(Cesium.LabelCollection.prototype, "add");
     const viewer = fakeViewer();

@@ -9,19 +9,17 @@ import type {
 } from "./catalog";
 import {
   parseScopeKeyCandidate,
+  type PointContainment,
   type RenderAssetDescriptor,
   type ResolvedPresentationInput,
   type ScopeKey,
 } from "./contracts";
 
+export type { PointContainment } from "./contracts";
+
 const EARTH_RADIUS_METERS = 6_371_008.8;
 const COORDINATE_EPSILON = 1e-12;
 const DISTANCE_EPSILON_METERS = 1e-6;
-
-export type PointContainment =
-  | "inside"
-  | "outside"
-  | "boundary-uncertain";
 
 export class SpatialGeometryError extends Error {
   constructor(message: string) {
@@ -37,6 +35,10 @@ function assertQueryCoordinate(longitude: number, latitude: number): void {
   if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
     throw new RangeError("Query latitude must be finite and within [-90, 90].");
   }
+}
+
+export function assertWgs84Point(longitude: number, latitude: number): void {
+  assertQueryCoordinate(longitude, latitude);
 }
 
 function assertErrorBand(maxErrorMeters: number): void {

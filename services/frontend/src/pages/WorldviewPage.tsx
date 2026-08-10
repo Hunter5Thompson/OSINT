@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -21,6 +22,22 @@ import {
   type SpatialBoundaryProvenanceLoader,
 } from "../spatial/catalog";
 import { WORLD_SCOPE_KEY, type SpatialQueryRef } from "../spatial/contracts";
+import type {
+  ContainmentSnapshot,
+  SpatialContainmentPort,
+} from "../spatial/contracts";
+import {
+  createSpatialContainmentController,
+  type OwnedSpatialContainmentPort,
+} from "../spatial/containment";
+import {
+  createStrictPointLayerAdapter,
+  type StrictPointLayerAdapter,
+} from "../spatial/pointLayerSpatialAdapter";
+import {
+  applyLayerSpatialPolicy,
+  layerSpatialStatuses,
+} from "../spatial/layerScopePolicy";
 import { SpatialScopeBreadcrumb } from "../spatial/SpatialScopeBreadcrumb";
 import { WorldviewKeyboardCoordinator } from "../spatial/WorldviewKeyboardCoordinator";
 import { MutuallyExclusiveCountryPath } from "../spatial/WorldviewCountryPath";
@@ -106,6 +123,7 @@ import type {
   TimelineEventDetail,
   TimelineGeoEvent,
   WindowTrackSample,
+  Earthquake,
 } from "../types";
 
 type PanelId = "layers" | "search" | "ticker";
@@ -585,12 +603,35 @@ interface WorldviewContentProps {
   readonly spatialEnabled: boolean;
   readonly presentationBridge: CesiumSpatialPresentationBridge | null;
   readonly provenanceLoader: SpatialBoundaryProvenanceLoader | null;
+  readonly containment: SpatialContainmentPort | null;
+  readonly earthquakeSpatialAdapter: StrictPointLayerAdapter<Earthquake> | null;
+}
+
+const DISABLED_CONTAINMENT_SNAPSHOT: ContainmentSnapshot = Object.freeze({
+  phase: "unavailable",
+  stateRevision: 0,
+});
+
+function useContainmentSnapshot(
+  containment: SpatialContainmentPort | null,
+): ContainmentSnapshot {
+  const subscribe = useCallback(
+    (listener: () => void) => containment?.subscribe(listener) ?? (() => undefined),
+    [containment],
+  );
+  const getSnapshot = useCallback(
+    () => containment?.getSnapshot() ?? DISABLED_CONTAINMENT_SNAPSHOT,
+    [containment],
+  );
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 function WorldviewContent({
   spatialEnabled,
   presentationBridge,
   provenanceLoader,
+  containment,
+  earthquakeSpatialAdapter,
 }: WorldviewContentProps) {
   const location = useLocation();
   const spatialScope = useOptionalSpatialScope();
@@ -600,6 +641,14 @@ function WorldviewContent({
     && spatialScope.phase !== "hydrating"
     ? spatialScope.current.key
     : WORLD_SCOPE_KEY;
+  const currentScopeKind = spatialEnabled
+    ? spatialScope !== null && spatialScope.phase !== "hydrating"
+      ? spatialScope.current.kind
+      : null
+    : "world";
+  const containmentSnapshot = useContainmentSnapshot(
+    spatialEnabled ? containment : null,
+  );
   const committedSpatialQuery = spatialEnabled
     && spatialScope !== null
     && spatialScope.phase !== "hydrating"
@@ -611,6 +660,16 @@ function WorldviewContent({
   const [photorealTileset, setPhotorealTileset] = useState<Cesium.Cesium3DTileset | null>(null);
   const [config, setConfig] = useState<ClientConfig | null>(null);
   const [layers, setLayers] = useState<LayerVisibility>(DEFAULT_LAYERS);
+  const runtimeSpatialStatuses = useMemo(
+    () => layerSpatialStatuses(currentScopeKind, containmentSnapshot),
+    [containmentSnapshot, currentScopeKind],
+  );
+  const effectiveLayers = useMemo(
+    () => spatialEnabled
+      ? applyLayerSpatialPolicy(layers, currentScopeKind, containmentSnapshot)
+      : layers,
+    [containmentSnapshot, currentScopeKind, layers, spatialEnabled],
+  );
   const [activeShader, setActiveShader] = useState<ShaderType>("none");
   const [selectionEnvelope, setSelectionEnvelope] =
     useState<SelectionEnvelope<Selected> | null>(null);
@@ -725,17 +784,17 @@ function WorldviewContent({
     [timelineGeo],
   );
 
-  const { flights } = useFlights(layers.flights);
-  const { satellites } = useSatellites(layers.satellites);
+  const { flights } = useFlights(effectiveLayers.flights);
+  const { satellites } = useSatellites(effectiveLayers.satellites);
   const { earthquakes } = useEarthquakes(layers.earthquakes);
-  const { cables, landingPoints } = useCables(layers.cables);
-  const { vessels } = useVessels(layers.vessels);
-  const { pipelines: pipelineData } = usePipelines(layers.pipelines);
-  const { hotspots: firmsHotspots } = useFIRMSHotspots(layers.firmsHotspots);
-  const { datacenters: datacenterData } = useDatacenters(layers.datacenters);
-  const { refineries: refineryData } = useRefineries(layers.refineries);
-  const { events: eonetEvents } = useEONETEvents(layers.eonet);
-  const { events: gdacsEvents } = useGDACSEvents(layers.gdacs);
+  const { cables, landingPoints } = useCables(effectiveLayers.cables);
+  const { vessels } = useVessels(effectiveLayers.vessels);
+  const { pipelines: pipelineData } = usePipelines(effectiveLayers.pipelines);
+  const { hotspots: firmsHotspots } = useFIRMSHotspots(effectiveLayers.firmsHotspots);
+  const { datacenters: datacenterData } = useDatacenters(effectiveLayers.datacenters);
+  const { refineries: refineryData } = useRefineries(effectiveLayers.refineries);
+  const { events: eonetEvents } = useEONETEvents(effectiveLayers.eonet);
+  const { events: gdacsEvents } = useGDACSEvents(effectiveLayers.gdacs);
   const { scenes: reconScenes } = useReconManifest();
   const { openScene } = useRecon();
 
@@ -838,25 +897,30 @@ function WorldviewContent({
             onViewerReady={handleViewerReady}
             cesiumToken={config.cesium_ion_token}
             activeShader={activeShader}
-            showCountryBorders={!spatialEnabled && layers.countryBorders}
-            showCityBuildings={layers.cityBuildings}
+            showCountryBorders={!spatialEnabled && effectiveLayers.countryBorders}
+            showCityBuildings={effectiveLayers.cityBuildings}
             onPhotorealTilesetReady={setPhotorealTileset}
           />
         </div>
 
-        <FlightLayer viewer={viewer} flights={flights} visible={layers.flights} />
-        <SatelliteLayer viewer={viewer} satellites={satellites} visible={layers.satellites} />
-        <EarthquakeLayer viewer={viewer} earthquakes={earthquakes} visible={layers.earthquakes} />
-        <ShipLayer viewer={viewer} vessels={vessels} visible={layers.vessels} />
-        <CCTVLayer viewer={viewer} visible={layers.cctv} />
+        <FlightLayer viewer={viewer} flights={flights} visible={effectiveLayers.flights} />
+        <SatelliteLayer viewer={viewer} satellites={satellites} visible={effectiveLayers.satellites} />
+        <EarthquakeLayer
+          viewer={viewer}
+          earthquakes={earthquakes}
+          visible={effectiveLayers.earthquakes}
+          spatialAdapter={earthquakeSpatialAdapter ?? undefined}
+        />
+        <ShipLayer viewer={viewer} vessels={vessels} visible={effectiveLayers.vessels} />
+        <CCTVLayer viewer={viewer} visible={effectiveLayers.cctv} />
         <EventLayerBridge
           viewer={viewer}
           events={eventLayerEvents}
-          visible={layers.events}
+          visible={effectiveLayers.events}
           window={timelineWindow}
         />
-        <CableLayer viewer={viewer} cables={cables} landingPoints={landingPoints} visible={layers.cables} />
-        <PipelineLayer viewer={viewer} pipelines={pipelineData} visible={layers.pipelines} />
+        <CableLayer viewer={viewer} cables={cables} landingPoints={landingPoints} visible={effectiveLayers.cables} />
+        <PipelineLayer viewer={viewer} pipelines={pipelineData} visible={effectiveLayers.pipelines} />
         <ReconLayer
           viewer={viewer}
           scenes={reconScenes}
@@ -865,7 +929,7 @@ function WorldviewContent({
         />
         <GlobeChildren
           viewer={viewer}
-          layers={layers}
+          layers={effectiveLayers}
           setSelected={setSelected}
           firmsHotspots={firmsHotspots}
           selectedWindow={selectedWindow}
@@ -880,7 +944,7 @@ function WorldviewContent({
           spatialEnabled={spatialEnabled}
           legacyRenderer={(
             <>
-              <CountryBorders viewer={viewer} visible={layers.countryBorders} />
+              <CountryBorders viewer={viewer} visible={effectiveLayers.countryBorders} />
               <LegacyCountrySpotlightOverlay viewer={viewer} />
               <CapitalPulse viewer={viewer} />
             </>
@@ -947,6 +1011,7 @@ function WorldviewContent({
                 activeShader={activeShader}
                 onShaderChange={setActiveShader}
                 spatialProvenance={spatialEnabled ? spatialProvenance : undefined}
+                spatialStatuses={spatialEnabled ? runtimeSpatialStatuses : undefined}
               />
             </OverlayPanel>
           ) : (
@@ -1032,6 +1097,8 @@ interface SpatialWorldviewResources {
   readonly assets: BoundaryAssetStore;
   readonly catalog: HttpSpatialCatalog;
   readonly presentation: CesiumSpatialPresentationBridge;
+  readonly containment: OwnedSpatialContainmentPort;
+  readonly earthquakeSpatialAdapter: StrictPointLayerAdapter<Earthquake>;
   lifecycleGeneration: number;
   disposed: boolean;
 }
@@ -1041,6 +1108,10 @@ interface SpatialCanaryWindow extends Window {
     assets: ReturnType<BoundaryAssetStore["diagnostics"]>;
     catalog: ReturnType<HttpSpatialCatalog["diagnostics"]>;
     presentation: ReturnType<CesiumSpatialPresentationBridge["diagnostics"]>;
+    containment: Readonly<{
+      phase: ContainmentSnapshot["phase"];
+      stateRevision: number;
+    }>;
     scope: Readonly<{
       current: ReturnType<typeof useSpatialScope>["current"] | null;
       pending: ReturnType<typeof useSpatialScope>["pending"];
@@ -1054,10 +1125,16 @@ interface SpatialCanaryWindow extends Window {
 
 function createSpatialWorldviewResources(): SpatialWorldviewResources {
   const assets = new BoundaryAssetStore();
+  const containment = createSpatialContainmentController({ assets });
   return {
     assets,
     catalog: new HttpSpatialCatalog({ assetStore: assets }),
     presentation: new CesiumSpatialPresentationBridge({ assets }),
+    containment,
+    earthquakeSpatialAdapter: createStrictPointLayerAdapter<Earthquake>({
+      containment,
+      coordinates: (earthquake) => [earthquake.longitude, earthquake.latitude],
+    }),
     lifecycleGeneration: 0,
     disposed: false,
   };
@@ -1073,19 +1150,26 @@ function SpatialCanaryProbe({ resources }: { readonly resources: SpatialWorldvie
       return;
     }
     const canaryWindow = window as SpatialCanaryWindow;
-    const readDiagnostics = () => Object.freeze({
-      assets: resources.assets.diagnostics(),
-      catalog: resources.catalog.diagnostics(),
-      presentation: resources.presentation.diagnostics(),
-      scope: Object.freeze({
-        current: scope.phase === "hydrating" ? null : scope.current,
-        pending: scope.pending,
-        phase: scope.phase,
-        problem: scope.problem,
-        stateRevision: scope.stateRevision,
-        visual: scope.visual,
-      }),
-    });
+    const readDiagnostics = () => {
+      const containment = resources.containment.getSnapshot();
+      return Object.freeze({
+        assets: resources.assets.diagnostics(),
+        catalog: resources.catalog.diagnostics(),
+        presentation: resources.presentation.diagnostics(),
+        containment: Object.freeze({
+          phase: containment.phase,
+          stateRevision: containment.stateRevision,
+        }),
+        scope: Object.freeze({
+          current: scope.phase === "hydrating" ? null : scope.current,
+          pending: scope.pending,
+          phase: scope.phase,
+          problem: scope.problem,
+          stateRevision: scope.stateRevision,
+          visual: scope.visual,
+        }),
+      });
+    };
     canaryWindow.__ODIN_SPATIAL_CANARY__ = readDiagnostics;
     return () => {
       if (canaryWindow.__ODIN_SPATIAL_CANARY__ === readDiagnostics) {
@@ -1113,6 +1197,7 @@ export function WorldviewPage() {
           && !resources.disposed
         ) {
           resources.disposed = true;
+          resources.containment.dispose();
           resources.presentation.dispose();
           resources.catalog.dispose();
         }
@@ -1125,12 +1210,15 @@ export function WorldviewPage() {
       enabled={SPATIAL_SCOPE_ENABLED}
       catalog={resources?.catalog}
       presentation={resources?.presentation}
+      containment={resources?.containment}
     >
       {resources === null ? null : <SpatialCanaryProbe resources={resources} />}
       <WorldviewContent
         spatialEnabled={SPATIAL_SCOPE_ENABLED}
         presentationBridge={resources?.presentation ?? null}
         provenanceLoader={resources?.catalog ?? null}
+        containment={resources?.containment ?? null}
+        earthquakeSpatialAdapter={resources?.earthquakeSpatialAdapter ?? null}
       />
     </SpatialScopeProvider>
   );

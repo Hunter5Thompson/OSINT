@@ -21,6 +21,10 @@ import {
   createSpatialScopeController,
   type SpatialScopePresentationPort,
 } from "../scopeController";
+import type {
+  SpatialContainmentCommit,
+  SpatialContainmentLifecyclePort,
+} from "../containment";
 
 interface Fixture {
   readonly catalogRevision: string;
@@ -290,11 +294,25 @@ class ControlledPresentation implements SpatialScopePresentationPort {
   }
 }
 
+class ControlledContainment implements SpatialContainmentLifecyclePort {
+  readonly calls: SpatialContainmentCommit[] = [];
+  readonly resets: number[] = [];
+
+  commit(input: SpatialContainmentCommit): void {
+    this.calls.push(input);
+  }
+
+  reset(stateRevision: number): void {
+    this.resets.push(stateRevision);
+  }
+}
+
 const liveControllers: Array<ReturnType<typeof createSpatialScopeController>> = [];
 
 function setup(options: {
   readonly initialScopeCandidate?: string | null;
   readonly presentation?: SpatialScopePresentationPort;
+  readonly containment?: SpatialContainmentLifecyclePort;
 } = {}) {
   const catalog = new MemorySpatialCatalog({
     activeCatalogRevision: fixture.catalogRevision,
@@ -309,6 +327,7 @@ function setup(options: {
     catalog,
     navigation,
     presentation,
+    containment: options.containment,
     createNavigationId: () => `test-navigation-${++navigationId}`,
   });
   liveControllers.push(controller);
@@ -756,6 +775,93 @@ describe("SpatialScopeController generations and failures", () => {
 });
 
 describe("SpatialScopeController semantic and presentation lifetimes", () => {
+  it("invalidates containment before publishing each semantic commit", async () => {
+    const order: string[] = [];
+    const containment: SpatialContainmentLifecyclePort = {
+      commit(input) {
+        order.push(`containment:${input.stateRevision}:${input.scopeKind}`);
+      },
+      reset(stateRevision) {
+        order.push(`reset:${stateRevision}`);
+      },
+    };
+    const { controller } = setup({ containment });
+    controller.subscribe(() => {
+      const snapshot = controller.getSnapshot();
+      if (snapshot.phase === "ready") {
+        order.push(`scope:${snapshot.stateRevision}:${snapshot.current.kind}`);
+      }
+    });
+
+    await startAtWorld(controller);
+    await controller.dispatch({
+      type: "enter",
+      target: UKRAINE,
+      cause: "country-click",
+    });
+
+    expect(order).toEqual([
+      "containment:1:world",
+      "scope:1:world",
+      "scope:1:world",
+      "containment:2:country",
+      "scope:2:country",
+      "scope:2:country",
+    ]);
+  });
+
+  it("passes the resolved fixed asset, marks missing geometry unavailable, and resets on stop", async () => {
+    const containment = new ControlledContainment();
+    const { controller } = setup({ containment });
+    await startAtWorld(controller);
+    await controller.dispatch({
+      type: "enter",
+      target: UKRAINE,
+      cause: "country-click",
+    });
+    await controller.dispatch({
+      type: "enter",
+      target: POLAND,
+      cause: "country-click",
+    });
+
+    expect(containment.calls).toHaveLength(3);
+    expect(containment.calls[0]).toEqual({
+      scopeKind: "world",
+      descriptor: null,
+      stateRevision: 1,
+    });
+    expect(containment.calls[1]).toMatchObject({
+      scopeKind: "country",
+      descriptor: { role: "containment" },
+      stateRevision: 2,
+    });
+    expect(containment.calls[2]).toEqual({
+      scopeKind: "country",
+      descriptor: null,
+      stateRevision: 3,
+    });
+
+    controller.stop();
+    expect(containment.resets).toEqual([0]);
+  });
+
+  it("does not rebuild containment when only presentation LOD readiness changes", async () => {
+    const presentation = new ControlledPresentation();
+    const presentationGate = presentation.deferNext(WORLD_SCOPE_KEY);
+    const containment = new ControlledContainment();
+    const { controller } = setup({ presentation, containment });
+    await startAtWorld(controller);
+    expect(containment.calls).toHaveLength(1);
+
+    presentationGate.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(controller.getSnapshot().visual.phase).toBe("ready");
+    expect(containment.calls).toHaveLength(1);
+  });
+
   it("commits semantic-only scope and reports unavailable geometry without rollback", async () => {
     const presentation = new ControlledPresentation();
     const { controller } = setup({ presentation });
