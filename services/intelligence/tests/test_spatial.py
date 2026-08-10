@@ -156,26 +156,29 @@ def test_lane_coverage_requires_named_exhaustive_accounting() -> None:
     coverage = SpatialLaneCoverageV1(
         lane="analysis",
         total_points=100,
-        filterable_points=50,
+        filterable_points=45,
         conflict_points=5,
         stale_points=5,
         unsupported_points=10,
         unprojected_points=20,
         audit_only_points=10,
+        inconsistent_points=5,
     )
 
     assert coverage.unprojected_points == 20
     assert coverage.audit_only_points == 10
+    assert coverage.inconsistent_points == 5
     with pytest.raises(ValidationError, match="must equal total points"):
         SpatialLaneCoverageV1(
             lane="analysis",
             total_points=100,
-            filterable_points=50,
+            filterable_points=45,
             conflict_points=5,
             stale_points=5,
             unsupported_points=10,
             unprojected_points=20,
             audit_only_points=9,
+            inconsistent_points=5,
         )
 
 

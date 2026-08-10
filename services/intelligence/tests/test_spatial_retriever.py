@@ -97,6 +97,7 @@ async def test_enhanced_search_propagates_coverage_snapshot_without_fallback() -
                 unsupported_points=10,
                 unprojected_points=5,
                 audit_only_points=2,
+                inconsistent_points=0,
             ),
         ),
     )

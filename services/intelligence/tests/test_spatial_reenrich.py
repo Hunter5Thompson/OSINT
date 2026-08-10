@@ -488,6 +488,7 @@ async def test_report_separates_current_stale_conflict_and_unsupported_coverage(
         "unsupported_points": 1,
         "unprojected_points": 0,
         "audit_only_points": 0,
+        "inconsistent_points": 0,
     }
     assert projected == {
         "lane": "analysis",
@@ -498,6 +499,7 @@ async def test_report_separates_current_stale_conflict_and_unsupported_coverage(
         "unsupported_points": 1,
         "unprojected_points": 0,
         "audit_only_points": 0,
+        "inconsistent_points": 0,
     }
     assert report["stale_points"] == 1
     assert report["stale_rate"] == 0.25
@@ -534,9 +536,33 @@ async def test_unprojected_points_fail_promotion_stale_gate_instead_of_hiding_in
             "unsupported_points",
             "unprojected_points",
             "audit_only_points",
+            "inconsistent_points",
         )
     ) == before["total_points"]
     assert report["stale_rate"] == 0.5
+    assert report["stale_gate_passed"] is False
+
+
+@pytest.mark.asyncio
+async def test_current_but_internally_inconsistent_payload_blocks_promotion() -> None:
+    from rag.spatial_reenrich import (
+        ReenrichmentJob,
+        preview_spatial_reenrichment,
+    )
+
+    target = "spatial-projection-v1-47fec701a2a2"
+    inconsistent = _projection(target, status="audit_only")
+    inconsistent["spatial_derivation_status"] = "filterable"
+    report = await preview_spatial_reenrichment(
+        FakeStore([inconsistent]),
+        FakeProjector(),
+        ReenrichmentJob(lane="analysis", target_projection_revision=target),
+    )
+
+    before = report["coverage_before"]["lanes"][0]
+    assert before["inconsistent_points"] == 1
+    assert before["unprojected_points"] == 0
+    assert report["stale_rate"] == 1.0
     assert report["stale_gate_passed"] is False
 
 
@@ -662,6 +688,66 @@ def test_json_checkpoint_store_uses_atomic_service_independent_v1_format(
     )
 
 
+def test_json_checkpoint_store_roundtrips_a_pristine_checkpoint(
+    tmp_path: Path,
+) -> None:
+    from rag.spatial_reenrich import (
+        Checkpoint,
+        JsonCheckpointStore,
+        ReenrichmentJob,
+    )
+
+    path = tmp_path / "checkpoints.json"
+    store = JsonCheckpointStore(path)
+    job = ReenrichmentJob(
+        lane="analysis",
+        target_projection_revision="spatial-projection-v1-111111111111",
+    )
+
+    store.save(job, Checkpoint())
+
+    assert JsonCheckpointStore(path).load(job) == Checkpoint()
+    assert json.loads(path.read_text(encoding="utf-8"))["checkpoints"][0][
+        "approved_report_fingerprint"
+    ] is None
+
+
+def test_json_checkpoint_store_upgrades_only_a_pristine_legacy_entry(
+    tmp_path: Path,
+) -> None:
+    from rag.spatial_reenrich import JsonCheckpointStore, ReenrichmentJob
+
+    path = tmp_path / "checkpoints.json"
+    job = ReenrichmentJob(
+        lane="analysis",
+        target_projection_revision="spatial-projection-v1-111111111111",
+    )
+    legacy = {
+        "schema_version": 1,
+        "checkpoints": [
+            {
+                "job_key": job.checkpoint_key,
+                "cursor": None,
+                "complete": False,
+            }
+        ],
+    }
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    store = JsonCheckpointStore(path)
+    pristine = store.load(job)
+    assert pristine.approved_report_fingerprint is None
+    store.save(job, pristine)
+    assert "approved_report_fingerprint" in json.loads(
+        path.read_text(encoding="utf-8")
+    )["checkpoints"][0]
+
+    legacy["checkpoints"][0]["cursor"] = "page-2"
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+    with pytest.raises(ValueError, match="approval fingerprint"):
+        JsonCheckpointStore(path).load(job)
+
+
 def test_shared_batch_contract_pins_plan06a_and_qdrant_semantics() -> None:
     contract = json.loads(BATCH_CONTRACT_PATH.read_text(encoding="utf-8"))
 
@@ -681,6 +767,22 @@ def test_shared_batch_contract_pins_plan06a_and_qdrant_semantics() -> None:
         "cursor",
         "complete",
         "approved_report_fingerprint",
+    ]
+    assert contract["qdrant_plan07a"]["legacy_checkpoint_policy"] == (
+        "accept-pristine-reject-durable-without-approval"
+    )
+    assert contract["qdrant_plan07a"]["checkpoint_approval_field"] == (
+        "null-only-pristine-64hex-for-durable"
+    )
+    assert contract["qdrant_plan07a"]["coverage_snapshot_fields"] == [
+        "total_points",
+        "filterable_points",
+        "conflict_points",
+        "stale_points",
+        "unsupported_points",
+        "unprojected_points",
+        "audit_only_points",
+        "inconsistent_points",
     ]
     assert contract["qdrant_plan07a"]["point_write"] == (
         "full-point-upsert-preserving-vector-and-nonspatial-payload"

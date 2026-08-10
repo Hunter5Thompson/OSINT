@@ -190,6 +190,7 @@ class SpatialLaneCoverageV1(StrictFrozenModel):
     unsupported_points: StrictInt = Field(ge=0)
     unprojected_points: StrictInt = Field(ge=0)
     audit_only_points: StrictInt = Field(ge=0)
+    inconsistent_points: StrictInt = Field(ge=0)
 
     @model_validator(mode="after")
     def validate_accounting(self) -> SpatialLaneCoverageV1:
@@ -200,6 +201,7 @@ class SpatialLaneCoverageV1(StrictFrozenModel):
             + self.unsupported_points
             + self.unprojected_points
             + self.audit_only_points
+            + self.inconsistent_points
         )
         if accounted != self.total_points:
             raise ValueError("lane accounting must equal total points")

@@ -237,26 +237,30 @@ class JsonCheckpointStore:
             raise ValueError("invalid Qdrant spatial checkpoints")
 
         values: dict[str, Checkpoint] = {}
+        required_fields = frozenset({"job_key", "cursor", "complete"})
+        current_fields = required_fields | {"approved_report_fingerprint"}
         for entry in entries:
-            if not isinstance(entry, dict) or set(entry) != {
-                "job_key",
-                "cursor",
-                "complete",
-                "approved_report_fingerprint",
+            if not isinstance(entry, dict) or frozenset(entry) not in {
+                required_fields,
+                current_fields,
             }:
                 raise ValueError("invalid Qdrant spatial checkpoint entry")
             key = entry["job_key"]
             cursor = entry["cursor"]
             complete = entry["complete"]
-            approved_fingerprint = entry["approved_report_fingerprint"]
+            approved_fingerprint = entry.get("approved_report_fingerprint")
             if (
                 not isinstance(key, str)
                 or not _valid_cursor(cursor)
                 or not isinstance(complete, bool)
-                or not isinstance(approved_fingerprint, str)
+                or not isinstance(approved_fingerprint, str | None)
                 or key in values
             ):
                 raise ValueError("invalid Qdrant spatial checkpoint value")
+            if (cursor is not None or complete) and approved_fingerprint is None:
+                raise ValueError(
+                    "legacy durable checkpoint lacks an approval fingerprint"
+                )
             values[key] = Checkpoint(
                 cursor=cursor,
                 complete=complete,
@@ -354,13 +358,13 @@ class _Coverage:
     unsupported_points: int = 0
     unprojected_points: int = 0
     audit_only_points: int = 0
+    inconsistent_points: int = 0
 
     def observe(self, payload: Mapping[str, object], target_revision: str) -> None:
         self.total_points += 1
         status = _coverage_status(payload, target_revision)
-        if status is not None:
-            field = f"{status}_points"
-            setattr(self, field, getattr(self, field) + 1)
+        field = f"{status}_points"
+        setattr(self, field, getattr(self, field) + 1)
 
     def snapshot(self, lane: str) -> SpatialLaneCoverageV1:
         return SpatialLaneCoverageV1(
@@ -372,6 +376,7 @@ class _Coverage:
             unsupported_points=self.unsupported_points,
             unprojected_points=self.unprojected_points,
             audit_only_points=self.audit_only_points,
+            inconsistent_points=self.inconsistent_points,
         )
 
 
@@ -728,24 +733,27 @@ def _validated_projection(
 def _coverage_status(
     payload: Mapping[str, object],
     target_revision: str,
-) -> str | None:
-    if payload.get("spatial_derivation_status") == "unavailable":
-        return "unsupported"
+) -> str:
+    status = payload.get("spatial_derivation_status")
+    has_tokens = any(
+        isinstance(payload.get(field), list) and bool(payload[field])
+        for field in _TOKEN_FIELDS
+    )
+    conflict = payload.get("spatial_conflict") is True
+    if status == "unavailable":
+        return "inconsistent" if has_tokens or conflict else "unsupported"
     revision = payload.get("spatial_projection_revision")
     if revision is None:
         return "unprojected"
     if revision != target_revision:
         return "stale"
-    if any(
-        isinstance(payload.get(field), list) and bool(payload[field])
-        for field in _TOKEN_FIELDS
-    ):
-        return "filterable"
-    if payload.get("spatial_conflict") is True:
-        return "conflict"
-    if payload.get("spatial_derivation_status") == "audit_only":
-        return "audit_only"
-    return "unprojected"
+    if status == "filterable":
+        return "filterable" if has_tokens else "inconsistent"
+    if status == "conflict":
+        return "conflict" if conflict and not has_tokens else "inconsistent"
+    if status == "audit_only":
+        return "audit_only" if not conflict and not has_tokens else "inconsistent"
+    return "inconsistent"
 
 
 def _coverage_snapshot(
@@ -822,7 +830,11 @@ def _promotion_stale_rate(coverage: _Coverage) -> float:
     """Treat absent current projections as stale for promotion purposes."""
 
     return _ratio(
-        coverage.stale_points + coverage.unprojected_points,
+        (
+            coverage.stale_points
+            + coverage.unprojected_points
+            + coverage.inconsistent_points
+        ),
         coverage.total_points,
     )
 

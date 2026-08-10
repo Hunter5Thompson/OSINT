@@ -32,6 +32,8 @@
       "approved_report_fingerprint"
     ],
     "cursor_semantics": "opaque-next-page-cursor",
+    "legacy_checkpoint_policy": "accept-pristine-reject-durable-without-approval",
+    "checkpoint_approval_field": "null-only-pristine-64hex-for-durable",
     "point_write": "full-point-upsert-preserving-vector-and-nonspatial-payload",
     "projection_owned_payload": {
       "prefixes": [
@@ -53,7 +55,8 @@
       "stale_points",
       "unsupported_points",
       "unprojected_points",
-      "audit_only_points"
+      "audit_only_points",
+      "inconsistent_points"
     ],
     "report_rate_fields": [
       "stale_rate",
