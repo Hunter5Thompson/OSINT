@@ -11,7 +11,7 @@ import time
 from typing import Any
 
 import structlog
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
 from langgraph.prebuilt import ToolRuntime
 
 from agents.tools.graph_templates import (
@@ -225,6 +225,45 @@ def _format_results(rows: list[dict], max_rows: int = 15) -> str:
     if len(rows) > max_rows:
         result += f"\n  ... ({len(rows) - max_rows} more rows)"
     return result
+
+
+SCOPED_GRAPH_TEMPLATE_IDS: tuple[str, ...] = (
+    "event_timeline",
+    "events_by_entity",
+    "co_occurring",
+    "source_backed",
+)
+
+SCOPED_QUERY_KNOWLEDGE_GRAPH_DESCRIPTION = """\
+Query the Neo4j knowledge graph inside the pinned spatial scope.
+
+The question is mapped to one of these reviewed templates:
+
+- **event_timeline** — "timeline of Kyiv" / "events in Ukraine"
+    Chronological events at scoped locations.
+- **events_by_entity** — "events involving \\"NATO\\""
+    Events that involve a named entity and occur in the pinned scope.
+- **co_occurring** — "co-occurring entities of \\"shadow fleet\\""
+    Other entities that share a scoped event with the named entity.
+- **source_backed** — "sources for \\"NATO\\""
+    Sources reporting a named entity through scoped events.
+
+Args:
+    question: Phrase to match a scoped template keyword. Quote entity names.
+
+Returns:
+    Formatted graph results (up to 15 rows per query).
+"""
+
+
+def bindable_query_knowledge_graph(*, scoped: bool) -> BaseTool:
+    """Return the global singleton or a request-local scoped schema copy."""
+
+    if not scoped:
+        return query_knowledge_graph
+    return query_knowledge_graph.model_copy(
+        update={"description": SCOPED_QUERY_KNOWLEDGE_GRAPH_DESCRIPTION},
+    )
 
 
 @tool

@@ -1,10 +1,13 @@
 from langchain_core.tools import BaseTool
 
-from agents.tools.capabilities import CAPABILITY_MATRIX
+from agents.tools.capabilities import CAPABILITY_MATRIX, is_non_global_state
 from agents.tools.capabilities import blocked_tool_names as blocked_tool_names
 from agents.tools.classify import classify_event
 from agents.tools.gdelt_query import gdelt_query
-from agents.tools.graph_query import query_knowledge_graph
+from agents.tools.graph_query import (
+    bindable_query_knowledge_graph,
+    query_knowledge_graph,
+)
 from agents.tools.qdrant_search import qdrant_search
 from agents.tools.rss_fetch import rss_fetch
 from agents.tools.vision import analyze_image
@@ -32,4 +35,13 @@ def tools_for_state(state: AgentState) -> list[BaseTool]:
     """Bind only capabilities permitted by the immutable run state."""
 
     blocked = set(blocked_tool_names(state))
-    return [tool for tool in ALL_TOOLS if tool.name not in blocked]
+    scoped = is_non_global_state(state)
+    bound: list[BaseTool] = []
+    for tool in ALL_TOOLS:
+        if tool.name in blocked:
+            continue
+        if tool.name == "query_knowledge_graph":
+            bound.append(bindable_query_knowledge_graph(scoped=scoped))
+            continue
+        bound.append(tool)
+    return bound
