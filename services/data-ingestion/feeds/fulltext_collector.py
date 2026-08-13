@@ -21,6 +21,7 @@ from feeds._fulltext_fetch import fetch_fulltext
 from feeds.content_quality import content_junk_reason, strip_data_uris
 from feeds.fulltext_chunker import chunk_markdown
 from qdrant_doctor.schema import validate_collection_schema
+from qdrant_spatial import unavailable_spatial_payload
 
 log = structlog.get_logger(__name__)
 
@@ -76,6 +77,9 @@ def build_fulltext_payload(
     """Pure rss_fulltext payload (no I/O). Canonical provenance + inherited teaser meta."""
     url = teaser["url"]  # URL is required; KeyError here is the intended fail-fast
     return {
+        **unavailable_spatial_payload(
+            "rss fulltext inherits no trusted structured spatial evidence"
+        ),
         "source": "rss_fulltext",
         "source_type": "rss",                 # canonical → credibility/tiering/guard
         "provider": provider,                 # feed domain → domain credibility override

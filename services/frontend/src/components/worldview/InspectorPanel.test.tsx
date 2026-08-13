@@ -183,8 +183,11 @@ describe("InspectorPanel", () => {
 
   it("exposes the approved Flag-on country parity set through the production Inspector", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
-      if (String(input).includes("/signals")) {
+      const url = String(input);
+      if (url.includes("/signals")) {
         return new Response(JSON.stringify({
+          scope_key: "country:UKR",
+          catalog_revision: "spatial-v1-fe9828dcda05",
           country_id: "UKR",
           items: [{
             event_id: "signal-1",
@@ -198,6 +201,8 @@ describe("InspectorPanel", () => {
         }), { status: 200 });
       }
       return new Response(JSON.stringify({
+        scope_key: "country:UKR",
+        catalog_revision: "spatial-v1-fe9828dcda05",
         id: "UKR",
         iso3: "UKR",
         m49: "804",

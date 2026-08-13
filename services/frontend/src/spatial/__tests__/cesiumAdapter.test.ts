@@ -825,4 +825,21 @@ describe("buildScopeGeometry chunking", () => {
       stateRevision: 17,
     });
   });
+
+  it("unwraps dateline rings before converting Cesium render positions", async () => {
+    const converted: Array<readonly [number, number]> = [];
+    await buildScopeGeometry({
+      activeAsset: geometry([[[[179, 0], [-179, 0], [-179, 1], [179, 0]]]]),
+      childAsset: null,
+      stateRevision: 1,
+      signal: new AbortController().signal,
+      convertPosition: (position) => {
+        converted.push(position);
+        return position;
+      },
+      scheduler: { now: () => 0, nextFrame: () => Promise.resolve() },
+    });
+
+    expect(converted.map(([longitude]) => longitude)).toEqual([179, 181, 181, 179]);
+  });
 });

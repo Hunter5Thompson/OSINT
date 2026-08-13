@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 
 from agents.tools import blocked_tool_names, tools_for_state
+from graph.state import AgentState
 from spatial import ScopeKind, SpatialScopeTokenV1
 from tests.tool_runtime import agent_state
 
@@ -98,6 +99,31 @@ async def test_react_node_binds_exactly_the_state_capabilities(monkeypatch) -> N
     monkeypatch.setattr(workflow, "create_react_agent", fake_create_react_agent)
 
     await workflow.react_agent_node(agent_state(spatial_scope=_scope_token()))
+
+    assert captured["tools"] == [
+        "qdrant_search",
+        "query_knowledge_graph",
+        "classify_event",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_tool_node_is_built_from_the_same_state_capabilities(monkeypatch) -> None:
+    import graph.workflow as workflow
+
+    captured: dict[str, list[str]] = {}
+
+    class FakeToolNode:
+        def __init__(self, tools: list[BaseTool]) -> None:
+            captured["tools"] = _names(tools)
+
+        async def ainvoke(self, state: AgentState) -> dict[str, object]:
+            return {"messages": state["messages"]}
+
+    monkeypatch.setattr(workflow, "ToolNode", FakeToolNode)
+    state = agent_state(spatial_scope=_scope_token())
+
+    await workflow.tool_node_for_state(state)
 
     assert captured["tools"] == [
         "qdrant_search",

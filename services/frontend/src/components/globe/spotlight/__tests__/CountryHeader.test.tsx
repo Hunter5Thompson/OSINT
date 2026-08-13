@@ -20,6 +20,12 @@ function mockCountryFetch(status = 200) {
     if (url.includes("/signals")) {
       return new Response(
         JSON.stringify({
+          ...(url.includes("/api/almanac/country/signals")
+            ? {
+                scope_key: "country:UKR",
+                catalog_revision: "spatial-v1-fe9828dcda05",
+              }
+            : {}),
           country_id: "GRC",
           items: [
             {
@@ -39,6 +45,12 @@ function mockCountryFetch(status = 200) {
     if (status !== 200) return new Response("missing", { status });
     return new Response(
       JSON.stringify({
+        ...(url.includes("/api/almanac/country?")
+          ? {
+              scope_key: "country:UKR",
+              catalog_revision: "spatial-v1-fe9828dcda05",
+            }
+          : {}),
         id: "GRC",
         iso3: "GRC",
         m49: "300",
@@ -140,12 +152,28 @@ describe("CountryHeader", () => {
 
   it("uses the shared south/west formatter in Legacy and Spatial headers", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
-      if (String(input).includes("/signals")) {
-        return new Response(JSON.stringify({ country_id: "ARG", items: [] }), {
+      const url = String(input);
+      if (url.includes("/signals")) {
+        return new Response(JSON.stringify({
+          ...(url.includes("/api/almanac/country/signals")
+            ? {
+                scope_key: "country:ARG",
+                catalog_revision: "spatial-v1-fe9828dcda05",
+              }
+            : {}),
+          country_id: "ARG",
+          items: [],
+        }), {
           status: 200,
         });
       }
       return new Response(JSON.stringify({
+        ...(url.includes("/api/almanac/country?")
+          ? {
+              scope_key: "country:ARG",
+              catalog_revision: "spatial-v1-fe9828dcda05",
+            }
+          : {}),
         id: "ARG",
         iso3: "ARG",
         m49: "032",

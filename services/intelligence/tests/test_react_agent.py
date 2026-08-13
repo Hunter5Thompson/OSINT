@@ -6,6 +6,7 @@ from agents.react_agent import (
     REACT_SYSTEM_PROMPT,
     guard_check,
     should_continue,
+    system_prompt_for_state,
 )
 from graph.state import AgentState
 from spatial import RetrievalSpatialRelation
@@ -54,6 +55,32 @@ class TestSystemPrompt:
         low = REACT_SYSTEM_PROMPT.lower()
         assert "untrusted" in low
         assert "anweisungen" in low or "instructions" in low
+
+    def test_scoped_prompt_only_advertises_bound_retrieval_capabilities(self):
+        from spatial import ScopeKind, SpatialScopeTokenV1
+
+        revision = "spatial-derive-v1-d30efa07e141"
+        scoped = _make_state(
+            spatial_scope=SpatialScopeTokenV1(
+                scope_key="country:UKR",
+                kind=ScopeKind.COUNTRY,
+                catalog_revision="spatial-v1-e76a16bff799",
+                derivation_revision=revision,
+                boundary_policy="odin-reference-v1",
+                compatible_derivation_revisions=(revision,),
+            )
+        )
+
+        prompt = system_prompt_for_state(scoped)
+
+        assert "qdrant_search" in prompt
+        assert "query_knowledge_graph" in prompt
+        assert "event_timeline" in prompt
+        assert "events_by_entity" in prompt
+        assert "co_occurring" in prompt
+        assert "source_backed" in prompt
+        for unavailable in ("entity_lookup", "one_hop", "gdelt_query", "rss_fetch"):
+            assert unavailable not in prompt
 
 
 class TestGuardCheck:

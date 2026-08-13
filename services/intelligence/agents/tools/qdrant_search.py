@@ -1,10 +1,11 @@
 """Qdrant vector search tool for RAG retrieval."""
 
+import json
+
 import structlog
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolRuntime
 
-from config import settings
 from graph.state import AgentState
 from rag.corpus_policy import (
     ANALYSIS_POOL,
@@ -20,9 +21,14 @@ from rag.corpus_policy import (
 )
 from rag.evidence import format_evidence_pack, to_evidence_item
 from rag.retriever import enhanced_search
+from rag.spatial_coverage import (
+    coverage_is_complete,
+    get_spatial_coverage_snapshot,
+)
 from spatial import (
     ScopeKind,
     SpatialApplicationMarkerV1,
+    SpatialCoverageSnapshotV1,
     combine_filters,
     compile_qdrant_scope_filter,
     format_spatial_application_marker,
@@ -40,6 +46,7 @@ def _qdrant_marker(
     status: str,
     completeness: str,
     detail_code: str | None = None,
+    coverage_snapshot: SpatialCoverageSnapshotV1 | None = None,
 ) -> SpatialApplicationMarkerV1:
     scope = state["spatial_scope"]
     scoped = scope is not None and scope.kind is not ScopeKind.WORLD
@@ -49,7 +56,11 @@ def _qdrant_marker(
         mode="semantic-key" if scoped else "global",
         completeness=completeness,
         detail_code=detail_code,
-        coverage_revision=(settings.spatial_coverage_revision if scoped else None),
+        coverage_revision=(
+            coverage_snapshot.target_projection_revision
+            if scoped and coverage_snapshot is not None
+            else None
+        ),
     )
 
 
@@ -114,6 +125,7 @@ async def qdrant_search(
         compile_qdrant_scope_filter(scope, relation) if scope is not None else None
     )
     try:
+        coverage_snapshot = get_spatial_coverage_snapshot() if scoped else None
         realtime_failed = False
         analysis = await enhanced_search(
             query, limit=FINAL_K, pool=ANALYSIS_POOL,
@@ -121,6 +133,7 @@ async def qdrant_search(
             post_rerank=apply_tier_boost,
             raise_on_failure=True,
             enable_graph_context=False if scoped else None,
+            coverage_snapshot=coverage_snapshot,
         )
         try:
             realtime = await enhanced_search(
@@ -129,6 +142,7 @@ async def qdrant_search(
                 post_rerank=apply_tier_boost, score_threshold=RT_SCORE_THRESHOLD,
                 raise_on_failure=True,
                 enable_graph_context=False if scoped else None,
+                coverage_snapshot=coverage_snapshot,
             )
         except Exception as e:  # realtime is best-effort; never fail the analysis lane
             logger.warning("realtime_lane_failed", error=str(e))
@@ -146,12 +160,12 @@ async def qdrant_search(
             result_count=len(results),
         )
 
-        completeness = settings.spatial_coverage_completeness if scoped else "complete"
-        if realtime_failed or (scoped and completeness == "complete"):
-            completeness = "partial"
+        completeness = "partial" if scoped or realtime_failed else "complete"
         detail_code = (
             "realtime-lane-failed"
             if realtime_failed
+            else "coverage-snapshot-unavailable"
+            if scoped and coverage_snapshot is None
             else "graph-context-omitted-for-scope" if scoped else None
         )
         marker = _qdrant_marker(
@@ -159,12 +173,35 @@ async def qdrant_search(
             status="applied",
             completeness=completeness,
             detail_code=detail_code,
+            coverage_snapshot=coverage_snapshot,
         )
 
         if not results:
+            coverage_text = (
+                "null"
+                if coverage_snapshot is None
+                else json.dumps(
+                    coverage_snapshot.model_dump(mode="json"),
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+            if not scoped:
+                empty_code = "NO_SEMANTIC_MATCHES"
+            elif coverage_snapshot is None:
+                empty_code = "SPATIAL_SCOPE_COVERAGE_UNAVAILABLE"
+            elif coverage_is_complete(
+                coverage_snapshot,
+                required_lanes=("analysis", "realtime"),
+            ):
+                empty_code = "NO_SEMANTIC_MATCHES_IN_SCOPE"
+            else:
+                empty_code = "SPATIAL_SCOPE_COVERAGE_PARTIAL"
             return _with_qdrant_application(
                 marker,
-                f"No relevant documents found for: {query}",
+                f"{empty_code}: no relevant documents found for: {query}\n"
+                f"Coverage-Snapshot: {coverage_text}",
             )
 
         items = [to_evidence_item(r) for r in results]
@@ -200,7 +237,15 @@ async def qdrant_search(
                 runtime.state,
                 status="failed",
                 completeness="unknown",
-                detail_code="qdrant-search-failed",
+                detail_code=(
+                    "spatial-scope-filter-unavailable"
+                    if scoped
+                    else "qdrant-search-failed"
+                ),
             ),
-            f"Knowledge base search failed: {e}",
+            (
+                f"SPATIAL_SCOPE_FILTER_UNAVAILABLE: {e}"
+                if scoped
+                else f"Knowledge base search failed: {e}"
+            ),
         )

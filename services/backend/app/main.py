@@ -38,7 +38,7 @@ from app.routers import (
     vessels,
 )
 from app.routers import recon as recon_router_module
-from app.services import neo4j_client, qdrant_client, vessel_service
+from app.services import incident_store, neo4j_client, qdrant_client, vessel_service
 from app.services.cache_service import CacheService
 from app.services.proxy_service import ProxyService
 from app.services.recon_manifest import (
@@ -80,6 +80,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     try:
         await spatial_catalog.load()
+        incident_store.configure_incident_spatial_catalog(spatial_catalog)
         if spatial_catalog.is_available:
             logger.info("spatial_catalog_ready")
         else:
@@ -179,6 +180,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.info("backend_started", vllm_url=settings.vllm_url, vllm_model=settings.vllm_model)
         yield
     finally:
+        incident_store.configure_incident_spatial_catalog(None)
         if promoter is not None:
             promoter.request_stop()
         for task in promoter_tasks:

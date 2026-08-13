@@ -1059,14 +1059,16 @@ function WorldviewContent({
           />
         </div>
 
-        {/* raised above the full-width § CHRONIK strip (height 90) docked at the bottom */}
-        <div style={{ position: "absolute", left: 16, bottom: 106, zIndex: 10 }}>
-          <TickerPanel
-            variant={expandedPanels.ticker ? "expanded" : "collapsed"}
-            onClose={() => setExpandedPanels((prev) => ({ ...prev, ticker: false }))}
-            onExpand={() => setExpandedPanels((prev) => ({ ...prev, ticker: true }))}
-          />
-        </div>
+        {/* The ticker is globally sourced; hide it below world until it has a scoped lane. */}
+        {!spatialEnabled || currentScopeKind === "world" ? (
+          <div style={{ position: "absolute", left: 16, bottom: 106, zIndex: 10 }}>
+            <TickerPanel
+              variant={expandedPanels.ticker ? "expanded" : "collapsed"}
+              onClose={() => setExpandedPanels((prev) => ({ ...prev, ticker: false }))}
+              onExpand={() => setExpandedPanels((prev) => ({ ...prev, ticker: true }))}
+            />
+          </div>
+        ) : null}
 
         <EventCallout
           eventId={selectedEventId}

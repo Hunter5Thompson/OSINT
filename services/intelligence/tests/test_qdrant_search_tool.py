@@ -258,7 +258,7 @@ class TestRuntimeSpatialScoping:
         assert all(call.kwargs["raise_on_failure"] is True for call in search.await_args_list)
 
     async def test_scoped_search_omits_unscoped_graph_context_and_reports_partial(self):
-        from config import settings
+        from spatial import SpatialCoverageSnapshotV1, SpatialLaneCoverageV1
 
         analysis = [{
             "source": "rss",
@@ -276,10 +276,40 @@ class TestRuntimeSpatialScoping:
             spatial_scope=_ukraine_token(),
             spatial_relation=RetrievalSpatialRelation.EITHER,
         )
+        coverage = SpatialCoverageSnapshotV1(
+            target_projection_revision="spatial-projection-v1-47fec701a2a2",
+            lanes=(
+                SpatialLaneCoverageV1(
+                    lane="analysis",
+                    total_points=10,
+                    filterable_points=10,
+                    conflict_points=0,
+                    stale_points=0,
+                    unsupported_points=0,
+                    unprojected_points=0,
+                    audit_only_points=0,
+                    inconsistent_points=0,
+                ),
+                SpatialLaneCoverageV1(
+                    lane="realtime",
+                    total_points=2,
+                    filterable_points=2,
+                    conflict_points=0,
+                    stale_points=0,
+                    unsupported_points=0,
+                    unprojected_points=0,
+                    audit_only_points=0,
+                    inconsistent_points=0,
+                ),
+            ),
+        )
 
         with (
             patch("agents.tools.qdrant_search.enhanced_search", search),
-            patch.object(settings, "spatial_coverage_completeness", "complete"),
+            patch(
+                "agents.tools.qdrant_search.get_spatial_coverage_snapshot",
+                return_value=coverage,
+            ),
         ):
             output = await invoke_runtime_tool(
                 qdrant_search,
@@ -299,6 +329,11 @@ class TestRuntimeSpatialScoping:
         assert marker is not None
         assert marker.status == "applied"
         assert marker.completeness == "partial"
+        assert marker.coverage_revision == coverage.target_projection_revision
+        assert all(
+            call.kwargs["coverage_snapshot"] is coverage
+            for call in search.await_args_list
+        )
 
     async def test_analysis_outage_is_reported_failed(self):
         state = agent_state(
@@ -368,3 +403,120 @@ class TestRuntimeSpatialScoping:
             actual_tool_name="qdrant_search",
         )
         assert marker is not None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("coverage", "expected_code"),
+        [
+            (None, "SPATIAL_SCOPE_COVERAGE_UNAVAILABLE"),
+            (
+                {
+                    "total_points": 10,
+                    "filterable_points": 8,
+                    "stale_points": 1,
+                    "unprojected_points": 1,
+                },
+                "SPATIAL_SCOPE_COVERAGE_PARTIAL",
+            ),
+            (
+                {
+                    "total_points": 10,
+                    "filterable_points": 10,
+                    "stale_points": 0,
+                    "unprojected_points": 0,
+                },
+                "SPATIAL_SCOPE_COVERAGE_PARTIAL",
+            ),
+        ],
+    )
+    async def test_scoped_empty_response_distinguishes_hits_filter_and_coverage(
+        self,
+        coverage,
+        expected_code: str,
+    ) -> None:
+        from spatial import SpatialCoverageSnapshotV1, SpatialLaneCoverageV1
+
+        snapshot = None
+        if coverage is not None:
+            snapshot = SpatialCoverageSnapshotV1(
+                target_projection_revision="spatial-projection-v1-47fec701a2a2",
+                lanes=(
+                    SpatialLaneCoverageV1(
+                        lane="analysis",
+                        conflict_points=0,
+                        unsupported_points=0,
+                        audit_only_points=0,
+                        inconsistent_points=0,
+                        **coverage,
+                    ),
+                ),
+            )
+        state = agent_state(
+            spatial_scope=_ukraine_token(),
+            spatial_relation=RetrievalSpatialRelation.EITHER,
+        )
+        with (
+            patch("agents.tools.qdrant_search.enhanced_search", AsyncMock(side_effect=[[], []])),
+            patch(
+                "agents.tools.qdrant_search.get_spatial_coverage_snapshot",
+                return_value=snapshot,
+            ),
+        ):
+            output = await invoke_runtime_tool(
+                qdrant_search,
+                {"query": "ukraine"},
+                state=state,
+            )
+
+        _, research = parse_spatial_application_marker(
+            output,
+            actual_tool_name="qdrant_search",
+        )
+        assert expected_code in research
+        if snapshot is not None:
+            assert '"target_projection_revision"' in research
+
+    async def test_scoped_empty_response_requires_coverage_for_both_search_lanes(
+        self,
+    ) -> None:
+        from spatial import SpatialCoverageSnapshotV1, SpatialLaneCoverageV1
+
+        def lane(name: str) -> SpatialLaneCoverageV1:
+            return SpatialLaneCoverageV1(
+                lane=name,
+                total_points=10,
+                filterable_points=10,
+                conflict_points=0,
+                stale_points=0,
+                unsupported_points=0,
+                unprojected_points=0,
+                audit_only_points=0,
+                inconsistent_points=0,
+            )
+
+        snapshot = SpatialCoverageSnapshotV1(
+            target_projection_revision="spatial-projection-v1-47fec701a2a2",
+            lanes=(lane("analysis"), lane("realtime")),
+        )
+        state = agent_state(
+            spatial_scope=_ukraine_token(),
+            spatial_relation=RetrievalSpatialRelation.EITHER,
+        )
+        with (
+            patch("agents.tools.qdrant_search.enhanced_search", AsyncMock(side_effect=[[], []])),
+            patch(
+                "agents.tools.qdrant_search.get_spatial_coverage_snapshot",
+                return_value=snapshot,
+            ),
+        ):
+            output = await invoke_runtime_tool(
+                qdrant_search,
+                {"query": "ukraine"},
+                state=state,
+            )
+
+        _, research = parse_spatial_application_marker(
+            output,
+            actual_tool_name="qdrant_search",
+        )
+        assert "NO_SEMANTIC_MATCHES_IN_SCOPE" in research

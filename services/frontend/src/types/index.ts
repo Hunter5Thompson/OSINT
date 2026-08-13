@@ -145,6 +145,7 @@ export interface SpatialApplicationV1 {
   readonly completeness: "complete" | "partial";
   readonly included_count: number;
   readonly excluded_unlocated_count: number;
+  readonly excluded_outside_count: number;
   readonly excluded_conflict_count: number;
   readonly excluded_stale_revision_count: number;
   readonly excluded_unsupported_count: number;

@@ -469,6 +469,7 @@ export function parseResolvedScope(value: unknown): ResolvedScope {
   assertExactKeys(record, "resolvedScope", [
     "scope",
     "path",
+    "children",
     "query",
     "presentation",
     "containment",
@@ -476,6 +477,7 @@ export function parseResolvedScope(value: unknown): ResolvedScope {
   ]);
   const scope = parseScopeSummary(record.scope, "scope");
   const path = parseScopePath(record.path, scope);
+  const children = parseDirectChildren(record.children, scope);
   const queryRecord = asRecord(record.query, "query");
   assertExactKeys(queryRecord, "query", [
     "schemaVersion",
@@ -493,6 +495,7 @@ export function parseResolvedScope(value: unknown): ResolvedScope {
   return freezeSpatialValue({
     scope,
     path,
+    children,
     query: {
       schemaVersion: 1,
       scopeKey: queryScopeKey,
@@ -1101,7 +1104,12 @@ export class BoundaryAssetStore {
       return this.lease(entry, policy.foreground);
     } finally {
       load.consumers -= 1;
-      if (load.consumers === 0 && !load.settled) load.controller.abort();
+      if (load.consumers === 0 && !load.settled) {
+        load.controller.abort();
+        if (this.inflight.get(descriptor.assetId) === load) {
+          this.inflight.delete(descriptor.assetId);
+        }
+      }
     }
   }
 
@@ -1847,6 +1855,7 @@ interface DecodedScopeBundle {
   readonly canonicalizedFrom: string | null;
   readonly scope: ScopeSummary;
   readonly path: ScopePath;
+  readonly children: readonly ScopeSummary[];
   readonly preferredLod: GeometryLod | null;
   readonly outlineLods: AssetLodSet;
   readonly childrenLods: AssetLodSet;
@@ -1913,6 +1922,42 @@ function parseWirePath(value: unknown, current: ScopeSummary): ScopePath {
   return parseScopePath(
     value.map((item, index) => {
       const summary = parseWireScopeSummary(item, `path[${index}]`);
+      return {
+        key: summary.key,
+        kind: summary.kind,
+        label: summary.label,
+        shortLabel: summary.shortLabel,
+        parentKey: summary.parentKey,
+        childrenAvailable: summary.childrenAvailable,
+        presentation: summary.presentation,
+      };
+    }),
+    current,
+  );
+}
+
+function parseDirectChildren(value: unknown, current: ScopeSummary): readonly ScopeSummary[] {
+  if (!Array.isArray(value)) contractError("children must be an array", current.key);
+  const children = value.map((item, index) =>
+    parseScopeSummary(item, `children[${index}]`));
+  const keys = new Set<ScopeKey>();
+  for (const child of children) {
+    if (child.parentKey !== current.key || keys.has(child.key)) {
+      lineageError("direct child identity does not match current scope", current.key);
+    }
+    keys.add(child.key);
+  }
+  if (current.childrenAvailable !== (children.length > 0)) {
+    lineageError("children do not match childrenAvailable", current.key);
+  }
+  return freezeSpatialValue(children);
+}
+
+function parseWireChildren(value: unknown, current: ScopeSummary): readonly ScopeSummary[] {
+  if (!Array.isArray(value)) contractError("wire children must be an array", current.key);
+  return parseDirectChildren(
+    value.map((item, index) => {
+      const summary = parseWireScopeSummary(item, `children[${index}]`);
       return {
         key: summary.key,
         kind: summary.kind,
@@ -1996,6 +2041,7 @@ function decodeScopeBundle(
     "canonicalized_from",
     "scope",
     "path",
+    "children",
     "presentation",
     "containment",
     "provenance_ref",
@@ -2013,6 +2059,7 @@ function decodeScopeBundle(
   }
   const canonicalizedFrom = parseCanonicalizedFrom(record.canonicalized_from, scope.key);
   const path = parseWirePath(record.path, scope);
+  const children = parseWireChildren(record.children, scope);
   const presentation = asRecord(record.presentation, "presentation");
   assertExactKeys(presentation, "presentation", [
     "preferred_lod",
@@ -2040,6 +2087,7 @@ function decodeScopeBundle(
     canonicalizedFrom,
     scope,
     path,
+    children,
     preferredLod,
     outlineLods,
     childrenLods,
@@ -2201,6 +2249,7 @@ async function resolvedFromBundle(
   return parseResolvedScope({
     scope: bundle.scope,
     path: bundle.path,
+    children: bundle.children,
     query: {
       schemaVersion: 1,
       scopeKey: bundle.scope.key,
@@ -2419,7 +2468,10 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
       return await waitForPromise(load.promise, signal);
     } finally {
       load.consumers -= 1;
-      if (load.consumers === 0 && !load.settled) load.controller.abort();
+      if (load.consumers === 0 && !load.settled) {
+        load.controller.abort();
+        if (this.inflightScopes.get(key) === load) this.inflightScopes.delete(key);
+      }
     }
   }
 

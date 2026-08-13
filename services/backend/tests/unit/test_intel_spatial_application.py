@@ -99,7 +99,10 @@ async def test_sse_preserves_run_scope_when_request_scope_has_since_changed() ->
     ]
 
     assert client.payload is not None
-    assert client.payload["spatial_scope"]["scope_key"] == "country:POL"  # type: ignore[index]
+    assert client.payload["spatial_scope"] == {
+        "scope_key": "country:POL",
+        "catalog_revision": "spatial-v1-e76a16bff799",
+    }
     result_event = next(event for event in events if event["event"] == "result")
     result = json.loads(result_event["data"])
     assert result["spatial_application"]["scope"]["scope_key"] == "country:UKR"

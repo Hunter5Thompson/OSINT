@@ -30,6 +30,7 @@ const APPLICATION = {
   completeness: "partial",
   included_count: 2,
   excluded_unlocated_count: 1,
+  excluded_outside_count: 3,
   excluded_conflict_count: 0,
   excluded_stale_revision_count: 0,
   excluded_unsupported_count: 4,

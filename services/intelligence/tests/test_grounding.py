@@ -5,14 +5,9 @@ from pydantic import ValidationError
 from main import GroundingEvidenceItem, QueryRequest
 from rag.evidence import format_evidence_pack, parse_evidence_refs, to_evidence_item
 
-TOKEN_JSON = {
-    "schema_version": 1,
+SCOPE_REF_JSON = {
     "scope_key": "country:UKR",
-    "kind": "country",
     "catalog_revision": "spatial-v1-e76a16bff799",
-    "derivation_revision": "spatial-derive-v1-d30efa07e141",
-    "boundary_policy": "odin-reference-v1",
-    "compatible_derivation_revisions": ["spatial-derive-v1-d30efa07e141"],
 }
 
 
@@ -60,13 +55,13 @@ def test_query_request_bounds_and_allowlist():
         QueryRequest(query="q", spatial_relation="either", grounding_evidence=[ok] * 7)
 
 
-def test_internal_query_requires_relation_and_validates_frozen_token() -> None:
+def test_internal_query_requires_relation_and_accepts_only_catalog_reference() -> None:
     with pytest.raises(ValidationError):
         QueryRequest(query="q")
 
     request = QueryRequest(
         query="q",
-        spatial_scope=TOKEN_JSON,
+        spatial_scope=SCOPE_REF_JSON,
         spatial_relation="occurrence",
     )
 
@@ -77,7 +72,12 @@ def test_internal_query_requires_relation_and_validates_frozen_token() -> None:
     with pytest.raises(ValidationError):
         QueryRequest(
             query="q",
-            spatial_scope={**TOKEN_JSON, "unexpected": True},
+            spatial_scope={
+                **SCOPE_REF_JSON,
+                "compatible_derivation_revisions": [
+                    "spatial-derive-v1-attacker00000"
+                ],
+            },
             spatial_relation="either",
         )
 

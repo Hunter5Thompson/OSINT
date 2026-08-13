@@ -13,13 +13,13 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from agents.react_agent import (
-    REACT_SYSTEM_PROMPT,
     create_react_agent,
     should_continue,
+    system_prompt_for_state,
 )
 from agents.synthesis_agent import create_synthesis_llm
 from agents.synthesis_agent import get_system_message as synthesis_sys
-from agents.tools import ALL_TOOLS, blocked_tool_names, tools_for_state
+from agents.tools import blocked_tool_names, tools_for_state
 from agents.tools.graph_query import set_graph_client
 from config import settings
 from distill_capture import capture_synthesis_input
@@ -132,7 +132,7 @@ async def react_agent_node(state: AgentState) -> dict:
             grounding_note = f"\n\n{grounding}" if grounding else ""
 
             initial_messages = [
-                SystemMessage(content=REACT_SYSTEM_PROMPT),
+                SystemMessage(content=system_prompt_for_state(state)),
                 HumanMessage(content=f"{query}{image_note}{scope_note}{grounding_note}"),
             ]
             messages = list(state.get("messages", [])) + initial_messages
@@ -305,12 +305,19 @@ async def react_synthesis_node(state: AgentState) -> dict:
 
 # ── Graph Builders ────────────────────────────────────────────────────────────
 
+async def tool_node_for_state(state: AgentState) -> dict:
+    """Execute only the same closed capability set exposed to the model."""
+
+    result = await ToolNode(tools_for_state(state)).ainvoke(state)
+    return dict(result)
+
+
 def build_react_graph() -> StateGraph:
     """Build the ReAct agent workflow."""
     graph = StateGraph(AgentState)
 
     graph.add_node("react_agent", react_agent_node)
-    graph.add_node("tools", ToolNode(ALL_TOOLS))
+    graph.add_node("tools", tool_node_for_state)
     graph.add_node("synthesis", react_synthesis_node)
 
     graph.set_entry_point("react_agent")

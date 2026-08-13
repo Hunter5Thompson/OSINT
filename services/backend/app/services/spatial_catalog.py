@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import math
 import re
 import time
@@ -18,6 +19,7 @@ from pydantic import ValidationError
 from app.models.spatial import (
     CatalogAttribution,
     CatalogManifest,
+    CatalogPointer,
     CatalogProblemCode,
     ManifestScope,
     ScopeKind,
@@ -81,6 +83,21 @@ class ResolvedSpatialScope:
     canonicalized_from: str | None
     record: ManifestScope
     path: tuple[ScopeNode, ...]
+    children: tuple[ScopeNode, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentSpatialProjection:
+    spatial_catalog_revision: str
+    spatial_derivation_revision: str | None
+    country_scope_key: str | None
+    admin1_scope_key: str | None
+    admin2_scope_key: str | None
+    spatial_basis: str | None
+    spatial_precision: str | None
+    spatial_conflict: bool
+    spatial_conflict_scope_keys: tuple[str, ...]
+    spatial_derivation_status: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,6 +178,10 @@ class SpatialCatalogLoader:
         self._catalogs: dict[str, _LoadedCatalog] = {}
         self._state: CatalogState = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
         self._verified_assets: set[tuple[str, str]] = set()
+        self._containment_cache: dict[
+            tuple[str, str],
+            tuple[tuple[tuple[tuple[float, float], ...], ...], ...],
+        ] = {}
         self._diagnostic: str | None = None
 
     @property
@@ -190,6 +211,7 @@ class SpatialCatalogLoader:
         except (OSError, UnicodeError, ValueError, ValidationError) as exc:
             self._catalogs.clear()
             self._verified_assets.clear()
+            self._containment_cache.clear()
             self._diagnostic = f"{type(exc).__name__}: {exc}"
             self._state = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
             self._emit(
@@ -202,6 +224,7 @@ class SpatialCatalogLoader:
 
         self._catalogs = {catalog.manifest.catalog_revision: catalog for catalog in loaded}
         self._verified_assets.clear()
+        self._containment_cache.clear()
         self._diagnostic = None
         revisions = tuple(catalog.manifest.catalog_revision for catalog in loaded)
         self._state = CatalogReadyState(
@@ -224,6 +247,7 @@ class SpatialCatalogLoader:
             await asyncio.gather(*tuple(self._inflight_file_reads), return_exceptions=True)
         self._catalogs.clear()
         self._verified_assets.clear()
+        self._containment_cache.clear()
         self._diagnostic = None
         self._state = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
 
@@ -330,6 +354,14 @@ class SpatialCatalogLoader:
             canonicalized_from=(scope_key if parsed.canonical != scope_key else None),
             record=record,
             path=tuple(catalog.scopes[key].scope for key in record.path),
+            children=tuple(sorted(
+                (
+                    candidate.scope
+                    for candidate in catalog.scopes.values()
+                    if candidate.scope.parent_key == record.scope.key
+                ),
+                key=lambda child: (child.label.casefold(), child.key),
+            )),
         )
         self._emit(
             "spatial_catalog_resolve",
@@ -448,6 +480,121 @@ class SpatialCatalogLoader:
             )
         return asset
 
+    async def project_incident_point(
+        self,
+        *,
+        latitude: float,
+        longitude: float,
+    ) -> IncidentSpatialProjection | SpatialCatalogProblem:
+        """Project one precise incident point through the active immutable catalog."""
+
+        if (
+            not math.isfinite(latitude)
+            or not math.isfinite(longitude)
+            or not -90 <= latitude <= 90
+            or not -180 <= longitude <= 180
+        ):
+            raise ValueError("incident coordinate is outside the geographic domain")
+        if not isinstance(self._state, CatalogReadyState):
+            return _GENERIC_UNAVAILABLE
+        revision = self._state.active_catalog_revision
+        catalog = self._catalogs[revision]
+        matches: dict[str, bool] = {}
+        for record in catalog.scopes.values():
+            if record.scope.kind is ScopeKind.WORLD:
+                continue
+            geometry = await self._containment_geometry(catalog, record)
+            if isinstance(geometry, SpatialCatalogProblem):
+                return geometry
+            if geometry is None:
+                continue
+            on_boundary, inside = _classify_point(
+                geometry,
+                longitude=longitude,
+                latitude=latitude,
+            )
+            if on_boundary or inside:
+                matches[record.scope.key] = on_boundary
+
+        terminal = tuple(sorted(
+            scope_key
+            for scope_key in matches
+            if not any(
+                scope_key in catalog.scopes[other].path[:-1]
+                for other in matches
+                if other != scope_key
+            )
+        ))
+        selected: str | None
+        conflicts: tuple[str, ...]
+        if len(terminal) == 1 and not matches[terminal[0]]:
+            selected = terminal[0]
+            conflicts = ()
+        elif len(terminal) == 1:
+            parent = catalog.scopes[terminal[0]].scope.parent_key
+            selected = None if parent == "world" else parent
+            conflicts = terminal
+        elif terminal:
+            lineages = tuple(catalog.scopes[key].path for key in terminal)
+            common: str | None = None
+            for candidates in zip(*lineages, strict=False):
+                if len(set(candidates)) != 1:
+                    break
+                common = candidates[0]
+            selected = None if common == "world" else common
+            conflicts = terminal
+        else:
+            selected = None
+            conflicts = ()
+
+        lineage = catalog.scopes[selected].path if selected is not None else ()
+        by_kind = {
+            catalog.scopes[key].scope.kind: key
+            for key in lineage
+            if key != "world"
+        }
+        return IncidentSpatialProjection(
+            spatial_catalog_revision=revision,
+            spatial_derivation_revision=(
+                catalog.scopes[selected].derivation_revision
+                if selected is not None and not conflicts
+                else None
+            ),
+            country_scope_key=by_kind.get(ScopeKind.COUNTRY),
+            admin1_scope_key=by_kind.get(ScopeKind.ADMIN1),
+            admin2_scope_key=by_kind.get(ScopeKind.ADMIN2),
+            spatial_basis="coordinate" if selected is not None else None,
+            spatial_precision="point",
+            spatial_conflict=bool(conflicts),
+            spatial_conflict_scope_keys=conflicts,
+            spatial_derivation_status=(
+                "conflict" if conflicts else "resolved" if selected is not None else "unresolved"
+            ),
+        )
+
+    async def _containment_geometry(
+        self,
+        catalog: _LoadedCatalog,
+        record: ManifestScope,
+    ) -> tuple[tuple[tuple[tuple[float, float], ...], ...], ...] | None | SpatialCatalogProblem:
+        descriptor = record.presentation.containment
+        if descriptor is None:
+            return None
+        key = (catalog.manifest.catalog_revision, descriptor.asset_id)
+        cached = self._containment_cache.get(key)
+        if cached is not None:
+            return cached
+        asset = catalog.assets[descriptor.asset_id]
+        payload = await self.read_asset(asset)
+        if isinstance(payload, SpatialCatalogProblem):
+            return payload
+        try:
+            geometry = _decode_containment_geometry(payload)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            return self._asset_corrupt(exc)
+        self._containment_cache[key] = geometry
+        return geometry
+
     def get_catalog(self, catalog_revision: str) -> _LoadedCatalog | SpatialCatalogProblem:
         catalog = self._catalogs.get(catalog_revision)
         if catalog is None:
@@ -538,10 +685,9 @@ class SpatialCatalogLoader:
         source_lock = SourceLock.model_validate_json(source_lock_path.read_bytes())
         source_by_id = {source.source_id: source for source in source_lock.sources}
         loaded = tuple(self._load_catalog(directory) for directory in directories)
-        ordered = _order_loaded_catalogs(loaded)
-        _validate_active_source_lock(ordered[0], source_by_id=source_by_id)
-        _validate_cross_catalog_assets(ordered)
-        return ordered
+        _validate_active_source_lock(loaded[0], source_by_id=source_by_id)
+        _validate_cross_catalog_assets(loaded)
+        return loaded
 
     def _discover_served_directories(self) -> tuple[Path, ...]:
         if (self._path / "manifest.json").is_file():
@@ -552,20 +698,25 @@ class SpatialCatalogLoader:
         catalogs_root = self._path / "catalogs"
         if not catalogs_root.is_dir():
             raise FileNotFoundError("spatial catalog directory is missing")
-        candidates: list[Path] = []
-        for candidate in catalogs_root.iterdir():
-            if not _CATALOG_DIRECTORY.fullmatch(candidate.name):
-                continue
-            if candidate.is_symlink() or not candidate.is_dir():
-                raise ValueError("catalog revision path must be a regular directory")
-            candidates.append(candidate)
-        if not candidates:
-            raise FileNotFoundError("no spatial catalog revision is installed")
-        candidates.sort(
-            key=lambda candidate: (candidate.stat().st_mtime_ns, candidate.name),
-            reverse=True,
-        )
-        return tuple(candidates[:2])
+        pointer_path = self._path / "catalog-pointer.json"
+        if pointer_path.is_symlink() or not pointer_path.is_file():
+            raise FileNotFoundError("spatial catalog pointer is missing")
+        pointer_bytes = pointer_path.read_bytes()
+        pointer = CatalogPointer.model_validate_json(pointer_bytes)
+        canonical_pointer = canonical_json_bytes(pointer)
+        if pointer_bytes not in {canonical_pointer, canonical_pointer + b"\n"}:
+            raise ValueError("catalog pointer is not canonical JSON")
+        directories: list[Path] = []
+        for revision in pointer.served_catalog_revisions:
+            candidate = catalogs_root / revision
+            if (
+                not _CATALOG_DIRECTORY.fullmatch(candidate.name)
+                or candidate.is_symlink()
+                or not candidate.is_dir()
+            ):
+                raise ValueError("served catalog revision is not installed")
+            directories.append(candidate)
+        return tuple(directories)
 
     def _source_lock_path(self, catalog_directory: Path) -> Path:
         candidates = (
@@ -668,6 +819,7 @@ class SpatialCatalogLoader:
     def _asset_corrupt(self, exc: Exception) -> SpatialCatalogProblem:
         self._catalogs.clear()
         self._verified_assets.clear()
+        self._containment_cache.clear()
         self._diagnostic = f"{type(exc).__name__}: {exc}"
         self._state = CatalogUnavailableState(_GENERIC_UNAVAILABLE)
         self._emit(
@@ -791,29 +943,135 @@ async def _wait_for_file_read_after_cancellation(read_task: asyncio.Task[bytes])
             read_task.result()
 
 
-def _order_loaded_catalogs(
-    loaded: tuple[_LoadedCatalog, ...],
-) -> tuple[_LoadedCatalog, ...]:
-    """Prefer the manifest carry-forward relation over filesystem timestamp order."""
+def _decode_containment_geometry(
+    payload: bytes,
+) -> tuple[tuple[tuple[tuple[float, float], ...], ...], ...]:
+    value = json.loads(payload)
+    if not isinstance(value, dict) or set(value) != {
+        "schema_version",
+        "geometry_type",
+        "polygons",
+    }:
+        raise ValueError("containment geometry shape is invalid")
+    if value["schema_version"] != 1 or value["geometry_type"] != "MultiPolygon":
+        raise ValueError("containment geometry version is unsupported")
+    raw_polygons = value["polygons"]
+    if not isinstance(raw_polygons, list) or not raw_polygons:
+        raise ValueError("containment geometry polygons are invalid")
+    polygons: list[tuple[tuple[tuple[float, float], ...], ...]] = []
+    for raw_polygon in raw_polygons:
+        if not isinstance(raw_polygon, list) or not raw_polygon:
+            raise ValueError("containment polygon is invalid")
+        rings: list[tuple[tuple[float, float], ...]] = []
+        for raw_ring in raw_polygon:
+            if not isinstance(raw_ring, list) or len(raw_ring) < 4:
+                raise ValueError("containment ring is invalid")
+            ring: list[tuple[float, float]] = []
+            for raw_position in raw_ring:
+                if (
+                    not isinstance(raw_position, list)
+                    or len(raw_position) != 2
+                    or any(
+                        isinstance(coordinate, bool)
+                        or not isinstance(coordinate, int | float)
+                        for coordinate in raw_position
+                    )
+                ):
+                    raise ValueError("containment position is invalid")
+                longitude, latitude = (float(raw_position[0]), float(raw_position[1]))
+                if (
+                    not math.isfinite(longitude)
+                    or not math.isfinite(latitude)
+                    or not -180 <= longitude <= 180
+                    or not -90 <= latitude <= 90
+                ):
+                    raise ValueError("containment position is outside the geographic domain")
+                ring.append((longitude, latitude))
+            if ring[0] != ring[-1]:
+                raise ValueError("containment ring is not closed")
+            rings.append(tuple(ring))
+        polygons.append(tuple(rings))
+    return tuple(polygons)
 
-    if len(loaded) < 2:
-        return loaded
-    loaded_revisions = {catalog.manifest.catalog_revision for catalog in loaded}
-    referenced_revisions = {
-        record.carry_forward_from
-        for catalog in loaded
-        for record in catalog.manifest.scopes
-        if record.carry_forward_from in loaded_revisions
-    }
-    active_candidates = tuple(
-        catalog
-        for catalog in loaded
-        if catalog.manifest.catalog_revision not in referenced_revisions
-    )
-    if len(active_candidates) != 1:
-        return loaded
-    active = active_candidates[0]
-    return (active, *(catalog for catalog in loaded if catalog is not active))
+
+def _classify_point(
+    geometry: tuple[tuple[tuple[tuple[float, float], ...], ...], ...],
+    *,
+    longitude: float,
+    latitude: float,
+) -> tuple[bool, bool]:
+    for polygon in geometry:
+        outer_query, outer = _unwrap_ring(longitude, polygon[0])
+        if _point_on_ring(outer_query, latitude, outer):
+            return True, False
+        if not _point_in_ring(outer_query, latitude, outer):
+            continue
+        inside_hole = False
+        for hole in polygon[1:]:
+            hole_query, unwrapped_hole = _unwrap_ring(longitude, hole)
+            if _point_on_ring(hole_query, latitude, unwrapped_hole):
+                return True, False
+            if _point_in_ring(hole_query, latitude, unwrapped_hole):
+                inside_hole = True
+                break
+        if not inside_hole:
+            return False, True
+    return False, False
+
+
+def _unwrap_ring(
+    query_longitude: float,
+    ring: tuple[tuple[float, float], ...],
+) -> tuple[float, tuple[tuple[float, float], ...]]:
+    unwrapped = [ring[0]]
+    for raw_longitude, latitude in ring[1:]:
+        candidate = raw_longitude
+        while candidate - unwrapped[-1][0] > 180:
+            candidate -= 360
+        while candidate - unwrapped[-1][0] < -180:
+            candidate += 360
+        unwrapped.append((candidate, latitude))
+    mean = sum(point[0] for point in unwrapped[:-1]) / (len(unwrapped) - 1)
+    query = query_longitude + round((mean - query_longitude) / 360) * 360
+    return query, tuple(unwrapped)
+
+
+def _point_in_ring(
+    longitude: float,
+    latitude: float,
+    ring: tuple[tuple[float, float], ...],
+) -> bool:
+    inside = False
+    for left, right in zip(ring, ring[1:], strict=False):
+        crosses = (left[1] > latitude) != (right[1] > latitude)
+        if crosses:
+            crossing = left[0] + (latitude - left[1]) * (
+                right[0] - left[0]
+            ) / (right[1] - left[1])
+            if longitude < crossing:
+                inside = not inside
+    return inside
+
+
+def _point_on_ring(
+    longitude: float,
+    latitude: float,
+    ring: tuple[tuple[float, float], ...],
+) -> bool:
+    for left, right in zip(ring, ring[1:], strict=False):
+        cross = (longitude - left[0]) * (right[1] - left[1]) - (
+            latitude - left[1]
+        ) * (right[0] - left[0])
+        if not math.isclose(cross, 0.0, abs_tol=1e-10):
+            continue
+        if (
+            min(left[0], right[0]) - 1e-10 <= longitude <= max(left[0], right[0]) + 1e-10
+            and min(left[1], right[1]) - 1e-10
+            <= latitude
+            <= max(left[1], right[1]) + 1e-10
+        ):
+            return True
+    return False
 
 
 def _sha256_bytes(payload: bytes) -> str:

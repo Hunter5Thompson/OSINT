@@ -149,7 +149,6 @@ def test_scoped_histogram_uses_catalog_bbox_and_echoes_partial_accounting(client
                 ("2026-06-01T01:30:00Z", "civil.demo", "low"),
                 ("2026-06-01T02:30:00Z", "civil.demo", "low"),
             ),
-            [{"excluded_unlocated_count": 2}],
             [],
             [],
             [],
@@ -166,10 +165,12 @@ def test_scoped_histogram_uses_catalog_bbox_and_echoes_partial_accounting(client
     assert application["mode"] == "bbox_approximate"
     assert application["completeness"] == "partial"
     assert application["included_count"] == 3
-    assert application["excluded_unlocated_count"] == 2
-    accounting_query = read.await_args_list[1].args[0]
-    assert "excluded_unlocated_count" in accounting_query
-    assert " AS total" not in accounting_query
+    assert application["excluded_unlocated_count"] == 0
+    assert len(read.await_args_list) == 4
+    assert all(
+        "excluded_unlocated_count" not in call.args[0]
+        for call in read.await_args_list
+    )
     resolve.assert_awaited_once_with(
         loader,
         "country:UKR",

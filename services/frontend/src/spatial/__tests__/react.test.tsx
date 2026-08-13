@@ -49,6 +49,10 @@ class CountingNavigation implements ScopeNavigationPort {
     return null;
   }
 
+  readCatalogRevisionCandidate(): string | null {
+    return null;
+  }
+
   writeScope(write: ScopeNavigationWrite): Promise<void> {
     this.writes.push(write);
     const event = {
@@ -125,6 +129,7 @@ class RecoveryModule implements OwnedSpatialScopeModule {
         presentation: "boundary",
       },
     ],
+    children: [],
     query: {
       schemaVersion: 1,
       scopeKey: UKRAINE,

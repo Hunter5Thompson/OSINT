@@ -16,7 +16,12 @@ from pydantic import TypeAdapter, ValidationError
 
 from spatial_catalog.identity import parse_scope_key
 from spatial_catalog.lod import LOD_POLICIES
-from spatial_catalog.manifest import CatalogManifest, canonical_json_bytes, canonical_manifest_bytes
+from spatial_catalog.manifest import (
+    CatalogManifest,
+    CatalogPointer,
+    canonical_json_bytes,
+    canonical_manifest_bytes,
+)
 from spatial_catalog.models import (
     AttributionSource,
     CatalogAttribution,
@@ -404,6 +409,68 @@ def publish_revision(
     finally:
         if staging.exists():
             shutil.rmtree(staging)
+
+
+def activate_revision(catalogs_root: Path, catalog_revision: str) -> Path:
+    """Atomically select a verified revision and retain the previous active one."""
+
+    revision = _CATALOG_REVISION_ADAPTER.validate_python(catalog_revision)
+    selected = catalogs_root / revision
+    if selected.is_symlink() or not selected.is_dir():
+        raise PublicationError("ACTIVE_REVISION_MISSING: revision is not installed")
+    manifest_path = selected / "manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise PublicationError("ACTIVE_MANIFEST_MISSING: revision has no manifest")
+
+    pointer_path = catalogs_root.parent / "catalog-pointer.json"
+    existing: CatalogPointer | None = None
+    if pointer_path.exists():
+        if pointer_path.is_symlink() or not pointer_path.is_file():
+            raise PublicationError("INVALID_CATALOG_POINTER: pointer is not a file")
+        try:
+            existing_bytes = pointer_path.read_bytes()
+            existing = CatalogPointer.model_validate_json(existing_bytes)
+        except (OSError, ValidationError) as exc:
+            raise PublicationError("INVALID_CATALOG_POINTER: cannot preserve rollout") from exc
+        canonical_existing = canonical_json_bytes(existing)
+        if existing_bytes not in {canonical_existing, canonical_existing + b"\n"}:
+            raise PublicationError("INVALID_CATALOG_POINTER: non-canonical JSON")
+    if existing is None:
+        served = (revision,)
+    elif existing.active_catalog_revision == revision:
+        served = existing.served_catalog_revisions
+    else:
+        served = (revision, existing.active_catalog_revision)
+
+    for served_revision in served[1:]:
+        served_path = catalogs_root / served_revision
+        served_manifest = served_path / "manifest.json"
+        if served_path.is_symlink() or not served_path.is_dir():
+            raise PublicationError("PREVIOUS_REVISION_MISSING: rollout cannot be preserved")
+        if served_manifest.is_symlink() or not served_manifest.is_file():
+            raise PublicationError("PREVIOUS_MANIFEST_MISSING: rollout cannot be preserved")
+    pointer = CatalogPointer(
+        schema_version=1,
+        active_catalog_revision=revision,
+        served_catalog_revisions=served,
+    )
+    content = canonical_json_bytes(pointer)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".catalog-pointer.",
+        dir=pointer_path.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, pointer_path)
+        pointer_path.chmod(0o644)
+        return pointer_path
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def _set_publication_modes(root: Path) -> None:

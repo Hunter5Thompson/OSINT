@@ -27,6 +27,7 @@ def _legacy_global_application() -> SpatialApplicationV1:
         completeness=SpatialCompleteness.COMPLETE,
         included_count=0,
         excluded_unlocated_count=0,
+        excluded_outside_count=0,
         excluded_conflict_count=0,
         excluded_stale_revision_count=0,
         excluded_unsupported_count=0,
@@ -103,6 +104,7 @@ def test_new_client_world_token_is_echoed_without_becoming_legacy_tokenless_glob
         completeness="complete",
         included_count=7,
         excluded_unlocated_count=0,
+        excluded_outside_count=0,
         excluded_conflict_count=0,
         excluded_stale_revision_count=0,
         excluded_unsupported_count=0,
@@ -143,6 +145,7 @@ def test_bbox_application_accounts_distinct_included_and_excluded_records():
         completeness="partial",
         included_count=11,
         excluded_unlocated_count=3,
+        excluded_outside_count=5,
         excluded_conflict_count=2,
         excluded_stale_revision_count=1,
         excluded_unsupported_count=4,
@@ -151,6 +154,7 @@ def test_bbox_application_accounts_distinct_included_and_excluded_records():
     assert application.relation == "intersects"
     assert application.included_count == 11
     assert application.excluded_unlocated_count == 3
+    assert application.excluded_outside_count == 5
     assert application.excluded_conflict_count == 2
     assert application.excluded_stale_revision_count == 1
     assert application.excluded_unsupported_count == 4

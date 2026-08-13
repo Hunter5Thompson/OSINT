@@ -34,6 +34,7 @@ const scope = {
       presentation: "boundary" as const,
     },
   ],
+  children: [],
   query: {
     schemaVersion: 1 as const,
     scopeKey: "country:UKR",
@@ -115,6 +116,10 @@ vi.mock("../../components/layers/ReconLayer", () => ({
   ),
 }));
 
+vi.mock("../../components/worldview/TickerPanel", () => ({
+  TickerPanel: () => <div data-testid="ticker-panel" />,
+}));
+
 vi.mock("../../services/api", () => ({
   getConfig: vi.fn().mockResolvedValue({
     cesium_ion_token: "",
@@ -152,6 +157,7 @@ vi.mock("../../services/api", () => ({
       completeness: "complete",
       included_count: 0,
       excluded_unlocated_count: 0,
+      excluded_outside_count: 0,
       excluded_conflict_count: 0,
       excluded_stale_revision_count: 0,
       excluded_unsupported_count: 0,
@@ -176,6 +182,7 @@ describe("WorldviewPage spatial layer policy wiring", () => {
     expect(screen.getByTestId("satellite-policy")).toHaveTextContent("true");
     expect(screen.getByTestId("earthquake-policy")).toHaveTextContent("true:adapter");
     expect(screen.getByTestId("recon-policy")).toHaveTextContent("false");
+    expect(screen.queryByTestId("ticker-panel")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /expand Layers/i }));
     expect(screen.getByTestId("layer-scope-flights")).toHaveTextContent(

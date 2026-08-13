@@ -84,7 +84,12 @@ async def stream_intel_query(
             "query": query,
             "region": region,
             "spatial_scope": (
-                spatial_scope.model_dump(mode="json") if spatial_scope is not None else None
+                {
+                    "scope_key": spatial_scope.scope_key,
+                    "catalog_revision": spatial_scope.catalog_revision,
+                }
+                if spatial_scope is not None
+                else None
             ),
             "spatial_relation": spatial_relation.value,
             "image_url": image_url,

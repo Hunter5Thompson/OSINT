@@ -22,6 +22,7 @@ const globalApplication: SpatialApplicationV1 = {
   completeness: "complete",
   included_count: 210,
   excluded_unlocated_count: 0,
+  excluded_outside_count: 0,
   excluded_conflict_count: 0,
   excluded_stale_revision_count: 0,
   excluded_unsupported_count: 0,
@@ -36,6 +37,7 @@ const partialApplication: SpatialApplicationV1 = {
   completeness: "partial",
   included_count: 207,
   excluded_unlocated_count: 2,
+  excluded_outside_count: 3,
   excluded_conflict_count: 1,
   excluded_unsupported_count: 2,
 };
@@ -119,7 +121,8 @@ describe("ChronikTimeline", () => {
     render(<ChronikTimeline {...base} spatialApplication={partialApplication} />);
     const status = screen.getByTestId("chronik-spatial-status");
     expect(status).toHaveTextContent("occurs-in · bbox approx · partial");
-    expect(status).toHaveTextContent("excluded 5");
+    expect(status).toHaveTextContent("excluded 8");
+    expect(status).toHaveAttribute("title", expect.stringContaining("outside 3"));
     expect(status).toHaveAttribute("title", expect.stringContaining("unsupported 2"));
   });
 

@@ -21,8 +21,18 @@ from app.models.incident import (
 )
 from app.services._loc_key import incident_key
 from app.services.neo4j_client import read_query, write_query
+from app.services.spatial_catalog import (
+    IncidentSpatialProjection,
+    SpatialCatalogLoader,
+)
 
 _REHYDRATE_LIMIT = 500
+_incident_spatial_catalog: SpatialCatalogLoader | None = None
+
+
+def configure_incident_spatial_catalog(loader: SpatialCatalogLoader | None) -> None:
+    global _incident_spatial_catalog
+    _incident_spatial_catalog = loader
 
 
 def _decode_timeline(raw: str | list[Any] | None) -> list[IncidentTimelineEvent]:
@@ -75,7 +85,11 @@ def _parse_dt(value: Any) -> datetime:
     return datetime.now(UTC)
 
 
-def _upsert_params(record: Incident, ordinal: int) -> dict[str, Any]:
+def _upsert_params(
+    record: Incident,
+    ordinal: int,
+    projection: IncidentSpatialProjection | None = None,
+) -> dict[str, Any]:
     return {
         "incident_id": record.id,
         "ordinal": ordinal,
@@ -95,8 +109,38 @@ def _upsert_params(record: Incident, ordinal: int) -> dict[str, Any]:
             ensure_ascii=True,
         ),
         "loc_key": incident_key(record.location, record.coords[0], record.coords[1]),
+        "spatial_write": projection is not None,
+        "country_scope_key": projection.country_scope_key if projection else None,
+        "admin1_scope_key": projection.admin1_scope_key if projection else None,
+        "admin2_scope_key": projection.admin2_scope_key if projection else None,
+        "spatial_basis": projection.spatial_basis if projection else None,
+        "spatial_precision": projection.spatial_precision if projection else None,
+        "spatial_catalog_revision": (
+            projection.spatial_catalog_revision if projection else None
+        ),
+        "spatial_derivation_revision": (
+            projection.spatial_derivation_revision if projection else None
+        ),
+        "spatial_conflict": projection.spatial_conflict if projection else False,
+        "spatial_conflict_scope_keys": (
+            list(projection.spatial_conflict_scope_keys) if projection else []
+        ),
+        "spatial_derivation_status": (
+            projection.spatial_derivation_status if projection else "unavailable"
+        ),
         "now": datetime.now(UTC).isoformat(),
     }
+
+
+async def _incident_projection(record: Incident) -> IncidentSpatialProjection | None:
+    loader = _incident_spatial_catalog
+    if loader is None or record.coords == (0.0, 0.0):
+        return None
+    result = await loader.project_incident_point(
+        latitude=record.coords[0],
+        longitude=record.coords[1],
+    )
+    return result if isinstance(result, IncidentSpatialProjection) else None
 
 
 async def list_open_incidents(limit: int = 50) -> list[Incident]:
@@ -134,7 +178,10 @@ async def create_incident(payload: IncidentCreateRequest) -> Incident:
         layer_hints=payload.layer_hints,
         timeline=[initial],
     )
-    rows = await write_query(INCIDENT_UPSERT, _upsert_params(record, ordinal))
+    rows = await write_query(
+        INCIDENT_UPSERT,
+        _upsert_params(record, ordinal, await _incident_projection(record)),
+    )
     if not rows:
         raise RuntimeError("failed to persist incident")
     return _row_to_incident(rows[0])
@@ -150,7 +197,10 @@ async def append_timeline_event(
     next_timeline = [*current.timeline, event]
     next_record = current.model_copy(update={"timeline": next_timeline})
     ordinal = int(datetime.now(UTC).timestamp() * 1000) % 2_000_000_000
-    rows = await write_query(INCIDENT_UPSERT, _upsert_params(next_record, ordinal))
+    rows = await write_query(
+        INCIDENT_UPSERT,
+        _upsert_params(next_record, ordinal, await _incident_projection(next_record)),
+    )
     if not rows:
         return None
     return _row_to_incident(rows[0])
@@ -184,7 +234,10 @@ async def apply_signal_update(
         }
     )
     ordinal = int(datetime.now(UTC).timestamp() * 1000) % 2_000_000_000
-    rows = await write_query(INCIDENT_UPSERT, _upsert_params(next_record, ordinal))
+    rows = await write_query(
+        INCIDENT_UPSERT,
+        _upsert_params(next_record, ordinal, await _incident_projection(next_record)),
+    )
     if not rows:
         return None
     return _row_to_incident(rows[0])
@@ -205,7 +258,10 @@ async def close_incident(
         update={"status": status, "closed_ts": when or datetime.now(UTC)}
     )
     ordinal = int(datetime.now(UTC).timestamp() * 1000) % 2_000_000_000
-    rows = await write_query(INCIDENT_UPSERT, _upsert_params(next_record, ordinal))
+    rows = await write_query(
+        INCIDENT_UPSERT,
+        _upsert_params(next_record, ordinal, await _incident_projection(next_record)),
+    )
     if not rows:
         return None
     return _row_to_incident(rows[0])

@@ -23,6 +23,7 @@ from spatial_catalog.emit import (
     ContextPackFeature,
     EmittedAsset,
     ScopePackFeature,
+    activate_revision,
     attribution_sources_sha256,
     emit_attribution,
     emit_boundary_pack,
@@ -343,6 +344,7 @@ def compile_catalog(
             reports=reports,
         )
     verify_catalog(destination)
+    activate_revision(output_root, destination.name)
     return destination
 
 

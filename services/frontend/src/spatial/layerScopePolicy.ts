@@ -381,6 +381,7 @@ export function chronikSpatialStatus(
   }
 
   const excluded = application.excluded_unlocated_count
+    + application.excluded_outside_count
     + application.excluded_conflict_count
     + application.excluded_stale_revision_count
     + application.excluded_unsupported_count;
@@ -390,6 +391,7 @@ export function chronikSpatialStatus(
     title: [
       `included ${application.included_count}`,
       `unlocated ${application.excluded_unlocated_count}`,
+      `outside ${application.excluded_outside_count}`,
       `conflict ${application.excluded_conflict_count}`,
       `stale revision ${application.excluded_stale_revision_count}`,
       `unsupported ${application.excluded_unsupported_count}`,

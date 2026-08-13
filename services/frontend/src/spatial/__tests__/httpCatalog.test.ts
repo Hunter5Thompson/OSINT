@@ -136,6 +136,15 @@ function scopeWire(): Record<string, unknown> {
     children_available: true,
     presentation: "boundary",
   };
+  const admin1 = {
+    key: "admin1:iso3166-2:UA-14",
+    kind: "admin1",
+    label: "Donetsk Oblast",
+    short_label: "Donetsk",
+    parent_key: "country:UKR",
+    children_available: false,
+    presentation: "boundary",
+  };
   return {
     schema_version: 1,
     catalog_revision: REVISION,
@@ -143,6 +152,7 @@ function scopeWire(): Record<string, unknown> {
     canonicalized_from: null,
     scope: country,
     path: [world, country],
+    children: [admin1],
     presentation: {
       preferred_lod: "regional",
       outline_lods: {
@@ -346,6 +356,7 @@ describe("HttpSpatialCatalog wire contract", () => {
     };
     wire.scope = admin1;
     wire.path = [world, country, admin1];
+    wire.children = [];
     wire.presentation = {
       preferred_lod: null,
       outline_lods: (wire.presentation as Record<string, unknown>).outline_lods,
@@ -494,6 +505,65 @@ describe("HttpSpatialCatalog wire contract", () => {
     });
   });
 
+  it("starts a fresh foreground load after the final hover waiter aborts", async () => {
+    let scopeRequests = 0;
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      if (url.startsWith("/api/spatial/scope")) {
+        scopeRequests += 1;
+        if (scopeRequests === 1) return new Promise<Response>(() => {});
+        return metadataResponse(scopeWire());
+      }
+      if (url === `/api/spatial/assets/${BOUNDARY_ID}`) return assetResponse(BOUNDARY_ID);
+      if (url === `/api/spatial/assets/${PACK_ID}`) return assetResponse(PACK_ID);
+      throw new Error(`unexpected URL: ${url}`);
+    });
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore: createStore(fetcher) });
+    const scopeKey = parseScopeKeyCandidate("country:UKR");
+    const hoverController = new AbortController();
+    const hover = catalog.prefetch(scopeKey, REVISION, "hover", hoverController.signal);
+    await vi.waitFor(() => expect(scopeRequests).toBe(1));
+
+    hoverController.abort();
+    await expect(hover).rejects.toMatchObject({ name: "AbortError" });
+    expect(catalog.diagnostics().inflightMetadataLoads).toBe(0);
+    const click = catalog.resolve(scopeKey, REVISION, new AbortController().signal);
+
+    await vi.waitFor(() => expect(scopeRequests).toBe(2));
+    await expect(click).resolves.toMatchObject({ scope: { key: scopeKey } });
+    expect(scopeRequests).toBe(2);
+  });
+
+  it("drops an aborted shared asset load before a click starts", async () => {
+    let boundaryRequests = 0;
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      if (url.startsWith("/api/spatial/scope")) return metadataResponse(scopeWire());
+      if (url === `/api/spatial/assets/${BOUNDARY_ID}`) {
+        boundaryRequests += 1;
+        if (boundaryRequests === 1) return new Promise<Response>(() => {});
+        return assetResponse(BOUNDARY_ID);
+      }
+      if (url === `/api/spatial/assets/${PACK_ID}`) return assetResponse(PACK_ID);
+      throw new Error(`unexpected URL: ${url}`);
+    });
+    const assetStore = createStore(fetcher);
+    const catalog = new HttpSpatialCatalog({ fetch: fetcher, assetStore });
+    const scopeKey = parseScopeKeyCandidate("country:UKR");
+    const hoverController = new AbortController();
+    const hover = catalog.prefetch(scopeKey, REVISION, "hover", hoverController.signal);
+    await vi.waitFor(() => expect(boundaryRequests).toBe(1));
+
+    hoverController.abort();
+    await expect(hover).rejects.toMatchObject({ name: "AbortError" });
+    expect(assetStore.diagnostics().inflightLoads).toBe(0);
+
+    await expect(
+      catalog.resolve(scopeKey, REVISION, new AbortController().signal),
+    ).resolves.toMatchObject({ scope: { key: scopeKey } });
+    expect(boundaryRequests).toBe(2);
+  });
+
   it("promotes an in-flight hover retry when click joins after the asset request starts", async () => {
     const clock = createClock();
     let assetRequests = 0;
@@ -558,6 +628,7 @@ describe("HttpSpatialCatalog wire contract", () => {
       };
       wire.scope = country;
       wire.path = [world, country];
+      wire.children = [];
       wire.presentation = {
         preferred_lod: null,
         outline_lods: (wire.presentation as Record<string, unknown>).outline_lods,
@@ -618,6 +689,7 @@ describe("HttpSpatialCatalog wire contract", () => {
       };
       wire.scope = country;
       wire.path = [world, country];
+      wire.children = [];
       wire.presentation = {
         preferred_lod: null,
         outline_lods: (wire.presentation as Record<string, unknown>).outline_lods,

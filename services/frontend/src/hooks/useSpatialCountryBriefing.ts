@@ -63,7 +63,21 @@ export function useSpatialCountryBriefing(query: SpatialQueryRef | null) {
         }
       },
       (analysis) => {
-        if (isCurrent()) {
+        const application = analysis.spatial_application;
+        if (
+          application?.scope.scope_key !== query.scopeKey
+          || application.scope.catalog_revision !== query.catalogRevision
+        ) {
+          if (isCurrent()) {
+            setState((previous) => ({
+              ...previous,
+              loading: false,
+              currentAgent: null,
+              result: null,
+              error: "briefing scope echo does not match the request",
+            }));
+          }
+        } else if (isCurrent()) {
           setState((previous) => ({ ...previous, result: analysis }));
         }
       },

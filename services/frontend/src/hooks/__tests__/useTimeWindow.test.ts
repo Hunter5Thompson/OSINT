@@ -40,6 +40,7 @@ function application(
     completeness: spatialScope ? "partial" : "complete",
     included_count: 1,
     excluded_unlocated_count: 0,
+    excluded_outside_count: 0,
     excluded_conflict_count: 0,
     excluded_stale_revision_count: 0,
     excluded_unsupported_count: 0,
@@ -101,6 +102,21 @@ describe("useTimeWindow", () => {
 
     expect(spy).not.toHaveBeenCalled();
     expect(result.current).toMatchObject({ data: null, loading: false, error: null });
+  });
+
+  it("defers while hidden and retries immediately when the tab becomes visible", async () => {
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    const spy = vi.spyOn(api, "getTimeWindow").mockResolvedValue(response(UKRAINE, "ua"));
+    const { result } = renderHook(() => useTimeWindow(true, query(UKRAINE), 0, 7));
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(result.current).toMatchObject({ data: null, loading: true, error: null });
+
+    hidden.mockReturnValue(false);
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+
+    await waitFor(() => expect(result.current.data?.samples[0]?.id).toBe("ua"));
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("aborts the in-flight request on unmount", () => {

@@ -94,6 +94,21 @@ function geometryFeatures(
   }));
 }
 
+function unwrapRenderRing(ring: readonly Position2D[]): readonly Position2D[] {
+  const first = ring[0];
+  if (first === undefined) return ring;
+  const unwrapped: Position2D[] = [[first[0], first[1]]];
+  let previousLongitude = first[0];
+  for (const [rawLongitude, latitude] of ring.slice(1)) {
+    let longitude = rawLongitude;
+    while (longitude - previousLongitude > 180) longitude -= 360;
+    while (longitude - previousLongitude < -180) longitude += 360;
+    unwrapped.push([longitude, latitude]);
+    previousLongitude = longitude;
+  }
+  return unwrapped;
+}
+
 export async function buildScopeGeometry<TPosition>(
   options: BuildScopeGeometryOptions<TPosition>,
 ): Promise<ScopeGeometryBuild<TPosition>> {
@@ -105,7 +120,7 @@ export async function buildScopeGeometry<TPosition>(
     ring: readonly Position2D[],
   ): Promise<readonly TPosition[]> => {
     const positions: TPosition[] = [];
-    for (const position of ring) {
+    for (const position of unwrapRenderRing(ring)) {
       assertNotAborted(options.signal);
       positions.push(options.convertPosition(position));
       chunkVertices += 1;

@@ -126,6 +126,27 @@ class CatalogManifest(StrictFrozenModel):
         return self
 
 
+class CatalogPointer(StrictFrozenModel):
+    """Canonical deployment pointer shared by catalog readers and writers."""
+
+    schema_version: Literal[1]
+    active_catalog_revision: CatalogRevision
+    served_catalog_revisions: tuple[CatalogRevision, ...] = Field(
+        min_length=1,
+        max_length=2,
+    )
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> CatalogPointer:
+        if self.served_catalog_revisions[0] != self.active_catalog_revision:
+            raise ValueError("active catalog revision must be first")
+        if len(set(self.served_catalog_revisions)) != len(
+            self.served_catalog_revisions
+        ):
+            raise ValueError("served catalog revisions must be unique")
+        return self
+
+
 def canonical_json_bytes(value: object) -> bytes:
     """Serialize stable JSON with sorted keys and normalized finite numbers."""
 

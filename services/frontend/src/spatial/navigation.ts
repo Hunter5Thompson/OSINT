@@ -173,6 +173,10 @@ export class RouterScopeNavigation implements ScopeNavigationPort {
     return readLocationEvent(this.location).scopeCandidate;
   }
 
+  readCatalogRevisionCandidate(): string | null {
+    return readLocationEvent(this.location).catalogRevisionCandidate;
+  }
+
   writeScope(write: ScopeNavigationWrite): Promise<void> {
     if (this.disposed) return Promise.reject(abortError());
     const canonical = this.validateWrite(write);
@@ -393,6 +397,10 @@ export class MemoryScopeNavigation implements ScopeNavigationPort {
 
   readScopeCandidate(): string | null {
     return this.location.scopeCandidate;
+  }
+
+  readCatalogRevisionCandidate(): string | null {
+    return this.location.catalogRevisionCandidate;
   }
 
   writeScope(write: ScopeNavigationWrite): Promise<void> {

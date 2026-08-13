@@ -14,7 +14,13 @@ from starlette.responses import Response
 
 from app.admin_auth import require_admin_token
 from app.config import settings
-from app.models.almanac import AlmanacSignalResponse, BriefingSaveRequest, CountryAlmanac
+from app.models.almanac import (
+    AlmanacSignalResponse,
+    BriefingSaveRequest,
+    CountryAlmanac,
+    SpatialAlmanacSignalResponse,
+    SpatialCountryAlmanacResponse,
+)
 from app.models.intel import RetrievalSpatialRelation
 from app.models.report import ReportMessageCreate, ReportRecord
 from app.models.spatial import (
@@ -153,16 +159,22 @@ async def get_country_almanac(country_id: str) -> CountryAlmanac:
     return country
 
 
-@router.get("/country", response_model=CountryAlmanac)
+@router.get("/country", response_model=SpatialCountryAlmanacResponse)
 async def get_spatial_country_almanac(
     request: Request,
     scope_key: str = Query(),
     catalog_revision: str = Query(),
-) -> CountryAlmanac | Response:
+) -> SpatialCountryAlmanacResponse | Response:
     """Resolve catalog identity before adapting it to existing almanac data."""
 
     context = _resolve_committed_country_scope(request, scope_key, catalog_revision)
-    return context if isinstance(context, Response) else context.country
+    if isinstance(context, Response):
+        return context
+    return SpatialCountryAlmanacResponse.model_validate({
+        **context.country.model_dump(),
+        "scope_key": context.token.scope_key,
+        "catalog_revision": context.token.catalog_revision,
+    })
 
 
 def _country_signal_response(
@@ -179,6 +191,18 @@ def _country_signal_response(
         country_id=country.iso3 or country.id,
         items=items,
     )
+
+
+def _spatial_country_signal_response(
+    context: _CountrySpatialContext,
+    limit: int,
+) -> SpatialAlmanacSignalResponse:
+    response = _country_signal_response(context.country, limit)
+    return SpatialAlmanacSignalResponse.model_validate({
+        **response.model_dump(),
+        "scope_key": context.token.scope_key,
+        "catalog_revision": context.token.catalog_revision,
+    })
 
 
 def _country_briefing_response(
@@ -210,17 +234,17 @@ def _country_briefing_response(
     return EventSourceResponse(event_generator())
 
 
-@router.get("/country/signals", response_model=AlmanacSignalResponse)
+@router.get("/country/signals", response_model=SpatialAlmanacSignalResponse)
 async def get_spatial_country_signals(
     request: Request,
     scope_key: str = Query(),
     catalog_revision: str = Query(),
     limit: int = Query(default=5, ge=1, le=20),
-) -> AlmanacSignalResponse | Response:
+) -> SpatialAlmanacSignalResponse | Response:
     context = _resolve_committed_country_scope(request, scope_key, catalog_revision)
     if isinstance(context, Response):
         return context
-    return _country_signal_response(context.country, limit)
+    return _spatial_country_signal_response(context, limit)
 
 
 @router.post("/country/briefing", response_model=None)

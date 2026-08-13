@@ -75,6 +75,8 @@ async def test_scope_and_exact_revision_resolve_before_almanac_lookup(
 
     assert response.status_code == 200
     assert response.json()["name"] == "Ukraine"
+    assert response.json()["scope_key"] == "country:UKR"
+    assert response.json()["catalog_revision"] == revision
     assert events == ["resolve", "almanac:UKR"]
 
 
@@ -176,6 +178,8 @@ async def test_spatial_signals_resolve_the_exact_committed_query(
 
     assert response.status_code == 200
     assert response.json()["country_id"] == "UKR"
+    assert response.json()["scope_key"] == "country:UKR"
+    assert response.json()["catalog_revision"] == revision
     assert calls == [("country:UKR", revision)]
 
 
