@@ -257,6 +257,49 @@ class TestRuntimeSpatialScoping:
         assert all("region" not in call.kwargs for call in search.await_args_list)
         assert all(call.kwargs["raise_on_failure"] is True for call in search.await_args_list)
 
+    async def test_scoped_search_omits_unscoped_graph_context_and_reports_partial(self):
+        from config import settings
+
+        analysis = [{
+            "source": "rss",
+            "feed_name": "CSIS",
+            "title": "Ukraine assessment",
+            "content": _prose(),
+            "score": 0.8,
+            "graph_context": (
+                "[Knowledge Graph Context]\n"
+                "  Wagner (organization) —[LOCATED_IN]→ Moscow (Location)"
+            ),
+        }]
+        search = AsyncMock(side_effect=[analysis, []])
+        state = agent_state(
+            spatial_scope=_ukraine_token(),
+            spatial_relation=RetrievalSpatialRelation.EITHER,
+        )
+
+        with (
+            patch("agents.tools.qdrant_search.enhanced_search", search),
+            patch.object(settings, "spatial_coverage_completeness", "complete"),
+        ):
+            output = await invoke_runtime_tool(
+                qdrant_search,
+                {"query": "ukraine"},
+                state=state,
+            )
+
+        assert all(
+            call.kwargs["enable_graph_context"] is False
+            for call in search.await_args_list
+        )
+        assert "Moscow" not in output
+        marker, _ = parse_spatial_application_marker(
+            output,
+            actual_tool_name="qdrant_search",
+        )
+        assert marker is not None
+        assert marker.status == "applied"
+        assert marker.completeness == "partial"
+
     async def test_analysis_outage_is_reported_failed(self):
         state = agent_state(
             spatial_scope=_ukraine_token(),

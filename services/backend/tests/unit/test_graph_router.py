@@ -321,3 +321,4 @@ class TestConfigEndpoint:
         data = resp.json()
         assert "events" in data["default_layers"]
         assert data["default_layers"]["events"] is False
+        assert data["default_layers"]["recon"] is True

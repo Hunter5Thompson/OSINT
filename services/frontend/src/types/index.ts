@@ -389,6 +389,7 @@ export interface LayerVisibility {
   refineries: boolean;
   eonet: boolean;
   gdacs: boolean;
+  recon: boolean;
 }
 
 export type ShaderType = "none" | "crt" | "nightvision" | "flir";

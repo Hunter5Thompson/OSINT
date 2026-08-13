@@ -147,6 +147,7 @@ const DEFAULT_LAYERS: LayerVisibility = {
   refineries: false,
   eonet: false,
   gdacs: false,
+  recon: true,
 };
 
 const FILTER_LAYER_PRESETS: Record<LandingFilter, Partial<LayerVisibility>> = {
@@ -924,7 +925,7 @@ function WorldviewContent({
         <ReconLayer
           viewer={viewer}
           scenes={reconScenes}
-          visible={true}
+          visible={effectiveLayers.recon}
           onSelect={(s) => openScene(s.scene_id)}
         />
         <GlobeChildren

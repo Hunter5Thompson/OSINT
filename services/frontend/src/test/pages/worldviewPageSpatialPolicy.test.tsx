@@ -109,6 +109,12 @@ vi.mock("../../components/layers/EarthquakeLayer", () => ({
   ),
 }));
 
+vi.mock("../../components/layers/ReconLayer", () => ({
+  ReconLayer: ({ visible }: { visible: boolean }) => (
+    <div data-testid="recon-policy">{String(visible)}</div>
+  ),
+}));
+
 vi.mock("../../services/api", () => ({
   getConfig: vi.fn().mockResolvedValue({
     cesium_ion_token: "",
@@ -169,6 +175,7 @@ describe("WorldviewPage spatial layer policy wiring", () => {
     expect(await screen.findByTestId("flight-policy")).toHaveTextContent("false");
     expect(screen.getByTestId("satellite-policy")).toHaveTextContent("true");
     expect(screen.getByTestId("earthquake-policy")).toHaveTextContent("true:adapter");
+    expect(screen.getByTestId("recon-policy")).toHaveTextContent("false");
 
     fireEvent.click(screen.getByRole("button", { name: /expand Layers/i }));
     expect(screen.getByTestId("layer-scope-flights")).toHaveTextContent(

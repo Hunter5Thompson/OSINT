@@ -13,6 +13,7 @@ export interface AttachedSpatialPresenter {
     stateRevision: number,
     signal: AbortSignal,
   ): Promise<void>;
+  clear(): void;
   dispose(): void;
   diagnostics?(): CesiumSpatialScopeDiagnostics;
 }
@@ -89,6 +90,10 @@ export class CesiumSpatialPresentationBridge {
     const presenter = await this.waitForPresenter(signal);
     if (signal.aborted) throw abortError();
     await presenter.present(input, stateRevision, signal);
+  }
+
+  clear(): void {
+    this.presenter?.clear();
   }
 
   dispose(): void {

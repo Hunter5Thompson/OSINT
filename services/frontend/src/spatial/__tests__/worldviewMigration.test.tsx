@@ -475,6 +475,7 @@ describe("CesiumSpatialPresentationBridge", () => {
   it("waits for the Viewer, delegates once, and disposes on detach", async () => {
     const presenter: AttachedSpatialPresenter = {
       present: vi.fn(() => Promise.resolve()),
+      clear: vi.fn(),
       dispose: vi.fn(),
       diagnostics: () => ({
         activeContainers: 1,
@@ -519,6 +520,9 @@ describe("CesiumSpatialPresentationBridge", () => {
       waitingPresentations: 0,
       presenter: { primitiveCount: 2, stagingContainers: 0 },
     });
+
+    bridge.clear();
+    expect(presenter.clear).toHaveBeenCalledOnce();
 
     bridge.detachViewer(viewer);
     expect(presenter.dispose).toHaveBeenCalledOnce();

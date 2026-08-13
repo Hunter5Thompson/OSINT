@@ -26,6 +26,7 @@ const ALL_LAYER_KEYS = [
   "refineries",
   "eonet",
   "gdacs",
+  "recon",
 ] as const satisfies readonly (keyof LayerVisibility)[];
 
 const allEnabled = Object.fromEntries(
@@ -165,6 +166,7 @@ describe("closed layer spatial capability matrix", () => {
     "refineries",
     "eonet",
     "gdacs",
+    "recon",
   ] as const)("fails closed for unsupported non-global layer %s", (layerId) => {
     expect(layerSpatialCapability(layerId)).toMatchObject({
       behavior: "unsupported",
@@ -224,6 +226,7 @@ describe("closed layer spatial capability matrix", () => {
       satellites: true,
       countryBorders: true,
       cityBuildings: true,
+      recon: false,
     });
   });
 
@@ -241,6 +244,7 @@ describe("closed layer spatial capability matrix", () => {
       countryBorders: false,
       satellites: true,
       cityBuildings: true,
+      recon: false,
     });
   });
 });

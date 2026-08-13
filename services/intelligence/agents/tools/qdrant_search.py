@@ -89,9 +89,9 @@ async def qdrant_search(
     NOT here: GDELT-GKG, FIRMS, UCDP, GDACS, EONET and other structured/sensor data
     — reach those via query_knowledge_graph (Neo4j), not this tool.
 
-    Each result includes a graph context block (entity → relation → entity)
-    derived from Neo4j — useful for spotting actors and locations connected
-    to the query topic.
+    Global results may include a graph context block (entity → relation → entity)
+    derived from Neo4j. Scoped runs omit that block until graph neighborhoods can
+    enforce the same scope predicate as Qdrant.
 
     Use multi-word phrases — "shadow fleet" beats "russian ships". Multi-call
     only if first call returned poor results, with a NARROWER query the second
@@ -109,6 +109,7 @@ async def qdrant_search(
     """
     scope = runtime.state["spatial_scope"]
     relation = runtime.state["spatial_relation"]
+    scoped = scope is not None and scope.kind is not ScopeKind.WORLD
     spatial_filter = (
         compile_qdrant_scope_filter(scope, relation) if scope is not None else None
     )
@@ -119,6 +120,7 @@ async def qdrant_search(
             query_filter=combine_filters(analysis_filter(), spatial_filter),
             post_rerank=apply_tier_boost,
             raise_on_failure=True,
+            enable_graph_context=False if scoped else None,
         )
         try:
             realtime = await enhanced_search(
@@ -126,6 +128,7 @@ async def qdrant_search(
                 query_filter=combine_filters(realtime_filter(), spatial_filter),
                 post_rerank=apply_tier_boost, score_threshold=RT_SCORE_THRESHOLD,
                 raise_on_failure=True,
+                enable_graph_context=False if scoped else None,
             )
         except Exception as e:  # realtime is best-effort; never fail the analysis lane
             logger.warning("realtime_lane_failed", error=str(e))
@@ -143,17 +146,19 @@ async def qdrant_search(
             result_count=len(results),
         )
 
-        scoped = scope is not None and scope.kind is not ScopeKind.WORLD
-        completeness = (
-            "partial"
+        completeness = settings.spatial_coverage_completeness if scoped else "complete"
+        if realtime_failed or (scoped and completeness == "complete"):
+            completeness = "partial"
+        detail_code = (
+            "realtime-lane-failed"
             if realtime_failed
-            else settings.spatial_coverage_completeness if scoped else "complete"
+            else "graph-context-omitted-for-scope" if scoped else None
         )
         marker = _qdrant_marker(
             runtime.state,
             status="applied",
             completeness=completeness,
-            detail_code="realtime-lane-failed" if realtime_failed else None,
+            detail_code=detail_code,
         )
 
         if not results:
@@ -167,11 +172,12 @@ async def qdrant_search(
         # Graph context is deduped and appended AFTER evidence within remaining budget.
         graph_blocks: list[str] = []
         seen_graph: set[str] = set()
-        for r in results:
-            gctx = r.get("graph_context", "")
-            if gctx and gctx not in seen_graph:
-                seen_graph.add(gctx)
-                graph_blocks.append(_clip_text(str(gctx), GRAPH_CONTEXT_MAX_CHARS))
+        if not scoped:
+            for r in results:
+                gctx = r.get("graph_context", "")
+                if gctx and gctx not in seen_graph:
+                    seen_graph.add(gctx)
+                    graph_blocks.append(_clip_text(str(gctx), GRAPH_CONTEXT_MAX_CHARS))
 
         graph_text = ""
         if graph_blocks:
