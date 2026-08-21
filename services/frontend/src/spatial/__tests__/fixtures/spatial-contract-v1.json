@@ -1,0 +1,230 @@
+{
+  "schemaVersion": 1,
+  "catalogRevision": "spatial-v1-44e5d2d7bff0",
+  "boundaryPolicy": "odin-reference-v1",
+  "scopeKeyVectors": {
+    "accepted": [
+      { "candidate": "world", "canonical": "world", "kind": "world" },
+      { "candidate": "country:ukr", "canonical": "country:UKR", "kind": "country" },
+      { "candidate": "country:m49:010", "canonical": "country:m49:010", "kind": "country" },
+      { "candidate": "country:odin:somaliland", "canonical": "country:odin:somaliland", "kind": "country" },
+      { "candidate": "admin1:iso3166-2:ua-14", "canonical": "admin1:iso3166-2:UA-14", "kind": "admin1" },
+      { "candidate": "admin1:gbopen:Case.Sensitive_1", "canonical": "admin1:gbopen:Case.Sensitive_1", "kind": "admin1" },
+      { "candidate": "admin2:gbopen:UA.14.1_1", "canonical": "admin2:gbopen:UA.14.1_1", "kind": "admin2" }
+    ],
+    "rejected": [
+      "",
+      "country/UKR",
+      "country\\UKR",
+      "country%2FUKR",
+      "country%252FUKR",
+      "country:UK R",
+      "country:Ukraine",
+      "Ukraine",
+      "country:UP",
+      "country:XKX",
+      "country:XKX:extra",
+      "locality:Kyiv",
+      "aoi:front-line"
+    ]
+  },
+  "catalogRevisionVectors": {
+    "accepted": [
+      "spatial-v1-001122334455",
+      "spatial-v12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "spatial-v1-44e5d2d7bff0"
+    ],
+    "rejected": [
+      "spatial-v1-placeholder",
+      "spatial-v1-ABCDEF123456",
+      "spatial-v1-00112233445"
+    ]
+  },
+  "resolvedScopes": [
+    {
+      "scope": {
+        "key": "world",
+        "kind": "world",
+        "label": "World",
+        "shortLabel": "World",
+        "parentKey": null,
+        "childrenAvailable": true,
+        "presentation": "boundary"
+      },
+      "path": [
+        {
+          "key": "world",
+          "kind": "world",
+          "label": "World",
+          "shortLabel": "World",
+          "parentKey": null,
+          "childrenAvailable": true,
+          "presentation": "boundary"
+        }
+      ],
+      "query": {
+        "schemaVersion": 1,
+        "scopeKey": "world",
+        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "boundaryPolicy": "odin-reference-v1"
+      },
+      "presentation": {
+        "mode": "boundary",
+        "scopeKey": "world",
+        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "preferredLod": "overview",
+        "outlineLods": {},
+        "childrenLods": {
+          "overview": {
+            "assetId": "b90baf4f115232700cade2dd6e7366de9193bcf38803fac09d66e99ae5934939",
+            "mediaType": "application/vnd.odin.boundary-pack+json;v=1",
+            "byteLength": 218408,
+            "vertexCount": 10598,
+            "featureCount": 177,
+            "role": "render",
+            "lod": "overview"
+          }
+        },
+        "cameraExtent": { "kind": "world" }
+      },
+      "containment": null
+    },
+    {
+      "scope": {
+        "key": "country:UKR",
+        "kind": "country",
+        "label": "Ukraine",
+        "shortLabel": "Ukraine",
+        "parentKey": "world",
+        "childrenAvailable": true,
+        "presentation": "boundary"
+      },
+      "path": [
+        {
+          "key": "world",
+          "kind": "world",
+          "label": "World",
+          "shortLabel": "World",
+          "parentKey": null,
+          "childrenAvailable": true,
+          "presentation": "boundary"
+        },
+        {
+          "key": "country:UKR",
+          "kind": "country",
+          "label": "Ukraine",
+          "shortLabel": "Ukraine",
+          "parentKey": "world",
+          "childrenAvailable": true,
+          "presentation": "boundary"
+        }
+      ],
+      "query": {
+        "schemaVersion": 1,
+        "scopeKey": "country:UKR",
+        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "boundaryPolicy": "odin-reference-v1"
+      },
+      "presentation": {
+        "mode": "boundary",
+        "scopeKey": "country:UKR",
+        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "preferredLod": "regional",
+        "outlineLods": {
+          "regional": {
+            "assetId": "7dfd2ab09ef0383464d4100d8c8f43aefa6ed8bfa89fe82a007fa965c3fc15cf",
+            "mediaType": "application/vnd.odin.boundary+json;v=1",
+            "byteLength": 175766,
+            "vertexCount": 8883,
+            "role": "render",
+            "lod": "regional"
+          }
+        },
+        "childrenLods": {
+          "regional": {
+            "assetId": "08a9cc63371a996301c525dd9ca919f9af1764f6d13c5d2a039215c9ad42bb10",
+            "mediaType": "application/vnd.odin.boundary-pack+json;v=1",
+            "byteLength": 820372,
+            "vertexCount": 41260,
+            "featureCount": 27,
+            "role": "render",
+            "lod": "regional"
+          }
+        },
+        "cameraExtent": {
+          "kind": "segments",
+          "south": 44.18,
+          "north": 52.38,
+          "longitude": [{ "west": 22.14, "east": 40.23 }]
+        }
+      },
+      "containment": {
+        "assetId": "47fc672319d16c13f9a15cd4fda27d2843064e472e4eb93129b49f9628d188b3",
+        "mediaType": "application/vnd.odin.boundary+json;v=1",
+        "byteLength": 2083,
+        "vertexCount": 93,
+        "role": "containment",
+        "maxErrorMeters": 0
+      }
+    },
+    {
+      "scope": {
+        "key": "admin1:iso3166-2:UA-14",
+        "kind": "admin1",
+        "label": "Donetsk Oblast",
+        "shortLabel": "Donetsk",
+        "parentKey": "country:UKR",
+        "childrenAvailable": false,
+        "presentation": "semantic-only"
+      },
+      "path": [
+        {
+          "key": "world",
+          "kind": "world",
+          "label": "World",
+          "shortLabel": "World",
+          "parentKey": null,
+          "childrenAvailable": true,
+          "presentation": "boundary"
+        },
+        {
+          "key": "country:UKR",
+          "kind": "country",
+          "label": "Ukraine",
+          "shortLabel": "Ukraine",
+          "parentKey": "world",
+          "childrenAvailable": true,
+          "presentation": "boundary"
+        },
+        {
+          "key": "admin1:iso3166-2:UA-14",
+          "kind": "admin1",
+          "label": "Donetsk Oblast",
+          "shortLabel": "Donetsk",
+          "parentKey": "country:UKR",
+          "childrenAvailable": false,
+          "presentation": "semantic-only"
+        }
+      ],
+      "query": {
+        "schemaVersion": 1,
+        "scopeKey": "admin1:iso3166-2:UA-14",
+        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "boundaryPolicy": "odin-reference-v1"
+      },
+      "presentation": {
+        "mode": "semantic-only",
+        "scopeKey": "admin1:iso3166-2:UA-14",
+        "catalogRevision": "spatial-v1-44e5d2d7bff0",
+        "problem": {
+          "severity": "warning",
+          "code": "GEOMETRY_UNAVAILABLE",
+          "target": "admin1:iso3166-2:UA-14",
+          "recoverable": false,
+          "message": "Boundary presentation is unavailable."
+        }
+      },
+      "containment": null
+    }
+  ]
+}

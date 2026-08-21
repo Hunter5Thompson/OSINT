@@ -20,6 +20,11 @@ vi.mock("../../services/api", () => ({
   }),
   getHotspots: vi.fn().mockResolvedValue([]),
 }));
+vi.mock("../../spatial/react", () => ({
+  SpatialScopeProvider: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="spatial-scope-provider">{children}</div>
+  ),
+}));
 
 import { WorldviewPage } from "../../pages/WorldviewPage";
 import { ReconProvider } from "../../state/ReconContext";
@@ -37,6 +42,7 @@ function renderWorldview() {
 describe("WorldviewPage", () => {
   it("renders the globe and four overlay panel tabs/expanded forms", async () => {
     renderWorldview();
+    expect(await screen.findByTestId("spatial-scope-provider")).toBeInTheDocument();
     expect(await screen.findByTestId("globe-viewer")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /expand Layers/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /expand Search/i })).toBeInTheDocument();
