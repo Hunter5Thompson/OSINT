@@ -14,6 +14,9 @@ warm the same ref-counted catalog/asset load later adopted by click, but cannot 
 semantic state, URL, camera, or foreground generation. A direct Admin-1 deep link
 resolves without prior parent navigation.
 
+> **Commit record (2026-08-07):** The four work-order checkpoints were consolidated
+> after the full independent exit-gate review in baseline commit `6a929a3`.
+
 ## File surface
 
 Extend the Slice-0 catalog plan/assets and existing builder fixtures. Modify frontend
@@ -23,62 +26,62 @@ client.
 
 ## Work order 1 — Selected-theater Admin-1 artifacts
 
-- [ ] **RED:** For each V1 theater, test complete direct-child membership, canonical
+- [x] **RED:** For each V1 theater, test complete direct-child membership, canonical
   lineage, valid preferred child LOD, parent dissolve/provenance, strict containment,
   budget descriptors, and deep resolution from the root manifest. A country disabled
   by plan must expose `children_available=false` and no child asset.
-- [ ] **GREEN:** Add only approved gbOpen releases/records to source lock and catalog
+- [x] **GREEN:** Add only approved gbOpen releases/records to source lock and catalog
   plan, then rebuild the immutable catalog. Produce selected Admin-1 bundles and
   updated audit/feasibility reports using the existing compiler.
-- [ ] **REFACTOR:** Theater coverage remains declarative in `catalog-plan.json`; no
+- [x] **REFACTOR:** Theater coverage remains declarative in `catalog-plan.json`; no
   country list enters frontend/backend code.
-- [ ] **VERIFY:** Run the full spatial-catalog suite and byte-identical double build.
-- [ ] **COMMIT:** `data(spatial-catalog): add selected admin1 theaters`
+- [x] **VERIFY:** Run the full spatial-catalog suite and byte-identical double build.
+- [x] **COMMIT:** `data(spatial-catalog): add selected admin1 theaters`
 
 ## Work order 2 — Prefetch scheduler and shared leases
 
-- [ ] **RED:** With fake time/network, test 200 ms dwell, leave-before/after-start,
+- [x] **RED:** With fake time/network, test 200 ms dwell, leave-before/after-start,
   maximum concurrency two, queue replacement, click adoption without duplicate HTTP,
   hover cancellation while click lease remains, LRU eviction, active-lease immunity,
   exact cache budgets (256 metadata entries; 8 decoded bundles/64 MiB), and no
   state/URL/camera publication.
-- [ ] **GREEN:** Add a bounded scheduler over the existing catalog store. `prefetch`
+- [x] **GREEN:** Add a bounded scheduler over the existing catalog store. `prefetch`
   gets no foreground intent/commit rights and releases its lease after validated
   decode; click adopts the shared in-flight load by reference count.
-- [ ] **REFACTOR:** Keep scheduling separate from cache ownership. Aborts remove only
+- [x] **REFACTOR:** Keep scheduling separate from cache ownership. Aborts remove only
   that consumer and never cancel another live lease.
-- [ ] **VERIFY:** Run controller/catalog tests with fake timers; no real sleeps.
-- [ ] **COMMIT:** `feat(frontend): prefetch spatial children with bounded leases`
+- [x] **VERIFY:** Run controller/catalog tests with fake timers; no real sleeps.
+- [x] **COMMIT:** `feat(frontend): prefetch spatial children with bounded leases`
 
 ## Work order 3 — Admin-1 picking, drill and direct links
 
-- [ ] **RED:** Test country→Admin-1 click, sibling jump, breadcrumb/ascend, canonical
+- [x] **RED:** Test country→Admin-1 click, sibling jump, breadcrumb/ascend, canonical
   child pick ID, direct Admin-1 deep link, unavailable child geometry, stale generation,
   blank click, and camera LOD invariance. Assert the query token changes only after
   URL echo and successful resolve.
-- [ ] **GREEN:** Reuse the existing preferred-LOD pick surface and dispatch
+- [x] **GREEN:** Reuse the existing preferred-LOD pick surface and dispatch
   `enter(child.scopeKey, "child-click")`. Build outline/children primitives from the
   resolved Admin-1 bundle; fit camera from its extent; show no affordance where the
   catalog says children unavailable.
-- [ ] **REFACTOR:** Country and Admin-1 use one adapter path parameterized by validated
+- [x] **REFACTOR:** Country and Admin-1 use one adapter path parameterized by validated
   bundle descriptors—no `if country === ...` theater code.
-- [ ] **VERIFY:** Run Cesium adapter, pick, controller, router, and page tests.
-- [ ] **COMMIT:** `feat(worldview): drill into catalog admin1 scopes`
+- [x] **VERIFY:** Run Cesium adapter, pick, controller, router, and page tests.
+- [x] **COMMIT:** `feat(worldview): drill into catalog admin1 scopes`
 
 ## Work order 4 — Input capability and soak gates
 
-- [ ] **RED:** Test hover prefetch disabled for touch/coarse pointer and
+- [x] **RED:** Test hover prefetch disabled for touch/coarse pointer and
   `saveData=true`; reduced motion changes camera duration only; cache/primitive/
   listener counters return to baseline after long synthetic navigation.
-- [ ] **GREEN:** Bind pointer dwell only when capability policy permits. Add the
+- [x] **GREEN:** Bind pointer dwell only when capability policy permits. Add the
   Spec-12 prefetch/cache/primitive metrics and run the Slice-5 canary/default-on
   acceptance scenario.
-- [ ] **REFACTOR:** Capability detection is injectable and testable; it does not enter
+- [x] **REFACTOR:** Capability detection is injectable and testable; it does not enter
   semantic scope state.
-- [ ] **VERIFY:** Run frontend full quality commands and record the real Cesium soak,
+- [x] **VERIFY:** Run frontend full quality commands and record the real Cesium soak,
   catalog audit, cache high-water, cached commit under 50 ms, cold local p95 under
   800 ms, no task over 50 ms, and no-growth evidence.
-- [ ] **COMMIT:** `test(worldview): gate admin1 prefetch and soak`
+- [x] **COMMIT:** `test(worldview): gate admin1 prefetch and soak`
 
 ## Exit gate
 

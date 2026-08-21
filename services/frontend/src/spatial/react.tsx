@@ -259,9 +259,12 @@ function useSpatialScopeValue(): SpatialScopeHandle | null {
     [module],
   );
   const prefetch = useCallback(
-    (target: ScopeKey) => {
+    (target: ScopeKey, signal?: AbortSignal) => {
       if (module === null) throw new Error("Spatial scope is unavailable.");
-      return module.dispatch({ type: "prefetch", target, priority: "hover" });
+      return module.dispatch(
+        { type: "prefetch", target, priority: "hover" },
+        { signal },
+      );
     },
     [module],
   );

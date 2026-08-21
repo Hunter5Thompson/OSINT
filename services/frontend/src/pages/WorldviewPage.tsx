@@ -512,6 +512,7 @@ function SpatialEventClickBridge({
         mode: "spatial",
         stateRevision: scope.stateRevision,
         onSpatialChild: handleSpatialChild,
+        onSpatialPrefetch: (target, signal) => scope.prefetch(target, signal),
         onBlank: () => {
           onCountrySelect(null);
           onClearEvent();
@@ -1028,20 +1029,71 @@ function WorldviewContent({
 }
 
 interface SpatialWorldviewResources {
+  readonly assets: BoundaryAssetStore;
   readonly catalog: HttpSpatialCatalog;
   readonly presentation: CesiumSpatialPresentationBridge;
   lifecycleGeneration: number;
   disposed: boolean;
 }
 
+interface SpatialCanaryWindow extends Window {
+  __ODIN_SPATIAL_CANARY__?: () => Readonly<{
+    assets: ReturnType<BoundaryAssetStore["diagnostics"]>;
+    catalog: ReturnType<HttpSpatialCatalog["diagnostics"]>;
+    presentation: ReturnType<CesiumSpatialPresentationBridge["diagnostics"]>;
+    scope: Readonly<{
+      current: ReturnType<typeof useSpatialScope>["current"] | null;
+      pending: ReturnType<typeof useSpatialScope>["pending"];
+      phase: ReturnType<typeof useSpatialScope>["phase"];
+      problem: ReturnType<typeof useSpatialScope>["problem"];
+      stateRevision: number;
+      visual: ReturnType<typeof useSpatialScope>["visual"];
+    }>;
+  }>;
+}
+
 function createSpatialWorldviewResources(): SpatialWorldviewResources {
   const assets = new BoundaryAssetStore();
   return {
+    assets,
     catalog: new HttpSpatialCatalog({ assetStore: assets }),
     presentation: new CesiumSpatialPresentationBridge({ assets }),
     lifecycleGeneration: 0,
     disposed: false,
   };
+}
+
+function SpatialCanaryProbe({ resources }: { readonly resources: SpatialWorldviewResources }) {
+  const scope = useSpatialScope();
+  useEffect(() => {
+    if (
+      !import.meta.env.DEV
+      || new URLSearchParams(window.location.search).get("spatial_canary") !== "1"
+    ) {
+      return;
+    }
+    const canaryWindow = window as SpatialCanaryWindow;
+    const readDiagnostics = () => Object.freeze({
+      assets: resources.assets.diagnostics(),
+      catalog: resources.catalog.diagnostics(),
+      presentation: resources.presentation.diagnostics(),
+      scope: Object.freeze({
+        current: scope.phase === "hydrating" ? null : scope.current,
+        pending: scope.pending,
+        phase: scope.phase,
+        problem: scope.problem,
+        stateRevision: scope.stateRevision,
+        visual: scope.visual,
+      }),
+    });
+    canaryWindow.__ODIN_SPATIAL_CANARY__ = readDiagnostics;
+    return () => {
+      if (canaryWindow.__ODIN_SPATIAL_CANARY__ === readDiagnostics) {
+        delete canaryWindow.__ODIN_SPATIAL_CANARY__;
+      }
+    };
+  }, [resources, scope]);
+  return null;
 }
 
 export function WorldviewPage() {
@@ -1074,6 +1126,7 @@ export function WorldviewPage() {
       catalog={resources?.catalog}
       presentation={resources?.presentation}
     >
+      {resources === null ? null : <SpatialCanaryProbe resources={resources} />}
       <WorldviewContent
         spatialEnabled={SPATIAL_SCOPE_ENABLED}
         presentationBridge={resources?.presentation ?? null}

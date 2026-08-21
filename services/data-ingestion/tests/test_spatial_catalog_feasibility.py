@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,7 @@ from spatial_catalog.audit import (
     CatalogVerificationError,
     ContainmentFeasibilityRecord,
     WorldChildPackRecord,
+    _verify_descriptor,
     audit_catalog,
     build_feasibility_report,
     verify_catalog,
@@ -41,6 +44,8 @@ from spatial_catalog.manifest import (
 )
 from spatial_catalog.models import (
     CatalogProvenance,
+    ContainmentDescriptor,
+    GeometryDescriptor,
     Lod,
     ScopeKind,
     ScopeNode,
@@ -167,6 +172,72 @@ def test_verify_detects_missing_corrupt_and_descriptor_drift(tmp_path: Path) -> 
     asset_path.unlink()
     with pytest.raises(CatalogVerificationError, match="ASSET_MISSING"):
         verify_catalog(catalog)
+
+
+def test_descriptor_verification_separates_content_from_reference_semantics() -> None:
+    asset = emit_render_boundary(_geometry(), lod=Lod.OVERVIEW)
+    regional = GeometryDescriptor(
+        asset_id=asset.asset_id,
+        media_type=asset.media_type,
+        byte_length=asset.counts.byte_length,
+        vertex_count=asset.counts.vertex_count,
+        role="render",
+        lod=Lod.REGIONAL,
+    )
+    containment = ContainmentDescriptor(
+        asset_id=asset.asset_id,
+        media_type=asset.media_type,
+        byte_length=asset.counts.byte_length,
+        vertex_count=asset.counts.vertex_count,
+        role="containment",
+        max_error_m=50,
+    )
+
+    _verify_descriptor(regional, asset)
+    _verify_descriptor(containment, asset)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error_code"),
+    (
+        ("asset_id", "f" * 64, "DESCRIPTOR_ASSET_MISMATCH"),
+        ("byte_length", 1, "DESCRIPTOR_COUNT_MISMATCH"),
+        ("vertex_count", 1, "DESCRIPTOR_COUNT_MISMATCH"),
+    ),
+)
+def test_descriptor_verification_rejects_content_identity_drift(
+    field: str,
+    value: str | int,
+    error_code: str,
+) -> None:
+    asset = emit_render_boundary(_geometry(), lod=Lod.OVERVIEW)
+    drifted = asset.descriptor.model_copy(update={field: value})
+
+    with pytest.raises(CatalogVerificationError, match=error_code):
+        _verify_descriptor(drifted, asset)
+
+
+def test_descriptor_verification_rejects_media_type_drift() -> None:
+    asset = emit_render_boundary(_geometry(), lod=Lod.OVERVIEW)
+    drifted = asset.descriptor.model_copy(
+        update={"media_type": "application/vnd.odin.boundary-pack+json;v=1"}
+    )
+
+    with pytest.raises(CatalogVerificationError, match="DESCRIPTOR_MEDIA_TYPE_MISMATCH"):
+        _verify_descriptor(drifted, asset)
+
+
+def test_descriptor_verification_rejects_pack_feature_count_drift() -> None:
+    asset = emit_boundary_pack(
+        parent_scope_key="world",
+        lod=Lod.OVERVIEW,
+        allowed_child_scope_keys=frozenset({"country:UKR"}),
+        features=(ScopePackFeature("country:UKR", "Ukraine", _geometry()),),
+    )
+    drifted = asset.descriptor.model_copy(update={"feature_count": 2})
+
+    with pytest.raises(CatalogVerificationError, match="DESCRIPTOR_COUNT_MISMATCH"):
+        _verify_descriptor(drifted, asset)
 
 
 def test_verify_rejects_missing_or_unbound_attribution_release(tmp_path: Path) -> None:
@@ -409,7 +480,7 @@ def test_offline_compiler_builds_byte_identical_revision_twice(tmp_path: Path) -
     crosswalk_payload["records"] = [
         record
         for record in crosswalk_payload["records"]
-        if record["scope_key"] == "country:UKR"
+        if record["scope_key"] in {"country:POL", "country:UKR"}
     ]
     crosswalk_bytes = json.dumps(
         crosswalk_payload,
@@ -420,6 +491,19 @@ def test_offline_compiler_builds_byte_identical_revision_twice(tmp_path: Path) -
         {
             "type": "FeatureCollection",
             "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "UN_A3": "616",
+                        "ISO_N3": "616",
+                        "ISO_N3_EH": "616",
+                        "NAME": "Poland",
+                    },
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[14, 49], [20, 49], [20, 55], [14, 55], [14, 49]]],
+                    },
+                },
                 {
                     "type": "Feature",
                     "properties": {
@@ -438,6 +522,47 @@ def test_offline_compiler_builds_byte_identical_revision_twice(tmp_path: Path) -
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
+    admin1_geojson = json.dumps(
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "shapeGroup": "UKR",
+                        "shapeType": "ADM1",
+                        "shapeID": "UKR-ADM1-1",
+                        "shapeISO": "UA-01",
+                        "shapeName": "West Fixture Oblast",
+                    },
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[20, 44], [30, 44], [30, 53], [20, 53], [20, 44]]],
+                    },
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "shapeGroup": "UKR",
+                        "shapeType": "ADM1",
+                        "shapeID": "UKR-ADM1-2",
+                        "shapeISO": "UA-02",
+                        "shapeName": "East Fixture Oblast",
+                    },
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[30, 44], [41, 44], [41, 53], [30, 53], [30, 44]]],
+                    },
+                },
+            ],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    admin1_archive = io.BytesIO()
+    with zipfile.ZipFile(admin1_archive, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("geoBoundaries-UKR-ADM1.geojson", admin1_geojson)
+    admin1_bytes = admin1_archive.getvalue()
     mapshaper_bytes = (
         Path(__file__).parents[1]
         / "spatial_catalog/data/mapshaper-0.7.49-offline.tgz"
@@ -456,6 +581,12 @@ def test_offline_compiler_builds_byte_identical_revision_twice(tmp_path: Path) -
     source_lock = SourceLock(
         schema_version=1,
         sources=(
+            locked(
+                "geoboundaries-gbopen-ukr-admin1",
+                "fixture-2026.08.01",
+                admin1_bytes,
+                "CC-BY-4.0",
+            ),
             locked("mapshaper", "0.7.49+odin-offline-v1", mapshaper_bytes, "MPL-2.0"),
             locked(
                 "natural-earth-admin0",
@@ -474,6 +605,7 @@ def test_offline_compiler_builds_byte_identical_revision_twice(tmp_path: Path) -
     cache = tmp_path / "cache"
     cache.mkdir()
     for source, payload in (
+        (source_lock.source("geoboundaries-gbopen-ukr-admin1"), admin1_bytes),
         (source_lock.source("mapshaper"), mapshaper_bytes),
         (source_lock.source("natural-earth-admin0"), natural_earth_bytes),
         (source_lock.source("odin-country-crosswalk"), crosswalk_bytes),
@@ -487,13 +619,22 @@ def test_offline_compiler_builds_byte_identical_revision_twice(tmp_path: Path) -
                 "boundary_policy": "odin-reference-v1",
                 "scopes": [
                     {
-                        "scope_key": "country:UKR",
+                        "scope_key": "country:POL",
                         "activation": "active",
                         "max_level": "country",
                         "representation_source_id": "natural-earth-admin0",
                         "children_source_id": None,
                         "representation_id": "natural-earth-110m-admin0",
                         "client_strict_containment_required": False,
+                    },
+                    {
+                        "scope_key": "country:UKR",
+                        "activation": "active",
+                        "max_level": "admin1",
+                        "representation_source_id": "natural-earth-admin0",
+                        "children_source_id": "geoboundaries-gbopen-ukr-admin1",
+                        "representation_id": "natural-earth-110m-admin0",
+                        "client_strict_containment_required": True,
                     }
                 ],
                 "non_scope_features": [],
@@ -544,3 +685,52 @@ def test_offline_compiler_builds_byte_identical_revision_twice(tmp_path: Path) -
         "asset_id"
     ]
     assert b"catalog_revision" not in (first / "assets" / f"{pack_id}.json").read_bytes()
+
+    scopes = {record["scope"]["key"]: record for record in manifest["scopes"]}
+    ukraine = scopes["country:UKR"]
+    poland = scopes["country:POL"]
+    expected_children = {
+        "admin1:iso3166-2:UA-01",
+        "admin1:iso3166-2:UA-02",
+    }
+    assert ukraine["scope"]["children_available"] is True
+    assert ukraine["presentation"]["preferred_lod"] == "regional"
+    assert ukraine["presentation"]["children_lods"]["regional"]["feature_count"] == 2
+    assert ukraine["provenance_ref"] == (
+        "natural-earth-admin0+geoboundaries-gbopen-ukr-admin1"
+    )
+    assert poland["scope"]["children_available"] is False
+    assert poland["presentation"]["children_lods"] == {}
+
+    child_pack_id = ukraine["presentation"]["children_lods"]["regional"]["asset_id"]
+    child_pack = json.loads((first / "assets" / f"{child_pack_id}.json").read_bytes())
+    assert child_pack["parent_scope_key"] == "country:UKR"
+    assert {feature["scope_key"] for feature in child_pack["features"]} == expected_children
+
+    for child_key in expected_children:
+        child = scopes[child_key]
+        assert child["path"] == ["world", "country:UKR", child_key]
+        assert child["scope"]["parent_key"] == "country:UKR"
+        assert child["scope"]["children_available"] is False
+        outline = child["presentation"]["outline_lods"]["regional"]
+        assert outline["role"] == "render"
+        assert outline["lod"] == "regional"
+        assert outline["byte_length"] <= 4 * 1024 * 1024
+        assert outline["vertex_count"] <= 50_000
+        containment = child["presentation"]["containment"]
+        assert containment["role"] == "containment"
+        assert containment["max_error_m"] <= 50
+        assert child["provenance"]["source_id"] == (
+            "geoboundaries-gbopen-ukr-admin1"
+        )
+
+    feasibility = json.loads((first / "containment-feasibility.json").read_bytes())
+    mandatory = set(feasibility["containment"]["mandatory_scope_keys"])
+    reported = {
+        record["scope_key"]: record
+        for record in feasibility["containment"]["features"]
+    }
+    assert expected_children <= mandatory
+    for child_key in expected_children:
+        assert reported[child_key]["status"] == "pass"
+        assert reported[child_key]["max_error_m"] <= 50

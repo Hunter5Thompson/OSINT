@@ -434,6 +434,21 @@ describe("CesiumSpatialPresentationBridge", () => {
     const presenter: AttachedSpatialPresenter = {
       present: vi.fn(() => Promise.resolve()),
       dispose: vi.fn(),
+      diagnostics: () => ({
+        activeContainers: 1,
+        buildChunks: 7,
+        cameraListeners: 1,
+        disposed: false,
+        highWaterContainers: 2,
+        highWaterPrimitives: 4,
+        maxBuildChunkDurationMs: 8,
+        over50MsBuildChunks: 0,
+        postRenderChecks: 1,
+        postRenderWaiters: 0,
+        primitiveCount: 2,
+        readyPrimitiveCount: 2,
+        stagingContainers: 0,
+      }),
     };
     const bridge = new CesiumSpatialPresentationBridge({
       createPresenter: () => presenter,
@@ -447,14 +462,25 @@ describe("CesiumSpatialPresentationBridge", () => {
     void pending.then(() => { settled = true; });
     await act(async () => Promise.resolve());
     expect(settled).toBe(false);
+    expect(bridge.diagnostics()).toMatchObject({
+      attached: false,
+      waitingPresentations: 1,
+      presenter: null,
+    });
 
     const viewer = { isDestroyed: () => false };
     bridge.attachViewer(viewer);
     await pending;
     expect(presenter.present).toHaveBeenCalledOnce();
+    expect(bridge.diagnostics()).toMatchObject({
+      attached: true,
+      waitingPresentations: 0,
+      presenter: { primitiveCount: 2, stagingContainers: 0 },
+    });
 
     bridge.detachViewer(viewer);
     expect(presenter.dispose).toHaveBeenCalledOnce();
+    expect(bridge.diagnostics()).toMatchObject({ attached: false, presenter: null });
   });
 
   it("aborts a pre-Viewer presentation without invoking an adapter", async () => {

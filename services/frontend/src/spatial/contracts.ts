@@ -146,7 +146,7 @@ export interface OwnedSpatialScopeModule extends SpatialScopeModule {
 export type SpatialScopeHandle = SpatialScopeSnapshot & {
   enter(target: ScopeKey, cause: EnterCause): Promise<SpatialScopeResult>;
   ascend(cause: "breadcrumb" | "keyboard"): Promise<SpatialScopeResult>;
-  prefetch(target: ScopeKey): Promise<SpatialScopeResult>;
+  prefetch(target: ScopeKey, signal?: AbortSignal): Promise<SpatialScopeResult>;
   cancelPending(): Promise<SpatialScopeResult>;
   rehydrate(): Promise<SpatialScopeResult>;
 };

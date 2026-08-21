@@ -7,6 +7,12 @@ import {
   resolveWorldviewPick,
   type WorldviewPickCategory,
 } from "../../spatial/cesium/resolveWorldviewPick";
+import {
+  SpatialHoverPrefetchController,
+  allowsSpatialHoverPrefetch,
+  readSpatialPrefetchCapabilities,
+  type SpatialPrefetchCapabilities,
+} from "../../spatial/prefetch";
 import { useSpotlight } from "./spotlight/SpotlightContext";
 import { useCountryHitTest, hitTestCountry } from "./hooks/useCountryHitTest";
 import { isPhotorealSurfacePick } from "./isPhotorealSurfacePick";
@@ -33,6 +39,10 @@ interface SpatialCountryInteraction {
   readonly mode: "spatial";
   readonly stateRevision: number;
   readonly onSpatialChild: (scopeKey: ScopeKey) => void | Promise<void>;
+  readonly onSpatialPrefetch: (
+    scopeKey: ScopeKey,
+    signal: AbortSignal,
+  ) => Promise<unknown>;
   readonly onBlank: () => void;
 }
 
@@ -44,6 +54,7 @@ interface EntityClickHandlerProps {
   viewer: Cesium.Viewer | null;
   photorealTileset?: Cesium.Cesium3DTileset | null;
   countryInteraction: CountryClickInteraction;
+  prefetchCapabilities?: SpatialPrefetchCapabilities;
   // Event-billboard click → open the new EventCallout (and seek if a time is known).
   onEventSelect?: (id: string, timeIso?: string) => void;
 }
@@ -90,6 +101,7 @@ export function EntityClickHandler({
   viewer,
   photorealTileset,
   countryInteraction,
+  prefetchCapabilities,
   onEventSelect,
 }: EntityClickHandlerProps) {
   const [selected, setSelected] = useState<SelectedEntity | null>(null);
@@ -108,6 +120,39 @@ export function EntityClickHandler({
     if (!viewer || viewer.isDestroyed()) return;
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    const capabilities = prefetchCapabilities ?? readSpatialPrefetchCapabilities();
+    const hoverPrefetch = (
+      countryInteractionRef.current.mode === "spatial"
+      && allowsSpatialHoverPrefetch(capabilities)
+    )
+      ? new SpatialHoverPrefetchController<Cesium.Cartesian2>({
+          resolveTarget: (position) => {
+            const interaction = countryInteractionRef.current;
+            if (interaction.mode !== "spatial") return null;
+            const resolved = resolveWorldviewPick(viewer.scene, position, {
+              stateRevision: interaction.stateRevision,
+              spatialEnabled: true,
+              classify: (hit) => classifyWorldviewHit(hit, photorealTilesetRef.current),
+            });
+            return resolved.kind === "spatial-child" ? resolved.id.scopeKey : null;
+          },
+          prefetch: async (target, signal) => {
+            const interaction = countryInteractionRef.current;
+            if (interaction.mode !== "spatial") return;
+            await interaction.onSpatialPrefetch(target, signal);
+          },
+        })
+      : null;
+    const onPointerLeave = () => hoverPrefetch?.leave();
+    if (hoverPrefetch !== null) {
+      handler.setInputAction(
+        (movement: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
+          hoverPrefetch.move(movement.endPosition);
+        },
+        Cesium.ScreenSpaceEventType.MOUSE_MOVE,
+      );
+      viewer.scene.canvas.addEventListener("pointerleave", onPointerLeave);
+    }
 
     handler.setInputAction((movement: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
       const interaction = countryInteractionRef.current;
@@ -120,6 +165,7 @@ export function EntityClickHandler({
       if (resolvedPick.kind === "spatial-child") {
         if (interaction.mode === "spatial") {
           void interaction.onSpatialChild(resolvedPick.id.scopeKey);
+          hoverPrefetch?.leave();
         }
         return;
       }
@@ -465,9 +511,11 @@ export function EntityClickHandler({
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
     return () => {
+      hoverPrefetch?.dispose();
+      viewer.scene.canvas.removeEventListener("pointerleave", onPointerLeave);
       handler.destroy();
     };
-  }, [viewer, dispatchSpotlight, country]);
+  }, [viewer, dispatchSpotlight, country, prefetchCapabilities]);
 
   if (!selected) return null;
 
