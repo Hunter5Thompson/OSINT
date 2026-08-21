@@ -37,7 +37,10 @@
   synchronisiert werden“ und bietet denselben Command explizit erneut an; bis dahin
   bleiben Store und URL auf dem letzten committed Scope.
 - Query-Consumer folgt bestehender Retry-Policy, aber bindet Retry an denselben Scope-Token.
-- Revision 409: Controller lädt Catalog-Bootstrap neu und bietet sichtbares Rehydrate auf aktive Revision an; kein stilles Umschreiben eines laufenden Results.
+- Revision 409: Der Adapter transportiert die aktive Revision strukturiert im
+  `ScopeProblem`; die UI bietet genau eine sichtbare Rehydrate-Aktion. Erst dieser
+  Command validiert und pinnt die aktive Revision neu. Kein Parsing von Meldungstext,
+  kein stilles Umschreiben und kein automatischer 409-Retry.
 
 ### 20.3 Fail-closed-Regel
 

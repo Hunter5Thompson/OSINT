@@ -117,6 +117,15 @@ deren `attribution.json` (1–2 Einträge): 1–32 Sources; Note 1–500,
 `source_id`/`license_id` 1–96, Release 1–128 und Text 1–300 Zeichen. HTML,
 Extra-Felder, fehlende, doppelte oder übergroße Werte sind ungültig.
 
+Jede Source in `attribution.json` besitzt ihren eigenen verpflichtenden `release`.
+Die kanonisch nach `source_id` sortierte `sources`-Liste wird als
+`attribution_sources_sha256` im Manifest gebunden; dieser Hash ist Teil der
+Katalogrevisionsableitung. Damit erzeugt auch ein reiner Attribution-/Tool-Release-
+Wechsel eine neue Revision. Die aktive Revision muss mit Source-Menge, Release,
+Lizenz und Text exakt dem aktuellen `source-lock.json` entsprechen. Eine vorherige
+Revision wird dagegen ausschließlich aus ihrem eigenen Manifest und ihrer eigenen
+Attribution validiert und leiht niemals Werte aus dem aktuellen Source-Lock.
+
 ### 10.5 Scope-Bundle
 
 ```json
@@ -457,6 +466,11 @@ interface SpatialCatalogPort {
     priority: "hover" | "anticipated",
     signal: AbortSignal,
   ): Promise<void>;
+  rehydrate(
+    scopeKey: ScopeKey,
+    activeCatalogRevision: CatalogRevision,
+    signal: AbortSignal,
+  ): Promise<ResolvedScope>;
   dispose(): void;
 }
 
@@ -519,7 +533,9 @@ Initiale Hydration übergibt `catalogRevision=null` und erhält die aktive Revis
 Jeder spätere `enter`/`ascend`/`prefetch` wird gegen die Revision des committed Query-
 Tokens aufgelöst. So kann ein Deployment nicht Country aus Revision A mit Admin-1 aus
 Revision B mischen. Wird A nicht mehr bedient, folgt 409 und eine sichtbare, explizite
-Rehydrate-Entscheidung auf die aktive Revision; der Controller retryt nicht heimlich.
+Rehydrate-Entscheidung auf die strukturierte aktive Revision; der Controller retryt
+nicht heimlich. Erst ein erfolgreiches `rehydrate` pinnt den HTTP-Adapter neu. Bis
+dahin bleiben dessen Revision, der committed Query-Token und Router-State unverändert.
 
 ### 10.10 Backend-Lifecycle
 
@@ -528,8 +544,9 @@ Rehydrate-Entscheidung auf die aktive Revision; der Controller retryt nicht heim
   Acquire-Timeout; keine externe URL und kein Secret im Code.
 - Der FastAPI-Lifespan erzeugt einmal `SpatialCatalogLoader` und legt ihn in
   `app.state.spatial_catalog` ab, analog zum vorhandenen Recon-Manifest-Lifecycle.
-- Startup validiert Manifest-/Attributionsschema, Revisionshash, relative Assetpfade,
-  deklarierte Dateigrößen und active/previous. Asset-Inhaltshashes
+- Startup validiert Manifest-/Attributionsschema, den revisionsbildenden
+  `attribution_sources_sha256`, Revisionshash, relative Assetpfade, deklarierte
+  Dateigrößen und active/previous. Asset-Inhaltshashes
   werden im Build vollständig und im Backend spätestens beim ersten Serve geprüft;
   ein erfolgreicher Check wird pro unveränderlichem Asset gecacht.
 - Manifest-/Hash-Datei-I/O läuft im Lifespan beziehungsweise beim ersten Serve über

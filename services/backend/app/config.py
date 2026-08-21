@@ -1,5 +1,7 @@
 """Application configuration loaded from environment variables."""
 
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -42,6 +44,11 @@ class Settings(BaseSettings):
 
     # HTTP API
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+
+    # Reviewed local spatial catalog (never a remote URL)
+    spatial_catalog_path: Path = Path("/app/data/spatial")
+    spatial_asset_max_concurrency: int = Field(default=8, ge=1, le=64)
+    spatial_asset_acquire_timeout_s: float = Field(default=0.05, gt=0, le=5.0)
 
     # External APIs
     opensky_api_url: str = "https://opensky-network.org/api/states/all"

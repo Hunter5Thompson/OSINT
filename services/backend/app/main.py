@@ -33,6 +33,7 @@ from app.routers import (
     reports,
     satellites,
     signals,
+    spatial,
     timeline,
     vessels,
 )
@@ -45,6 +46,7 @@ from app.services.recon_manifest import (
     ReconManifestMissingError,
 )
 from app.services.signal_stream import get_signal_stream, redis_consumer_loop
+from app.services.spatial_catalog import SpatialCatalogLoader
 from app.static.cached_static import CachedStaticFiles
 from app.ws import flight_ws, vessel_ws
 
@@ -69,8 +71,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     promoter = None
     promoter_tasks: tuple[asyncio.Task[None] | None, asyncio.Task[None] | None] = (None, None)
     vessel_started = False
+    spatial_catalog = SpatialCatalogLoader(
+        settings.spatial_catalog_path,
+        asset_max_concurrency=settings.spatial_asset_max_concurrency,
+        asset_acquire_timeout_s=settings.spatial_asset_acquire_timeout_s,
+    )
+    app.state.spatial_catalog = spatial_catalog
 
     try:
+        await spatial_catalog.load()
+        if spatial_catalog.is_available:
+            logger.info("spatial_catalog_ready")
+        else:
+            logger.warning(
+                "spatial_catalog_unavailable",
+                diagnostic=spatial_catalog.diagnostic,
+            )
+
         await proxy.start()
         app.state.proxy = proxy
 
@@ -181,6 +198,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             with contextlib.suppress(Exception):
                 await vessel_service.stop_collector()
         for cleanup in (
+            spatial_catalog.close,
             proxy.stop,
             cache.close,
             qdrant_client.close_qdrant_client,
@@ -211,7 +229,7 @@ for r in (
     flights.router, satellites.router, earthquakes.router, vessels.router,
     hotspots.router, intel.router, rag.router, graph.router, cables.router,
     firms.router, aircraft.router, eonet.router, gdacs.router, reports.router,
-    timeline.router,
+    timeline.router, spatial.router,
 ):
     app.include_router(r, prefix="/api")
 

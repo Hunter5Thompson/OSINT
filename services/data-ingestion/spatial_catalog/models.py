@@ -17,6 +17,7 @@ from pydantic import (
     StrictInt,
     StrictStr,
     StringConstraints,
+    field_validator,
     model_validator,
 )
 
@@ -79,6 +80,37 @@ class StrictFrozenModel(BaseModel):
     """Shared model policy without weakening JSON enum decoding."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class AttributionSource(StrictFrozenModel):
+    """Complete source metadata owned by one immutable catalog revision."""
+
+    source_id: PolicyIdentifier
+    release: Annotated[StrictStr, StringConstraints(min_length=1, max_length=128)]
+    license_id: PolicyIdentifier
+    attribution: Annotated[StrictStr, StringConstraints(min_length=1, max_length=300)]
+
+    @field_validator("attribution")
+    @classmethod
+    def reject_html(cls, value: str) -> str:
+        if "<" in value or ">" in value:
+            raise ValueError("attribution must not contain HTML")
+        return value
+
+
+class CatalogAttribution(StrictFrozenModel):
+    schema_version: Literal[1]
+    catalog_revision: CatalogRevision
+    sources: tuple[AttributionSource, ...] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> CatalogAttribution:
+        source_ids = tuple(source.source_id for source in self.sources)
+        if len(source_ids) != len(set(source_ids)):
+            raise ValueError("duplicate attribution source")
+        if source_ids != tuple(sorted(source_ids)):
+            raise ValueError("attribution sources must be canonically ordered")
+        return self
 
 
 class ScopeNode(StrictFrozenModel):

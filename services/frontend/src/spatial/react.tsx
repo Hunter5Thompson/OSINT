@@ -52,6 +52,7 @@ export function useReactRouterScopeNavigation(
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
+  const lastAcceptedLocationKeyRef = useRef(location.key);
   const initialLocationRef = useRef<RouterLocationSnapshot | null>(null);
   initialLocationRef.current ??= routerLocationSnapshot(
     location.pathname,
@@ -75,13 +76,34 @@ export function useReactRouterScopeNavigation(
   const navigation = navigationRef.current;
 
   useEffect(() => {
+    if (lastAcceptedLocationKeyRef.current === location.key) return;
+    lastAcceptedLocationKeyRef.current = location.key;
     navigation.acceptLocation(routerLocationSnapshot(
       location.pathname,
       location.search,
       location.hash,
       location.state as unknown,
     ));
-  }, [location.hash, location.pathname, location.search, location.state, navigation]);
+  }, [
+    location.hash,
+    location.key,
+    location.pathname,
+    location.search,
+    location.state,
+    navigation,
+  ]);
+
+  const lifecycleGenerationRef = useRef(0);
+  useEffect(() => {
+    const lifecycleGeneration = ++lifecycleGenerationRef.current;
+    return () => {
+      queueMicrotask(() => {
+        if (lifecycleGenerationRef.current === lifecycleGeneration) {
+          navigation.dispose();
+        }
+      });
+    };
+  }, [navigation]);
 
   return navigation;
 }
@@ -96,10 +118,15 @@ export type SpatialScopeModuleFactory = (
   options: CreateSpatialScopeControllerOptions,
 ) => OwnedSpatialScopeModule;
 
+export type SpatialCatalogFactory = () => SpatialCatalogPort;
+
 export interface SpatialScopeProviderProps {
   readonly children: ReactNode;
   readonly enabled?: boolean;
+  /** Borrowed for the provider lifetime; the caller retains disposal ownership. */
   readonly catalog?: SpatialCatalogPort;
+  /** Created once and disposed by the provider after its final cleanup. */
+  readonly catalogFactory?: SpatialCatalogFactory;
   readonly navigation?: ScopeNavigationPort;
   readonly presentation?: SpatialScopePresentationPort;
   readonly moduleFactory?: SpatialScopeModuleFactory;
@@ -113,33 +140,59 @@ interface ModuleProviderProps extends SpatialScopeProviderProps {
 function ModuleProvider({
   children,
   catalog,
+  catalogFactory,
   navigation,
   presentation,
   moduleFactory = createSpatialScopeController,
   onNavigationCleanup,
 }: ModuleProviderProps) {
-  const bootstrapCatalogRef = useRef<SpatialCatalogPort | null>(null);
-  const selectedCatalog = catalog ?? (
-    bootstrapCatalogRef.current ??= createBootstrapSpatialCatalog()
-  );
+  if (catalog !== undefined && catalogFactory !== undefined) {
+    throw new Error("SpatialScopeProvider accepts catalog or catalogFactory, not both.");
+  }
+  const catalogSelectionRef = useRef<{
+    readonly catalog: SpatialCatalogPort;
+    readonly owned: boolean;
+    disposed: boolean;
+  } | null>(null);
+  catalogSelectionRef.current ??= catalog === undefined
+    ? {
+        catalog: (catalogFactory ?? createBootstrapSpatialCatalog)(),
+        owned: true,
+        disposed: false,
+      }
+    : { catalog, owned: false, disposed: false };
+  const catalogSelection = catalogSelectionRef.current;
   const moduleRef = useRef<OwnedSpatialScopeModule | null>(null);
   moduleRef.current ??= moduleFactory({
-    catalog: selectedCatalog,
+    catalog: catalogSelection.catalog,
     navigation,
     presentation,
   });
   const module = moduleRef.current;
+  const lifecycleGenerationRef = useRef(0);
 
   useEffect(() => {
+    const lifecycleGeneration = ++lifecycleGenerationRef.current;
     module.start();
     return () => {
       module.stop();
       onNavigationCleanup?.();
+      queueMicrotask(() => {
+        if (
+          lifecycleGenerationRef.current === lifecycleGeneration &&
+          catalogSelection.owned &&
+          !catalogSelection.disposed
+        ) {
+          catalogSelection.disposed = true;
+          catalogSelection.catalog.dispose();
+        }
+      });
     };
-  }, [module, onNavigationCleanup]);
+  }, [catalogSelection, module, onNavigationCleanup]);
 
   return (
     <SpatialScopeContext.Provider value={module}>
+      <SpatialScopeRecoveryAction />
       {children}
     </SpatialScopeContext.Provider>
   );
@@ -203,9 +256,71 @@ export function useSpatialScope(): SpatialScopeHandle {
     (target: ScopeKey) => module.dispatch({ type: "prefetch", target, priority: "hover" }),
     [module],
   );
+  const rehydrate = useCallback(
+    () => module.dispatch({ type: "rehydrate" }),
+    [module],
+  );
 
   return useMemo<SpatialScopeHandle>(
-    () => freezeSpatialValue({ ...snapshot, enter, ascend, prefetch }) as SpatialScopeHandle,
-    [ascend, enter, prefetch, snapshot],
+    () => freezeSpatialValue({
+      ...snapshot,
+      enter,
+      ascend,
+      prefetch,
+      rehydrate,
+    }) as SpatialScopeHandle,
+    [ascend, enter, prefetch, rehydrate, snapshot],
+  );
+}
+
+function SpatialScopeRecoveryAction() {
+  const scope = useSpatialScope();
+  const problem = scope.problem;
+  if (
+    scope.phase === "hydrating" ||
+    problem?.code !== "CATALOG_REVISION_UNAVAILABLE" ||
+    problem.activeCatalogRevision === null
+  ) {
+    return null;
+  }
+  return (
+    <div
+      role="alert"
+      style={{
+        position: "fixed",
+        top: 16,
+        left: "50%",
+        zIndex: 50,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        maxWidth: 560,
+        padding: "10px 12px",
+        border: "1px solid rgba(255, 190, 80, 0.72)",
+        background: "rgba(13, 17, 23, 0.94)",
+        color: "#f5d7a1",
+        fontFamily: "monospace",
+        fontSize: 12,
+        transform: "translateX(-50%)",
+      }}
+    >
+      <span>
+        Kartenstand abgelaufen. Aktive Revision: {problem.activeCatalogRevision}
+      </span>
+      <button
+        type="button"
+        onClick={() => { void scope.rehydrate(); }}
+        style={{
+          border: "1px solid currentColor",
+          padding: "5px 8px",
+          background: "transparent",
+          color: "inherit",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Aktiven Kartenstand laden
+      </button>
+    </div>
   );
 }

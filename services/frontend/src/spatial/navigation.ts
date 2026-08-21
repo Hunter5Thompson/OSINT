@@ -224,6 +224,7 @@ export class RouterScopeNavigation implements ScopeNavigationPort {
     const cancellation = abortError();
     if (this.active !== null) {
       if (this.active.timer !== null) this.clock.clearTimeout(this.active.timer);
+      this.rememberStaleNavigationId(this.active.write.navigationId);
       this.active.reject(cancellation);
       this.active = null;
     }

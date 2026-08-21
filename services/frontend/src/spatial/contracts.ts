@@ -58,6 +58,7 @@ export interface ScopeProblem {
   readonly target: string | null;
   readonly recoverable: boolean;
   readonly message: string;
+  readonly activeCatalogRevision: CatalogRevision | null;
 }
 
 export type ScopeVisualState =
@@ -112,7 +113,8 @@ export type SpatialScopeCommand =
       readonly type: "prefetch";
       readonly target: ScopeKey;
       readonly priority: "hover" | "anticipated";
-    };
+    }
+  | { readonly type: "rehydrate" };
 
 export type SpatialScopeResult =
   | { readonly outcome: "committed"; readonly snapshot: SpatialScopeSnapshot }
@@ -144,6 +146,7 @@ export type SpatialScopeHandle = SpatialScopeSnapshot & {
   enter(target: ScopeKey, cause: EnterCause): Promise<SpatialScopeResult>;
   ascend(cause: "breadcrumb" | "keyboard"): Promise<SpatialScopeResult>;
   prefetch(target: ScopeKey): Promise<SpatialScopeResult>;
+  rehydrate(): Promise<SpatialScopeResult>;
 };
 
 export interface LongitudeSpan {
@@ -211,6 +214,7 @@ export interface ResolvedScope {
   readonly query: SpatialQueryRef;
   readonly presentation: ResolvedPresentation;
   readonly containment: ContainmentAssetDescriptor | null;
+  readonly canonicalizedFrom: string | null;
 }
 
 export interface SpatialCatalogPort {
@@ -225,6 +229,11 @@ export interface SpatialCatalogPort {
     priority: "hover" | "anticipated",
     signal: AbortSignal,
   ): Promise<void>;
+  rehydrate(
+    scopeKey: ScopeKey,
+    activeCatalogRevision: CatalogRevision,
+    signal: AbortSignal,
+  ): Promise<ResolvedScope>;
   dispose(): void;
 }
 
@@ -306,6 +315,37 @@ export function parseScopeKeyCandidate(candidate: unknown): ScopeKey {
 
   if (!valid) return invalidScopeKey(candidate);
   return canonical as ScopeKey;
+}
+
+export interface ParsedScopeLocationCandidate {
+  readonly scopeKey: ScopeKey;
+  readonly canonicalizedFrom: string | null;
+}
+
+// URL/storage compatibility only: aliases never enter the canonical ScopeKey grammar.
+const LEGACY_SCOPE_LOCATION_ALIASES = new Map<string, ScopeKey>([
+  ["country:XKX", parseScopeKeyCandidate("country:odin:kosovo")],
+]);
+
+export function parseScopeLocationCandidate(
+  candidate: unknown,
+): ParsedScopeLocationCandidate {
+  if (typeof candidate === "string") {
+    const legacyTarget = LEGACY_SCOPE_LOCATION_ALIASES.get(candidate);
+    if (legacyTarget !== undefined) {
+      return Object.freeze({
+        scopeKey: legacyTarget,
+        canonicalizedFrom: candidate,
+      });
+    }
+  }
+
+  const scopeKey = parseScopeKeyCandidate(candidate);
+  return Object.freeze({
+    scopeKey,
+    canonicalizedFrom:
+      typeof candidate === "string" && candidate !== scopeKey ? candidate : null,
+  });
 }
 
 export function scopeKindForKey(scopeKey: ScopeKey): ScopeKind {

@@ -5,6 +5,7 @@ import {
   WORLD_SCOPE_KEY,
   freezeSpatialScopeSnapshot,
   parseCatalogRevision,
+  parseScopeLocationCandidate,
   parseScopeKeyCandidate,
   scopeKindForKey,
   type CatalogRevision,
@@ -29,6 +30,11 @@ interface ScopeKeyVector {
   readonly kind: ScopeKind;
 }
 
+interface LocationCandidateVector {
+  readonly candidate: string;
+  readonly canonical: string;
+}
+
 interface SpatialContractFixture {
   readonly schemaVersion: 1;
   readonly catalogRevision: string;
@@ -36,6 +42,9 @@ interface SpatialContractFixture {
   readonly scopeKeyVectors: {
     readonly accepted: readonly ScopeKeyVector[];
     readonly rejected: readonly string[];
+  };
+  readonly locationCandidateVectors: {
+    readonly canonicalized: readonly LocationCandidateVector[];
   };
   readonly catalogRevisionVectors: {
     readonly accepted: readonly string[];
@@ -95,6 +104,20 @@ describe("spatial contract vectors", () => {
     fixture.catalogRevisionVectors.rejected.forEach((candidate) => {
       expect(() => parseCatalogRevision(candidate)).toThrow("CATALOG_REVISION_UNAVAILABLE");
     });
+  });
+
+  it("keeps legacy URL aliases separate from canonical ScopeKey identity", () => {
+    for (const vector of fixture.locationCandidateVectors.canonicalized) {
+      expect(parseScopeLocationCandidate(vector.candidate)).toEqual({
+        scopeKey: vector.canonical,
+        canonicalizedFrom: vector.candidate,
+      });
+    }
+    expect(parseScopeLocationCandidate("country:UKR")).toEqual({
+      scopeKey: "country:UKR",
+      canonicalizedFrom: null,
+    });
+    expect(() => parseScopeKeyCandidate("country:XKX")).toThrow("INVALID_SCOPE_KEY");
   });
 
   it("keeps the discriminated hydration snapshot deeply frozen and reusable", () => {
@@ -164,6 +187,31 @@ describe("strict resolved-scope decoding", () => {
     expect(Object.isFrozen(resolved[1]?.path)).toBe(true);
     expect(Object.isFrozen(resolved[1]?.presentation)).toBe(true);
     expect("geometry" in (resolved[1] ?? {})).toBe(false);
+    expect(resolved.every((item) => item.canonicalizedFrom === null)).toBe(true);
+  });
+
+  it("accepts only a canonicalizing source identity in canonicalizedFrom", () => {
+    const lowerUkraine = {
+      ...(fixture.resolvedScopes[1] as object),
+      canonicalizedFrom: "country:ukr",
+    };
+    expect(parseResolvedScope(lowerUkraine).canonicalizedFrom).toBe("country:ukr");
+
+    const kosovo: unknown = JSON.parse(
+      JSON.stringify(fixture.resolvedScopes[1])
+        .replaceAll("country:UKR", "country:odin:kosovo")
+        .replaceAll("Ukraine", "Kosovo")
+        .replace('"canonicalizedFrom":null', '"canonicalizedFrom":"country:XKX"'),
+    );
+    expect(parseResolvedScope(kosovo)).toMatchObject({
+      scope: { key: "country:odin:kosovo" },
+      canonicalizedFrom: "country:XKX",
+    });
+
+    expect(() => parseResolvedScope({
+      ...(fixture.resolvedScopes[1] as object),
+      canonicalizedFrom: "country:POL",
+    })).toThrow("INVALID_LINEAGE");
   });
 
   it("rejects extra fields and broken lineage instead of weakening the contract", () => {
@@ -199,6 +247,33 @@ describe("MemorySpatialCatalog", () => {
     expect(catalog.resolveCalls).toHaveLength(2);
   });
 
+  it("transports the active revision for an unavailable memory-catalog revision", async () => {
+    const catalog = new MemorySpatialCatalog({
+      activeCatalogRevision: fixture.catalogRevision,
+      resolvedScopes: fixture.resolvedScopes,
+    });
+    const ukraine = parseScopeKeyCandidate("country:UKR");
+    const staleRevision = parseCatalogRevision("spatial-v1-001122334455");
+
+    await expect(catalog.resolve(
+      ukraine,
+      staleRevision,
+      new AbortController().signal,
+    )).rejects.toMatchObject({
+      code: "CATALOG_REVISION_UNAVAILABLE",
+      activeCatalogRevision: parseCatalogRevision(fixture.catalogRevision),
+    });
+
+    await expect(catalog.rehydrate(
+      ukraine,
+      parseCatalogRevision(fixture.catalogRevision),
+      new AbortController().signal,
+    )).resolves.toMatchObject({
+      scope: { key: ukraine },
+      query: { catalogRevision: fixture.catalogRevision },
+    });
+  });
+
   it("supports deterministic deferred resolve and caller cancellation", async () => {
     const catalog = new MemorySpatialCatalog({
       activeCatalogRevision: fixture.catalogRevision,
@@ -227,8 +302,26 @@ describe("MemorySpatialCatalog", () => {
       target: "country:ZZZ",
       recoverable: false,
       message: "Scope is not present in the catalog.",
+      activeCatalogRevision: null,
     });
     expect(Object.isFrozen(problem)).toBe(true);
+  });
+
+  it("preserves the typed active revision instead of parsing the message", () => {
+    const activeCatalogRevision = parseCatalogRevision(fixture.catalogRevision);
+    const problem = mapSpatialCatalogProblem(new SpatialCatalogError({
+      code: "CATALOG_REVISION_UNAVAILABLE",
+      target: "spatial-v1-001122334455",
+      message: "The prose intentionally contains no replacement revision.",
+      recoverable: true,
+      activeCatalogRevision,
+    }));
+
+    expect(problem).toMatchObject({
+      code: "CATALOG_REVISION_UNAVAILABLE",
+      activeCatalogRevision,
+    });
+    expect(problem.message).not.toContain(activeCatalogRevision);
   });
 });
 

@@ -3,11 +3,19 @@ import fixtureText from "./fixtures/spatial-contract-v1.json?raw";
 import {
   HYDRATING_SPATIAL_SCOPE_SNAPSHOT,
   WORLD_SCOPE_KEY,
+  parseCatalogRevision,
   parseScopeKeyCandidate,
+  type CatalogRevision,
+  type ResolvedScope,
   type ResolvedPresentationInput,
   type ScopeKey,
+  type SpatialCatalogPort,
 } from "../contracts";
-import { MemorySpatialCatalog } from "../catalog";
+import {
+  MemorySpatialCatalog,
+  SpatialCatalogError,
+  parseResolvedScope,
+} from "../catalog";
 import { MemoryScopeNavigation } from "../navigation";
 import {
   createSpatialScopeController,
@@ -41,6 +49,9 @@ const UKRAINE = parseScopeKeyCandidate("country:UKR");
 const POLAND = parseScopeKeyCandidate("country:POL");
 const DONETSK = parseScopeKeyCandidate("admin1:iso3166-2:UA-14");
 const VINNYTSIA = parseScopeKeyCandidate("admin1:iso3166-2:UA-05");
+const ACTIVE_REVISION = parseCatalogRevision(fixture.catalogRevision);
+const RETIRED_REVISION = parseCatalogRevision("spatial-v1-001122334455");
+const NEXT_REVISION = parseCatalogRevision("spatial-v1-aabbccddeeff");
 
 interface TestSummary {
   readonly key: string;
@@ -95,9 +106,11 @@ function semanticScope(
         target: scope.key,
         recoverable: false,
         message: "Boundary presentation is unavailable.",
+        activeCatalogRevision: null,
       },
     },
     containment: null,
+    canonicalizedFrom: null,
   };
 }
 
@@ -125,6 +138,128 @@ const extraScopes = [
   semanticScope(polandSummary, [worldSummary, polandSummary]),
   semanticScope(vinnytsiaSummary, [worldSummary, ukraineSummary, vinnytsiaSummary]),
 ];
+
+interface RolloverCall {
+  readonly kind: "resolve" | "rehydrate";
+  readonly scopeKey: ScopeKey;
+  readonly catalogRevision: CatalogRevision;
+  readonly signal: AbortSignal;
+}
+
+class RolloverSpatialCatalog implements SpatialCatalogPort {
+  readonly calls: RolloverCall[] = [];
+  private readonly entries = new Map<string, ResolvedScope>();
+  private activeRevision = RETIRED_REVISION;
+  private retiredOldRevision = false;
+  private rehydrateGate: Deferred<void> | null = null;
+  private rehydrateFailure: SpatialCatalogError | null = null;
+
+  constructor() {
+    for (const candidate of [...fixture.resolvedScopes, ...extraScopes]) {
+      const active = parseResolvedScope(candidate);
+      const retired = parseResolvedScope(JSON.parse(
+        JSON.stringify(candidate).replaceAll(fixture.catalogRevision, RETIRED_REVISION),
+      ) as unknown);
+      this.entries.set(this.entryKey(active.scope.key, ACTIVE_REVISION), active);
+      this.entries.set(this.entryKey(retired.scope.key, RETIRED_REVISION), retired);
+    }
+  }
+
+  rollover(): void {
+    this.activeRevision = ACTIVE_REVISION;
+    this.retiredOldRevision = true;
+  }
+
+  deferNextRehydrate(): Deferred<void> {
+    const gate = deferred<void>();
+    this.rehydrateGate = gate;
+    return gate;
+  }
+
+  failNextRehydrate(error: SpatialCatalogError): void {
+    this.rehydrateFailure = error;
+  }
+
+  async resolve(
+    scopeKey: ScopeKey,
+    catalogRevision: string | null,
+    signal: AbortSignal,
+  ): Promise<ResolvedScope> {
+    const revision = catalogRevision === null
+      ? this.activeRevision
+      : parseCatalogRevision(catalogRevision);
+    this.calls.push({ kind: "resolve", scopeKey, catalogRevision: revision, signal });
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    if (revision === RETIRED_REVISION && this.retiredOldRevision) {
+      throw new SpatialCatalogError({
+        code: "CATALOG_REVISION_UNAVAILABLE",
+        target: revision,
+        message: "The pinned revision is no longer served.",
+        recoverable: true,
+        activeCatalogRevision: this.activeRevision,
+      });
+    }
+    return this.lookup(scopeKey, revision);
+  }
+
+  async rehydrate(
+    scopeKey: ScopeKey,
+    activeCatalogRevision: CatalogRevision,
+    signal: AbortSignal,
+  ): Promise<ResolvedScope> {
+    this.calls.push({
+      kind: "rehydrate",
+      scopeKey,
+      catalogRevision: activeCatalogRevision,
+      signal,
+    });
+    const failure = this.rehydrateFailure;
+    this.rehydrateFailure = null;
+    if (failure !== null) throw failure;
+    const gate = this.rehydrateGate;
+    this.rehydrateGate = null;
+    if (gate !== null) await gate.promise;
+    if (activeCatalogRevision !== this.activeRevision) {
+      throw new SpatialCatalogError({
+        code: "CATALOG_REVISION_UNAVAILABLE",
+        target: activeCatalogRevision,
+        message: "The requested recovery revision changed again.",
+        recoverable: true,
+        activeCatalogRevision: this.activeRevision,
+      });
+    }
+    return this.lookup(scopeKey, activeCatalogRevision);
+  }
+
+  async prefetch(
+    _scopeKey: ScopeKey,
+    _catalogRevision: string,
+    _priority: "hover" | "anticipated",
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+  }
+
+  dispose(): void {
+    this.entries.clear();
+  }
+
+  private lookup(scopeKey: ScopeKey, revision: CatalogRevision): ResolvedScope {
+    const resolved = this.entries.get(this.entryKey(scopeKey, revision));
+    if (resolved === undefined) {
+      throw new SpatialCatalogError({
+        code: "UNKNOWN_SCOPE",
+        target: scopeKey,
+        message: "Scope is absent from the selected revision.",
+      });
+    }
+    return resolved;
+  }
+
+  private entryKey(scopeKey: ScopeKey, revision: CatalogRevision): string {
+    return `${revision}\u0000${scopeKey}`;
+  }
+}
 
 class ControlledPresentation implements SpatialScopePresentationPort {
   readonly calls: Array<{
@@ -200,6 +335,37 @@ async function startAtWorld(
 ): Promise<void> {
   controller.start();
   await waitForScope(controller, WORLD_SCOPE_KEY);
+}
+
+async function setupRetiredRevision() {
+  const catalog = new RolloverSpatialCatalog();
+  const navigation = new MemoryScopeNavigation({
+    initialScopeCandidate: UKRAINE,
+  });
+  const controller = createSpatialScopeController({ catalog, navigation });
+  liveControllers.push(controller);
+  controller.start();
+  await waitForScope(controller, UKRAINE);
+  expect(controller.getSnapshot().query?.catalogRevision).toBe(RETIRED_REVISION);
+  catalog.rollover();
+  const committedQuery = controller.getSnapshot().query;
+
+  const failed = await controller.dispatch({
+    type: "enter",
+    target: DONETSK,
+    cause: "child-click",
+  });
+
+  expect(failed).toMatchObject({
+    outcome: "failed",
+    problem: {
+      code: "CATALOG_REVISION_UNAVAILABLE",
+      activeCatalogRevision: ACTIVE_REVISION,
+    },
+  });
+  expect(controller.getSnapshot().query).toBe(committedQuery);
+  expect(navigation.writes).toHaveLength(0);
+  return { catalog, navigation, controller, committedQuery };
 }
 
 afterEach(() => {
@@ -406,6 +572,144 @@ describe("SpatialScopeController generations and failures", () => {
     expect(controller.getSnapshot().query).toBe(beforeQuery);
     expect(controller.getSnapshot().phase).toBe("ready");
     expect(navigation.writes).toHaveLength(0);
+  });
+
+  it("requires an explicit 409 rehydrate before replacing the committed revision", async () => {
+    const { catalog, controller, navigation, committedQuery } = await setupRetiredRevision();
+    const committedStateRevision = controller.getSnapshot().stateRevision;
+
+    expect(catalog.calls.filter((call) => call.scopeKey === DONETSK)).toHaveLength(1);
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      current: { key: UKRAINE },
+      query: { catalogRevision: RETIRED_REVISION },
+      problem: {
+        code: "CATALOG_REVISION_UNAVAILABLE",
+        activeCatalogRevision: ACTIVE_REVISION,
+      },
+    });
+    expect(controller.getSnapshot().query).toBe(committedQuery);
+
+    const recovered = await controller.dispatch({ type: "rehydrate" });
+
+    expect(recovered).toMatchObject({ outcome: "committed" });
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      stateRevision: committedStateRevision + 1,
+      current: { key: UKRAINE },
+      query: { catalogRevision: ACTIVE_REVISION },
+      problem: null,
+    });
+    expect(navigation.writes).toEqual([
+      expect.objectContaining({
+        scopeKey: UKRAINE,
+        catalogRevision: ACTIVE_REVISION,
+        mode: "replace",
+      }),
+    ]);
+    expect(catalog.calls.map((call) => [
+      call.kind,
+      call.scopeKey,
+      call.catalogRevision,
+    ])).toEqual([
+      ["resolve", UKRAINE, RETIRED_REVISION],
+      ["resolve", DONETSK, RETIRED_REVISION],
+      ["rehydrate", UKRAINE, ACTIVE_REVISION],
+    ]);
+  });
+
+  it.each([
+    [
+      "404",
+      new SpatialCatalogError({
+        code: "UNKNOWN_SCOPE",
+        target: UKRAINE,
+        message: "The committed scope is absent from the active revision.",
+      }),
+      "UNKNOWN_SCOPE",
+      null,
+    ],
+    [
+      "network/5xx",
+      new SpatialCatalogError({
+        code: "CATALOG_UNAVAILABLE",
+        target: UKRAINE,
+        message: "The active catalog cannot be reached.",
+        recoverable: true,
+      }),
+      "CATALOG_UNAVAILABLE",
+      null,
+    ],
+    [
+      "second 409",
+      new SpatialCatalogError({
+        code: "CATALOG_REVISION_UNAVAILABLE",
+        target: ACTIVE_REVISION,
+        message: "The recovery revision changed again.",
+        recoverable: true,
+        activeCatalogRevision: NEXT_REVISION,
+      }),
+      "CATALOG_REVISION_UNAVAILABLE",
+      NEXT_REVISION,
+    ],
+  ] as const)("keeps a rehydrate %s visible and fail-closed", async (
+    _case,
+    error,
+    expectedCode,
+    expectedActiveRevision,
+  ) => {
+    const { catalog, controller, navigation, committedQuery } = await setupRetiredRevision();
+    catalog.failNextRehydrate(error);
+
+    const result = await controller.dispatch({ type: "rehydrate" });
+
+    expect(result).toMatchObject({
+      outcome: "failed",
+      problem: {
+        code: expectedCode,
+        activeCatalogRevision: expectedActiveRevision,
+      },
+    });
+    expect(controller.getSnapshot().query).toBe(committedQuery);
+    expect(controller.getSnapshot().current?.key).toBe(UKRAINE);
+    expect(navigation.writes).toHaveLength(0);
+    expect(catalog.calls.some((call) => call.scopeKey === WORLD_SCOPE_KEY)).toBe(false);
+  });
+
+  it("does not call the rehydrate adapter for an already-aborted intent", async () => {
+    const { catalog, controller, committedQuery } = await setupRetiredRevision();
+    const aborter = new AbortController();
+    aborter.abort();
+    const callsBefore = catalog.calls.length;
+
+    const result = await controller.dispatch(
+      { type: "rehydrate" },
+      { signal: aborter.signal },
+    );
+
+    expect(result).toEqual({ outcome: "cancelled" });
+    expect(catalog.calls).toHaveLength(callsBefore);
+    expect(controller.getSnapshot().query).toBe(committedQuery);
+  });
+
+  it("cannot commit an older rehydrate response over a newer history intent", async () => {
+    const { catalog, controller } = await setupRetiredRevision();
+    const gate = catalog.deferNextRehydrate();
+    const recovery = controller.dispatch({ type: "rehydrate" });
+    const newer = controller.dispatch({
+      type: "hydrate",
+      target: POLAND,
+      catalogRevision: ACTIVE_REVISION,
+      cause: "browser-history",
+    });
+
+    await expect(newer).resolves.toMatchObject({ outcome: "committed" });
+    gate.resolve();
+    await expect(recovery).resolves.toEqual({ outcome: "superseded" });
+    expect(controller.getSnapshot()).toMatchObject({
+      current: { key: POLAND },
+      query: { catalogRevision: ACTIVE_REVISION },
+    });
   });
 });
 
