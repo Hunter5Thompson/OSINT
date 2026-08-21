@@ -32,7 +32,12 @@ from spatial_catalog.identity import (
     load_country_crosswalk,
     parse_scope_key,
 )
-from spatial_catalog.manifest import CatalogManifest, canonical_manifest_bytes
+from spatial_catalog.manifest import (
+    CatalogManifest,
+    CatalogPointer,
+    canonical_json_bytes,
+    canonical_manifest_bytes,
+)
 from spatial_catalog.models import ScopeKind
 from spatial_catalog.normalize import BoundaryGeometry, normalize_geometry
 from spatial_catalog.topology import contains_point
@@ -375,7 +380,7 @@ def load_active_normalization_index(
     *,
     crosswalk_path: Path,
 ) -> SpatialNormalizationIndex:
-    """Resolve the newest installed immutable catalog using backend ordering."""
+    """Resolve exactly the deployment-owned active immutable catalog."""
 
     if (catalog_root / "manifest.json").is_file():
         return load_normalization_index(
@@ -385,19 +390,27 @@ def load_active_normalization_index(
     catalogs_root = catalog_root / "catalogs"
     if catalogs_root.is_symlink() or not catalogs_root.is_dir():
         raise FileNotFoundError("spatial catalog root is missing")
-    candidates = tuple(
-        candidate
-        for candidate in catalogs_root.iterdir()
-        if candidate.is_dir()
-        and not candidate.is_symlink()
-        and (candidate / "manifest.json").is_file()
-    )
-    if not candidates:
-        raise FileNotFoundError("no spatial catalog revision is installed")
-    active = max(
-        candidates,
-        key=lambda candidate: (candidate.stat().st_mtime_ns, candidate.name),
-    )
+    pointer_path = catalog_root / "catalog-pointer.json"
+    if pointer_path.is_symlink() or not pointer_path.is_file():
+        raise FileNotFoundError("spatial catalog pointer is missing")
+    pointer_bytes = pointer_path.read_bytes()
+    pointer = CatalogPointer.model_validate_json(pointer_bytes)
+    canonical_pointer = canonical_json_bytes(pointer)
+    if pointer_bytes not in {canonical_pointer, canonical_pointer + b"\n"}:
+        raise ValueError("spatial catalog pointer is not canonical JSON")
+    served: list[Path] = []
+    for revision in pointer.served_catalog_revisions:
+        directory = catalogs_root / revision
+        manifest_path = directory / "manifest.json"
+        if (
+            directory.is_symlink()
+            or not directory.is_dir()
+            or manifest_path.is_symlink()
+            or not manifest_path.is_file()
+        ):
+            raise FileNotFoundError("served spatial catalog revision is missing")
+        served.append(directory)
+    active = served[0]
     return load_normalization_index(active, crosswalk_path=crosswalk_path)
 
 

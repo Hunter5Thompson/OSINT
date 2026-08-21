@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
@@ -14,6 +16,7 @@ from graph_integrity.spatial_normalizer import (
     SpatialNormalizationIndex,
     SpatialPrecision,
     build_normalization_index,
+    load_active_normalization_index,
     load_normalization_index,
     normalize_location,
 )
@@ -385,6 +388,66 @@ def test_catalog_and_derivation_revisions_remain_separate(
     assert result.spatial_catalog_revision == "spatial-v1-e76a16bff799"
     assert result.spatial_derivation_revision == "spatial-derive-v1-d30efa07e141"
     assert result.spatial_catalog_revision != result.spatial_derivation_revision
+
+
+def test_active_normalizer_uses_catalog_pointer_even_when_previous_is_touched(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "spatial"
+    catalogs = root / "catalogs"
+    active = "spatial-v1-111111111111"
+    previous = "spatial-v1-222222222222"
+    (catalogs / active).mkdir(parents=True)
+    (catalogs / previous).mkdir()
+    (catalogs / active / "manifest.json").write_text("{}")
+    (catalogs / previous / "manifest.json").write_text("{}")
+    (root / "catalog-pointer.json").write_text(json.dumps({
+        "schema_version": 1,
+        "active_catalog_revision": active,
+        "served_catalog_revisions": [active, previous],
+    }, separators=(",", ":"), sort_keys=True))
+    os.utime(
+        catalogs / previous,
+        ns=(9_000_000_000_000_000_000, 9_000_000_000_000_000_000),
+    )
+    sentinel = object()
+
+    with patch(
+        "graph_integrity.spatial_normalizer.load_normalization_index",
+        return_value=sentinel,
+    ) as load:
+        selected = load_active_normalization_index(
+            root,
+            crosswalk_path=CROSSWALK_PATH,
+        )
+
+    assert selected is sentinel
+    load.assert_called_once_with(
+        catalogs / active,
+        crosswalk_path=CROSSWALK_PATH,
+    )
+
+
+def test_active_normalizer_fails_closed_when_a_served_revision_is_missing(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "spatial"
+    catalogs = root / "catalogs"
+    active = "spatial-v1-111111111111"
+    missing_previous = "spatial-v1-222222222222"
+    (catalogs / active).mkdir(parents=True)
+    (catalogs / active / "manifest.json").write_text("{}")
+    (root / "catalog-pointer.json").write_text(json.dumps({
+        "schema_version": 1,
+        "active_catalog_revision": active,
+        "served_catalog_revisions": [active, missing_previous],
+    }, separators=(",", ":"), sort_keys=True))
+
+    with pytest.raises(FileNotFoundError, match="served spatial catalog revision"):
+        load_active_normalization_index(
+            root,
+            crosswalk_path=CROSSWALK_PATH,
+        )
 
 
 def test_index_tracks_only_reviewed_compatible_derivation_revisions() -> None:
