@@ -143,11 +143,11 @@ class TestIngestionVllmSettings:
         with patch.dict(os.environ, {}, clear=True):
             s = Settings(_env_file=None)
             assert s.ingestion_vllm_url == "http://192.168.178.39:8000"
-            assert s.ingestion_vllm_model == "Qwen/Qwen3.6-35B-A3B"
+            assert s.ingestion_vllm_model == "Qwen/Qwen3.8-27B"
             # RSS timeout stays 120s (continuous pipeline = fail-fast); the NLM batch
             # gets its own 600s (split per code review: Spark contention ~160s/extraction).
-            assert s.ingestion_vllm_timeout == 120.0
-            assert s.nlm_ingestion_vllm_timeout == 600.0
+            assert s.ingestion_vllm_timeout == 240.0
+            assert s.nlm_ingestion_vllm_timeout == 900.0
             # 8000: 4000 truncated long-transcript extraction JSON mid-string.
             assert s.ingestion_max_tokens == 8000
 

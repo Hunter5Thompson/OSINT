@@ -30,7 +30,7 @@ async def test_ready_when_model_in_response():
     resp.status_code = 200
     resp.raise_for_status = MagicMock()
     resp.json.return_value = {"data": [
-        {"id": "Qwen/Qwen3.6-35B-A3B"},
+        {"id": "Qwen/Qwen3.8-27B"},
         {"id": "other/model"},
     ]}
 
