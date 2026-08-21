@@ -267,20 +267,25 @@ def evidence_artifact(items: list[EvidenceItem]) -> list[dict]:
     return [item.model_dump(mode="json") for item in items]
 
 
-def source_refs_from_artifact(artifact: object) -> list[SourceRef]:
-    """Validate an artifact into SourceRefs. Fail-closed: anything that is not a
-    well-formed EvidenceItem payload is dropped, never guessed at."""
+def evidence_items_from_artifact(artifact: object) -> list[EvidenceItem]:
+    """Validate an artifact into EvidenceItems, dropping malformed entries."""
     if not isinstance(artifact, list):
         return []
-    refs: list[SourceRef] = []
+    items: list[EvidenceItem] = []
     for entry in artifact:
         if not isinstance(entry, dict):
             continue
         try:
-            refs.append(EvidenceItem.model_validate(entry).source)
+            items.append(EvidenceItem.model_validate(entry))
         except ValidationError:
             continue
-    return refs
+    return items
+
+
+def source_refs_from_artifact(artifact: object) -> list[SourceRef]:
+    """Validate an artifact into SourceRefs. Fail-closed: anything that is not a
+    well-formed EvidenceItem payload is dropped, never guessed at."""
+    return [item.source for item in evidence_items_from_artifact(artifact)]
 
 
 def neutralize_evidence_markers(text: str) -> str:

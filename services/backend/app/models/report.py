@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.models.intel import SpatialRunApplicationV1
+
 _utc_now = partial(datetime.now, UTC)
 
 ReportStatus = Literal["Draft", "Published", "Archived"]
@@ -44,6 +46,7 @@ class ReportRecord(BaseModel):
     body_paragraphs: list[str] = Field(default_factory=list)
     margin: list[MarginEntry] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
+    spatial_application: SpatialRunApplicationV1 | None = None
     created_at: datetime = Field(default_factory=_utc_now)
     updated_at: datetime = Field(default_factory=_utc_now)
 
@@ -62,6 +65,7 @@ class ReportCreateRequest(BaseModel):
     body_paragraphs: list[str] = Field(default_factory=list)
     margin: list[MarginEntry] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
+    spatial_application: SpatialRunApplicationV1 | None = None
 
 
 class ReportUpdateRequest(BaseModel):
@@ -77,6 +81,7 @@ class ReportUpdateRequest(BaseModel):
     body_paragraphs: list[str] | None = None
     margin: list[MarginEntry] | None = None
     sources: list[str] | None = None
+    spatial_application: SpatialRunApplicationV1 | None = None
 
 
 class ReportMessage(BaseModel):

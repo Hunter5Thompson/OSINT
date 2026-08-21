@@ -82,6 +82,7 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert "COPY services/data-ingestion/pyproject.toml ." in dockerfile
     assert "COPY services/data-ingestion/uv.lock ." in dockerfile
     assert "COPY services/data-ingestion/canonicalize.py ." in dockerfile
+    assert "COPY services/data-ingestion/qdrant_spatial.py ." in dockerfile
     assert "COPY services/data-ingestion/graph_integrity/ graph_integrity/" in dockerfile
     assert (
         "COPY services/data-ingestion/migrations/location_spatial_scope_indexes.cypher "
@@ -213,6 +214,9 @@ def test_compose_builds_data_ingestion_images_from_repo_root():
         block = match.group("block")
         assert "context: ." in block
         assert "dockerfile: services/data-ingestion/Dockerfile" in block
+        assert (
+            "./services/backend/data/spatial:/app/data/spatial:ro" in block
+        )
 
 
 def test_agents_documents_deployment_lock_exception():

@@ -5,7 +5,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agents.tools.rss_fetch import rss_fetch
+from spatial import ScopeKind, SpatialScopeTokenV1
 from tests._evidence_text import parse_evidence_refs
+from tests.tool_runtime import agent_state, invoke_runtime_tool
 
 _FEED = """<?xml version="1.0"?><rss><channel>
 <item><title>Strike reported</title><link>https://bbc.com/news/1</link>
@@ -28,6 +30,18 @@ class _DummyAsyncClient:
         return self._response
 
 
+def _scope_token() -> SpatialScopeTokenV1:
+    revision = "spatial-derive-v1-d30efa07e141"
+    return SpatialScopeTokenV1(
+        scope_key="country:UKR",
+        kind=ScopeKind.COUNTRY,
+        catalog_revision="spatial-v1-e76a16bff799",
+        derivation_revision=revision,
+        boundary_policy="odin-reference-v1",
+        compatible_derivation_revisions=(revision,),
+    )
+
+
 @pytest.mark.asyncio
 async def test_rss_fetch_emits_evidence_with_domain_provider():
     resp = MagicMock()
@@ -37,7 +51,10 @@ async def test_rss_fetch_emits_evidence_with_domain_provider():
         "agents.tools.rss_fetch.httpx.AsyncClient",
         return_value=_DummyAsyncClient(resp),
     ):
-        out = await rss_fetch.ainvoke({"feed_url": "https://bbc.com/rss.xml"})
+        out = await invoke_runtime_tool(
+            rss_fetch,
+            {"feed_url": "https://bbc.com/rss.xml"},
+        )
     refs = parse_evidence_refs(out)
     assert len(refs) == 1
     assert refs[0].source_type == "rss"
@@ -63,7 +80,25 @@ async def test_rss_fetch_strips_www_so_provider_matches_credibility_override():
         "agents.tools.rss_fetch.httpx.AsyncClient",
         return_value=_DummyAsyncClient(resp),
     ):
-        out = await rss_fetch.ainvoke({"feed_url": "https://www.reuters.com/rss.xml"})
+        out = await invoke_runtime_tool(
+            rss_fetch,
+            {"feed_url": "https://www.reuters.com/rss.xml"},
+        )
     refs = parse_evidence_refs(out)
     assert refs[0].provider == "reuters.com"
     assert refs[0].credibility_score == 0.85
+
+
+@pytest.mark.asyncio
+async def test_scoped_direct_call_is_blocked_before_http():
+    with patch(
+        "agents.tools.rss_fetch.httpx.AsyncClient",
+        side_effect=AssertionError("HTTP must not be constructed"),
+    ):
+        out = await invoke_runtime_tool(
+            rss_fetch,
+            {"feed_url": "https://example.test/rss.xml"},
+            state=agent_state(spatial_scope=_scope_token()),
+        )
+
+    assert out.startswith("SPATIAL_SCOPE_UNSUPPORTED")

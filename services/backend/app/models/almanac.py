@@ -55,7 +55,7 @@ class AlmanacSignalResponse(BaseModel):
 
 
 class BriefingSaveRequest(BaseModel):
-    """Stateless save payload: a finished Munin IntelAnalysis for one country."""
+    """Stateless browser payload; trusted run metadata is discarded by the save route."""
 
     analysis: IntelAnalysis
 

@@ -7,6 +7,9 @@ Each template has parameterized Cypher ($name, $limit etc.) — no string interp
 from __future__ import annotations
 
 import re
+from typing import TypedDict
+
+from spatial import ScopeKind
 
 TEMPLATES: dict[str, dict] = {
     "entity_lookup": {
@@ -109,6 +112,246 @@ TEMPLATES: dict[str, dict] = {
         "defaults": {"limit": 20},
     },
 }
+
+
+class ScopedGraphTemplate(TypedDict):
+    cypher: str
+    defaults: dict[str, object]
+
+
+# Complete literal query strings are intentional. A scoped read never appends a
+# caller- or model-derived WHERE fragment to a global query.
+SCOPED_TEMPLATES: dict[tuple[str, ScopeKind], ScopedGraphTemplate] = {
+    (
+        "event_timeline",
+        ScopeKind.COUNTRY,
+    ): {
+        "cypher": (
+            "MATCH (ev:Event)-[:OCCURRED_AT]->(l:Location) "
+            "WHERE l.country_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH ev, l ORDER BY coalesce(l.id, l.name, '') "
+            "WITH ev, collect(l)[0] AS l "
+            "RETURN DISTINCT ev.title AS title, ev.codebook_type AS type, "
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
+            "l.name AS location, l.country AS country "
+            "ORDER BY timestamp DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 30},
+    },
+    (
+        "event_timeline",
+        ScopeKind.ADMIN1,
+    ): {
+        "cypher": (
+            "MATCH (ev:Event)-[:OCCURRED_AT]->(l:Location) "
+            "WHERE l.admin1_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH ev, l ORDER BY coalesce(l.id, l.name, '') "
+            "WITH ev, collect(l)[0] AS l "
+            "RETURN DISTINCT ev.title AS title, ev.codebook_type AS type, "
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
+            "l.name AS location, l.country AS country "
+            "ORDER BY timestamp DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 30},
+    },
+    (
+        "event_timeline",
+        ScopeKind.ADMIN2,
+    ): {
+        "cypher": (
+            "MATCH (ev:Event)-[:OCCURRED_AT]->(l:Location) "
+            "WHERE l.admin2_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH ev, l ORDER BY coalesce(l.id, l.name, '') "
+            "WITH ev, collect(l)[0] AS l "
+            "RETURN DISTINCT ev.title AS title, ev.codebook_type AS type, "
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
+            "l.name AS location, l.country AS country "
+            "ORDER BY timestamp DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 30},
+    },
+    (
+        "events_by_entity",
+        ScopeKind.COUNTRY,
+    ): {
+        "cypher": (
+            "MATCH (e:Entity)<-[:INVOLVES]-(ev:Event)-[:OCCURRED_AT]->(l:Location) "
+            "WHERE e.name = $name AND l.country_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH DISTINCT ev "
+            "RETURN DISTINCT ev.title AS title, ev.codebook_type AS type, "
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
+            "ev.confidence AS confidence "
+            "ORDER BY timestamp DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 20},
+    },
+    (
+        "events_by_entity",
+        ScopeKind.ADMIN1,
+    ): {
+        "cypher": (
+            "MATCH (e:Entity)<-[:INVOLVES]-(ev:Event)-[:OCCURRED_AT]->(l:Location) "
+            "WHERE e.name = $name AND l.admin1_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH DISTINCT ev "
+            "RETURN DISTINCT ev.title AS title, ev.codebook_type AS type, "
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
+            "ev.confidence AS confidence "
+            "ORDER BY timestamp DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 20},
+    },
+    (
+        "events_by_entity",
+        ScopeKind.ADMIN2,
+    ): {
+        "cypher": (
+            "MATCH (e:Entity)<-[:INVOLVES]-(ev:Event)-[:OCCURRED_AT]->(l:Location) "
+            "WHERE e.name = $name AND l.admin2_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH DISTINCT ev "
+            "RETURN DISTINCT ev.title AS title, ev.codebook_type AS type, "
+            "ev.severity AS severity, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
+            "ev.confidence AS confidence "
+            "ORDER BY timestamp DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 20},
+    },
+    (
+        "source_backed",
+        ScopeKind.COUNTRY,
+    ): {
+        "cypher": (
+            "MATCH (e:Entity)<-[:INVOLVES]-(ev:Event)-[:OCCURRED_AT]->(l:Location) "
+            "MATCH (ev)-[:REPORTED_BY]->(s:Source) "
+            "WHERE e.name = $name AND l.country_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH DISTINCT ev, s "
+            "RETURN DISTINCT ev.title AS event, s.name AS source, s.url AS url, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp "
+            "ORDER BY timestamp DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 20},
+    },
+    (
+        "source_backed",
+        ScopeKind.ADMIN1,
+    ): {
+        "cypher": (
+            "MATCH (e:Entity)<-[:INVOLVES]-(ev:Event)-[:OCCURRED_AT]->(l:Location) "
+            "MATCH (ev)-[:REPORTED_BY]->(s:Source) "
+            "WHERE e.name = $name AND l.admin1_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH DISTINCT ev, s "
+            "RETURN DISTINCT ev.title AS event, s.name AS source, s.url AS url, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp "
+            "ORDER BY timestamp DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 20},
+    },
+    (
+        "source_backed",
+        ScopeKind.ADMIN2,
+    ): {
+        "cypher": (
+            "MATCH (e:Entity)<-[:INVOLVES]-(ev:Event)-[:OCCURRED_AT]->(l:Location) "
+            "MATCH (ev)-[:REPORTED_BY]->(s:Source) "
+            "WHERE e.name = $name AND l.admin2_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH DISTINCT ev, s "
+            "RETURN DISTINCT ev.title AS event, s.name AS source, s.url AS url, "
+            "coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp "
+            "ORDER BY timestamp DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 20},
+    },
+    (
+        "co_occurring",
+        ScopeKind.COUNTRY,
+    ): {
+        "cypher": (
+            "MATCH (e:Entity)<-[:INVOLVES]-(ev:Event)-[:INVOLVES]->(other:Entity) "
+            "MATCH (ev)-[:OCCURRED_AT]->(l:Location) "
+            "WHERE e.name = $name AND other.name <> $name "
+            "AND l.country_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH DISTINCT other, ev "
+            "RETURN DISTINCT other.name AS entity, other.type AS type, "
+            "count(DISTINCT ev) AS shared_events "
+            "ORDER BY shared_events DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 20},
+    },
+    (
+        "co_occurring",
+        ScopeKind.ADMIN1,
+    ): {
+        "cypher": (
+            "MATCH (e:Entity)<-[:INVOLVES]-(ev:Event)-[:INVOLVES]->(other:Entity) "
+            "MATCH (ev)-[:OCCURRED_AT]->(l:Location) "
+            "WHERE e.name = $name AND other.name <> $name "
+            "AND l.admin1_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH DISTINCT other, ev "
+            "RETURN DISTINCT other.name AS entity, other.type AS type, "
+            "count(DISTINCT ev) AS shared_events "
+            "ORDER BY shared_events DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 20},
+    },
+    (
+        "co_occurring",
+        ScopeKind.ADMIN2,
+    ): {
+        "cypher": (
+            "MATCH (e:Entity)<-[:INVOLVES]-(ev:Event)-[:INVOLVES]->(other:Entity) "
+            "MATCH (ev)-[:OCCURRED_AT]->(l:Location) "
+            "WHERE e.name = $name AND other.name <> $name "
+            "AND l.admin2_scope_key = $scope_key "
+            "AND l.spatial_derivation_revision IN $compatible_revisions "
+            "AND l.spatial_conflict = false "
+            "WITH DISTINCT other, ev "
+            "RETURN DISTINCT other.name AS entity, other.type AS type, "
+            "count(DISTINCT ev) AS shared_events "
+            "ORDER BY shared_events DESC LIMIT $limit"
+        ),
+        "defaults": {"limit": 20},
+    },
+}
+
+
+def select_scoped_template(
+    template_id: str,
+    scope_kind: ScopeKind,
+    params: dict[str, object],
+) -> tuple[str, dict[str, object]] | None:
+    template = SCOPED_TEMPLATES.get((template_id, scope_kind))
+    if template is None:
+        return None
+    merged = dict(template["defaults"])
+    merged.update(params)
+    return template["cypher"], merged
 
 
 def select_template(

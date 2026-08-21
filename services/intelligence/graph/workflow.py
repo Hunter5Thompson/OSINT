@@ -14,13 +14,13 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from agents.react_agent import (
-    REACT_SYSTEM_PROMPT,
     create_react_agent,
     should_continue,
+    system_prompt_for_state,
 )
 from agents.synthesis_agent import create_synthesis_llm
 from agents.synthesis_agent import get_system_message as synthesis_sys
-from agents.tools import ALL_TOOLS
+from agents.tools import blocked_tool_names, tools_for_state
 from agents.tools.graph_query import set_graph_client
 from config import settings
 from distill_capture import capture_synthesis_input
@@ -30,9 +30,18 @@ from graph.nodes import synthesis_node as legacy_synthesis_node
 from graph.state import AgentState
 from rag.evidence import (
     evidence_artifact,
-    format_evidence_pack,
+    evidence_items_from_artifact,
+    pack_with_lineage,
     source_refs_from_artifact,
     to_evidence_item,
+)
+from spatial import (
+    RetrievalSpatialRelation,
+    SpatialApplicationMarkerV1,
+    SpatialRunApplicationV1,
+    SpatialScopeTokenV1,
+    aggregate_spatial_application,
+    parse_spatial_application_marker,
 )
 
 logger = structlog.get_logger()
@@ -45,10 +54,70 @@ GROUNDING_EVIDENCE_MAX_CHARS = 3000
 
 def _clip_text(text: str, max_chars: int) -> str:
     """Bound prompt material before it is sent to the 16k-context local model."""
+    if max_chars <= 0:
+        return ""
     if len(text) <= max_chars:
         return text
     omitted = len(text) - max_chars
-    return text[:max_chars].rstrip() + f"\n...[truncated {omitted} chars]"
+    while True:
+        suffix = f"\n...[truncated {omitted} chars]"
+        prefix_chars = max_chars - len(suffix)
+        if prefix_chars <= 0:
+            return text[:max_chars]
+        updated_omitted = len(text) - prefix_chars
+        if updated_omitted == omitted:
+            return text[:prefix_chars] + suffix
+        omitted = updated_omitted
+
+
+RESEARCH_SEPARATOR = "\n\n---\n\n"
+
+
+def _budget_research_segments(
+    segments: Sequence[tuple[str, object]],
+    *,
+    budget: int,
+) -> tuple[str, list[dict]]:
+    """Budget research text and structured lineage as one inseparable stream.
+
+    Artifact-bearing segments that do not fit whole are re-rendered from their
+    validated EvidenceItems, keeping only complete blocks and their matching
+    lineage. Content-only segments may be clipped because they cannot contribute
+    provenance. Rendered tool text is never parsed to make trust decisions.
+    """
+    rendered: list[str] = []
+    artifacts: list[dict] = []
+    used = 0
+
+    for segment_text, artifact in segments:
+        if not segment_text:
+            continue
+        separator = RESEARCH_SEPARATOR if rendered else ""
+        available = budget - used - len(separator)
+        if available <= 0:
+            break
+
+        items = evidence_items_from_artifact(artifact)
+        if len(segment_text) <= available:
+            selected_text = segment_text
+            selected_artifact = evidence_artifact(items)
+        elif items:
+            selected_text, selected_artifact = pack_with_lineage(
+                items,
+                budget=available,
+                preserve_order=True,
+            )
+        else:
+            selected_text = _clip_text(segment_text, available)
+            selected_artifact = []
+
+        if not selected_text:
+            continue
+        rendered.append(selected_text)
+        artifacts.extend(selected_artifact)
+        used += len(separator) + len(selected_text)
+
+    return RESEARCH_SEPARATOR.join(rendered), artifacts
 
 
 def _with_content(message, content: str):  # type: ignore[no-untyped-def]
@@ -125,21 +194,29 @@ async def react_agent_node(state: AgentState) -> dict:
     logger.info("react_agent_node", iteration=state.get("iteration", 0))
 
     try:
-        llm = create_react_agent()
+        llm = create_react_agent(tools_for_state(state))
 
         # Build messages for LLM invocation
         if state.get("iteration", 0) == 0:
             query = state["query"]
             image_note = ""
             if state.get("image_url"):
-                image_note = f"\n\nAn image has been provided for analysis: {state['image_url']}"
+                image_note = "\n\nAn attached image is available through the vision tool."
+
+            scope = state.get("spatial_scope")
+            scope_note = (
+                f"\n\nActive server-pinned scope: {scope.scope_key} "
+                f"({state['spatial_relation'].value})."
+                if scope is not None
+                else "\n\nActive server-pinned scope: global."
+            )
 
             grounding = state.get("grounding_context") or ""
             grounding_note = f"\n\n{grounding}" if grounding else ""
 
             initial_messages = [
-                SystemMessage(content=REACT_SYSTEM_PROMPT),
-                HumanMessage(content=f"{query}{image_note}{grounding_note}"),
+                SystemMessage(content=system_prompt_for_state(state)),
+                HumanMessage(content=f"{query}{image_note}{scope_note}{grounding_note}"),
             ]
             messages = list(state.get("messages", [])) + initial_messages
         else:
@@ -194,36 +271,52 @@ async def react_synthesis_node(state: AgentState) -> dict:
     """Deterministic synthesis node — produces structured intelligence report."""
     logger.info("react_synthesis_node")
 
+    spatial_application: SpatialRunApplicationV1 | None = None
     try:
         llm = create_synthesis_llm()
 
         # Tool TEXT feeds the prompt; tool ARTIFACTS feed provenance. Two separate
         # streams on purpose — text is attacker-influenced, artifacts are not.
         messages = state.get("messages", [])
-        tool_results = []
+        tool_segments: list[tuple[str, object]] = []
+        application_markers: list[SpatialApplicationMarkerV1] = []
         for msg in messages:
             if hasattr(msg, "content") and getattr(msg, "type", None) == "tool":
-                tool_results.append(
-                    msg.content if isinstance(msg.content, str) else str(msg.content)
+                content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                marker, research_text = parse_spatial_application_marker(
+                    content,
+                    actual_tool_name=getattr(msg, "name", None),
                 )
+                if marker is not None:
+                    application_markers.append(marker)
+                if research_text:
+                    tool_segments.append((research_text, getattr(msg, "artifact", None)))
+
+        scope = state.get("spatial_scope")
+        if scope is not None:
+            application = aggregate_spatial_application(
+                scope,
+                state["spatial_relation"],
+                application_markers,
+                blocked_tools=blocked_tool_names(state),
+            )
+            spatial_application = application
 
         # Prepend the deterministic grounding pack so it is part of the synthesis
         # research text; its lineage travels in grounding_evidence_artifact.
         pack = state.get("grounding_evidence_pack") or ""
-        tool_results = ([pack] if pack else []) + tool_results
-
-        evidence_artifacts = (
-            list(state.get("grounding_evidence_artifact") or [])
-            + collect_evidence_artifacts(messages)
+        research_segments = (
+            [(pack, state.get("grounding_evidence_artifact"))] if pack else []
+        ) + tool_segments
+        raw_research_chars = len(
+            RESEARCH_SEPARATOR.join(text for text, _artifact in research_segments)
         )
-
-        research_text = (
-            "\n\n---\n\n".join(tool_results)
-            if tool_results
-            else "No research results collected."
+        research_text, evidence_artifacts = _budget_research_segments(
+            research_segments,
+            budget=SYNTHESIS_RESEARCH_MAX_CHARS,
         )
-        raw_research_chars = len(research_text)
-        research_text = _clip_text(research_text, SYNTHESIS_RESEARCH_MAX_CHARS)
+        if not research_text:
+            research_text = "No research results collected."
 
         # Derive sources_used from validated artifacts (de-duplicated provider IDs)
         derived_sources = derive_sources_used(evidence_artifacts)
@@ -231,7 +324,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
             "react_synthesis_grounding",
             tool_call_count=len(state.get("tool_trace", [])),
             providers=derived_sources,
-            tool_message_count=len(tool_results),
+            tool_message_count=len(research_segments),
             raw_research_chars=raw_research_chars,
             research_chars=len(research_text),
         )
@@ -283,6 +376,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
             "sources_used": derived_sources,
             "agent_chain": state.get("agent_chain", []) + ["synthesis"],
             "messages": [response],
+            "spatial_application": spatial_application,
         }
 
     except Exception as e:
@@ -293,17 +387,25 @@ async def react_synthesis_node(state: AgentState) -> dict:
             "confidence": 0.0,
             "error": f"Synthesis failed: {e}",
             "agent_chain": state.get("agent_chain", []) + ["synthesis"],
+            "spatial_application": spatial_application,
         }
 
 
 # ── Graph Builders ────────────────────────────────────────────────────────────
+
+async def tool_node_for_state(state: AgentState) -> dict:
+    """Execute only the same closed capability set exposed to the model."""
+
+    result = await ToolNode(tools_for_state(state)).ainvoke(state)
+    return dict(result)
+
 
 def build_react_graph() -> StateGraph:
     """Build the ReAct agent workflow."""
     graph = StateGraph(AgentState)
 
     graph.add_node("react_agent", react_agent_node)
-    graph.add_node("tools", ToolNode(ALL_TOOLS))
+    graph.add_node("tools", tool_node_for_state)
     graph.add_node("synthesis", react_synthesis_node)
 
     graph.set_entry_point("react_agent")
@@ -381,26 +483,42 @@ async def run_intelligence_query(
     region: str | None = None,
     image_url: str | None = None,
     use_legacy: bool = False,
+    *,
+    spatial_scope: SpatialScopeTokenV1 | None = None,
+    spatial_relation: RetrievalSpatialRelation = RetrievalSpatialRelation.EITHER,
     grounding_context: str | None = None,
     grounding_evidence: list[dict] | None = None,
 ) -> dict:
     """Run intelligence analysis — ReAct by default (fail-closed on failure);
     the legacy pipeline runs only when use_legacy=True."""
     mode = "legacy" if use_legacy else "react"
-    logger.info("intelligence_query_started", query=query, region=region, mode=mode)
+    pinned_scope = spatial_scope.model_copy(deep=True) if spatial_scope is not None else None
+    pinned_relation = RetrievalSpatialRelation(spatial_relation)
+    logger.info(
+        "intelligence_query_started",
+        scope_key=pinned_scope.scope_key if pinned_scope is not None else "world",
+        catalog_revision=(
+            pinned_scope.catalog_revision if pinned_scope is not None else None
+        ),
+        mode=mode,
+        deprecated_region_supplied=region is not None,
+    )
 
     # Wire Neo4j client for graph_query tool (lazy singleton)
     _ensure_graph_client()
 
     items = [to_evidence_item(d) for d in (grounding_evidence or [])]
-    grounding_evidence_pack = (
-        format_evidence_pack(items, budget=GROUNDING_EVIDENCE_MAX_CHARS) if items else ""
+    grounding_evidence_pack, grounding_evidence_artifact = (
+        pack_with_lineage(items, budget=GROUNDING_EVIDENCE_MAX_CHARS)
+        if items
+        else ("", [])
     )
-    grounding_evidence_artifact = evidence_artifact(items)
 
     initial_state: AgentState = {
         "query": query,
         "image_url": image_url,
+        "spatial_scope": pinned_scope,
+        "spatial_relation": pinned_relation,
         "grounding_context": grounding_context or "",
         "grounding_evidence_pack": grounding_evidence_pack,
         "grounding_evidence_artifact": grounding_evidence_artifact,
@@ -418,6 +536,7 @@ async def run_intelligence_query(
         "agent_chain": [],
         "tool_trace": [],
         "error": None,
+        "spatial_application": None,
     }
 
     try:
@@ -448,8 +567,19 @@ async def run_intelligence_query(
             "tool_trace": [],
             "timestamp": datetime.now(UTC).isoformat(),
             "mode": "error",
+            "spatial_scope": (
+                pinned_scope.model_dump(mode="json") if pinned_scope is not None else None
+            ),
+            "spatial_relation": pinned_relation.value,
+            "spatial_application": None,
         }
 
+    result_application = result.get("spatial_application")
+    serialized_application = (
+        result_application.model_dump(mode="json")
+        if isinstance(result_application, SpatialRunApplicationV1)
+        else result_application
+    )
     return {
         "query": query,
         "agent_chain": result.get("agent_chain", []),
@@ -460,6 +590,11 @@ async def run_intelligence_query(
         "tool_trace": result.get("tool_trace", []),
         "timestamp": datetime.now(UTC).isoformat(),
         "mode": mode,
+        "spatial_scope": (
+            pinned_scope.model_dump(mode="json") if pinned_scope is not None else None
+        ),
+        "spatial_relation": pinned_relation.value,
+        "spatial_application": serialized_application,
     }
 
 

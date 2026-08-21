@@ -1,5 +1,7 @@
 """Intelligence service configuration."""
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -16,6 +18,11 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1024
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "odin_intel"
+    spatial_catalog_path: Path = Path("/app/data/spatial")
+    spatial_coverage_snapshot_path: Path = Path(
+        "/app/data/spatial/qdrant-coverage.json"
+    )
+    gdelt_api_url: str = "https://api.gdeltproject.org/api/v2/doc/doc"
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""

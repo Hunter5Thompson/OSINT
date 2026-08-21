@@ -52,6 +52,7 @@ async def run_once() -> None:
         collection=settings.qdrant_collection,
         embedding_dimensions=settings.embedding_dimensions,
         enable_hybrid=settings.enable_hybrid,
+        spatial_index=spatial_index,
     )
     try:
         await run_forward(state, neo4j, qdrant, Path(gdelt_cfg.parquet_path))

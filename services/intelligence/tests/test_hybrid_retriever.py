@@ -214,6 +214,8 @@ class TestEnhancedSearch:
 
 class TestQueryFilterAndPostRerank:
     async def test_query_filter_passed_to_search(self):
+        from qdrant_client import models
+
         from rag.retriever import enhanced_search
 
         captured = {}
@@ -222,13 +224,21 @@ class TestQueryFilterAndPostRerank:
             captured.update(kwargs)
             return [{"title": "r", "content": "c", "score": 0.9}]
 
+        expected_filter = models.Filter(
+            should=[
+                models.FieldCondition(
+                    key="source",
+                    match=models.MatchValue(value="rss"),
+                )
+            ]
+        )
         with patch("rag.retriever.search", AsyncMock(side_effect=fake_search)):
             await enhanced_search(
-                "q", query_filter={"should": [{"key": "source", "match": {"value": "rss"}}]},
+                "q",
+                query_filter=expected_filter,
                 pool=40, enable_rerank=False, enable_graph_context=False,
             )
-        expected_filter = {"should": [{"key": "source", "match": {"value": "rss"}}]}
-        assert captured["query_filter"] == expected_filter
+        assert captured["query_filter"] is expected_filter
         assert captured["limit"] == 40  # pool drives overfetch
 
     async def test_post_rerank_none_is_neutral(self):
@@ -290,13 +300,20 @@ class TestStartupIndexPreflight:
         from types import SimpleNamespace
         from unittest.mock import AsyncMock, patch
 
+        from qdrant_client.models import PayloadIndexInfo, PayloadSchemaType
+
         import rag.retriever as retr
 
         client = SimpleNamespace(
             get_collections=AsyncMock(return_value=SimpleNamespace(
                 collections=[SimpleNamespace(name=retr.settings.qdrant_collection)])),
             get_collection=AsyncMock(return_value=SimpleNamespace(
-                payload_schema={"source": 1})),   # telegram_channel + notebook_id missing
+                payload_schema={
+                    "source": PayloadIndexInfo(
+                        data_type=PayloadSchemaType.KEYWORD,
+                        points=1,
+                    )
+                })),
             create_payload_index=AsyncMock(),
             close=AsyncMock(),
         )

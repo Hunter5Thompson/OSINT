@@ -1,5 +1,7 @@
 """Tests for the intelligence pipeline workflow graphs."""
 
+import asyncio
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -15,6 +17,19 @@ from graph.workflow import (
     build_react_graph,
     run_intelligence_query,
 )
+from spatial import RetrievalSpatialRelation, ScopeKind, SpatialScopeTokenV1
+
+
+def _token(scope_key: str, suffix: str) -> SpatialScopeTokenV1:
+    revision = f"spatial-derive-v1-{suffix}"
+    return SpatialScopeTokenV1(
+        scope_key=scope_key,
+        kind=ScopeKind.COUNTRY,
+        catalog_revision="spatial-v1-e76a16bff799",
+        derivation_revision=revision,
+        boundary_policy="odin-reference-v1",
+        compatible_derivation_revisions=(revision,),
+    )
 
 
 class TestWorkflowGraph:
@@ -35,6 +50,8 @@ class TestWorkflowGraph:
         state: AgentState = {
             "query": "Test query",
             "image_url": None,
+            "spatial_scope": None,
+            "spatial_relation": RetrievalSpatialRelation.EITHER,
             "messages": [],
             "tool_calls_count": 0,
             "iteration": 0,
@@ -61,8 +78,11 @@ class TestWorkflowGraph:
 
         clipped = _clip_text(text, SYNTHESIS_RESEARCH_MAX_CHARS)
 
-        assert len(clipped) < len(text)
-        assert "truncated 100 chars" in clipped
+        assert len(clipped) == SYNTHESIS_RESEARCH_MAX_CHARS
+        match = re.search(r"\n\.\.\.\[truncated (\d+) chars\]$", clipped)
+        assert match is not None
+        prefix = clipped[:match.start()]
+        assert int(match.group(1)) == len(text) - len(prefix)
 
     def test_compact_tool_messages_preserves_recent_outputs(self) -> None:
         old_tool = ToolMessage(content="old " * 2000, tool_call_id="old")
@@ -93,7 +113,91 @@ async def test_react_failure_propagates_instead_of_silent_legacy_fallback() -> N
         patch("graph.workflow._ensure_graph_client"),
         pytest.raises(RuntimeError, match="react exploded"),
     ):
-        await run_intelligence_query("test query", use_legacy=False)
+        await run_intelligence_query(
+            "test query",
+            use_legacy=False,
+            spatial_scope=_token("country:UKR", "d30efa07e141"),
+        )
 
     # The ReAct path must not silently fall back to the legacy pipeline.
     legacy.ainvoke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_pins_scope_before_later_ui_scope_switch() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    captured: dict[str, AgentState] = {}
+
+    class ReactGraph:
+        async def ainvoke(self, state: AgentState) -> dict[str, object]:
+            captured["state"] = state
+            started.set()
+            await release.wait()
+            return {
+                "synthesis": "scoped",
+                "agent_chain": ["synthesis"],
+                "sources_used": [],
+                "confidence": 0.5,
+                "threat_assessment": "MODERATE",
+                "tool_trace": [],
+            }
+
+    original = _token("country:UKR", "d30efa07e141")
+    current_ui_scope = original
+    with (
+        patch("graph.workflow.react_graph", ReactGraph()),
+        patch("graph.workflow._ensure_graph_client"),
+    ):
+        task = asyncio.create_task(
+            run_intelligence_query(
+                "test query",
+                spatial_scope=original,
+                spatial_relation=RetrievalSpatialRelation.EITHER,
+            )
+        )
+        await started.wait()
+        current_ui_scope = _token("country:POL", "aaaaaaaaaaaa")
+        release.set()
+        result = await task
+
+    assert current_ui_scope.scope_key == "country:POL"
+    assert captured["state"]["spatial_scope"].scope_key == "country:UKR"
+    assert captured["state"]["spatial_relation"] is RetrievalSpatialRelation.EITHER
+    assert result["spatial_scope"]["scope_key"] == "country:UKR"
+    assert result["spatial_scope"]["catalog_revision"] == "spatial-v1-e76a16bff799"
+    assert result["spatial_scope"]["derivation_revision"] == (
+        "spatial-derive-v1-d30efa07e141"
+    )
+
+
+@pytest.mark.asyncio
+async def test_legacy_region_is_observable_without_logging_free_text() -> None:
+    legacy = MagicMock(
+        ainvoke=AsyncMock(
+            return_value={
+                "synthesis": "legacy",
+                "sources_used": [],
+                "agent_chain": [],
+                "tool_trace": [],
+            }
+        )
+    )
+    with (
+        patch("graph.workflow.legacy_graph", legacy),
+        patch("graph.workflow._ensure_graph_client"),
+        patch("graph.workflow.logger.info") as info,
+    ):
+        await run_intelligence_query(
+            "sensitive query text",
+            region="Eastern Europe",
+            use_legacy=True,
+        )
+
+    info.assert_called_once_with(
+        "intelligence_query_started",
+        scope_key="world",
+        catalog_revision=None,
+        mode="legacy",
+        deprecated_region_supplied=True,
+    )

@@ -17,7 +17,11 @@ import sys
 import click
 from qdrant_client import QdrantClient
 
-from qdrant_doctor.schema import QdrantSchemaMismatch, validate_collection_schema
+from qdrant_doctor.schema import (
+    QdrantSchemaMismatch,
+    validate_collection_schema,
+    validate_payload_index_schema,
+)
 
 __all__ = ["run_doctor", "main"]
 
@@ -144,6 +148,14 @@ def run_doctor(
     try:
         validate_collection_schema(info, enable_hybrid=enable_hybrid)
         _ok(f"Schema matches expected {'hybrid' if enable_hybrid else 'dense-only'} contract.")
+        missing_payload_indexes = validate_payload_index_schema(info)
+        if missing_payload_indexes:
+            _warn(
+                "Missing payload indexes (read-only check): "
+                + ", ".join(missing_payload_indexes)
+            )
+        else:
+            _ok("Payload indexes match the required typed contract.")
     except QdrantSchemaMismatch as exc:
         _fail(str(exc))
         failed = True

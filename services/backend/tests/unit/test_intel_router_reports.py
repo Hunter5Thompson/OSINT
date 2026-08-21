@@ -10,7 +10,32 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models.intel import SpatialRunApplicationV1
 from app.models.report import ReportRecord
+
+_SPATIAL_APPLICATION = {
+    "schema_version": 1,
+    "scope": {
+        "schema_version": 1,
+        "scope_key": "country:UKR",
+        "catalog_revision": "spatial-v1-e76a16bff799",
+        "derivation_revision": "spatial-derive-v1-d30efa07e141",
+        "boundary_policy": "odin-reference-v1",
+    },
+    "relation": "either",
+    "qdrant": {
+        "status": "applied",
+        "mode": "semantic-key",
+        "completeness": "partial",
+    },
+    "neo4j": {
+        "status": "not-called",
+        "mode": "semantic-key",
+        "completeness": "unknown",
+    },
+    "blocked_tools": ["gdelt_query", "rss_fetch"],
+    "coverage_revision": None,
+}
 
 
 class _MockResp:
@@ -39,6 +64,17 @@ class _MockHttpClient:
 
     async def post(self, *args, **kwargs):
         return _MockResp()
+
+
+class _SpatialMockHttpClient(_MockHttpClient):
+    async def post(self, *args, **kwargs):
+        response = _MockResp()
+        base_json = response.json
+        response.json = lambda: {
+            **base_json(),
+            "spatial_application": _SPATIAL_APPLICATION,
+        }
+        return response
 
 
 def _sample_report() -> ReportRecord:
@@ -83,11 +119,13 @@ class TestIntelReportScopedPersistence:
 
     def test_persists_user_and_munin_messages(self, client: TestClient) -> None:
         append_mock = AsyncMock()
+        update_mock = AsyncMock(return_value=_sample_report())
         with (
             patch(
                 "app.services.intel_stream.report_store.get_report",
                 AsyncMock(return_value=_sample_report()),
             ),
+            patch("app.services.intel_stream.report_store.update_report", update_mock),
             patch("app.services.intel_stream.report_store.append_report_message", append_mock),
             patch("app.services.intel_stream.httpx.AsyncClient", return_value=_MockHttpClient()),
         ):
@@ -108,6 +146,78 @@ class TestIntelReportScopedPersistence:
         assert first_call.args[0] == "r-044"
         assert first_call.args[1].role == "user"
         assert second_call.args[1].role == "munin"
+        patch_request = update_mock.await_args.args[1]
+        assert "spatial_application" in patch_request.model_fields_set
+        assert patch_request.spatial_application is None
+
+    def test_clears_previous_application_for_later_unscoped_run(
+        self,
+        client: TestClient,
+    ) -> None:
+        report = _sample_report().model_copy(
+            update={
+                "spatial_application": SpatialRunApplicationV1.model_validate(
+                    _SPATIAL_APPLICATION
+                )
+            }
+        )
+        cleared = report.model_copy(update={"spatial_application": None})
+        update_mock = AsyncMock(return_value=cleared)
+        with (
+            patch(
+                "app.services.intel_stream.report_store.get_report",
+                AsyncMock(return_value=report),
+            ),
+            patch("app.services.intel_stream.report_store.update_report", update_mock),
+            patch(
+                "app.services.intel_stream.report_store.append_report_message",
+                AsyncMock(),
+            ),
+            patch(
+                "app.services.intel_stream.httpx.AsyncClient",
+                return_value=_MockHttpClient(),
+            ),
+        ):
+            response = client.post(
+                "/api/intel/query",
+                json={"query": "global follow-up", "report_id": "r-044"},
+            )
+
+        assert response.status_code == 200
+        assert "event: result" in response.text
+        patch_request = update_mock.await_args.args[1]
+        assert "spatial_application" in patch_request.model_fields_set
+        assert patch_request.spatial_application is None
+
+    def test_does_not_persist_result_when_application_update_fails(
+        self,
+        client: TestClient,
+    ) -> None:
+        append_mock = AsyncMock()
+        with (
+            patch(
+                "app.services.intel_stream.report_store.get_report",
+                AsyncMock(return_value=_sample_report()),
+            ),
+            patch(
+                "app.services.intel_stream.report_store.update_report",
+                AsyncMock(side_effect=RuntimeError("write failed")),
+            ),
+            patch("app.services.intel_stream.report_store.append_report_message", append_mock),
+            patch(
+                "app.services.intel_stream.httpx.AsyncClient",
+                return_value=_SpatialMockHttpClient(),
+            ),
+        ):
+            response = client.post(
+                "/api/intel/query",
+                json={"query": "scoped follow-up", "report_id": "r-044"},
+            )
+
+        assert response.status_code == 200
+        assert "INTEL_ERROR" in response.text
+        assert "event: result" not in response.text
+        assert [call.args[1].role for call in append_mock.await_args_list] == ["user"]
 
     def test_persists_error_message_on_http_failure(self, client: TestClient) -> None:
         append_mock = AsyncMock()
@@ -138,3 +248,34 @@ class TestIntelReportScopedPersistence:
         assert "INTEL_SERVICE_ERROR" in resp.text
         roles = [c.args[1].role for c in append_mock.await_args_list]
         assert "user" in roles and "munin" in roles  # user message + persisted error munin message
+
+    def test_persists_original_result_application_without_report_relabel(
+        self,
+        client: TestClient,
+    ) -> None:
+        report = _sample_report().model_copy(update={"scope_key": "country:POL"})
+        update_mock = AsyncMock(return_value=report)
+        with (
+            patch(
+                "app.services.intel_stream.report_store.get_report",
+                AsyncMock(return_value=report),
+            ),
+            patch("app.services.intel_stream.report_store.update_report", update_mock),
+            patch(
+                "app.services.intel_stream.report_store.append_report_message",
+                AsyncMock(),
+            ),
+            patch(
+                "app.services.intel_stream.httpx.AsyncClient",
+                return_value=_SpatialMockHttpClient(),
+            ),
+        ):
+            response = client.post(
+                "/api/intel/query",
+                json={"query": "old run", "report_id": "r-044"},
+            )
+
+        assert response.status_code == 200
+        application = update_mock.await_args.args[1].spatial_application
+        assert application is not None
+        assert application.scope.scope_key == "country:UKR"

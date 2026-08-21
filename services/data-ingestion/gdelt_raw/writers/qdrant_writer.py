@@ -18,7 +18,21 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from feeds.provenance import provenance_fields
 from gdelt_raw.ids import qdrant_point_id_for_doc
-from qdrant_doctor.schema import validate_collection_schema
+from gdelt_raw.schemas import GDELTEventWrite
+from gdelt_raw.spatial import raw_location_identity_for_event
+from graph_integrity.spatial_normalizer import (
+    SpatialNormalizationIndex,
+    normalize_location,
+)
+from qdrant_doctor.schema import missing_payload_indexes, validate_collection_schema
+from qdrant_spatial import (
+    SpatialCrosswalkStatus,
+    SpatialEvidenceKind,
+    SpatialEvidenceV1,
+    SpatialRelation,
+    project_spatial_payload,
+    unavailable_spatial_payload,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -32,7 +46,11 @@ def build_embed_text(row: dict[str, Any]) -> str:
     return f"{title}\nThemes: {themes}\nActors: {actors}"[:1500]
 
 
-def build_payload(row: dict[str, Any]) -> dict[str, Any]:
+def build_payload(
+    row: dict[str, Any],
+    *,
+    spatial_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     gdelt_date = row.get("gdelt_date") or row.get("v21_date")
     if isinstance(gdelt_date, datetime):
         gdelt_date_iso = gdelt_date.isoformat()
@@ -69,6 +87,13 @@ def build_payload(row: dict[str, Any]) -> dict[str, Any]:
         "gdelt_date": gdelt_date_iso,
         "published_at": row.get("published_at"),
         "ingested_at": datetime.now(UTC).isoformat(),
+        **(
+            spatial_payload
+            if spatial_payload is not None
+            else unavailable_spatial_payload(
+                "GDELT spatial projection context is unavailable"
+            )
+        ),
     }
 
 
@@ -89,12 +114,14 @@ class QdrantWriter:
         *,
         embedding_dimensions: int = 1024,
         enable_hybrid: bool = False,
+        spatial_index: SpatialNormalizationIndex | None = None,
     ):
         self._client = client
         self._embed = embed
         self._collection = collection
         self._embedding_dimensions = embedding_dimensions
         self._enable_hybrid = enable_hybrid
+        self._spatial_index = spatial_index
         self._collection_ready = False
 
     async def _ensure_collection(self) -> None:
@@ -117,6 +144,13 @@ class QdrantWriter:
                 info,
                 enable_hybrid=self._enable_hybrid,
             )
+            missing = missing_payload_indexes(info)
+            if missing:
+                log.warning(
+                    "qdrant_payload_indexes_missing",
+                    collection=self._collection,
+                    fields=missing,
+                )
             log.debug(
                 "qdrant_schema_validated",
                 collection=self._collection,
@@ -134,6 +168,7 @@ class QdrantWriter:
         if not path.exists():
             return 0
         df = pl.read_parquet(path)
+        event_rows = self._event_rows(parquet_base, slice_id, date)
         points: list[PointStruct] = []
         for row in df.to_dicts():
             doc_id = row.get("doc_id")
@@ -146,7 +181,10 @@ class QdrantWriter:
             text = build_embed_text(row)
             content_hash = hashlib.sha256(text.encode()).hexdigest()
             vector = await self._embed(text)
-            payload = build_payload(row)
+            payload = build_payload(
+                row,
+                spatial_payload=self._spatial_payload(row, event_rows),
+            )
             payload["content_hash"] = content_hash
             points.append(PointStruct(
                 id=qdrant_point_id_for_doc(doc_id),
@@ -158,3 +196,56 @@ class QdrantWriter:
             await self._client.upsert(collection_name=self._collection, points=points)
         log.info("qdrant_written", slice=slice_id, count=len(points))
         return len(points)
+
+    def _event_rows(
+        self,
+        parquet_base: Path,
+        slice_id: str,
+        date: str,
+    ) -> dict[str, dict[str, Any]]:
+        path = Path(parquet_base) / "events" / f"date={date}" / f"{slice_id}.parquet"
+        if not path.exists():
+            return {}
+        rows = pl.read_parquet(path).to_dicts()
+        return {
+            row["event_id"]: row
+            for row in rows
+            if isinstance(row.get("event_id"), str)
+        }
+
+    def _spatial_payload(
+        self,
+        row: dict[str, Any],
+        event_rows: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        if self._spatial_index is None:
+            return unavailable_spatial_payload(
+                "GDELT spatial normalization index is unavailable"
+            )
+
+        evidence: list[SpatialEvidenceV1] = []
+        linked_ids = sorted(set(row.get("linked_event_ids") or []))
+        for event_id in linked_ids:
+            event_row = event_rows.get(event_id)
+            if event_row is None:
+                log.warning(
+                    "gdelt_spatial_linked_event_unavailable",
+                    doc_id=row.get("doc_id"),
+                    event_id=event_id,
+                )
+                continue
+            event = GDELTEventWrite.model_validate(event_row)
+            raw = raw_location_identity_for_event(event)
+            if raw is None:
+                continue
+            evidence.append(
+                SpatialEvidenceV1(
+                    relation=SpatialRelation.OCCURRENCE,
+                    evidence_kind=SpatialEvidenceKind.STRUCTURED_EVENT_LOCATION,
+                    evidence_id=event.event_id,
+                    normalization=normalize_location(raw, self._spatial_index),
+                    confidence=1.0,
+                    crosswalk_status=SpatialCrosswalkStatus.NOT_REQUIRED,
+                )
+            )
+        return project_spatial_payload(evidence, self._spatial_index)

@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Sequence
 from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import structlog
 from neo4j.exceptions import ConstraintError
 
 from app.cypher.report_read import (
     REPORT_BY_ID,
-    REPORT_BY_SCOPE,
+    REPORT_BY_SCOPE_KEYS,
     REPORT_COUNT,
     REPORT_LIST,
     REPORT_MESSAGES_BY_REPORT_ID,
@@ -26,7 +28,7 @@ from app.cypher.report_write import (
     REPORT_SCOPE_UNIQUE_CONSTRAINT,
     REPORT_UPSERT,
 )
-from app.models.intel import IntelAnalysis
+from app.models.intel import IntelAnalysis, SpatialRunApplicationV1
 from app.models.report import (
     AccentTone,
     DossierMetric,
@@ -41,6 +43,8 @@ from app.models.report import (
 )
 from app.services.briefing import parse_munin_report
 from app.services.neo4j_client import read_query, write_query
+
+log = structlog.get_logger(__name__)
 
 _DEFAULT_FINDINGS = [
     "Initial signal basket created. Add first confirmed indicator.",
@@ -123,6 +127,21 @@ def _decode_margin(raw: str | list[dict[str, Any]] | None) -> list[MarginEntry]:
     return out
 
 
+def _decode_spatial_application(
+    raw: str | dict[str, Any] | SpatialRunApplicationV1 | None,
+) -> SpatialRunApplicationV1 | None:
+    if isinstance(raw, SpatialRunApplicationV1):
+        return raw
+    try:
+        if isinstance(raw, str) and raw.strip():
+            return SpatialRunApplicationV1.model_validate_json(raw)
+        if isinstance(raw, dict):
+            return SpatialRunApplicationV1.model_validate(raw)
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
 def _coerce_report_status(value: object) -> ReportStatus:
     raw = str(value or "Draft")
     if raw in ("Draft", "Published", "Archived"):
@@ -157,6 +176,9 @@ def _row_to_report(row: dict[str, Any]) -> ReportRecord:
         body_paragraphs=[str(v) for v in (row.get("body_paragraphs") or [])],
         margin=_decode_margin(row.get("margin_json")),
         sources=[str(v) for v in (row.get("sources") or [])],
+        spatial_application=_decode_spatial_application(
+            row.get("spatial_application_json")
+        ),
         created_at=created_at,
         updated_at=updated_at,
     )
@@ -196,6 +218,16 @@ def _report_params(
         "body_paragraphs": payload.body_paragraphs,
         "margin_json": json.dumps([m.model_dump() for m in margin], ensure_ascii=True),
         "sources": payload.sources,
+        "spatial_application_json": (
+            json.dumps(
+                payload.spatial_application.model_dump(mode="json"),
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            if payload.spatial_application is not None
+            else None
+        ),
         "scope_key": getattr(payload, "scope_key", None),
         "now": datetime.now(UTC).isoformat(),
     }
@@ -271,12 +303,15 @@ async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRec
     if current is None:
         return None
 
-    # merge patch over current, then re-validate so DossierMetric/MarginEntry rebuild from dicts.
-    # exclude_none drops explicit-null patch fields (nulling a required field was never valid →
-    # ReportRecord forbids it) so a PATCH like {"title": null} is a NO-OP, not a 500. Zero/empty
-    # values (confidence=0.0, findings=[]) are not None → still applied.
+    # Merge patch over current, then re-validate so DossierMetric/MarginEntry rebuild from dicts.
+    # Explicit null remains a NO-OP for ordinary fields (for example title), while the optional
+    # run snapshot has a deliberate clear operation: a later global run must be able to remove
+    # the previous scoped run's application. Zero/empty values are still applied normally.
+    patch_values = patch.model_dump(exclude_unset=True, exclude_none=True)
+    if "spatial_application" in patch.model_fields_set:
+        patch_values["spatial_application"] = patch.spatial_application
     merged = ReportRecord.model_validate(
-        {**current.model_dump(), **patch.model_dump(exclude_unset=True, exclude_none=True)}
+        {**current.model_dump(), **patch_values}
     )
     rows = await write_query(
         REPORT_UPSERT,
@@ -297,8 +332,13 @@ _THREAT_TONE: dict[str, AccentTone] = {
 _DEFAULT_TONE: AccentTone = "sentinel"
 
 
-def build_hydration_patch(analysis: IntelAnalysis, country_name: str) -> ReportUpdateRequest:
-    """Map a finished Munin IntelAnalysis into a dossier hydration patch."""
+def build_hydration_patch(
+    analysis: IntelAnalysis,
+    country_name: str,
+    *,
+    trusted_spatial_application: SpatialRunApplicationV1 | None = None,
+) -> ReportUpdateRequest:
+    """Map analysis content, accepting run attribution only through an explicit trust seam."""
     parsed = parse_munin_report(analysis.analysis)
     threat = analysis.threat_assessment or "MODERATE"
     metrics = [
@@ -321,6 +361,7 @@ def build_hydration_patch(analysis: IntelAnalysis, country_name: str) -> ReportU
         body_paragraphs=parsed.body_paragraphs,
         sources=analysis.sources_used,
         metrics=metrics,
+        spatial_application=trusted_spatial_application,
     )
 
 
@@ -331,14 +372,47 @@ async def bootstrap_report_schema() -> None:
 
 
 async def get_report_by_scope(scope_key: str) -> ReportRecord | None:
-    rows = await read_query(REPORT_BY_SCOPE, {"scope_key": scope_key})
-    return _row_to_report(rows[0]) if rows else None
+    return await get_report_by_scope_keys(scope_key)
+
+
+async def get_report_by_scope_keys(
+    canonical_scope_key: str,
+    legacy_aliases: Sequence[str] = (),
+) -> ReportRecord | None:
+    scope_keys = list(dict.fromkeys((canonical_scope_key, *legacy_aliases)))
+    rows = await read_query(
+        REPORT_BY_SCOPE_KEYS,
+        {
+            "canonical_scope_key": canonical_scope_key,
+            "scope_keys": scope_keys,
+        },
+    )
+    if not rows:
+        return None
+    rank = {scope_key: index for index, scope_key in enumerate(scope_keys)}
+    ordered = sorted(
+        rows,
+        key=lambda row: (rank.get(str(row.get("scope_key")), len(rank)), str(row.get("id"))),
+    )
+    if len(ordered) > 1:
+        log.warning(
+            "report_scope_duplicate_conflict",
+            canonical_scope_key=canonical_scope_key,
+            matched_scope_keys=[str(row.get("scope_key")) for row in ordered],
+            report_ids=[str(row.get("id")) for row in ordered],
+        )
+    return _row_to_report(ordered[0])
 
 
 async def get_or_create_report_by_scope(
-    scope_key: str, title: str, location: str, coords: str
+    scope_key: str,
+    title: str,
+    location: str,
+    coords: str,
+    *,
+    legacy_aliases: Sequence[str] = (),
 ) -> ReportRecord:
-    existing = await get_report_by_scope(scope_key)
+    existing = await get_report_by_scope_keys(scope_key, legacy_aliases)
     if existing is not None:
         return existing
     try:
@@ -348,7 +422,7 @@ async def get_or_create_report_by_scope(
             )
         )
     except ConstraintError:
-        winner = await get_report_by_scope(scope_key)
+        winner = await get_report_by_scope_keys(scope_key, legacy_aliases)
         if winner is None:
             raise
         return winner

@@ -18,6 +18,19 @@ class TestQdrantCollectionDefault:
             assert s.qdrant_collection == _CANONICAL_COLLECTION
 
 
+class TestExternalServiceDefaults:
+    def test_gdelt_endpoint_is_configured(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            s = Settings(_env_file=None)
+            assert s.gdelt_api_url == "https://api.gdeltproject.org/api/v2/doc/doc"
+
+    def test_spatial_coverage_comes_from_index_build_artifact(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            s = Settings(_env_file=None)
+            assert s.spatial_coverage_snapshot_path.name == "qdrant-coverage.json"
+            assert not hasattr(s, "spatial_coverage_completeness")
+
+
 class TestHybridFlagDefault:
     """enable_hybrid must default to False (Phase 2 gate: requires sparse vectors in Qdrant)."""
 

@@ -1,8 +1,18 @@
 # services/backend/tests/test_briefing_endpoint.py
+from pathlib import Path
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+from app.services.spatial_catalog import CatalogReadyState, SpatialCatalogLoader
+
+
+@pytest.fixture(autouse=True)
+async def _spatial_catalog() -> None:
+    loader = SpatialCatalogLoader(Path(__file__).parents[1] / "data" / "spatial")
+    assert isinstance(await loader.load(), CatalogReadyState)
+    app.state.spatial_catalog = loader
 
 
 @pytest.mark.asyncio

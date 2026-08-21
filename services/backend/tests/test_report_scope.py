@@ -2,12 +2,40 @@
 import pytest
 from neo4j.exceptions import ConstraintError
 
+from app.cypher.report_read import REPORT_BY_SCOPE_KEYS
+from app.models.intel import SpatialRunApplicationV1
 from app.models.report import ReportCreateRequest, ReportUpdateRequest
 from app.services import report_store
 
 
 def _req(**kw) -> ReportCreateRequest:
     return ReportCreateRequest(title="T", location="L", coords="--", **kw)
+
+
+def _application() -> SpatialRunApplicationV1:
+    return SpatialRunApplicationV1.model_validate({
+        "schema_version": 1,
+        "scope": {
+            "schema_version": 1,
+            "scope_key": "country:UKR",
+            "catalog_revision": "spatial-v1-e76a16bff799",
+            "derivation_revision": "spatial-derive-v1-d30efa07e141",
+            "boundary_policy": "odin-reference-v1",
+        },
+        "relation": "either",
+        "qdrant": {
+            "status": "applied",
+            "mode": "semantic-key",
+            "completeness": "partial",
+        },
+        "neo4j": {
+            "status": "not-called",
+            "mode": "semantic-key",
+            "completeness": "unknown",
+        },
+        "blocked_tools": ["gdelt_query", "rss_fetch"],
+        "coverage_revision": None,
+    })
 
 
 class _FakeGraph:
@@ -32,12 +60,13 @@ class _FakeGraph:
         return []
 
     async def read(self, cypher, params):
-        if "scope_key: $scope_key" in cypher:
-            hit = next(
-                (r for r in self.by_id.values() if r.get("scope_key") == params["scope_key"]),
-                None,
-            )
-            return [self._row(hit["report_id"])] if hit else []
+        if "scope_keys" in params:
+            return [
+                self._row(rid)
+                for scope_key in params["scope_keys"]
+                for rid, record in self.by_id.items()
+                if record.get("scope_key") == scope_key
+            ]
         if "max(r.paragraph_num)" in cypher:
             nxt = max((r["paragraph_num"] for r in self.by_id.values()), default=0) + 1
             return [{"next_paragraph": nxt}]
@@ -52,6 +81,7 @@ class _FakeGraph:
             "paragraph_num": p.get("paragraph_num", 0),
             "title": p.get("title", ""),
             "confidence": p.get("confidence", 0.0),
+            "spatial_application_json": p.get("spatial_application_json"),
         }
 
 
@@ -72,6 +102,39 @@ async def test_scope_key_roundtrips_and_survives_update(graph):
 
 
 @pytest.mark.asyncio
+async def test_spatial_application_roundtrips_and_survives_report_update(graph):
+    application = _application()
+    rec = await report_store.create_report(
+        _req(scope_key="country:UKR", spatial_application=application)
+    )
+
+    assert rec.spatial_application == application
+    updated = await report_store.update_report(
+        rec.id,
+        ReportUpdateRequest(confidence=0.9),
+    )
+    assert updated is not None
+    assert updated.spatial_application == application
+    assert updated.spatial_application.scope.scope_key == "country:UKR"
+
+
+@pytest.mark.asyncio
+async def test_spatial_application_can_be_explicitly_cleared(graph):
+    rec = await report_store.create_report(
+        _req(scope_key="country:UKR", spatial_application=_application())
+    )
+
+    updated = await report_store.update_report(
+        rec.id,
+        ReportUpdateRequest(spatial_application=None),
+    )
+
+    assert updated is not None
+    assert updated.spatial_application is None
+    assert graph.by_id[rec.id]["spatial_application_json"] is None
+
+
+@pytest.mark.asyncio
 async def test_get_or_create_is_idempotent_per_scope(graph):
     a = await report_store.get_or_create_report_by_scope(
         "country:FRA", title="F", location="F", coords="--"
@@ -80,6 +143,79 @@ async def test_get_or_create_is_idempotent_per_scope(graph):
         "country:FRA", title="F", location="F", coords="--"
     )
     assert a.id == b.id  # reuse, not a second dossier
+
+
+@pytest.mark.asyncio
+async def test_alias_lookup_uses_parameterized_allowlist_and_returns_alias(
+    monkeypatch,
+):
+    calls: list[tuple[str, dict]] = []
+
+    async def read(cypher, params):
+        calls.append((cypher, params))
+        return [{"id": "r-legacy", "scope_key": "country:XKX", "paragraph_num": 1}]
+
+    monkeypatch.setattr(report_store, "read_query", read)
+    report = await report_store.get_report_by_scope_keys(
+        "country:odin:kosovo",
+        ("country:XKX",),
+    )
+
+    assert report is not None and report.id == "r-legacy"
+    assert calls == [
+        (
+            REPORT_BY_SCOPE_KEYS,
+            {
+                "canonical_scope_key": "country:odin:kosovo",
+                "scope_keys": ["country:odin:kosovo", "country:XKX"],
+            },
+        )
+    ]
+    assert "$scope_keys" in REPORT_BY_SCOPE_KEYS
+    assert "country:XKX" not in REPORT_BY_SCOPE_KEYS
+
+
+@pytest.mark.asyncio
+async def test_canonical_report_wins_duplicate_alias_conflict_without_write(
+    monkeypatch,
+):
+    writes: list[object] = []
+
+    async def read(cypher, params):
+        return [
+            {"id": "r-alias", "scope_key": "country:XKX", "paragraph_num": 1},
+            {
+                "id": "r-canonical",
+                "scope_key": "country:odin:kosovo",
+                "paragraph_num": 2,
+            },
+        ]
+
+    async def write(cypher, params):
+        writes.append((cypher, params))
+        return []
+
+    warnings: list[tuple[str, dict[str, object]]] = []
+
+    class RecordingLog:
+        def warning(self, event: str, **kwargs: object) -> None:
+            warnings.append((event, kwargs))
+
+    monkeypatch.setattr(report_store, "read_query", read)
+    monkeypatch.setattr(report_store, "write_query", write)
+    monkeypatch.setattr(report_store, "log", RecordingLog())
+    report = await report_store.get_or_create_report_by_scope(
+        "country:odin:kosovo",
+        title="Kosovo",
+        location="Kosovo",
+        coords="--",
+        legacy_aliases=("country:XKX",),
+    )
+
+    assert report.id == "r-canonical"
+    assert writes == []
+    assert warnings and warnings[0][0] == "report_scope_duplicate_conflict"
+    assert warnings[0][1]["canonical_scope_key"] == "country:odin:kosovo"
 
 
 @pytest.mark.asyncio
@@ -116,7 +252,7 @@ async def test_get_or_create_rereads_winner_on_scope_race(monkeypatch):
     reads = {"scope": 0}
 
     async def read(cypher, params):
-        if "scope_key: $scope_key" in cypher:
+        if "scope_keys" in params:
             reads["scope"] += 1
             return [] if reads["scope"] == 1 else [winner]  # miss, then the racer's winner
         if "max(r.paragraph_num)" in cypher:

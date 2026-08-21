@@ -1,12 +1,26 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from qdrant_client.models import PayloadIndexInfo, PayloadSchemaType
+
+
+def _payload_schema(existing):
+    from rag.qdrant_schema import PAYLOAD_INDEXES
+
+    return {
+        field: PayloadIndexInfo(
+            data_type=PayloadSchemaType(PAYLOAD_INDEXES[field]),
+            points=1,
+        )
+        for field in existing
+    }
+
 
 class TestEnsureIndexes:
     def _client(self, existing):
         c = SimpleNamespace()
         c.get_collection = AsyncMock(
-            return_value=SimpleNamespace(payload_schema={k: object() for k in existing})
+            return_value=SimpleNamespace(payload_schema=_payload_schema(existing))
         )
         c.create_payload_index = AsyncMock()
         return c
@@ -49,7 +63,7 @@ class TestTypedIndexes:
     def _client(self, existing):
         c = SimpleNamespace()
         c.get_collection = AsyncMock(
-            return_value=SimpleNamespace(payload_schema={k: object() for k in existing}))
+            return_value=SimpleNamespace(payload_schema=_payload_schema(existing)))
         c.create_payload_index = AsyncMock()
         return c
 

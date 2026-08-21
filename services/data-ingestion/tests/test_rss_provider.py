@@ -52,6 +52,10 @@ def test_build_rss_payload_stamps_explicit_provenance():
     assert payload["provider"] == "bbc.co.uk"
     assert payload["published_at"] == "2026-05-30T10:00:00+00:00"
     assert payload["feed_name"] == "BBC World"
+    assert payload["spatial_derivation_status"] == "unavailable"
+    assert payload["spatial_derivation_unavailable_reason"] == (
+        "rss payload has no trusted structured spatial evidence"
+    )
     assert "credibility_score" not in payload
 
 
@@ -63,3 +67,4 @@ def test_build_rss_payload_published_none_when_missing():
     )
     assert "published_at" not in payload
     assert payload["published"] is None
+    assert payload["spatial_about_scope_revision_tokens"] == []

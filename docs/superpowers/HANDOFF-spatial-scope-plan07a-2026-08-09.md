@@ -95,11 +95,14 @@ spatial_conflict_scope_keys
 Dabei gelten unverändert:
 
 - `spatial_catalog_revision` ist Audit-Provenance des letzten Enrichments.
-- `spatial_derivation_revision` ist die Filterdimension.
+- Der Plan-06A-Scalar `spatial_derivation_revision` bezeichnet nur den terminal
+  ausgewählten Scope. Der Qdrant-Projector darf ihn nicht als recordweite
+  Filterdimension oder als Revision seiner Ancestors kopieren.
 - Query-Compiler vergleichen niemals Record-Katalogrevision mit der
   Request-Katalogrevision.
 - Kompatibilität wird pro Scope über die reviewte Menge kompatibler
-  Derivationsrevisionen entschieden.
+  Derivationsrevisionen und im Qdrant-Filter ausschließlich über atomare
+  Scope-/Revisions-Pair-Tokens entschieden.
 - Bei Conflicts bleibt `spatial_derivation_revision` null. Der 07A-Projector darf
   ihre Audit-Keys nur unter `spatial_conflict_scope_keys`, niemals in den
   filterbaren About-/Occurrence-Arrays publizieren.
@@ -113,28 +116,36 @@ Dabei gelten unverändert:
 Relationen bleiben getrennt:
 
 ```text
-spatial_about_scope_keys          keyword[]
-spatial_occurrence_scope_keys     keyword[]
+spatial_about_scope_revision_tokens       keyword[]
+spatial_occurrence_scope_revision_tokens  keyword[]
 geo                               geo point or geo point[]
 spatial_basis                     keyword[]
 spatial_precision                 keyword
 spatial_catalog_revision          keyword
-spatial_derivation_revision       keyword
+spatial_projection_revision       keyword
 spatial_derivation_version        keyword
-spatial_conflict                  bool
-spatial_conflict_scope_keys       keyword[]
+spatial_conflict                  unindexed bool audit
+spatial_conflict_scope_keys       unindexed keyword[] audit
 ```
 
 Zusätzlich bleiben die rohen, auditierbaren Codefelder aus Spec 09 erhalten. Die
-zehn oben genannten Felder besitzen gemäß Spec 09 §16.2 Payload-Indizes mit exakt
-den Typen Keyword/Geo/Bool. Bestehende neun Corpus-/Fulltext-Indizes dürfen bei der
-Erweiterung nicht verloren gehen.
+acht Retrieval-/Provenance-Felder besitzen gemäß Spec 09 §16.2 Payload-Indizes mit
+exakt den Typen Keyword/Geo. Die beiden Conflict-Felder werden vom Compiler nicht
+gelesen und bleiben unindiziert. Bestehende neun Corpus-/Fulltext-Indizes dürfen bei
+der Erweiterung nicht verloren gehen.
 
 `occurrence` darf nur aus einer strukturierten Event-/Sensor-Location oder einer
 belastbaren Koordinate entstehen. `about` darf nur aus einer explizit extrahierten,
 eindeutig gecrosswalkten Geo-Entität oberhalb des versionierten Confidence-Gates
 entstehen. Audit-Derivationen dürfen mehr enthalten als die filterbaren Arrays; der
 deterministische Projector entscheidet, nicht das Retrieval-LLM.
+
+Conflict-Admission ist relations- und scopespezifisch: Conflict-Evidenz publiziert
+selbst keine Pair-Tokens oder `geo`; sie darf aber valide Tokens eines anderen Scopes
+oder einer anderen Relation nicht recordweit löschen. Die Pair-Arrays sind die
+alleinige positive Retrieval-Berechtigung. Mixed-Records mit mindestens einem
+zugelassenen Token sind filterbar und behalten die recordweiten Conflict-Felder nur
+für Audit.
 
 Ein Re-Enrichment ersetzt **alle** `spatial_*`-Felder eines Points atomar. Es darf
 niemals Arrays aus Lauf A mit scalar Revisionen aus Lauf B mischen.
@@ -197,6 +208,32 @@ Der gleiche scalar-Revision-/Ancestor-Key-Sachverhalt betrifft grundsätzlich au
 die spätere Neo4j-Country-Promotion für Locations, die tiefer als Country aufgelöst
 sind. Plan 06B bleibt inert; vor einer realen Promotion muss diese Population im
 Candidate/Stale-Smoke explizit enthalten sein oder der Vertrag korrigiert werden.
+
+### Design-Gate-Auflösung 2026-08-10
+
+Das Gate wurde mit drei unabhängigen Interface-Entwürfen sowie einem lokalen
+Qdrant-Contract-Proof reviewed. Normativ gilt nun Spec 09 in der korrigierten Form:
+
+```text
+spatial_about_scope_revision_tokens[]
+spatial_occurrence_scope_revision_tokens[]
+
+sr1|<canonical non-global ScopeKey>|<DerivationRevision>
+```
+
+Die Relation bleibt durch zwei getrennte Felder sichtbar; Scope und genau dessen
+Revision bleiben innerhalb jedes Keyword-Tokens atomar. `|` ist in beiden
+Komponentengrammatiken verboten, womit das Encoding injektiv ist. Der falsche
+Qdrant-Scalar `spatial_derivation_revision` entfällt. Ein separater
+`spatial_projection_revision`-Fingerprint dient ausschließlich restartbarer
+Job-/Idempotenzsteuerung und niemals der fachlichen Scope-Compatibility.
+
+Der erste RED enthielt einen gültigen UA-14-Point, einen vertauschten
+Parent-/Child-Poison-Point und einen inkompatiblen Point. Die gewählte Repräsentation
+findet nur den gültigen Point sowohl für `country:UKR` als auch für
+`admin1:iso3166-2:UA-14`. Der gemeinsame Vertrag ist
+`contracts/qdrant-spatial-payload-v1.json`. Diese Auflösung ersetzt die ursprüngliche
+scalar Payloadannahme und gibt Work Order 1 frei.
 
 ## Read-only Qdrant-Ausgangsbaseline
 
@@ -280,7 +317,7 @@ Services.
 Die ersten fehlschlagenden Tests müssen beweisen:
 
 1. Alle neun bestehenden Payload-Indizes bleiben erhalten.
-2. Alle zehn Spatial-Indizes aus Spec 09 §16.2 sind mit dem exakten Qdrant-Typ
+2. Alle acht Spatial-Indizes aus Spec 09 §16.2 sind mit dem exakten Qdrant-Typ
    vorhanden.
 3. Ein vorhandener Index mit falschem Typ wird fail-closed abgelehnt und nicht als
    „vorhanden“ akzeptiert.
@@ -329,11 +366,15 @@ Folgende Arbeiten sind ohne neue ausdrückliche Freigabe **nicht** Teil des Star
 Vor einem späteren Qdrant-Apply gelten mindestens:
 
 1. autorisierte Indizes vor Re-Enrichment;
-2. reviewter Dry-run und machine-readable Coverage pro Corpus-Lane;
-3. restartbarer Cursor und lane+target-revision Checkpoint;
+2. reviewter vollständiger Dry-run als Pflichtargument des Apply-Pfads und
+   machine-readable Coverage pro Corpus-Lane;
+3. restartbarer Cursor und lane+target-projection-revision Checkpoint, gebunden an
+   den genehmigten Report-Fingerprint;
 4. atomischer Ersatz aller `spatial_*`-Felder;
-5. sichtbares Conflict-/Stale-/Unsupported-Accounting;
-6. Stale-Anteil über 0 sichtbar, über 1 % promotionsblockierend;
+5. exaktes benanntes Filterable-/Conflict-/Stale-/Unsupported-/Unprojected-/
+   Audit-only-/Inconsistent-Accounting ohne Rest;
+6. wirksamer Stale-Gap `(stale + unprojected + inconsistent) / total` über 0
+   sichtbar, über 1 % promotionsblockierend;
 7. keine ungefilterte Retry- oder Fallback-Route.
 
 Eine reine Katalog-Carry-forward-Revision mit identischer Derivationsrevision darf

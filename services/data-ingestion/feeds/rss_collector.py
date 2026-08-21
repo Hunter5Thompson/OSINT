@@ -22,6 +22,7 @@ from pipeline import (
     process_item,
 )
 from qdrant_doctor.schema import validate_collection_schema
+from qdrant_spatial import unavailable_spatial_payload
 
 log = structlog.get_logger(__name__)
 
@@ -140,6 +141,9 @@ def build_rss_payload(
     provider is the feed's explicit canonical domain. published_at is passed
     through verbatim — None stays None (never ingestion time)."""
     return {
+        **unavailable_spatial_payload(
+            "rss payload has no trusted structured spatial evidence"
+        ),
         **provenance_fields(
             source_type="rss",
             provider=feed["provider"],

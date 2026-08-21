@@ -12,7 +12,15 @@ Phase 2 runtime contract (hybrid):
 
 from __future__ import annotations
 
-from qdrant_client.models import CollectionInfo, Distance, VectorParams
+from collections.abc import Mapping
+
+from qdrant_client.models import (
+    CollectionInfo,
+    Distance,
+    PayloadIndexInfo,
+    PayloadSchemaType,
+    VectorParams,
+)
 
 __all__ = [
     "QdrantSchemaMismatch",
@@ -20,6 +28,7 @@ __all__ = [
     "PAYLOAD_INDEXES",
     "REQUIRED_PAYLOAD_INDEXES",
     "missing_payload_indexes",
+    "validate_payload_index_schema",
 ]
 
 PAYLOAD_INDEXES: dict[str, str] = {
@@ -32,6 +41,14 @@ PAYLOAD_INDEXES: dict[str, str] = {
     "fulltext_status": "keyword",
     "superseded_by_fulltext": "bool",
     "fulltext_retry_epoch": "float",
+    "spatial_about_scope_revision_tokens": "keyword",
+    "spatial_occurrence_scope_revision_tokens": "keyword",
+    "geo": "geo",
+    "spatial_basis": "keyword",
+    "spatial_precision": "keyword",
+    "spatial_catalog_revision": "keyword",
+    "spatial_projection_revision": "keyword",
+    "spatial_derivation_version": "keyword",
 }
 REQUIRED_PAYLOAD_INDEXES = tuple(PAYLOAD_INDEXES)   # field names (back-compat)
 
@@ -42,6 +59,47 @@ def missing_payload_indexes(info) -> list[str]:
     is the only writer."""
     existing = set((getattr(info, "payload_schema", None) or {}).keys())
     return [f for f in REQUIRED_PAYLOAD_INDEXES if f not in existing]
+
+
+def validate_payload_index_schema(info: object) -> list[str]:
+    """Reject wrong existing index types and return absent required fields.
+
+    This function is read-only.  Missing indexes are reported to callers, while a
+    present field with the wrong Qdrant type fails closed because creating another
+    index cannot repair that drift safely.
+    """
+
+    payload_schema = getattr(info, "payload_schema", None) or {}
+    if not isinstance(payload_schema, Mapping):
+        raise QdrantSchemaMismatch("Qdrant payload schema is not a field mapping")
+
+    mismatches: list[str] = []
+    for field, expected in PAYLOAD_INDEXES.items():
+        if field not in payload_schema:
+            continue
+        actual = _payload_index_type(payload_schema[field])
+        if actual != expected:
+            mismatches.append(f"{field}: existing {actual}, expected {expected}")
+    if mismatches:
+        raise QdrantSchemaMismatch(
+            "Qdrant payload index type mismatch: " + "; ".join(mismatches)
+        )
+    return missing_payload_indexes(info)
+
+
+def _payload_index_type(value: object) -> str:
+    data_type: object
+    if isinstance(value, PayloadIndexInfo):
+        data_type = value.data_type
+    elif isinstance(value, Mapping):
+        data_type = value.get("data_type")
+    else:
+        data_type = getattr(value, "data_type", None)
+    if isinstance(data_type, PayloadSchemaType):
+        return data_type.value
+    if isinstance(data_type, str):
+        return data_type
+    return f"unrecognized({type(value).__name__})"
 
 
 EXPECTED_DENSE_SIZE = 1024
@@ -71,6 +129,7 @@ def validate_collection_schema(
         _validate_hybrid(vectors, sparse_vectors)
     else:
         _validate_dense_only(vectors)
+    validate_payload_index_schema(info)
 
 
 def _validate_dense_only(vectors) -> None:  # type: ignore[type-arg]

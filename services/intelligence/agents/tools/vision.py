@@ -15,9 +15,12 @@ from urllib.parse import urlparse
 import httpx
 import structlog
 from langchain_core.tools import tool
+from langgraph.prebuilt import ToolRuntime
 from PIL import Image
 
+from agents.tools.capabilities import tool_allowed_for_state
 from config import settings
+from graph.state import AgentState
 
 log = structlog.get_logger(__name__)
 
@@ -126,19 +129,21 @@ async def _load_image(url: str) -> str:
 
 @tool
 async def analyze_image(
-    image_url: str,
-    question: str = (
-        "Describe this image in detail. Identify objects, text, locations, "
-        "and any intelligence-relevant features."
-    ),
+    question: str,
+    runtime: ToolRuntime[dict[str, object], AgentState],
 ) -> str:
     """Analyze an image using Qwen3.5 multimodal vision.
     Use for satellite imagery, document photos, maps, or any visual content.
 
     Args:
-        image_url: HTTPS URL or whitelisted local path to the image.
         question: Specific question about the image content.
     """
+    if not tool_allowed_for_state("analyze_image", runtime.state):
+        return "SPATIAL_SCOPE_UNSUPPORTED: analyze_image requires an attached image"
+
+    image_url = runtime.state.get("image_url")
+    if not isinstance(image_url, str) or not image_url:
+        return "SPATIAL_SCOPE_UNSUPPORTED: analyze_image requires an attached image"
     if not validate_image_url(image_url):
         return (
             f"Image URL rejected: '{image_url}'. "

@@ -23,6 +23,7 @@ REPORT_LIST = (
     "  coalesce(r.body_paragraphs, []) AS body_paragraphs, "
     "  coalesce(r.margin_json, '[]') AS margin_json, "
     "  coalesce(r.sources, []) AS sources, "
+    "  r.spatial_application_json AS spatial_application_json, "
     "  r.scope_key AS scope_key, "
     "  toString(r.created_at) AS created_at, "
     "  toString(r.updated_at) AS updated_at "
@@ -48,13 +49,15 @@ REPORT_BY_ID = (
     "  coalesce(r.body_paragraphs, []) AS body_paragraphs, "
     "  coalesce(r.margin_json, '[]') AS margin_json, "
     "  coalesce(r.sources, []) AS sources, "
+    "  r.spatial_application_json AS spatial_application_json, "
     "  r.scope_key AS scope_key, "
     "  toString(r.created_at) AS created_at, "
     "  toString(r.updated_at) AS updated_at"
 )
 
-REPORT_BY_SCOPE = (
-    "MATCH (r:Report {scope_key: $scope_key}) "
+REPORT_BY_SCOPE_KEYS = (
+    "MATCH (r:Report) "
+    "WHERE r.scope_key IN $scope_keys "
     "RETURN "
     "  r.id AS id, "
     "  coalesce(r.paragraph_num, 0) AS paragraph_num, "
@@ -71,9 +74,11 @@ REPORT_BY_SCOPE = (
     "  coalesce(r.body_paragraphs, []) AS body_paragraphs, "
     "  coalesce(r.margin_json, '[]') AS margin_json, "
     "  coalesce(r.sources, []) AS sources, "
+    "  r.spatial_application_json AS spatial_application_json, "
     "  r.scope_key AS scope_key, "
     "  toString(r.created_at) AS created_at, "
-    "  toString(r.updated_at) AS updated_at"
+    "  toString(r.updated_at) AS updated_at "
+    "ORDER BY CASE WHEN r.scope_key = $canonical_scope_key THEN 0 ELSE 1 END, r.id"
 )
 
 REPORT_MESSAGES_BY_REPORT_ID = (

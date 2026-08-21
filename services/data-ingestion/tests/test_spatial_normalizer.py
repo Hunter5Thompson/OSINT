@@ -450,6 +450,23 @@ def test_active_normalizer_fails_closed_when_a_served_revision_is_missing(
         )
 
 
+def test_index_exposes_each_lineage_scopes_own_derivation_revision(
+    published_index: SpatialNormalizationIndex,
+) -> None:
+    assignments = published_index.scope_derivation_assignments(
+        "admin1:iso3166-2:UA-14"
+    )
+
+    assert [(item.scope_key, item.derivation_revision) for item in assignments] == [
+        ("country:UKR", "spatial-derive-v1-d30efa07e141"),
+        (
+            "admin1:iso3166-2:UA-14",
+            "spatial-derive-v1-4d1de888e0c7",
+        ),
+    ]
+    assert "world" in dict(published_index.scope_derivation_revision_items())
+
+
 def test_index_tracks_only_reviewed_compatible_derivation_revisions() -> None:
     current = "spatial-derive-v1-111111111111"
     compatible = "spatial-derive-v1-000000000000"

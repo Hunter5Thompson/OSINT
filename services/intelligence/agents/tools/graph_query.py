@@ -11,19 +11,69 @@ import time
 from typing import Any
 
 import structlog
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
+from langgraph.prebuilt import ToolRuntime
 
 from agents.tools.graph_templates import (
     build_cypher_from_template,
     inject_limit,
+    select_scoped_template,
     select_template,
 )
 from graph.read_queries import validate_cypher_readonly
+from graph.state import AgentState
+from spatial import (
+    RetrievalSpatialRelation,
+    ScopeKind,
+    SpatialApplicationMarkerV1,
+    SpatialScopeTokenV1,
+    format_spatial_application_marker,
+)
 
 log = structlog.get_logger(__name__)
 
 # Lazy singleton — set by the workflow before agent invocation
 _graph_client = None
+
+
+def _with_graph_application(
+    state: AgentState,
+    output: str,
+) -> str:
+    scope = state["spatial_scope"]
+    scoped = scope is not None and scope.kind is not ScopeKind.WORLD
+    if output.startswith("SPATIAL_SCOPE_UNSUPPORTED"):
+        status = "unsupported"
+        completeness = "unknown"
+        detail_code = (
+            "spatial-relation-not-allowlisted"
+            if output.startswith("SPATIAL_SCOPE_UNSUPPORTED_RELATION")
+            else "template-not-allowlisted"
+        )
+    elif output.startswith(
+        (
+            "Graph database not available",
+            "Graph query failed",
+            "Graph query generation failed",
+            "Could not generate a graph query",
+            "Query rejected",
+        )
+    ):
+        status = "failed"
+        completeness = "unknown"
+        detail_code = "neo4j-query-failed"
+    else:
+        status = "applied"
+        completeness = "complete"
+        detail_code = None
+    marker = SpatialApplicationMarkerV1(
+        consumer="neo4j",
+        status=status,
+        mode="semantic-key" if scoped else "global",
+        completeness=completeness,
+        detail_code=detail_code,
+    )
+    return format_spatial_application_marker(marker, output)
 
 
 def set_graph_client(client: Any) -> None:
@@ -115,6 +165,51 @@ async def execute_graph_query(
         return f"Graph query failed: {e}"
 
 
+async def execute_scoped_graph_query(
+    template_id: str,
+    params: dict[str, object],
+    token: SpatialScopeTokenV1,
+    graph_client: Any = None,
+) -> str:
+    """Execute one complete allowlisted scope template with trusted parameters."""
+
+    client = graph_client or _graph_client
+    if client is None:
+        return "Graph database not available. Cannot query knowledge graph."
+    selected = select_scoped_template(template_id, token.kind, params)
+    if selected is None:
+        return f"SPATIAL_SCOPE_UNSUPPORTED: graph template {template_id}"
+    query_cypher, merged_params = selected
+    merged_params.update(
+        {
+            "scope_key": token.scope_key,
+            "compatible_revisions": list(token.compatible_derivation_revisions),
+        }
+    )
+    start = time.monotonic()
+    try:
+        rows = await client.run_query(query_cypher, merged_params, read_only=True)
+        log.info(
+            "graph_query_executed",
+            mode="scoped_template",
+            template_id=template_id,
+            scope_key=token.scope_key,
+            duration_ms=int((time.monotonic() - start) * 1000),
+            result_count=len(rows),
+        )
+        return _format_results(rows)
+    except Exception as e:
+        log.warning(
+            "graph_query_failed",
+            mode="scoped_template",
+            template_id=template_id,
+            scope_key=token.scope_key,
+            error=str(e),
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+        return f"Graph query failed: {e}"
+
+
 def _format_results(rows: list[dict], max_rows: int = 15) -> str:
     """Format Neo4j result rows as readable text for the agent."""
     if not rows:
@@ -132,8 +227,50 @@ def _format_results(rows: list[dict], max_rows: int = 15) -> str:
     return result
 
 
+SCOPED_GRAPH_TEMPLATE_IDS: tuple[str, ...] = (
+    "event_timeline",
+    "events_by_entity",
+    "co_occurring",
+    "source_backed",
+)
+
+SCOPED_QUERY_KNOWLEDGE_GRAPH_DESCRIPTION = """\
+Query the Neo4j knowledge graph inside the pinned spatial scope.
+
+The question is mapped to one of these reviewed templates:
+
+- **event_timeline** — "timeline of Kyiv" / "events in Ukraine"
+    Chronological events at scoped locations.
+- **events_by_entity** — "events involving \\"NATO\\""
+    Events that involve a named entity and occur in the pinned scope.
+- **co_occurring** — "co-occurring entities of \\"shadow fleet\\""
+    Other entities that share a scoped event with the named entity.
+- **source_backed** — "sources for \\"NATO\\""
+    Sources reporting a named entity through scoped events.
+
+Args:
+    question: Phrase to match a scoped template keyword. Quote entity names.
+
+Returns:
+    Formatted graph results (up to 15 rows per query).
+"""
+
+
+def bindable_query_knowledge_graph(*, scoped: bool) -> BaseTool:
+    """Return the global singleton or a request-local scoped schema copy."""
+
+    if not scoped:
+        return query_knowledge_graph
+    return query_knowledge_graph.model_copy(
+        update={"description": SCOPED_QUERY_KNOWLEDGE_GRAPH_DESCRIPTION},
+    )
+
+
 @tool
-async def query_knowledge_graph(question: str) -> str:
+async def query_knowledge_graph(
+    question: str,
+    runtime: ToolRuntime[dict[str, object], AgentState],
+) -> str:
     """Query the Neo4j knowledge graph (entities, events, locations, sources).
 
     The graph is built from Qdrant's underlying documents — same content,
@@ -174,11 +311,36 @@ async def query_knowledge_graph(question: str) -> str:
     """
     template_id, params = _match_intent(question)
 
+    scope = runtime.state["spatial_scope"]
+    relation = runtime.state["spatial_relation"]
+    if scope is not None and scope.kind is not ScopeKind.WORLD:
+        if relation is RetrievalSpatialRelation.ABOUT:
+            return _with_graph_application(
+                runtime.state,
+                "SPATIAL_SCOPE_UNSUPPORTED_RELATION: about has no reviewed "
+                "scoped graph template",
+            )
+        if template_id is None:
+            return _with_graph_application(
+                runtime.state,
+                "SPATIAL_SCOPE_UNSUPPORTED: no scoped graph template",
+            )
+        log.info(
+            "spatial_filter_applied",
+            consumer="neo4j",
+            scope_key=scope.scope_key,
+            relation=relation.value,
+            filter_mode="semantic-key",
+        )
+        output = await execute_scoped_graph_query(template_id, params, scope)
+        return _with_graph_application(runtime.state, output)
+
     if template_id:
-        return await execute_graph_query(template_id=template_id, params=params)
+        output = await execute_graph_query(template_id=template_id, params=params)
     else:
         # No template matched — fallback to LLM-generated Cypher
-        return await _free_cypher_fallback(question)
+        output = await _free_cypher_fallback(question)
+    return _with_graph_application(runtime.state, output)
 
 
 def _match_intent(question: str) -> tuple[str | None, dict]:
@@ -200,6 +362,10 @@ def _match_intent(question: str) -> tuple[str | None, dict]:
     ):
         return "top_connected", {}
 
+    # Match the longer entity intent before the "events in" location prefix.
+    if entity and any(kw in q for kw in ("events involving", "events about", "events for")):
+        return "events_by_entity", {"name": entity}
+
     if any(kw in q for kw in ("timeline", "events in", "events at")):
         location = entity or question.split("in ")[-1].split("at ")[-1].strip(" ?.")
         return "event_timeline", {"location": location}
@@ -211,9 +377,6 @@ def _match_intent(question: str) -> tuple[str | None, dict]:
 
     if entity and any(kw in q for kw in ("sources for", "evidence", "reported by", "source")):
         return "source_backed", {"name": entity}
-
-    if entity and any(kw in q for kw in ("events involving", "events about", "events for")):
-        return "events_by_entity", {"name": entity}
 
     if entity and any(kw in q for kw in ("network", "2-hop", "connections around")):
         return "two_hop_network", {"name": entity}

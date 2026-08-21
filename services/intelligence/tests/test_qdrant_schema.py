@@ -164,6 +164,7 @@ class TestRetrieverPreflight:
             await retriever._ensure_schema_validated()
 
         assert retriever._schema_validated is True
+        mock_client.create_payload_index.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_phase2_code_refuses_phase1_collection(self) -> None:
