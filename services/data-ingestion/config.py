@@ -32,18 +32,20 @@ class Settings(BaseSettings):
     vllm_url: str = "http://localhost:8000"
     vllm_model: str = "qwen3.5"
 
-    # Ingestion LLM (Spark — Qwen3.6-35B-A3B MoE). URL WITHOUT /v1 — callers append full path.
+    # Ingestion LLM (Spark — Qwen3.8-27B dense, NVFP4+MTP). URL WITHOUT /v1 — callers append full path.
     ingestion_vllm_url: str = "http://192.168.178.39:8000"
-    ingestion_vllm_model: str = "Qwen/Qwen3.6-35B-A3B"
-    # RSS/intelligence extraction timeout (consumed by pipeline.py). Kept at 120s: the
-    # RSS pipeline is continuous and should fail-fast + retry, not hold a worker for
-    # minutes on a wedged Spark call.
-    ingestion_vllm_timeout: float = 120.0
-    # NLM extraction timeout — SEPARATE from RSS (split per code review). 600s because the
-    # NLM batch shares the Spark (35B MoE) with the live RSS pipeline; a single extraction
-    # measured ~160s under concurrency, and 120s caused ReadTimeouts that failed every NLM
-    # extraction. A batch job can wait; the continuous RSS pipeline should not.
-    nlm_ingestion_vllm_timeout: float = 600.0
+    ingestion_vllm_model: str = "Qwen/Qwen3.8-27B"
+    # RSS/intelligence extraction timeout (consumed by pipeline.py). Raised 120s -> 240s
+    # on the 2026-08-21 cutover to Qwen3.8-27B: the dense 27B decodes at ~15-28 tok/s where
+    # the Qwen3.6 MoE (3B active) did ~167, so a fully used 2000-token response needs ~70-130s
+    # of generation alone and was clipping the old 120s window. Still fail-fast by intent --
+    # the RSS pipeline is continuous and must not hold a worker on a wedged Spark call.
+    ingestion_vllm_timeout: float = 240.0
+    # NLM extraction timeout — SEPARATE from RSS (split per code review). Was 600s for the
+    # 35B MoE, where a single extraction measured ~160s under concurrency. Raised to 900s for
+    # Qwen3.8-27B: at ~15-28 tok/s the 8000-token NLM budget alone is ~285-533s of generation,
+    # leaving 600s without headroom under concurrency. A batch job can wait; RSS should not.
+    nlm_ingestion_vllm_timeout: float = 900.0
     # 8000, not 4000: long NotebookLM transcripts produce large extraction JSON; 4000
     # truncated mid-string -> JSON parse failure (the whole notebook lost). NLM extract path.
     ingestion_max_tokens: int = 8000
