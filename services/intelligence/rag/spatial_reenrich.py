@@ -626,6 +626,72 @@ def validate_dry_run_approval(
         raise ValueError("approved dry-run drifted from the current Qdrant lane")
 
 
+def publish_spatial_coverage_snapshot(
+    path: Path,
+    reports: Sequence[Mapping[str, object]],
+) -> SpatialCoverageSnapshotV1:
+    """Atomically publish coverage from verified, current full-index scans.
+
+    Callers run one fresh preview per lane after re-enrichment.  Projected
+    dry-run counts are deliberately rejected: only ``coverage_before`` proves
+    what is currently stored and therefore filterable in Qdrant.
+    """
+
+    lanes: list[SpatialLaneCoverageV1] = []
+    target_revision: str | None = None
+    for report in reports:
+        _validated_dry_run_fingerprint("coverage", report)
+        if report.get("writes_planned") != 0 or (
+            report.get("coverage_before") != report.get("coverage_projected")
+        ):
+            raise ValueError(
+                "coverage report does not describe current index coverage"
+            )
+        before = SpatialCoverageSnapshotV1.model_validate_json(
+            _canonical_json(report.get("coverage_before"))
+        )
+        if len(before.lanes) != 1:
+            raise ValueError("coverage report must describe exactly one lane")
+        job = report.get("job")
+        if not isinstance(job, Mapping):
+            raise ValueError("coverage report job is invalid")
+        lane = before.lanes[0]
+        if (
+            job.get("lane") != lane.lane
+            or job.get("target_projection_revision")
+            != before.target_projection_revision
+        ):
+            raise ValueError("coverage report identity does not match its job")
+        if target_revision is None:
+            target_revision = before.target_projection_revision
+        elif target_revision != before.target_projection_revision:
+            raise ValueError("coverage lanes target different projection revisions")
+        lanes.append(lane)
+
+    if target_revision is None:
+        raise ValueError("at least one Qdrant coverage report is required")
+    lanes.sort(key=lambda lane: lane.lane)
+    snapshot = SpatialCoverageSnapshotV1(
+        target_projection_revision=target_revision,
+        lanes=tuple(lanes),
+    )
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise ValueError("coverage snapshot path must be a regular file")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as temporary:
+        temporary.write(_canonical_json(snapshot.model_dump(mode="json")))
+        temporary_path = Path(temporary.name)
+    temporary_path.replace(path)
+    return snapshot
+
+
 def _validated_dry_run_fingerprint(
     label: str,
     report: Mapping[str, object],
@@ -648,6 +714,11 @@ def _replacement(
     job: ReenrichmentJob,
 ) -> ReenrichmentPoint:
     projected = _validated_projection(projection, job)
+    # ``geo`` is projection-owned, but omission is not a clear operation.  A
+    # projector must return ``geo: null`` explicitly to remove an existing
+    # coordinate; otherwise a full-point upsert preserves the last good value.
+    if "geo" not in projected and "geo" in point.payload:
+        projected["geo"] = point.payload["geo"]
     preserved = {
         key: value
         for key, value in point.payload.items()
@@ -781,6 +852,8 @@ def _valid_pair_token(token: str) -> bool:
 
 
 def _validate_geo(value: object) -> None:
+    if value is None:
+        return
     points = value if isinstance(value, list) else [value]
     if not points:
         raise ValueError("geo projection must not be empty")
@@ -862,6 +935,7 @@ __all__ = [
     "apply_spatial_reenrichment",
     "plan_spatial_reenrichment_jobs",
     "preview_spatial_reenrichment",
+    "publish_spatial_coverage_snapshot",
     "report_fingerprint",
     "validate_dry_run_approval",
 ]

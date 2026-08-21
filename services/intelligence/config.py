@@ -1,8 +1,7 @@
 """Intelligence service configuration."""
 
-from typing import Literal
+from pathlib import Path
 
-from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -19,11 +18,10 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1024
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "odin_intel"
-    spatial_coverage_revision: str | None = Field(
-        default=None,
-        pattern=r"^spatial-projection-v[0-9]+-[a-f0-9]{12,64}$",
+    spatial_catalog_path: Path = Path("/app/data/spatial")
+    spatial_coverage_snapshot_path: Path = Path(
+        "/app/data/spatial/qdrant-coverage.json"
     )
-    spatial_coverage_completeness: Literal["complete", "partial", "unknown"] = "unknown"
     gdelt_api_url: str = "https://api.gdeltproject.org/api/v2/doc/doc"
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"

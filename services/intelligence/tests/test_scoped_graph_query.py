@@ -59,6 +59,8 @@ def test_scoped_registry_is_complete_static_and_parameterized() -> None:
         assert "$scope_key" in cypher
         assert "$compatible_revisions" in cypher
         assert f"l.{_SCOPE_FIELD[kind]} = $scope_key" in cypher
+        assert "l.spatial_conflict = false" in cypher
+        assert "coalesce(l.spatial_conflict" not in cypher
         assert "DISTINCT" in cypher, template_id
         assert "{" not in cypher and "}" not in cypher
 
@@ -160,3 +162,28 @@ async def test_scoped_graph_failure_does_not_fallback_or_retry() -> None:
 
     assert "failed" in result.lower()
     client.run_query.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_about_relation_is_unsupported_before_scoped_occurrence_query() -> None:
+    client = AsyncMock()
+    set_graph_client(client)
+    state = agent_state(
+        spatial_scope=_token(ScopeKind.COUNTRY),
+        spatial_relation=RetrievalSpatialRelation.ABOUT,
+    )
+
+    result = await invoke_runtime_tool(
+        query_knowledge_graph,
+        {"question": 'events about "NATO"'},
+        state=state,
+    )
+
+    marker, research = parse_spatial_application_marker(
+        result,
+        actual_tool_name="query_knowledge_graph",
+    )
+    assert marker is not None and marker.status == "unsupported"
+    assert marker.detail_code == "spatial-relation-not-allowlisted"
+    assert research.startswith("SPATIAL_SCOPE_UNSUPPORTED")
+    client.run_query.assert_not_awaited()

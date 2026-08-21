@@ -145,6 +145,66 @@ async def test_dry_run_plans_replacements_but_performs_zero_writes() -> None:
 
 
 @pytest.mark.asyncio
+async def test_publish_coverage_snapshot_combines_verified_index_lanes(tmp_path) -> None:
+    from rag.spatial_reenrich import (
+        ReenrichmentJob,
+        preview_spatial_reenrichment,
+        publish_spatial_coverage_snapshot,
+    )
+    from spatial import SpatialCoverageSnapshotV1
+
+    target = "spatial-projection-v1-47fec701a2a2"
+    reports = []
+    for lane in ("analysis", "documents"):
+        store = FakeStore([_projection(target), _projection(target)])
+        reports.append(
+            await preview_spatial_reenrichment(
+                store,
+                FakeProjector(),
+                ReenrichmentJob(
+                    lane=lane,
+                    target_projection_revision=target,
+                ),
+            )
+        )
+    path = tmp_path / "qdrant-coverage.json"
+
+    snapshot = publish_spatial_coverage_snapshot(path, reports)
+
+    assert snapshot == SpatialCoverageSnapshotV1.model_validate_json(path.read_bytes())
+    from rag.spatial_coverage import load_spatial_coverage_snapshot
+
+    assert load_spatial_coverage_snapshot(path) == snapshot
+    assert snapshot.target_projection_revision == target
+    assert [lane.lane for lane in snapshot.lanes] == ["analysis", "documents"]
+    assert all(lane.filterable_points == 2 for lane in snapshot.lanes)
+
+
+@pytest.mark.asyncio
+async def test_publish_coverage_snapshot_rejects_projected_dry_run_counts(
+    tmp_path,
+) -> None:
+    from rag.spatial_reenrich import (
+        ReenrichmentJob,
+        preview_spatial_reenrichment,
+        publish_spatial_coverage_snapshot,
+    )
+
+    target = "spatial-projection-v1-47fec701a2a2"
+    report = await preview_spatial_reenrichment(
+        FakeStore([_old_payload()]),
+        FakeProjector(),
+        ReenrichmentJob(lane="analysis", target_projection_revision=target),
+    )
+
+    with pytest.raises(ValueError, match="current index coverage"):
+        publish_spatial_coverage_snapshot(
+            tmp_path / "qdrant-coverage.json",
+            [report],
+        )
+
+
+@pytest.mark.asyncio
 async def test_public_apply_interface_requires_an_approved_dry_run() -> None:
     from rag.spatial_reenrich import (
         MemoryCheckpointStore,
@@ -269,7 +329,39 @@ async def test_apply_replaces_every_spatial_field_in_one_full_point_update() -> 
     assert replacement.payload["admin2_code"] == []
     assert "spatial_derivation_revision" not in replacement.payload
     assert "spatial_legacy_field" not in replacement.payload
-    assert "geo" not in replacement.payload
+    assert replacement.payload["geo"] == {"lon": 1.0, "lat": 2.0}
+
+
+@pytest.mark.asyncio
+async def test_apply_honors_explicit_geo_clear() -> None:
+    from rag.spatial_reenrich import (
+        MemoryCheckpointStore,
+        ReenrichmentJob,
+        apply_spatial_reenrichment,
+        preview_spatial_reenrichment,
+    )
+
+    class ClearingProjector(FakeProjector):
+        def project(self, point, job):
+            projection = _projection(job.target_projection_revision)
+            projection["geo"] = None
+            return projection
+
+    target = "spatial-projection-v1-47fec701a2a2"
+    store = FakeStore([_old_payload()])
+    projector = ClearingProjector()
+    job = ReenrichmentJob(lane="analysis", target_projection_revision=target)
+    approved = await preview_spatial_reenrichment(store, projector, job)
+
+    await apply_spatial_reenrichment(
+        store,
+        projector,
+        MemoryCheckpointStore(),
+        job,
+        approved_report=approved,
+    )
+
+    assert store.points[0].payload["geo"] is None
 
 
 @pytest.mark.asyncio

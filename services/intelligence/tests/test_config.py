@@ -24,11 +24,11 @@ class TestExternalServiceDefaults:
             s = Settings(_env_file=None)
             assert s.gdelt_api_url == "https://api.gdeltproject.org/api/v2/doc/doc"
 
-    def test_unpromoted_spatial_coverage_is_reported_unknown(self) -> None:
+    def test_spatial_coverage_comes_from_index_build_artifact(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             s = Settings(_env_file=None)
-            assert s.spatial_coverage_revision is None
-            assert s.spatial_coverage_completeness == "unknown"
+            assert s.spatial_coverage_snapshot_path.name == "qdrant-coverage.json"
+            assert not hasattr(s, "spatial_coverage_completeness")
 
 
 class TestHybridFlagDefault:

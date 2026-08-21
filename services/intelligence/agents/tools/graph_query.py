@@ -23,6 +23,7 @@ from agents.tools.graph_templates import (
 from graph.read_queries import validate_cypher_readonly
 from graph.state import AgentState
 from spatial import (
+    RetrievalSpatialRelation,
     ScopeKind,
     SpatialApplicationMarkerV1,
     SpatialScopeTokenV1,
@@ -44,7 +45,11 @@ def _with_graph_application(
     if output.startswith("SPATIAL_SCOPE_UNSUPPORTED"):
         status = "unsupported"
         completeness = "unknown"
-        detail_code = "template-not-allowlisted"
+        detail_code = (
+            "spatial-relation-not-allowlisted"
+            if output.startswith("SPATIAL_SCOPE_UNSUPPORTED_RELATION")
+            else "template-not-allowlisted"
+        )
     elif output.startswith(
         (
             "Graph database not available",
@@ -309,6 +314,12 @@ async def query_knowledge_graph(
     scope = runtime.state["spatial_scope"]
     relation = runtime.state["spatial_relation"]
     if scope is not None and scope.kind is not ScopeKind.WORLD:
+        if relation is RetrievalSpatialRelation.ABOUT:
+            return _with_graph_application(
+                runtime.state,
+                "SPATIAL_SCOPE_UNSUPPORTED_RELATION: about has no reviewed "
+                "scoped graph template",
+            )
         if template_id is None:
             return _with_graph_application(
                 runtime.state,
