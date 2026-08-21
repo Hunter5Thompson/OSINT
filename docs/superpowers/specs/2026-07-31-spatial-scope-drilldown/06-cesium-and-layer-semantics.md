@@ -30,10 +30,52 @@ interface SpatialPresentationPort {
 }
 ```
 
-Der konkrete `CesiumSpatialScopeAdapter` erhält den gemeinsamen
-`BoundaryAssetStore`, besitzt exakt eine Root-`PrimitiveCollection` im Viewer und
-alle darunter erzeugten Scope-Primitives. `GlobeViewer` bleibt
-Renderer-Composition-Root und enthält keine Scope-State-Machine.
+Der `ViewerSpatialCesiumRuntime` ist der einzige Eigentümer der Root-
+`PrimitiveCollection` im Viewer. Der konkrete `CesiumSpatialScopeAdapter` erhält den
+gemeinsamen `BoundaryAssetStore` und läuft darin als Presentation-Strategie.
+Operational und Cinematic sind strikt wechselseitige Strategien derselben Runtime,
+niemals zwei Roots oder zwei gleichzeitig attachte Presenter. `GlobeViewer` bleibt
+Renderer-Composition-Root und enthält keine Scope-State-Machine. Es besitzt jedoch
+den unten definierten Post-Process-Controller über die gesamte Viewer-Lebensdauer,
+auch wenn Spatial deaktiviert ist.
+
+Die Runtime besitzt außerdem einen exklusiven `SceneStateLease`. Beim Attach klont
+er exakt `scene.backgroundColor`, Referenz und `show` von `scene.skyBox`,
+`globe.enableLighting`, `globe.dynamicAtmosphereLighting`,
+`globe.dynamicAtmosphereLightingFromSun`, `globe.showGroundAtmosphere`,
+`globe.atmosphereHueShift`, `globe.atmosphereSaturationShift`,
+`globe.atmosphereBrightnessShift`, `globe.lightingFadeInDistance`,
+`globe.lightingFadeOutDistance`, `globe.nightFadeInDistance`,
+`globe.nightFadeOutDistance`, `skyAtmosphere.hueShift`,
+`skyAtmosphere.saturationShift`, `skyAtmosphere.brightnessShift`, `fog.enabled`,
+`fog.density`, `scene.verticalExaggeration`,
+`show/alpha/brightness/contrast/saturation/gamma` des explizit referenzierten Basemap-Layers,
+`show/alpha/brightness/contrast` des Border-Layers,
+`show/alpha/dayAlpha/nightAlpha/brightness/gamma` des Night-Layers,
+`show` des Photoreal-Tilesets sowie `postProcessStages.bloom.enabled`. Farbwerte
+werden geklont, skalare Werte kopiert und Objektwerte als unveränderte Referenz
+restauriert. Cinematic darf Photoreal auf World-/Country-Höhe nur über `show`
+verbergen; der von `GlobeViewer` besessene `customShader` wird weder ersetzt noch
+mutiert. V1 mutiert keine anderen Scene- oder Bloom-Properties. Nicht geladene optionale Layer werden
+als `absent` erfasst und bei spätem Load sofort an den aktiven Lease gebunden. Nur der Lease
+darf diese Werte während Cinematic mutieren; React-Props aktualisieren währenddessen
+den zu restaurierenden Baseline-Wunsch statt dieselben Cesium-Properties direkt zu
+schreiben. `dispose`, Attach-Fehler und Abort restaurieren die aktuelle Baseline
+genau einmal. Ein Integrationstest vergleicht alle Werte vor Attach und nach Dispose.
+Ein ersetztes Starfield benötigt Source Lock; der Lease mutiert nie das zuvor
+erfasste `SkyBox`-Objekt in place.
+
+`GlobeViewer` besitzt genau einen `WorldviewPostProcessController`, unabhängig von
+Feature-Flag und Presentation-Mode. Er besitzt alle anwendereigenen Stages, die
+einzige Mutationserlaubnis für Built-in-Bloom und ein stabiles Composite. CRT, Night
+Vision, FLIR sowie eine aktive Runtime-Strategie registrieren nur allowlistete Slots;
+`shaderUtils.ts` darf danach keine Stage oder Bloom-Property direkt mutieren. Bei
+Cinematic vermittelt der Controller seinen Bloom-Wunsch über den aktiven
+`SceneStateLease`, sodass dessen Restore-Record vollständig bleibt. Ohne Runtime
+führt der Controller denselben Wert gegen seine Viewer-Baseline. Kein Consumer
+verwendet `removeAll`. Ein Strategie-Wechsel gibt zuerst deren Slot und Listener frei
+und attachiert erst danach die nächste; der Viewer-langlebige Controller bleibt
+bestehen und rekonstruiert eine feste, getestete Slot-Reihenfolge.
 
 `ResolvedPresentationInput`, `AssetDescriptor` und `GeoExtent` sind interne,
 rendererfreie Katalogtypen. Sie verlassen das Module nicht in Richtung normaler
@@ -213,6 +255,26 @@ interface LayerSpatialCapability {
     | "global";
 }
 ```
+
+Der kanonische Output eines strict clientseitigen Punkt-Containments ist ebenfalls
+geschlossen und wird von Szenenconsumern unverändert importiert:
+
+```ts
+interface StrictPointLayerApplication<T> {
+  readonly phase: "building" | "ready" | "unavailable";
+  readonly stateRevision: number;
+  readonly records: readonly T[];
+  readonly inputCount: number;
+  readonly includedCount: number;
+  readonly excludedOutsideCount: number;
+  readonly excludedBoundaryUncertainCount: number;
+  readonly excludedInvalidCoordinateCount: number;
+  readonly withheldCount: number;
+}
+```
+
+`excludedBoundaryUncertainCount` gehört dieser Containment-Quelle. Es wird nicht in
+den anders geschnittenen CHRONIK-Wire-Vertrag `SpatialApplicationV1` hineingemischt.
 
 Initiale Matrix:
 

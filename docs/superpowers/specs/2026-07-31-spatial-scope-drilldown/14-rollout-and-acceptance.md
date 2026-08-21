@@ -33,6 +33,41 @@
 - Exact Neo4j/Qdrant-Filter besitzen separate serverseitige Activation Gates nach Coverage-Report.
 - UI zeigt nur Drill-Affordances, die der aktive Katalog wirklich besitzt.
 
+Ein Spatial-enabled Artefakt darf zusätzlich die validierte Runtime-Konfiguration
+`worldview_presentation_mode = operational | cinematic` besitzen. Die Mode-Matrix
+ist geschlossen:
+
+| `VITE_SPATIAL_SCOPE_ENABLED` | Mode | einziger Presenter |
+|---|---|---|
+| `false` | `operational` | Legacy-WorldView |
+| `false` | `cinematic` | ungültig; sichtbare `CINEMATIC_REQUIRES_SPATIAL`-Diagnose, Legacy bleibt operational |
+| `true` | `operational` | operationaler `ViewerSpatialCesiumRuntime` |
+| `true` | `cinematic` | Cinematic-Strategie derselben `ViewerSpatialCesiumRuntime` |
+
+#### Cinematic Shared-Refactor-Stufe S
+
+Bevor `cinematic` als gültiger Runtime-Wert oder ein Cinematic-Scene-Pfad gebaut
+wird, landet ein separat releasbares Shared-Refactor-Artefakt. Es enthält nur:
+
+- `SpatialPresentationPort`-Parität auf `PresentationOutcome`;
+- den Viewer-langlebigen Post-Process-Controller samt unverändertem Legacy-Shader-
+  Verhalten;
+- die Migration der vorhandenen Layer-rAFs und des `PerformanceGuard` auf einen
+  gemeinsamen Frame-Monitor/Motion-Store;
+- `camera.cancelFlight()` auf Pointer-, Wheel- und Keyboard-Kameraeingabe.
+
+Diese Stufe enthält kein `CinematicWorldviewModule`, keine cineastische Scene-
+Strategie und keine neuen visuellen Claims; `cinematic` bleibt bis zum späteren
+Artefakt fail-closed. Sie durchläuft TDD, vollständige Frontend-Gates sowie getrennte
+Flag-off-Legacy- und Flag-on-Operational-Canaries. Gates sind Verhaltensparität der
+Layer und Shader, Motion-Modi, Port-Outcomes, Camera-Cancel, Baseline-Scene-State,
+100 Attach/Dispose-Zyklen und ein Long-session-Soak ohne Ressourcenwachstum. Erst ein
+reviewter Canary-/Soak-Record entsperrt die erste Cinematic-Zeile. Das unmittelbar
+vorherige Frontend-Artefakt bleibt als eigener Shared-Refactor-Rollback erhalten.
+
+Die obige Mode-Matrix beschreibt den Endzustand nach diesem Gate. Der Mode ist kein
+Query-Parameter und entsperrt weder Phase D noch Deployment.
+
 ### 26.2 Kompatibilität
 
 - Timeline-`bbox` bleibt bestehen.
@@ -48,10 +83,20 @@
   kompatibel.
 - Phase D: Rollback deployt das unmittelbar vorherige Frontend-Artefakt. Die
   Backend-/Datenänderungen bleiben additiv, sodass dieses Artefakt weiter funktioniert.
+- Shared-Refactor-Stufe S: Fehler oder Canary-/Soak-Abbruch deployt das unmittelbar
+  vorherige Frontend-Artefakt; ein Presentation-Mode-Wechsel behauptet ausdrücklich
+  nicht, diese gemeinsam genutzten Änderungen rückgängig zu machen.
 - additive Neo4j-/Qdrant-Felder und Indizes werden beim Code-Rollback nicht destruktiv entfernt.
 - exact Activation Gate aus: Endpoint meldet wieder explizit `bbox_approximate`, sofern dieser Pfad im jeweiligen Release weiterhin unterstützt wird; niemals still.
 - Katalog: vorherige Revision bleibt als served Revision verfügbar und kann wieder active gesetzt werden.
 - kein Rollback löscht Backfill-Rohdaten oder überschreibt Source-Codes.
+- Ein Cinematic→Operational-Wechsel auf der bestandenen Post-S-Baseline disposet
+  Strategie, deren Controller-Slot, Clock und Listener,
+  restauriert über den `SceneStateLease` sämtliche in `06 §12.1` benannten Werte und
+  attachiert erst danach Operational. Das Gate vergleicht den vollständigen
+  Scene-State vor Attach und nach Dispose auf Wertgleichheit sowie die Root-/Stage-
+  Anzahl auf ihre Baseline; Fehler stoppt Default-on. Dieser Laufzeitwechsel ist der
+  Rollback der Cinematic-Schicht, nicht der Shared-Refactor-Stufe.
 
 Der Parallelzeitraum ist auf Phase B plus eine Soak-Periode begrenzt und besitzt einen
 expliziten Lösch-Gate. „Parallel“ meint Codeverfügbarkeit, niemals gleichzeitiges
@@ -116,9 +161,12 @@ Abgelehnt: eine sichere generische Query-Rewrite-Schicht ist deutlich komplexer 
 
 Abgelehnt: Punkt, Track, Polygon, Raster, globales Referenzobjekt und semantisches Dokument benötigen verschiedene Relationen. Eine Capability-Matrix verhindert visuelle Lügen.
 
-### Dekorative Extrusion/Fly-Lines
+### Kopierte Showroom-Ästhetik, dekorative Extrusion und Fake-Lines
 
-Abgelehnt: Höhe und Bögen müssen echte Werte beziehungsweise Beziehungen kodieren. Scope-Navigation braucht keine Showroom-Animation.
+Abgelehnt: Quellcode, Assets, Shader und konkrete Gestaltung des Fundstücks werden
+nicht übernommen. Höhe und variable Intensität kodieren echte Werte; Bögen echte
+Beziehungen. Clean-room-Stagecraft darf dagegen flache Basisringe, Auswahlkonturen,
+Kontext-Dimming und zeitlich begrenzte Reveals gemäß `01 §4.2` verwenden.
 
 ---
 

@@ -106,13 +106,21 @@ Diese Lücken bestimmen die Reihenfolge der Umsetzung: erst eine semantische Sou
 ### 4.2 Nicht-Ziele
 
 - Kein Three.js-Renderer und kein Austausch von CesiumJS.
-- Keine Übernahme der Ästhetik, Fly-Lines, Chase-Lights, Basisringe oder anderer dekorativer Effekte des Fundstücks.
+- Keine Übernahme von Quellcode, Assets, Shadern, Komponenten oder konkreter
+  Gestaltung des externen Fundstücks. Clean-room-Stagecraft mit vorhandenen
+  Hlíðskjalf-/Cesium-Mitteln ist zulässig, wenn sie keine quantitative Aussage trägt.
 - Keine automatisch aus Kamerahöhe abgeleitete semantische Region.
 - Kein universelles City- oder AOI-Modell in V1. Städte sind nicht überall administrative Kinder; AOIs sind nutzerdefinierte Geometrien mit anderer Identität und Lifecycle.
 - Keine Behauptung, alle WorldView-Layer seien nach einem Scope-Wechsel exakt gefiltert.
 - Kein Runtime-Download von Aliyun, geoBoundaries, Natural Earth oder anderen Drittquellen.
 - Kein LLM-generiertes Cypher zur Durchsetzung räumlicher Constraints und weiterhin kein LLM-generierter Write.
-- Keine dekorative Extrusion. Höhe ist nur zulässig, wenn sie eine benannte Metrik mit Einheit, Zeitbasis, Skala und Legende kodiert.
+- Nicht-quantitative Stagecraft darf Kontext dimmen sowie flache, nicht pickbare
+  Auswahlkonturen, Basisringe und zeitlich begrenzte Reveals verwenden. Ihre
+  Parameter sind innerhalb derselben Scope-Klasse konstant und hängen weder von
+  Datenwerten noch Cameraextent ab.
+- Keine dekorative Extrusion oder variable Fake-Beziehung. Höhe und variable
+  visuelle Intensität sind nur mit benannter Metrik, Einheit, Zeitbasis, Skala,
+  Coverage und Legende zulässig; Arcs nur für echte gerichtete Beziehungen.
 
 ### 4.3 Produktseitige Definition von Erfolg
 

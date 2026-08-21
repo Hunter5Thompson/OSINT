@@ -121,6 +121,14 @@ Unsupported weiterhin pro Request gemessen werden. `completeness=complete` ist i
 diesem Modus damit eine durch Deployment-Evidenz attestierte Aussage und keine
 Request-Zeit-Messung des nicht scopebaren Rests.
 
+Frontend-Szenen verwenden für CHRONIK-Accounting exakt die decodierte
+`SpatialApplicationV1`-Instanz derselben Response-Generation. Eine abgeleitete
+Teilstruktur darf weder `relation="intersects"` oder `mode="global"` verlieren noch
+einen der vier Exclusion-Counter auslassen. Sie darf kein `candidate_count`
+behaupten, solange dieses Feld nicht durch einen eigenen Wire-Schema-Review hier
+eingeführt wurde. Containment-spezifische Zähler wie `boundary-uncertain` bleiben in
+einem getrennten, durch `06 §13` besessenen Punkt-Containment-Accounting.
+
 ### 14.3 Interne Auflösung
 
 ```py
