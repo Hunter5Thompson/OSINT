@@ -215,9 +215,20 @@ class FakeRuntime implements SpatialCesiumRuntime {
 
 class FakeBuilder {
   readonly calls: Array<Parameters<ScopePrimitiveBuilder>[0]> = [];
+  private nextError: Error | null = null;
+
+  failNext(error: Error): void {
+    this.nextError = error;
+  }
+
   readonly builder: ScopePrimitiveBuilder = async (input) => {
     this.calls.push(input);
     if (input.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    if (this.nextError !== null) {
+      const error = this.nextError;
+      this.nextError = null;
+      throw error;
+    }
     return {
       renderPrimitives: [new FakePrimitive("render")],
       pickPrimitives: input.includePickSurface
@@ -296,16 +307,76 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
     expect(firstContainer.show).toBe(true);
 
     const second = adapter.present(presentation(world, "2"), 2, new AbortController().signal);
-    expect(firstContainer.show).toBe(false);
+    expect(firstContainer.show).toBe(true);
     await waitForMounted(runtime, 2);
     const secondContainer = runtime.mounted[1]!;
     expect(secondContainer.show).toBe(true);
     expect(secondContainer.primitives.every((primitive) => !primitive.show)).toBe(true);
+    expect(runtime.mounted).toEqual([firstContainer, secondContainer]);
+    expect(firstContainer.destroyed).toBe(false);
     await readyPresentation(runtime, second);
 
     expect(runtime.mounted).toEqual([secondContainer]);
     expect(firstContainer.destroyed).toBe(true);
     expect(assets.released).toBe(assets.acquired);
+  });
+
+  it("restores the last good presentation when staging fails", async () => {
+    const { adapter, runtime, fakeBuilder } = setup();
+    const first = adapter.present(presentation(world, "1"), 1, new AbortController().signal);
+    await readyPresentation(runtime, first);
+    const firstContainer = runtime.mounted[0]!;
+    fakeBuilder.failNext(new Error("WebGL staging failed"));
+
+    await expect(
+      adapter.present(presentation(world, "2"), 2, new AbortController().signal),
+    ).rejects.toThrow("WebGL staging failed");
+
+    expect(runtime.mounted).toEqual([firstContainer]);
+    expect(firstContainer.show).toBe(true);
+    expect(firstContainer.destroyed).toBe(false);
+    expect(adapter.diagnostics().activeContainers).toBe(1);
+    expect(runtime.cameraListeners.size).toBe(1);
+  });
+
+  it("restores the last good presentation when staging is aborted", async () => {
+    const { adapter, runtime } = setup();
+    const first = adapter.present(presentation(world, "1"), 1, new AbortController().signal);
+    await readyPresentation(runtime, first);
+    const firstContainer = runtime.mounted[0]!;
+    const aborter = new AbortController();
+    const second = adapter.present(presentation(world, "2"), 2, aborter.signal);
+    await waitForMounted(runtime, 2);
+
+    aborter.abort();
+    await expect(second).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(runtime.mounted).toEqual([firstContainer]);
+    expect(firstContainer.show).toBe(true);
+    expect(firstContainer.destroyed).toBe(false);
+    expect(adapter.diagnostics().activeContainers).toBe(1);
+    expect(runtime.cameraListeners.size).toBe(1);
+  });
+
+  it("clears an active presentation without disposing the reusable runtime", async () => {
+    const { adapter, runtime } = setup();
+    const first = adapter.present(presentation(world, "1"), 1, new AbortController().signal);
+    await readyPresentation(runtime, first);
+
+    adapter.clear();
+
+    expect(runtime.mounted).toHaveLength(0);
+    expect(runtime.cameraListeners.size).toBe(0);
+    expect(runtime.disposed).toBe(false);
+    expect(adapter.diagnostics()).toMatchObject({
+      activeContainers: 0,
+      disposed: false,
+      primitiveCount: 0,
+    });
+
+    const next = adapter.present(presentation(world, "2"), 2, new AbortController().signal);
+    await readyPresentation(runtime, next);
+    expect(runtime.mounted).toHaveLength(1);
   });
 
   it("disposes stale staging and never makes it visible", async () => {

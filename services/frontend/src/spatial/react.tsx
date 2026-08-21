@@ -31,6 +31,7 @@ import {
   type CreateSpatialScopeControllerOptions,
   type SpatialScopePresentationPort,
 } from "./scopeController";
+import type { SpatialContainmentLifecyclePort } from "./containment";
 
 export interface ReactRouterScopeNavigationOptions {
   readonly clock?: ScopeNavigationClock;
@@ -129,6 +130,7 @@ export interface SpatialScopeProviderProps {
   readonly catalogFactory?: SpatialCatalogFactory;
   readonly navigation?: ScopeNavigationPort;
   readonly presentation?: SpatialScopePresentationPort;
+  readonly containment?: SpatialContainmentLifecyclePort;
   readonly moduleFactory?: SpatialScopeModuleFactory;
 }
 
@@ -143,6 +145,7 @@ function ModuleProvider({
   catalogFactory,
   navigation,
   presentation,
+  containment,
   moduleFactory = createSpatialScopeController,
   onNavigationCleanup,
 }: ModuleProviderProps) {
@@ -167,6 +170,7 @@ function ModuleProvider({
     catalog: catalogSelection.catalog,
     navigation,
     presentation,
+    containment,
   });
   const module = moduleRef.current;
   const lifecycleGenerationRef = useRef(0);

@@ -1851,6 +1851,10 @@ Observation-Producer.
 #   verhindern jede
 #   operative Exact-Promotion. Auch 06B erfüllt keines der neun folgenden Frontend-
 #   Kriterien und ändert den Status von TASK-123 daher nicht.
+#   Spatial Plan 08 verdrahtet am 2026-08-10 `spatial/geometry.ts` über den festen
+#   Containment-Index produktiv und macht die geschlossene Layer-Matrix zum Runtime-
+#   Gate sowie Badge-Consumer. Damit sind ausschließlich Kriterien 6 und 9 erfüllt;
+#   Kriterien 1–5, 7 und 8 sowie der Plan-05D-Blocker bleiben offen.
 #
 # Verbleibende Akzeptanzkriterien / RED-Gates:
 #   1. Der Spatial-Country-Inspector erhält Signal-Liste und Munin-Briefing über
@@ -1888,3 +1892,14 @@ Observation-Producer.
 #      05/08 einen Produktions-Consumer für Layer-Badges und Scope-Verhalten oder wird
 #      vor 05D entfernt. Bis dahin bleibt sie explizit Vorleistung und darf nicht
 #      still als unverdrahtete zweite Wahrheitsquelle weiterwachsen.
+#
+# Review-Nachtrag (2026-08-13):
+#   - Nicht-globale Qdrant-Runs unterdrücken den ungefilterten Neo4j-Graph-Kontext und
+#     melden die ausgelassene Capability höchstens als partial.
+#   - Cesium behält die letzte gute Präsentation bis zum erfolgreichen Swap und stellt
+#     sie nach Fehler/Abort samt Kamera-Listener wieder her.
+#   - Semantic-only-Commits leeren die alte Boundary über den Presentation-Port.
+#   - Recon ist als world-only/unsupported registriert und wird in Scopes fail-closed
+#     über `effectiveLayers` verborgen.
+#   - Regression: Frontend 616, Intelligence 450 und Backend 579 Tests grün; ESLint,
+#     TypeScript, Ruff und Mypy ebenfalls grün.

@@ -1,6 +1,7 @@
 import { useId, useState, type CSSProperties } from "react";
 import type { SpatialBoundaryProvenanceState } from "../../hooks/useSpatialBoundaryProvenance";
 import type { LayerVisibility, ShaderType } from "../../types";
+import type { LayerSpatialStatus } from "../../spatial/layerScopePolicy";
 
 export interface LayersPanelProps {
   layers: LayerVisibility;
@@ -8,6 +9,7 @@ export interface LayersPanelProps {
   activeShader: ShaderType;
   onShaderChange: (shader: ShaderType) => void;
   spatialProvenance?: SpatialBoundaryProvenanceState;
+  spatialStatuses?: Partial<Record<keyof LayerVisibility, LayerSpatialStatus>>;
 }
 
 type AlwaysOnKey = "void" | "atmosphere" | "spotlight";
@@ -63,6 +65,7 @@ const PANEL_GROUPS: PanelGroup[] = [
       { key: "refineries", label: "Refineries" },
       { key: "eonet", label: "EONET" },
       { key: "gdacs", label: "GDACS" },
+      { key: "recon", label: "Recon" },
     ],
   },
   {
@@ -130,6 +133,25 @@ const alwaysOnBadge: CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   opacity: 0.5,
+};
+
+const spatialStatusStyle: CSSProperties = {
+  fontFamily: '"Martian Mono", ui-monospace, monospace',
+  fontSize: "0.5rem",
+  letterSpacing: "0.03em",
+  lineHeight: 1.35,
+  marginTop: "0.1rem",
+  textTransform: "uppercase",
+};
+
+const spatialStatusColor: Readonly<Record<LayerSpatialStatus["tone"], string>> = {
+  strict: "var(--amber)",
+  approximate: "var(--amber)",
+  global: "var(--ash)",
+  presentation: "var(--ash)",
+  loading: "var(--amber)",
+  unavailable: "var(--stone)",
+  unsupported: "var(--stone)",
 };
 
 const policyLink: CSSProperties = {
@@ -244,6 +266,7 @@ export function LayersPanel({
   activeShader,
   onShaderChange,
   spatialProvenance,
+  spatialStatuses,
 }: LayersPanelProps) {
   return (
     <div style={{ display: "grid", gap: "0.8rem" }}>
@@ -268,11 +291,26 @@ export function LayersPanel({
               // Regular toggle item — key is guaranteed to be a LayerVisibility key
               const toggleKey = item.key as ToggleKey;
               const enabled = layers[toggleKey];
+              const spatialStatus = spatialStatuses?.[toggleKey];
               return (
                 <div key={item.key} style={row} data-testid={`layer-toggle-${item.key}`}>
-                  <span style={{ color: enabled ? "var(--bone)" : "var(--stone)", fontSize: "0.78rem" }}>
-                    {item.label}
-                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{ color: enabled ? "var(--bone)" : "var(--stone)", fontSize: "0.78rem" }}>
+                      {item.label}
+                    </span>
+                    {spatialStatus === undefined ? null : (
+                      <div
+                        data-testid={`layer-scope-${toggleKey}`}
+                        title={spatialStatus.title}
+                        style={{
+                          ...spatialStatusStyle,
+                          color: spatialStatusColor[spatialStatus.tone],
+                        }}
+                      >
+                        {spatialStatus.label}
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     aria-label={toggleKey}

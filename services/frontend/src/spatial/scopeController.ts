@@ -24,6 +24,7 @@ import {
 import { mapSpatialCatalogProblem } from "./catalog";
 import { ScopeNavigationError } from "./navigation";
 import { BoundedPrefetchScheduler } from "./prefetch";
+import type { SpatialContainmentLifecyclePort } from "./containment";
 
 export interface SpatialScopePresentationPort {
   present(
@@ -31,12 +32,14 @@ export interface SpatialScopePresentationPort {
     stateRevision: number,
     signal: AbortSignal,
   ): Promise<void>;
+  clear(): void;
 }
 
 export interface CreateSpatialScopeControllerOptions {
   readonly catalog: SpatialCatalogPort;
   readonly navigation: ScopeNavigationPort;
   readonly presentation?: SpatialScopePresentationPort;
+  readonly containment?: SpatialContainmentLifecyclePort;
   readonly createNavigationId?: () => string;
 }
 
@@ -61,6 +64,12 @@ type ForegroundResolver = (signal: AbortSignal) => Promise<ResolvedScope>;
 
 const noPresentation: SpatialScopePresentationPort = {
   present: () => Promise.resolve(),
+  clear: () => undefined,
+};
+
+const noContainment: SpatialContainmentLifecyclePort = {
+  commit: () => undefined,
+  reset: () => undefined,
 };
 
 function isAbortError(error: unknown): boolean {
@@ -121,6 +130,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
   private readonly catalog: SpatialCatalogPort;
   private readonly navigation: ScopeNavigationPort;
   private readonly presentation: SpatialScopePresentationPort;
+  private readonly containment: SpatialContainmentLifecyclePort;
   private readonly createNavigationId: () => string;
   private readonly listeners = new Set<() => void>();
   private readonly sharedResolves = new Map<string, SharedResolve>();
@@ -138,6 +148,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
     this.catalog = options.catalog;
     this.navigation = options.navigation;
     this.presentation = options.presentation ?? noPresentation;
+    this.containment = options.containment ?? noContainment;
     let fallbackNavigationId = 0;
     this.createNavigationId = options.createNavigationId ?? (() => {
       fallbackNavigationId += 1;
@@ -188,6 +199,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
     this.pendingNavigationIds.clear();
     this.unsubscribeNavigation?.();
     this.unsubscribeNavigation = null;
+    this.containment.reset(0);
     this.publish(HYDRATING_SPATIAL_SCOPE_SNAPSHOT);
   }
 
@@ -575,6 +587,11 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
           }
         : { phase: "building", stateRevision },
     } satisfies SpatialScopeSnapshot);
+    this.containment.commit({
+      scopeKind: resolved.scope.kind,
+      descriptor: resolved.containment,
+      stateRevision,
+    });
     this.publish(next);
 
     if (resolved.presentation.mode === "boundary") {
@@ -585,6 +602,8 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
         stateRevision,
         controller,
       );
+    } else {
+      this.presentation.clear();
     }
     return next;
   }

@@ -5,12 +5,14 @@ import type { LayerVisibility } from "../../types";
 import type { SpatialBoundaryProvenanceState } from "../../hooks/useSpatialBoundaryProvenance";
 import type { SpatialBoundaryProvenance } from "../../spatial/catalog";
 import { parseCatalogRevision } from "../../spatial/contracts";
+import type { LayerSpatialStatus } from "../../spatial/layerScopePolicy";
 
 const allOff: LayerVisibility = {
   flights: false, satellites: false, earthquakes: false, vessels: false,
   cctv: false, events: false, cables: false, pipelines: false,
   countryBorders: false, cityBuildings: false, firmsHotspots: false,
   milAircraft: false, datacenters: false, refineries: false, eonet: false, gdacs: false,
+  recon: false,
 };
 
 const provenanceData: SpatialBoundaryProvenance = {
@@ -40,6 +42,43 @@ const readyProvenance: SpatialBoundaryProvenanceState = {
 };
 
 describe("LayersPanel", () => {
+  it("renders registry-owned scope behavior beside runtime layers", () => {
+    const spatialStatuses: Partial<Record<keyof LayerVisibility, LayerSpatialStatus>> = {
+      flights: {
+        render: false,
+        label: "unavailable in scope",
+        title: "Flights are unavailable outside world scope",
+        tone: "unsupported",
+      },
+      satellites: {
+        render: true,
+        label: "global context",
+        title: "Satellites remain global context",
+        tone: "global",
+      },
+    };
+    render(
+      <LayersPanel
+        layers={{ ...allOff, flights: true, satellites: true }}
+        onToggle={() => {}}
+        activeShader="none"
+        onShaderChange={() => {}}
+        spatialStatuses={spatialStatuses}
+      />,
+    );
+
+    expect(screen.getByTestId("layer-scope-flights")).toHaveTextContent(
+      "unavailable in scope",
+    );
+    expect(screen.getByTestId("layer-scope-satellites")).toHaveTextContent(
+      "global context",
+    );
+    expect(screen.getByTestId("layer-scope-flights")).toHaveAttribute(
+      "title",
+      "Flights are unavailable outside world scope",
+    );
+  });
+
   it("renders groups and marks active layer as pressed", () => {
     render(
       <LayersPanel
@@ -81,9 +120,9 @@ describe("LayersPanel", () => {
     expect(screen.getByText(/D · lens & chrome/i)).toBeInTheDocument();
   });
 
-  it("renders all 16 LayerVisibility keys under correct groups", () => {
+  it("renders all 17 LayerVisibility keys under correct groups", () => {
     render(<LayersPanel layers={allOff} onToggle={() => {}} activeShader="none" onShaderChange={() => {}} />);
-    const expectedKeys = ["flights","satellites","earthquakes","vessels","cctv","events","cables","pipelines","countryBorders","cityBuildings","firmsHotspots","milAircraft","datacenters","refineries","eonet","gdacs"];
+    const expectedKeys = ["flights","satellites","earthquakes","vessels","cctv","events","cables","pipelines","countryBorders","cityBuildings","firmsHotspots","milAircraft","datacenters","refineries","eonet","gdacs","recon"];
     for (const k of expectedKeys) {
       expect(screen.getByTestId(`layer-toggle-${k}`)).toBeInTheDocument();
     }

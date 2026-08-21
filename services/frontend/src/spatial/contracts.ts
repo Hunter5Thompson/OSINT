@@ -185,6 +185,27 @@ export interface ContainmentAssetDescriptor extends BaseAssetDescriptor {
   readonly maxErrorMeters: number;
 }
 
+export type PointContainment =
+  | "inside"
+  | "outside"
+  | "boundary-uncertain";
+
+export type ContainmentSnapshot =
+  | {
+      readonly phase: "building" | "unavailable";
+      readonly stateRevision: number;
+    }
+  | {
+      readonly phase: "ready";
+      readonly stateRevision: number;
+      contains(longitude: number, latitude: number): PointContainment;
+    };
+
+export interface SpatialContainmentPort {
+  getSnapshot(): ContainmentSnapshot;
+  subscribe(listener: () => void): () => void;
+}
+
 export type AssetDescriptor = RenderAssetDescriptor | ContainmentAssetDescriptor;
 export type GeometryLod = RenderAssetDescriptor["lod"];
 export type AssetLodSet = Readonly<
