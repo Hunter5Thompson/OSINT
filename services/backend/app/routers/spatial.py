@@ -50,6 +50,7 @@ _PROBLEM_STATUS: Final[dict[CatalogProblemCode, int]] = {
     CatalogProblemCode.UNKNOWN_ASSET: 404,
     CatalogProblemCode.ASSET_BUSY: 429,
     CatalogProblemCode.ASSET_CORRUPT: 503,
+    CatalogProblemCode.SPATIAL_FILTER_UNAVAILABLE: 503,
 }
 if set(_PROBLEM_STATUS) != set(CatalogProblemCode):
     raise RuntimeError("spatial problem status mapping must be exhaustive")

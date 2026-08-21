@@ -1,6 +1,6 @@
 # Spatial Scope 04 — CHRONIK BBox Scope
 
-> **Canonical slice:** 4 · **Requires:** Plans 02 and 03
+> **Status:** DONE (2026-08-06) · **Canonical slice:** 4 · **Requires:** Plans 02 and 03
 >
 > **Load with:** [Spec 07](../../specs/2026-07-31-spatial-scope-drilldown/07-chronik-query-contract.md),
 > [Spec 04 §10.8](../../specs/2026-07-31-spatial-scope-drilldown/04-spatial-catalog-contracts.md),
@@ -25,61 +25,72 @@ request as a mutually exclusive AOI mode.
 
 ## Work order 1 — Request/response contract
 
-- [ ] **RED:** Model tests cover structured scope, `scope_key + bbox` 422, invalid
+- [x] **RED:** Model tests cover structured scope, `scope_key + bbox` 422, invalid
   revision, a new-client world token versus a legacy tokenless global request, echoed
   query reference, relation, mode,
   completeness, distinct included count, excluded counts, and unknown enum/schema.
-- [ ] **GREEN:** Implement the Spec-07 models including `SpatialApplicationV1`.
+- [x] **GREEN:** Implement the Spec-07 models including `SpatialApplicationV1`.
   Define `included_count` as distinct top-level records before sample limit and keep
   `samples.length` separate.
-- [ ] **REFACTOR:** Import the shared conceptual symbols; do not redeclare a second
+- [x] **REFACTOR:** Import the shared conceptual symbols; do not redeclare a second
   `SpatialQueryRef` normative shape in timeline code.
-- [ ] **VERIFY:** Run `test_timeline_models.py` and `test_timeline_params.py`.
-- [ ] **COMMIT:** `feat(backend): define scoped timeline contract`
+- [x] **VERIFY:** Run `test_timeline_models.py` and `test_timeline_params.py`.
+- [x] **COMMIT:** `feat(backend): define scoped timeline contract`
 
 ## Work order 2 — Catalog extent compiler
 
-- [ ] **RED:** Test server-side resolution, active/previous revision pinning,
+- [x] **RED:** Test server-side resolution, active/previous revision pinning,
   world/unscoped behavior, Fiji two-span projection, polar full longitude, invalid
   extent, event `occurs-in` versus movement `intersects`, parameter binding, and no
   global fallback on catalog failure.
-- [ ] **GREEN:** Implement a static bbox compiler in `spatial_filters.py`; it returns
+- [x] **GREEN:** Implement a static bbox compiler in `spatial_filters.py`; it returns
   fixed query IDs plus parameter dictionaries, never dynamic property names or raw
   Cypher fragments. Wire event/histogram/movement handlers to resolve through the
   loader and return `bbox_approximate + partial` accounting.
-- [ ] **REFACTOR:** Keep current timeline query shapes and movement semantics. One
+- [x] **REFACTOR:** Keep current timeline query shapes and movement semantics. One
   extent adapter owns conversion from `GeoExtent` to the legacy Neo4j bbox convention.
-- [ ] **VERIFY:** Run timeline router/histogram and new spatial-filter unit tests.
-- [ ] **COMMIT:** `feat(backend): scope chronik through catalog extents`
+- [x] **VERIFY:** Run timeline router/histogram and new spatial-filter unit tests.
+- [x] **COMMIT:** `feat(backend): scope chronik through catalog extents`
 
 ## Work order 3 — Frontend API and stale envelope guards
 
-- [ ] **RED:** Hook tests cover A→B immediate hide, first B render rejecting stored A
+- [x] **RED:** Hook tests cover A→B immediate hide, first B render rejecting stored A
   before an effect, late A response, echoed token mismatch, abort, backend failure,
   and no fallback request without scope. Preserve timeline cursor/range/mode/speed
   across scope; preserve scope across seek.
-- [ ] **GREEN:** Send `SpatialQueryRef` with window/histogram calls and store a typed
+- [x] **GREEN:** Send `SpatialQueryRef` with window/histogram calls and store a typed
   response envelope. Derive visible data synchronously from current props plus echoed
   token/generation; reset loading/error explicitly rather than silently retaining old
   data.
-- [ ] **REFACTOR:** Share one token-equality helper and request-generation pattern
+- [x] **REFACTOR:** Share one token-equality helper and request-generation pattern
   between both hooks. Do not copy catalog bounds into frontend types.
-- [ ] **VERIFY:** Run both hook suites and `ScrubberMount` tests.
-- [ ] **COMMIT:** `feat(frontend): bind chronik requests to spatial scope`
+- [x] **VERIFY:** Run both hook suites and `ScrubberMount` tests.
+- [x] **COMMIT:** `feat(frontend): bind chronik requests to spatial scope`
 
 ## Work order 4 — Honest UX and observability
 
-- [ ] **RED:** Test the scrubber badge/text for global, loading, partial
+- [x] **RED:** Test the scrubber badge/text for global, loading, partial
   `bbox_approximate`, unavailable, and differing movement relation. Ensure stale data
   cannot remain visible under a new breadcrumb.
-- [ ] **GREEN:** Surface application mode/completeness/excluded counts compactly and
+- [x] **GREEN:** Surface application mode/completeness/excluded counts compactly and
   emit request/reject/latency metrics with scope kind/revision—not raw user content.
   Seed `layerScopePolicy.ts` with the Spec-06 initial capability matrix so global
   context, unsupported, approximate and strict layers cannot share a misleading UI.
-- [ ] **REFACTOR:** Keep precision labels response-driven; the UI never infers exactness
+- [x] **REFACTOR:** Keep precision labels response-driven; the UI never infers exactness
   from the presence of a scope key.
-- [ ] **VERIFY:** Run full backend and frontend quality commands.
-- [ ] **COMMIT:** `feat(worldview): expose chronik spatial precision`
+- [x] **VERIFY:** Run full backend and frontend quality commands.
+- [x] **COMMIT:** `feat(worldview): expose chronik spatial precision`
+
+## Review follow-up — 2026-08-07
+
+- [x] Histogram totals reuse the already deduplicated result rows; only non-global
+  requests issue one additional unlocated-record scan.
+- [x] Frontend V1 decoding requires normative fields and enums while tolerating
+  additive response fields for independent frontend/backend rollout.
+- [x] `requested_scope_key` echoes the validated request literally while the internal
+  catalog token remains canonical.
+- [x] Requested-filter telemetry moved to debug; the provisional layer matrix is
+  tracked in `TASK-123`, and hook refs are published after React commit.
 
 ## Exit gate
 

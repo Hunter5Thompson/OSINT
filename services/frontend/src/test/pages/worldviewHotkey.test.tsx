@@ -19,6 +19,32 @@ vi.mock("../../services/api", () => ({
     api_version: "v1",
   }),
   getHotspots: vi.fn().mockResolvedValue([]),
+  getTimeWindow: vi.fn(),
+  getTimeHistogram: vi.fn().mockResolvedValue({
+    t_start: "a",
+    t_end: "b",
+    bucket_ms: 1,
+    buckets: [],
+    notables: [],
+    geo_events: [],
+    total_count: 0,
+    geo_located_count: 0,
+    geo_truncated: false,
+    spatial_application: {
+      schema_version: 1,
+      requested_scope_key: null,
+      catalog_revision: null,
+      derivation_revision: null,
+      boundary_policy: null,
+      relation: "occurs-in",
+      mode: "global",
+      completeness: "complete",
+      included_count: 0,
+      excluded_unlocated_count: 0,
+      excluded_conflict_count: 0,
+      excluded_stale_revision_count: 0,
+    },
+  }),
 }));
 
 import { WorldviewPage } from "../../pages/WorldviewPage";

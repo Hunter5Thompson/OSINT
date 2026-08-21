@@ -1862,3 +1862,7 @@ Observation-Producer.
 #      über minimale geteilte Longitude-Spans in RBush eingetragen statt mit einer
 #      globalen `[-180, 180]`-BBox; Tests belegen Diagnose, beidseitige Treffer und
 #      Pruning außerhalb der tatsächlichen Spans.
+#   9. Die in Plan 04 vorgezogene `LAYER_SPATIAL_CAPABILITIES`-Matrix erhält in Plan
+#      05/08 einen Produktions-Consumer für Layer-Badges und Scope-Verhalten oder wird
+#      vor 05D entfernt. Bis dahin bleibt sie explizit Vorleistung und darf nicht
+#      still als unverdrahtete zweite Wahrheitsquelle weiterwachsen.

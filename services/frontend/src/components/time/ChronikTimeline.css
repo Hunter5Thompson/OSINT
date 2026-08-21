@@ -78,6 +78,24 @@
 .chronik__located {
   color: var(--ash, #6b6358);
 }
+.chronik__scope {
+  max-width: 290px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--stone, #958a7a);
+}
+.chronik__scope--complete,
+.chronik__scope--global {
+  color: var(--sage, #7a8a68);
+}
+.chronik__scope--partial,
+.chronik__scope--loading {
+  color: var(--amber, #c4813a);
+}
+.chronik__scope--unavailable {
+  color: var(--signal-red, #c4503a);
+}
 
 .chronik__strip {
   position: relative;

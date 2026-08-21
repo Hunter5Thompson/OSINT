@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { TimelineGeoEvent } from "../../types";
+import type { TimeHistogramQuery, TimelineGeoEvent } from "../../types";
+import type { SpatialQueryRef } from "../../spatial/contracts";
 import { useTime } from "../../state/TimeContext";
 import { useTimeHistogram } from "../../hooks/useTimeHistogram";
 import { ChronikTimeline } from "./ChronikTimeline";
@@ -25,12 +26,19 @@ interface ScrubberMountProps {
     geoEvents: TimelineGeoEvent[];
     window: { startMs: number; endMs: number } | null; // active fade window for EventLayer (§7)
   }) => void;
+  spatialScope?: SpatialQueryRef | null;
+  scopeGeneration?: number;
 }
 
 // useTime() consumer that drives the § CHRONIK density timeline: coarse histogram over a
 // rolling preset window, click=pause+seek vs drag=brush, and lifts geo_events + the active
 // fade window up to WorldviewPage.
-export function ScrubberMount({ onSelectEvent, onTimelineData }: ScrubberMountProps) {
+export function ScrubberMount({
+  onSelectEvent,
+  onTimelineData,
+  spatialScope,
+  scopeGeneration = 0,
+}: ScrubberMountProps) {
   const { mode, cursorMs, playing, speed, seek, pause, play, setMode, setReplayWindow, setSpeed } = useTime();
 
   const [preset, setPreset] = useState<Preset>("7d");
@@ -45,10 +53,20 @@ export function ScrubberMount({ onSelectEvent, onTimelineData }: ScrubberMountPr
     return () => clearInterval(id);
   }, [preset]);
 
-  const { data } = useTimeHistogram(
-    true,
-    { tStart: coarse.tStart, tEnd: coarse.tEnd, buckets: 120 },
+  const histogramQuery = useMemo<TimeHistogramQuery>(
+    () => ({
+      tStart: coarse.tStart,
+      tEnd: coarse.tEnd,
+      buckets: 120,
+      ...(spatialScope === undefined || spatialScope === null ? {} : { spatialScope }),
+    }),
+    [coarse.tEnd, coarse.tStart, spatialScope],
+  );
+  const { data, loading, error } = useTimeHistogram(
+    spatialScope !== null,
+    histogramQuery,
     30_000,
+    scopeGeneration,
   );
 
   // Active fade window: the static brush in replay, else the coarse bounds in live (so all
@@ -128,6 +146,9 @@ export function ScrubberMount({ onSelectEvent, onTimelineData }: ScrubberMountPr
       onReverse={() => { ensureReplay(); setSpeed(signedSpeed(magnitude, -1)); play(); }}
       onForward={() => { setSpeed(signedSpeed(magnitude, 1)); play(); }}
       onSetSpeedMagnitude={(m) => setSpeed(signedSpeed(m, speed < 0 ? -1 : 1))}
+      spatialApplication={data?.spatial_application ?? null}
+      spatialLoading={spatialScope === null || loading}
+      spatialError={error}
     />
   );
 }

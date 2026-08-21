@@ -20,7 +20,7 @@ import {
   HttpSpatialCatalog,
   type SpatialBoundaryProvenanceLoader,
 } from "../spatial/catalog";
-import { WORLD_SCOPE_KEY } from "../spatial/contracts";
+import { WORLD_SCOPE_KEY, type SpatialQueryRef } from "../spatial/contracts";
 import { SpatialScopeBreadcrumb } from "../spatial/SpatialScopeBreadcrumb";
 import { WorldviewKeyboardCoordinator } from "../spatial/WorldviewKeyboardCoordinator";
 import { MutuallyExclusiveCountryPath } from "../spatial/WorldviewCountryPath";
@@ -176,6 +176,8 @@ interface GlobeChildrenProps {
   refineryData: RefineryGeoJSON | null;
   eonetEvents: EONETEvent[];
   gdacsEvents: GDACSEvent[];
+  chronikSpatialScope: SpatialQueryRef | null | undefined;
+  scopeGeneration: number;
 }
 
 function GlobeChildren({
@@ -188,6 +190,8 @@ function GlobeChildren({
   refineryData,
   eonetEvents,
   gdacsEvents,
+  chronikSpatialScope,
+  scopeGeneration,
 }: GlobeChildrenProps) {
   const { dispatch: dispatchSpotlight } = useSpotlight();
 
@@ -219,6 +223,8 @@ function GlobeChildren({
         layers={layers}
         selectedWindow={selectedWindow}
         setSelected={setSelected}
+        spatialScope={chronikSpatialScope}
+        scopeGeneration={scopeGeneration}
       />
       <DatacenterLayer
         viewer={viewer}
@@ -319,11 +325,15 @@ function MilTrackSource({
   layers,
   selectedWindow,
   setSelected,
+  spatialScope,
+  scopeGeneration,
 }: {
   viewer: Cesium.Viewer | null;
   layers: LayerVisibility;
   selectedWindow: { tStart: string; tEnd: string };
   setSelected: Dispatch<SetStateAction<Selected | null>>;
+  spatialScope: SpatialQueryRef | null | undefined;
+  scopeGeneration: number;
 }) {
   const { dispatch: dispatchSpotlight } = useSpotlight();
   const { mode, getTimeMs, discontinuityEpoch } = useTime();
@@ -337,12 +347,15 @@ function MilTrackSource({
       domain: "movements",
       tier: "fine",
       movementKind: "mil_aircraft",
+      ...(spatialScope === undefined || spatialScope === null ? {} : { spatialScope }),
     }),
-    [selectedWindow.tStart, selectedWindow.tEnd],
+    [selectedWindow.tStart, selectedWindow.tEnd, spatialScope],
   );
   const { data: replayData } = useTimeWindow(
-    layers.milAircraft && mode === "replay",
+    layers.milAircraft && mode === "replay" && spatialScope !== null,
     replayQuery,
+    0,
+    scopeGeneration,
   );
 
   const milRender = useMemo<MilTrackRender[]>(
@@ -591,6 +604,7 @@ function WorldviewContent({
     && spatialScope.phase !== "hydrating"
     ? spatialScope.query
     : null;
+  const chronikSpatialScope = spatialEnabled ? committedSpatialQuery : undefined;
 
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [photorealTileset, setPhotorealTileset] = useState<Cesium.Cesium3DTileset | null>(null);
@@ -858,6 +872,8 @@ function WorldviewContent({
           refineryData={refineryData}
           eonetEvents={eonetEvents}
           gdacsEvents={gdacsEvents}
+          chronikSpatialScope={chronikSpatialScope}
+          scopeGeneration={scopeStateRevision}
         />
         <MutuallyExclusiveCountryPath
           spatialEnabled={spatialEnabled}
@@ -1001,6 +1017,8 @@ function WorldviewContent({
         <ScrubberMount
           onSelectEvent={setSelectedEventId}
           onTimelineData={handleTimelineData}
+          spatialScope={chronikSpatialScope}
+          scopeGeneration={scopeStateRevision}
         />
       </div>
     </TimeProvider>
