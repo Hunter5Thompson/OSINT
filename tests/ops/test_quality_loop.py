@@ -23,6 +23,17 @@ class QualityLoopTests(unittest.TestCase):
     def test_quality_loop_service_executes_repo_script_with_ceiling(self) -> None:
         service = (OPS_DIR / "odin-quality-loop.service").read_text()
 
+        self.assertIn("User=deadpool-ultra", service)
+        self.assertIn("Group=deadpool-ultra", service)
+        self.assertIn("Environment=HOME=/home/deadpool-ultra", service)
+        self.assertIn(
+            "Environment=PATH=/home/deadpool-ultra/.local/bin:"
+            "/home/deadpool-ultra/.nvm/versions/node/v24.13.0/bin:"
+            "/home/deadpool-ultra/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
+            service,
+        )
+        self.assertNotIn("User=root", service)
+        self.assertNotIn("Group=root", service)
         self.assertIn("Type=oneshot", service)
         self.assertIn("WorkingDirectory=/home/deadpool-ultra/ODIN/OSINT", service)
         self.assertIn(
@@ -54,6 +65,13 @@ class QualityLoopTests(unittest.TestCase):
             self.assertIn("ODIN Quality Loop test", output)
             self.assertIn("Coverage mode: ratchet", output)
             self.assertIn("DRY RUN: no commands will be executed", output)
+            ops_contracts = output.index("## Ops Contracts")
+            backend = output.index("## Backend")
+            self.assertLess(ops_contracts, backend)
+            self.assertIn(
+                "$ cd services/backend && uv run pytest ../../tests/ops -q",
+                output,
+            )
             self.assertIn("services/backend", output)
             self.assertIn("uv sync --all-extras", output)
             self.assertIn("uv run --with pytest-cov pytest --cov=app", output)
@@ -88,6 +106,7 @@ class QualityLoopTests(unittest.TestCase):
                 output,
             )
             self.assertIn("./odin.sh smoke", output)
+            self.assertEqual(output.rfind("## "), output.index("## Smoke"))
 
             report = tmp_path / "report-test.md"
             self.assertTrue(report.exists())
@@ -111,6 +130,29 @@ class QualityLoopTests(unittest.TestCase):
             "vision-enrichment",
         ):
             self.assertIn(f'"{service}"', baseline)
+
+    def test_default_ingestion_suite_excludes_live_spark_smoke(self) -> None:
+        ingestion = ROOT / "services" / "data-ingestion"
+
+        result = subprocess.run(
+            [
+                "uv",
+                "run",
+                "pytest",
+                "--collect-only",
+                "-q",
+                "tests/integration/test_spark_smoke.py",
+            ],
+            cwd=ingestion,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual(result.returncode, 5)
+        self.assertNotIn("test_models_endpoint_lists_expected_model", result.stdout)
+        self.assertNotIn("test_real_extraction_call", result.stdout)
+        self.assertIn("2 deselected", result.stdout)
 
     def test_quality_loop_does_not_publish_failed_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

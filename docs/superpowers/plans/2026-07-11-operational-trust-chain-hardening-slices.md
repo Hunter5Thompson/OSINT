@@ -2,7 +2,7 @@
 
 **Datum:** 2026-07-11
 
-**Status:** IN EXECUTION — S01 COMMITTED, PR/MERGE PENDING
+**Status:** IN EXECUTION — S01-S02 DONE, S03 NEXT
 
 **Design-Spec:**
 `docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md`
@@ -48,7 +48,7 @@ wird bis dahin weder verworfen noch mit anderen Slices vermischt.
 
 ## S01 — Kanonischer Munin Runtime Model Contract
 
-**Status:** COMMITTED + VERIFIED — PR/MERGE PENDING
+**Status:** DONE — MERGED ON MAIN
 
 **Priorität:** P0
 
@@ -191,17 +191,16 @@ ODIN_ENV_FILE=tests/fixtures/compose.env docker compose \
   Host-`.venv`; `uv run` reparierte sie deshalb beim Containerstart und lud
   Dependencies nach. S04 erhält dafür einen ausführbaren Build-Kontext- und
   No-Sync-Vertrag; S01 wird dafür nicht verbreitert.
-- VERSIONIERUNG: Der vorgefundene Nutzer-Change an
-  `docker-compose.override.yml` ist unverändert Teil des separaten S01-Commits
-  auf `fix/task-119-s01-runtime-contract`. Erst der Merge macht ihn zu
-  getracktem `main` und erfüllt damit das letzte EXIT-Kriterium; S02 beginnt
-  vorher nicht.
+- VERSIONIERUNG: Der separate S01-Commit `5edafaa` ist Bestandteil von `main`;
+  das letzte EXIT-Kriterium ist damit erfüllt.
 
 **Commit:** `fix(intelligence): make Munin runtime contract reproducible`
 
 ---
 
 ## S02 — Hermetischer Quality-Loop
+
+**Status:** DONE — VERIFIED 2026-08-22
 
 **Priorität:** P0
 
@@ -303,6 +302,41 @@ Exit-Code im PR dokumentieren.
   `daemon-reload`-Warnhinweis
 - vom Loop neu erzeugte `.venv`-, `node_modules`- und Log-Artefakte gehören nicht
   Root
+
+### RECORD — 2026-08-22
+
+- RED: Mit explizit gesetzten `REPORTS_ADMIN_TOKEN` und
+  `INCIDENTS_ADMIN_TOKEN` lieferte
+  `test_create_report_requires_admin_token` reproduzierbar `401` statt `503`.
+  Der neue Ops-Contract war mit drei gezielten Fehlern rot: fehlende
+  `Ops Contracts`-Sektion, fehlende Non-Root-Unit-Felder und ein in der
+  Default-Suite gesammelter Spark-Live-Smoke.
+- GREEN: Backend-Tests neutralisieren Host-Tokens vor dem App-Import;
+  `tests/ops` läuft als erste Nightly-Suite über die Backend-`uv`-Umgebung; der
+  Spark-Smoke trägt den Marker `live`; die getrackte Unit enthält User, Group,
+  HOME und den expliziten PATH.
+- VORGESCHALTETE GATE-REPARATUREN: Der vollständige Ops-/Nightly-Lauf deckte
+  zwei bereits auf `main` vorhandene Testadapter-Drifts auf. Commit `5ac5b50`
+  richtet den alten Spark-Dry-Run-Test auf den bereits produktiven
+  Qwen3.8-Rollback-Vertrag aus; Commit `2eb4009` erhält den Wheel-Isolationstest
+  auch unter einem `uv --with`-Overlay. Beide Reparaturen ändern keinen
+  Produktivpfad und sind separat committed.
+- VERIFY: Backend `585 passed`; Ops `16 passed`; Frontend `625 passed`;
+  Intelligence `484 passed`; Data Ingestion `1445 passed, 1 skipped,
+  17 deselected`; Vision Enrichment `22 passed`. Alle fünf Coverage-Ratchets,
+  Ruff und Backend-mypy waren grün. Der abschließende Smoke meldete
+  `14 passed, 0 failed, 1 skipped`; der Full-Quality-Loop-Handoff trug
+  `Status: PASS`.
+- RUNTIME-ADAPTER: Der Full-Loop lief aus dem isolierten Worktree mit
+  `ODIN_REPO_ROOT` und explizitem `COMPOSE_PROJECT_NAME=osint`, damit der
+  read-only Smoke das bereits laufende kanonische Compose-Projekt prüft. Es gab
+  keinen Containerstart, Profilwechsel oder Deploy.
+- SYSTEMD: Getrackte Service- und Timer-Dateien sind bytegenau identisch mit
+  `/etc/systemd/system`; der Timer ist enabled/active und die geladene Unit läuft
+  als `deadpool-ultra`. Daher waren weder Kopie noch `daemon-reload` nötig.
+- OWNERSHIP: Neu erzeugte Service-`.venv`- und Frontend-Artefakte gehören
+  `deadpool-ultra`, nicht Root. Reports/Handoffs lagen außerhalb des Repositories
+  unter `/tmp/odin-task119-s02-*`.
 
 **Commit:** `fix(ops): isolate nightly quality gate from host environment`
 

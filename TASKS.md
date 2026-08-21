@@ -1651,7 +1651,7 @@ Observation-Producer.
 # ══════════════════════════════════════════
 # TASK-119: Operational Trust Chain Hardening
 # ══════════════════════════════════════════
-# Status: IN PROGRESS — S01 COMMITTED, PR/MERGE PENDING | Priorität: P0 → P2
+# Status: IN PROGRESS — S01-S02 DONE ✅; S03 NEXT | Priorität: P0 → P2
 #
 # Design-Spec:
 #   docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md
@@ -1666,9 +1666,9 @@ Observation-Producer.
 #   SPEC → RED → GREEN → REFACTOR → VERIFY → RECORD
 #
 # Slices:
-#   S01 [P0] [COMMITTED ⏳ MERGE] Kanonischer Munin Runtime Model Contract
-#   S02 [P0] Hermetischer Quality-Loop
-#   S03 [P0] Local Exposure Floor
+#   S01 [P0] [DONE ✅] Kanonischer Munin Runtime Model Contract
+#   S02 [P0] [DONE ✅ 2026-08-22] Hermetischer Quality-Loop
+#   S03 [P0] [NEXT] Local Exposure Floor
 #   S04 [P1] Locked Dependency Contract
 #   S05 [P1] Runtime Provenance, Deploy und Drift
 #   S06 [P1] Evidence Hygiene am Codec-Seam
