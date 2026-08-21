@@ -23,8 +23,10 @@ def test_dry_run_up_prints_cutover_without_calling_docker() -> None:
     result = _dry_run("up")
 
     assert result.returncode == 0, result.stderr
-    assert "[dry-run] docker stop vllm-qwen36" in result.stdout
+    assert "[dry-run] docker stop vllm-qwen36-nvfp4" in result.stdout
+    assert "[dry-run] docker stop vllm-qwen36\n" in result.stdout
     assert "[dry-run] docker run" in result.stdout
+    assert "--name vllm-qwen38-nvfp4" in result.stdout
     assert "would wait for" in result.stdout
 
 
@@ -32,5 +34,6 @@ def test_dry_run_rollback_prints_both_container_transitions() -> None:
     result = _dry_run("rollback")
 
     assert result.returncode == 0, result.stderr
-    assert "[dry-run] docker stop vllm-qwen36-nvfp4" in result.stdout
-    assert "[dry-run] docker start vllm-qwen36" in result.stdout
+    assert "[dry-run] docker stop vllm-qwen38-nvfp4" in result.stdout
+    assert "[dry-run] docker start vllm-qwen36-nvfp4" in result.stdout
+    assert "INGESTION_VLLM_MODEL=Qwen/Qwen3.6-35B-A3B" in result.stdout
