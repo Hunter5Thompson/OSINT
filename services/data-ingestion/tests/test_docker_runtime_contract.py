@@ -2,7 +2,6 @@ import os
 import re
 import subprocess
 import sys
-import sysconfig
 import tomllib
 import zipfile
 from pathlib import Path
@@ -169,14 +168,17 @@ def test_built_wheel_imports_infra_atlas_with_identity_but_without_compiler(
     environment = os.environ.copy()
     environment.pop("PYTHONHOME", None)
     environment.pop("PYTHONPATH", None)
-    purelib = sysconfig.get_path("purelib")
+    dependency_paths = tuple(
+        path for path in sys.path if Path(path).name == "site-packages"
+    )
+    assert dependency_paths
     isolated_import = "\n".join(
         (
             "import importlib.util",
             "import pathlib",
             "import sys",
             f"sys.path.insert(0, {str(installed)!r})",
-            f"sys.path.append({purelib!r})",
+            *(f"sys.path.append({path!r})" for path in dependency_paths),
             "import infra_atlas.build_country_almanac as almanac",
             "import infra_atlas.cli as infra_cli",
             "import spatial_catalog.identity as identity",
