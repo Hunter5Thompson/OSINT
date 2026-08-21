@@ -214,6 +214,9 @@ def test_compose_builds_data_ingestion_images_from_repo_root():
         block = match.group("block")
         assert "context: ." in block
         assert "dockerfile: services/data-ingestion/Dockerfile" in block
+        assert (
+            "./services/backend/data/spatial:/app/data/spatial:ro" in block
+        )
 
 
 def test_agents_documents_deployment_lock_exception():

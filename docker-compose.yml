@@ -235,6 +235,8 @@ services:
     ports:
       - "8003:80"
     env_file: ${ODIN_ENV_FILE:-.env}
+    volumes:
+      - ./services/backend/data/spatial:/app/data/spatial:ro
     environment:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
@@ -296,6 +298,7 @@ services:
       - GDELT_CAMEO_ROOT_ALLOWLIST=${GDELT_CAMEO_ROOT_ALLOWLIST:-15,18,19,20}
       - GDELT_BACKFILL_PARALLEL_SLICES=${GDELT_BACKFILL_PARALLEL_SLICES:-4}
     volumes:
+      - ./services/backend/data/spatial:/app/data/spatial:ro
       - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram:/data/telegram
       - gdelt_parquet:/data/gdelt
     depends_on:
@@ -350,6 +353,7 @@ services:
       - GDELT_CAMEO_ROOT_ALLOWLIST=${GDELT_CAMEO_ROOT_ALLOWLIST:-15,18,19,20}
       - GDELT_BACKFILL_PARALLEL_SLICES=${GDELT_BACKFILL_PARALLEL_SLICES:-4}
     volumes:
+      - ./services/backend/data/spatial:/app/data/spatial:ro
       - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram:/data/telegram
       - gdelt_parquet:/data/gdelt
     depends_on:
