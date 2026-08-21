@@ -40,6 +40,10 @@ def test_payload_canonical_provenance_and_inherited_meta():
     assert p["chunk_index"] == 2 and p["chunk_count"] == 5
     assert p["fulltext_article_id"] == article_id("https://csis.org/a")
     assert "chunk_uid" in p
+    assert p["spatial_derivation_status"] == "unavailable"
+    assert p["spatial_derivation_unavailable_reason"] == (
+        "rss fulltext inherits no trusted structured spatial evidence"
+    )
 
 
 def test_normalize_url_lowercases_host_preserves_path():
