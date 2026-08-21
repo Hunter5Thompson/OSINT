@@ -4,6 +4,15 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
+_LOCAL_SPATIAL_CATALOG_PATH = (
+    Path(__file__).resolve().parent.parent / "backend" / "data" / "spatial"
+)
+_DEFAULT_SPATIAL_CATALOG_PATH = (
+    Path("/app/data/spatial")
+    if Path("/app").is_dir()
+    else _LOCAL_SPATIAL_CATALOG_PATH
+)
+
 
 class Settings(BaseSettings):
     """Application settings — all values come from env vars or .env file."""
@@ -61,6 +70,15 @@ class Settings(BaseSettings):
     neo4j_http_url: str = "http://localhost:7474"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
+
+    # Immutable spatial assignment inputs shared with the backend catalog.
+    spatial_catalog_path: Path = _DEFAULT_SPATIAL_CATALOG_PATH
+    spatial_country_crosswalk_path: Path = (
+        Path(__file__).resolve().parent
+        / "spatial_catalog"
+        / "data"
+        / "country_crosswalk.json"
+    )
 
     # Redis Streams
     redis_stream_events: str = "events:new"

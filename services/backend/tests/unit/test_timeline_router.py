@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -11,11 +12,13 @@ from app.models.spatial import (
     SpatialCatalogProblem,
     SpatialScopeTokenV1,
 )
+from app.models.timeline import ChronikExactSpatialActivationV1
 from app.services.spatial_catalog import SpatialCatalogLoader
 from app.services.spatial_filters import (
     GeoExtent,
     LongitudeSpan,
     ResolvedSpatialConstraint,
+    compile_exact_event_query_plan,
     compile_extent_filter,
 )
 
@@ -31,10 +34,10 @@ def _catalog_filter(
     *,
     scope_key: str = "country:UKR",
     catalog_revision: str = "spatial-v1-0123456789ab",
+    derivation_revision: str = "spatial-derive-v1-0123456789ab",
     kind: ScopeKind = ScopeKind.COUNTRY,
     extent: GeoExtent | None = None,
 ):
-    derivation_revision = "spatial-derive-v1-0123456789ab"
     token = SpatialScopeTokenV1(
         scope_key=scope_key,
         kind=kind,
@@ -57,6 +60,21 @@ def _catalog_filter(
         admin2_scope_key=None,
     )
     return compile_extent_filter(selected_extent, constraint=constraint)
+
+
+def _exact_activation(**overrides: object) -> ChronikExactSpatialActivationV1:
+    return ChronikExactSpatialActivationV1.model_validate({
+        "lane": "event_occurrence",
+        "scope_kind": "country",
+        "catalog_revision": "spatial-v1-0123456789ab",
+        "derivation_revision": "spatial-derive-v1-0123456789ab",
+        "coverage_revision": "coverage-fixture-a",
+        "enabled": True,
+        "coverage_complete": True,
+        "index_plan_verified": True,
+        "stale_revision_ratio": 0.0,
+        **overrides,
+    })
 
 
 @pytest.fixture
@@ -97,6 +115,7 @@ def test_events_window_returns_samples(client):
         "excluded_unlocated_count": 0,
         "excluded_conflict_count": 0,
         "excluded_stale_revision_count": 0,
+        "excluded_unsupported_count": 0,
     }
 
 
@@ -185,6 +204,7 @@ def test_scoped_event_window_echoes_catalog_token_and_distinct_accounting(
         "excluded_unlocated_count": 2,
         "excluded_conflict_count": 0,
         "excluded_stale_revision_count": 0,
+        "excluded_unsupported_count": 0,
     }
     resolve.assert_awaited_once_with(
         spatial_loader,
@@ -196,6 +216,337 @@ def test_scoped_event_window_echoes_catalog_token_and_distinct_accounting(
         assert "country:UKR" not in query
         assert parameters["west"] == 20
         assert parameters["east"] == 41
+
+
+def test_exact_event_window_uses_one_pinned_token_and_reports_mixed_coverage(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    exact = compile_exact_event_query_plan(
+        compiled,
+        coverage_revision="coverage-fixture-a",
+        coverage_complete=True,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch(
+            "app.routers.timeline._select_event_spatial_query",
+            return_value=exact,
+        ),
+        patch("app.routers.timeline.read_queries", new_callable=AsyncMock) as read_many,
+    ):
+        read_many.return_value = [
+            [{
+                "id": "gdelt:event:1",
+                "time": "2026-05-01T06:00:00Z",
+                "time_basis": "indexed",
+            }],
+            [{
+                "candidate_count": 8,
+                "included_count": 3,
+                "excluded_conflict_count": 1,
+                "excluded_stale_revision_count": 2,
+                "excluded_unsupported_count": 2,
+            }],
+        ]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab&limit=1"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bbox"] is None
+    assert body["total_count"] == 3
+    assert len(body["samples"]) == 1
+    assert body["truncated"] is True
+    assert body["spatial_application"] == {
+        "schema_version": 1,
+        "requested_scope_key": "country:UKR",
+        "catalog_revision": "spatial-v1-0123456789ab",
+        "derivation_revision": "spatial-derive-v1-0123456789ab",
+        "boundary_policy": "odin-reference-v1",
+        "relation": "occurs-in",
+        "mode": "semantic_key",
+        "completeness": "partial",
+        "included_count": 3,
+        "excluded_unlocated_count": 0,
+        "excluded_conflict_count": 1,
+        "excluded_stale_revision_count": 2,
+        "excluded_unsupported_count": 2,
+    }
+    query_specs = read_many.await_args.args[0]
+    samples_query, samples_parameters = query_specs[0]
+    count_query, count_parameters = query_specs[1]
+    assert "l.country_scope_key = $scope_key" in samples_query
+    assert "l.spatial_conflict = false" in samples_query
+    assert "excluded_stale_revision_count" in count_query
+    assert samples_parameters == count_parameters
+    assert samples_parameters["scope_key"] == "country:UKR"
+    assert samples_parameters["compatible_revisions"] == [
+        "spatial-derive-v1-0123456789ab"
+    ]
+    assert {"bbox_off", "west", "east", "south", "north"}.isdisjoint(
+        samples_parameters
+    )
+
+
+@pytest.mark.parametrize(
+    ("coverage_complete", "expected_completeness"),
+    [(False, "partial"), (True, "complete")],
+)
+def test_exact_complete_requires_lane_contract_and_zero_exclusions(
+    client,
+    spatial_loader,
+    coverage_complete,
+    expected_completeness,
+):
+    compiled = _catalog_filter()
+    exact = compile_exact_event_query_plan(
+        compiled,
+        coverage_revision="coverage-fixture-a",
+        coverage_complete=coverage_complete,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch(
+            "app.routers.timeline._select_event_spatial_query",
+            return_value=exact,
+        ),
+        patch("app.routers.timeline.read_queries", new_callable=AsyncMock) as read_many,
+    ):
+        read_many.return_value = [
+            [],
+            [{
+                "candidate_count": 0,
+                "included_count": 0,
+                "excluded_conflict_count": 0,
+                "excluded_stale_revision_count": 0,
+                "excluded_unsupported_count": 0,
+            }],
+        ]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 200
+    assert (
+        response.json()["spatial_application"]["completeness"]
+        == expected_completeness
+    )
+
+
+def test_server_activation_selects_exact_and_emits_revisioned_metric(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    deployment_settings = SimpleNamespace(
+        chronik_exact_spatial_activations=(_exact_activation(),),
+        chronik_exact_max_stale_revision_ratio=0.01,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.settings", deployment_settings),
+        patch("app.routers.timeline.read_queries", new_callable=AsyncMock) as read_many,
+        patch("app.routers.timeline.log") as logger,
+    ):
+        read_many.return_value = [
+            [],
+            [{
+                "candidate_count": 0,
+                "included_count": 0,
+                "excluded_conflict_count": 0,
+                "excluded_stale_revision_count": 0,
+                "excluded_unsupported_count": 0,
+            }],
+        ]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["spatial_application"]["mode"] == "semantic_key"
+    selected = next(
+        call.kwargs
+        for call in logger.info.call_args_list
+        if call.args[0] == "spatial_exact_activation_selected"
+    )
+    assert selected == {
+        "consumer": "chronik",
+        "lane": "event_occurrence",
+        "scope_key": "country:UKR",
+        "scope_kind": "country",
+        "catalog_revision": "spatial-v1-0123456789ab",
+        "derivation_revision": "spatial-derive-v1-0123456789ab",
+        "coverage_revision": "coverage-fixture-a",
+    }
+
+
+def test_new_derivation_revision_rejects_exact_and_stays_explicit_bbox(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter(
+        derivation_revision="spatial-derive-v1-bbbbbbbbbbbb",
+    )
+    deployment_settings = SimpleNamespace(
+        chronik_exact_spatial_activations=(_exact_activation(),),
+        chronik_exact_max_stale_revision_ratio=0.01,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.settings", deployment_settings),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+        patch("app.routers.timeline.log") as logger,
+    ):
+        read.side_effect = [[], [{"total": 0, "excluded_unlocated_count": 0}]]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["spatial_application"]["mode"] == "bbox_approximate"
+    rejected = next(
+        call.kwargs
+        for call in logger.info.call_args_list
+        if call.args[0] == "spatial_exact_activation_rejected"
+    )
+    assert rejected["cause"] == "derivation_revision_mismatch"
+    assert rejected["coverage_revision"] is None
+    assert "l.country_scope_key = $scope_key" not in read.await_args_list[0].args[0]
+
+
+def test_client_cannot_enable_exact_when_server_registry_is_default_off(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    deployment_settings = SimpleNamespace(
+        chronik_exact_spatial_activations=(),
+        chronik_exact_max_stale_revision_ratio=0.01,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.settings", deployment_settings),
+        patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
+    ):
+        read.side_effect = [[], [{"total": 0, "excluded_unlocated_count": 0}]]
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab&exact=true"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["spatial_application"]["mode"] == "bbox_approximate"
+    assert "l.country_scope_key = $scope_key" not in read.await_args_list[0].args[0]
+
+
+def test_active_exact_failure_returns_spatial_filter_unavailable_without_bbox_retry(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    deployment_settings = SimpleNamespace(
+        chronik_exact_spatial_activations=(_exact_activation(),),
+        chronik_exact_max_stale_revision_ratio=0.01,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch("app.routers.timeline.settings", deployment_settings),
+        patch("app.routers.timeline.read_queries", new_callable=AsyncMock) as read_many,
+    ):
+        read_many.side_effect = RuntimeError("exact count unavailable")
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "SPATIAL_FILTER_UNAVAILABLE"
+    assert response.headers["cache-control"] == "no-store"
+    read_many.assert_awaited_once()
+    query_specs = read_many.await_args.args[0]
+    assert len(query_specs) == 2
+    assert all(
+        "l.country_scope_key = $scope_key" in query
+        for query, _ in query_specs
+    )
+    assert all("$bbox_off" not in query for query, _ in query_specs)
+
+
+def test_exact_accounting_violation_is_not_logged_as_a_neo4j_query_failure(
+    client,
+    spatial_loader,
+):
+    compiled = _catalog_filter()
+    exact = compile_exact_event_query_plan(
+        compiled,
+        coverage_revision="coverage-fixture-a",
+        coverage_complete=True,
+    )
+    with (
+        patch(
+            "app.routers.timeline.resolve_catalog_filter",
+            new_callable=AsyncMock,
+            return_value=compiled,
+        ),
+        patch(
+            "app.routers.timeline._select_event_spatial_query",
+            return_value=exact,
+        ),
+        patch(
+            "app.routers.timeline.read_queries",
+            new_callable=AsyncMock,
+            return_value=[
+                [{"id": "event-1", "time": "2026-05-01T06:00:00Z"}],
+                [{
+                    "candidate_count": 0,
+                    "included_count": 0,
+                    "excluded_conflict_count": 0,
+                    "excluded_stale_revision_count": 0,
+                    "excluded_unsupported_count": 0,
+                }],
+            ],
+        ),
+        patch("app.routers.timeline.log") as logger,
+    ):
+        response = client.get(
+            f"/api/timeline/window{W}&scope_key=country:UKR"
+            "&catalog_revision=spatial-v1-0123456789ab"
+        )
+
+    assert response.status_code == 503
+    events = [call.args[0] for call in logger.error.call_args_list]
+    assert events == ["timeline_exact_event_accounting_invalid"]
 
 
 def test_new_client_world_token_echoes_identity_while_using_global_query(

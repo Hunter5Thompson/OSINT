@@ -1,11 +1,19 @@
 """Windowed-data contract models for /api/timeline/window."""
 
+from __future__ import annotations
+
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, model_validator
 
-from app.models.spatial import CatalogRevision, DerivationRevision, PolicyIdentifier, ScopeKey
+from app.models.spatial import (
+    CatalogRevision,
+    DerivationRevision,
+    PolicyIdentifier,
+    ScopeKey,
+    ScopeKind,
+)
 
 
 class SpatialFilterMode(StrEnum):
@@ -18,6 +26,40 @@ class SpatialFilterMode(StrEnum):
 class SpatialCompleteness(StrEnum):
     COMPLETE = "complete"
     PARTIAL = "partial"
+
+
+class ChronikSpatialLane(StrEnum):
+    """Backend-owned CHRONIK lanes; never accepted as request parameters."""
+
+    EVENT_OCCURRENCE = "event_occurrence"
+    MOVEMENT_TRACK = "movement_track"
+
+
+class ChronikExactSpatialActivationV1(BaseModel):
+    """One deployment-reviewed exact activation bound to coverage evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    lane: ChronikSpatialLane
+    scope_kind: ScopeKind
+    catalog_revision: CatalogRevision
+    derivation_revision: DerivationRevision
+    coverage_revision: PolicyIdentifier
+    enabled: bool
+    coverage_complete: bool
+    index_plan_verified: bool
+    stale_revision_ratio: StrictFloat = Field(ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def reject_non_exact_scope_kinds(self) -> ChronikExactSpatialActivationV1:
+        if self.scope_kind not in {
+            ScopeKind.COUNTRY,
+            ScopeKind.ADMIN1,
+            ScopeKind.ADMIN2,
+        }:
+            raise ValueError("exact activation scope kind is unsupported")
+        return self
 
 
 class SpatialApplicationV1(BaseModel):
@@ -35,10 +77,11 @@ class SpatialApplicationV1(BaseModel):
     completeness: SpatialCompleteness
     included_count: StrictInt = Field(ge=0)
     excluded_unlocated_count: StrictInt = Field(ge=0)
-    # BBox V1 cannot observe derived-key conflicts or stale derivation revisions;
-    # these counters stay zero until an exact lane actually measures them.
+    # BBox V1 cannot observe derived-key conflicts, stale revisions, or unsupported
+    # normalization states; these counters stay zero until exact measures them.
     excluded_conflict_count: StrictInt = Field(ge=0)
     excluded_stale_revision_count: StrictInt = Field(ge=0)
+    excluded_unsupported_count: StrictInt = Field(ge=0)
 
 
 class EventSample(BaseModel):

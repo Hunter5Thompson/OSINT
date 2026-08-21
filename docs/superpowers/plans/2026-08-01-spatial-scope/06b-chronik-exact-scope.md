@@ -11,7 +11,8 @@
 Promote eligible CHRONIK event lanes from catalog-bbox approximation to exact
 materialized scope-key queries. Static templates are selected by scope kind and
 relation, with revision compatibility and conflict/stale accounting. Activation is
-server-side per lane/kind; rollback explicitly returns to `bbox_approximate`.
+server-side per lane/kind/derivation revision; rollback explicitly returns to
+`bbox_approximate`.
 
 ## File surface
 
@@ -21,48 +22,71 @@ LLM output.
 
 ## Work order 1 — Static template registry
 
-- [ ] **RED:** Test a closed registry for country/admin1/admin2 event occurrence;
+- [x] **RED:** Test a closed registry for country/admin1/admin2 event occurrence;
   parameter binding; compatible derivation revisions; conflict exclusion; no dynamic
   property names; unknown kind/relation unsupported; antimeridian irrelevant to exact
   key matching. Add an event with two matching `OCCURRED_AT` locations and require one
   top-level event.
-- [ ] **GREEN:** Add complete fixed Cypher templates. Collapse with deterministic
+- [x] **GREEN:** Add complete fixed Cypher templates. Collapse with deterministic
   `ORDER BY ... WITH ev, collect(l)[0] AS l` before `LIMIT`; count with
-  `count(DISTINCT ev)`. Select the registry entry through enums only.
-- [ ] **REFACTOR:** Share predicates conceptually but keep full query strings static so
+  `count(DISTINCT ev)`. Histogram buckets, Event/Incident notables and geo rows use
+  separate fixed templates. Select the registry entry through enums only.
+- [x] **REFACTOR:** Share predicates conceptually but keep full query strings static so
   Neo4j can plan the matching composite index.
-- [ ] **VERIFY:** `cd services/backend && uv run pytest tests/unit/test_spatial_filters.py tests/unit/test_timeline_router.py -v`
-- [ ] **COMMIT:** `feat(backend): compile exact spatial event templates`
+- [x] **VERIFY:** `cd services/backend && uv run pytest tests/unit/test_spatial_filters.py tests/unit/test_timeline_router.py -v`
+- [x] **COMMIT:** `feat(backend): compile exact spatial event templates`
 
 ## Work order 2 — Accounting and mixed coverage
 
-- [ ] **RED:** Fixture tests distinguish total, included distinct records, samples,
+- [x] **RED:** Fixture tests distinguish an independently measured candidate set,
+  included distinct records, samples,
   unlocated, conflict, stale revision and unsupported. Verify `complete` only when the
   lane contract permits it; multi-location rows never inflate counts.
-- [ ] **GREEN:** Execute count/sample queries against one pinned token and map results
+- [x] **GREEN:** Execute count/sample queries against one pinned token and one
+  Neo4j read snapshot, then map results
   to `SpatialApplicationV1(mode=SpatialFilterMode.SEMANTIC_KEY)`. Echo
   scope/catalog/derivation compatibility and keep exclusions visible.
-- [ ] **REFACTOR:** One response-accounting function serves window/histogram endpoints
+- [x] **REFACTOR:** One response-accounting function serves window/histogram endpoints
   and prevents divergent count semantics.
-- [ ] **VERIFY:** Run timeline model/router/histogram suites.
-- [ ] **COMMIT:** `feat(backend): report exact chronik coverage`
+- [x] **VERIFY:** Run timeline model/router/histogram suites.
+- [x] **COMMIT:** `feat(backend): report exact chronik coverage`
 
 ## Work order 3 — Per-lane activation and rollback
 
-- [ ] **RED:** Test default-off exact gate, eligible lane/kind on, ineligible lane
+- [x] **RED:** Test default-off exact gate, eligible lane/kind on, ineligible lane
   remaining bbox with explicit mode, missing/stale coverage blocking promotion, new
   derivation revision automatically disabling exact until re-enrichment, and rollback
   returning visibly to approximation without global fallback. Once an exact lane is
   active, an execution failure returns `503/SPATIAL_FILTER_UNAVAILABLE`; it never
   retries as bbox or global inside that request.
-- [ ] **GREEN:** Add an allowlisted activation registry tied to coverage revision and
-  derivation revision. Resolve a request once, choose exact or bbox explicitly, and
-  emit activation/rejection metrics.
-- [ ] **REFACTOR:** Gates are deployment config/data, not query parameters and never
+- [x] **GREEN:** Add an allowlisted activation registry tied to coverage revision and
+  derivation revision. Multiple scope-specific derivations may coexist for the same
+  lane/kind; the resolved token selects membership in that revision set. Resolve a
+  request once, choose exact or bbox explicitly, and emit activation/rejection metrics.
+- [x] **REFACTOR:** Gates are deployment config/data, not query parameters and never
   client-controlled.
-- [ ] **VERIFY:** Run full backend tests/lint/mypy; execute staging `EXPLAIN` and
+- [x] **VERIFY:** Run full backend tests/lint/mypy; execute staging `EXPLAIN` and
   accounting smoke for every promoted lane/kind.
-- [ ] **COMMIT:** `feat(chronik): activate exact scope per covered lane`
+- [x] **COMMIT:** `feat(chronik): activate exact scope per covered lane`
+
+> Verification 2026-08-09: Backend `539 passed`; Ruff and strict MyPy are clean.
+> The deployment registry remains empty/default-off because no lane/kind has passed
+> the still-open operational promotion gates. Therefore there was no promoted
+> lane/kind requiring a staging `EXPLAIN` or accounting smoke, and no live exact
+> activation or graph mutation occurred in Plan 06B.
+
+> Review remediation 2026-08-09: the activation key is now
+> `(lane, scope_kind, derivation_revision)`; accounting reconciles an independently
+> measured scope-relative candidate set and no longer scans global unlocated Events;
+> `excluded_unsupported_count` is reported through backend and frontend; Exact
+> Incident notables have a static query path and coordinate-preferred representatives;
+> their production coverage is still a separate promotion gate. All Exact
+> result sets share one read transaction. Backend `553 passed`, frontend `559 passed`,
+> Ruff, strict MyPy, ESLint and TypeScript are clean. All 18 country/admin1/admin2
+> sample/bucket/notable/incident/geo/count templates passed live Neo4j `EXPLAIN` as
+> read-only and index-backed. A later read-only production accounting smoke for
+> `country:USA` and `country:IND` reconciled; it is not promotion evidence. The
+> deployment registry remains empty, and no operational promotion occurred.
 
 ## Exit gate
 
@@ -70,3 +94,19 @@ Approved lanes meet Spec-08 coverage and index-plan gates; duplicate locations d
 duplicate events or consume row limit; all exclusion counts reconcile; non-approved
 lanes remain honestly approximate. `exact` names only the activation gate; successful
 responses report `semantic_key`. Disabling exact never yields an unfiltered query.
+
+The implementation exit is complete with all non-approved lanes explicitly remaining
+`bbox_approximate`. Operational promotion remains a separate, evidence-gated action.
+
+### Operational promotion gates still open
+
+- [ ] Measure and attest Incident-Location scope coverage separately from Event
+  coverage. Current production evidence is `0/11793` scope-keyed Incidents, so no
+  histogram-bearing scope may be promoted yet.
+- [ ] Record the unlocated-coverage attestation, expected candidate baseline and a
+  reconciled accounting smoke for each concrete lane/kind/derivation. Exact
+  `completeness=complete` is evidence-attested, not runtime-measured from unlocated
+  records.
+- [ ] `PROFILE` the unbounded Exact-Geo read with real promoted-scope parameters and
+  approve a transaction-duration/row-budget or add server-side aggregation/capping.
+  Current USA evidence is 13.156 Geo rows for a 200-dot response cap.

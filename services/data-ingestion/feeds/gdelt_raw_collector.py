@@ -16,12 +16,17 @@ from gdelt_raw.run import run_forward
 from gdelt_raw.state import GDELTState
 from gdelt_raw.writers.neo4j_writer import Neo4jWriter
 from gdelt_raw.writers.qdrant_writer import QdrantWriter, default_tei_embed
+from graph_integrity.spatial_normalizer import load_active_normalization_index
 
 log = structlog.get_logger(__name__)
 
 
 async def run_once() -> None:
     gdelt_cfg = get_settings()
+    spatial_index = load_active_normalization_index(
+        settings.spatial_catalog_path,
+        crosswalk_path=settings.spatial_country_crosswalk_path,
+    )
     r = aioredis.from_url(
         os.getenv("REDIS_URL", "redis://localhost:6379/0"),
         decode_responses=True,
@@ -31,6 +36,7 @@ async def run_once() -> None:
         uri=os.getenv("NEO4J_URL", "bolt://localhost:7687"),
         user=os.getenv("NEO4J_USER", "neo4j"),
         password=os.getenv("NEO4J_PASSWORD", ""),
+        spatial_index=spatial_index,
     )
     qdrant_client = AsyncQdrantClient(
         url=os.getenv("QDRANT_URL", "http://localhost:6333")

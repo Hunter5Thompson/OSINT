@@ -21,34 +21,60 @@ import yaml
 
 from canonicalize import canonicalize_entity
 from config import Settings, settings
-from graph_integrity.country_centroids import centroid_for, resolve_iso2
-from graph_integrity.loc_key import centroid_key
+from graph_integrity.spatial_normalizer import (
+    CountryCodeSystem,
+    RawLocationIdentity,
+    SpatialNormalizationIndex,
+    load_active_normalization_index,
+    normalize_location,
+    spatial_property_parameters,
+)
 from nlm_ingest.schemas import normalize_entity_type
 
 log = structlog.get_logger(__name__)
 
 
-def build_event_geo_fragment(country: str | None) -> dict | None:
-    """Cypher FRAGMENT appended to an event-create statement where `ev` is
-    already bound (after `MERGE (d)-[:DESCRIBES]->(ev)`). It does NOT re-MATCH
-    the event — no node-id round-trip. Returns None when country is unknown."""
-    iso2 = resolve_iso2(country)
-    if iso2 is None:
+def build_event_geo_fragment(
+    *,
+    country_code: str | None,
+    spatial_index: SpatialNormalizationIndex,
+) -> dict[str, Any] | None:
+    """Build a country-only Location fragment from an explicit ISO2 code."""
+
+    if country_code is None or re.fullmatch(r"[A-Z]{2}", country_code) is None:
         return None
-    cc = centroid_for(iso2)
-    if cc is None:
+    normalized = normalize_location(
+        RawLocationIdentity(
+            country_code=country_code,
+            country_code_system=CountryCodeSystem.ISO2,
+        ),
+        spatial_index,
+    )
+    if normalized.country_scope_key is None or normalized.spatial_conflict:
         return None
-    lat, lon = cc
     return {
         "cypher": (
             " MERGE (l:Location {loc_key: $loc_key}) "
-            "   ON CREATE SET l.lat = $lat, l.lon = $lon, "
-            "                 l.geo_basis = $geo_basis, l.geo_precision = $geo_precision "
+            "   ON CREATE SET l.country = $source_country_code, "
+            "                 l.geo_basis = 'source_country_code' "
+            " SET l.source_country_code = $source_country_code, "
+            "     l.source_country_code_system = $source_country_code_system, "
+            "     l.country_iso3 = $country_iso3, "
+            "     l.admin1_code = $admin1_code, l.admin2_code = $admin2_code, "
+            "     l.country_scope_key = $country_scope_key, "
+            "     l.admin1_scope_key = $admin1_scope_key, "
+            "     l.admin2_scope_key = $admin2_scope_key, "
+            "     l.spatial_basis = $spatial_basis, "
+            "     l.spatial_precision = $spatial_precision, "
+            "     l.spatial_catalog_revision = $spatial_catalog_revision, "
+            "     l.spatial_derivation_revision = $spatial_derivation_revision, "
+            "     l.spatial_conflict = $spatial_conflict, "
+            "     l.spatial_conflict_scope_keys = $spatial_conflict_scope_keys "
             " MERGE (ev)-[:OCCURRED_AT]->(l)"
         ),
         "parameters": {
-            "loc_key": centroid_key(iso2), "lat": lat, "lon": lon,
-            "geo_basis": "country_centroid", "geo_precision": "country",
+            "loc_key": f"spatial:country:{country_code.lower()}",
+            **spatial_property_parameters(normalized),
         },
     }
 
@@ -220,7 +246,7 @@ You are an OSINT intelligence extraction specialist. Analyze the provided text a
 2. ENTITIES: Extract named entities.
    Types: person, organization, location, weapon_system, satellite, vessel, aircraft, military_unit
 
-3. LOCATIONS: Geographic locations with country.
+3. LOCATIONS: Geographic locations with an uppercase ISO 3166-1 alpha-2 country code.
 
 RULES:
 - Confidence: 0.0 to 1.0
@@ -276,7 +302,7 @@ _RESPONSE_SCHEMA = {
                 "additionalProperties": False,
                 "properties": {
                     "name": {"type": "string"},
-                    "country": {"type": "string"},
+                    "country": {"type": "string", "pattern": "^[A-Z]{2}$"},
                 },
                 "required": ["name", "country"],
             },
@@ -493,6 +519,7 @@ async def _write_to_neo4j(
     ingested_at: str | None = None,
     locations: list[dict] | None = None,
     doc_content_hash: str | None = None,
+    spatial_index: SpatialNormalizationIndex | None = None,
 ) -> None:
     """Write extraction results to Neo4j via HTTP transactional API."""
     statements = []
@@ -563,14 +590,27 @@ async def _write_to_neo4j(
     # beats the optional LLM 'timestamp' hint; a malformed hint is dropped, never
     # turned into a fabricated occurred_at.
     effective_ingested = ingested_at or datetime.now(UTC).isoformat()
-    # Geo-stamp events only when the document resolves to exactly ONE distinct
-    # country (WP-05). Multiple place names within the same country stay
-    # centroid-stampable, but a multi-country document is left geoless (honest
-    # located:0) instead of collapsing every event onto whichever country the
-    # LLM happened to emit first. resolve_iso2 maps name/code -> canonical
-    # ISO-2 (or None) and is idempotent on an ISO-2 code.
-    iso2s = {resolve_iso2(loc.get("country")) for loc in (locations or [])}
-    doc_country = next(iter(iso2s)) if len(iso2s) == 1 else None
+    # Scope events only when extraction emitted exactly one structured ISO2 code.
+    country_codes = {
+        value if isinstance(value, str) and re.fullmatch(r"[A-Z]{2}", value) else None
+        for loc in (locations or [])
+        for value in (loc.get("country"),)
+    }
+    doc_country = next(iter(country_codes)) if len(country_codes) == 1 else None
+    active_spatial_index = spatial_index
+    if active_spatial_index is None:
+        try:
+            active_spatial_index = load_active_normalization_index(
+                settings.spatial_catalog_path,
+                crosswalk_path=settings.spatial_country_crosswalk_path,
+            )
+        except (OSError, ValueError) as exc:
+            log.warning(
+                "spatial_location_writer_unsupported",
+                lane="rss_pipeline",
+                cause="normalization_index_unavailable",
+                error=str(exc),
+            )
     doc_hash = doc_content_hash or content_hash(doc_title, doc_url)
     for event in events:
         ev_occurred = occurred_at or event.get("timestamp")
@@ -608,12 +648,26 @@ async def _write_to_neo4j(
                 "url": doc_url,
             },
         })
-        # Append country-centroid geo fragment to the event statement.
+        # Append the country-scope fragment to the event statement; no point is invented.
         # `ev` is still in scope from the preceding `MERGE (d)-[:DESCRIBES]->(ev)`.
-        frag = build_event_geo_fragment(doc_country)
+        frag = (
+            build_event_geo_fragment(
+                country_code=doc_country,
+                spatial_index=active_spatial_index,
+            )
+            if active_spatial_index is not None
+            else None
+        )
         if frag is not None:
             statements[-1]["statement"] += frag["cypher"]
             statements[-1]["parameters"].update(frag["parameters"])
+        elif locations:
+            log.warning(
+                "spatial_location_writer_unsupported",
+                lane="rss_pipeline",
+                cause="country_code_unresolved_or_ambiguous",
+                country_code=doc_country,
+            )
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:

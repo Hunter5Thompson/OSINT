@@ -15,7 +15,9 @@ SPATIAL_RUNTIME_FILES = frozenset(
         "spatial_catalog/identity.py",
         "spatial_catalog/manifest.py",
         "spatial_catalog/models.py",
+        "spatial_catalog/normalize.py",
         "spatial_catalog/source_lock.py",
+        "spatial_catalog/topology.py",
         "spatial_catalog/catalog-plan.json",
         "spatial_catalog/data/country_crosswalk.json",
     }
@@ -27,8 +29,6 @@ SPATIAL_COMPILER_FILES = frozenset(
         "spatial_catalog/compiler.py",
         "spatial_catalog/emit.py",
         "spatial_catalog/lod.py",
-        "spatial_catalog/normalize.py",
-        "spatial_catalog/topology.py",
         "spatial_catalog/tools/rebuild_mapshaper_bundle.py",
     }
 )
@@ -39,8 +39,6 @@ SPATIAL_DOCKER_CONTEXT_EXCLUDES = frozenset(
         "services/data-ingestion/spatial_catalog/compiler.py",
         "services/data-ingestion/spatial_catalog/emit.py",
         "services/data-ingestion/spatial_catalog/lod.py",
-        "services/data-ingestion/spatial_catalog/normalize.py",
-        "services/data-ingestion/spatial_catalog/topology.py",
         "services/data-ingestion/spatial_catalog/tools",
         "services/data-ingestion/spatial_catalog/data/*",
     }
@@ -85,8 +83,13 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert "COPY services/data-ingestion/uv.lock ." in dockerfile
     assert "COPY services/data-ingestion/canonicalize.py ." in dockerfile
     assert "COPY services/data-ingestion/graph_integrity/ graph_integrity/" in dockerfile
+    assert (
+        "COPY services/data-ingestion/migrations/location_spatial_scope_indexes.cypher "
+        "migrations/location_spatial_scope_indexes.cypher"
+    ) in dockerfile
     assert "COPY services/data-ingestion/qdrant_doctor/ qdrant_doctor/" in dockerfile
     assert "COPY services/data-ingestion/infra_atlas/ infra_atlas/" in dockerfile
+    assert "COPY services/backend/data/spatial/ data/spatial/" in dockerfile
     assert "COPY services/data-ingestion/spatial_catalog/ spatial_catalog/" not in dockerfile
     for relative_path in sorted(SPATIAL_RUNTIME_FILES):
         assert (
@@ -108,17 +111,17 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert 'CMD ["python", "scheduler.py"]' in dockerfile
     assert "uv run" not in dockerfile
     assert "COPY . ." not in dockerfile
-    assert "migrations/" not in dockerfile
+    assert "COPY services/data-ingestion/migrations/ migrations/" not in dockerfile
 
 
-def test_spatial_compiler_dependencies_are_build_time_only():
+def test_spatial_normalizer_dependencies_are_available_at_runtime():
     pyproject_path = SERVICE_ROOT / "pyproject.toml"
     pyproject = pyproject_path.read_text()
     configuration = tomllib.loads(pyproject)
     project = configuration["project"]
     dockerignore = set((REPO_ROOT / ".dockerignore").read_text().splitlines())
 
-    assert not any(dependency.startswith("shapely") for dependency in project["dependencies"])
+    assert "shapely>=2.1,<2.2" in project["dependencies"]
     assert project["optional-dependencies"]["spatial-catalog"] == ["shapely>=2.1,<2.2"]
     assert "services/data-ingestion/spatial_catalog" not in dockerignore
     assert dockerignore >= SPATIAL_DOCKER_CONTEXT_EXCLUDES
@@ -153,6 +156,9 @@ def test_built_wheel_imports_infra_atlas_with_identity_but_without_compiler(
         name for name in members if name.startswith("spatial_catalog/")
     }
     assert packaged_spatial == SPATIAL_RUNTIME_FILES
+    assert "graph_integrity/spatial_normalizer.py" in members
+    assert "gdelt_raw/migrations/phase2_indexes.cypher" in members
+    assert "migrations/location_spatial_scope_indexes.cypher" in members
     assert not SPATIAL_COMPILER_FILES & members
     assert not any(
         name.startswith("spatial_catalog/tools/") or name.endswith(".tgz")

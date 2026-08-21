@@ -1842,6 +1842,15 @@ Observation-Producer.
 #   Exit-Gates, fand aber verbleibende Paritäts-, Accessibility- und LOD-Schulden.
 #   Flag-on-Harness, Canary-Reproduktion, Legacy-Klickkosten/Fail-closed und das
 #   ungemountete Cesium-Collection-Leak wurden direkt auf dem Plan-03-Branch behoben.
+#   Plan 06A schloss am 2026-08-07 ausschließlich den Neo4j-Datenpfad hermetisch ab
+#   (Implementierungs-HEAD `51f15f9`, 18/20 Plan-Gates). Er erfüllt keines der neun
+#   untenstehenden Frontend-/Legacy-Cleanup-Kriterien; TASK-123 bleibt deshalb OFFEN.
+#   Plan 06B implementierte am 2026-08-09 die statischen Exact-Reads, reconciliertes
+#   CHRONIK-Accounting und die serverseitige Lane/Kind/Derivations-Aktivierung. Die
+#   Registry ist bewusst default-leer; offene Backup-/Backfill-/Coverage-Gates
+#   verhindern jede
+#   operative Exact-Promotion. Auch 06B erfüllt keines der neun folgenden Frontend-
+#   Kriterien und ändert den Status von TASK-123 daher nicht.
 #
 # Verbleibende Akzeptanzkriterien / RED-Gates:
 #   1. Der Spatial-Country-Inspector erhält Signal-Liste und Munin-Briefing über

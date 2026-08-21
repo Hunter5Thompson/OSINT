@@ -9,6 +9,7 @@ import structlog
 log = structlog.get_logger(__name__)
 
 MIGRATIONS_DIR = Path(__file__).parent
+SERVICE_MIGRATIONS_DIR = MIGRATIONS_DIR.parent.parent / "migrations"
 
 SOURCE_DUP_PREFLIGHT_QUERY = """
 MATCH (s:Source)
@@ -20,6 +21,10 @@ RETURN name, c ORDER BY c DESC
 
 def read_cypher_file(name: str) -> str:
     return (MIGRATIONS_DIR / name).read_text()
+
+
+def read_service_cypher_file(name: str) -> str:
+    return (SERVICE_MIGRATIONS_DIR / name).read_text()
 
 
 async def check_source_duplicates(driver) -> list[tuple[str, int]]:
@@ -47,8 +52,12 @@ async def apply_phase1(driver) -> None:
 
 
 async def apply_phase2(driver) -> None:
+    migration_texts = (
+        read_cypher_file("phase2_indexes.cypher"),
+        read_service_cypher_file("location_spatial_scope_indexes.cypher"),
+    )
     statements = [
-        s.strip() for s in read_cypher_file("phase2_indexes.cypher").split(";")
+        s.strip() for text in migration_texts for s in text.split(";")
         if s.strip()
     ]
     async with driver.session() as session:

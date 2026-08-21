@@ -20,6 +20,7 @@ dependencies = [
     "pyarrow>=17.0",
     "click>=8.0",
     "neo4j>=6.1.0",
+    "shapely>=2.1,<2.2",
 ]
 
 [project.optional-dependencies]
@@ -59,8 +60,6 @@ exclude = [
   "spatial_catalog/compiler.py",
   "spatial_catalog/emit.py",
   "spatial_catalog/lod.py",
-  "spatial_catalog/normalize.py",
-  "spatial_catalog/topology.py",
   "spatial_catalog/tools/**",
   "tests/fixtures/spatial_catalog/**",
   "tests/test_spatial_catalog_*.py",
@@ -70,6 +69,9 @@ include = [
   "feeds/**/*.py",
   "feeds/**/*.yaml",
   "gdelt_raw/**/*.py",
+  "gdelt_raw/migrations/*.cypher",
+  "graph_integrity/**/*.py",
+  "migrations/location_spatial_scope_indexes.cypher",
   "nlm_ingest/**/*.py",
   "nlm_ingest/prompts/*.txt",
   "infra_atlas/**/*.py",
@@ -80,7 +82,9 @@ include = [
   "spatial_catalog/identity.py",
   "spatial_catalog/manifest.py",
   "spatial_catalog/models.py",
+  "spatial_catalog/normalize.py",
   "spatial_catalog/source_lock.py",
+  "spatial_catalog/topology.py",
   "spatial_catalog/catalog-plan.json",
   "spatial_catalog/data/country_crosswalk.json",
   "suv_structured/**/*.py",

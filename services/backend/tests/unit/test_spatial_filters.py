@@ -9,20 +9,480 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.models.spatial import CatalogProblemCode, ScopeKind, SpatialCatalogProblem
+from app.models.spatial import (
+    CatalogProblemCode,
+    ScopeKind,
+    SpatialCatalogProblem,
+    SpatialScopeTokenV1,
+)
+from app.models.timeline import (
+    ChronikExactSpatialActivationV1,
+    ChronikSpatialLane,
+)
 from app.services.spatial_filters import (
+    EventSpatialRelation,
+    ExactActivationRejectionCause,
     GeoExtent,
     LongitudeSpan,
+    ResolvedSpatialConstraint,
     TimelineSpatialQueryId,
+    UnsupportedExactSpatialQueryError,
+    compile_exact_event_query_plan,
     compile_extent_filter,
+    exact_event_parameters,
+    exact_event_query_templates,
     extent_from_boundary_geometry,
+    parse_exact_event_accounting,
     resolve_catalog_filter,
+    select_exact_event_activation,
 )
 
 CATALOG_A = "spatial-v1-aaaaaaaaaaaa"
 CATALOG_B = "spatial-v1-bbbbbbbbbbbb"
 DERIVATION_A = "spatial-derive-v1-aaaaaaaaaaaa"
 DERIVATION_B = "spatial-derive-v1-bbbbbbbbbbbb"
+MAX_STALE_RATIO = 0.01
+
+
+_EXACT_SCOPE_PROPERTY = {
+    ScopeKind.COUNTRY: "country_scope_key",
+    ScopeKind.ADMIN1: "admin1_scope_key",
+    ScopeKind.ADMIN2: "admin2_scope_key",
+}
+
+
+@pytest.mark.parametrize("scope_kind", tuple(_EXACT_SCOPE_PROPERTY))
+def test_exact_event_occurrence_contract_excludes_conflicts_and_binds_identity(
+    scope_kind: ScopeKind,
+):
+    """Legacy conflicts remain unsafe unless every exact template filters them."""
+
+    templates = exact_event_query_templates(
+        scope_kind,
+        EventSpatialRelation.OCCURS_IN,
+    )
+    property_name = _EXACT_SCOPE_PROPERTY[scope_kind]
+
+    for query in (
+        templates.samples,
+        templates.histogram,
+        templates.notables,
+        templates.incidents,
+        templates.geo,
+        templates.count,
+    ):
+        assert f"l.{property_name} = $scope_key" in query
+        assert "l.spatial_derivation_revision IN $compatible_revisions" in query
+        assert "l.spatial_conflict = false" in query
+        assert "country:UKR" not in query
+        assert DERIVATION_A not in query
+
+    # A conflict can carry the same key and compatible revision as a valid Location.
+    # The explicit boolean predicate, not revision nullability, is the exclusion gate.
+    matching_locations = [
+        {"scope_key": "country:UKR", "revision": DERIVATION_A, "conflict": False},
+        {"scope_key": "country:UKR", "revision": DERIVATION_A, "conflict": True},
+    ]
+    included = [
+        location
+        for location in matching_locations
+        if location["scope_key"] == "country:UKR"
+        and location["revision"] in (DERIVATION_A,)
+        and location["conflict"] is False
+    ]
+    assert included == [matching_locations[0]]
+
+
+@pytest.mark.parametrize("scope_kind", tuple(_EXACT_SCOPE_PROPERTY))
+def test_exact_event_occurrence_collapses_duplicate_locations_before_limit(
+    scope_kind: ScopeKind,
+):
+    templates = exact_event_query_templates(
+        scope_kind,
+        EventSpatialRelation.OCCURS_IN,
+    )
+
+    collapse = "WITH ev, collect(l)[0] AS l"
+    assert collapse in templates.samples
+    assert templates.samples.index(collapse) < templates.samples.index("LIMIT $limit")
+    assert "count(DISTINCT ev) AS included_count" in templates.count
+
+    # Fixture shape: ev-1 has two equally matching OCCURRED_AT Locations. The static
+    # collapse contract must yield one top-level row and consume one unit of LIMIT.
+    matches = [("ev-1", "location-a"), ("ev-1", "location-b"), ("ev-2", "location-c")]
+    distinct_events = list(dict.fromkeys(event_id for event_id, _ in matches))
+    assert distinct_events[:2] == ["ev-1", "ev-2"]
+
+
+@pytest.mark.parametrize("scope_kind", tuple(_EXACT_SCOPE_PROPERTY))
+def test_exact_histogram_splits_buckets_notables_incidents_and_geo(
+    scope_kind: ScopeKind,
+):
+    templates = exact_event_query_templates(
+        scope_kind,
+        EventSpatialRelation.OCCURS_IN,
+    )
+    property_name = _EXACT_SCOPE_PROPERTY[scope_kind]
+
+    assert "WITH DISTINCT ev" in templates.histogram
+    assert " AS id" not in templates.histogram
+    assert " AS title" not in templates.histogram
+    assert " AS lat" not in templates.histogram
+    assert " AS lon" not in templates.histogram
+    assert "LIMIT" not in templates.histogram
+
+    assert "MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)" in templates.notables
+    assert "LIMIT 400" in templates.notables
+    assert "MATCH (l:Location)<-[:OCCURRED_AT]-(i:Incident)" in templates.incidents
+    assert f"l.{property_name} = $scope_key" in templates.incidents
+    assert "LIMIT 200" in templates.incidents
+    assert "l.lat IS NOT NULL AND l.lon IS NOT NULL" in templates.geo
+
+
+@pytest.mark.parametrize("scope_kind", tuple(_EXACT_SCOPE_PROPERTY))
+def test_exact_representative_location_prefers_coordinates(scope_kind: ScopeKind):
+    templates = exact_event_query_templates(
+        scope_kind,
+        EventSpatialRelation.OCCURS_IN,
+    )
+    preference = (
+        "CASE WHEN l.lat IS NOT NULL AND l.lon IS NOT NULL THEN 0 ELSE 1 END ASC"
+    )
+
+    for query in (templates.samples, templates.notables, templates.incidents):
+        assert preference in query
+        assert query.index(preference) < query.index(
+            "coalesce(l.id, l.location_id, l.name, elementId(l)) ASC"
+        )
+
+
+def test_exact_event_registry_is_closed_and_antimeridian_independent():
+    queries = {
+        kind: exact_event_query_templates(kind, EventSpatialRelation.OCCURS_IN)
+        for kind in _EXACT_SCOPE_PROPERTY
+    }
+
+    assert set(queries) == {ScopeKind.COUNTRY, ScopeKind.ADMIN1, ScopeKind.ADMIN2}
+    for scope_kind, templates in queries.items():
+        expected_property = _EXACT_SCOPE_PROPERTY[scope_kind]
+        other_properties = set(_EXACT_SCOPE_PROPERTY.values()) - {expected_property}
+        combined = "\n".join((
+            templates.samples,
+            templates.histogram,
+            templates.notables,
+            templates.incidents,
+            templates.geo,
+            templates.count,
+        ))
+        assert all(f"l.{name}" not in combined for name in other_properties)
+        assert all(
+            parameter not in combined
+            for parameter in ("$west", "$east", "$south", "$north", "$bbox_off")
+        )
+
+    with pytest.raises(UnsupportedExactSpatialQueryError):
+        exact_event_query_templates(ScopeKind.WORLD, EventSpatialRelation.OCCURS_IN)
+    with pytest.raises(UnsupportedExactSpatialQueryError):
+        exact_event_query_templates(ScopeKind.COUNTRY, EventSpatialRelation.INTERSECTS)
+    with pytest.raises(UnsupportedExactSpatialQueryError):
+        exact_event_query_templates("district", EventSpatialRelation.OCCURS_IN)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("scope_kind", tuple(_EXACT_SCOPE_PROPERTY))
+def test_exact_accounting_templates_partition_distinct_event_exclusions(
+    scope_kind: ScopeKind,
+):
+    query = exact_event_query_templates(
+        scope_kind,
+        EventSpatialRelation.OCCURS_IN,
+    ).count
+    property_name = _EXACT_SCOPE_PROPERTY[scope_kind]
+
+    # The first count is an independent scope-relative reference population;
+    # the remaining four queries partition exactly that population.
+    assert query.count("count(DISTINCT ev)") == 5
+    assert "AS candidate_count" in query
+    assert f"l.{property_name} = $scope_key" in query
+    assert "l.spatial_conflict = true" in query
+    assert "l.spatial_conflict = false" in query
+    assert "l.spatial_derivation_revision IN $compatible_revisions" in query
+    assert "NOT l.spatial_derivation_revision IN $compatible_revisions" in query
+    assert "l.spatial_conflict IS NULL" in query
+    assert "NOT l.spatial_conflict IN [true, false]" in query
+    assert "CALL () {" in query
+    assert "MATCH (ev:Event)" not in query
+    assert "0 AS excluded_unsupported_count" not in query
+    assert " AS total" not in query
+    for field in (
+        "candidate_count",
+        "included_count",
+        "excluded_conflict_count",
+        "excluded_stale_revision_count",
+        "excluded_unsupported_count",
+    ):
+        assert field in query
+
+
+async def test_exact_parameters_are_pinned_to_the_resolved_token_not_bbox_or_alias():
+    resolved = _resolved(
+        revision=CATALOG_A,
+        scope_key="country:UKR",
+        kind=ScopeKind.COUNTRY,
+        derivation=DERIVATION_A,
+        parent_key="world",
+        containment_asset_id="asset-a",
+    )
+    loader = _FakeLoader({CATALOG_A: resolved})
+    loader.asset_payloads["asset-a"] = _geometry([_box(20, 40, 41, 53)])
+
+    # Resolution remains async and catalog-pinned; compilation only consumes its token.
+    compiled = await resolve_catalog_filter(loader, "country:ukr", CATALOG_A)
+    assert not isinstance(compiled, SpatialCatalogProblem)
+    exact = compile_exact_event_query_plan(
+        compiled,
+        coverage_revision="coverage-a",
+        coverage_complete=True,
+    )
+    parameters = exact_event_parameters(
+        exact,
+        t_start="2026-05-01T00:00:00Z",
+        t_end="2026-05-02T00:00:00Z",
+        limit=25,
+    )
+
+    assert parameters == {
+        "scope_key": "country:UKR",
+        "compatible_revisions": [DERIVATION_A],
+        "t_start": "2026-05-01T00:00:00Z",
+        "t_end": "2026-05-02T00:00:00Z",
+        "limit": 25,
+    }
+    assert {"west", "east", "south", "north", "bbox_off"}.isdisjoint(parameters)
+
+
+def test_exact_accounting_distinguishes_samples_and_reconciles_all_categories():
+    accounting = parse_exact_event_accounting(
+        [{
+            "candidate_count": 8,
+            "included_count": 3,
+            "excluded_conflict_count": 1,
+            "excluded_stale_revision_count": 3,
+            "excluded_unsupported_count": 1,
+        }],
+        sample_count=2,
+    )
+
+    assert accounting.candidate_count == 8
+    assert accounting.included_count == 3
+    assert accounting.sample_count == 2
+    assert accounting.excluded_unlocated_count == 0
+    assert accounting.excluded_conflict_count == 1
+    assert accounting.excluded_stale_revision_count == 3
+    assert accounting.excluded_unsupported_count == 1
+
+    with pytest.raises(ValueError, match="reconcile"):
+        parse_exact_event_accounting(
+            [{
+                "candidate_count": 9,
+                "included_count": 3,
+                "excluded_conflict_count": 1,
+                "excluded_stale_revision_count": 3,
+                "excluded_unsupported_count": 1,
+            }],
+            sample_count=2,
+        )
+
+
+def _gate_filter(
+    *,
+    scope_kind: ScopeKind = ScopeKind.COUNTRY,
+    catalog_revision: str = CATALOG_A,
+    derivation_revision: str = DERIVATION_A,
+):
+    scope_key = {
+        ScopeKind.COUNTRY: "country:UKR",
+        ScopeKind.ADMIN1: "admin1:iso3166-2:UA-14",
+        ScopeKind.ADMIN2: "admin2:geoboundaries:UKR.ADM2.1",
+    }[scope_kind]
+    token = SpatialScopeTokenV1(
+        scope_key=scope_key,
+        kind=scope_kind,
+        catalog_revision=catalog_revision,
+        derivation_revision=derivation_revision,
+        boundary_policy="odin-reference-v1",
+        compatible_derivation_revisions=(derivation_revision,),
+    )
+    extent = GeoExtent(
+        kind="segments",
+        south=40,
+        north=53,
+        longitude=(LongitudeSpan(20, 41),),
+    )
+    return compile_extent_filter(
+        extent,
+        constraint=ResolvedSpatialConstraint(
+            token=token,
+            extent=extent,
+            country_scope_key="country:UKR",
+            admin1_scope_key=(scope_key if scope_kind is ScopeKind.ADMIN1 else None),
+            admin2_scope_key=(scope_key if scope_kind is ScopeKind.ADMIN2 else None),
+        ),
+    )
+
+
+def _activation(**overrides: object) -> ChronikExactSpatialActivationV1:
+    payload = {
+        "lane": "event_occurrence",
+        "scope_kind": "country",
+        "catalog_revision": CATALOG_A,
+        "derivation_revision": DERIVATION_A,
+        "coverage_revision": "coverage-fixture-a",
+        "enabled": True,
+        "coverage_complete": True,
+        "index_plan_verified": True,
+        "stale_revision_ratio": 0.0,
+        **overrides,
+    }
+    return ChronikExactSpatialActivationV1.model_validate(payload)
+
+
+def test_exact_activation_selects_only_a_fully_eligible_lane_kind_revision():
+    decision = select_exact_event_activation(
+        _gate_filter(),
+        lane=ChronikSpatialLane.EVENT_OCCURRENCE,
+        activations=(_activation(),),
+        max_stale_revision_ratio=MAX_STALE_RATIO,
+    )
+
+    assert decision.plan is not None
+    assert decision.cause is None
+    assert decision.plan.coverage_revision == "coverage-fixture-a"
+    assert decision.plan.coverage_complete is True
+
+
+def test_exact_activation_selects_scope_revision_from_lane_kind_set():
+    decision = select_exact_event_activation(
+        _gate_filter(derivation_revision=DERIVATION_B),
+        lane=ChronikSpatialLane.EVENT_OCCURRENCE,
+        activations=(
+            _activation(),
+            _activation(
+                derivation_revision=DERIVATION_B,
+                coverage_revision="coverage-fixture-b",
+            ),
+        ),
+        max_stale_revision_ratio=MAX_STALE_RATIO,
+    )
+
+    assert decision.plan is not None
+    assert decision.cause is None
+    assert decision.activation is not None
+    assert decision.activation.derivation_revision == DERIVATION_B
+    assert decision.plan.coverage_revision == "coverage-fixture-b"
+
+
+def test_exact_activation_uses_deployment_stale_revision_threshold():
+    decision = select_exact_event_activation(
+        _gate_filter(),
+        lane=ChronikSpatialLane.EVENT_OCCURRENCE,
+        activations=(_activation(stale_revision_ratio=0.015),),
+        max_stale_revision_ratio=0.02,
+    )
+
+    assert decision.plan is not None
+
+
+@pytest.mark.parametrize(
+    ("activations", "spatial_filter", "lane", "expected_cause"),
+    [
+        ((), _gate_filter(), ChronikSpatialLane.EVENT_OCCURRENCE, "default_off"),
+        (
+            (_activation(scope_kind="admin1"),),
+            _gate_filter(),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "lane_kind_not_allowlisted",
+        ),
+        (
+            (_activation(enabled=False),),
+            _gate_filter(),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "disabled",
+        ),
+        (
+            (_activation(coverage_complete=False),),
+            _gate_filter(),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "coverage_incomplete",
+        ),
+        (
+            (_activation(index_plan_verified=False),),
+            _gate_filter(),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "index_plan_unverified",
+        ),
+        (
+            (_activation(stale_revision_ratio=0.0101),),
+            _gate_filter(),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "stale_revision_coverage",
+        ),
+        (
+            (_activation(),),
+            _gate_filter(catalog_revision=CATALOG_B),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "catalog_revision_mismatch",
+        ),
+        (
+            (_activation(),),
+            _gate_filter(derivation_revision=DERIVATION_B),
+            ChronikSpatialLane.EVENT_OCCURRENCE,
+            "derivation_revision_mismatch",
+        ),
+        (
+            (_activation(),),
+            _gate_filter(),
+            ChronikSpatialLane.MOVEMENT_TRACK,
+            "unsupported_lane",
+        ),
+    ],
+)
+def test_exact_activation_rejections_are_explicit_and_return_the_bbox_plan(
+    activations,
+    spatial_filter,
+    lane,
+    expected_cause,
+):
+    decision = select_exact_event_activation(
+        spatial_filter,
+        lane=lane,
+        activations=activations,
+        max_stale_revision_ratio=MAX_STALE_RATIO,
+    )
+
+    assert decision.plan is None
+    assert decision.cause is ExactActivationRejectionCause(expected_cause)
+
+
+def test_exact_activation_rollback_removes_the_plan_without_unfiltering():
+    spatial_filter = _gate_filter()
+
+    active = select_exact_event_activation(
+        spatial_filter,
+        lane=ChronikSpatialLane.EVENT_OCCURRENCE,
+        activations=(_activation(),),
+        max_stale_revision_ratio=MAX_STALE_RATIO,
+    )
+    rolled_back = select_exact_event_activation(
+        spatial_filter,
+        lane=ChronikSpatialLane.EVENT_OCCURRENCE,
+        activations=(),
+        max_stale_revision_ratio=MAX_STALE_RATIO,
+    )
+
+    assert active.plan is not None
+    assert rolled_back.plan is None
+    assert rolled_back.approximate_filter is spatial_filter
+    assert rolled_back.approximate_filter.query_id is TimelineSpatialQueryId.BBOX_SINGLE
 
 
 def _geometry(polygons: object) -> bytes:

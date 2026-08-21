@@ -138,7 +138,8 @@ export function chronikSpatialStatus(
 
   const excluded = application.excluded_unlocated_count
     + application.excluded_conflict_count
-    + application.excluded_stale_revision_count;
+    + application.excluded_stale_revision_count
+    + application.excluded_unsupported_count;
   const excludedLabel = excluded > 0 ? ` · excluded ${excluded}` : "";
   return {
     label: `${application.relation} · ${PRECISION_LABEL[application.mode]} · ${application.completeness}${excludedLabel}`,
@@ -147,6 +148,7 @@ export function chronikSpatialStatus(
       `unlocated ${application.excluded_unlocated_count}`,
       `conflict ${application.excluded_conflict_count}`,
       `stale revision ${application.excluded_stale_revision_count}`,
+      `unsupported ${application.excluded_unsupported_count}`,
       ...(loading ? ["refreshing"] : []),
     ].join(" · "),
     tone: application.completeness,
