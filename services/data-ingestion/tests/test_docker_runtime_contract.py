@@ -1,9 +1,50 @@
+import os
 import re
 import subprocess
+import sys
+import sysconfig
+import tomllib
+import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SERVICE_ROOT = REPO_ROOT / "services" / "data-ingestion"
+SPATIAL_RUNTIME_FILES = frozenset(
+    {
+        "spatial_catalog/__init__.py",
+        "spatial_catalog/identity.py",
+        "spatial_catalog/manifest.py",
+        "spatial_catalog/models.py",
+        "spatial_catalog/source_lock.py",
+        "spatial_catalog/catalog-plan.json",
+        "spatial_catalog/data/country_crosswalk.json",
+    }
+)
+SPATIAL_COMPILER_FILES = frozenset(
+    {
+        "spatial_catalog/__main__.py",
+        "spatial_catalog/audit.py",
+        "spatial_catalog/compiler.py",
+        "spatial_catalog/emit.py",
+        "spatial_catalog/lod.py",
+        "spatial_catalog/normalize.py",
+        "spatial_catalog/topology.py",
+        "spatial_catalog/tools/rebuild_mapshaper_bundle.py",
+    }
+)
+SPATIAL_DOCKER_CONTEXT_EXCLUDES = frozenset(
+    {
+        "services/data-ingestion/spatial_catalog/__main__.py",
+        "services/data-ingestion/spatial_catalog/audit.py",
+        "services/data-ingestion/spatial_catalog/compiler.py",
+        "services/data-ingestion/spatial_catalog/emit.py",
+        "services/data-ingestion/spatial_catalog/lod.py",
+        "services/data-ingestion/spatial_catalog/normalize.py",
+        "services/data-ingestion/spatial_catalog/topology.py",
+        "services/data-ingestion/spatial_catalog/tools",
+        "services/data-ingestion/spatial_catalog/data/*",
+    }
+)
 
 
 def test_root_dockerignore_excludes_local_and_secret_paths():
@@ -46,6 +87,14 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert "COPY services/data-ingestion/graph_integrity/ graph_integrity/" in dockerfile
     assert "COPY services/data-ingestion/qdrant_doctor/ qdrant_doctor/" in dockerfile
     assert "COPY services/data-ingestion/infra_atlas/ infra_atlas/" in dockerfile
+    assert "COPY services/data-ingestion/spatial_catalog/ spatial_catalog/" not in dockerfile
+    for relative_path in sorted(SPATIAL_RUNTIME_FILES):
+        assert (
+            f"COPY services/data-ingestion/{relative_path} {relative_path}"
+            in dockerfile
+        )
+    for relative_path in sorted(SPATIAL_COMPILER_FILES):
+        assert f"COPY services/data-ingestion/{relative_path}" not in dockerfile
     assert (
         "COPY services/intelligence/codebook/event_codebook.yaml "
         "runtime_contracts/event_codebook.yaml"
@@ -60,6 +109,89 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert "uv run" not in dockerfile
     assert "COPY . ." not in dockerfile
     assert "migrations/" not in dockerfile
+
+
+def test_spatial_compiler_dependencies_are_build_time_only():
+    pyproject_path = SERVICE_ROOT / "pyproject.toml"
+    pyproject = pyproject_path.read_text()
+    configuration = tomllib.loads(pyproject)
+    project = configuration["project"]
+    dockerignore = set((REPO_ROOT / ".dockerignore").read_text().splitlines())
+
+    assert not any(dependency.startswith("shapely") for dependency in project["dependencies"])
+    assert project["optional-dependencies"]["spatial-catalog"] == ["shapely>=2.1,<2.2"]
+    assert "services/data-ingestion/spatial_catalog" not in dockerignore
+    assert dockerignore >= SPATIAL_DOCKER_CONTEXT_EXCLUDES
+    assert "!services/data-ingestion/spatial_catalog/data/country_crosswalk.json" in (
+        dockerignore
+    )
+    for relative_path in SPATIAL_RUNTIME_FILES - {
+        "spatial_catalog/data/country_crosswalk.json"
+    }:
+        assert f"services/data-ingestion/{relative_path}" not in dockerignore
+
+
+def test_built_wheel_imports_infra_atlas_with_identity_but_without_compiler(
+    tmp_path: Path,
+) -> None:
+    distribution = tmp_path / "dist"
+    subprocess.run(
+        ["uv", "build", "--wheel", "--out-dir", str(distribution)],
+        cwd=SERVICE_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    wheels = tuple(distribution.glob("*.whl"))
+    assert len(wheels) == 1
+    installed = tmp_path / "installed"
+    with zipfile.ZipFile(wheels[0]) as wheel:
+        members = set(wheel.namelist())
+        wheel.extractall(installed)
+
+    packaged_spatial = {
+        name for name in members if name.startswith("spatial_catalog/")
+    }
+    assert packaged_spatial == SPATIAL_RUNTIME_FILES
+    assert not SPATIAL_COMPILER_FILES & members
+    assert not any(
+        name.startswith("spatial_catalog/tools/") or name.endswith(".tgz")
+        for name in members
+    )
+
+    environment = os.environ.copy()
+    environment.pop("PYTHONHOME", None)
+    environment.pop("PYTHONPATH", None)
+    purelib = sysconfig.get_path("purelib")
+    isolated_import = "\n".join(
+        (
+            "import importlib.util",
+            "import pathlib",
+            "import sys",
+            f"sys.path.insert(0, {str(installed)!r})",
+            f"sys.path.append({purelib!r})",
+            "import infra_atlas.build_country_almanac as almanac",
+            "import infra_atlas.cli as infra_cli",
+            "import spatial_catalog.identity as identity",
+            f"root = pathlib.Path({str(installed)!r}).resolve()",
+            "assert pathlib.Path(infra_cli.__file__).resolve().is_relative_to(root)",
+            "assert pathlib.Path(identity.__file__).resolve().is_relative_to(root)",
+            "assert callable(infra_cli.cli)",
+            "assert almanac.FRONTEND_TOPO == root / 'services/frontend/public/countries-110m.json'",
+            "assert almanac.SEED_OUT == root / 'services/backend/data/country_almanac.json'",
+            "assert identity.load_country_crosswalk().records",
+            "assert importlib.util.find_spec('spatial_catalog.compiler') is None",
+            "assert 'shapely' not in sys.modules",
+        )
+    )
+    subprocess.run(
+        [sys.executable, "-S", "-c", isolated_import],
+        cwd=installed,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def test_compose_builds_data_ingestion_images_from_repo_root():

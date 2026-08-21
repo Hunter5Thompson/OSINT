@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "source_id": "geoboundaries-gbopen-ukr-admin1",
+      "release": "2023-12-12+9469f09592ce",
+      "url": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09592ced973a3448cf66b6100b741b64c0d/releaseData/gbOpen/UKR/ADM1/geoBoundaries-UKR-ADM1-all.zip",
+      "sha256": "e7d7935d74861b884969647c7ac594618fbfb5894df2bfabc63da64dc444574f",
+      "license_id": "CC-BY-4.0",
+      "attribution": "geoBoundaries / William & Mary geoLab (CC BY 4.0); OpenStreetMap contributors (source ODbL 1.0)"
+    },
+    {
+      "source_id": "mapshaper",
+      "release": "0.7.49+odin-offline-v1",
+      "url": "repo:services/data-ingestion/spatial_catalog/data/mapshaper-0.7.49-offline.tgz",
+      "sha256": "68b39a96791d6e62b51163e8e39f1f32ba55c0d3b9fbceade58ad07db7dae8f1",
+      "license_id": "MPL-2.0",
+      "attribution": "Mapshaper by Matthew Bloch (MPL 2.0); bundled runtime dependency licenses are recorded in mapshaper-offline-bundle-manifest.json"
+    },
+    {
+      "source_id": "natural-earth-admin0",
+      "release": "5.1.2+f1890d9f152c",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/f1890d9f152c896d250a77557a5751a93d494776/geojson/ne_110m_admin_0_countries.geojson",
+      "sha256": "6866c877d39cba9c357620878839b336d569f8c662d3cfab4cb1dbe2d39c977f",
+      "license_id": "public-domain",
+      "attribution": "Natural Earth"
+    },
+    {
+      "source_id": "odin-country-crosswalk",
+      "release": "spatial-crosswalk-v1",
+      "url": "repo:services/data-ingestion/spatial_catalog/data/country_crosswalk.json",
+      "sha256": "0ea93f12d5028fc0f741b38d231f143cdce3b8938f32e2d3274d76863a534fd3",
+      "license_id": "LicenseRef-ODIN-Reviewed-Crosswalk",
+      "attribution": "ODIN reviewed identity registry; per-record provenance is embedded in the crosswalk"
+    }
+  ]
+}

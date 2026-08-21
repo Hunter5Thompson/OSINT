@@ -1,0 +1,1599 @@
+{
+  "boundary_policy": "odin-reference-v1",
+  "non_scope_features": [
+    {
+      "non_scope_reason": "disputed-territory-context",
+      "record_id": "natural-earth-admin0:N. Cyprus",
+      "representation_id": "natural-earth-110m-admin0",
+      "source_code": "N. Cyprus",
+      "source_system": "natural-earth-admin0"
+    }
+  ],
+  "schema_version": 1,
+  "scopes": [
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:AFG"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:AGO"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ALB"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ARE"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ARG"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ARM"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ATF"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:AUS"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:AUT"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:AZE"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BDI"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BEL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BEN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BFA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BGD"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BGR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BHS"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BIH"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BLR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BLZ"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BOL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BRA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BRN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BTN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:BWA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CAF"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CAN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CHE"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CHL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CHN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CIV"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CMR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:COD"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:COG"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:COL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CRI"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CUB"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CYP"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:CZE"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:DEU"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:DJI"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:DNK"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:DOM"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:DZA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ECU"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:EGY"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ERI"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ESH"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ESP"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:EST"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ETH"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:FIN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:FJI"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:FLK"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:FRA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GAB"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GBR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GEO"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GHA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GIN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GMB"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GNB"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GNQ"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GRC"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GRL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GTM"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:GUY"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:HND"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:HRV"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:HTI"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:HUN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:IDN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:IND"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:IRL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:IRN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:IRQ"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ISL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ISR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ITA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:JAM"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:JOR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:JPN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:KAZ"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:KEN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:KGZ"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:KHM"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:KOR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:KWT"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:LAO"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:LBN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:LBR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:LBY"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:LKA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:LSO"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:LTU"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:LUX"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:LVA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MAR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MDA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MDG"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MEX"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MKD"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MLI"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MMR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MNE"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MNG"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MOZ"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MRT"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MWI"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:MYS"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:NAM"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:NCL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:NER"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:NGA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:NIC"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:NLD"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:NOR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:NPL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:NZL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:OMN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:PAK"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:PAN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:PER"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:PHL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:PNG"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:POL"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:PRI"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:PRK"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:PRT"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:PRY"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:PSE"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:QAT"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ROU"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:RUS"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:RWA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SAU"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SDN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SEN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SLB"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SLE"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SLV"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SOM"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SRB"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SSD"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SUR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SVK"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SVN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SWE"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SWZ"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:SYR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:TCD"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:TGO"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:THA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:TJK"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:TKM"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:TLS"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:TTO"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:TUN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:TUR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:TWN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:TZA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:UGA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": "geoboundaries-gbopen-ukr-admin1",
+      "client_strict_containment_required": true,
+      "max_level": "admin1",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:UKR"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:URY"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:USA"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:UZB"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:VEN"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:VNM"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:VUT"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:YEM"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ZAF"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ZMB"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:ZWE"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:m49:010"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:odin:kosovo"
+    },
+    {
+      "activation": "active",
+      "children_source_id": null,
+      "client_strict_containment_required": false,
+      "max_level": "country",
+      "representation_id": "natural-earth-110m-admin0",
+      "representation_source_id": "natural-earth-admin0",
+      "scope_key": "country:odin:somaliland"
+    }
+  ]
+}

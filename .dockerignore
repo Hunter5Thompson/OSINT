@@ -12,4 +12,14 @@
 **/dist
 services/frontend
 docs
+services/data-ingestion/spatial_catalog/__main__.py
+services/data-ingestion/spatial_catalog/audit.py
+services/data-ingestion/spatial_catalog/compiler.py
+services/data-ingestion/spatial_catalog/emit.py
+services/data-ingestion/spatial_catalog/lod.py
+services/data-ingestion/spatial_catalog/normalize.py
+services/data-ingestion/spatial_catalog/topology.py
+services/data-ingestion/spatial_catalog/tools
+services/data-ingestion/spatial_catalog/data/*
+!services/data-ingestion/spatial_catalog/data/country_crosswalk.json
 *.dump
