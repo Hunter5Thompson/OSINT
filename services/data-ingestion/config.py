@@ -32,7 +32,8 @@ class Settings(BaseSettings):
     vllm_url: str = "http://localhost:8000"
     vllm_model: str = "qwen3.5"
 
-    # Ingestion LLM (Spark — Qwen3.8-27B dense, NVFP4+MTP). URL WITHOUT /v1 — callers append full path.
+    # Ingestion LLM (Spark — Qwen3.8-27B dense, NVFP4+MTP).
+    # URL WITHOUT /v1 — callers append the full path.
     ingestion_vllm_url: str = "http://192.168.178.39:8000"
     ingestion_vllm_model: str = "Qwen/Qwen3.8-27B"
     # RSS/intelligence extraction timeout (consumed by pipeline.py). Raised 120s -> 240s
