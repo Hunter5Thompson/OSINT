@@ -120,6 +120,17 @@ class TestQdrantSearchTool:
             out = await invoke_runtime_tool(qdrant_search, {"query": "q" * 100})
         assert len(out) <= TOOL_OUTPUT_MAX_CHARS
 
+    @pytest.mark.asyncio
+    async def test_empty_result_with_long_query_never_exceeds_cap(self):
+        query = "q" * (TOOL_OUTPUT_MAX_CHARS * 2)
+        with patch(
+            "agents.tools.qdrant_search.enhanced_search",
+            AsyncMock(side_effect=[[], []]),
+        ):
+            out = await invoke_runtime_tool(qdrant_search, {"query": query})
+
+        assert len(out) <= TOOL_OUTPUT_MAX_CHARS
+
 
 class TestTwoLaneScoping:
     def _lane_mock(self, analysis, realtime):

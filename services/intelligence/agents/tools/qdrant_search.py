@@ -75,10 +75,20 @@ def _with_qdrant_application(
 
 def _clip_text(text: str, max_chars: int) -> str:
     """Keep tool outputs bounded so ReAct history stays inside model context."""
+    if max_chars <= 0:
+        return ""
     if len(text) <= max_chars:
         return text
     omitted = len(text) - max_chars
-    return text[:max_chars].rstrip() + f"\n...[truncated {omitted} chars]"
+    while True:
+        suffix = f"\n...[truncated {omitted} chars]"
+        prefix_chars = max_chars - len(suffix)
+        if prefix_chars <= 0:
+            return text[:max_chars]
+        updated_omitted = len(text) - prefix_chars
+        if updated_omitted == omitted:
+            return text[:prefix_chars] + suffix
+        omitted = updated_omitted
 
 
 @tool(response_format="content_and_artifact")
