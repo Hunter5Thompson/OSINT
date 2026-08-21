@@ -1,7 +1,7 @@
 # Spatial Plan 03 flag-on canary evidence
 
-Date: 2026-08-06  
-Branch: `feat/spatial-plan03`  
+Date: 2026-08-06
+Branch: `feat/spatial-plan03`
 Configuration: `VITE_SPATIAL_SCOPE_ENABLED=true`
 
 This is the deterministic pre-deployment lifecycle canary for Plan 03. It does
