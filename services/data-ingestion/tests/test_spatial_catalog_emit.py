@@ -13,6 +13,7 @@ from spatial_catalog.emit import (
     ContextPackFeature,
     PublicationError,
     ScopePackFeature,
+    activate_revision,
     emit_attribution,
     emit_boundary_pack,
     emit_render_boundary,
@@ -284,6 +285,14 @@ def test_attribution_and_atomic_revision_publication_are_deterministic(tmp_path:
     assert stat.S_IMODE((first / "assets").stat().st_mode) == 0o755
     assert stat.S_IMODE((first / "manifest.json").stat().st_mode) == 0o644
 
+    pointer_path = activate_revision(output_root, manifest.catalog_revision)
+    assert json.loads(pointer_path.read_bytes()) == {
+        "schema_version": 1,
+        "active_catalog_revision": manifest.catalog_revision,
+        "served_catalog_revisions": [manifest.catalog_revision],
+    }
+    assert stat.S_IMODE(pointer_path.stat().st_mode) == 0o644
+
     (first / "attribution.json").write_bytes(b"corrupt")
     with pytest.raises(PublicationError, match="IMMUTABLE_REVISION_CONFLICT"):
         publish_revision(
@@ -292,3 +301,24 @@ def test_attribution_and_atomic_revision_publication_are_deterministic(tmp_path:
             assets=(asset,),
             attribution=attribution,
         )
+
+
+def test_idempotent_activation_retains_the_served_previous_revision(
+    tmp_path: Path,
+) -> None:
+    catalogs = tmp_path / "spatial" / "catalogs"
+    first = "spatial-v1-111111111111"
+    second = "spatial-v1-222222222222"
+    for revision in (first, second):
+        directory = catalogs / revision
+        directory.mkdir(parents=True)
+        (directory / "manifest.json").write_text("{}")
+
+    activate_revision(catalogs, first)
+    pointer = activate_revision(catalogs, second)
+    activate_revision(catalogs, second)
+
+    assert json.loads(pointer.read_bytes())["served_catalog_revisions"] == [
+        second,
+        first,
+    ]
