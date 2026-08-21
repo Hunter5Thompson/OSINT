@@ -133,10 +133,24 @@ describe("BriefingPage", () => {
     renderBriefing();
     await screen.findAllByText(/Sinjar Ridge · Escalation Pattern/i);
 
-    fireEvent.click(screen.getByRole("button", { name: /Read full dossier/i }));
-    expect(screen.getByText(/Body title/i)).toBeInTheDocument();
+    const expandButton = screen.getByRole("button", { name: /Read full dossier/i });
+    expect(expandButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(expandButton);
+
+    const bodyTitle = await screen.findByRole("heading", { name: /Body title/i });
+    expect(bodyTitle).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Collapse dossier/i })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /Collapse dossier/i }));
-    expect(screen.queryByText(/Body title/i)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: /Body title/i })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /Read full dossier/i })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 });

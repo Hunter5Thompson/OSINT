@@ -73,7 +73,7 @@ export function BriefingPage() {
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
   const [filter, setFilter] = useState("");
-  const [expandedBody, setExpandedBody] = useState(false);
+  const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
 
   const [chatByReport, setChatByReport] = useState<Record<string, ReportMessage[]>>({});
   const [chatLoading, setChatLoading] = useState(false);
@@ -143,6 +143,7 @@ export function BriefingPage() {
     if (explicit) return explicit;
     return reports[0] ?? null;
   }, [reports, selectedId]);
+  const expandedBody = selectedReport?.id === expandedReportId;
 
   useEffect(() => {
     if (!selectedReport) return;
@@ -163,7 +164,6 @@ export function BriefingPage() {
 
   useEffect(() => {
     if (!selectedReport) return;
-    setExpandedBody(false);
     setInput("");
     void loadMessages(selectedReport.id);
   }, [selectedReport?.id, loadMessages]);
@@ -256,7 +256,7 @@ export function BriefingPage() {
       const created = await createReport({});
       setReports((prev) => [created, ...prev.filter((r) => r.id !== created.id)]);
       setSelectedId(created.id);
-      setExpandedBody(false);
+      setExpandedReportId(null);
       setReportsError(null);
     } catch (err) {
       setReportsError(normalizeError(err));
@@ -293,6 +293,7 @@ export function BriefingPage() {
       const next = applyDelete(reportsRef.current, selectedIdRef.current, outcome.droppedId);
       setReports(next.reports);
       setSelectedId(next.selectedId);
+      setExpandedReportId(null);
       setChatByReport((prev) => {
         const copy = { ...prev };
         delete copy[outcome.droppedId];
@@ -385,7 +386,7 @@ export function BriefingPage() {
                 className={`briefing-report-item ${selectedReport?.id === report.id ? "is-active" : ""}`}
                 onClick={() => {
                   setSelectedId(report.id);
-                  setExpandedBody(false);
+                  setExpandedReportId(null);
                 }}
               >
                 <div className="mono briefing-report-meta">{`§ ${String(report.paragraph_num).padStart(3, "0")} · ${report.stamp}`}</div>
@@ -447,7 +448,13 @@ export function BriefingPage() {
                 <button
                   type="button"
                   className="briefing-link"
-                  onClick={() => setExpandedBody((v) => !v)}
+                  aria-controls="briefing-dossier-body"
+                  aria-expanded={expandedBody}
+                  onClick={() => {
+                    setExpandedReportId((current) => (
+                      current === selectedReport.id ? null : selectedReport.id
+                    ));
+                  }}
                 >
                   {expandedBody ? "▸ Collapse dossier" : "▸ Read full dossier"}
                 </button>
@@ -481,7 +488,7 @@ export function BriefingPage() {
             {expandedBody ? (
               <>
                 <hr className="hair" />
-                <section className="briefing-body-grid">
+                <section id="briefing-dossier-body" className="briefing-body-grid">
                   <div>
                     <h3 className="serif briefing-body-title">{selectedReport.body_title}</h3>
                     {selectedReport.body_paragraphs.map((paragraph, idx) => (
