@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agents.tools.rss_fetch import rss_fetch
-from rag.evidence import parse_evidence_refs
+from tests._evidence_text import parse_evidence_refs
 
 _FEED = """<?xml version="1.0"?><rss><channel>
 <item><title>Strike reported</title><link>https://bbc.com/news/1</link>

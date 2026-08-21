@@ -4,15 +4,17 @@ import httpx
 import structlog
 from langchain_core.tools import tool
 
-from rag.evidence import format_evidence_pack, to_evidence_item
+from rag.evidence import neutralize_evidence_markers, pack_with_lineage, to_evidence_item
 
 logger = structlog.get_logger()
 
 GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 
-@tool
-async def gdelt_query(query: str, max_records: int = 20) -> str:
+@tool(response_format="content_and_artifact")
+async def gdelt_query(
+    query: str, max_records: int = 20
+) -> tuple[str, list[dict]]:
     """Query GDELT DOC-API for breaking news (last 24-72h coverage window).
 
     GDELT covers global news in 65+ languages updated every 15 minutes —
@@ -66,7 +68,8 @@ async def gdelt_query(query: str, max_records: int = 20) -> str:
                     preview=body_preview,
                     error=str(exc),
                 )
-                return f"GDELT query temporarily unavailable for: {query}"
+                return (f"GDELT query temporarily unavailable for: "
+                        f"{neutralize_evidence_markers(query)}"), []
 
         articles = data.get("articles", [])
         logger.info(
@@ -76,7 +79,7 @@ async def gdelt_query(query: str, max_records: int = 20) -> str:
             result_count=len(articles),
         )
         if not articles:
-            return f"No GDELT results found for: {query}"
+            return f"No GDELT results found for: {neutralize_evidence_markers(query)}", []
 
         items = [
             to_evidence_item({
@@ -90,8 +93,8 @@ async def gdelt_query(query: str, max_records: int = 20) -> str:
             })
             for idx, article in enumerate(articles[:max_records])
         ]
-        pack = format_evidence_pack(items, budget=6500)
-        return f"[GDELT Evidence for: {query}]\n{pack}"
+        pack, lineage = pack_with_lineage(items, budget=6500)
+        return f"[GDELT Evidence for: {neutralize_evidence_markers(query)}]\n{pack}", lineage
     except Exception as e:
         logger.warning("gdelt_query_failed", error=str(e))
-        return f"GDELT query failed: {e}"
+        return f"GDELT query failed: {neutralize_evidence_markers(str(e))}", []

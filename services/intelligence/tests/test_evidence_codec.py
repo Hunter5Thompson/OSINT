@@ -7,8 +7,8 @@ from rag.evidence import (
     EvidenceItem,
     SourceRef,
     format_evidence_pack,
-    parse_evidence_refs,
 )
+from tests._evidence_text import parse_evidence_refs
 
 
 def _item(i: int, prov: str, score: float) -> EvidenceItem:

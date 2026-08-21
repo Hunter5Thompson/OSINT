@@ -66,14 +66,14 @@ class TestGdeltQueryTool:
             result = await gdelt_query.ainvoke({"query": "strait of hormuz", "max_records": 5})
 
         assert "[GDELT Evidence for: strait of hormuz]" in result
-        from rag.evidence import parse_evidence_refs
+        from tests._evidence_text import parse_evidence_refs
         refs = parse_evidence_refs(result)
         assert len(refs) == 1
         assert refs[0].provider == "example.test"
 
     @pytest.mark.asyncio
     async def test_emits_evidence_blocks_seendate_not_published(self):
-        from rag.evidence import parse_evidence_refs
+        from tests._evidence_text import parse_evidence_refs
         response = MagicMock()
         response.raise_for_status.return_value = None
         response.json.return_value = {"articles": [{

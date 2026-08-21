@@ -16,6 +16,8 @@ class AgentState(TypedDict):
     # Deterministic grounding (POSTed by the backend, e.g. country briefing)
     grounding_context: str
     grounding_evidence_pack: str
+    # Provenance travels structurally, never via the rendered pack text.
+    grounding_evidence_artifact: list[dict]
 
     # ReAct loop
     messages: Annotated[list[BaseMessage], add_messages]

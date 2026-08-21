@@ -2,6 +2,11 @@
 
 This module is internal to the intelligence service. SourceRef objects are NEVER
 serialized across the /query API boundary (Slice 1 keeps sources_used: list[str]).
+
+TRUST SEAM: provenance is carried by the structured artifact (`evidence_artifact`),
+never by the rendered text. The [EVIDENCE] codec is prompt formatting for the LLM —
+it is NOT an authentication mechanism, because untrusted text (excerpts, graph
+context, echoed tool arguments) reaches the same output stream.
 """
 from __future__ import annotations
 
@@ -10,7 +15,7 @@ import json
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from rag.credibility import credibility_score, normalize_provider
 
@@ -177,6 +182,32 @@ def _block(item: EvidenceItem) -> str:
     return f"{header}\nTitle: {item.title}\nExcerpt: {item.excerpt}"
 
 
+def select_pack_items(items: list[EvidenceItem], *, budget: int,
+                      preserve_order: bool = False) -> list[EvidenceItem]:
+    """The items a pack of this budget actually keeps — deduped, whole blocks only.
+
+    Split out from rendering so lineage can be derived from the SAME selection:
+    an artifact must never claim a source whose block was dropped for budget.
+    """
+    ordered = items if preserve_order else sorted(
+        items, key=lambda it: it.relevance_score, reverse=True)
+    seen: set[str] = set()
+    kept: list[EvidenceItem] = []
+    used = 0
+    for it in ordered:
+        key = it.content_hash or it.source.source_ref_id
+        if key in seen:
+            continue
+        block = _block(it)
+        add = len(block) + (2 if kept else 0)  # "\n\n" separator
+        if used + add > budget:
+            continue  # try the next (smaller) block; never truncate
+        seen.add(key)
+        kept.append(it)
+        used += add
+    return kept
+
+
 def format_evidence_pack(items: list[EvidenceItem], *, budget: int,
                          preserve_order: bool = False) -> str:
     """Deterministic, budgeted pack. Deduped, and a block is only appended if it
@@ -185,50 +216,16 @@ def format_evidence_pack(items: list[EvidenceItem], *, budget: int,
     If preserve_order, items are emitted in the caller's order (already ranked);
     otherwise sorted by relevance desc.
     """
-    ordered = items if preserve_order else sorted(
-        items, key=lambda it: it.relevance_score, reverse=True)
-    seen: set[str] = set()
-    blocks: list[str] = []
-    used = 0
-    for it in ordered:
-        key = it.content_hash or it.source.source_ref_id
-        if key in seen:
-            continue
-        block = _block(it)
-        add = len(block) + (2 if blocks else 0)  # "\n\n" separator
-        if used + add > budget:
-            continue  # try the next (smaller) block; never truncate
-        seen.add(key)
-        blocks.append(block)
-        used += add
-    return "\n\n".join(blocks)
+    return "\n\n".join(
+        _block(it) for it in select_pack_items(
+            items, budget=budget, preserve_order=preserve_order))
 
 
-def parse_evidence_refs(text: str) -> list[SourceRef]:
-    """Reconstruct SourceRef from every complete [EVIDENCE] <json> line.
-    Lines that don't parse are ignored. Order preserved."""
-    refs: list[SourceRef] = []
-    for line in text.splitlines():
-        if not line.startswith(_EVIDENCE_PREFIX):
-            continue
-        try:
-            meta = json.loads(line[len(_EVIDENCE_PREFIX):])
-        except (ValueError, json.JSONDecodeError):
-            continue
-        try:
-            refs.append(SourceRef(
-                source_ref_id=meta["source_ref_id"],
-                source_type=meta["source_type"],
-                provider=meta["provider"],
-                display_name=meta.get("display_name"),
-                url=meta.get("url"),
-                published_at=_parse_dt(meta.get("published_at")),
-                credibility_score=meta.get("credibility_score", 0.5),
-                provenance_inferred=meta.get("provenance_inferred", False),
-            ))
-        except (KeyError, ValueError, TypeError):
-            continue
-    return refs
+def pack_with_lineage(items: list[EvidenceItem], *, budget: int,
+                      preserve_order: bool = False) -> tuple[str, list[dict]]:
+    """Rendered pack plus the matching provenance artifact — the pair tools return."""
+    kept = select_pack_items(items, budget=budget, preserve_order=preserve_order)
+    return "\n\n".join(_block(it) for it in kept), evidence_artifact(kept)
 
 
 def compute_source_ref_id(
@@ -256,3 +253,44 @@ def compute_source_ref_id(
         ["source-ref-v1", source_type, normalize_provider(provider), kind, value]
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20]
+
+
+# --- Structured provenance artifact (the trust seam) --------------------------
+
+
+def evidence_artifact(items: list[EvidenceItem]) -> list[dict]:
+    """Serialize evidence for `ToolMessage.artifact` — the only lineage carrier.
+
+    Kept as EvidenceItem payloads (not bare SourceRefs) so the corroboration slice
+    can consume excerpts structurally without another transport change.
+    """
+    return [item.model_dump(mode="json") for item in items]
+
+
+def source_refs_from_artifact(artifact: object) -> list[SourceRef]:
+    """Validate an artifact into SourceRefs. Fail-closed: anything that is not a
+    well-formed EvidenceItem payload is dropped, never guessed at."""
+    if not isinstance(artifact, list):
+        return []
+    refs: list[SourceRef] = []
+    for entry in artifact:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            refs.append(EvidenceItem.model_validate(entry).source)
+        except ValidationError:
+            continue
+    return refs
+
+
+def neutralize_evidence_markers(text: str) -> str:
+    """Defense-in-depth for the prompt surface: keep untrusted text from imitating
+    a codec header line. Carries no security guarantee on its own — provenance
+    integrity lives in the artifact — but stops the LLM from reading forged
+    metadata as if the system had emitted it."""
+    if not text or _EVIDENCE_PREFIX not in text:
+        return text
+    return "\n".join(
+        ("\u2007" + line if line.startswith(_EVIDENCE_PREFIX) else line)
+        for line in text.split("\n")
+    )

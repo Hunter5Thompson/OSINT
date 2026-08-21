@@ -5,6 +5,7 @@ fallback). The legacy pipeline runs only when the caller passes use_legacy=True.
 """
 
 import asyncio
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 
 import structlog
@@ -27,7 +28,12 @@ from graph.client import GraphClient
 from graph.nodes import analyst_node, osint_node, router_node
 from graph.nodes import synthesis_node as legacy_synthesis_node
 from graph.state import AgentState
-from rag.evidence import format_evidence_pack, parse_evidence_refs, to_evidence_item
+from rag.evidence import (
+    evidence_artifact,
+    format_evidence_pack,
+    source_refs_from_artifact,
+    to_evidence_item,
+)
 
 logger = structlog.get_logger()
 
@@ -80,19 +86,35 @@ def _compact_tool_messages(messages: list) -> list:  # type: ignore[type-arg]
     return list(reversed(compacted_reversed))
 
 
-def derive_sources_used(tool_outputs: list[str]) -> list[str]:
+def collect_evidence_artifacts(messages: Iterable[object]) -> list[dict]:
+    """Structured evidence payloads from ToolMessages, in message order.
+
+    Only ToolMessage.artifact is read. Tool *text* is never inspected: excerpts,
+    graph context and echoed tool arguments all reach that text and are attacker-
+    influenced, so text cannot carry provenance.
+    """
+    artifacts: list[dict] = []
+    for msg in messages:
+        if getattr(msg, "type", None) != "tool":
+            continue
+        artifact = getattr(msg, "artifact", None)
+        if isinstance(artifact, list):
+            artifacts.extend(entry for entry in artifact if isinstance(entry, dict))
+    return artifacts
+
+
+def derive_sources_used(artifacts: Sequence[dict]) -> list[str]:
     """Deduplicated provider IDs in first-seen (evidence) order.
 
-    Parses [EVIDENCE] <json> blocks. Never falls back to tool names or
+    Reads validated evidence artifacts only. Never falls back to tool names or
     "llm_knowledge". Empty list if there is no real evidence lineage.
     """
     seen: set[str] = set()
     ordered: list[str] = []
-    for out in tool_outputs:
-        for ref in parse_evidence_refs(out):
-            if ref.provider not in seen:
-                seen.add(ref.provider)
-                ordered.append(ref.provider)
+    for ref in source_refs_from_artifact(list(artifacts)):
+        if ref.provider not in seen:
+            seen.add(ref.provider)
+            ordered.append(ref.provider)
     return ordered
 
 
@@ -175,18 +197,25 @@ async def react_synthesis_node(state: AgentState) -> dict:
     try:
         llm = create_synthesis_llm()
 
-        # Collect all tool results from messages + derive sources_used from trace
+        # Tool TEXT feeds the prompt; tool ARTIFACTS feed provenance. Two separate
+        # streams on purpose — text is attacker-influenced, artifacts are not.
+        messages = state.get("messages", [])
         tool_results = []
-        for msg in state.get("messages", []):
+        for msg in messages:
             if hasattr(msg, "content") and getattr(msg, "type", None) == "tool":
                 tool_results.append(
                     msg.content if isinstance(msg.content, str) else str(msg.content)
                 )
 
         # Prepend the deterministic grounding pack so it is part of the synthesis
-        # research text AND counted first by derive_sources_used (sources_used).
+        # research text; its lineage travels in grounding_evidence_artifact.
         pack = state.get("grounding_evidence_pack") or ""
         tool_results = ([pack] if pack else []) + tool_results
+
+        evidence_artifacts = (
+            list(state.get("grounding_evidence_artifact") or [])
+            + collect_evidence_artifacts(messages)
+        )
 
         research_text = (
             "\n\n---\n\n".join(tool_results)
@@ -196,8 +225,8 @@ async def react_synthesis_node(state: AgentState) -> dict:
         raw_research_chars = len(research_text)
         research_text = _clip_text(research_text, SYNTHESIS_RESEARCH_MAX_CHARS)
 
-        # Derive sources_used from parsed [EVIDENCE] blocks (de-duplicated provider IDs)
-        derived_sources = derive_sources_used(tool_results)
+        # Derive sources_used from validated artifacts (de-duplicated provider IDs)
+        derived_sources = derive_sources_used(evidence_artifacts)
         logger.info(
             "react_synthesis_grounding",
             tool_call_count=len(state.get("tool_trace", [])),
@@ -367,12 +396,14 @@ async def run_intelligence_query(
     grounding_evidence_pack = (
         format_evidence_pack(items, budget=GROUNDING_EVIDENCE_MAX_CHARS) if items else ""
     )
+    grounding_evidence_artifact = evidence_artifact(items)
 
     initial_state: AgentState = {
         "query": query,
         "image_url": image_url,
         "grounding_context": grounding_context or "",
         "grounding_evidence_pack": grounding_evidence_pack,
+        "grounding_evidence_artifact": grounding_evidence_artifact,
         "messages": [],
         "tool_calls_count": 0,
         "iteration": 0,
