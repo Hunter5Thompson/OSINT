@@ -232,6 +232,27 @@ class ManifestScope(StrictFrozenModel):
         return self
 
 
+class CatalogPointer(StrictFrozenModel):
+    """Deployment-owned active/previous catalog selection."""
+
+    schema_version: Literal[1]
+    active_catalog_revision: CatalogRevision
+    served_catalog_revisions: tuple[CatalogRevision, ...] = Field(
+        min_length=1,
+        max_length=2,
+    )
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> CatalogPointer:
+        if self.served_catalog_revisions[0] != self.active_catalog_revision:
+            raise ValueError("active catalog revision must be first")
+        if len(set(self.served_catalog_revisions)) != len(
+            self.served_catalog_revisions
+        ):
+            raise ValueError("served catalog revisions must be unique")
+        return self
+
+
 class CatalogManifest(StrictFrozenModel):
     schema_version: Literal[1]
     catalog_revision: CatalogRevision

@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from app.models.spatial import (
     CatalogAttribution,
     CatalogManifest,
+    CatalogPointer,
     CatalogProblemCode,
     ManifestScope,
     ScopeKind,
@@ -485,10 +486,9 @@ class SpatialCatalogLoader:
         source_lock = SourceLock.model_validate_json(source_lock_path.read_bytes())
         source_by_id = {source.source_id: source for source in source_lock.sources}
         loaded = tuple(self._load_catalog(directory) for directory in directories)
-        ordered = _order_loaded_catalogs(loaded)
-        _validate_active_source_lock(ordered[0], source_by_id=source_by_id)
-        _validate_cross_catalog_assets(ordered)
-        return ordered
+        _validate_active_source_lock(loaded[0], source_by_id=source_by_id)
+        _validate_cross_catalog_assets(loaded)
+        return loaded
 
     def _discover_served_directories(self) -> tuple[Path, ...]:
         if (self._path / "manifest.json").is_file():
@@ -499,20 +499,25 @@ class SpatialCatalogLoader:
         catalogs_root = self._path / "catalogs"
         if not catalogs_root.is_dir():
             raise FileNotFoundError("spatial catalog directory is missing")
-        candidates: list[Path] = []
-        for candidate in catalogs_root.iterdir():
-            if not _CATALOG_DIRECTORY.fullmatch(candidate.name):
-                continue
-            if candidate.is_symlink() or not candidate.is_dir():
-                raise ValueError("catalog revision path must be a regular directory")
-            candidates.append(candidate)
-        if not candidates:
-            raise FileNotFoundError("no spatial catalog revision is installed")
-        candidates.sort(
-            key=lambda candidate: (candidate.stat().st_mtime_ns, candidate.name),
-            reverse=True,
-        )
-        return tuple(candidates[:2])
+        pointer_path = self._path / "catalog-pointer.json"
+        if pointer_path.is_symlink() or not pointer_path.is_file():
+            raise FileNotFoundError("spatial catalog pointer is missing")
+        pointer_bytes = pointer_path.read_bytes()
+        pointer = CatalogPointer.model_validate_json(pointer_bytes)
+        canonical_pointer = canonical_json_bytes(pointer)
+        if pointer_bytes not in {canonical_pointer, canonical_pointer + b"\n"}:
+            raise ValueError("catalog pointer is not canonical JSON")
+        directories: list[Path] = []
+        for revision in pointer.served_catalog_revisions:
+            candidate = catalogs_root / revision
+            if (
+                not _CATALOG_DIRECTORY.fullmatch(candidate.name)
+                or candidate.is_symlink()
+                or not candidate.is_dir()
+            ):
+                raise ValueError("served catalog revision is not installed")
+            directories.append(candidate)
+        return tuple(directories)
 
     def _source_lock_path(self, catalog_directory: Path) -> Path:
         candidates = (
@@ -736,31 +741,6 @@ async def _wait_for_file_read_after_cancellation(read_task: asyncio.Task[bytes])
     if not read_task.cancelled():
         with contextlib.suppress(Exception):
             read_task.result()
-
-
-def _order_loaded_catalogs(
-    loaded: tuple[_LoadedCatalog, ...],
-) -> tuple[_LoadedCatalog, ...]:
-    """Prefer the manifest carry-forward relation over filesystem timestamp order."""
-
-    if len(loaded) < 2:
-        return loaded
-    loaded_revisions = {catalog.manifest.catalog_revision for catalog in loaded}
-    referenced_revisions = {
-        record.carry_forward_from
-        for catalog in loaded
-        for record in catalog.manifest.scopes
-        if record.carry_forward_from in loaded_revisions
-    }
-    active_candidates = tuple(
-        catalog
-        for catalog in loaded
-        if catalog.manifest.catalog_revision not in referenced_revisions
-    )
-    if len(active_candidates) != 1:
-        return loaded
-    active = active_candidates[0]
-    return (active, *(catalog for catalog in loaded if catalog is not active))
 
 
 def _sha256_bytes(payload: bytes) -> str:

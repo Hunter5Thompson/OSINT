@@ -208,6 +208,22 @@ def _publish_catalog(
     asset_path.write_bytes(asset_content)
     if modified_ns is not None:
         os.utime(catalog_dir, ns=(modified_ns, modified_ns))
+    pointer_path = root / "catalog-pointer.json"
+    previous_revision = None
+    if pointer_path.is_file():
+        previous_revision = json.loads(pointer_path.read_bytes())["active_catalog_revision"]
+    served = [revision]
+    if previous_revision is not None and previous_revision != revision:
+        served.append(previous_revision)
+    pointer_path.write_bytes(
+        _canonical_bytes(
+            {
+                "schema_version": 1,
+                "active_catalog_revision": revision,
+                "served_catalog_revisions": served,
+            }
+        )
+    )
     return revision, asset_id, asset_path
 
 
@@ -236,6 +252,57 @@ async def test_loader_serves_active_and_previous_catalogs(tmp_path: Path) -> Non
     assert loader.get_scope(previous, "world").scope.key == "world"
     assert loader.get_asset(active, active_asset).asset_id == active_asset
     assert loader.get_asset(previous, previous_asset).asset_id == previous_asset
+
+
+@pytest.mark.asyncio
+async def test_catalog_pointer_not_mtime_selects_the_served_active_revision(
+    tmp_path: Path,
+) -> None:
+    spatial_root = tmp_path / "spatial"
+    older, _, _ = _publish_catalog(
+        spatial_root,
+        asset_content=b'{"revision":"older"}',
+        modified_ns=1_000_000_000,
+    )
+    active, _, _ = _publish_catalog(
+        spatial_root,
+        asset_content=b'{"revision":"active"}',
+        modified_ns=2_000_000_000,
+    )
+    os.utime(
+        spatial_root / "catalogs" / older,
+        ns=(9_000_000_000, 9_000_000_000),
+    )
+
+    state = await SpatialCatalogLoader(spatial_root).load()
+
+    assert isinstance(state, CatalogReadyState)
+    assert state.active_catalog_revision == active
+    assert state.served_catalog_revisions == (active, older)
+
+
+@pytest.mark.asyncio
+async def test_catalog_pointer_fails_closed_when_active_directory_is_missing(
+    tmp_path: Path,
+) -> None:
+    spatial_root = tmp_path / "spatial"
+    installed, _, _ = _publish_catalog(spatial_root)
+    (spatial_root / "catalog-pointer.json").write_bytes(
+        _canonical_bytes(
+            {
+                "schema_version": 1,
+                "active_catalog_revision": "spatial-v1-aaaaaaaaaaaa",
+                "served_catalog_revisions": [
+                    "spatial-v1-aaaaaaaaaaaa",
+                    installed,
+                ],
+            }
+        )
+    )
+
+    state = await SpatialCatalogLoader(spatial_root).load()
+
+    assert isinstance(state, CatalogUnavailableState)
 
 
 @pytest.mark.asyncio
