@@ -50,7 +50,7 @@ class TestQdrantSearchTool:
 
     @pytest.mark.asyncio
     async def test_emits_parsable_evidence_blocks_with_provider(self):
-        from rag.evidence import parse_evidence_refs
+        from tests._evidence_text import parse_evidence_refs
         results = [
             {
                 "score": 0.9, "source": "rss", "source_type": "rss",

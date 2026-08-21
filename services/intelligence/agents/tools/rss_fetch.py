@@ -8,13 +8,13 @@ import httpx
 import structlog
 from langchain_core.tools import tool
 
-from rag.evidence import format_evidence_pack, to_evidence_item
+from rag.evidence import neutralize_evidence_markers, pack_with_lineage, to_evidence_item
 
 logger = structlog.get_logger()
 
 
-@tool
-async def rss_fetch(feed_url: str) -> str:
+@tool(response_format="content_and_artifact")
+async def rss_fetch(feed_url: str) -> tuple[str, list[dict]]:
     """Fetch and parse an RSS feed to get recent articles.
 
     Args:
@@ -56,10 +56,11 @@ async def rss_fetch(feed_url: str) -> str:
             }))
 
         if not items:
-            return f"No articles found in feed: {feed_url}"
+            return f"No articles found in feed: {neutralize_evidence_markers(feed_url)}", []
 
-        pack = format_evidence_pack(items, budget=6500)
-        return f"[RSS Evidence: {feed_url}]\n{pack}"
+        pack, lineage = pack_with_lineage(items, budget=6500)
+        return f"[RSS Evidence: {neutralize_evidence_markers(feed_url)}]\n{pack}", lineage
     except Exception as e:
         logger.warning("rss_fetch_failed", url=feed_url, error=str(e))
-        return f"Failed to fetch RSS feed: {feed_url} - {e}"
+        return (f"Failed to fetch RSS feed: {neutralize_evidence_markers(feed_url)} - "
+                f"{neutralize_evidence_markers(str(e))}"), []

@@ -3,7 +3,8 @@ import pytest
 from pydantic import ValidationError
 
 from main import GroundingEvidenceItem, QueryRequest
-from rag.evidence import format_evidence_pack, parse_evidence_refs, to_evidence_item
+from rag.evidence import format_evidence_pack, to_evidence_item
+from tests._evidence_text import parse_evidence_refs
 
 
 def test_query_request_bounds_and_allowlist():
@@ -104,10 +105,17 @@ async def test_grounding_reaches_react_seed_and_synthesis_sources(monkeypatch):
             return AIMessage(content="HIGH — moderate confidence")
 
     monkeypatch.setattr(wf, "create_synthesis_llm", lambda: FakeSynth())
-    pack = (
-        '[EVIDENCE] {"provider":"odin-country-almanac","source_ref_id":"x","source_type":"dataset"}'
-        "\nTitle: t\nExcerpt: e"
+    from rag.evidence import EvidenceItem, SourceRef, evidence_artifact, format_evidence_pack
+
+    grounding_item = EvidenceItem(
+        source=SourceRef(
+            source_ref_id="x", source_type="dataset", provider="odin-country-almanac",
+            display_name=None, url=None, published_at=None,
+            credibility_score=0.8, provenance_inferred=False,
+        ),
+        title="t", excerpt="e", relevance_score=1.0,
     )
+    pack = format_evidence_pack([grounding_item], budget=5000)
     syn = await wf.react_synthesis_node(
         {
             "query": "Lage Iran",  # react_synthesis_node reads state["query"]
@@ -115,6 +123,8 @@ async def test_grounding_reaches_react_seed_and_synthesis_sources(monkeypatch):
             "tool_trace": [],
             "agent_chain": [],
             "grounding_evidence_pack": pack,
+            # Provenance travels structurally — the pack is prompt text only.
+            "grounding_evidence_artifact": evidence_artifact([grounding_item]),
         }
     )
     # grounding surfaces as a source

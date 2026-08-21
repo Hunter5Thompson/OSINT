@@ -15,7 +15,7 @@ from rag.corpus_policy import (
     realtime_filter,
     validate_lane,
 )
-from rag.evidence import format_evidence_pack, to_evidence_item
+from rag.evidence import neutralize_evidence_markers, pack_with_lineage, to_evidence_item
 from rag.retriever import enhanced_search
 
 logger = structlog.get_logger()
@@ -32,8 +32,10 @@ def _clip_text(text: str, max_chars: int) -> str:
     return text[:max_chars].rstrip() + f"\n...[truncated {omitted} chars]"
 
 
-@tool
-async def qdrant_search(query: str, region: str = "") -> str:
+@tool(response_format="content_and_artifact")
+async def qdrant_search(
+    query: str, region: str = ""
+) -> tuple[str, list[dict]]:
     """Semantic vector search across the OSINT knowledge base.
 
     Index content — VETTED ANALYSIS PROSE only (1024-dim cosine):
@@ -100,7 +102,8 @@ async def qdrant_search(query: str, region: str = "") -> str:
         )
 
         if not results:
-            return f"No relevant documents found for: {query}"
+            # The query is echoed back to the LLM — neutralize codec markers in it.
+            return f"No relevant documents found for: {neutralize_evidence_markers(query)}", []
 
         items = [to_evidence_item(r) for r in results]
 
@@ -111,20 +114,21 @@ async def qdrant_search(query: str, region: str = "") -> str:
             gctx = r.get("graph_context", "")
             if gctx and gctx not in seen_graph:
                 seen_graph.add(gctx)
-                graph_blocks.append(_clip_text(str(gctx), GRAPH_CONTEXT_MAX_CHARS))
+                graph_blocks.append(
+                    neutralize_evidence_markers(_clip_text(str(gctx), GRAPH_CONTEXT_MAX_CHARS)))
 
         graph_text = ""
         if graph_blocks:
             graph_text = "\n---\n[Graph Context]\n" + "\n\n".join(graph_blocks)
 
-        header = f"[Knowledge Base Evidence for: {query}]\n"
+        header = f"[Knowledge Base Evidence for: {neutralize_evidence_markers(query)}]\n"
         evidence_budget = TOOL_OUTPUT_MAX_CHARS - len(graph_text) - len(header)
-        pack = format_evidence_pack(
+        pack, lineage = pack_with_lineage(
             items, budget=max(evidence_budget, 0), preserve_order=True)
         output = header + pack
         if graph_text and len(output) + len(graph_text) <= TOOL_OUTPUT_MAX_CHARS:
             output += graph_text
-        return output
+        return output, lineage
     except Exception as e:
         logger.warning("qdrant_search_failed", error=str(e))
-        return f"Knowledge base search failed: {e}"
+        return f"Knowledge base search failed: {neutralize_evidence_markers(str(e))}", []
