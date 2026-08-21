@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
+import { formatCoords } from "../../../lib/coords";
 import { useSpotlight, type FocusTarget } from "../spotlight/SpotlightContext";
 
 const ZOOM_THRESHOLD_M = 500_000;
@@ -36,7 +37,7 @@ export function useSpotlightTrigger(viewer: Cesium.Viewer | null): void {
           target: {
             kind: "circle", trigger: "zoom",
             center: { lon, lat }, radius: 1, altitude,
-            label: `${lat.toFixed(2)}N · ${lon.toFixed(2)}E`,
+            label: formatCoords([lat, lon], 2),
           },
         });
       } else if (altitude >= ZOOM_EXIT_M && ft?.trigger === "zoom") {

@@ -126,6 +126,7 @@ describe("spatial contract vectors", () => {
       stateRevision: 0,
       current: null,
       path: [],
+      children: [],
       query: null,
       pending: null,
       problem: null,
@@ -147,6 +148,7 @@ describe("spatial contract vectors", () => {
         childrenAvailable: true,
         presentation: "boundary",
       },
+      children: [],
       path: [{
         key: WORLD_SCOPE_KEY,
         kind: "world",

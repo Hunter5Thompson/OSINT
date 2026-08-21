@@ -33,6 +33,7 @@ const HIST: HistogramResponse = {
     completeness: "complete",
     included_count: 1,
     excluded_unlocated_count: 0,
+    excluded_outside_count: 0,
     excluded_conflict_count: 0,
     excluded_stale_revision_count: 0,
     excluded_unsupported_count: 0,

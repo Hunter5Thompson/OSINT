@@ -377,7 +377,7 @@ describe("controller and router revision/failure coordination", () => {
     expect(catalog.resolveCalls.filter((call) => call.scopeKey === UKRAINE)).toHaveLength(1);
   });
 
-  it("uses active revision on reload but the validated pinned revision on Back", async () => {
+  it("uses the validated pinned revision on first hydration and Back", async () => {
     const initial = location("?scope=country%3AUKR", {
       odinSpatialCatalogRevision: fixture.catalogRevision,
       odinSpatialNavigationId: "old-reload-state",
@@ -394,7 +394,7 @@ describe("controller and router revision/failure coordination", () => {
     const controller = createSpatialScopeController({ catalog, navigation });
     controllers.push(controller);
     controller.start();
-    await waitForScope(controller, UKRAINE, ACTIVE_REVISION);
+    await waitForScope(controller, UKRAINE, fixture.catalogRevision);
 
     navigation.acceptLocation(location("", null));
     await waitForScope(controller, WORLD_SCOPE_KEY, ACTIVE_REVISION);

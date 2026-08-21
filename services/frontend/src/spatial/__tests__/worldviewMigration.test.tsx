@@ -73,6 +73,18 @@ function ukraineSummary() {
   };
 }
 
+function donetskSummary() {
+  return {
+    key: parseScopeKeyCandidate("admin1:iso3166-2:UA-14"),
+    kind: "admin1" as const,
+    label: "Donetsk Oblast",
+    shortLabel: "Donetsk",
+    parentKey: ukraine,
+    childrenAvailable: false,
+    presentation: "boundary" as const,
+  };
+}
+
 function readySnapshot(
   current: "world" | "ukraine" = "ukraine",
   pending: ScopeKey | null = null,
@@ -86,6 +98,7 @@ function readySnapshot(
     stateRevision: current === "world" ? 1 : 2,
     current: summary,
     path,
+    children: current === "world" ? [ukraineSummary()] : [donetskSummary()],
     query: {
       schemaVersion: 1,
       scopeKey: summary.key,
@@ -302,6 +315,24 @@ describe("WorldView pick classification", () => {
 });
 
 describe("SpatialScopeBreadcrumb", () => {
+  it("exposes every direct child as a native drilldown button", () => {
+    const module = new InteractiveModule(readySnapshot("ukraine"));
+    render(
+      <ScopeHarness module={module}>
+        <SpatialScopeBreadcrumb />
+      </ScopeHarness>,
+    );
+
+    const child = screen.getByRole("button", { name: "Donetsk" });
+    expect(child).toHaveAttribute("type", "button");
+    fireEvent.click(child);
+    expect(module.commands[0]).toEqual({
+      type: "enter",
+      target: parseScopeKeyCandidate("admin1:iso3166-2:UA-14"),
+      cause: "child-click",
+    });
+  });
+
   it("is semantic, keyboard-native, and retains focus after an ancestor commit", async () => {
     const module = new InteractiveModule(readySnapshot("ukraine"));
     render(

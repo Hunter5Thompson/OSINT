@@ -174,7 +174,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
       if (!this.started || lifecycleGeneration !== this.lifecycleGeneration) return;
       this.hydrateCandidate(
         this.navigation.readScopeCandidate(),
-        null,
+        this.navigation.readCatalogRevisionCandidate(),
         "deep-link",
       );
     });
@@ -576,6 +576,7 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
       stateRevision,
       current: resolved.scope,
       path: resolved.path,
+      children: resolved.children,
       query: resolved.query,
       pending: null,
       problem: committedProblem ?? (semanticOnly ? resolved.presentation.problem : null),

@@ -45,7 +45,12 @@ function adminHeaders(headers: Record<string, string> = {}): Record<string, stri
 import type { LandingSummary } from "../types/landing";
 import type { SignalEnvelope } from "../types/signals";
 import type { Incident, IncidentCreateRequest } from "../types/incident";
-import type { AlmanacSignalResponse, CountryAlmanac } from "../types/almanac";
+import type {
+  AlmanacSignalResponse,
+  CountryAlmanac,
+  SpatialAlmanacSignalResponse,
+  SpatialCountryAlmanac,
+} from "../types/almanac";
 import type { SpatialQueryRef } from "../spatial/contracts";
 
 export const SIGNAL_STREAM_URL = "/api/signals/stream";
@@ -98,7 +103,7 @@ function spatialCountryParameters(
 export async function getSpatialCountryAlmanac(
   query: Pick<SpatialQueryRef, "scopeKey" | "catalogRevision">,
   signal?: AbortSignal,
-): Promise<CountryAlmanac> {
+): Promise<SpatialCountryAlmanac> {
   const parameters = spatialCountryParameters(query);
   const res = await fetch(`/api/almanac/country?${parameters.toString()}`, {
     headers: { Accept: "application/json" },
@@ -107,14 +112,14 @@ export async function getSpatialCountryAlmanac(
   if (!res.ok) {
     throw new Error(`spatial country almanac failed: ${res.status} ${res.statusText}`);
   }
-  return (await res.json()) as CountryAlmanac;
+  return (await res.json()) as SpatialCountryAlmanac;
 }
 
 export async function getSpatialCountryAlmanacSignals(
   query: Pick<SpatialQueryRef, "scopeKey" | "catalogRevision">,
   limit = 5,
   signal?: AbortSignal,
-): Promise<AlmanacSignalResponse> {
+): Promise<SpatialAlmanacSignalResponse> {
   const parameters = spatialCountryParameters(query);
   parameters.set("limit", String(limit));
   const res = await fetch(`/api/almanac/country/signals?${parameters.toString()}`, {
@@ -124,7 +129,7 @@ export async function getSpatialCountryAlmanacSignals(
   if (!res.ok) {
     throw new Error(`spatial country signals failed: ${res.status} ${res.statusText}`);
   }
-  return (await res.json()) as AlmanacSignalResponse;
+  return (await res.json()) as SpatialAlmanacSignalResponse;
 }
 
 export async function getCountryAlmanacSignals(
@@ -585,6 +590,7 @@ const REQUIRED_SPATIAL_APPLICATION_FIELDS = [
   "completeness",
   "included_count",
   "excluded_unlocated_count",
+  "excluded_outside_count",
   "excluded_conflict_count",
   "excluded_stale_revision_count",
   "excluded_unsupported_count",
@@ -634,6 +640,7 @@ function decodeSpatialApplication(value: unknown): SpatialApplicationV1 {
     || !SPATIAL_COMPLETENESS.has(value.completeness as SpatialApplicationV1["completeness"])
     || !isNonNegativeInteger(value.included_count)
     || !isNonNegativeInteger(value.excluded_unlocated_count)
+    || !isNonNegativeInteger(value.excluded_outside_count)
     || !isNonNegativeInteger(value.excluded_conflict_count)
     || !isNonNegativeInteger(value.excluded_stale_revision_count)
     || !isNonNegativeInteger(value.excluded_unsupported_count)

@@ -57,6 +57,17 @@
         "childrenAvailable": true,
         "presentation": "boundary"
       },
+      "children": [
+        {
+          "key": "country:UKR",
+          "kind": "country",
+          "label": "Ukraine",
+          "shortLabel": "Ukraine",
+          "parentKey": "world",
+          "childrenAvailable": true,
+          "presentation": "boundary"
+        }
+      ],
       "path": [
         {
           "key": "world",
@@ -106,6 +117,17 @@
         "childrenAvailable": true,
         "presentation": "boundary"
       },
+      "children": [
+        {
+          "key": "admin1:iso3166-2:UA-14",
+          "kind": "admin1",
+          "label": "Donetsk Oblast",
+          "shortLabel": "Donetsk",
+          "parentKey": "country:UKR",
+          "childrenAvailable": false,
+          "presentation": "boundary"
+        }
+      ],
       "path": [
         {
           "key": "world",
@@ -185,6 +207,7 @@
         "childrenAvailable": false,
         "presentation": "boundary"
       },
+      "children": [],
       "path": [
         {
           "key": "world",

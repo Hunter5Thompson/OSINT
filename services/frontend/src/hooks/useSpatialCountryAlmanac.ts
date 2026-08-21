@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { getSpatialCountryAlmanac } from "../services/api";
 import type { SpatialQueryRef } from "../spatial/contracts";
-import type { CountryAlmanac } from "../types/almanac";
+import type { SpatialCountryAlmanac } from "../types/almanac";
 
 export type SpatialCountryAlmanacState =
   | { readonly status: "idle"; readonly data: null; readonly error: null }
   | { readonly status: "loading"; readonly data: null; readonly error: null }
-  | { readonly status: "ready"; readonly data: CountryAlmanac; readonly error: null }
+  | { readonly status: "ready"; readonly data: SpatialCountryAlmanac; readonly error: null }
   | { readonly status: "error"; readonly data: null; readonly error: string };
 
 const IDLE: SpatialCountryAlmanacState = {
@@ -53,6 +53,9 @@ export function useSpatialCountryAlmanac(
     setTagged({ queryIdentity: identity, value: LOADING });
     getSpatialCountryAlmanac({ scopeKey, catalogRevision }, controller.signal)
       .then((data) => {
+        if (data.scope_key !== scopeKey || data.catalog_revision !== catalogRevision) {
+          throw new Error("almanac scope echo does not match the request");
+        }
         if (
           !controller.signal.aborted
           && generationRef.current === generation

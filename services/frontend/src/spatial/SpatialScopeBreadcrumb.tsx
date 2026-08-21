@@ -79,6 +79,20 @@ export function SpatialScopeBreadcrumb() {
           Eine Ebene hoch
         </button>
       ) : null}
+      {scope.children.map((child) => (
+        <button
+          key={child.key}
+          type="button"
+          onClick={() => { void scope.enter(child.key, "child-click"); }}
+          style={{
+            ...buttonStyle,
+            color: "var(--signal)",
+            border: "1px solid var(--granite)",
+          }}
+        >
+          {child.shortLabel}
+        </button>
+      ))}
       <span key="scope-status" role="status" aria-live="polite" aria-atomic="true">
         {statusMessage}
       </span>

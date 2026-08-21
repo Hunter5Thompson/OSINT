@@ -30,6 +30,11 @@ export interface CountryAlmanac {
   source_note: string;
 }
 
+export interface SpatialCountryAlmanac extends CountryAlmanac {
+  scope_key: string;
+  catalog_revision: string;
+}
+
 export interface AlmanacSignalItem {
   event_id: string;
   ts: string;
@@ -43,4 +48,9 @@ export interface AlmanacSignalItem {
 export interface AlmanacSignalResponse {
   country_id: string;
   items: AlmanacSignalItem[];
+}
+
+export interface SpatialAlmanacSignalResponse extends AlmanacSignalResponse {
+  scope_key: string;
+  catalog_revision: string;
 }

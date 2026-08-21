@@ -148,6 +148,8 @@ function spatialFacts(name: string): SpatialCountryAlmanacState {
       },
       updated_at: "2026-08-10",
       source_note: "fixture",
+      scope_key: "country:UKR",
+      catalog_revision: "spatial-v1-fe9828dcda05",
     },
   };
 }
