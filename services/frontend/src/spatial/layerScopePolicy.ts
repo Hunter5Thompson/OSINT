@@ -113,6 +113,7 @@ export const LAYER_SPATIAL_CAPABILITIES: Readonly<
   refineries: unsupported("refineries", "occurs-in"),
   eonet: unsupported("eonet", "occurs-in"),
   gdacs: unsupported("gdacs", "occurs-in"),
+  recon: unsupported("recon", "occurs-in"),
 };
 
 export function layerSpatialCapability(layerId: LayerSpatialId): LayerSpatialCapability {

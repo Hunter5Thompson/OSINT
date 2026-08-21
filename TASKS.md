@@ -1892,3 +1892,14 @@ Observation-Producer.
 #      05/08 einen Produktions-Consumer für Layer-Badges und Scope-Verhalten oder wird
 #      vor 05D entfernt. Bis dahin bleibt sie explizit Vorleistung und darf nicht
 #      still als unverdrahtete zweite Wahrheitsquelle weiterwachsen.
+#
+# Review-Nachtrag (2026-08-13):
+#   - Nicht-globale Qdrant-Runs unterdrücken den ungefilterten Neo4j-Graph-Kontext und
+#     melden die ausgelassene Capability höchstens als partial.
+#   - Cesium behält die letzte gute Präsentation bis zum erfolgreichen Swap und stellt
+#     sie nach Fehler/Abort samt Kamera-Listener wieder her.
+#   - Semantic-only-Commits leeren die alte Boundary über den Presentation-Port.
+#   - Recon ist als world-only/unsupported registriert und wird in Scopes fail-closed
+#     über `effectiveLayers` verborgen.
+#   - Regression: Frontend 616, Intelligence 450 und Backend 579 Tests grün; ESLint,
+#     TypeScript, Ruff und Mypy ebenfalls grün.

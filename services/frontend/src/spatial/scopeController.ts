@@ -32,6 +32,7 @@ export interface SpatialScopePresentationPort {
     stateRevision: number,
     signal: AbortSignal,
   ): Promise<void>;
+  clear(): void;
 }
 
 export interface CreateSpatialScopeControllerOptions {
@@ -63,6 +64,7 @@ type ForegroundResolver = (signal: AbortSignal) => Promise<ResolvedScope>;
 
 const noPresentation: SpatialScopePresentationPort = {
   present: () => Promise.resolve(),
+  clear: () => undefined,
 };
 
 const noContainment: SpatialContainmentLifecyclePort = {
@@ -600,6 +602,8 @@ class SpatialScopeController implements OwnedSpatialScopeModule {
         stateRevision,
         controller,
       );
+    } else {
+      this.presentation.clear();
     }
     return next;
   }

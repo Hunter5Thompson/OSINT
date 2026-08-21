@@ -296,6 +296,7 @@ async def client_config() -> ClientConfig:
             "milAircraft": True,
             "eonet": False,
             "gdacs": False,
+            "recon": True,
         },
         api_version="v1",
     )

@@ -12,6 +12,7 @@ const allOff: LayerVisibility = {
   cctv: false, events: false, cables: false, pipelines: false,
   countryBorders: false, cityBuildings: false, firmsHotspots: false,
   milAircraft: false, datacenters: false, refineries: false, eonet: false, gdacs: false,
+  recon: false,
 };
 
 const provenanceData: SpatialBoundaryProvenance = {
@@ -119,9 +120,9 @@ describe("LayersPanel", () => {
     expect(screen.getByText(/D · lens & chrome/i)).toBeInTheDocument();
   });
 
-  it("renders all 16 LayerVisibility keys under correct groups", () => {
+  it("renders all 17 LayerVisibility keys under correct groups", () => {
     render(<LayersPanel layers={allOff} onToggle={() => {}} activeShader="none" onShaderChange={() => {}} />);
-    const expectedKeys = ["flights","satellites","earthquakes","vessels","cctv","events","cables","pipelines","countryBorders","cityBuildings","firmsHotspots","milAircraft","datacenters","refineries","eonet","gdacs"];
+    const expectedKeys = ["flights","satellites","earthquakes","vessels","cctv","events","cables","pipelines","countryBorders","cityBuildings","firmsHotspots","milAircraft","datacenters","refineries","eonet","gdacs","recon"];
     for (const k of expectedKeys) {
       expect(screen.getByTestId(`layer-toggle-${k}`)).toBeInTheDocument();
     }

@@ -65,6 +65,7 @@ const PANEL_GROUPS: PanelGroup[] = [
       { key: "refineries", label: "Refineries" },
       { key: "eonet", label: "EONET" },
       { key: "gdacs", label: "GDACS" },
+      { key: "recon", label: "Recon" },
     ],
   },
   {

@@ -271,6 +271,7 @@ class ControlledPresentation implements SpatialScopePresentationPort {
     readonly stateRevision: number;
     readonly signal: AbortSignal;
   }> = [];
+  clearCalls = 0;
   private readonly gates = new Map<ScopeKey, Deferred<void>[]>();
 
   deferNext(scopeKey: ScopeKey): Deferred<void> {
@@ -291,6 +292,10 @@ class ControlledPresentation implements SpatialScopePresentationPort {
     const gate = queue?.shift();
     if (queue?.length === 0) this.gates.delete(input.scopeKey);
     return gate?.promise ?? Promise.resolve();
+  }
+
+  clear(): void {
+    this.clearCalls += 1;
   }
 }
 
@@ -866,6 +871,11 @@ describe("SpatialScopeController semantic and presentation lifetimes", () => {
     const presentation = new ControlledPresentation();
     const { controller } = setup({ presentation });
     await startAtWorld(controller);
+    await controller.dispatch({
+      type: "enter",
+      target: UKRAINE,
+      cause: "country-click",
+    });
     const result = await controller.dispatch({
       type: "enter",
       target: VINNYTSIA,
@@ -884,6 +894,7 @@ describe("SpatialScopeController semantic and presentation lifetimes", () => {
       },
     });
     expect(presentation.calls.map((call) => call.input.scopeKey)).not.toContain(VINNYTSIA);
+    expect(presentation.clearCalls).toBe(1);
   });
 
   it("ignores presentation completion for a stale stateRevision", async () => {

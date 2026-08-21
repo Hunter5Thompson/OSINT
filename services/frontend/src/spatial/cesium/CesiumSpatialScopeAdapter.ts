@@ -302,7 +302,6 @@ export class CesiumSpatialScopeAdapter {
     const generation = ++this.generation;
     this.lodGeneration += 1;
     const previous = this.active;
-    if (previous !== null) previous.container.show = false;
 
     let staging: SpatialPrimitiveContainer | null = null;
     let acquired: AcquiredAssets | null = null;
@@ -371,9 +370,7 @@ export class CesiumSpatialScopeAdapter {
         build.cameraPositions,
         this.prefersReducedMotion() ? 0 : 1.2,
       );
-      this.removeCameraListener = this.runtime.onCameraMoveEnd(() => {
-        void this.swapCameraLod().catch(() => undefined);
-      });
+      this.attachCameraListener();
     } catch (error: unknown) {
       if (staging !== null) {
         staging.show = false;
@@ -385,8 +382,8 @@ export class CesiumSpatialScopeAdapter {
         && previous !== null
         && this.active === previous
       ) {
-        this.runtime.unmount(previous.container);
-        this.active = null;
+        previous.container.show = true;
+        this.attachCameraListener();
       }
       throw error;
     } finally {
@@ -396,6 +393,28 @@ export class CesiumSpatialScopeAdapter {
         this.presentationController = null;
       }
     }
+  }
+
+  clear(): void {
+    if (this.disposed) return;
+    this.generation += 1;
+    this.lodGeneration += 1;
+    this.presentationController?.abort();
+    this.presentationController = null;
+    this.lodController?.abort();
+    this.lodController = null;
+    this.removeCameraListener?.();
+    this.removeCameraListener = null;
+    if (this.active !== null) {
+      this.active.container.show = false;
+      this.runtime.unmount(this.active.container);
+      this.active = null;
+    }
+    for (const container of this.staging.keys()) {
+      container.show = false;
+      this.runtime.unmount(container);
+    }
+    this.staging.clear();
   }
 
   dispose(): void {
@@ -490,6 +509,13 @@ export class CesiumSpatialScopeAdapter {
       acquired?.release();
       if (this.lodController === controller) this.lodController = null;
     }
+  }
+
+  private attachCameraListener(): void {
+    this.removeCameraListener?.();
+    this.removeCameraListener = this.runtime.onCameraMoveEnd(() => {
+      void this.swapCameraLod().catch(() => undefined);
+    });
   }
 
   private async acquireAssets(
