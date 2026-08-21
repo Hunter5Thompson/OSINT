@@ -1,7 +1,32 @@
 import RBush from "rbush";
 import { useEffect, useState } from "react";
 import { feature as topojsonFeature } from "topojson-client";
-import { polygonContains } from "./pointInPolygon";
+
+type PreparedPosition = readonly [longitude: number, latitude: number];
+
+interface PreparedRing {
+  readonly meanLongitude: number;
+  readonly positions: readonly PreparedPosition[];
+}
+
+interface PreparedPolygon {
+  readonly outer: PreparedRing;
+  readonly holes: readonly PreparedRing[];
+}
+
+interface PreparedLegacyGeometry {
+  readonly polygons: readonly PreparedPolygon[];
+}
+
+interface PreparedCountryGeometry {
+  readonly geometry: PreparedLegacyGeometry;
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+}
+
+const COORDINATE_EPSILON = 1e-12;
 
 export interface CountryFeature {
   m49: string;
@@ -15,6 +40,7 @@ interface BboxNode {
   maxX: number;
   maxY: number;
   index: number;
+  geometry: PreparedLegacyGeometry;
 }
 
 export type CountryIndex = RBush<BboxNode>;
@@ -38,27 +64,189 @@ export interface CountryHit {
   capital: { name: string; coords: { lon: number; lat: number } } | null;
 }
 
-function bboxOf(geom: GeoJSON.Polygon | GeoJSON.MultiPolygon): [number, number, number, number] {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  const polys = geom.type === "Polygon" ? [geom.coordinates] : geom.coordinates;
-  for (const poly of polys) {
-    for (const ring of poly as number[][][]) {
-      for (const coord of ring) {
-        const x = coord[0]!;
-        const y = coord[1]!;
-        if (x < minX) minX = x; if (y < minY) minY = y;
-        if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+function prepareRing(rawRing: readonly GeoJSON.Position[]): PreparedRing | null {
+  if (rawRing.length < 4) return null;
+  const positions: PreparedPosition[] = [];
+  for (const rawPosition of rawRing) {
+    const longitude = rawPosition[0];
+    const latitude = rawPosition[1];
+    if (
+      typeof longitude !== "number"
+      || typeof latitude !== "number"
+      || !Number.isFinite(longitude)
+      || longitude < -180
+      || longitude > 180
+      || !Number.isFinite(latitude)
+      || latitude < -90
+      || latitude > 90
+    ) {
+      return null;
+    }
+    const previous = positions.at(-1);
+    let unwrappedLongitude = longitude;
+    if (previous !== undefined) {
+      while (unwrappedLongitude - previous[0] > 180) unwrappedLongitude -= 360;
+      while (unwrappedLongitude - previous[0] < -180) unwrappedLongitude += 360;
+    }
+    positions.push([unwrappedLongitude, latitude]);
+  }
+  const first = positions[0];
+  const last = positions.at(-1);
+  if (first === undefined || last === undefined) return null;
+  const meanPositions = Math.abs(first[0] - last[0]) <= COORDINATE_EPSILON
+      && Math.abs(first[1] - last[1]) <= COORDINATE_EPSILON
+    ? positions.slice(0, -1)
+    : positions;
+  if (meanPositions.length === 0) return null;
+  return {
+    meanLongitude: meanPositions.reduce(
+      (total, [longitude]) => total + longitude,
+      0,
+    ) / meanPositions.length,
+    positions,
+  };
+}
+
+function prepareLegacyGeometry(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): PreparedCountryGeometry | null {
+  const rawPolygons = geometry.type === "Polygon"
+    ? [geometry.coordinates]
+    : geometry.coordinates;
+  const polygons: PreparedPolygon[] = [];
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let crossesDateline = false;
+
+  for (const rawPolygon of rawPolygons) {
+    const rings: PreparedRing[] = [];
+    for (const rawRing of rawPolygon) {
+      const prepared = prepareRing(rawRing);
+      if (prepared === null) return null;
+      rings.push(prepared);
+      for (let index = 0; index < rawRing.length; index += 1) {
+        const position = rawRing[index];
+        if (position === undefined) return null;
+        const longitude = position[0];
+        const latitude = position[1];
+        if (typeof longitude !== "number" || typeof latitude !== "number") return null;
+        minX = Math.min(minX, longitude);
+        minY = Math.min(minY, latitude);
+        maxX = Math.max(maxX, longitude);
+        maxY = Math.max(maxY, latitude);
+        const next = rawRing[index + 1];
+        if (
+          next !== undefined
+          && typeof next[0] === "number"
+          && Math.abs(next[0] - longitude) > 180
+        ) {
+          crossesDateline = true;
+        }
       }
     }
+    const outer = rings[0];
+    if (outer === undefined) return null;
+    polygons.push({ outer, holes: rings.slice(1) });
   }
-  return [minX, minY, maxX, maxY];
+  if (
+    polygons.length === 0
+    || !Number.isFinite(minX)
+    || !Number.isFinite(minY)
+    || !Number.isFinite(maxX)
+    || !Number.isFinite(maxY)
+  ) {
+    return null;
+  }
+  return {
+    geometry: { polygons },
+    minX: crossesDateline ? -180 : minX,
+    minY,
+    maxX: crossesDateline ? 180 : maxX,
+    maxY,
+  };
+}
+
+function pointOnSegment(
+  longitude: number,
+  latitude: number,
+  left: PreparedPosition,
+  right: PreparedPosition,
+): boolean {
+  const cross = (longitude - left[0]) * (right[1] - left[1])
+    - (latitude - left[1]) * (right[0] - left[0]);
+  if (Math.abs(cross) > COORDINATE_EPSILON) return false;
+  return longitude >= Math.min(left[0], right[0]) - COORDINATE_EPSILON
+    && longitude <= Math.max(left[0], right[0]) + COORDINATE_EPSILON
+    && latitude >= Math.min(left[1], right[1]) - COORDINATE_EPSILON
+    && latitude <= Math.max(left[1], right[1]) + COORDINATE_EPSILON;
+}
+
+type PreparedRingContainment = "boundary" | "inside" | "outside";
+
+function classifyPreparedRing(
+  ring: PreparedRing,
+  longitude: number,
+  latitude: number,
+): PreparedRingContainment {
+  const queryLongitude = longitude
+    + Math.round((ring.meanLongitude - longitude) / 360) * 360;
+  let inside = false;
+  for (let index = 0, previousIndex = ring.positions.length - 1;
+    index < ring.positions.length;
+    previousIndex = index, index += 1) {
+    const left = ring.positions[index];
+    const right = ring.positions[previousIndex];
+    if (left === undefined || right === undefined) continue;
+    if (pointOnSegment(queryLongitude, latitude, left, right)) return "boundary";
+    const crosses = (left[1] > latitude) !== (right[1] > latitude);
+    if (!crosses) continue;
+    const crossingLongitude = left[0]
+      + (latitude - left[1]) * (right[0] - left[0])
+        / (right[1] - left[1]);
+    if (queryLongitude < crossingLongitude) inside = !inside;
+  }
+  return inside ? "inside" : "outside";
+}
+
+function legacyGeometryContains(
+  geometry: PreparedLegacyGeometry,
+  longitude: number,
+  latitude: number,
+): boolean {
+  for (const polygon of geometry.polygons) {
+    const outer = classifyPreparedRing(polygon.outer, longitude, latitude);
+    if (outer === "outside") continue;
+    if (outer === "boundary") return true;
+    let insideHole = false;
+    for (const hole of polygon.holes) {
+      const containment = classifyPreparedRing(hole, longitude, latitude);
+      if (containment === "boundary") return true;
+      if (containment === "inside") {
+        insideHole = true;
+        break;
+      }
+    }
+    if (!insideHole) return true;
+  }
+  return false;
 }
 
 export function buildCountryIndex(features: CountryFeature[]): CountryIndex {
   const tree: CountryIndex = new RBush<BboxNode>();
-  const items: BboxNode[] = features.map((f, index) => {
-    const [minX, minY, maxX, maxY] = bboxOf(f.geometry);
-    return { minX, minY, maxX, maxY, index };
+  const items: BboxNode[] = [];
+  features.forEach((feature, index) => {
+    const prepared = prepareLegacyGeometry(feature.geometry);
+    if (prepared === null) return;
+    items.push({
+      minX: prepared.minX,
+      minY: prepared.minY,
+      maxX: prepared.maxX,
+      maxY: prepared.maxY,
+      index,
+      geometry: prepared.geometry,
+    });
   });
   tree.load(items);
   return tree;
@@ -72,10 +260,20 @@ export function hitTestCountry(
   lon: number,
   lat: number
 ): CountryHit | null {
+  if (
+    !Number.isFinite(lon)
+    || lon < -180
+    || lon > 180
+    || !Number.isFinite(lat)
+    || lat < -90
+    || lat > 90
+  ) {
+    return null;
+  }
   const candidates = index.search({ minX: lon, minY: lat, maxX: lon, maxY: lat });
   for (const c of candidates) {
-    const f = features[c.index]!;
-    if (!polygonContains(f.geometry, lon, lat)) continue;
+    const f = features[c.index];
+    if (f === undefined || !legacyGeometryContains(c.geometry, lon, lat)) continue;
     const iso3 = topoIndex[f.m49] ?? null;
     const datum = iso3 ? countries[iso3] : null;
     return {
@@ -98,12 +296,18 @@ interface LoaderState {
   countries: Record<string, CountryDatum>;
 }
 
-export function useCountryHitTest(): LoaderState {
-  const [state, setState] = useState<LoaderState>({
+const EMPTY_LOADER_STATE: LoaderState = {
     features: [], index: null, topoIndex: {}, countries: {},
-  });
+};
+
+export function useCountryHitTest(enabled = true): LoaderState {
+  const [state, setState] = useState<LoaderState>(EMPTY_LOADER_STATE);
 
   useEffect(() => {
+    if (!enabled) {
+      setState(EMPTY_LOADER_STATE);
+      return;
+    }
     let cancelled = false;
     (async () => {
       const [topoRes, endoRes] = await Promise.all([
@@ -136,7 +340,7 @@ export function useCountryHitTest(): LoaderState {
       });
     })().catch((e) => console.error("useCountryHitTest load failed:", e));
     return () => { cancelled = true; };
-  }, []);
+  }, [enabled]);
 
   return state;
 }

@@ -19,6 +19,7 @@ import {
   type ScopeProblem,
   type ScopeSummary,
   type SpatialCatalogPort,
+  type SpatialQueryRef,
 } from "./contracts";
 
 type JsonRecord = Record<string, unknown>;
@@ -63,6 +64,27 @@ export class SpatialCatalogError extends Error {
     this.recoverable = init.recoverable ?? false;
     this.activeCatalogRevision = init.activeCatalogRevision ?? null;
   }
+}
+
+export interface SpatialBoundaryAttributionSource {
+  readonly sourceId: string;
+  readonly release: string;
+  readonly licenseId: string;
+  readonly text: string;
+}
+
+export interface SpatialBoundaryProvenance {
+  readonly boundaryPolicy: string;
+  readonly catalogRevision: CatalogRevision;
+  readonly representationNote: string;
+  readonly sources: readonly SpatialBoundaryAttributionSource[];
+}
+
+export interface SpatialBoundaryProvenanceLoader {
+  loadBoundaryProvenance(
+    query: Pick<SpatialQueryRef, "catalogRevision" | "boundaryPolicy">,
+    signal: AbortSignal,
+  ): Promise<SpatialBoundaryProvenance>;
 }
 
 function contractError(message: string, target: string | null = null): never {
@@ -759,6 +781,16 @@ export interface BoundaryAssetStoreOptions {
   readonly maxDecodedBytes?: number;
 }
 
+export interface BoundaryAssetStoreDiagnostics {
+  readonly activeLeases: number;
+  readonly decodedBytes: number;
+  readonly decodedEntries: number;
+  readonly disposed: boolean;
+  readonly inflightLoads: number;
+  readonly maxDecodedBytes: number;
+  readonly maxEntries: number;
+}
+
 interface DecodedAsset {
   readonly asset: BoundaryAsset;
   readonly estimatedHeapBytes: number;
@@ -798,6 +830,7 @@ const MAX_ASSET_FEATURES = 256;
 const MAX_ASSET_RINGS = 2_048;
 const MAX_RING_VERTICES = 16_384;
 const MAX_SCOPE_METADATA_BYTES = 512 * 1024;
+const MAX_CATALOG_METADATA_BYTES = 64 * 1024;
 const LOD_VERTEX_BUDGET: Readonly<Record<GeometryLod, number>> = {
   overview: 12_000,
   regional: 50_000,
@@ -966,6 +999,22 @@ export class BoundaryAssetStore {
     for (const load of this.inflight.values()) load.controller.abort();
     this.inflight.clear();
     this.cache.clear();
+  }
+
+  diagnostics(): BoundaryAssetStoreDiagnostics {
+    const entries = [...this.cache.values()];
+    return freezeSpatialValue({
+      activeLeases: entries.reduce((total, entry) => total + entry.leases, 0),
+      decodedBytes: entries.reduce(
+        (total, entry) => total + entry.estimatedHeapBytes,
+        0,
+      ),
+      decodedEntries: entries.length,
+      disposed: this.disposed,
+      inflightLoads: this.inflight.size,
+      maxDecodedBytes: this.maxDecodedBytes,
+      maxEntries: this.maxEntries,
+    });
   }
 
   private async acquireWithPolicy(
@@ -1515,6 +1564,188 @@ async function readScopeJson(response: Response, signal: AbortSignal): Promise<u
   }
 }
 
+async function readCatalogJson(response: Response, signal: AbortSignal): Promise<unknown> {
+  const declaredLength = response.headers.get("Content-Length");
+  if (
+    declaredLength !== null
+    && (!/^[0-9]+$/.test(declaredLength)
+      || Number(declaredLength) > MAX_CATALOG_METADATA_BYTES)
+  ) {
+    contractError("catalog metadata exceeds its byte budget");
+  }
+  const text = await response.text();
+  if (signal.aborted) throw abortError();
+  if (new TextEncoder().encode(text).byteLength > MAX_CATALOG_METADATA_BYTES) {
+    contractError("catalog metadata exceeded its streaming byte budget");
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (error: unknown) {
+    throw new SpatialCatalogError({
+      code: "CATALOG_UNAVAILABLE",
+      message: "Catalog metadata is not valid JSON.",
+      recoverable: false,
+      cause: error,
+    });
+  }
+}
+
+function reviewedCatalogText(value: unknown, context: string, maxLength: number): string {
+  const text = parseString(value, context, maxLength);
+  if (text.includes("<") || text.includes(">")) {
+    contractError(`${context} must not contain HTML`);
+  }
+  if (/(?:^|[^A-Za-z0-9])@[A-Za-z0-9_][A-Za-z0-9_.-]*/.test(text)) {
+    contractError(`${context} must not contain an external author handle`);
+  }
+  if (/\p{Cc}/u.test(text)) contractError(`${context} contains a control character`);
+  return text;
+}
+
+function decodeBoundaryAttributionSource(
+  value: unknown,
+  context: string,
+): SpatialBoundaryAttributionSource {
+  const record = asRecord(value, context);
+  assertExactKeys(record, context, [
+    "source_id",
+    "release",
+    "license_id",
+    "text",
+  ]);
+  const sourceId = parseString(record.source_id, `${context}.source_id`, 96);
+  const licenseId = parseString(record.license_id, `${context}.license_id`, 96);
+  if (!POLICY_IDENTIFIER.test(sourceId) || !POLICY_IDENTIFIER.test(licenseId)) {
+    contractError(`${context} has an invalid policy identifier`);
+  }
+  return freezeSpatialValue({
+    sourceId,
+    release: parseString(record.release, `${context}.release`, 128),
+    licenseId,
+    text: reviewedCatalogText(record.text, `${context}.text`, 300),
+  });
+}
+
+function decodeBoundaryProvenance(
+  value: unknown,
+  query: Pick<SpatialQueryRef, "catalogRevision" | "boundaryPolicy">,
+): SpatialBoundaryProvenance {
+  const record = asRecord(value, "catalogBootstrap");
+  assertExactKeys(record, "catalogBootstrap", [
+    "schema_version",
+    "active_catalog_revision",
+    "served_catalog_revisions",
+    "boundary_policy",
+    "root_scope_key",
+    "capabilities",
+    "attributions",
+  ]);
+  if (record.schema_version !== 1) contractError("catalogBootstrap.schema_version must be 1");
+  const activeRevision = parseCatalogRevision(record.active_catalog_revision);
+  if (
+    !Array.isArray(record.served_catalog_revisions)
+    || record.served_catalog_revisions.length < 1
+    || record.served_catalog_revisions.length > 2
+  ) {
+    contractError("catalogBootstrap.served_catalog_revisions is invalid");
+  }
+  const servedRevisions = record.served_catalog_revisions.map((revision) =>
+    parseCatalogRevision(revision));
+  if (
+    servedRevisions[0] !== activeRevision
+    || new Set(servedRevisions).size !== servedRevisions.length
+  ) {
+    contractError("catalogBootstrap served revisions are inconsistent");
+  }
+  const boundaryPolicy = parseString(
+    record.boundary_policy,
+    "catalogBootstrap.boundary_policy",
+    96,
+  );
+  if (boundaryPolicy !== "odin-reference-v1" || boundaryPolicy !== query.boundaryPolicy) {
+    contractError("catalogBootstrap boundary policy does not match the committed scope");
+  }
+  if (record.root_scope_key !== "world") {
+    contractError("catalogBootstrap.root_scope_key must be world");
+  }
+  const capabilities = asRecord(record.capabilities, "catalogBootstrap.capabilities");
+  assertExactKeys(capabilities, "catalogBootstrap.capabilities", [
+    "max_enabled_kind",
+    "timeline_scope",
+    "intelligence_scope",
+  ]);
+  if (
+    typeof capabilities.max_enabled_kind !== "string"
+    || !["world", "country", "admin1", "admin2"].includes(
+      capabilities.max_enabled_kind,
+    )
+    || typeof capabilities.timeline_scope !== "string"
+    || !["bbox_approximate", "exact"].includes(capabilities.timeline_scope)
+    || typeof capabilities.intelligence_scope !== "string"
+    || !["unavailable", "exact"].includes(capabilities.intelligence_scope)
+  ) {
+    contractError("catalogBootstrap capabilities are invalid");
+  }
+  if (
+    !Array.isArray(record.attributions)
+    || record.attributions.length !== servedRevisions.length
+  ) {
+    contractError("catalogBootstrap attributions do not match served revisions");
+  }
+  const attributions = record.attributions.map((candidate, attributionIndex) => {
+    const context = `catalogBootstrap.attributions[${attributionIndex}]`;
+    const attribution = asRecord(candidate, context);
+    assertExactKeys(attribution, context, [
+      "catalog_revision",
+      "representation_note",
+      "sources",
+    ]);
+    const catalogRevision = parseCatalogRevision(attribution.catalog_revision);
+    if (catalogRevision !== servedRevisions[attributionIndex]) {
+      contractError(`${context} does not match its served revision`);
+    }
+    if (
+      !Array.isArray(attribution.sources)
+      || attribution.sources.length < 1
+      || attribution.sources.length > 32
+    ) {
+      contractError(`${context}.sources is invalid`);
+    }
+    const sources = attribution.sources.map((source, sourceIndex) =>
+      decodeBoundaryAttributionSource(source, `${context}.sources[${sourceIndex}]`));
+    const sourceIds = sources.map((source) => source.sourceId);
+    if (
+      new Set(sourceIds).size !== sourceIds.length
+      || sourceIds.some((sourceId, index) => index > 0 && sourceId < sourceIds[index - 1]!)
+    ) {
+      contractError(`${context}.sources must be unique and canonically ordered`);
+    }
+    return freezeSpatialValue({
+      boundaryPolicy,
+      catalogRevision,
+      representationNote: reviewedCatalogText(
+        attribution.representation_note,
+        `${context}.representation_note`,
+        500,
+      ),
+      sources,
+    });
+  });
+  const selected = attributions.find(
+    (attribution) => attribution.catalogRevision === query.catalogRevision,
+  );
+  if (selected === undefined) {
+    throw new SpatialCatalogError({
+      code: "CATALOG_REVISION_UNAVAILABLE",
+      target: query.catalogRevision,
+      message: "Committed catalog revision is not present in catalog metadata.",
+      recoverable: true,
+      activeCatalogRevision: activeRevision,
+    });
+  }
+  return selected;
+}
+
 export interface HttpSpatialCatalogOptions {
   readonly fetch?: SpatialFetch;
   readonly assetStore?: BoundaryAssetStore;
@@ -1879,6 +2110,37 @@ export class HttpSpatialCatalog implements SpatialCatalogPort {
     this.assertAvailable();
     const revision = this.requestedRevision(catalogRevision);
     return this.loadScope(scopeKey, revision, signal, true, false);
+  }
+
+  async loadBoundaryProvenance(
+    query: Pick<SpatialQueryRef, "catalogRevision" | "boundaryPolicy">,
+    signal: AbortSignal,
+  ): Promise<SpatialBoundaryProvenance> {
+    this.assertAvailable();
+    if (signal.aborted) throw abortError();
+    let response: Response;
+    try {
+      response = await this.fetcher("/api/spatial/catalog", {
+        method: "GET",
+        signal,
+        headers: { Accept: "application/json" },
+      });
+    } catch (error: unknown) {
+      if (signal.aborted || isAbortFailure(error)) throw abortError();
+      throw new SpatialCatalogError({
+        code: "CATALOG_UNAVAILABLE",
+        message: "Spatial catalog metadata request failed.",
+        recoverable: true,
+        cause: error,
+      });
+    }
+    if (!response.ok) throw await errorFromResponse(response);
+    if (response.headers.get("Content-Type")?.split(";", 1)[0] !== "application/json") {
+      contractError("catalog metadata response is not JSON");
+    }
+    const value = await readCatalogJson(response, signal);
+    if (signal.aborted) throw abortError();
+    return decodeBoundaryProvenance(value, query);
   }
 
   async rehydrate(

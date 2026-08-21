@@ -457,6 +457,38 @@ describe("SpatialScopeController hydration and hierarchy", () => {
 });
 
 describe("SpatialScopeController generations and failures", () => {
+  it("cancels a pending foreground resolve and keeps the committed scope", async () => {
+    const { catalog, controller } = setup();
+    await startAtWorld(controller);
+    const gate = catalog.deferNextResolve(UKRAINE);
+    const pending = controller.dispatch({
+      type: "enter",
+      target: UKRAINE,
+      cause: "country-click",
+    });
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "resolving",
+      current: { key: WORLD_SCOPE_KEY },
+      pending: UKRAINE,
+    });
+
+    await expect(controller.dispatch({ type: "cancel-pending" })).resolves.toMatchObject({
+      outcome: "unchanged",
+      snapshot: {
+        phase: "ready",
+        current: { key: WORLD_SCOPE_KEY },
+        pending: null,
+      },
+    });
+    gate.resolve();
+    await expect(pending).resolves.toEqual({ outcome: "cancelled" });
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      current: { key: WORLD_SCOPE_KEY },
+      pending: null,
+    });
+  });
+
   it("lets B supersede a deferred A without stale state or URL mutation", async () => {
     const { catalog, controller, navigation } = setup();
     await startAtWorld(controller);
@@ -768,6 +800,36 @@ describe("SpatialScopeController semantic and presentation lifetimes", () => {
     expect(controller.getSnapshot()).toMatchObject({
       current: { key: POLAND },
       visual: { phase: "unavailable", stateRevision: polandSnapshot.stateRevision },
+    });
+  });
+
+  it("keeps the semantic commit when presentation fails", async () => {
+    const presentation = new ControlledPresentation();
+    const { controller } = setup({ presentation });
+    await startAtWorld(controller);
+    const failedPresentation = presentation.deferNext(UKRAINE);
+
+    await expect(controller.dispatch({
+      type: "enter",
+      target: UKRAINE,
+      cause: "country-click",
+    })).resolves.toMatchObject({ outcome: "committed" });
+    const committedRevision = controller.getSnapshot().stateRevision;
+    failedPresentation.reject(new Error("WebGL staging failed"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      stateRevision: committedRevision,
+      current: { key: UKRAINE },
+      query: { scopeKey: UKRAINE },
+      problem: { code: "PRESENTATION_FAILED" },
+      visual: {
+        phase: "unavailable",
+        stateRevision: committedRevision,
+        problem: { code: "PRESENTATION_FAILED" },
+      },
     });
   });
 

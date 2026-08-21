@@ -24,6 +24,7 @@ import {
   type RouterLocationSnapshot,
 } from "../navigation";
 import {
+  SPATIAL_SCOPE_ENABLED,
   SpatialScopeProvider,
   useSpatialScope,
   type SpatialScopeModuleFactory,
@@ -218,11 +219,41 @@ afterEach(() => {
 });
 
 describe("SpatialScopeProvider gate and hook", () => {
-  it("is inert and default-off when VITE_SPATIAL_SCOPE_ENABLED is absent", () => {
+  it("maps the build env exactly and defaults the provider to that gate", () => {
+    expect(SPATIAL_SCOPE_ENABLED).toBe(
+      import.meta.env.VITE_SPATIAL_SCOPE_ENABLED === "true",
+    );
+
+    const lifecycle = new LifecycleModule();
+    const factory = vi.fn<SpatialScopeModuleFactory>(() => lifecycle);
+    const view = render(
+      <MemoryRouter>
+        <SpatialScopeProvider
+          catalog={catalog()}
+          navigation={new CountingNavigation()}
+          moduleFactory={factory}
+        >
+          <div data-testid="default-gated-child">default gated</div>
+        </SpatialScopeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("default-gated-child")).toBeInTheDocument();
+    expect(factory).toHaveBeenCalledTimes(SPATIAL_SCOPE_ENABLED ? 1 : 0);
+    expect(lifecycle.calls).toEqual(SPATIAL_SCOPE_ENABLED ? ["start"] : []);
+
+    view.unmount();
+    expect(lifecycle.calls).toEqual(
+      SPATIAL_SCOPE_ENABLED ? ["start", "stop"] : [],
+    );
+  });
+
+  it("is inert when explicitly disabled regardless of the build artifact", () => {
     const factory = vi.fn<SpatialScopeModuleFactory>();
     render(
       <MemoryRouter>
         <SpatialScopeProvider
+          enabled={false}
           catalog={catalog()}
           navigation={new CountingNavigation()}
           moduleFactory={factory}
@@ -262,6 +293,7 @@ describe("SpatialScopeProvider gate and hook", () => {
     const ascend = hydrating?.ascend;
     const prefetch = hydrating?.prefetch;
     const rehydrate = hydrating?.rehydrate;
+    const cancelPending = hydrating?.cancelPending;
 
     gate.resolve();
     await vi.waitFor(() => expect(latestHandle?.phase).toBe("ready"));
@@ -269,6 +301,7 @@ describe("SpatialScopeProvider gate and hook", () => {
     expect(latestHandle?.ascend).toBe(ascend);
     expect(latestHandle?.prefetch).toBe(prefetch);
     expect(latestHandle?.rehydrate).toBe(rehydrate);
+    expect(latestHandle?.cancelPending).toBe(cancelPending);
   });
 
   it("renders exactly one explicit 409 recovery action", async () => {
