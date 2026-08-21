@@ -113,6 +113,7 @@ def test_events_window_returns_samples(client):
         "completeness": "complete",
         "included_count": 1,
         "excluded_unlocated_count": 0,
+        "excluded_outside_count": 0,
         "excluded_conflict_count": 0,
         "excluded_stale_revision_count": 0,
         "excluded_unsupported_count": 0,
@@ -181,7 +182,7 @@ def test_scoped_event_window_echoes_catalog_token_and_distinct_accounting(
                 "time": "2026-05-01T06:00:00Z",
                 "time_basis": "indexed",
             }],
-            [{"total": 3, "excluded_unlocated_count": 2}],
+            [{"total": 3, "excluded_unlocated_count": 0}],
         ]
         response = client.get(
             f"/api/timeline/window{W}&scope_key=country:UKR"
@@ -201,7 +202,8 @@ def test_scoped_event_window_echoes_catalog_token_and_distinct_accounting(
         "mode": "bbox_approximate",
         "completeness": "partial",
         "included_count": 3,
-        "excluded_unlocated_count": 2,
+        "excluded_unlocated_count": 0,
+        "excluded_outside_count": 0,
         "excluded_conflict_count": 0,
         "excluded_stale_revision_count": 0,
         "excluded_unsupported_count": 0,
@@ -216,6 +218,9 @@ def test_scoped_event_window_echoes_catalog_token_and_distinct_accounting(
         assert "country:UKR" not in query
         assert parameters["west"] == 20
         assert parameters["east"] == 41
+    count_query = read.await_args_list[1].args[0]
+    assert count_query.count("MATCH (ev:Event)") == 1
+    assert "0 AS excluded_unlocated_count" in count_query
 
 
 def test_exact_event_window_uses_one_pinned_token_and_reports_mixed_coverage(
@@ -276,6 +281,7 @@ def test_exact_event_window_uses_one_pinned_token_and_reports_mixed_coverage(
         "completeness": "partial",
         "included_count": 3,
         "excluded_unlocated_count": 0,
+        "excluded_outside_count": 0,
         "excluded_conflict_count": 1,
         "excluded_stale_revision_count": 2,
         "excluded_unsupported_count": 2,
@@ -693,7 +699,14 @@ def test_scoped_movement_uses_intersects_relation(client, spatial_loader):
         ),
         patch("app.routers.timeline.read_query", new_callable=AsyncMock) as read,
     ):
-        read.side_effect = [[], [{"total": 0, "excluded_unlocated_count": 1}]]
+        read.side_effect = [[{
+            "icao24": "abc123",
+            "points": [{"ts_ms": 1, "lat": 50.0, "lon": 30.0}],
+        }], [{
+            "total": 1,
+            "excluded_unlocated_count": 0,
+            "excluded_outside_count": 2,
+        }]]
         response = client.get(
             f"/api/timeline/window{W}&domain=movements&tier=fine"
             "&movement_kind=mil_aircraft&scope_key=country:UKR"
@@ -703,7 +716,12 @@ def test_scoped_movement_uses_intersects_relation(client, spatial_loader):
     application = response.json()["spatial_application"]
     assert application["relation"] == "intersects"
     assert application["mode"] == "bbox_approximate"
-    assert application["excluded_unlocated_count"] == 1
+    assert application["excluded_unlocated_count"] == 0
+    assert application["excluded_outside_count"] == 2
+    samples_query, count_query = (call.args[0] for call in read.await_args_list)
+    assert "x IN inbox |" in samples_query
+    assert "x IN rs |" not in samples_query
+    assert "excluded_outside_count" in count_query
 
 
 def test_movements_mil_aircraft_window(client):

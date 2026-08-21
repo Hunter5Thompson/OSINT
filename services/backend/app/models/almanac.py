@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.intel import IntelAnalysis
+from app.models.spatial import CatalogRevision, ScopeKey
 
 
 class AlmanacCapital(BaseModel):
@@ -52,6 +53,16 @@ class AlmanacSignalItem(BaseModel):
 class AlmanacSignalResponse(BaseModel):
     country_id: str
     items: list[AlmanacSignalItem]
+
+
+class SpatialCountryAlmanacResponse(CountryAlmanac):
+    scope_key: ScopeKey
+    catalog_revision: CatalogRevision
+
+
+class SpatialAlmanacSignalResponse(AlmanacSignalResponse):
+    scope_key: ScopeKey
+    catalog_revision: CatalogRevision
 
 
 class BriefingSaveRequest(BaseModel):
