@@ -31,7 +31,7 @@ Usage:
   ./odin.sh down               # Stop all services
   ./odin.sh ps                 # Show running compose services
   ./odin.sh logs [service]     # Tail logs (optional service)
-  ./odin.sh doctor             # Check compose + model directories
+  ./odin.sh doctor [env-file]  # Check exposure, compose + model directories
   ./odin.sh pull 9b-awq        # Download smaller interactive model
   ./odin.sh smoke              # Smoke-test running services (health + basic calls)
   ./odin.sh vision up|down     # Start/stop Vision Enrichment (Qwen3-VL-8B)
@@ -89,12 +89,80 @@ start_mode() {
   esac
 }
 
+resolve_env_file() {
+  local requested="${1:-${ODIN_ENV_FILE:-.env}}"
+
+  if [[ "$requested" == /* ]]; then
+    printf '%s' "$requested"
+  else
+    printf '%s/%s' "$ROOT_DIR" "$requested"
+  fi
+}
+
+check_bind_host() {
+  local bind_host="${ODIN_BIND_HOST:-127.0.0.1}"
+
+  if [[ "$bind_host" != "127.0.0.1" ]]; then
+    echo "ERROR unauthenticated services require loopback host binding: ODIN_BIND_HOST=$bind_host"
+    return 1
+  fi
+  echo "OK  host exposure: ODIN_BIND_HOST=$bind_host"
+}
+
+check_secret_file_mode() {
+  local env_file="$1"
+  local mode
+
+  if [[ ! -f "$env_file" ]]; then
+    echo "ERROR secret environment file missing: $env_file"
+    return 1
+  fi
+  mode="$(stat -c '%a' -- "$env_file")"
+  if (( (8#$mode & 8#177) != 0 )); then
+    echo "ERROR unsafe secret permissions: $env_file (mode $mode; expected mode 600 or stricter)"
+    return 1
+  fi
+  echo "OK  secret permissions: $env_file (mode $mode)"
+}
+
+check_secret_files() {
+  local primary="$1"
+  local candidate
+  local failed=0
+  local -A checked=()
+
+  checked["$primary"]=1
+  if ! check_secret_file_mode "$primary"; then
+    failed=1
+  fi
+  while IFS= read -r -d '' candidate; do
+    if [[ -n "${checked[$candidate]:-}" ]]; then
+      continue
+    fi
+    checked["$candidate"]=1
+    if ! check_secret_file_mode "$candidate"; then
+      failed=1
+    fi
+  done < <(
+    find "$ROOT_DIR" \
+      -type d \( -name .git -o -name .venv -o -name node_modules -o -name .quality-loop \) \
+      -prune -o -type f -name .env -print0
+  )
+  return "$failed"
+}
+
 doctor() {
+  local env_file
   local models_path
+  env_file="$(resolve_env_file "${1:-}")"
   models_path="${MODELS_PATH:-/home/deadpool-ultra/ODIN/models}"
 
+  echo "Checking local exposure..."
+  check_bind_host
+  check_secret_files "$env_file"
+
   echo "Compose syntax check..."
-  "${COMPOSE[@]}" config --quiet
+  ODIN_ENV_FILE="$env_file" "${COMPOSE[@]}" --env-file "$env_file" config --quiet
   echo "OK"
 
   echo "Checking model directories in $models_path"
@@ -374,7 +442,7 @@ case "$COMMAND" in
     fi
     ;;
   doctor)
-    doctor
+    doctor "$MODE"
     ;;
   smoke)
     smoke

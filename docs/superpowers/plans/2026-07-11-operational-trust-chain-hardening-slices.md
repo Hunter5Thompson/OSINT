@@ -2,7 +2,7 @@
 
 **Datum:** 2026-07-11
 
-**Status:** IN EXECUTION — S01-S02 DONE, S03 NEXT
+**Status:** IN EXECUTION — S01-S02 DONE; S03 CODE VERIFIED, HOST APPLY PENDING
 
 **Design-Spec:**
 `docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md`
@@ -344,6 +344,8 @@ Exit-Code im PR dokumentieren.
 
 ## S03 — Local Exposure Floor
 
+**Status:** IN PROGRESS — CODE VERIFIED; HOST PERMISSIONS + DEPLOY PENDING
+
 **Priorität:** P0
 
 **Abhängigkeiten:** S02
@@ -425,6 +427,36 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 - fehlendes Neo4j-Passwort stoppt Compose vor Containerstart
 - ein explizites Nicht-Loopback-Binding erzeugt einen sichtbaren Doctor-Fehler,
   solange die internen Dienste keine Auth besitzen
+
+### RECORD — 2026-08-22 (CODE VERIFIED; HOST APPLY OPEN)
+
+- RED: Der neue Contract startete mit `5 failed, 1 passed`: kein gerenderter
+  `host_ip`, kein required Neo4j-Secret, kein Doctor-Dateimodus-Gate und schwache
+  Beispielwerte. Ein nachgeschärfter Temp-Repo-Test bewies separat rot, dass der
+  Doctor verschachtelte Service-`.env`-Dateien noch nicht fand.
+- GREEN: Alle 13 publizierten Ports über die fünf Profile verwenden genau
+  `${ODIN_BIND_HOST:-127.0.0.1}`. Fünf Neo4j-Verwendungen verlangen
+  `NEO4J_PASSWORD` per required interpolation. Der Doctor lehnt Nicht-Loopback
+  ohne Override ab und prüft die primäre sowie alle verschachtelten Repository-
+  `.env`-Dateien auf Gruppen-/Weltrechte, ohne Inhalte auszugeben.
+- VERIFY: S03-Contract `7 passed`, vollständige Ops-Suite `23 passed`,
+  `bash -n` grün und hermetischer Compose-Render aller Profile grün. Der Full-
+  Quality-Loop war PASS: Backend `585 passed`, Frontend `625 passed`,
+  Intelligence `484 passed`, Data Ingestion `1445 passed, 1 skipped,
+  17 deselected`, Vision Enrichment `22 passed`; alle Coverage-Ratchets grün;
+  Smoke `14 passed, 0 failed, 1 skipped`. `shellcheck` war auf dem Host nicht
+  installiert und wurde deshalb nicht als ausgeführtes Gate gewertet.
+- NEGATIVE GATES: Ein Compose-Render ohne `NEO4J_PASSWORD` endet non-zero; ein
+  explizites `ODIN_BIND_HOST=192.0.2.10` rendert korrekt, wird vom Doctor aber als
+  Exposure unauthentifizierter Dienste abgelehnt. Container-DNS blieb auf
+  `redis`, `qdrant`, `neo4j` und `vllm` unverändert.
+- OFFENER HOST-APPLY: Die existierenden Dateien `.env`,
+  `services/backend/.env` und `services/frontend/.env` im kanonischen Checkout
+  besitzen weiterhin Modus `664`; der neue Doctor endet deshalb erwartungsgemäß
+  non-zero. Die laufenden Container wurden nicht neu erstellt und lauschen noch
+  auf `0.0.0.0/[::]`. Weder `chmod`, Container-Neustart, Profilwechsel noch
+  Deployment wurden ohne gesonderte Freigabe ausgeführt. S03 ist bis zu diesen
+  beiden operativen Schritten ausdrücklich nicht DONE.
 
 **Commit:** `fix(ops): bind ODIN host ports to loopback by default`
 
