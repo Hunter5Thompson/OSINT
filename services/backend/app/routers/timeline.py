@@ -231,6 +231,7 @@ def _spatial_application(
     relation: Literal["occurs-in", "intersects"],
     included_count: int,
     excluded_unlocated_count: int,
+    excluded_outside_count: int = 0,
     mode: SpatialFilterMode | None = None,
     coverage_complete: bool = False,
     excluded_conflict_count: int = 0,
@@ -252,6 +253,7 @@ def _spatial_application(
         value > 0
         for value in (
             excluded_unlocated_count,
+            excluded_outside_count,
             excluded_conflict_count,
             excluded_stale_revision_count,
             excluded_unsupported_count,
@@ -276,6 +278,7 @@ def _spatial_application(
         ),
         included_count=included_count,
         excluded_unlocated_count=(0 if is_global else excluded_unlocated_count),
+        excluded_outside_count=(0 if is_global else excluded_outside_count),
         excluded_conflict_count=(0 if is_global else excluded_conflict_count),
         excluded_stale_revision_count=(
             0 if is_global else excluded_stale_revision_count
@@ -316,6 +319,7 @@ def _emit_filter_applied(application: SpatialApplicationV1, started: float) -> N
         duration_ms=max(0.0, (perf_counter() - started) * 1000.0),
         included_count=application.included_count,
         excluded_unlocated_count=application.excluded_unlocated_count,
+        excluded_outside_count=application.excluded_outside_count,
         excluded_conflict_count=application.excluded_conflict_count,
         excluded_stale_revision_count=application.excluded_stale_revision_count,
         excluded_unsupported_count=application.excluded_unsupported_count,
@@ -342,43 +346,20 @@ LIMIT $limit
 """
 
 _EVENTS_COUNT_QUERY = """
-CALL () {
-  MATCH (ev:Event)
-  WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
-  OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
-  WITH ev, collect(l) AS locations
-  WHERE $bbox_off
-     OR any(location IN locations WHERE
-       location.lat IS NOT NULL AND location.lon IS NOT NULL
-       AND location.lat >= $south AND location.lat <= $north
-       AND ( ($west <= $east
-              AND location.lon >= $west AND location.lon <= $east)
-          OR ($west > $east
-              AND (location.lon >= $west OR location.lon <= $east)) ))
-  RETURN count(ev) AS total
-}
-CALL () {
-  MATCH (ev:Event)
-  WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
-  OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
-  WITH ev, [location IN collect(l) WHERE
-    location.lat IS NOT NULL AND location.lon IS NOT NULL] AS located
-  WHERE size(located) = 0
-  RETURN count(ev) AS excluded_unlocated_count
-}
-RETURN total, excluded_unlocated_count
-"""
-
-_EVENTS_UNLOCATED_COUNT_QUERY = """
 MATCH (ev:Event)
 WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end)
 OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location)
-WITH ev, [location IN collect(l) WHERE
-  location.lat IS NOT NULL AND location.lon IS NOT NULL] AS located
-WHERE size(located) = 0
-RETURN count(ev) AS excluded_unlocated_count
+WITH ev, collect(l) AS locations
+WHERE $bbox_off
+   OR any(location IN locations WHERE
+     location.lat IS NOT NULL AND location.lon IS NOT NULL
+     AND location.lat >= $south AND location.lat <= $north
+     AND ( ($west <= $east
+            AND location.lon >= $west AND location.lon <= $east)
+        OR ($west > $east
+            AND (location.lon >= $west OR location.lon <= $east)) ))
+RETURN count(ev) AS total, 0 AS excluded_unlocated_count
 """
-
 
 @router.get("/window", response_model=WindowResponse)
 async def get_window(
@@ -582,7 +563,7 @@ WITH a, rs,
          AND ( ($west <= $east AND x.longitude >= $west AND x.longitude <= $east)
             OR ($west >  $east AND (x.longitude >= $west OR x.longitude <= $east)) ))] AS inbox
 WHERE size(inbox) >= 1
-WITH a, [x IN rs | {
+WITH a, [x IN inbox | {
     ts_ms: x.timestamp * 1000, lat: x.latitude, lon: x.longitude,
     altitude_m: x.altitude_m, speed_ms: x.speed_ms, heading: x.heading
   }] AS points
@@ -592,32 +573,23 @@ ORDER BY points[-1].ts_ms DESC
 LIMIT $limit
 """
 
-# Same window + bbox track-selection as _MIL_TRACKS_QUERY but no LIMIT — counts the
-# DISTINCT in-window/in-bbox aircraft so total_count is the true pre-limit match
-# count (tracks, not points), per spec §5.
+# Same window + bbox track-selection as _MIL_TRACKS_QUERY but no LIMIT. Besides
+# the pre-limit track count it reports the located track points clipped away by
+# the bbox so a shortened polyline is explicit in spatial_application.
 _MIL_TRACKS_COUNT_QUERY = """
-CALL () {
-  MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
-  WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
-    AND r.latitude IS NOT NULL AND r.longitude IS NOT NULL
-  WITH a, collect(r) AS rs
-  WITH a,
-    [x IN rs WHERE $bbox_off
-       OR (x.latitude >= $south AND x.latitude <= $north
-           AND ( ($west <= $east AND x.longitude >= $west AND x.longitude <= $east)
-              OR ($west > $east AND (x.longitude >= $west OR x.longitude <= $east)) ))] AS inbox
-  WHERE size(inbox) >= 1
-  RETURN count(DISTINCT a) AS total
-}
-CALL () {
-  MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
-  WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
-  WITH a, collect(r) AS samples
-  WHERE none(sample IN samples WHERE
-    sample.latitude IS NOT NULL AND sample.longitude IS NOT NULL)
-  RETURN count(DISTINCT a) AS excluded_unlocated_count
-}
-RETURN total, excluded_unlocated_count
+MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
+WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
+  AND r.latitude IS NOT NULL AND r.longitude IS NOT NULL
+WITH a, collect(r) AS rs
+WITH a, rs,
+  [x IN rs WHERE $bbox_off
+     OR (x.latitude >= $south AND x.latitude <= $north
+         AND ( ($west <= $east AND x.longitude >= $west AND x.longitude <= $east)
+            OR ($west > $east AND (x.longitude >= $west OR x.longitude <= $east)) ))] AS inbox
+WHERE size(inbox) >= 1
+RETURN count(DISTINCT a) AS total,
+       0 AS excluded_unlocated_count,
+       coalesce(sum(size(rs) - size(inbox)), 0) AS excluded_outside_count
 """
 
 
@@ -665,6 +637,11 @@ async def _movements_window(
         count_rows,
         fallback_total=len(samples),
     )
+    excluded_outside = (
+        int(count_rows[0].get("excluded_outside_count", 0))
+        if count_rows
+        else 0
+    )
     return WindowResponse(
         domain="movements",
         tier="fine",
@@ -678,6 +655,7 @@ async def _movements_window(
             relation="intersects",
             included_count=total,
             excluded_unlocated_count=excluded_unlocated,
+            excluded_outside_count=excluded_outside,
         ),
     )
 
@@ -783,11 +761,11 @@ async def get_histogram(
             exact_incident_rows = []
             exact_geo_rows = []
             exact_accounting = None
-            unlocated_rows = (
-                await read_query(_EVENTS_UNLOCATED_COUNT_QUERY, params)
-                if applied_filter.query_id is not TimelineSpatialQueryId.GLOBAL
-                else []
-            )
+            # A BBox cannot classify globally unlocated events as inside or
+            # outside. Counting the whole time window would leak unrelated
+            # geography into a scoped coverage marker, so approximation reports
+            # no unlocated count until exact semantic accounting is activated.
+            unlocated_rows = []
     except Exception as exc:
         log.error("timeline_histogram_neo4j_query_failed", error=str(exc))
         if isinstance(event_spatial_query, ExactEventQueryPlan):

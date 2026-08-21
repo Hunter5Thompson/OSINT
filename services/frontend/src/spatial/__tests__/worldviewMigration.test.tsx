@@ -73,6 +73,18 @@ function ukraineSummary() {
   };
 }
 
+function donetskSummary() {
+  return {
+    key: parseScopeKeyCandidate("admin1:iso3166-2:UA-14"),
+    kind: "admin1" as const,
+    label: "Donetsk Oblast",
+    shortLabel: "Donetsk",
+    parentKey: ukraine,
+    childrenAvailable: false,
+    presentation: "boundary" as const,
+  };
+}
+
 function readySnapshot(
   current: "world" | "ukraine" = "ukraine",
   pending: ScopeKey | null = null,
@@ -86,6 +98,7 @@ function readySnapshot(
     stateRevision: current === "world" ? 1 : 2,
     current: summary,
     path,
+    children: current === "world" ? [ukraineSummary()] : [donetskSummary()],
     query: {
       schemaVersion: 1,
       scopeKey: summary.key,
@@ -123,6 +136,11 @@ class InteractiveModule implements OwnedSpatialScopeModule {
     }
     return { outcome: "unchanged", snapshot: this.snapshot };
   };
+
+  publish(snapshot: SpatialScopeSnapshot): void {
+    this.snapshot = snapshot;
+    this.listeners.forEach((listener) => listener());
+  }
 
   start(): void {}
   stop(): void {}
@@ -297,6 +315,24 @@ describe("WorldView pick classification", () => {
 });
 
 describe("SpatialScopeBreadcrumb", () => {
+  it("exposes every direct child as a native drilldown button", () => {
+    const module = new InteractiveModule(readySnapshot("ukraine"));
+    render(
+      <ScopeHarness module={module}>
+        <SpatialScopeBreadcrumb />
+      </ScopeHarness>,
+    );
+
+    const child = screen.getByRole("button", { name: "Donetsk" });
+    expect(child).toHaveAttribute("type", "button");
+    fireEvent.click(child);
+    expect(module.commands[0]).toEqual({
+      type: "enter",
+      target: parseScopeKeyCandidate("admin1:iso3166-2:UA-14"),
+      cause: "child-click",
+    });
+  });
+
   it("is semantic, keyboard-native, and retains focus after an ancestor commit", async () => {
     const module = new InteractiveModule(readySnapshot("ukraine"));
     render(
@@ -312,6 +348,8 @@ describe("SpatialScopeBreadcrumb", () => {
       "location",
     );
     const worldButton = screen.getByRole("button", { name: "World" });
+    expect(worldButton.tagName).toBe("BUTTON");
+    expect(worldButton).toHaveAttribute("type", "button");
     worldButton.focus();
     fireEvent.click(worldButton);
 
@@ -325,15 +363,50 @@ describe("SpatialScopeBreadcrumb", () => {
     expect(worldButton).toHaveAttribute("aria-current", "location");
   });
 
-  it("shows pending truth and offers a separate semantic ascend action", () => {
+  it("keeps one polite live region across idle, pending, unavailable, and idle", () => {
     const pending = parseScopeKeyCandidate("admin1:iso3166-2:UA-14");
-    const module = new InteractiveModule(readySnapshot("ukraine", pending));
+    const module = new InteractiveModule(readySnapshot("ukraine"));
     render(
       <ScopeHarness module={module}>
         <SpatialScopeBreadcrumb />
       </ScopeHarness>,
     );
-    expect(screen.getByText(/Opening admin1:iso3166-2:UA-14/i)).toBeInTheDocument();
+
+    const liveRegion = screen.getByRole("status");
+    expect(liveRegion).toHaveAttribute("aria-live", "polite");
+    expect(liveRegion).toHaveTextContent("");
+
+    act(() => module.publish(readySnapshot("ukraine", pending)));
+    expect(screen.getByRole("status")).toBe(liveRegion);
+    expect(liveRegion).toHaveTextContent("Opening spatial scope…");
+    expect(liveRegion).not.toHaveTextContent("admin1:iso3166-2:UA-14");
+
+    const unavailable = readySnapshot("ukraine");
+    if (unavailable.phase === "hydrating") {
+      throw new Error("readySnapshot fixture unexpectedly returned hydration state");
+    }
+    act(() => module.publish(freezeSpatialScopeSnapshot({
+      ...unavailable,
+      visual: {
+        phase: "unavailable",
+        stateRevision: unavailable.stateRevision,
+        problem: {
+          severity: "warning",
+          code: "PRESENTATION_FAILED",
+          target: unavailable.current.key,
+          recoverable: true,
+          message: "fixture",
+          activeCatalogRevision: unavailable.query.catalogRevision,
+        },
+      },
+    } satisfies SpatialScopeSnapshot)));
+    expect(screen.getByRole("status")).toBe(liveRegion);
+    expect(liveRegion).toHaveTextContent("Boundary unavailable");
+
+    act(() => module.publish(readySnapshot("ukraine")));
+    expect(screen.getByRole("status")).toBe(liveRegion);
+    expect(liveRegion).toHaveTextContent("");
+
     fireEvent.click(screen.getByRole("button", { name: "Eine Ebene hoch" }));
     expect(module.commands.at(-1)).toEqual({ type: "ascend", cause: "breadcrumb" });
   });

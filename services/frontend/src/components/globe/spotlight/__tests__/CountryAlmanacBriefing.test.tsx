@@ -1,6 +1,13 @@
 // services/frontend/src/components/globe/spotlight/__tests__/CountryAlmanacBriefing.test.tsx
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { SpatialCountryAlmanacState } from "../../../../hooks/useSpatialCountryAlmanac";
+import {
+  parseCatalogRevision,
+  parseScopeKeyCandidate,
+  type SpatialQueryRef,
+} from "../../../../spatial/contracts";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -108,5 +115,121 @@ describe("CountryAlmanacPanel briefing block", () => {
     rerender(<CountryAlmanacPanel iso3="FRA" m49="250" />);         // switch country
     expect(reset).toHaveBeenCalled();                               // hook reset fired
     expect(screen.queryByRole("link", { name: /öffnen/i })).toBeNull();  // stale link cleared
+  });
+});
+
+function spatialQuery(scopeKey: string): SpatialQueryRef {
+  return {
+    schemaVersion: 1,
+    scopeKey: parseScopeKeyCandidate(scopeKey),
+    catalogRevision: parseCatalogRevision("spatial-v1-fe9828dcda05"),
+    boundaryPolicy: "odin-reference-v1",
+  };
+}
+
+function spatialFacts(name: string): SpatialCountryAlmanacState {
+  return {
+    status: "ready",
+    error: null,
+    data: {
+      id: name,
+      iso3: name.slice(0, 3).toUpperCase(),
+      m49: "000",
+      name,
+      region: "Europe",
+      subregion: "",
+      capital: null,
+      facts: {
+        profile: [{ label: "Status", value: "Current" }],
+        people: [],
+        government: [],
+        economy: [],
+        security: [],
+      },
+      updated_at: "2026-08-10",
+      source_note: "fixture",
+      scope_key: "country:UKR",
+      catalog_revision: "spatial-v1-fe9828dcda05",
+    },
+  };
+}
+
+function deferred<T>() {
+  let resolvePromise: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: resolvePromise };
+}
+
+describe("SpatialCountryAlmanacPanel briefing parity", () => {
+  function resultMock() {
+    return {
+      loading: false,
+      currentAgent: null,
+      error: null,
+      run: vi.fn(),
+      reset: vi.fn(),
+      result: {
+        query: "q",
+        analysis: "Spatial Lagebericht",
+        confidence: 0.8,
+        threat_assessment: "HIGH",
+        sources_used: [],
+      },
+    };
+  }
+
+  it("saves and opens a briefing only through the committed Spatial query", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
+    const briefing = await import("../../../../hooks/useSpatialCountryBriefing");
+    vi.spyOn(briefing, "useSpatialCountryBriefing").mockReturnValue(resultMock() as never);
+    const api = await import("../../../../services/api");
+    const save = vi.spyOn(api, "saveSpatialCountryBriefing")
+      .mockResolvedValue({ id: "spatial-r-001" } as never);
+    const { SpatialCountryAlmanacPanel } = await import("../CountryAlmanacPanel");
+    const token = spatialQuery("country:UKR");
+
+    render(<SpatialCountryAlmanacPanel facts={spatialFacts("Ukraine")} query={token} />);
+    fireEvent.click(screen.getByText(/HIGH · 80%/));
+    fireEvent.click(screen.getByRole("button", { name: /speichern/i }));
+
+    expect(save).toHaveBeenCalledWith(
+      token,
+      expect.objectContaining({ analysis: "Spatial Lagebericht" }),
+      expect.any(AbortSignal),
+    );
+    expect(await screen.findByRole("link", { name: /öffnen/i })).toHaveAttribute(
+      "href",
+      "/briefing/spatial-r-001",
+    );
+  });
+
+  it("cannot render selection A save state after switching to selection B", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
+    const briefing = await import("../../../../hooks/useSpatialCountryBriefing");
+    vi.spyOn(briefing, "useSpatialCountryBriefing").mockReturnValue(resultMock() as never);
+    const api = await import("../../../../services/api");
+    const lateSave = deferred<Awaited<ReturnType<typeof api.saveSpatialCountryBriefing>>>();
+    vi.spyOn(api, "saveSpatialCountryBriefing").mockReturnValue(lateSave.promise);
+    const { SpatialCountryAlmanacPanel } = await import("../CountryAlmanacPanel");
+    const ukraine = spatialQuery("country:UKR");
+    const poland = spatialQuery("country:POL");
+
+    const view = render(
+      <SpatialCountryAlmanacPanel facts={spatialFacts("Ukraine")} query={ukraine} />,
+    );
+    fireEvent.click(screen.getByText(/HIGH · 80%/));
+    fireEvent.click(screen.getByRole("button", { name: /speichern/i }));
+    const saveSignal = vi.mocked(api.saveSpatialCountryBriefing).mock.calls[0]?.[2];
+
+    view.rerender(
+      <SpatialCountryAlmanacPanel facts={spatialFacts("Poland")} query={poland} />,
+    );
+    expect(saveSignal?.aborted).toBe(true);
+
+    await act(async () => lateSave.resolve({ id: "stale-ukraine" } as never));
+    expect(screen.queryByRole("link", { name: /öffnen/i })).toBeNull();
+    expect(screen.queryByText(/✓ in Briefing Room/i)).toBeNull();
   });
 });

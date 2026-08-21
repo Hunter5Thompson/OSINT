@@ -27,7 +27,7 @@ function query(scopeKey: string): SpatialQueryRef {
   };
 }
 
-function response(name: string): Response {
+function response(name: string, scopeKey = "country:UKR"): Response {
   return new Response(JSON.stringify({
     id: name,
     iso3: name.slice(0, 3).toUpperCase(),
@@ -39,6 +39,8 @@ function response(name: string): Response {
     facts: { profile: [], people: [], government: [], economy: [], security: [] },
     updated_at: "2026-08-06",
     source_note: "fixture",
+    scope_key: scopeKey,
+    catalog_revision: "spatial-v1-fe9828dcda05",
   }), { status: 200 });
 }
 
@@ -81,7 +83,7 @@ describe("useSpatialCountryAlmanac", () => {
     await act(async () => first.resolve(response("STALE Ukraine")));
     expect(result.current.status).toBe("loading");
 
-    await act(async () => second.resolve(response("Poland")));
+    await act(async () => second.resolve(response("Poland", "country:POL")));
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(result.current.data?.name).toBe("Poland");
   });
@@ -91,5 +93,14 @@ describe("useSpatialCountryAlmanac", () => {
     const { result } = renderHook(() => useSpatialCountryAlmanac(null));
     expect(result.current.status).toBe("idle");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a response whose scope identity differs from the request", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response("Poland", "country:POL"));
+    const { result } = renderHook(() => useSpatialCountryAlmanac(query("country:UKR")));
+
+    await waitFor(() => expect(result.current.status).toBe("error"));
+    expect(result.current.error).toMatch(/scope echo/i);
+    expect(result.current.data).toBeNull();
   });
 });

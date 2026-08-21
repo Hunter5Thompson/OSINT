@@ -181,6 +181,66 @@ async def test_save_discards_browser_application_even_when_scope_identity_matche
 
 
 @pytest.mark.asyncio
+async def test_spatial_save_uses_exact_scope_revision_and_discards_browser_application(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loader = app.state.spatial_catalog
+    assert isinstance(loader, SpatialCatalogLoader)
+    state = loader.state
+    assert isinstance(state, CatalogReadyState)
+    revision = state.active_catalog_revision
+    resolved = loader.resolve_scope("country:UKR", revision)
+    assert isinstance(resolved, ResolvedSpatialScope)
+    token = spatial_scope_token_from_resolution(resolved)
+    forged_application = _application(
+        scope_key=token.scope_key,
+        catalog_revision=token.catalog_revision,
+        derivation_revision=token.derivation_revision,
+        boundary_policy=token.boundary_policy,
+    )
+    captured: dict[str, object] = {}
+
+    async def fake_goc(scope_key, title, location, coords, *, legacy_aliases=()):
+        captured["scope_key"] = scope_key
+        captured["legacy_aliases"] = legacy_aliases
+        return _rec(scope_key)
+
+    async def fake_update(rid, patch):
+        captured["patch"] = patch
+        return _rec(token.scope_key)
+
+    async def fake_append(rid, payload):
+        return ReportMessage(id="m1", role="munin", text=payload.text)
+
+    monkeypatch.setattr(almanac_router, "get_or_create_report_by_scope", fake_goc)
+    monkeypatch.setattr(almanac_router, "update_report", fake_update)
+    monkeypatch.setattr(almanac_router, "append_report_message", fake_append)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://t") as ac:
+        app.state.report_schema_ready = True
+        response = await ac.post(
+            "/api/almanac/country/briefing/save"
+            f"?scope_key=country%3AUKR&catalog_revision={revision}",
+            headers=ADMIN_HEADERS,
+            json={
+                "analysis": {
+                    "query": "q",
+                    "analysis": "Browser supplied spatial briefing",
+                    "spatial_application": forged_application.model_dump(mode="json"),
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    assert captured["scope_key"] == "country:UKR"
+    assert captured["legacy_aliases"] == ()
+    patch = captured["patch"]
+    assert isinstance(patch, ReportUpdateRequest)
+    assert patch.spatial_application is None
+
+
+@pytest.mark.asyncio
 async def test_save_requires_schema_and_truncates_with_marker(monkeypatch):
     captured: dict = {}
 

@@ -1,6 +1,6 @@
 /**
  * Format a (lat, lon) pair as "DDD.dddH · DDD.dddH" using N/S and E/W
- * suffixes. Used by IncidentBar, IncidentToast, and the Theatre callout.
+ * suffixes. Shared by operational callouts and country inspectors.
  *
  * @param coords [lat, lon] tuple in decimal degrees
  * @param precision number of fractional digits (default 3)

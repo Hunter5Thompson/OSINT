@@ -106,7 +106,7 @@ export function useScopedTimelineRequest<
       const sequence = ++sequenceRef.current;
       if (typeof document !== "undefined" && document.hidden) {
         if (isCurrent(sequence)) {
-          setStatus({ activeRequestKey, loading: false, error: null });
+          setStatus({ activeRequestKey, loading: true, error: null });
         }
         return;
       }
@@ -132,10 +132,15 @@ export function useScopedTimelineRequest<
     };
 
     void run();
+    const retryWhenVisible = (): void => {
+      if (!document.hidden) void run();
+    };
+    document.addEventListener("visibilitychange", retryWhenVisible);
     const timer = refreshMs > 0 ? window.setInterval(() => void run(), refreshMs) : null;
     return () => {
       controller.abort();
       sequenceRef.current += 1;
+      document.removeEventListener("visibilitychange", retryWhenVisible);
       if (timer !== null) window.clearInterval(timer);
     };
   }, [activeRequestKey, enabled, fetcher, refreshMs, requestKey, scopeGeneration, scopeTokenKey]);

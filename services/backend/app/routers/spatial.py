@@ -181,6 +181,7 @@ def _scope_response(value: ResolvedSpatialScope) -> ScopeBundleResponse:
         canonicalized_from=value.canonicalized_from,
         scope=value.record.scope,
         path=value.path,
+        children=value.children,
         presentation=ScopePresentationResponse(
             preferred_lod=presentation.preferred_lod,
             outline_lods={

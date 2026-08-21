@@ -1832,10 +1832,12 @@ Observation-Producer.
 # ══════════════════════════════════════════
 # TASK-123: Spatial Plan-03 Review-Follow-ups vor Legacy-Cleanup
 # ══════════════════════════════════════════
-# Status: OFFEN | Priorität: P1
+# Status: DONE ✅ (2026-08-10) | Priorität: P1
 # Owner: Spatial Plans 05/05D + Frontend WorldView
 # Blocked by: nichts
-# Blocks: Spatial Plan 05D / Löschung des Legacy-Country-Pfads
+# Abschluss: docs/reports/2026-08-10-spatial-task123-verification.md
+# TASK-123-Gate für Plan 05D: erfüllt; Plan 05D selbst bleibt durch Default-on-
+#   Release, Soak, Artefakt-Rollback und explizite Phase-D-Entscheidung blockiert.
 #
 # Kontext:
 #   Der Plan-03-Review vom 2026-08-06 bestätigte die semantischen und Lifecycle-
@@ -1855,8 +1857,17 @@ Observation-Producer.
 #   Containment-Index produktiv und macht die geschlossene Layer-Matrix zum Runtime-
 #   Gate sowie Badge-Consumer. Damit sind ausschließlich Kriterien 6 und 9 erfüllt;
 #   Kriterien 1–5, 7 und 8 sowie der Plan-05D-Blocker bleiben offen.
+#   Das Plan-08-Abschluss-Handoff vom 2026-08-10 führt deshalb nicht unmittelbar in
+#   die Legacy-Löschung. Die nächste Session inventarisiert und schließt zuerst genau
+#   die Kriterien 1–5, 7 und 8 und erstellt danach einen Plan-05D-Readiness-Record.
+#   Das dedizierte Handoff
+#   `docs/superpowers/HANDOFF-spatial-scope-task123-2026-08-10.md` ist dafür die
+#   verbindliche Detailquelle: ein begrenzter Implementierungsplan mit vier
+#   Code-Work-Orders, kein Plan 09 und keine Folge mehrerer neuer Pläne.
+#   Default-on-Release, vereinbarter Soak, Artefakt-Rollback und explizite Phase-D-
+#   Entscheidung bleiben zusätzliche externe Freigabegates.
 #
-# Verbleibende Akzeptanzkriterien / RED-Gates:
+# Abgeschlossene Akzeptanzkriterien / Regression-Gates:
 #   1. Der Spatial-Country-Inspector erhält Signal-Liste und Munin-Briefing über
 #      kanonisch aufgelöste `scope_key + catalog_revision`-Adapter. Almanac-Felder
 #      oder Displaynamen dürfen dabei niemals wieder Identitätsquelle werden.

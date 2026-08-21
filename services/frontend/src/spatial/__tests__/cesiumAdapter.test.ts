@@ -35,18 +35,36 @@ function geometry(
   return { schemaVersion: 1, geometryType: "MultiPolygon", polygons };
 }
 
-const activeGeometry = geometry([
+const overviewGeometry = geometry([
   [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]],
 ]);
+const regionalGeometry = geometry([
+  [[[0, 0], [9, 0], [9, 9], [0, 9], [0, 0]]],
+]);
+const localGeometry = geometry([
+  [[[0, 0], [8, 0], [8, 8], [0, 8], [0, 0]]],
+]);
+const activeGeometry = overviewGeometry;
 const world = parseScopeKeyCandidate("world");
 const child = parseScopeKeyCandidate("country:UKR");
-const childPack: BoundaryPackV1 = {
-  schemaVersion: 1,
-  parentScopeKey: world,
-  features: [
-    { kind: "scope", scopeKey: child, label: "Ukraine", geometry: activeGeometry },
-  ],
-};
+
+function childPackFor(
+  label: string,
+  childGeometry: BoundaryGeometryV1,
+): BoundaryPackV1 {
+  return {
+    schemaVersion: 1,
+    parentScopeKey: world,
+    features: [
+      { kind: "scope", scopeKey: child, label, geometry: childGeometry },
+    ],
+  };
+}
+
+const overviewChildPack = childPackFor("Ukraine overview", overviewGeometry);
+const regionalChildPack = childPackFor("Ukraine regional", regionalGeometry);
+const localChildPack = childPackFor("Ukraine local", localGeometry);
+const childPack = overviewChildPack;
 
 function descriptor(lod: GeometryLod, seed: string): RenderAssetDescriptor {
   return {
@@ -62,8 +80,18 @@ function descriptor(lod: GeometryLod, seed: string): RenderAssetDescriptor {
 const overview = descriptor("overview", "a");
 const regional = descriptor("regional", "b");
 const local = descriptor("local", "c");
-const children = {
+const overviewChildren = {
   ...descriptor("overview", "d"),
+  mediaType: "application/vnd.odin.boundary-pack+json;v=1",
+  featureCount: 1,
+} satisfies RenderAssetDescriptor;
+const regionalChildren = {
+  ...descriptor("regional", "e"),
+  mediaType: "application/vnd.odin.boundary-pack+json;v=1",
+  featureCount: 1,
+} satisfies RenderAssetDescriptor;
+const localChildren = {
+  ...descriptor("local", "f"),
   mediaType: "application/vnd.odin.boundary-pack+json;v=1",
   featureCount: 1,
 } satisfies RenderAssetDescriptor;
@@ -80,19 +108,28 @@ function presentation(
     ),
     preferredLod: "overview",
     outlineLods: { overview, regional, local },
-    childrenLods: { overview: children },
+    childrenLods: {
+      overview: overviewChildren,
+      regional: regionalChildren,
+      local: localChildren,
+    },
     cameraExtent: { kind: "world" },
   };
 }
 
 class FakeAssetProvider implements BoundaryAssetProvider {
   readonly assets = new Map<string, BoundaryAsset>([
-    [overview.assetId, activeGeometry],
-    [regional.assetId, activeGeometry],
-    [local.assetId, activeGeometry],
-    [children.assetId, childPack],
+    [overview.assetId, overviewGeometry],
+    [regional.assetId, regionalGeometry],
+    [local.assetId, localGeometry],
+    [overviewChildren.assetId, overviewChildPack],
+    [regionalChildren.assetId, regionalChildPack],
+    [localChildren.assetId, localChildPack],
   ]);
+  readonly acquiredAssetIds: string[] = [];
   acquired = 0;
+  activeLeases = 0;
+  highWaterLeases = 0;
   released = 0;
 
   async acquire(
@@ -103,6 +140,9 @@ class FakeAssetProvider implements BoundaryAssetProvider {
     const asset = this.assets.get(descriptorValue.assetId);
     if (asset === undefined) throw new Error(`missing ${descriptorValue.assetId}`);
     this.acquired += 1;
+    this.acquiredAssetIds.push(descriptorValue.assetId);
+    this.activeLeases += 1;
+    this.highWaterLeases = Math.max(this.highWaterLeases, this.activeLeases);
     let released = false;
     return {
       asset,
@@ -110,6 +150,7 @@ class FakeAssetProvider implements BoundaryAssetProvider {
         if (released) return;
         released = true;
         this.released += 1;
+        this.activeLeases -= 1;
       },
     };
   }
@@ -425,12 +466,105 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
     await readyPresentation(runtime, current);
 
     expect(assets.acquired).toBe(1);
-    expect(fakeBuilder.calls[0]).toMatchObject({ childAsset: null });
+    expect(fakeBuilder.calls[0]).toMatchObject({
+      childRenderAsset: null,
+      childPickAsset: null,
+    });
     expect(runtime.mounted).toHaveLength(1);
     expect(adapter.diagnostics()).toMatchObject({
       activeContainers: 1,
       primitiveCount: 2,
     });
+  });
+
+  it.each([
+    {
+      cameraLod: "overview",
+      height: 9_000_000,
+      activeAsset: overviewGeometry,
+      childRenderAsset: overviewChildPack,
+      acquiredAssetIds: [overview.assetId, overviewChildren.assetId],
+    },
+    {
+      cameraLod: "regional",
+      height: 2_000_000,
+      activeAsset: regionalGeometry,
+      childRenderAsset: regionalChildPack,
+      acquiredAssetIds: [
+        regional.assetId,
+        regionalChildren.assetId,
+        overviewChildren.assetId,
+      ],
+    },
+    {
+      cameraLod: "local",
+      height: 500_000,
+      activeAsset: localGeometry,
+      childRenderAsset: localChildPack,
+      acquiredAssetIds: [
+        local.assetId,
+        localChildren.assetId,
+        overviewChildren.assetId,
+      ],
+    },
+  ])(
+    "separates active, child-render, and preferred child-pick assets at $cameraLod LOD",
+    async ({
+      height,
+      activeAsset,
+      childRenderAsset,
+      acquiredAssetIds,
+    }) => {
+      const { adapter, assets, runtime, fakeBuilder } = setup();
+      runtime.cameraHeight = height;
+
+      const current = adapter.present(
+        presentation(),
+        1,
+        new AbortController().signal,
+      );
+      await readyPresentation(runtime, current);
+
+      expect(fakeBuilder.calls[0]).toMatchObject({
+        activeAsset,
+        childRenderAsset,
+        childPickAsset: overviewChildPack,
+        includePickSurface: true,
+      });
+      expect(assets.acquiredAssetIds).toEqual(acquiredAssetIds);
+      expect(assets.activeLeases).toBe(0);
+      expect(assets.released).toBe(assets.acquired);
+      adapter.dispose();
+    },
+  );
+
+  it("uses the next available coarser child outline as a deterministic fallback", async () => {
+    const { adapter, assets, runtime, fakeBuilder } = setup();
+    runtime.cameraHeight = 500_000;
+    const overviewChildrenOnly: ResolvedPresentationInput = {
+      ...presentation(),
+      childrenLods: { overview: overviewChildren },
+    };
+
+    const current = adapter.present(
+      overviewChildrenOnly,
+      1,
+      new AbortController().signal,
+    );
+    await readyPresentation(runtime, current);
+
+    expect(fakeBuilder.calls[0]).toMatchObject({
+      activeAsset: localGeometry,
+      childRenderAsset: overviewChildPack,
+      childPickAsset: overviewChildPack,
+    });
+    expect(assets.acquiredAssetIds).toEqual([
+      local.assetId,
+      overviewChildren.assetId,
+    ]);
+    expect(assets.highWaterLeases).toBe(2);
+    expect(assets.activeLeases).toBe(0);
+    adapter.dispose();
   });
 
   it("does not jump from a globe request to a local-only outline", async () => {
@@ -531,13 +665,14 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
     expect(adapter.diagnostics().highWaterPrimitives).toBeLessThanOrEqual(4);
   });
 
-  it("keeps the preferred pick primitive across 100 camera LOD swaps", async () => {
-    const { adapter, runtime } = setup();
+  it("keeps the preferred pick primitive and bounded resources across 100 camera LOD swaps", async () => {
+    const { adapter, assets, runtime, fakeBuilder } = setup();
     const initial = adapter.present(presentation(), 1, new AbortController().signal);
     await readyPresentation(runtime, initial);
     const container = runtime.mounted[0]!;
     const pick = container.primitives.find((primitive) => primitive.role === "pick");
     expect(pick).toBeDefined();
+    expect(assets.activeLeases).toBe(0);
 
     for (let swap = 0; swap < 100; swap += 1) {
       runtime.cameraHeight = swap % 2 === 0 ? 2_000_000 : 9_000_000;
@@ -549,8 +684,31 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
       expect(container.primitives).toContain(pick);
       expect(pick?.destroyed).toBe(false);
       expect(runtime.mounted).toEqual([container]);
+      expect(runtime.cameraListeners.size).toBe(1);
+      expect(runtime.postRenderListeners.size).toBe(0);
+      expect(assets.activeLeases).toBe(0);
+      expect(assets.released).toBe(assets.acquired);
+      expect(adapter.diagnostics()).toMatchObject({
+        activeContainers: 1,
+        cameraListeners: 1,
+        primitiveCount: 2,
+        stagingContainers: 0,
+      });
     }
+
+    expect(fakeBuilder.calls).toHaveLength(101);
+    expect(fakeBuilder.calls.slice(1).every((call) => (
+      call.childPickAsset === null && !call.includePickSurface
+    ))).toBe(true);
+    expect(fakeBuilder.calls.every((call) => call.stateRevision === 1)).toBe(true);
+    expect(assets.acquired).toBe(202);
+    expect(assets.released).toBe(202);
+    expect(assets.highWaterLeases).toBeLessThanOrEqual(2);
+    expect(adapter.diagnostics().highWaterContainers).toBe(1);
+    expect(adapter.diagnostics().highWaterPrimitives).toBeLessThanOrEqual(3);
     adapter.dispose();
+    expect(runtime.cameraListeners.size).toBe(0);
+    expect(runtime.mounted).toHaveLength(0);
   });
 });
 
@@ -630,7 +788,8 @@ describe("buildScopeGeometry chunking", () => {
     try {
       built = await buildScopePrimitives({
         activeAsset: activeGeometry,
-        childAsset: childPack,
+        childRenderAsset: childPack,
+        childPickAsset: childPack,
         stateRevision: 17,
         includePickSurface: true,
         signal: new AbortController().signal,
@@ -665,5 +824,22 @@ describe("buildScopeGeometry chunking", () => {
       scopeKey: child,
       stateRevision: 17,
     });
+  });
+
+  it("unwraps dateline rings before converting Cesium render positions", async () => {
+    const converted: Array<readonly [number, number]> = [];
+    await buildScopeGeometry({
+      activeAsset: geometry([[[[179, 0], [-179, 0], [-179, 1], [179, 0]]]]),
+      childAsset: null,
+      stateRevision: 1,
+      signal: new AbortController().signal,
+      convertPosition: (position) => {
+        converted.push(position);
+        return position;
+      },
+      scheduler: { now: () => 0, nextFrame: () => Promise.resolve() },
+    });
+
+    expect(converted.map(([longitude]) => longitude)).toEqual([179, 181, 181, 179]);
   });
 });

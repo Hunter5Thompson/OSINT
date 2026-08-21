@@ -77,6 +77,7 @@ export type SpatialScopeSnapshot =
       readonly stateRevision: 0;
       readonly current: null;
       readonly path: readonly [];
+      readonly children: readonly [];
       readonly query: null;
       readonly pending: ScopeKey | null;
       readonly problem: ScopeProblem | null;
@@ -87,6 +88,7 @@ export type SpatialScopeSnapshot =
       readonly stateRevision: number;
       readonly current: ScopeSummary;
       readonly path: ScopePath;
+      readonly children: readonly ScopeSummary[];
       readonly query: SpatialQueryRef;
       readonly pending: ScopeKey | null;
       readonly problem: ScopeProblem | null;
@@ -234,6 +236,7 @@ export type ResolvedPresentation =
 export interface ResolvedScope {
   readonly scope: ScopeSummary;
   readonly path: ScopePath;
+  readonly children: readonly ScopeSummary[];
   readonly query: SpatialQueryRef;
   readonly presentation: ResolvedPresentation;
   readonly containment: ContainmentAssetDescriptor | null;
@@ -275,6 +278,7 @@ export interface ScopeLocationEvent {
 
 export interface ScopeNavigationPort {
   readScopeCandidate(): string | null;
+  readCatalogRevisionCandidate(): string | null;
   writeScope(write: ScopeNavigationWrite): Promise<void>;
   subscribeLocation(listener: (event: ScopeLocationEvent) => void): () => void;
 }
@@ -413,6 +417,7 @@ export const HYDRATING_SPATIAL_SCOPE_SNAPSHOT = freezeSpatialScopeSnapshot({
   stateRevision: 0,
   current: null,
   path: [],
+  children: [],
   query: null,
   pending: null,
   problem: null,

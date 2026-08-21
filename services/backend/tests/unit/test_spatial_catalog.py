@@ -12,7 +12,11 @@ from typing import Any
 
 import pytest
 
-from app.models.spatial import CatalogAttribution, CatalogProblemCode
+from app.models.spatial import (
+    CatalogAttribution,
+    CatalogProblemCode,
+    SpatialCatalogProblem,
+)
 from app.services import spatial_catalog as spatial_catalog_module
 from app.services.spatial_catalog import (
     CatalogReadyState,
@@ -506,6 +510,21 @@ async def test_loader_accepts_the_reviewed_reference_catalog() -> None:
     assert admin1.presentation.outline_lods["regional"].asset_id == (
         "a7c85e0208cf628a320a2f4642e3589168e2da34a573f7d2daaebed220017123"
     )
+
+
+@pytest.mark.asyncio
+async def test_reference_catalog_projects_precise_incident_coordinates() -> None:
+    reference_root = Path(__file__).parents[2] / "data" / "spatial"
+    loader = SpatialCatalogLoader(reference_root)
+    await loader.load()
+
+    projection = await loader.project_incident_point(latitude=48.0, longitude=37.8)
+
+    assert not isinstance(projection, SpatialCatalogProblem)
+    assert projection.country_scope_key == "country:UKR"
+    assert projection.admin1_scope_key == "admin1:iso3166-2:UA-14"
+    assert projection.spatial_derivation_revision is not None
+    assert projection.spatial_conflict is False
 
 
 @pytest.mark.asyncio

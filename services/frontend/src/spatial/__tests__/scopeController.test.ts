@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import fixtureText from "./fixtures/spatial-contract-v1.json?raw";
 import {
   HYDRATING_SPATIAL_SCOPE_SNAPSHOT,
@@ -94,6 +94,7 @@ function semanticScope(
   return {
     scope,
     path,
+    children: [],
     query: {
       schemaVersion: 1,
       scopeKey: scope.key,
@@ -316,6 +317,7 @@ const liveControllers: Array<ReturnType<typeof createSpatialScopeController>> = 
 
 function setup(options: {
   readonly initialScopeCandidate?: string | null;
+  readonly initialCatalogRevisionCandidate?: string | null;
   readonly presentation?: SpatialScopePresentationPort;
   readonly containment?: SpatialContainmentLifecyclePort;
 } = {}) {
@@ -325,6 +327,7 @@ function setup(options: {
   });
   const navigation = new MemoryScopeNavigation({
     initialScopeCandidate: options.initialScopeCandidate ?? null,
+    initialCatalogRevisionCandidate: options.initialCatalogRevisionCandidate ?? null,
   });
   const presentation = options.presentation ?? new ControlledPresentation();
   let navigationId = 0;
@@ -397,6 +400,24 @@ afterEach(() => {
 });
 
 describe("SpatialScopeController hydration and hierarchy", () => {
+  it("pins first hydration to the catalog revision stored in history", async () => {
+    const { catalog, controller } = setup({
+      initialScopeCandidate: UKRAINE,
+      initialCatalogRevisionCandidate: fixture.catalogRevision,
+    });
+    const resolve = vi.spyOn(catalog, "resolve");
+
+    controller.start();
+    await waitForScope(controller, UKRAINE);
+
+    expect(controller.getSnapshot().query?.catalogRevision).toBe(ACTIVE_REVISION);
+    expect(resolve).toHaveBeenCalledWith(
+      UKRAINE,
+      fixture.catalogRevision,
+      expect.any(AbortSignal),
+    );
+  });
+
   it("hydrates a deep link without ever publishing a world query flash", async () => {
     const presentation = new ControlledPresentation();
     const { catalog, controller } = setup({

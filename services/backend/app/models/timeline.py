@@ -77,6 +77,10 @@ class SpatialApplicationV1(BaseModel):
     completeness: SpatialCompleteness
     included_count: StrictInt = Field(ge=0)
     excluded_unlocated_count: StrictInt = Field(ge=0)
+    # Movement windows clip returned tracks to the requested bbox. This counter
+    # makes the omitted out-of-window track points observable instead of silently
+    # presenting a partial polyline as the complete track.
+    excluded_outside_count: StrictInt = Field(ge=0)
     # BBox V1 cannot observe derived-key conflicts, stale revisions, or unsupported
     # normalization states; these counters stay zero until exact measures them.
     excluded_conflict_count: StrictInt = Field(ge=0)

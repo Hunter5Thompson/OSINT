@@ -206,7 +206,7 @@ export function classifyPointInGeometry(
   return containsPoint(geometry, longitude, latitude) ? "inside" : "outside";
 }
 
-interface LongitudeSpan {
+export interface LongitudeSpan {
   readonly west: number;
   readonly east: number;
 }
@@ -241,7 +241,9 @@ function cleanLongitude(longitude: number): number {
   return longitude;
 }
 
-function minimalLongitudeSpans(longitudes: readonly number[]): readonly LongitudeSpan[] {
+export function minimalLongitudeSpans(
+  longitudes: readonly number[],
+): readonly LongitudeSpan[] {
   const angles = [...new Set(longitudes.map(normalizedAngle))].sort((a, b) => a - b);
   if (angles.length === 0) throw new SpatialGeometryError("Geometry has no positions.");
   if (angles.length === 1) {
@@ -267,7 +269,7 @@ function minimalLongitudeSpans(longitudes: readonly number[]): readonly Longitud
   const startIndex = (largestGapIndex + 1) % angles.length;
   const start = angles[startIndex] ?? 0;
   let end = angles[largestGapIndex] ?? 0;
-  if (end < start || largestGapIndex === angles.length - 1) end += 360;
+  if (end < start) end += 360;
   const west = cleanLongitude(start - 180);
   const eastUnwrapped = end - 180;
   if (eastUnwrapped <= 180 + COORDINATE_EPSILON) {

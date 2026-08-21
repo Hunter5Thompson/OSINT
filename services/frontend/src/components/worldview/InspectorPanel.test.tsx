@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { InspectorPanel } from "./InspectorPanel";
+import {
+  parseCatalogRevision,
+  parseScopeKeyCandidate,
+} from "../../spatial/contracts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -39,7 +43,7 @@ describe("InspectorPanel", () => {
       />,
     );
     expect(screen.getByRole("region", { name: /Inspector/i })).toBeInTheDocument();
-    expect(screen.getByText(/12.340 N, 56.780 E/)).toBeInTheDocument();
+    expect(screen.getByText(/12.340N · 56.780E/)).toBeInTheDocument();
     expect(screen.getByText(/FIRMS hotspot · VIIRS/)).toBeInTheDocument();
   });
 
@@ -95,7 +99,7 @@ describe("InspectorPanel", () => {
       "https://example.test/sabine-pass.jpg",
     );
     expect(screen.getByText("lng terminal")).toBeInTheDocument();
-    expect(screen.getByText(/29.754 N, 93.874 W/)).toBeInTheDocument();
+    expect(screen.getByText(/29.754N · 93.874W/)).toBeInTheDocument();
     expect(screen.getByText("Coordinates exact per GEM")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /source/i })).toHaveAttribute(
       "href",
@@ -175,5 +179,78 @@ describe("InspectorPanel", () => {
     expect(panel.style.maxHeight).toMatch(/vh/);
     // Flush the almanac fetch (404 -> error state) so the effect's state update settles.
     await screen.findByText(/unavailable for this country/i);
+  });
+
+  it("exposes the approved Flag-on country parity set through the production Inspector", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/signals")) {
+        return new Response(JSON.stringify({
+          scope_key: "country:UKR",
+          catalog_revision: "spatial-v1-fe9828dcda05",
+          country_id: "UKR",
+          items: [{
+            event_id: "signal-1",
+            ts: "2026-08-10T00:00:00Z",
+            type: "signal.rss",
+            title: "Canonical scoped signal",
+            severity: "low",
+            source: "rss",
+            url: "",
+          }],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        scope_key: "country:UKR",
+        catalog_revision: "spatial-v1-fe9828dcda05",
+        id: "UKR",
+        iso3: "UKR",
+        m49: "804",
+        name: "Ukraine",
+        region: "Europe",
+        subregion: "Eastern Europe",
+        capital: { name: "Kyiv", lat: 50.45, lon: 30.52 },
+        facts: {
+          profile: [{ label: "Currency", value: "Hryvnia" }],
+          people: [],
+          government: [],
+          economy: [],
+          security: [],
+        },
+        updated_at: "2026-08-10",
+        source_note: "fixture",
+      }), { status: 200 });
+    });
+    const scopeKey = parseScopeKeyCandidate("country:UKR");
+
+    render(
+      <InspectorPanel
+        selected={{
+          type: "spatial-country",
+          data: { scopeKey, label: "Canonical Ukraine" },
+        }}
+        spatialQuery={{
+          schemaVersion: 1,
+          scopeKey,
+          catalogRevision: parseCatalogRevision("spatial-v1-fe9828dcda05"),
+          boundaryPolicy: "odin-reference-v1",
+        }}
+        onClose={vi.fn()}
+        viewer={null}
+      />,
+    );
+
+    expect(screen.getByText("Canonical Ukraine")).toBeInTheDocument();
+    expect(await screen.findByText("Kyiv · 50.45N · 30.52E")).toBeInTheDocument();
+    expect(screen.getByText("Hryvnia")).toBeInTheDocument();
+    for (const tab of ["Profile", "People", "Gov", "Economy", "Security"]) {
+      expect(screen.getByRole("button", { name: tab })).toBeInTheDocument();
+    }
+    expect(await screen.findByText("Canonical scoped signal")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Munin-Briefing erzeugen/i }))
+      .toBeInTheDocument();
+    for (const capability of ["Hugin", "Signalia", "Vectorium", "Memoria", "Fenestra"]) {
+      expect(screen.getByText(capability)).toBeInTheDocument();
+    }
   });
 });

@@ -8,6 +8,7 @@ describe("formatCoords", () => {
 
   it("renders S + W for negative coords", () => {
     expect(formatCoords([-22.5, -47.6])).toBe("22.500S · 47.600W");
+    expect(formatCoords([-33.45, -70.67], 2)).toBe("33.45S · 70.67W");
   });
 
   it("respects precision", () => {

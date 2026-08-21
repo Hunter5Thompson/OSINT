@@ -1,22 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 
-import { getSpatialCountryAlmanac } from "../services/api";
+import { getSpatialCountryAlmanacSignals } from "../services/api";
 import type { SpatialQueryRef } from "../spatial/contracts";
-import type { SpatialCountryAlmanac } from "../types/almanac";
+import type { SpatialAlmanacSignalResponse } from "../types/almanac";
 
-export type SpatialCountryAlmanacState =
+export type SpatialCountrySignalsState =
   | { readonly status: "idle"; readonly data: null; readonly error: null }
   | { readonly status: "loading"; readonly data: null; readonly error: null }
-  | { readonly status: "ready"; readonly data: SpatialCountryAlmanac; readonly error: null }
+  | { readonly status: "ready"; readonly data: SpatialAlmanacSignalResponse; readonly error: null }
   | { readonly status: "error"; readonly data: null; readonly error: string };
 
-const IDLE: SpatialCountryAlmanacState = {
-  status: "idle",
-  data: null,
-  error: null,
-};
-
-const LOADING: SpatialCountryAlmanacState = {
+const IDLE: SpatialCountrySignalsState = { status: "idle", data: null, error: null };
+const LOADING: SpatialCountrySignalsState = {
   status: "loading",
   data: null,
   error: null,
@@ -24,17 +19,19 @@ const LOADING: SpatialCountryAlmanacState = {
 
 interface TaggedState {
   readonly queryIdentity: string | null;
-  readonly value: SpatialCountryAlmanacState;
+  readonly value: SpatialCountrySignalsState;
 }
 
-export function useSpatialCountryAlmanac(
+function queryIdentity(query: SpatialQueryRef | null): string | null {
+  return query === null ? null : `${query.scopeKey}\u0000${query.catalogRevision}`;
+}
+
+export function useSpatialCountrySignals(
   query: SpatialQueryRef | null,
-): SpatialCountryAlmanacState {
+): SpatialCountrySignalsState {
   const scopeKey = query?.scopeKey ?? null;
   const catalogRevision = query?.catalogRevision ?? null;
-  const identity = scopeKey === null || catalogRevision === null
-    ? null
-    : `${scopeKey}\u0000${catalogRevision}`;
+  const identity = queryIdentity(query);
   const activeIdentityRef = useRef(identity);
   activeIdentityRef.current = identity;
   const [tagged, setTagged] = useState<TaggedState>({
@@ -51,10 +48,14 @@ export function useSpatialCountryAlmanac(
     }
     const controller = new AbortController();
     setTagged({ queryIdentity: identity, value: LOADING });
-    getSpatialCountryAlmanac({ scopeKey, catalogRevision }, controller.signal)
+    getSpatialCountryAlmanacSignals(
+      { scopeKey, catalogRevision },
+      5,
+      controller.signal,
+    )
       .then((data) => {
         if (data.scope_key !== scopeKey || data.catalog_revision !== catalogRevision) {
-          throw new Error("almanac scope echo does not match the request");
+          throw new Error("signals scope echo does not match the request");
         }
         if (
           !controller.signal.aborted

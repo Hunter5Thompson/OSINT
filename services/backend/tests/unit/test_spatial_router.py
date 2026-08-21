@@ -182,6 +182,28 @@ async def test_scope_resolve_uses_active_revision_when_omitted(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
+async def test_scope_resolve_includes_every_direct_child_from_the_pinned_catalog() -> None:
+    reference_root = Path(__file__).parents[2] / "data" / "spatial"
+    loader = SpatialCatalogLoader(reference_root)
+    state = await loader.load()
+    assert isinstance(state, CatalogReadyState)
+
+    response = await _get(
+        loader,
+        "/api/spatial/scope?scope_key=country:UKR"
+        f"&catalog_revision={state.active_catalog_revision}",
+    )
+
+    assert response.status_code == 200
+    children = response.json()["children"]
+    assert {child["key"] for child in children} >= {
+        "admin1:iso3166-2:UA-05",
+        "admin1:iso3166-2:UA-14",
+    }
+    assert all(child["parent_key"] == "country:UKR" for child in children)
+
+
+@pytest.mark.asyncio
 async def test_unknown_scope_and_asset_return_stable_404(tmp_path: Path) -> None:
     spatial_root = tmp_path / "spatial"
     revision, _, _ = _publish_catalog(spatial_root)
