@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # Manage the Spark (DGX GB10) ingestion vLLM for the ODIN stack.
 #
-# Production model: Qwen3.6-35B-A3B served as NVFP4 (W4A16, modelopt) on vLLM nightly.
-# ODIN's data-ingestion addresses it ONLY by served-model-name "Qwen/Qwen3.6-35B-A3B"
-# (services/data-ingestion/config.py: ingestion_vllm_model) — so NO ODIN change is needed.
+# Production model: Qwen3.8-27B served from the validated Unsloth NVFP4 checkpoint.
+# ODIN's data-ingestion addresses it by served-model-name "Qwen/Qwen3.8-27B",
+# matching services/data-ingestion/config.py:ingestion_vllm_model.
 #
-# Rollback target: the legacy BF16 container "vllm-qwen36" (image vllm-gemma4:latest, vLLM
-# v0.19.0). It is kept STOPPED with restart=no so it never auto-starts and fights for :8000.
+# Rollback target: the previous Qwen3.6 NVFP4 container. Its served name differs,
+# so ODIN must also override INGESTION_VLLM_MODEL when an operator rolls back.
 set -euo pipefail
 
-# vllm/vllm-openai:nightly pinned by digest on 2026-06-29 (reproducible; tag moves daily)
-IMG_NVFP4="vllm/vllm-openai@sha256:907377dddef392f6b679d9c071e1c33c3935b4dc993b61d0352e391a5319ff3e"
-NEW="vllm-qwen36-nvfp4"     # NVFP4 production container
-OLD="vllm-qwen36"          # legacy BF16, rollback only
-SERVED="Qwen/Qwen3.6-35B-A3B"
+# vLLM 0.27.1 image used by the verified 2026-08-21 Spark deployment, pinned.
+IMG_NVFP4="vllm/vllm-openai@sha256:0a51ea5b4ae2dc5d81890e5173f54203d2a3ae0cfffe51b8fd2afd4391bfd967"
+NEW="vllm-qwen38-nvfp4"       # current production container
+ROLLBACK="vllm-qwen36-nvfp4"  # previous NVFP4 container
+LEGACY_BF16="vllm-qwen36"     # older BF16 fallback, kept stopped
+SERVED="Qwen/Qwen3.8-27B"
+ROLLBACK_SERVED="Qwen/Qwen3.6-35B-A3B"
 HF="/home/albert/.cache/huggingface"
 PORT=8000
 DRY_RUN=0
@@ -39,12 +41,15 @@ start_nvfp4() {
     --gpus all -p ${PORT}:8000 \
     -v ${HF}:/root/.cache/huggingface \
     "$IMG_NVFP4" \
-    --model nvidia/Qwen3.6-35B-A3B-NVFP4 \
+    --model unsloth/Qwen3.8-27B-NVFP4 \
     --served-model-name "$SERVED" \
-    --quantization modelopt \
-    --max-model-len 32768 \
-    --gpu-memory-utilization 0.90 \
-    --trust-remote-code
+    --max-model-len 131072 \
+    --gpu-memory-utilization 0.85 \
+    --max-num-seqs 4 \
+    --enable-auto-tool-choice \
+    --tool-call-parser qwen3_coder \
+    --reasoning-parser qwen3 \
+    --speculative-config '{"method":"mtp","num_speculative_tokens":5}'
   echo "started $NEW (serving as '$SERVED')"
 }
 
@@ -68,9 +73,11 @@ wait_ready() {
 
 case "${1:-help}" in
   up)
-    echo "Cutover -> NVFP4. Stopping legacy BF16 ($OLD) and neutralizing its auto-start..."
-    run_cmd docker stop "$OLD" || true
-    run_cmd docker update --restart=no "$OLD" || true
+    echo "Starting Qwen3.8 NVFP4 and neutralizing Qwen3.6 rollback containers..."
+    run_cmd docker stop "$ROLLBACK" || true
+    run_cmd docker update --restart=no "$ROLLBACK" || true
+    run_cmd docker stop "$LEGACY_BF16" || true
+    run_cmd docker update --restart=no "$LEGACY_BF16" || true
     start_nvfp4
     wait_ready
     ;;
@@ -78,8 +85,8 @@ case "${1:-help}" in
     run_cmd docker stop "$NEW" || true; echo "stopped $NEW"
     ;;
   status)
-    echo "Container:"; docker ps -a --filter name=vllm-qwen36 --format "  {{.Names}} | {{.Status}} | restart={{.Label \"x\"}}"
-    docker inspect "$NEW" "$OLD" --format "  {{.Name}} restart={{.HostConfig.RestartPolicy.Name}} status={{.State.Status}}" 2>/dev/null || true
+    echo "Container:"; docker ps -a --filter name=vllm-qwen3 --format "  {{.Names}} | {{.Status}}"
+    docker inspect "$NEW" "$ROLLBACK" "$LEGACY_BF16" --format "  {{.Name}} restart={{.HostConfig.RestartPolicy.Name}} status={{.State.Status}}" 2>/dev/null || true
     echo -n "  endpoint /v1/models -> "
     curl -sf -m5 http://localhost:${PORT}/v1/models | python3 -c "import json,sys;print(json.load(sys.stdin)['data'][0]['id'])" 2>/dev/null || echo "(down)"
     ;;
@@ -87,12 +94,14 @@ case "${1:-help}" in
     docker logs "${2:-$NEW}" 2>&1 | tail -"${3:-40}"
     ;;
   rollback)
-    echo "ROLLBACK -> BF16 ($OLD)..."
+    echo "ROLLBACK -> Qwen3.6 NVFP4 ($ROLLBACK)..."
     run_cmd docker stop "$NEW" || true
     run_cmd docker update --restart=no "$NEW" || true
-    run_cmd docker update --restart=unless-stopped "$OLD" || true
-    run_cmd docker start "$OLD"
-    echo "BF16 starting. Verify with: $0 status   (BF16 cold-start ~4-5 min)"
+    run_cmd docker update --restart=unless-stopped "$ROLLBACK" || true
+    run_cmd docker start "$ROLLBACK"
+    echo "Qwen3.6 starting. Before restarting ingestion, set:"
+    echo "  INGESTION_VLLM_MODEL=$ROLLBACK_SERVED"
+    echo "Verify with: $0 status"
     ;;
   *)
     echo "usage: $0 [--dry-run] {up|down|status|logs [container] [n]|rollback}"

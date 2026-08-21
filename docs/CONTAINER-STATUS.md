@@ -1,8 +1,23 @@
 # Container Status & Known Issues
 
-> Last verified: 2026-04-03 (E2E Smoke Test)
+> Last verified: global baseline 2026-04-03; Spark ingestion runtime 2026-08-21
 
 ## Release Notes
+
+### 2026-08-21 — Spark ingestion vLLM cut over to Qwen3.8-27B
+
+- The live Spark endpoint now serves `Qwen/Qwen3.8-27B` from
+  `unsloth/Qwen3.8-27B-NVFP4` on the pinned vLLM 0.27.1 image recorded below.
+- The checked-in launcher, ingestion-contract verifier and this runbook use the
+  same served-model name, image digest, 131072-token context, four-sequence cap,
+  Qwen tool/reasoning parsers and five-token MTP configuration as the verified
+  container.
+- ODIN ingestion still uses strict `response_format: json_schema` with thinking
+  disabled; it does not use tool calls. Parser support remains enabled for
+  separately gated agent clients and does not change the ingestion payload.
+- Qwen3.6 NVFP4 remains the immediate rollback container. Because its served name
+  differs, rollback also requires
+  `INGESTION_VLLM_MODEL=Qwen/Qwen3.6-35B-A3B` before ingestion restarts.
 
 ### 2026-06-29 — Spark ingestion vLLM cut over to NVFP4
 
@@ -173,42 +188,48 @@ The reranker is a custom CUDA 12.8 + PyTorch cu128 image from
 `infra/docker/reranker`, not a TEI image. The old sm_80/sm_120 hypothesis was
 incorrect; verify the active container separately with `./odin.sh smoke`.
 
-### vLLM + Qwen3.6-35B-A3B NVFP4 on the Spark (DGX GB10) — ingestion backend
+### vLLM + Qwen3.8-27B NVFP4 on the Spark (DGX GB10) — ingestion backend
 
 **Status: WORKS (production). Serves the `data-ingestion-spark` contract.**
-**Host: Spark `192.168.178.39:8000` (NOT the local 5090). Cold start ~8 min (compile + FP4 autotune).**
+**Host: Spark `192.168.178.39:8000` (NOT the local 5090).**
 
 Runs on the Spark, addressed by `data-ingestion-spark` via `INGESTION_VLLM_URL` /
-`ingestion_vllm_model` (`http://192.168.178.39:8000`, model `Qwen/Qwen3.6-35B-A3B`). Started and
-managed by `scripts/spark/odin-spark-vllm.sh` (installed on the Spark as `/home/albert/odin-spark-vllm.sh`):
+`ingestion_vllm_model` (`http://192.168.178.39:8000`, model `Qwen/Qwen3.8-27B`).
+Started and managed by `scripts/spark/odin-spark-vllm.sh` (installed on the Spark
+as `/home/albert/odin-spark-vllm.sh`):
 
 ```bash
-docker run -d --name vllm-qwen36-nvfp4 --restart unless-stopped --gpus all -p 8000:8000 \
+docker run -d --name vllm-qwen38-nvfp4 --restart unless-stopped --gpus all -p 8000:8000 \
   -v /home/albert/.cache/huggingface:/root/.cache/huggingface \
-  vllm/vllm-openai@sha256:907377dd...   `# :nightly pinned 2026-06-29` \
-  --model nvidia/Qwen3.6-35B-A3B-NVFP4 \
-  --served-model-name Qwen/Qwen3.6-35B-A3B \
-  --quantization modelopt \
-  --max-model-len 32768 \
-  --gpu-memory-utilization 0.90 \
-  --trust-remote-code
+  vllm/vllm-openai@sha256:0a51ea5b4ae2dc5d81890e5173f54203d2a3ae0cfffe51b8fd2afd4391bfd967 \
+  --model unsloth/Qwen3.8-27B-NVFP4 \
+  --served-model-name Qwen/Qwen3.8-27B \
+  --max-model-len 131072 \
+  --gpu-memory-utilization 0.85 \
+  --max-num-seqs 4 \
+  --enable-auto-tool-choice \
+  --tool-call-parser qwen3_coder \
+  --reasoning-parser qwen3 \
+  --speculative-config '{"method":"mtp","num_speculative_tokens":5}'
 ```
 
-- **Why NVFP4:** parity with BF16 on quality + faithfulness (blind A/B, 30 held-out Munin
-  contexts); frees ~44 GB UMA, ~2.3× throughput on nightly. (Nemotron-3-Super-120B was also
-  A/B-tested and was statistically indistinguishable but 3.6× slower — not adopted.)
-- **Contract (data-ingestion):** model name `Qwen/Qwen3.6-35B-A3B`; `response_format json_schema`
-  strict; `chat_template_kwargs.enable_thinking:false`; temperature 0.1; max_tokens 2000 (RSS) /
-  8000 (NLM). `4xx/422` → `ExtractionConfigError` (hard fail, no retry); `5xx/timeout/connect` →
-  `ExtractionTransientError` (retry). **No tool-calling on this path** (JSON-schema only — tool
-  calling is the local 9B's ReAct path).
-- **Requires `vllm/vllm-openai:nightly`** (v0.23.1+) — v0.19.0 fails to load the modelopt NVFP4
-  MoE (`KeyError: experts.w2_input_scale`). sm_121 has no native FP4 compute yet → Marlin W4A16
-  fallback (memory win real; speed win partly from the newer vLLM).
-- **Operate:** `odin-spark-vllm.sh up` (cutover → NVFP4), `rollback` (→ legacy BF16
-  `vllm-qwen36`), `status`, `down`, `logs [container] [n]`. **One model at a time** (single GPU /
-  unified memory). Prefix a mutating action with `--dry-run` to print the Docker commands
-  without executing them.
+- **Runtime identity:** vLLM 0.27.1, image digest
+  `sha256:0a51ea5b4ae2dc5d81890e5173f54203d2a3ae0cfffe51b8fd2afd4391bfd967`,
+  container `vllm-qwen38-nvfp4`, restart policy `unless-stopped`.
+- **Contract (data-ingestion):** model name `Qwen/Qwen3.8-27B`;
+  `response_format json_schema` strict;
+  `chat_template_kwargs.enable_thinking:false`; temperature 0.1; max_tokens 2000
+  (RSS) / 8000 (NLM). RSS timeout is 240s and NLM timeout is 900s.
+  `4xx/422` → `ExtractionConfigError` (hard fail, no retry);
+  `5xx/timeout/connect` → `ExtractionTransientError` (retry).
+- **Tool surface:** the server exposes parsed Qwen tool calls and reasoning for
+  separately gated clients. ODIN ingestion itself remains schema-only and sends no
+  tool definitions.
+- **Operate:** `odin-spark-vllm.sh up`, `status`, `down`, `logs [container] [n]`.
+  `rollback` stops Qwen3.8 and starts `vllm-qwen36-nvfp4`; before ingestion is
+  restarted, set `INGESTION_VLLM_MODEL=Qwen/Qwen3.6-35B-A3B`. The older BF16
+  `vllm-qwen36` remains stopped. **One model at a time** on the Spark. Prefix a
+  mutating action with `--dry-run` to print Docker commands without executing them.
 - **Verify the contract anytime:** `python3 scripts/spark/verify_ingestion_contract.py`
   (replicates `pipeline.py:_call_vllm` + the scheduler `/v1/models` check).
 - **Note:** independent of the local 5090 embeddings — `*_embed_failed` in ingestion logs means

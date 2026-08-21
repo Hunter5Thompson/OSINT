@@ -6,7 +6,7 @@ Mirrors services/data-ingestion/pipeline.py:_call_vllm + scheduler.check_ingesti
   - response_format json_schema strict with the REAL _RESPONSE_SCHEMA
   - chat_template_kwargs enable_thinking False, temperature 0.1, max_tokens 2000
 PASS requires HTTP 200 (a 4xx/422 = ODIN ExtractionConfigError = hard ingestion failure)
-AND schema-shaped, parseable JSON. Run AFTER the NVFP4 cutover; on FAIL -> rollback.
+AND schema-shaped, parseable JSON. Run after a Qwen3.8 restart; on FAIL, stop deployment.
 """
 import json
 import sys
@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 
 BASE = "http://192.168.178.39:8000"
-MODEL = "Qwen/Qwen3.6-35B-A3B"
+MODEL = "Qwen/Qwen3.8-27B"
 
 # Verbatim copy of services/data-ingestion/pipeline.py:_RESPONSE_SCHEMA (lines 236-286)
 SCHEMA = {
@@ -82,7 +82,7 @@ def _get(url, timeout=10):
         return json.loads(r.read().decode())
 
 
-def _post(url, payload, timeout=120):
+def _post(url, payload, timeout=240):
     req = urllib.request.Request(
         url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -120,7 +120,7 @@ def main() -> None:
         body = e.read()[:400].decode(errors="replace")
         print(f"[2] guided-JSON request: FAIL — HTTP {e.code} "
               f"(= ODIN ExtractionConfigError, hard fail)\n    body: {body}")
-        print("\nRESULT: ❌ CONTRACT BROKEN — roll back to BF16")
+        print("\nRESULT: ❌ CONTRACT BROKEN — stop deployment")
         sys.exit(1)
     except Exception as e:  # noqa: BLE001
         print(f"[2] guided-JSON request: FAIL — {e!r}")
@@ -143,8 +143,8 @@ def main() -> None:
         print(f"[2] json_schema strict -> 200 but JSON parse FAIL: {e}\n    raw: {content[:200]}")
     ok &= c2
 
-    print("\nRESULT:", "✅ CONTRACT OK — NVFP4 satisfies the ODIN ingestion contract"
-          if ok else "❌ CONTRACT BROKEN — roll back to BF16")
+    print("\nRESULT:", "✅ CONTRACT OK — Qwen3.8 satisfies the ODIN ingestion contract"
+          if ok else "❌ CONTRACT BROKEN — stop deployment")
     sys.exit(0 if ok else 1)
 
 
