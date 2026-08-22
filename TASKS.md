@@ -1669,7 +1669,7 @@ Observation-Producer.
 # Slices:
 #   S01 [P0] [DONE ✅] Kanonischer Munin Runtime Model Contract
 #   S02 [P0] [DONE ✅ 2026-08-22] Hermetischer Quality-Loop
-#   S03 [P0] [IN PROGRESS — REVIEW-FIXES ✅ / HOST APPLY + RE-REVIEW ⏳]
+#   S03 [P0] [IN PROGRESS — REVIEW-FIXES + HOST MODES ✅ / RE-REVIEW ⏳]
 #       Local Exposure Floor
 #   S04 [P1] [REVIEW COMPLETE 2026-08-22; CI/MERGE PENDING] Locked Dependency Contract
 #   S05 [P1] [REVIEW BACKLOG REFINED 2026-08-22] Runtime Provenance, Deploy und Drift

@@ -365,8 +365,8 @@ Exit-Code im PR dokumentieren.
 
 ## S03 — Local Exposure Floor
 
-**Status:** IN PROGRESS — REVIEW-FIXES VERIFIED; HOST PERMISSIONS, RE-REVIEW +
-DEPLOY PENDING
+**Status:** IN PROGRESS — REVIEW-FIXES + HOST PERMISSIONS VERIFIED; RE-REVIEW,
+MERGE + RECREATE PENDING
 
 **Priorität:** P0
 
@@ -450,7 +450,7 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 - ein explizites Nicht-Loopback-Binding erzeugt einen sichtbaren Doctor-Fehler,
   solange die internen Dienste keine Auth besitzen
 
-### RECORD — 2026-08-22 (CODE VERIFIED; HOST APPLY OPEN)
+### RECORD — 2026-08-22 (CODE + HOST MODES VERIFIED; DEPLOY OPEN)
 
 - RED: Der neue Contract startete mit `5 failed, 1 passed`: kein gerenderter
   `host_ip`, kein required Neo4j-Secret, kein Doctor-Dateimodus-Gate und schwache
@@ -472,13 +472,11 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
   explizites `ODIN_BIND_HOST=192.0.2.10` rendert korrekt, wird vom Doctor aber als
   Exposure unauthentifizierter Dienste abgelehnt. Container-DNS blieb auf
   `redis`, `qdrant`, `neo4j` und `vllm` unverändert.
-- OFFENER HOST-APPLY: Die existierenden Dateien `.env`,
+- HOST-BASELINE VOR APPLY: Die existierenden Dateien `.env`,
   `services/backend/.env` und `services/frontend/.env` im kanonischen Checkout
-  besitzen weiterhin Modus `664`; der neue Doctor endet deshalb erwartungsgemäß
-  non-zero. Die laufenden Container wurden nicht neu erstellt und lauschen noch
-  auf `0.0.0.0/[::]`. Weder `chmod`, Container-Neustart, Profilwechsel noch
-  Deployment wurden ohne gesonderte Freigabe ausgeführt. S03 ist bis zu diesen
-  beiden operativen Schritten ausdrücklich nicht DONE.
+  besaßen bei der ersten Verifikation Modus `664`; der neue Doctor endete deshalb
+  erwartungsgemäß non-zero. Zu diesem Zeitpunkt wurden weder `chmod`,
+  Container-Neustart, Profilwechsel noch Deployment ausgeführt.
 
 **Commit:** `fix(ops): bind ODIN host ports to loopback by default`
 
@@ -516,10 +514,16 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
   1 skipped, 17 deselected`, Vision Enrichment `22 passed`; alle Coverage-
   Ratchets grün; Smoke `14 passed, 0 failed, 1 skipped`. Handoff:
   `/tmp/odin-task119-review-full/handoff-20260822-review.md`.
-- WEITERHIN OFFEN: Die drei realen Secret-Dateien im kanonischen Checkout
-  wurden nicht verändert und stehen weiterhin auf Modus `664`; die laufenden
-  Container wurden nicht neu erstellt. Host-`chmod 600`, unabhängiger Re-Review,
-  Merge und anschließendes Recreate bleiben in genau dieser Reihenfolge offen.
+- HOST-APPLY: Nach expliziter Freigabe wurden ausschließlich die drei regulären,
+  `deadpool-ultra` gehörenden Secret-Dateien `.env`, `services/backend/.env` und
+  `services/frontend/.env` im kanonischen Checkout von `664` auf `600` gesetzt.
+  Der anschließende Scan mit derselben `.env`/`.env.*`-Auswahl wie der Doctor
+  fand genau diese drei Dateien und bestätigte für alle Modus `600`; Inhalte
+  wurden weder gelesen noch ausgegeben.
+- WEITERHIN OFFEN: Die laufenden Container wurden nicht neu erstellt und
+  lauschen noch auf `0.0.0.0/[::]`. Unabhängiger Re-Review, Merge und erst danach
+  das Recreate bleiben offen. S03 ist bis zum Runtime-Nachweis ausdrücklich
+  nicht DONE.
 
 **Review-Fix-Commit:** `fix(ops): align doctor with compose environment`
 
