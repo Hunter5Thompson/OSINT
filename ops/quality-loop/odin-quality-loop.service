@@ -7,7 +7,7 @@ Wants=network-online.target
 User=deadpool-ultra
 Group=deadpool-ultra
 Environment=HOME=/home/deadpool-ultra
-Environment=PATH=/home/deadpool-ultra/.local/bin:/home/deadpool-ultra/.nvm/versions/node/v24.13.0/bin:/home/deadpool-ultra/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/home/deadpool-ultra/.local/bin:/home/deadpool-ultra/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 Type=oneshot
 WorkingDirectory=/home/deadpool-ultra/ODIN/OSINT
 ExecStart=/home/deadpool-ultra/ODIN/OSINT/ops/quality-loop/quality_loop.sh

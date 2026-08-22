@@ -432,6 +432,8 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 
 ## S04 — Locked Dependency Contract
 
+**Status:** LOCALLY VERIFIED 2026-08-22 — REVIEW/CI/MERGE PENDING
+
 **Priorität:** P1
 
 **Abhängigkeiten:** S02
@@ -537,6 +539,46 @@ Build-Smoke für alle betroffenen Images durchführen.
   Host-Environment-Artefakte in sein Image
 - der CI-Job `test-ops-contracts` führt alle bis dahin vorhandenen Root/Ops-
   Contracts automatisch und ohne Host-`.env` aus
+
+### RECORD — 2026-08-22
+
+- ISOLATION: S04 wurde aus dem verifizierten S02-Stand auf
+  `fix/task-119-s04-locked-dependencies` umgesetzt. Der S03-Commit `81fa8ee` ist
+  kein Vorfahr dieses Branches; Exposure-Hardening und Dependency-Locking
+  bleiben damit getrennte Review-/Merge-Einheiten.
+- RED: Der erste ausführbare Dependency-Contract endete mit `26 failed,
+  6 passed` und belegte fehlende/getrackte Locks, unlocked CI-/Nightly-Pfade,
+  `npm install`, ungeschützte Build-Kontexte und synchronisierende
+  Container-Entrypoints. Ein zweiter gezielter RED-Lauf endete mit `5 failed,
+  1 passed`: drei Service-Locks enthielten den vom Nightly verwendeten
+  Coverage-Runner nicht und `uv run --with pytest-cov` hätte weiterhin eine
+  Dependency außerhalb der Locks aufgelöst.
+- GREEN: Alle fünf Deployment-Locks sind getrackte Quellartefakte. Python-CI,
+  Docker und Nightly verwenden `uv 0.10.0` und Locked-Syncs; Frontend verwendet
+  Node 22 und `npm ci`. Service-Kontexte schließen Host-Environments und Caches
+  aus; Python-Images starten ausschließlich mit `uv run --no-sync`. Der neue
+  CI-Job `test-ops-contracts` fordert Docker Compose hart an und nutzt nur die
+  synthetische Environment-Fixture.
+- COVERAGE-LOCK: `pytest-cov` ist in allen vier Service-Locks enthalten; der
+  Quality-Loop enthält kein `uv run --with`. Die fokussierte Reparatur war mit
+  `6 passed` grün, die vollständige Ops-Suite mit `44 passed`.
+- VERIFY: Backend `585 passed` plus Ruff/mypy; Frontend `625 passed` plus
+  ESLint, TypeScript und Build; Intelligence `484 passed`; Data Ingestion
+  `1445 passed, 1 skipped, 17 deselected`; Vision Enrichment `22 passed`.
+  Alle Coverage-Ratchets waren grün. Der read-only Live-Smoke meldete
+  `14 passed, 0 failed, 1 skipped`; der Handoff unter
+  `/tmp/odin-task119-s04-full/` trägt `Status: PASS`.
+- IMAGE-SMOKE: Backend, Frontend, Intelligence, Data Ingestion und Vision
+  wurden als getrennte `odin-task119-s04-*-verify:20260822`-Images gebaut. Alle
+  fünf bestanden danach einen `--network none`-Smoke; die Python-Smokes
+  verwendeten ausdrücklich `uv run --no-sync`. Der Backend-Smoke erhielt nur
+  die synthetische `tests/fixtures/compose.env`.
+- HOST-SICHERHEIT: Es gab keinen Compose-Start, Recreate, Profilwechsel oder
+  Deploy. Die installierte systemd-Unit blieb unverändert. Die getrackte Unit
+  verwendet statt des versionsgebundenen NVM-Pfads den stabilen
+  `/home/deadpool-ultra/.local/bin`-Adapter, der auf dem auditierten Host Node
+  `v22.23.1` und npm `10.9.8` bereitstellt; der Unit-Sync bleibt bewusst bis
+  nach Review/Merge offen.
 
 **Commit:** `build(ops): lock deployment dependencies across services`
 

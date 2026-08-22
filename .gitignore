@@ -19,11 +19,13 @@ dist/
 coverage/
 *.tsbuildinfo
 
-# Local lockfiles generated during ad-hoc test runs
+# Deployment lockfiles are source artifacts; other service/training locks stay local.
 services/**/uv.lock
+!services/backend/uv.lock
+!services/intelligence/uv.lock
 !services/data-ingestion/uv.lock
+!services/vision-enrichment/uv.lock
 training/**/uv.lock
-services/frontend/package-lock.json
 
 # OS / editor noise
 .DS_Store

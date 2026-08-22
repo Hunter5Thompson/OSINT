@@ -4,19 +4,32 @@
 
 ```bash
 # Backend (FastAPI, port 8080 host / 8000 container)
-cd services/backend && uv sync && uv run pytest && uv run ruff check app/ && uv run mypy app/
+cd services/backend && uv sync --locked --all-extras && uv run pytest && uv run ruff check app/ && uv run mypy app/
 
 # Frontend (React/CesiumJS, port 5173)
-cd services/frontend && npm install && npm run lint && npm run type-check && npm test
+cd services/frontend && npm ci && npm run lint && npm run type-check && npm test
 
 # Intelligence (LangGraph, port 8003)
-cd services/intelligence && uv sync && uv run pytest
+cd services/intelligence && uv sync --locked --all-extras && uv run pytest
 
 # Data Ingestion (scheduler + feeds)
-cd services/data-ingestion && uv sync && uv run pytest
+cd services/data-ingestion && uv sync --locked --all-extras && uv run pytest
+
+# Vision Enrichment (async image analysis)
+cd services/vision-enrichment && uv sync --locked --all-extras && uv run pytest
 ```
 
-**Lockfiles are gitignored** (`uv sync` / `npm install` regenerate them) **except** the tracked deployment lock `services/data-ingestion/uv.lock`.
+Deployment lockfiles are tracked source artifacts:
+
+- `services/backend/uv.lock`
+- `services/intelligence/uv.lock`
+- `services/data-ingestion/uv.lock`
+- `services/vision-enrichment/uv.lock`
+- `services/frontend/package-lock.json`
+
+CI, Docker and the nightly quality loop use **uv 0.10.0** with
+`uv sync --locked`; service test environments add `--all-extras`. Frontend
+uses **Node 22** with `npm ci`. Local ad-hoc training lockfiles remain ignored.
 
 ## Docker Compose: profiles, not monolithic
 

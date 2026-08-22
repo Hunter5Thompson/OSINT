@@ -28,10 +28,10 @@ class QualityLoopTests(unittest.TestCase):
         self.assertIn("Environment=HOME=/home/deadpool-ultra", service)
         self.assertIn(
             "Environment=PATH=/home/deadpool-ultra/.local/bin:"
-            "/home/deadpool-ultra/.nvm/versions/node/v24.13.0/bin:"
             "/home/deadpool-ultra/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
             service,
         )
+        self.assertNotIn("/.nvm/versions/node/", service)
         self.assertNotIn("User=root", service)
         self.assertNotIn("Group=root", service)
         self.assertIn("Type=oneshot", service)
@@ -66,7 +66,7 @@ class QualityLoopTests(unittest.TestCase):
             self.assertIn("Coverage mode: ratchet", output)
             self.assertIn("DRY RUN: no commands will be executed", output)
             backend_environment = output.index("## Backend Environment")
-            backend_sync = output.index("uv sync --all-extras")
+            backend_sync = output.index("uv sync --locked --all-extras")
             ops_contracts = output.index("## Ops Contracts")
             ops_pytest = output.index("uv run pytest ../../tests/ops -q")
             backend = output.index("\n## Backend\n")
@@ -78,8 +78,9 @@ class QualityLoopTests(unittest.TestCase):
                 output,
             )
             self.assertIn("services/backend", output)
-            self.assertIn("uv sync --all-extras", output)
-            self.assertIn("uv run --with pytest-cov pytest --cov=app", output)
+            self.assertIn("uv sync --locked --all-extras", output)
+            self.assertIn("uv run pytest --cov=app", output)
+            self.assertNotIn("uv run --with", output)
             self.assertIn("--cov-report=json:", output)
             self.assertNotIn("--cov-fail-under=100", output)
             self.assertIn("check_coverage_ratchet.py", output)
@@ -87,7 +88,7 @@ class QualityLoopTests(unittest.TestCase):
             self.assertIn("uv run ruff check app/", output)
             self.assertIn("uv run mypy app/", output)
             self.assertIn("services/frontend", output)
-            self.assertIn("npm install", output)
+            self.assertIn("npm ci", output)
             self.assertIn("npm run lint", output)
             self.assertIn("npm run type-check", output)
             self.assertIn("npm test", output)

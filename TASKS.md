@@ -1669,7 +1669,7 @@ Observation-Producer.
 #   S01 [P0] [DONE ✅] Kanonischer Munin Runtime Model Contract
 #   S02 [P0] [DONE ✅ 2026-08-22] Hermetischer Quality-Loop
 #   S03 [P0] [NEXT] Local Exposure Floor
-#   S04 [P1] Locked Dependency Contract
+#   S04 [P1] [LOCALLY VERIFIED 2026-08-22; REVIEW/CI/MERGE PENDING] Locked Dependency Contract
 #   S05 [P1] Runtime Provenance, Deploy und Drift
 #   S06 [P1] Evidence Hygiene am Codec-Seam
 #   S07 [P1] Graph Write/Read Contract und Integritätsvokabular
