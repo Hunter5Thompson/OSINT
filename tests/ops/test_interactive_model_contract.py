@@ -49,7 +49,6 @@ def _render_contract_profiles(project: Path) -> dict:
             "--profile",
             "interactive-spark",
             "config",
-            "--no-env-resolution",
             "--format",
             "json",
         ],
@@ -64,22 +63,21 @@ def _render_contract_profiles(project: Path) -> dict:
     return json.loads(result.stdout)
 
 
-def _env_file_paths(service: dict) -> set[Path]:
-    paths: set[Path] = set()
-    for item in service.get("env_file", []):
-        raw = item.get("path") if isinstance(item, dict) else item
-        paths.add(Path(raw).resolve())
-    return paths
-
-
-def test_service_env_files_use_synthetic_env_without_root_dotenv(tmp_path: Path) -> None:
+def test_service_env_files_resolve_synthetic_env_without_root_dotenv(
+    tmp_path: Path,
+) -> None:
     config = _render_contract_profiles(tmp_path)
-    expected = (tmp_path / "tests" / "fixtures" / "compose.env").resolve()
 
-    assert _env_file_paths(config["services"]["backend"]) == {expected}
-    assert _env_file_paths(config["services"]["intelligence"]) == {expected}
-    assert _env_file_paths(config["services"]["data-ingestion"]) == {expected}
-    assert _env_file_paths(config["services"]["data-ingestion-spark"]) == {expected}
+    for service_name in (
+        "backend",
+        "intelligence",
+        "data-ingestion",
+        "data-ingestion-spark",
+    ):
+        assert (
+            config["services"][service_name]["environment"]["NEO4J_PASSWORD"]
+            == "compose-test-only"
+        )
 
 
 def test_interactive_render_keeps_base_and_munin_contract(tmp_path: Path) -> None:
