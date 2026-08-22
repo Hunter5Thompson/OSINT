@@ -426,6 +426,8 @@ services:
     build:
       context: ./services/frontend
       dockerfile: Dockerfile
+      args:
+        VITE_SPATIAL_SCOPE_ENABLED: ${VITE_SPATIAL_SCOPE_ENABLED:-true}
     ports:
       - "5173:5173"
     volumes:

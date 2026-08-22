@@ -1,4 +1,4 @@
-# Intentional Vite build input; keep only public VITE_* values in .env.
+.env
 .env.*
 node_modules
 dist

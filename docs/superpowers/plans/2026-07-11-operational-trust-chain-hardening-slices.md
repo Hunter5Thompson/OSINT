@@ -432,7 +432,7 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 
 ## S04 — Locked Dependency Contract
 
-**Status:** REVIEW-KORREKTUREN LOKAL VERIFIZIERT 2026-08-22 — FINAL REVIEW/CI/MERGE PENDING
+**Status:** DELTA-REVIEW-KORREKTUR LOKAL VERIFIZIERT 2026-08-22 — FINAL REVIEW/CI/MERGE PENDING
 
 **Priorität:** P1
 
@@ -461,8 +461,10 @@ Service-lokale Docker-Build-Kontexte schließen Host-`.venv`, `node_modules` und
 Caches aus. Ein gestarteter Container darf Dependencies weder synchronisieren
 noch aus dem Netz nachladen; Python-Entrypoints verwenden deshalb den beim Build
 erzeugten Environment-Zustand mit `uv run --no-sync`.
-`services/frontend/.env` ist dagegen ein absichtlicher Vite-Build-Input und darf
-ausschließlich öffentliche `VITE_*`-Werte enthalten.
+Frontend-`.env`-Dateien bleiben ebenfalls außerhalb des Image-Kontexts. Der
+öffentliche Spatial-Schalter wird stattdessen als explizites Compose/Docker-
+Build-Argument mit dem versionierten Default `true` transportiert; CI und
+Nightly verwenden denselben Wert.
 
 **Non-Goals:** ein Monorepo-Lockfile, Renovate/Dependabot, Base-Image-Digests,
 Dependency-Upgrades über das zur Lock-Erzeugung notwendige Maß hinaus.
@@ -479,8 +481,9 @@ Neu: `tests/ops/test_dependency_contract.py`
 - Service-Build-Kontexte schließen `.venv`, `node_modules` und Cache-Artefakte
   aus; Python-Container starten mit `uv run --no-sync`
 - Frontend-CI und Docker verwenden Node 22 + `npm ci`
-- der Frontend-Kontext erhält den öffentlichen Vite-Build-Input `.env`, und die
-  qualifizierte Cesium-Version ist im Manifest und Lock exakt fixiert
+- der Frontend-Kontext schließt `.env` und `.env.*` aus; der Spatial-Schalter
+  wird über ein explizites, überschreibbares Build-Argument transportiert
+- die qualifizierte Cesium-Version ist im Manifest und Lock exakt fixiert
 - Quality-Loop verwendet dieselben Installkommandos
 - auch der verschachtelte Collection-Runner verwendet `uv run --locked`
 - ein eigener CI-Job führt `tests/ops` über die gelockte Backend-Testumgebung und
@@ -510,8 +513,9 @@ kein behaupteter Defekt.
   ergänzen und Python-Entrypoints auf `uv run --no-sync` setzen
 - `uv:latest` auf `uv:0.10.0` pinnen
 - Frontend auf Node 22 und `npm ci`
-- Frontend-`.env` als öffentlichen Vite-Build-Input erhalten und Cesium samt
-  Engine/Widgets auf den bereits qualifizierten Versionsstand fixieren
+- Frontend-`.env` aus dem Image-Kontext ausschließen, den Spatial-Schalter als
+  explizites Build-Argument führen und Cesium samt Engine/Widgets auf den bereits
+  qualifizierten Versionsstand fixieren
 - CI und Quality-Loop spiegeln dieselben Befehle
 - der repositoryweite Python-Lint läuft aus der gelockten Backend-Toolchain
 - CI-Job `test-ops-contracts` nutzt `services/backend/uv.lock`, führt
@@ -591,17 +595,16 @@ Build-Smoke für alle betroffenen Images durchführen.
   `/home/deadpool-ultra/.local/bin`-Adapter, der auf dem auditierten Host Node
   `v22.23.1` und npm `10.9.8` bereitstellt; der Unit-Sync bleibt bewusst bis
   nach Review/Merge offen.
-- REVIEW-RED: Drei gezielte Regressionen belegten den ausgeschlossenen
-  Frontend-`.env`-Build-Input, den Cesium-Sprung von qualifiziertem `1.142.0`
-  auf Lock-Stand `1.144.0` und den unlocked verschachtelten Collection-Runner.
+- REVIEW-RED: Drei gezielte Regressionen belegten zunächst den fehlenden
+  Frontend-Buildwert, den Cesium-Sprung von qualifiziertem `1.142.0` auf
+  Lock-Stand `1.144.0` und den unlocked verschachtelten Collection-Runner.
   Der erweiterte Cesium-Contract blieb anschließend rot, bis auch Engine
   `26.0.0` und Widgets `16.0.0` statt neuer Transitiven erzwungen wurden. Ein
   weiterer gezielter RED-Test bestätigte, dass der Python-Lint mit einem
   separaten `uvx`-Ruff `0.15.15` statt einer getrackten Service-Toolchain lief.
-- REVIEW-GREEN: Der Frontend-Kontext erhält `.env`, während `.env.*`,
-  `node_modules` und Build-Caches ausgeschlossen bleiben. Manifest, Overrides,
-  Lock und installierter Baum verwenden exakt Cesium `1.142.0`, Engine `26.0.0`
-  und Widgets `16.0.0`. Der Collection-Runner verwendet `uv run --locked`.
+- REVIEW-GREEN: Manifest, Overrides, Lock und installierter Baum verwenden exakt
+  Cesium `1.142.0`, Engine `26.0.0` und Widgets `16.0.0`. Der Collection-Runner
+  verwendet `uv run --locked`.
   Der dynamische Drift-Test ist ausdrücklich als `uv`-Charakterisierung benannt;
   separate Contracts erzwingen die tatsächliche Verdrahtung in CI, Docker und
   Nightly. Der CI-Lint synchronisiert die Backend-Extras gelockt und führt den
@@ -609,11 +612,7 @@ Build-Smoke für alle betroffenen Images durchführen.
 - REVIEW-VERIFY: Die kombinierte Dependency-/Quality-Contract-Suite meldete
   `36 passed`; die finale vollständige Ops-Suite einschließlich des zusätzlichen
   CI-Lint-Contracts meldete `47 passed`. Der reale Full-Service-Lint war grün.
-  `npm ci`, ESLint, TypeScript und alle `625` Frontend-Tests waren grün. Zwei
-  ansonsten identische
-  Frontend-Builds mit ein- und ausgeschaltetem synthetischem Spatial-Flag
-  erzeugten unterschiedliche Main-Bundles; beide Images bestanden den
-  `--network none`-Smoke und enthielten im finalen Nginx-Layer keine `.env`.
+  `npm ci`, ESLint, TypeScript und alle `625` Frontend-Tests waren grün.
   Der finale vollständige Quality-Loop wiederholte Backend `585`, Frontend
   `625`, Intelligence `484`, Data Ingestion `1445 passed, 1 skipped,
   17 deselected` und Vision Enrichment `22` samt aller Ratchets grün. Der
@@ -622,10 +621,30 @@ Build-Smoke für alle betroffenen Images durchführen.
   identischer Lauf ohne explizites `COMPOSE_PROJECT_NAME=osint` fand wegen der
   Worktree-Isolation keine Dienste und endete ausschließlich im Smoke; er blieb
   als FAIL-Handoff erhalten, es wurde nichts gestartet oder verändert.
+- DELTA-REVIEW-RED: Vier fokussierte Contracts endeten mit `4 failed` und
+  belegten, dass `.env` noch im Kontext lag und der Spatial-Wert weder in
+  Docker/Compose noch in CI/Nightly explizit gebunden war.
+- DELTA-REVIEW-GREEN: `.env` und `.env.*` sind wieder ausgeschlossen. Dockerfile
+  und das real gerenderte Compose-Modell führen ausschließlich
+  `VITE_SPATIAL_SCOPE_ENABLED`, standardmäßig `true` und explizit auf `false`
+  überschreibbar. CI, Nightly und `.env.example` verwenden denselben Default.
+- DELTA-REVIEW-VERIFY: Unter Node `v22.23.1`/npm `10.9.8` waren `npm ci`, ESLint,
+  TypeScript, alle `625` Tests und der Flag-on-Build grün. Default/`true` und
+  explizites `false` erzeugten unterschiedliche Main-Bundle-Hashes. Eine
+  temporäre `.env` mit synthetischem Admin-Sentinel und `Spatial=false` änderte
+  weder RootFS-Layer noch Bundle-Hash des Default-Images; Sentinel, `.env` und
+  `VITE_*` fehlten im ausgelieferten Nginx-Image. Die Datei wurde danach
+  entfernt. Der finale Quality-Loop meldete `49` Ops-Contracts, Backend `585`,
+  Frontend `625`, Intelligence `484`, Data Ingestion `1445 passed, 1 skipped,
+  17 deselected`, Vision Enrichment `22` und den read-only Live-Smoke mit
+  `14 passed, 0 failed, 1 skipped`; alle Ratchets waren grün. Der Handoff unter
+  `/tmp/odin-task119-s04-buildarg-final/` trägt `Status: PASS`.
 
 **Commit:** `build(ops): lock deployment dependencies across services`
 
 **Review-Fix-Commit:** `fix(ops): close locked dependency review gaps`
+
+**Delta-Review-Fix-Commit:** `fix(frontend): make spatial image build explicit`
 
 ---
 

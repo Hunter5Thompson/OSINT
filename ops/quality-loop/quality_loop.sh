@@ -16,6 +16,7 @@ FRONTEND_COVERAGE="$LOG_DIR/frontend-coverage-summary-$STAMP.json"
 INTELLIGENCE_COVERAGE="$LOG_DIR/intelligence-coverage-$STAMP.json"
 INGESTION_COVERAGE="$LOG_DIR/data-ingestion-coverage-$STAMP.json"
 VISION_COVERAGE="$LOG_DIR/vision-enrichment-coverage-$STAMP.json"
+FRONTEND_SPATIAL_SCOPE_ENABLED="${VITE_SPATIAL_SCOPE_ENABLED:-true}"
 COVERAGE_REPORTS=(
   "$BACKEND_COVERAGE"
   "$FRONTEND_COVERAGE"
@@ -132,7 +133,7 @@ run_cmd "$ROOT/services/frontend" npm test
 run_cmd "$ROOT/services/frontend" npm run coverage
 run_cmd "$ROOT" cp "$ROOT/services/frontend/coverage/coverage-summary.json" "$FRONTEND_COVERAGE"
 check_coverage frontend vitest-summary "$FRONTEND_COVERAGE"
-run_cmd "$ROOT/services/frontend" npm run build
+run_cmd "$ROOT/services/frontend" env "VITE_SPATIAL_SCOPE_ENABLED=$FRONTEND_SPATIAL_SCOPE_ENABLED" npm run build
 
 section "Intelligence"
 run_cmd "$ROOT/services/intelligence" uv sync --locked --all-extras

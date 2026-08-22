@@ -104,6 +104,8 @@ jobs:
   test-frontend:
     name: tests · frontend
     runs-on: ubuntu-latest
+    env:
+      VITE_SPATIAL_SCOPE_ENABLED: "true"
     defaults:
       run:
         working-directory: services/frontend

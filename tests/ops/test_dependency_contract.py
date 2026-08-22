@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -35,6 +36,37 @@ def _job_block(workflow: str, job: str) -> str:
     )
     assert match is not None, f"missing CI job: {job}"
     return match.group("block")
+
+
+def _render_frontend_build_config(
+    *, spatial_scope_enabled: str | None = None
+) -> dict[str, object]:
+    environment = os.environ.copy()
+    environment.pop("ODIN_ENV_FILE", None)
+    environment.pop("VITE_SPATIAL_SCOPE_ENABLED", None)
+    if spatial_scope_enabled is not None:
+        environment["VITE_SPATIAL_SCOPE_ENABLED"] = spatial_scope_enabled
+
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            "tests/fixtures/compose.env",
+            "--profile",
+            "interactive",
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=ROOT,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    config = json.loads(result.stdout)
+    return config["services"]["frontend"]["build"]
 
 
 @pytest.mark.parametrize("relative_path", DEPLOYMENT_LOCKS)
@@ -110,6 +142,7 @@ def test_frontend_ci_uses_node_22_and_npm_ci() -> None:
     block = _job_block(workflow, "test-frontend")
 
     assert 'node-version: "22"' in block
+    assert 'VITE_SPATIAL_SCOPE_ENABLED: "true"' in block
     assert "run: npm ci" in block
     assert "run: npm install" not in block
 
@@ -177,9 +210,44 @@ def test_frontend_image_and_context_use_frozen_install() -> None:
     assert "COPY package.json package-lock.json ./" in dockerfile
     assert "RUN npm ci" in dockerfile
     assert "RUN npm install" not in dockerfile
-    assert {".env.*", "node_modules", "dist", "coverage"} <= ignored
-    assert ".env" not in ignored
+    assert {".env", ".env.*", "node_modules", "dist", "coverage"} <= ignored
+    assert not any(pattern.startswith("!") and ".env" in pattern for pattern in ignored)
     assert "package-lock.json" not in ignored
+
+
+def test_frontend_spatial_image_build_is_explicit_and_overridable() -> None:
+    dockerfile = (ROOT / "services" / "frontend" / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    argument = "ARG VITE_SPATIAL_SCOPE_ENABLED=true"
+    environment = "ENV VITE_SPATIAL_SCOPE_ENABLED=$VITE_SPATIAL_SCOPE_ENABLED"
+
+    assert argument in dockerfile
+    assert environment in dockerfile
+    assert dockerfile.index(argument) < dockerfile.index("RUN npm run build")
+    assert dockerfile.index(environment) < dockerfile.index("RUN npm run build")
+    assert _render_frontend_build_config()["args"] == {
+        "VITE_SPATIAL_SCOPE_ENABLED": "true"
+    }
+    assert _render_frontend_build_config(spatial_scope_enabled="false")["args"] == {
+        "VITE_SPATIAL_SCOPE_ENABLED": "false"
+    }
+
+
+def test_frontend_automated_builds_share_the_spatial_default() -> None:
+    quality_loop = (ROOT / "ops" / "quality-loop" / "quality_loop.sh").read_text(
+        encoding="utf-8"
+    )
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+
+    assert 'FRONTEND_SPATIAL_SCOPE_ENABLED="${VITE_SPATIAL_SCOPE_ENABLED:-true}"' in (
+        quality_loop
+    )
+    assert (
+        'env "VITE_SPATIAL_SCOPE_ENABLED=$FRONTEND_SPATIAL_SCOPE_ENABLED" npm run build'
+        in quality_loop
+    )
+    assert "VITE_SPATIAL_SCOPE_ENABLED=true" in env_example.splitlines()
 
 
 def test_frontend_cesium_version_matches_the_qualified_install() -> None:
@@ -229,9 +297,13 @@ def test_nested_ops_uv_runner_cannot_update_the_ingestion_lock() -> None:
     )
 
     assert match is not None
-    runner = match.group(0)
-    assert '"--locked"' in runner
-    assert runner.index('"--locked"') < runner.index('"pytest"')
+    commands = re.findall(r'\[\s*"uv",\s*"run",.*?\]', match.group(0), re.DOTALL)
+    assert commands
+    assert all('"--locked"' in command for command in commands)
+    assert all(
+        command.index('"--locked"') < command.index('"pytest"')
+        for command in commands
+    )
 
 
 @pytest.mark.parametrize("service", PYTHON_SERVICES)

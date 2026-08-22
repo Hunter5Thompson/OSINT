@@ -5,6 +5,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
+ARG VITE_SPATIAL_SCOPE_ENABLED=true
+ENV VITE_SPATIAL_SCOPE_ENABLED=$VITE_SPATIAL_SCOPE_ENABLED
+
 COPY . .
 RUN npm run build
 
