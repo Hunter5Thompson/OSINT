@@ -1669,9 +1669,9 @@ Observation-Producer.
 # Slices:
 #   S01 [P0] [DONE ✅] Kanonischer Munin Runtime Model Contract
 #   S02 [P0] [DONE ✅ 2026-08-22] Hermetischer Quality-Loop
-#   S03 [P0] [IN PROGRESS — START-GATE FIX ✅ / FINAL RE-REVIEW ⏳]
+#   S03 [P0] [REVIEW COMPLETE 2026-08-22; CI/MERGE + RECREATE PENDING]
 #       Local Exposure Floor
-#   S04 [P1] [REVIEW COMPLETE 2026-08-22; CI/MERGE PENDING] Locked Dependency Contract
+#   S04 [P1] [DONE ✅ 2026-08-22] Locked Dependency Contract
 #   S05 [P1] [REVIEW BACKLOG REFINED 2026-08-22] Runtime Provenance, Deploy und Drift
 #   S06 [P1] Evidence Hygiene am Codec-Seam
 #   S07 [P1] Graph Write/Read Contract und Integritätsvokabular

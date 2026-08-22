@@ -2,8 +2,8 @@
 
 **Datum:** 2026-07-11
 
-**Status:** IN EXECUTION — S01-S02 DONE; S03 REVIEW-FIXES VERIFIED,
-HOST APPLY + RE-REVIEW PENDING
+**Status:** IN EXECUTION — S01-S02 + S04 DONE; S03 REVIEW COMPLETE,
+CI/MERGE + RECREATE PENDING
 
 **Design-Spec:**
 `docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md`
@@ -365,8 +365,7 @@ Exit-Code im PR dokumentieren.
 
 ## S03 — Local Exposure Floor
 
-**Status:** IN PROGRESS — START-GATE REVIEW-BLOCKER VERIFIED FIXED; FINAL
-RE-REVIEW, MERGE + RECREATE PENDING
+**Status:** REVIEW COMPLETE 2026-08-22 — CI/MERGE + RECREATE PENDING
 
 **Priorität:** P0
 
@@ -534,10 +533,17 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
   Der anschließende Scan mit derselben `.env`/`.env.*`-Auswahl wie der Doctor
   fand genau diese drei Dateien und bestätigte für alle Modus `600`; Inhalte
   wurden weder gelesen noch ausgegeben.
+- FINAL-REVIEW: Ein Docker-Shim fing jeden Containerstart vor der Ausführung ab.
+  Mit `ODIN_BIND_HOST=0.0.0.0` blockierten `up interactive`, `up ingestion`,
+  `swap interactive`, `nlm up` und `vision up` jeweils vor Compose mit Exit `1`.
+  Mit Loopback erreichten `up interactive` und `vision up` den Shim und endeten
+  dort erwartungsgemäß mit Exit `97`; das Gate overblockt den sicheren Pfad
+  damit nicht. Es wurde kein Container gestartet und der Review-Worktree blieb
+  clean. Der unabhängige Re-Review meldete keine offenen Blocker.
 - WEITERHIN OFFEN: Die laufenden Container wurden nicht neu erstellt und
-  lauschen noch auf `0.0.0.0/[::]`. Unabhängiger Re-Review, Merge und erst danach
-  das Recreate bleiben offen. S03 ist bis zum Runtime-Nachweis ausdrücklich
-  nicht DONE.
+  lauschen noch auf `0.0.0.0/[::]`. PR-CI, Merge und erst danach das
+  kontrollierte Recreate samt Loopback-Nachweis bleiben offen. S03 ist bis zum
+  Runtime-Nachweis ausdrücklich nicht DONE.
 
 **Review-Fix-Commit:** `fix(ops): align doctor with compose environment`
 
@@ -547,7 +553,7 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 
 ## S04 — Locked Dependency Contract
 
-**Status:** REVIEW COMPLETE 2026-08-22 — CI/MERGE PENDING
+**Status:** DONE — MERGED ON MAIN 2026-08-22
 
 **Priorität:** P1
 
