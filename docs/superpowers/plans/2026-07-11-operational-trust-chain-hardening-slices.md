@@ -432,7 +432,7 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 
 ## S04 — Locked Dependency Contract
 
-**Status:** DELTA-REVIEW-KORREKTUR LOKAL VERIFIZIERT 2026-08-22 — FINAL REVIEW/CI/MERGE PENDING
+**Status:** REVIEW COMPLETE 2026-08-22 — CI/MERGE PENDING
 
 **Priorität:** P1
 
@@ -639,6 +639,22 @@ Build-Smoke für alle betroffenen Images durchführen.
   17 deselected`, Vision Enrichment `22` und den read-only Live-Smoke mit
   `14 passed, 0 failed, 1 skipped`; alle Ratchets waren grün. Der Handoff unter
   `/tmp/odin-task119-s04-buildarg-final/` trägt `Status: PASS`.
+- FINAL-REVIEW-ADVERSARIAL: Ein angehängtes `!.env` ließ
+  `test_frontend_image_and_context_use_frozen_install` erwartungsgemäß
+  fehlschlagen; das Entfernen des Dockerfile-`ARG` ließ
+  `test_frontend_spatial_image_build_is_explicit_and_overridable`
+  fehlschlagen. Ein zusätzlicher Ausschluss `**/.env` blieb korrekt grün, weil
+  er den geforderten Ausschluss nur redundant verschärft. Der Worktree war nach
+  allen drei Gegenproben wieder clean.
+- FINAL-REVIEW-CONTRACT: `.env.example`, Compose, Dockerfile, CI und Nightly
+  führen denselben Spatial-Default `true`; der Dockerfile-Default deckt dabei
+  auch einen nackten `docker build` ohne Compose ab. `npm ci --dry-run
+  --offline` war grün und belegte die Offline-Auflösbarkeit des Locks. Der zuvor
+  abgebrochene `--network none`-Cold-Build war ein fehlender Docker-Layer-Cache
+  nach Wechsel des Netzwerkmodus, kein offener Lock-Fehler.
+- FINAL-REVIEW-ENTSCHEIDUNG: S04 hat keine offenen Review-Blocker. Der Branch
+  bleibt bis zum erstmaligen Lauf des neuen CI-Jobs `test-ops-contracts` und dem
+  anschließenden Merge unverändert; Build/Recreate folgen erst danach.
 
 **Commit:** `build(ops): lock deployment dependencies across services`
 
@@ -659,6 +675,41 @@ Build-Smoke für alle betroffenen Images durchführen.
 **Invariant:** OT-05
 
 **Erwarteter Umfang:** Dockerfiles/Compose, Health-Metadaten, `odin.sh`, Ops-Tests
+
+### Review-Backlog aus S04 — 2026-08-22
+
+Diese vier Punkte sind bewusst nicht Teil des abgeschlossenen S04-Slices. Sie
+werden in S05 mit Tests zuerst und ohne Vermischung mit der S04-Integration
+bearbeitet:
+
+1. **Ruff-Toolchain vereinheitlichen.** Backend und Intelligence sind derzeit
+   auf Ruff `0.16.4` gelockt, Data Ingestion auf `0.15.15`; Vision Enrichment
+   besitzt keinen gelockten Ruff. Eine kanonische exakte Version muss in allen
+   vier Service-Toolchains und in CI gelten. CI darf die repositoryweite
+   Semantik nicht implizit von der zufällig im Backend-Lock aufgelösten Version
+   erben. Abnahme: Service-lokale und CI-Aufrufe melden dieselbe Version, alle
+   Locks sind konsistent und ein Contract fängt Versionsdrift ab.
+2. **`tests/ops` in den Lint-Scope aufnehmen.** Der neue PR-CI-Job führt die
+   Contracts aus, lintet das Verzeichnis aber nicht. Bestehende Findings wie
+   `I001` in `test_coverage_ratchet.py` werden regulär behoben, nicht ignoriert.
+   Abnahme: derselbe gelockte Ruff prüft die bisherigen vier Service-Scopes
+   plus `tests/ops`; CI und Quality-Loop sind grün und ein Contract verhindert
+   ein erneutes Herausfallen des Verzeichnisses.
+3. **`VITE_ADMIN_TOKEN`-Vertrag schließen.** Jeder `VITE_*`-Wert ist Teil des
+   öffentlich ausgelieferten Browser-Bundles und darf kein produktiv
+   wiederverwendbares Admin-Credential sein. S05 dokumentiert und implementiert
+   entweder einen ausdrücklich nicht geheimen Dev-only-Vertrag oder verlagert
+   produktive Autorisierung auf einen serverseitigen beziehungsweise
+   sitzungsgebundenen Pfad. Abnahme: Ein Produktionsbuild enthält kein
+   wiederverwendbares Admin-Credential; ein ausführbarer Contract belegt das.
+4. **Spatial-Default im lokalen Dev-Pfad angleichen.** Image, CI und Nightly sind
+   default-on, während ein Clean Clone bei `npm run dev` ohne lokale
+   Frontend-`.env` default-off ist; selbst `.env.example` nennt den Schalter
+   derzeit nicht. Abnahme: Der versionierte Dev-Vertrag dokumentiert den Wert
+   und ein Clean-Clone-Dev-Start erhält ohne ungetracktes Host-Artefakt denselben
+   Default `true`. Ein Eintrag nur in `.env.example` genügt dafür nur, wenn der
+   unterstützte Bootstrap ihn deterministisch übernimmt; die Parität wird per
+   Contract geprüft.
 
 ### SPEC
 

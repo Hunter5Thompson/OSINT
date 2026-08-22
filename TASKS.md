@@ -1669,13 +1669,25 @@ Observation-Producer.
 #   S01 [P0] [DONE ✅] Kanonischer Munin Runtime Model Contract
 #   S02 [P0] [DONE ✅ 2026-08-22] Hermetischer Quality-Loop
 #   S03 [P0] [NEXT] Local Exposure Floor
-#   S04 [P1] [DELTA-REVIEW FIX LOCALLY VERIFIED 2026-08-22; FINAL REVIEW/CI/MERGE PENDING] Locked Dependency Contract
-#   S05 [P1] Runtime Provenance, Deploy und Drift
+#   S04 [P1] [REVIEW COMPLETE 2026-08-22; CI/MERGE PENDING] Locked Dependency Contract
+#   S05 [P1] [REVIEW BACKLOG REFINED 2026-08-22] Runtime Provenance, Deploy und Drift
 #   S06 [P1] Evidence Hygiene am Codec-Seam
 #   S07 [P1] Graph Write/Read Contract und Integritätsvokabular
 #   S08 [P2] Ehrliche Publication Metadata
 #   S09 [P2] Directional Retrieval Gate und kleinste Korrektur
 #   S10 [P2] ReAct Research Trace, Injection-Gate und Entscheidung
+#
+# S05 Review-Backlog aus S04:
+#   - Ruff-Version und gelockte Toolchain über alle vier Python-Services und CI
+#     vereinheitlichen; CI darf nicht implizit vom aktuellen Backend-Lock abhängen.
+#   - tests/ops in denselben Ruff-/CI-Scope aufnehmen, bestehende Findings regulär
+#     beheben und den Scope per Contract gegen erneutes Herausfallen schützen.
+#   - VITE_ADMIN_TOKEN als browseröffentlichen Wert behandeln und den produktiven
+#     Admin-Auth-Vertrag so schließen, dass kein wiederverwendbares Credential im
+#     Frontend-Bundle landet.
+#   - lokalen Spatial-Dev-Default an Image/CI/Nightly angleichen; ein Clean-Clone-
+#     Dev-Start muss ohne ungetrackte Host-.env ebenfalls explizit default-on sein.
+#   - Verbindliche Abnahmekriterien stehen im S05-Work-Order.
 #
 # Harte Guardrails:
 #   - ein Slice pro PR; keine benachbarte Modernisierung
