@@ -2,7 +2,7 @@
 
 **Datum:** 2026-07-11
 
-**Status:** IN EXECUTION — S01 COMMITTED, PR/MERGE PENDING
+**Status:** IN EXECUTION — S01-S02 DONE, S03 NEXT
 
 **Design-Spec:**
 `docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md`
@@ -48,7 +48,7 @@ wird bis dahin weder verworfen noch mit anderen Slices vermischt.
 
 ## S01 — Kanonischer Munin Runtime Model Contract
 
-**Status:** COMMITTED + VERIFIED — PR/MERGE PENDING
+**Status:** DONE — MERGED ON MAIN
 
 **Priorität:** P0
 
@@ -191,17 +191,16 @@ ODIN_ENV_FILE=tests/fixtures/compose.env docker compose \
   Host-`.venv`; `uv run` reparierte sie deshalb beim Containerstart und lud
   Dependencies nach. S04 erhält dafür einen ausführbaren Build-Kontext- und
   No-Sync-Vertrag; S01 wird dafür nicht verbreitert.
-- VERSIONIERUNG: Der vorgefundene Nutzer-Change an
-  `docker-compose.override.yml` ist unverändert Teil des separaten S01-Commits
-  auf `fix/task-119-s01-runtime-contract`. Erst der Merge macht ihn zu
-  getracktem `main` und erfüllt damit das letzte EXIT-Kriterium; S02 beginnt
-  vorher nicht.
+- VERSIONIERUNG: Der separate S01-Commit `5edafaa` ist Bestandteil von `main`;
+  das letzte EXIT-Kriterium ist damit erfüllt.
 
 **Commit:** `fix(intelligence): make Munin runtime contract reproducible`
 
 ---
 
 ## S02 — Hermetischer Quality-Loop
+
+**Status:** DONE — VERIFIED 2026-08-22
 
 **Priorität:** P0
 
@@ -304,6 +303,41 @@ Exit-Code im PR dokumentieren.
 - vom Loop neu erzeugte `.venv`-, `node_modules`- und Log-Artefakte gehören nicht
   Root
 
+### RECORD — 2026-08-22
+
+- RED: Mit explizit gesetzten `REPORTS_ADMIN_TOKEN` und
+  `INCIDENTS_ADMIN_TOKEN` lieferte
+  `test_create_report_requires_admin_token` reproduzierbar `401` statt `503`.
+  Der neue Ops-Contract war mit drei gezielten Fehlern rot: fehlende
+  `Ops Contracts`-Sektion, fehlende Non-Root-Unit-Felder und ein in der
+  Default-Suite gesammelter Spark-Live-Smoke.
+- GREEN: Backend-Tests neutralisieren Host-Tokens vor dem App-Import;
+  `tests/ops` läuft als erste Nightly-Suite über die Backend-`uv`-Umgebung; der
+  Spark-Smoke trägt den Marker `live`; die getrackte Unit enthält User, Group,
+  HOME und den expliziten PATH.
+- VORGESCHALTETE GATE-REPARATUREN: Der vollständige Ops-/Nightly-Lauf deckte
+  zwei bereits auf `main` vorhandene Testadapter-Drifts auf. Commit `5ac5b50`
+  richtet den alten Spark-Dry-Run-Test auf den bereits produktiven
+  Qwen3.8-Rollback-Vertrag aus; Commit `2eb4009` erhält den Wheel-Isolationstest
+  auch unter einem `uv --with`-Overlay. Beide Reparaturen ändern keinen
+  Produktivpfad und sind separat committed.
+- VERIFY: Backend `585 passed`; Ops `16 passed`; Frontend `625 passed`;
+  Intelligence `484 passed`; Data Ingestion `1445 passed, 1 skipped,
+  17 deselected`; Vision Enrichment `22 passed`. Alle fünf Coverage-Ratchets,
+  Ruff und Backend-mypy waren grün. Der abschließende Smoke meldete
+  `14 passed, 0 failed, 1 skipped`; der Full-Quality-Loop-Handoff trug
+  `Status: PASS`.
+- RUNTIME-ADAPTER: Der Full-Loop lief aus dem isolierten Worktree mit
+  `ODIN_REPO_ROOT` und explizitem `COMPOSE_PROJECT_NAME=osint`, damit der
+  read-only Smoke das bereits laufende kanonische Compose-Projekt prüft. Es gab
+  keinen Containerstart, Profilwechsel oder Deploy.
+- SYSTEMD: Getrackte Service- und Timer-Dateien sind bytegenau identisch mit
+  `/etc/systemd/system`; der Timer ist enabled/active und die geladene Unit läuft
+  als `deadpool-ultra`. Daher waren weder Kopie noch `daemon-reload` nötig.
+- OWNERSHIP: Neu erzeugte Service-`.venv`- und Frontend-Artefakte gehören
+  `deadpool-ultra`, nicht Root. Reports/Handoffs lagen außerhalb des Repositories
+  unter `/tmp/odin-task119-s02-*`.
+
 **Commit:** `fix(ops): isolate nightly quality gate from host environment`
 
 ---
@@ -398,6 +432,8 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 
 ## S04 — Locked Dependency Contract
 
+**Status:** REVIEW COMPLETE 2026-08-22 — CI/MERGE PENDING
+
 **Priorität:** P1
 
 **Abhängigkeiten:** S02
@@ -406,7 +442,7 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 
 **Invariant:** OT-04
 
-**Erwarteter Umfang:** vier Lockfiles, Gitignore/AGENTS, CI, vier Dockerfiles,
+**Erwarteter Umfang:** fünf Lockfiles, Gitignore/AGENTS, CI, fünf Dockerfiles,
 service-lokale Dockerignore-Regeln, Quality-Loop
 
 ### SPEC
@@ -425,6 +461,10 @@ Service-lokale Docker-Build-Kontexte schließen Host-`.venv`, `node_modules` und
 Caches aus. Ein gestarteter Container darf Dependencies weder synchronisieren
 noch aus dem Netz nachladen; Python-Entrypoints verwenden deshalb den beim Build
 erzeugten Environment-Zustand mit `uv run --no-sync`.
+Frontend-`.env`-Dateien bleiben ebenfalls außerhalb des Image-Kontexts. Der
+öffentliche Spatial-Schalter wird stattdessen als explizites Compose/Docker-
+Build-Argument mit dem versionierten Default `true` transportiert; CI und
+Nightly verwenden denselben Wert.
 
 **Non-Goals:** ein Monorepo-Lockfile, Renovate/Dependabot, Base-Image-Digests,
 Dependency-Upgrades über das zur Lock-Erzeugung notwendige Maß hinaus.
@@ -435,11 +475,17 @@ Neu: `tests/ops/test_dependency_contract.py`
 
 - alle fünf Lockfiles existieren und sind von Git getrackt
 - CI enthält pro Service den Locked-Install
+- der Python-Lint-Job verwendet Ruff aus einer getrackten gelockten
+  Service-Umgebung und kein separates `uvx`-Environment
 - Dockerfiles kopieren den Lock vor dem Install und nutzen Locked-Modus
 - Service-Build-Kontexte schließen `.venv`, `node_modules` und Cache-Artefakte
   aus; Python-Container starten mit `uv run --no-sync`
 - Frontend-CI und Docker verwenden Node 22 + `npm ci`
+- der Frontend-Kontext schließt `.env` und `.env.*` aus; der Spatial-Schalter
+  wird über ein explizites, überschreibbares Build-Argument transportiert
+- die qualifizierte Cesium-Version ist im Manifest und Lock exakt fixiert
 - Quality-Loop verwendet dieselben Installkommandos
+- auch der verschachtelte Collection-Runner verwendet `uv run --locked`
 - ein eigener CI-Job führt `tests/ops` über die gelockte Backend-Testumgebung und
   die synthetische Compose-Environment-Fixture aus
 - der CI-Job führt `docker compose version` als harte Capability-Prüfung aus;
@@ -467,7 +513,11 @@ kein behaupteter Defekt.
   ergänzen und Python-Entrypoints auf `uv run --no-sync` setzen
 - `uv:latest` auf `uv:0.10.0` pinnen
 - Frontend auf Node 22 und `npm ci`
+- Frontend-`.env` aus dem Image-Kontext ausschließen, den Spatial-Schalter als
+  explizites Build-Argument führen und Cesium samt Engine/Widgets auf den bereits
+  qualifizierten Versionsstand fixieren
 - CI und Quality-Loop spiegeln dieselben Befehle
+- der repositoryweite Python-Lint läuft aus der gelockten Backend-Toolchain
 - CI-Job `test-ops-contracts` nutzt `services/backend/uv.lock`, führt
   `uv run pytest ../../tests/ops -q` aus und exportiert ausschließlich die
   synthetische Compose-Fixture; davor muss `docker compose version` erfolgreich
@@ -501,10 +551,116 @@ Build-Smoke für alle betroffenen Images durchführen.
 - CI, Docker und Nightly lösen keine neue Dependency-Version auf
 - ein App-Container lädt beim Start keine Dependencies nach und übernimmt keine
   Host-Environment-Artefakte in sein Image
+- der Frontend-Rebuild kompiliert den konfigurierten Spatial-Scope ein und
+  verwendet exakt den bereits qualifizierten Cesium-Versionssatz
 - der CI-Job `test-ops-contracts` führt alle bis dahin vorhandenen Root/Ops-
   Contracts automatisch und ohne Host-`.env` aus
 
+### RECORD — 2026-08-22
+
+- ISOLATION: S04 wurde aus dem verifizierten S02-Stand auf
+  `fix/task-119-s04-locked-dependencies` umgesetzt. Der S03-Commit `81fa8ee` ist
+  kein Vorfahr dieses Branches; Exposure-Hardening und Dependency-Locking
+  bleiben damit getrennte Review-/Merge-Einheiten.
+- RED: Der erste ausführbare Dependency-Contract endete mit `26 failed,
+  6 passed` und belegte fehlende/getrackte Locks, unlocked CI-/Nightly-Pfade,
+  `npm install`, ungeschützte Build-Kontexte und synchronisierende
+  Container-Entrypoints. Ein zweiter gezielter RED-Lauf endete mit `5 failed,
+  1 passed`: drei Service-Locks enthielten den vom Nightly verwendeten
+  Coverage-Runner nicht und `uv run --with pytest-cov` hätte weiterhin eine
+  Dependency außerhalb der Locks aufgelöst.
+- GREEN: Alle fünf Deployment-Locks sind getrackte Quellartefakte. Python-CI,
+  Docker und Nightly verwenden `uv 0.10.0` und Locked-Syncs; Frontend verwendet
+  Node 22 und `npm ci`. Service-Kontexte schließen Host-Environments und Caches
+  aus; Python-Images starten ausschließlich mit `uv run --no-sync`. Der neue
+  CI-Job `test-ops-contracts` fordert Docker Compose hart an und nutzt nur die
+  synthetische Environment-Fixture.
+- COVERAGE-LOCK: `pytest-cov` ist in allen vier Service-Locks enthalten; der
+  Quality-Loop enthält kein `uv run --with`. Die fokussierte Reparatur war mit
+  `6 passed` grün, die vollständige Ops-Suite mit `44 passed`.
+- VERIFY: Backend `585 passed` plus Ruff/mypy; Frontend `625 passed` plus
+  ESLint, TypeScript und Build; Intelligence `484 passed`; Data Ingestion
+  `1445 passed, 1 skipped, 17 deselected`; Vision Enrichment `22 passed`.
+  Alle Coverage-Ratchets waren grün. Der read-only Live-Smoke meldete
+  `14 passed, 0 failed, 1 skipped`; der Handoff unter
+  `/tmp/odin-task119-s04-full/` trägt `Status: PASS`.
+- IMAGE-SMOKE: Backend, Frontend, Intelligence, Data Ingestion und Vision
+  wurden als getrennte `odin-task119-s04-*-verify:20260822`-Images gebaut. Alle
+  fünf bestanden danach einen `--network none`-Smoke; die Python-Smokes
+  verwendeten ausdrücklich `uv run --no-sync`. Der Backend-Smoke erhielt nur
+  die synthetische `tests/fixtures/compose.env`.
+- HOST-SICHERHEIT: Es gab keinen Compose-Start, Recreate, Profilwechsel oder
+  Deploy. Die installierte systemd-Unit blieb unverändert. Die getrackte Unit
+  verwendet statt des versionsgebundenen NVM-Pfads den stabilen
+  `/home/deadpool-ultra/.local/bin`-Adapter, der auf dem auditierten Host Node
+  `v22.23.1` und npm `10.9.8` bereitstellt; der Unit-Sync bleibt bewusst bis
+  nach Review/Merge offen.
+- REVIEW-RED: Drei gezielte Regressionen belegten zunächst den fehlenden
+  Frontend-Buildwert, den Cesium-Sprung von qualifiziertem `1.142.0` auf
+  Lock-Stand `1.144.0` und den unlocked verschachtelten Collection-Runner.
+  Der erweiterte Cesium-Contract blieb anschließend rot, bis auch Engine
+  `26.0.0` und Widgets `16.0.0` statt neuer Transitiven erzwungen wurden. Ein
+  weiterer gezielter RED-Test bestätigte, dass der Python-Lint mit einem
+  separaten `uvx`-Ruff `0.15.15` statt einer getrackten Service-Toolchain lief.
+- REVIEW-GREEN: Manifest, Overrides, Lock und installierter Baum verwenden exakt
+  Cesium `1.142.0`, Engine `26.0.0` und Widgets `16.0.0`. Der Collection-Runner
+  verwendet `uv run --locked`.
+  Der dynamische Drift-Test ist ausdrücklich als `uv`-Charakterisierung benannt;
+  separate Contracts erzwingen die tatsächliche Verdrahtung in CI, Docker und
+  Nightly. Der CI-Lint synchronisiert die Backend-Extras gelockt und führt den
+  Full-Service-Check mit dem dort gelockten Ruff `0.16.4` aus.
+- REVIEW-VERIFY: Die kombinierte Dependency-/Quality-Contract-Suite meldete
+  `36 passed`; die finale vollständige Ops-Suite einschließlich des zusätzlichen
+  CI-Lint-Contracts meldete `47 passed`. Der reale Full-Service-Lint war grün.
+  `npm ci`, ESLint, TypeScript und alle `625` Frontend-Tests waren grün.
+  Der finale vollständige Quality-Loop wiederholte Backend `585`, Frontend
+  `625`, Intelligence `484`, Data Ingestion `1445 passed, 1 skipped,
+  17 deselected` und Vision Enrichment `22` samt aller Ratchets grün. Der
+  read-only Live-Smoke meldete `14 passed, 0 failed, 1 skipped`; der Handoff
+  unter `/tmp/odin-task119-s04-final-osint/` trägt `Status: PASS`. Ein erster
+  identischer Lauf ohne explizites `COMPOSE_PROJECT_NAME=osint` fand wegen der
+  Worktree-Isolation keine Dienste und endete ausschließlich im Smoke; er blieb
+  als FAIL-Handoff erhalten, es wurde nichts gestartet oder verändert.
+- DELTA-REVIEW-RED: Vier fokussierte Contracts endeten mit `4 failed` und
+  belegten, dass `.env` noch im Kontext lag und der Spatial-Wert weder in
+  Docker/Compose noch in CI/Nightly explizit gebunden war.
+- DELTA-REVIEW-GREEN: `.env` und `.env.*` sind wieder ausgeschlossen. Dockerfile
+  und das real gerenderte Compose-Modell führen ausschließlich
+  `VITE_SPATIAL_SCOPE_ENABLED`, standardmäßig `true` und explizit auf `false`
+  überschreibbar. CI, Nightly und `.env.example` verwenden denselben Default.
+- DELTA-REVIEW-VERIFY: Unter Node `v22.23.1`/npm `10.9.8` waren `npm ci`, ESLint,
+  TypeScript, alle `625` Tests und der Flag-on-Build grün. Default/`true` und
+  explizites `false` erzeugten unterschiedliche Main-Bundle-Hashes. Eine
+  temporäre `.env` mit synthetischem Admin-Sentinel und `Spatial=false` änderte
+  weder RootFS-Layer noch Bundle-Hash des Default-Images; Sentinel, `.env` und
+  `VITE_*` fehlten im ausgelieferten Nginx-Image. Die Datei wurde danach
+  entfernt. Der finale Quality-Loop meldete `49` Ops-Contracts, Backend `585`,
+  Frontend `625`, Intelligence `484`, Data Ingestion `1445 passed, 1 skipped,
+  17 deselected`, Vision Enrichment `22` und den read-only Live-Smoke mit
+  `14 passed, 0 failed, 1 skipped`; alle Ratchets waren grün. Der Handoff unter
+  `/tmp/odin-task119-s04-buildarg-final/` trägt `Status: PASS`.
+- FINAL-REVIEW-ADVERSARIAL: Ein angehängtes `!.env` ließ
+  `test_frontend_image_and_context_use_frozen_install` erwartungsgemäß
+  fehlschlagen; das Entfernen des Dockerfile-`ARG` ließ
+  `test_frontend_spatial_image_build_is_explicit_and_overridable`
+  fehlschlagen. Ein zusätzlicher Ausschluss `**/.env` blieb korrekt grün, weil
+  er den geforderten Ausschluss nur redundant verschärft. Der Worktree war nach
+  allen drei Gegenproben wieder clean.
+- FINAL-REVIEW-CONTRACT: `.env.example`, Compose, Dockerfile, CI und Nightly
+  führen denselben Spatial-Default `true`; der Dockerfile-Default deckt dabei
+  auch einen nackten `docker build` ohne Compose ab. `npm ci --dry-run
+  --offline` war grün und belegte die Offline-Auflösbarkeit des Locks. Der zuvor
+  abgebrochene `--network none`-Cold-Build war ein fehlender Docker-Layer-Cache
+  nach Wechsel des Netzwerkmodus, kein offener Lock-Fehler.
+- FINAL-REVIEW-ENTSCHEIDUNG: S04 hat keine offenen Review-Blocker. Der Branch
+  bleibt bis zum erstmaligen Lauf des neuen CI-Jobs `test-ops-contracts` und dem
+  anschließenden Merge unverändert; Build/Recreate folgen erst danach.
+
 **Commit:** `build(ops): lock deployment dependencies across services`
+
+**Review-Fix-Commit:** `fix(ops): close locked dependency review gaps`
+
+**Delta-Review-Fix-Commit:** `fix(frontend): make spatial image build explicit`
 
 ---
 
@@ -519,6 +675,41 @@ Build-Smoke für alle betroffenen Images durchführen.
 **Invariant:** OT-05
 
 **Erwarteter Umfang:** Dockerfiles/Compose, Health-Metadaten, `odin.sh`, Ops-Tests
+
+### Review-Backlog aus S04 — 2026-08-22
+
+Diese vier Punkte sind bewusst nicht Teil des abgeschlossenen S04-Slices. Sie
+werden in S05 mit Tests zuerst und ohne Vermischung mit der S04-Integration
+bearbeitet:
+
+1. **Ruff-Toolchain vereinheitlichen.** Backend und Intelligence sind derzeit
+   auf Ruff `0.16.4` gelockt, Data Ingestion auf `0.15.15`; Vision Enrichment
+   besitzt keinen gelockten Ruff. Eine kanonische exakte Version muss in allen
+   vier Service-Toolchains und in CI gelten. CI darf die repositoryweite
+   Semantik nicht implizit von der zufällig im Backend-Lock aufgelösten Version
+   erben. Abnahme: Service-lokale und CI-Aufrufe melden dieselbe Version, alle
+   Locks sind konsistent und ein Contract fängt Versionsdrift ab.
+2. **`tests/ops` in den Lint-Scope aufnehmen.** Der neue PR-CI-Job führt die
+   Contracts aus, lintet das Verzeichnis aber nicht. Bestehende Findings wie
+   `I001` in `test_coverage_ratchet.py` werden regulär behoben, nicht ignoriert.
+   Abnahme: derselbe gelockte Ruff prüft die bisherigen vier Service-Scopes
+   plus `tests/ops`; CI und Quality-Loop sind grün und ein Contract verhindert
+   ein erneutes Herausfallen des Verzeichnisses.
+3. **`VITE_ADMIN_TOKEN`-Vertrag schließen.** Jeder `VITE_*`-Wert ist Teil des
+   öffentlich ausgelieferten Browser-Bundles und darf kein produktiv
+   wiederverwendbares Admin-Credential sein. S05 dokumentiert und implementiert
+   entweder einen ausdrücklich nicht geheimen Dev-only-Vertrag oder verlagert
+   produktive Autorisierung auf einen serverseitigen beziehungsweise
+   sitzungsgebundenen Pfad. Abnahme: Ein Produktionsbuild enthält kein
+   wiederverwendbares Admin-Credential; ein ausführbarer Contract belegt das.
+4. **Spatial-Default im lokalen Dev-Pfad angleichen.** Image, CI und Nightly sind
+   default-on, während ein Clean Clone bei `npm run dev` ohne lokale
+   Frontend-`.env` default-off ist; selbst `.env.example` nennt den Schalter
+   derzeit nicht. Abnahme: Der versionierte Dev-Vertrag dokumentiert den Wert
+   und ein Clean-Clone-Dev-Start erhält ohne ungetracktes Host-Artefakt denselben
+   Default `true`. Ein Eintrag nur in `.env.example` genügt dafür nur, wenn der
+   unterstützte Bootstrap ihn deterministisch übernimmt; die Parität wird per
+   Contract geprüft.
 
 ### SPEC
 

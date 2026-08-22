@@ -16,6 +16,7 @@ FRONTEND_COVERAGE="$LOG_DIR/frontend-coverage-summary-$STAMP.json"
 INTELLIGENCE_COVERAGE="$LOG_DIR/intelligence-coverage-$STAMP.json"
 INGESTION_COVERAGE="$LOG_DIR/data-ingestion-coverage-$STAMP.json"
 VISION_COVERAGE="$LOG_DIR/vision-enrichment-coverage-$STAMP.json"
+FRONTEND_SPATIAL_SCOPE_ENABLED="${VITE_SPATIAL_SCOPE_ENABLED:-true}"
 COVERAGE_REPORTS=(
   "$BACKEND_COVERAGE"
   "$FRONTEND_COVERAGE"
@@ -112,36 +113,41 @@ fi
 section "Git"
 run_cmd "$ROOT" git status --short
 
+section "Backend Environment"
+run_cmd "$ROOT/services/backend" uv sync --locked --all-extras
+
+section "Ops Contracts"
+run_cmd "$ROOT/services/backend" uv run pytest ../../tests/ops -q
+
 section "Backend"
-run_cmd "$ROOT/services/backend" uv sync --all-extras
-run_cmd "$ROOT/services/backend" uv run --with pytest-cov pytest --cov=app --cov-report=term-missing "--cov-report=json:$BACKEND_COVERAGE" --cov-fail-under=0
+run_cmd "$ROOT/services/backend" uv run pytest --cov=app --cov-report=term-missing "--cov-report=json:$BACKEND_COVERAGE" --cov-fail-under=0
 check_coverage backend coverage.py "$BACKEND_COVERAGE"
 run_cmd "$ROOT/services/backend" uv run ruff check app/
 run_cmd "$ROOT/services/backend" uv run mypy app/
 
 section "Frontend"
-run_cmd "$ROOT/services/frontend" npm install
+run_cmd "$ROOT/services/frontend" npm ci
 run_cmd "$ROOT/services/frontend" npm run lint
 run_cmd "$ROOT/services/frontend" npm run type-check
 run_cmd "$ROOT/services/frontend" npm test
 run_cmd "$ROOT/services/frontend" npm run coverage
 run_cmd "$ROOT" cp "$ROOT/services/frontend/coverage/coverage-summary.json" "$FRONTEND_COVERAGE"
 check_coverage frontend vitest-summary "$FRONTEND_COVERAGE"
-run_cmd "$ROOT/services/frontend" npm run build
+run_cmd "$ROOT/services/frontend" env "VITE_SPATIAL_SCOPE_ENABLED=$FRONTEND_SPATIAL_SCOPE_ENABLED" npm run build
 
 section "Intelligence"
-run_cmd "$ROOT/services/intelligence" uv sync --all-extras
-run_cmd "$ROOT/services/intelligence" uv run --with pytest-cov pytest --cov=agents --cov=codebook --cov=config --cov=extraction --cov=graph --cov=main --cov=rag --cov=scripts --cov-report=term-missing "--cov-report=json:$INTELLIGENCE_COVERAGE" --cov-fail-under=0
+run_cmd "$ROOT/services/intelligence" uv sync --locked --all-extras
+run_cmd "$ROOT/services/intelligence" uv run pytest --cov=agents --cov=codebook --cov=config --cov=extraction --cov=graph --cov=main --cov=rag --cov=scripts --cov-report=term-missing "--cov-report=json:$INTELLIGENCE_COVERAGE" --cov-fail-under=0
 check_coverage intelligence coverage.py "$INTELLIGENCE_COVERAGE"
 
 section "Data Ingestion"
-run_cmd "$ROOT/services/data-ingestion" uv sync --all-extras
-run_cmd "$ROOT/services/data-ingestion" uv run --with pytest-cov pytest --cov=canonicalize --cov=config --cov=feeds --cov=gdelt_raw --cov=graph_integrity --cov=infra_atlas --cov=migrations --cov=nlm_ingest --cov=pipeline --cov=qdrant_doctor --cov=scheduler --cov=suv_structured --cov-report=term-missing "--cov-report=json:$INGESTION_COVERAGE" --cov-fail-under=0
+run_cmd "$ROOT/services/data-ingestion" uv sync --locked --all-extras
+run_cmd "$ROOT/services/data-ingestion" uv run pytest --cov=canonicalize --cov=config --cov=feeds --cov=gdelt_raw --cov=graph_integrity --cov=infra_atlas --cov=migrations --cov=nlm_ingest --cov=pipeline --cov=qdrant_doctor --cov=scheduler --cov=suv_structured --cov-report=term-missing "--cov-report=json:$INGESTION_COVERAGE" --cov-fail-under=0
 check_coverage data-ingestion coverage.py "$INGESTION_COVERAGE"
 
 section "Vision Enrichment"
-run_cmd "$ROOT/services/vision-enrichment" uv sync --all-extras
-run_cmd "$ROOT/services/vision-enrichment" uv run --with pytest-cov pytest --cov=config --cov=consumer --cov=main --cov=qdrant_schema --cov=vision --cov-report=term-missing "--cov-report=json:$VISION_COVERAGE" --cov-fail-under=0
+run_cmd "$ROOT/services/vision-enrichment" uv sync --locked --all-extras
+run_cmd "$ROOT/services/vision-enrichment" uv run pytest --cov=config --cov=consumer --cov=main --cov=qdrant_schema --cov=vision --cov-report=term-missing "--cov-report=json:$VISION_COVERAGE" --cov-fail-under=0
 check_coverage vision-enrichment coverage.py "$VISION_COVERAGE"
 
 section "Smoke"

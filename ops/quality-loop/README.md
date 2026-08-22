@@ -5,11 +5,13 @@ executes service checks from each service directory, matching `AGENTS.md`.
 
 ## What It Runs
 
-- Backend: `uv sync --all-extras`, pytest with production coverage, Ruff, mypy.
-- Frontend: `npm install`, lint, type-check, tests, production coverage, build.
-- Intelligence: `uv sync --all-extras`, pytest with production coverage.
-- Data ingestion: `uv sync --all-extras`, pytest with production coverage.
-- Vision enrichment: `uv sync --all-extras`, pytest with production coverage.
+- Backend environment: `uv sync --locked --all-extras` before any Backend-managed test.
+- Ops contracts: root `tests/ops` via that freshly synced Backend environment.
+- Backend: pytest with production coverage, Ruff, mypy.
+- Frontend: `npm ci`, lint, type-check, tests, production coverage, build.
+- Intelligence: `uv sync --locked --all-extras`, pytest with production coverage.
+- Data ingestion: `uv sync --locked --all-extras`, pytest with production coverage.
+- Vision enrichment: `uv sync --locked --all-extras`, pytest with production coverage.
 - Smoke: `./odin.sh smoke`.
 
 Coverage gates default to ratchet mode. The loop compares each service against

@@ -1,13 +1,14 @@
 FROM python:3.12-slim
 
 WORKDIR /app
+ENV PATH="/app/.venv/bin:$PATH"
 
-# Install uv for fast dependency resolution
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.10.0 /uv /usr/local/bin/uv
 
-COPY pyproject.toml .
-RUN uv sync --no-dev
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
 
 COPY . .
+RUN uv sync --locked --no-dev
 
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uv", "run", "--no-sync", "python", "main.py"]

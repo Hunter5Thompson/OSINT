@@ -2,7 +2,6 @@ import os
 import re
 import subprocess
 import sys
-import sysconfig
 import tomllib
 import zipfile
 from pathlib import Path
@@ -106,11 +105,9 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     assert 'ENV EVENT_CODEBOOK_PATH="/app/runtime_contracts/event_codebook.yaml"' in dockerfile
     assert "RUN uv sync --locked --no-dev --no-install-project" in dockerfile
     assert "RUN uv sync --locked --no-dev" in dockerfile
-    # Runtime entrypoint must use the built venv python directly — never `uv run`,
-    # which re-resolves and would pull dev deps (ruff/duckdb/...) at container start
-    # and can fail offline.
-    assert 'CMD ["python", "scheduler.py"]' in dockerfile
-    assert "uv run" not in dockerfile
+    # Runtime may invoke uv only in explicit no-sync mode, which uses the built
+    # environment without resolving or downloading anything at container start.
+    assert 'CMD ["uv", "run", "--no-sync", "python", "scheduler.py"]' in dockerfile
     assert "COPY . ." not in dockerfile
     assert "COPY services/data-ingestion/migrations/ migrations/" not in dockerfile
 
@@ -169,14 +166,17 @@ def test_built_wheel_imports_infra_atlas_with_identity_but_without_compiler(
     environment = os.environ.copy()
     environment.pop("PYTHONHOME", None)
     environment.pop("PYTHONPATH", None)
-    purelib = sysconfig.get_path("purelib")
+    dependency_paths = tuple(
+        path for path in sys.path if Path(path).name == "site-packages"
+    )
+    assert dependency_paths
     isolated_import = "\n".join(
         (
             "import importlib.util",
             "import pathlib",
             "import sys",
             f"sys.path.insert(0, {str(installed)!r})",
-            f"sys.path.append({purelib!r})",
+            *(f"sys.path.append({path!r})" for path in dependency_paths),
             "import infra_atlas.build_country_almanac as almanac",
             "import infra_atlas.cli as infra_cli",
             "import spatial_catalog.identity as identity",
@@ -219,8 +219,16 @@ def test_compose_builds_data_ingestion_images_from_repo_root():
         )
 
 
-def test_agents_documents_deployment_lock_exception():
+def test_agents_documents_deployment_locks_and_frozen_installs():
     agents = (REPO_ROOT / "AGENTS.md").read_text()
 
-    assert "except" in agents
-    assert "services/data-ingestion/uv.lock" in agents
+    for lock in (
+        "services/backend/uv.lock",
+        "services/intelligence/uv.lock",
+        "services/data-ingestion/uv.lock",
+        "services/vision-enrichment/uv.lock",
+        "services/frontend/package-lock.json",
+    ):
+        assert lock in agents
+    assert "uv sync --locked --all-extras" in agents
+    assert "npm ci" in agents

@@ -23,6 +23,17 @@ class QualityLoopTests(unittest.TestCase):
     def test_quality_loop_service_executes_repo_script_with_ceiling(self) -> None:
         service = (OPS_DIR / "odin-quality-loop.service").read_text()
 
+        self.assertIn("User=deadpool-ultra", service)
+        self.assertIn("Group=deadpool-ultra", service)
+        self.assertIn("Environment=HOME=/home/deadpool-ultra", service)
+        self.assertIn(
+            "Environment=PATH=/home/deadpool-ultra/.local/bin:"
+            "/home/deadpool-ultra/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
+            service,
+        )
+        self.assertNotIn("/.nvm/versions/node/", service)
+        self.assertNotIn("User=root", service)
+        self.assertNotIn("Group=root", service)
         self.assertIn("Type=oneshot", service)
         self.assertIn("WorkingDirectory=/home/deadpool-ultra/ODIN/OSINT", service)
         self.assertIn(
@@ -37,6 +48,7 @@ class QualityLoopTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             env = os.environ.copy()
+            env["ODIN_REPO_ROOT"] = str(ROOT)
             env["ODIN_QUALITY_LOOP_DRY_RUN"] = "1"
             env["ODIN_QUALITY_LOG_DIR"] = str(tmp_path)
             env["ODIN_QUALITY_STAMP"] = "test"
@@ -54,9 +66,22 @@ class QualityLoopTests(unittest.TestCase):
             self.assertIn("ODIN Quality Loop test", output)
             self.assertIn("Coverage mode: ratchet", output)
             self.assertIn("DRY RUN: no commands will be executed", output)
+            backend_environment = output.index("## Backend Environment")
+            backend_sync = output.index("uv sync --locked --all-extras")
+            ops_contracts = output.index("## Ops Contracts")
+            ops_pytest = output.index("uv run pytest ../../tests/ops -q")
+            backend = output.index("\n## Backend\n")
+            self.assertLess(backend_environment, ops_contracts)
+            self.assertLess(backend_sync, ops_pytest)
+            self.assertLess(ops_contracts, backend)
+            self.assertIn(
+                "$ cd services/backend && uv run pytest ../../tests/ops -q",
+                output,
+            )
             self.assertIn("services/backend", output)
-            self.assertIn("uv sync --all-extras", output)
-            self.assertIn("uv run --with pytest-cov pytest --cov=app", output)
+            self.assertIn("uv sync --locked --all-extras", output)
+            self.assertIn("uv run pytest --cov=app", output)
+            self.assertNotIn("uv run --with", output)
             self.assertIn("--cov-report=json:", output)
             self.assertNotIn("--cov-fail-under=100", output)
             self.assertIn("check_coverage_ratchet.py", output)
@@ -64,7 +89,7 @@ class QualityLoopTests(unittest.TestCase):
             self.assertIn("uv run ruff check app/", output)
             self.assertIn("uv run mypy app/", output)
             self.assertIn("services/frontend", output)
-            self.assertIn("npm install", output)
+            self.assertIn("npm ci", output)
             self.assertIn("npm run lint", output)
             self.assertIn("npm run type-check", output)
             self.assertIn("npm test", output)
@@ -88,6 +113,7 @@ class QualityLoopTests(unittest.TestCase):
                 output,
             )
             self.assertIn("./odin.sh smoke", output)
+            self.assertEqual(output.rfind("## "), output.index("## Smoke"))
 
             report = tmp_path / "report-test.md"
             self.assertTrue(report.exists())
@@ -112,6 +138,30 @@ class QualityLoopTests(unittest.TestCase):
         ):
             self.assertIn(f'"{service}"', baseline)
 
+    def test_default_ingestion_suite_excludes_live_spark_smoke(self) -> None:
+        ingestion = ROOT / "services" / "data-ingestion"
+
+        result = subprocess.run(
+            [
+                "uv",
+                "run",
+                "--locked",
+                "pytest",
+                "--collect-only",
+                "-q",
+                "tests/integration/test_spark_smoke.py",
+            ],
+            cwd=ingestion,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual(result.returncode, 5)
+        self.assertNotIn("test_models_endpoint_lists_expected_model", result.stdout)
+        self.assertNotIn("test_real_extraction_call", result.stdout)
+        self.assertIn("deselected", result.stdout)
+
     def test_quality_loop_does_not_publish_failed_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -122,6 +172,7 @@ class QualityLoopTests(unittest.TestCase):
                 "{broken", encoding="utf-8"
             )
             env = os.environ.copy()
+            env["ODIN_REPO_ROOT"] = str(ROOT)
             env["ODIN_QUALITY_LOOP_DRY_RUN"] = "1"
             env["ODIN_QUALITY_LOG_DIR"] = str(tmp_path)
             env["ODIN_QUALITY_STAMP"] = "test"
