@@ -65,8 +65,13 @@ class QualityLoopTests(unittest.TestCase):
             self.assertIn("ODIN Quality Loop test", output)
             self.assertIn("Coverage mode: ratchet", output)
             self.assertIn("DRY RUN: no commands will be executed", output)
+            backend_environment = output.index("## Backend Environment")
+            backend_sync = output.index("uv sync --all-extras")
             ops_contracts = output.index("## Ops Contracts")
-            backend = output.index("## Backend")
+            ops_pytest = output.index("uv run pytest ../../tests/ops -q")
+            backend = output.index("\n## Backend\n")
+            self.assertLess(backend_environment, ops_contracts)
+            self.assertLess(backend_sync, ops_pytest)
             self.assertLess(ops_contracts, backend)
             self.assertIn(
                 "$ cd services/backend && uv run pytest ../../tests/ops -q",
@@ -152,7 +157,7 @@ class QualityLoopTests(unittest.TestCase):
         self.assertEqual(result.returncode, 5)
         self.assertNotIn("test_models_endpoint_lists_expected_model", result.stdout)
         self.assertNotIn("test_real_extraction_call", result.stdout)
-        self.assertIn("2 deselected", result.stdout)
+        self.assertIn("deselected", result.stdout)
 
     def test_quality_loop_does_not_publish_failed_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

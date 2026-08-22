@@ -112,11 +112,13 @@ fi
 section "Git"
 run_cmd "$ROOT" git status --short
 
+section "Backend Environment"
+run_cmd "$ROOT/services/backend" uv sync --all-extras
+
 section "Ops Contracts"
 run_cmd "$ROOT/services/backend" uv run pytest ../../tests/ops -q
 
 section "Backend"
-run_cmd "$ROOT/services/backend" uv sync --all-extras
 run_cmd "$ROOT/services/backend" uv run --with pytest-cov pytest --cov=app --cov-report=term-missing "--cov-report=json:$BACKEND_COVERAGE" --cov-fail-under=0
 check_coverage backend coverage.py "$BACKEND_COVERAGE"
 run_cmd "$ROOT/services/backend" uv run ruff check app/

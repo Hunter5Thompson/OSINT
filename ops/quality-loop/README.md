@@ -5,8 +5,9 @@ executes service checks from each service directory, matching `AGENTS.md`.
 
 ## What It Runs
 
-- Ops contracts: root `tests/ops` via the managed Backend `uv` environment.
-- Backend: `uv sync --all-extras`, pytest with production coverage, Ruff, mypy.
+- Backend environment: `uv sync --all-extras` before any Backend-managed test.
+- Ops contracts: root `tests/ops` via that freshly synced Backend environment.
+- Backend: pytest with production coverage, Ruff, mypy.
 - Frontend: `npm install`, lint, type-check, tests, production coverage, build.
 - Intelligence: `uv sync --all-extras`, pytest with production coverage.
 - Data ingestion: `uv sync --all-extras`, pytest with production coverage.
