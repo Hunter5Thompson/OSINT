@@ -49,7 +49,7 @@ Vector DB:
 Graph DB:
   Neo4j:      5-community
   Ports:      7474 (HTTP), 7687 (Bolt)
-  Auth:       neo4j/odin_yggdrasil
+  Auth:       neo4j/${NEO4J_PASSWORD} (required)
 
 Cache:
   Redis:      Port 6379
@@ -225,7 +225,7 @@ neo4j:
     - "7474:7474"
     - "7687:7687"
   environment:
-    NEO4J_AUTH: neo4j/odin_yggdrasil
+    NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
     NEO4J_PLUGINS: '["apoc"]'
     NEO4J_dbms_memory_heap_max__size: 1G
   volumes:
@@ -1651,7 +1651,8 @@ Observation-Producer.
 # ══════════════════════════════════════════
 # TASK-119: Operational Trust Chain Hardening
 # ══════════════════════════════════════════
-# Status: IN PROGRESS — S01-S02 DONE ✅; S03 NEXT | Priorität: P0 → P2
+# Status: IN PROGRESS — S01-S02 DONE ✅; S03 REVIEW-FIXES VERIFIED,
+#         HOST APPLY + RE-REVIEW PENDING | Priorität: P0 → P2
 #
 # Design-Spec:
 #   docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md
@@ -1668,8 +1669,9 @@ Observation-Producer.
 # Slices:
 #   S01 [P0] [DONE ✅] Kanonischer Munin Runtime Model Contract
 #   S02 [P0] [DONE ✅ 2026-08-22] Hermetischer Quality-Loop
-#   S03 [P0] [NEXT] Local Exposure Floor
-#   S04 [P1] [REVIEW COMPLETE 2026-08-22; CI/MERGE PENDING] Locked Dependency Contract
+#   S03 [P0] [REVIEW COMPLETE 2026-08-22; CI/MERGE + RECREATE PENDING]
+#       Local Exposure Floor
+#   S04 [P1] [DONE ✅ 2026-08-22] Locked Dependency Contract
 #   S05 [P1] [REVIEW BACKLOG REFINED 2026-08-22] Runtime Provenance, Deploy und Drift
 #   S06 [P1] Evidence Hygiene am Codec-Seam
 #   S07 [P1] Graph Write/Read Contract und Integritätsvokabular

@@ -6,7 +6,7 @@ services:
     image: vllm/vllm-openai:latest
     profiles: ["ingestion"]
     ports:
-      - "8000:8000"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:8000:8000"
     environment:
       - VLLM_FLASH_ATTN_VERSION=2
     volumes:
@@ -43,7 +43,7 @@ services:
     image: vllm/vllm-openai:latest
     profiles: ["interactive"]
     ports:
-      - "8000:8000"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:8000:8000"
     environment:
       - VLLM_FLASH_ATTN_VERSION=2
     volumes:
@@ -84,7 +84,7 @@ services:
     image: vllm/vllm-omni:v0.18.0
     profiles: ["notebooklm"]
     ports:
-      - "8010:8000"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:8010:8000"
     volumes:
       - ${VOXTRAL_MODEL_PATH:-/home/deadpool-ultra/Voxtral/model}:/models/voxtral:ro
     command: >
@@ -120,7 +120,7 @@ services:
   tei-embed:
     image: ghcr.io/huggingface/text-embeddings-inference:120-1.9.3
     ports:
-      - "8001:80"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:8001:80"
     volumes:
       - tei-embed-cache:/data
     command: --model-id Qwen/Qwen3-Embedding-0.6B --dtype float16
@@ -148,7 +148,7 @@ services:
       context: ./infra/docker/reranker
       dockerfile: Dockerfile
     ports:
-      - "8002:80"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:8002:80"
     volumes:
       - tei-rerank-cache:/data
     environment:
@@ -178,10 +178,10 @@ services:
   neo4j:
     image: neo4j:5-community
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:7474:7474"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:7687:7687"
     environment:
-      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-odin1234}
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_memory_heap_max__size: 1G
     volumes:
@@ -201,7 +201,7 @@ services:
       context: ./services/backend
       dockerfile: Dockerfile
     ports:
-      - "8080:8000"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:8080:8000"
     env_file: ${ODIN_ENV_FILE:-.env}
     environment:
       - REDIS_URL=redis://redis:6379/0
@@ -233,7 +233,7 @@ services:
       context: ./services/intelligence
       dockerfile: Dockerfile
     ports:
-      - "8003:80"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:8003:80"
     env_file: ${ODIN_ENV_FILE:-.env}
     volumes:
       - ./services/backend/data/spatial:/app/data/spatial:ro
@@ -246,7 +246,7 @@ services:
       - TEI_RERANK_URL=http://tei-rerank:80
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=${NEO4J_USER:-neo4j}
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
     healthcheck:
       test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:80/health\")'"]
       interval: 15s
@@ -281,7 +281,7 @@ services:
       - NEO4J_URL=bolt://neo4j:7687
       - NEO4J_HTTP_URL=http://neo4j:7474
       - NEO4J_USER=${NEO4J_USER:-neo4j}
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
       - TELEGRAM_API_ID=${TELEGRAM_API_ID:-0}
       - TELEGRAM_API_HASH=${TELEGRAM_API_HASH:-}
       # GDELT raw-files ingestion config.
@@ -336,7 +336,7 @@ services:
       - NEO4J_URL=bolt://neo4j:7687
       - NEO4J_HTTP_URL=http://neo4j:7474
       - NEO4J_USER=${NEO4J_USER:-neo4j}
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
       - TELEGRAM_API_ID=${TELEGRAM_API_ID:-0}
       - TELEGRAM_API_HASH=${TELEGRAM_API_HASH:-}
       # GDELT raw-files ingestion config (mirrored from data-ingestion).
@@ -372,7 +372,7 @@ services:
     image: vllm/vllm-openai:latest
     profiles: ["vision"]
     ports:
-      - "8011:8000"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:8011:8000"
     volumes:
       - ${HF_HOME:-${HOME}/.cache/huggingface}:/root/.cache/huggingface
     deploy:
@@ -411,7 +411,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - NEO4J_URL=http://neo4j:7474
       - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-odin1234}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
       - QDRANT_URL=http://qdrant:6333
     depends_on:
       redis:
@@ -429,7 +429,7 @@ services:
       args:
         VITE_SPATIAL_SCOPE_ENABLED: ${VITE_SPATIAL_SCOPE_ENABLED:-true}
     ports:
-      - "5173:5173"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:5173:5173"
     volumes:
       - ./services/frontend/src:/app/src
     depends_on:
@@ -440,7 +440,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:6379:6379"
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
@@ -455,8 +455,8 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.13.2
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:6333:6333"
+      - "${ODIN_BIND_HOST:-127.0.0.1}:6334:6334"
     volumes:
       - qdrant-data:/qdrant/storage
     environment:

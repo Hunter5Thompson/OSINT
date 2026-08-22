@@ -2,7 +2,8 @@
 
 **Datum:** 2026-07-11
 
-**Status:** IN EXECUTION — S01-S02 DONE, S03 NEXT
+**Status:** IN EXECUTION — S01-S02 + S04 DONE; S03 REVIEW COMPLETE,
+CI/MERGE + RECREATE PENDING
 
 **Design-Spec:**
 `docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md`
@@ -338,11 +339,33 @@ Exit-Code im PR dokumentieren.
   `deadpool-ultra`, nicht Root. Reports/Handoffs lagen außerhalb des Repositories
   unter `/tmp/odin-task119-s02-*`.
 
+### REVIEW-FOLLOW-UP — 2026-08-22
+
+- RED: Der Review reproduzierte auf einer frischen Backend-Umgebung, dass
+  `tests/ops` vor `uv sync --all-extras` lief. Weil Pytest ein optionales
+  Backend-Extra ist, endete der Nightly-Loop dadurch bereits in seiner ersten
+  Testsuite. Die neue Reihenfolge-Gegenprobe war vor dem Fix rot.
+- GREEN: Eine explizite Sektion `Backend Environment` synchronisiert nun die
+  Backend-Extras vor `Ops Contracts`; die Backend-Suite verwendet anschließend
+  dieselbe Umgebung ohne zweiten Sync. Die Spark-Deselection-Gegenprobe prüft
+  weiter den Ausschluss der Live-Tests, aber nicht mehr eine fragile exakte
+  Anzahl.
+- VERIFY: In einer neu erzeugten externen Umgebung unter `/tmp` installierte
+  `uv sync --all-extras` Pytest frisch; anschließend liefen alle `27 tests/ops`
+  grün. Der vollständige Quality-Loop war ebenfalls PASS.
+- OFFEN: Der versionsgebundene NVM-Pfad der systemd-Unit bleibt als LOW für S04
+  offen; S04 vereinheitlicht den Node-22-/Locked-Dependency-Vertrag. Der eigene
+  PR-CI-Job für `tests/ops` bleibt ebenfalls expliziter S04-Umfang.
+
 **Commit:** `fix(ops): isolate nightly quality gate from host environment`
+
+**Review-Fix-Commit:** `fix(ops): sync backend before ops contracts`
 
 ---
 
 ## S03 — Local Exposure Floor
+
+**Status:** REVIEW COMPLETE 2026-08-22 — CI/MERGE + RECREATE PENDING
 
 **Priorität:** P0
 
@@ -426,13 +449,111 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 - ein explizites Nicht-Loopback-Binding erzeugt einen sichtbaren Doctor-Fehler,
   solange die internen Dienste keine Auth besitzen
 
+### RECORD — 2026-08-22 (CODE + HOST MODES VERIFIED; DEPLOY OPEN)
+
+- RED: Der neue Contract startete mit `5 failed, 1 passed`: kein gerenderter
+  `host_ip`, kein required Neo4j-Secret, kein Doctor-Dateimodus-Gate und schwache
+  Beispielwerte. Ein nachgeschärfter Temp-Repo-Test bewies separat rot, dass der
+  Doctor verschachtelte Service-`.env`-Dateien noch nicht fand.
+- GREEN: Alle 13 publizierten Ports über die fünf Profile verwenden genau
+  `${ODIN_BIND_HOST:-127.0.0.1}`. Fünf Neo4j-Verwendungen verlangen
+  `NEO4J_PASSWORD` per required interpolation. Der Doctor lehnt Nicht-Loopback
+  ohne Override ab und prüft die primäre sowie alle verschachtelten Repository-
+  `.env`-Dateien auf Gruppen-/Weltrechte, ohne Inhalte auszugeben.
+- VERIFY: S03-Contract `7 passed`, vollständige Ops-Suite `23 passed`,
+  `bash -n` grün und hermetischer Compose-Render aller Profile grün. Der Full-
+  Quality-Loop war PASS: Backend `585 passed`, Frontend `625 passed`,
+  Intelligence `484 passed`, Data Ingestion `1445 passed, 1 skipped,
+  17 deselected`, Vision Enrichment `22 passed`; alle Coverage-Ratchets grün;
+  Smoke `14 passed, 0 failed, 1 skipped`. `shellcheck` war auf dem Host nicht
+  installiert und wurde deshalb nicht als ausgeführtes Gate gewertet.
+- NEGATIVE GATES: Ein Compose-Render ohne `NEO4J_PASSWORD` endet non-zero; ein
+  explizites `ODIN_BIND_HOST=192.0.2.10` rendert korrekt, wird vom Doctor aber als
+  Exposure unauthentifizierter Dienste abgelehnt. Container-DNS blieb auf
+  `redis`, `qdrant`, `neo4j` und `vllm` unverändert.
+- HOST-BASELINE VOR APPLY: Die existierenden Dateien `.env`,
+  `services/backend/.env` und `services/frontend/.env` im kanonischen Checkout
+  besaßen bei der ersten Verifikation Modus `664`; der neue Doctor endete deshalb
+  erwartungsgemäß non-zero. Zu diesem Zeitpunkt wurden weder `chmod`,
+  Container-Neustart, Profilwechsel noch Deployment ausgeführt.
+
 **Commit:** `fix(ops): bind ODIN host ports to loopback by default`
+
+### REVIEW-CORRECTION — 2026-08-22
+
+- REVIDIERTER VORZUSTAND: Die erste S03-Verifikation war nicht ausreichend.
+  Mit `ODIN_BIND_HOST=0.0.0.0` nur in der ausgewählten `.env` renderte Compose
+  alle betroffenen Host-Ports weit, während der Doctor fälschlich den Shell-
+  Default `127.0.0.1` prüfte. Außerdem war der Modus-`600`-Test an das echte
+  Repository gekoppelt. Die nachgeschärfte fokussierte Suite startete mit
+  `9 failed, 8 passed`.
+- GREEN: `odin.sh` besitzt nun eine gemeinsame globale Auswahl
+  `--env-file PATH`; jeder Compose-Lifecycle-Aufruf erhält exakt diese Datei.
+  Der Doctor lässt Compose selbst den effektiven Bind-Host aus derselben Datei
+  und mit derselben Shell-Priorität auflösen. Exposure-, Dateimodus- und
+  Secret-Precondition-Fehler werden gesammelt statt beim ersten Fehler
+  abzubrechen.
+- HERMETIK + SECRET-SUCHE: Doctor-Tests kopieren Script und Compose-Dateien in
+  ein temporäres Repository. Die Suche umfasst `.env`, `.env.local`,
+  `.env.spark` und andere `.env.*`-Varianten, ausgenommen `.env.example`;
+  `.gitignore` schützt dieselben Varianten vor versehentlichem Tracking.
+- RECOVERY: Start-, Swap- und profilbezogene Up-Kommandos prüfen ein fehlendes
+  oder leeres `NEO4J_PASSWORD` freundlich vor dem ersten Lifecycle-Eingriff.
+  `ps`, `logs`, `down`, `stop`, `rm`, `exec` und der Doctor-Config-Check bleiben
+  bei verlorener Env-Datei über einen nicht geheimen Recovery-Sentinel nutzbar.
+  Eine interne Allowlist verbietet diesem Pfad ausdrücklich `up`, `start`,
+  `run`, `create`, `restart`, `build` und `pull`; der Sentinel kann keinen
+  Container starten. Die required Compose-Interpolation bleibt daher als
+  Schutz für direkte Startversuche erhalten.
+- START-GATE RE-REVIEW: Ein neuer Regressionstest belegte rot, dass
+  `up interactive` bei effektivem `ODIN_BIND_HOST=0.0.0.0` mit Exit `0` den
+  Compose-Start erreichte, obwohl der Doctor denselben Wert korrekt ablehnte.
+  `require_start_configuration` prüft den über Compose aufgelösten Bind-Host
+  jetzt vor dem Passwort. Der grüne Contract deckt alle vier Startpfade `up`,
+  `swap`, `nlm up` und `vision up` ab und beweist, dass keiner davon den
+  Compose-`up`-Aufruf erreicht.
+- VERIFY: S03 fokussiert `11 passed`; vollständige Ops-Suite `27 passed`;
+  `bash -n`, Test-Ruff und hermetischer Compose-Render grün. Ein reales
+  `./odin.sh --env-file <missing> ps` gegen das eigene leere Probeprojekt endete
+  mit Exit `0`. Der Full-Quality-Loop war PASS: Backend `585 passed`, Frontend
+  `625 passed`, Intelligence `484 passed`, Data Ingestion `1445 passed,
+  1 skipped, 17 deselected`, Vision Enrichment `22 passed`; alle Coverage-
+  Ratchets grün; Smoke `14 passed, 0 failed, 1 skipped`. Handoff:
+  `/tmp/odin-task119-review-full/handoff-20260822-review.md`.
+- VERIFY NACH START-GATE-FIX: S03 fokussiert `12 passed`; vollständige
+  Ops-Suite `28 passed`; Test-Ruff und `bash -n` grün. Der erneut vollständig
+  ausgeführte Quality-Loop war PASS: Backend `585 passed`, Frontend
+  `625 passed`, Intelligence `484 passed`, Data Ingestion `1445 passed,
+  1 skipped, 17 deselected`, Vision Enrichment `22 passed`; alle Coverage-
+  Ratchets grün; read-only Smoke `14 passed, 0 failed, 1 skipped`. Handoff:
+  `/tmp/odin-task119-s03-start-gate/handoff-20260822-start-gate.md`.
+- HOST-APPLY: Nach expliziter Freigabe wurden ausschließlich die drei regulären,
+  `deadpool-ultra` gehörenden Secret-Dateien `.env`, `services/backend/.env` und
+  `services/frontend/.env` im kanonischen Checkout von `664` auf `600` gesetzt.
+  Der anschließende Scan mit derselben `.env`/`.env.*`-Auswahl wie der Doctor
+  fand genau diese drei Dateien und bestätigte für alle Modus `600`; Inhalte
+  wurden weder gelesen noch ausgegeben.
+- FINAL-REVIEW: Ein Docker-Shim fing jeden Containerstart vor der Ausführung ab.
+  Mit `ODIN_BIND_HOST=0.0.0.0` blockierten `up interactive`, `up ingestion`,
+  `swap interactive`, `nlm up` und `vision up` jeweils vor Compose mit Exit `1`.
+  Mit Loopback erreichten `up interactive` und `vision up` den Shim und endeten
+  dort erwartungsgemäß mit Exit `97`; das Gate overblockt den sicheren Pfad
+  damit nicht. Es wurde kein Container gestartet und der Review-Worktree blieb
+  clean. Der unabhängige Re-Review meldete keine offenen Blocker.
+- WEITERHIN OFFEN: Die laufenden Container wurden nicht neu erstellt und
+  lauschen noch auf `0.0.0.0/[::]`. PR-CI, Merge und erst danach das
+  kontrollierte Recreate samt Loopback-Nachweis bleiben offen. S03 ist bis zum
+  Runtime-Nachweis ausdrücklich nicht DONE.
+
+**Review-Fix-Commit:** `fix(ops): align doctor with compose environment`
+
+**Start-Gate-Fix-Commit:** `fix(ops): enforce loopback before service start`
 
 ---
 
 ## S04 — Locked Dependency Contract
 
-**Status:** REVIEW COMPLETE 2026-08-22 — CI/MERGE PENDING
+**Status:** DONE — MERGED ON MAIN 2026-08-22
 
 **Priorität:** P1
 
