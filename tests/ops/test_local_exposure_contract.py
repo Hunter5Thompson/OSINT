@@ -390,6 +390,39 @@ def test_up_rejects_blank_neo4j_password_before_compose_start(tmp_path: Path) ->
     assert " up " not in f" {log} "
 
 
+def test_start_commands_reject_non_loopback_bind_before_compose_start(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    _copy_odin_repository(repository)
+    env_file = repository / ".env"
+    env_file.write_text(
+        "ODIN_BIND_HOST=0.0.0.0\nNEO4J_PASSWORD=must-not-be-printed\n",
+        encoding="utf-8",
+    )
+    env_file.chmod(0o600)
+
+    commands = (
+        ("up", "interactive"),
+        ("swap", "interactive"),
+        ("nlm", "up"),
+        ("vision", "up"),
+    )
+    for index, command in enumerate(commands):
+        result, log = _run_odin_with_fake_compose(
+            repository,
+            tmp_path / f"runtime-{index}",
+            ["--env-file", str(env_file), *command],
+            preflight_bind_host="0.0.0.0",
+            preflight_secret_configured=True,
+        )
+
+        assert result.returncode != 0, command
+        assert "unauthenticated services require loopback" in result.stdout
+        assert " up " not in f" {log} ", command
+        assert "must-not-be-printed" not in result.stdout + result.stderr + log
+
+
 def test_up_uses_selected_env_file_for_every_compose_call(tmp_path: Path) -> None:
     repository = tmp_path / "repository"
     _copy_odin_repository(repository)

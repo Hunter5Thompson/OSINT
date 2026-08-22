@@ -252,6 +252,10 @@ print(environment.get("NEO4J_CONFIGURED", ""))
 }
 
 require_start_configuration() {
+  if ! check_bind_host "$ENV_FILE"; then
+    echo "Refusing to start or swap services until the selected environment is valid."
+    return 1
+  fi
   if ! check_neo4j_password "$ENV_FILE"; then
     echo "Refusing to start or swap services until the selected environment is valid."
     return 1

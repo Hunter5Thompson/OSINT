@@ -365,8 +365,8 @@ Exit-Code im PR dokumentieren.
 
 ## S03 — Local Exposure Floor
 
-**Status:** IN PROGRESS — REVIEW-FIXES + HOST PERMISSIONS VERIFIED; RE-REVIEW,
-MERGE + RECREATE PENDING
+**Status:** IN PROGRESS — START-GATE REVIEW-BLOCKER VERIFIED FIXED; FINAL
+RE-REVIEW, MERGE + RECREATE PENDING
 
 **Priorität:** P0
 
@@ -506,6 +506,13 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
   `run`, `create`, `restart`, `build` und `pull`; der Sentinel kann keinen
   Container starten. Die required Compose-Interpolation bleibt daher als
   Schutz für direkte Startversuche erhalten.
+- START-GATE RE-REVIEW: Ein neuer Regressionstest belegte rot, dass
+  `up interactive` bei effektivem `ODIN_BIND_HOST=0.0.0.0` mit Exit `0` den
+  Compose-Start erreichte, obwohl der Doctor denselben Wert korrekt ablehnte.
+  `require_start_configuration` prüft den über Compose aufgelösten Bind-Host
+  jetzt vor dem Passwort. Der grüne Contract deckt alle vier Startpfade `up`,
+  `swap`, `nlm up` und `vision up` ab und beweist, dass keiner davon den
+  Compose-`up`-Aufruf erreicht.
 - VERIFY: S03 fokussiert `11 passed`; vollständige Ops-Suite `27 passed`;
   `bash -n`, Test-Ruff und hermetischer Compose-Render grün. Ein reales
   `./odin.sh --env-file <missing> ps` gegen das eigene leere Probeprojekt endete
@@ -514,6 +521,13 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
   1 skipped, 17 deselected`, Vision Enrichment `22 passed`; alle Coverage-
   Ratchets grün; Smoke `14 passed, 0 failed, 1 skipped`. Handoff:
   `/tmp/odin-task119-review-full/handoff-20260822-review.md`.
+- VERIFY NACH START-GATE-FIX: S03 fokussiert `12 passed`; vollständige
+  Ops-Suite `28 passed`; Test-Ruff und `bash -n` grün. Der erneut vollständig
+  ausgeführte Quality-Loop war PASS: Backend `585 passed`, Frontend
+  `625 passed`, Intelligence `484 passed`, Data Ingestion `1445 passed,
+  1 skipped, 17 deselected`, Vision Enrichment `22 passed`; alle Coverage-
+  Ratchets grün; read-only Smoke `14 passed, 0 failed, 1 skipped`. Handoff:
+  `/tmp/odin-task119-s03-start-gate/handoff-20260822-start-gate.md`.
 - HOST-APPLY: Nach expliziter Freigabe wurden ausschließlich die drei regulären,
   `deadpool-ultra` gehörenden Secret-Dateien `.env`, `services/backend/.env` und
   `services/frontend/.env` im kanonischen Checkout von `664` auf `600` gesetzt.
@@ -526,6 +540,8 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
   nicht DONE.
 
 **Review-Fix-Commit:** `fix(ops): align doctor with compose environment`
+
+**Start-Gate-Fix-Commit:** `fix(ops): enforce loopback before service start`
 
 ---
 
