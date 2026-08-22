@@ -432,7 +432,7 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 
 ## S04 — Locked Dependency Contract
 
-**Status:** LOCALLY VERIFIED 2026-08-22 — REVIEW/CI/MERGE PENDING
+**Status:** REVIEW-KORREKTUREN LOKAL VERIFIZIERT 2026-08-22 — FINAL REVIEW/CI/MERGE PENDING
 
 **Priorität:** P1
 
@@ -442,7 +442,7 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
 
 **Invariant:** OT-04
 
-**Erwarteter Umfang:** vier Lockfiles, Gitignore/AGENTS, CI, vier Dockerfiles,
+**Erwarteter Umfang:** fünf Lockfiles, Gitignore/AGENTS, CI, fünf Dockerfiles,
 service-lokale Dockerignore-Regeln, Quality-Loop
 
 ### SPEC
@@ -461,6 +461,8 @@ Service-lokale Docker-Build-Kontexte schließen Host-`.venv`, `node_modules` und
 Caches aus. Ein gestarteter Container darf Dependencies weder synchronisieren
 noch aus dem Netz nachladen; Python-Entrypoints verwenden deshalb den beim Build
 erzeugten Environment-Zustand mit `uv run --no-sync`.
+`services/frontend/.env` ist dagegen ein absichtlicher Vite-Build-Input und darf
+ausschließlich öffentliche `VITE_*`-Werte enthalten.
 
 **Non-Goals:** ein Monorepo-Lockfile, Renovate/Dependabot, Base-Image-Digests,
 Dependency-Upgrades über das zur Lock-Erzeugung notwendige Maß hinaus.
@@ -471,11 +473,16 @@ Neu: `tests/ops/test_dependency_contract.py`
 
 - alle fünf Lockfiles existieren und sind von Git getrackt
 - CI enthält pro Service den Locked-Install
+- der Python-Lint-Job verwendet Ruff aus einer getrackten gelockten
+  Service-Umgebung und kein separates `uvx`-Environment
 - Dockerfiles kopieren den Lock vor dem Install und nutzen Locked-Modus
 - Service-Build-Kontexte schließen `.venv`, `node_modules` und Cache-Artefakte
   aus; Python-Container starten mit `uv run --no-sync`
 - Frontend-CI und Docker verwenden Node 22 + `npm ci`
+- der Frontend-Kontext erhält den öffentlichen Vite-Build-Input `.env`, und die
+  qualifizierte Cesium-Version ist im Manifest und Lock exakt fixiert
 - Quality-Loop verwendet dieselben Installkommandos
+- auch der verschachtelte Collection-Runner verwendet `uv run --locked`
 - ein eigener CI-Job führt `tests/ops` über die gelockte Backend-Testumgebung und
   die synthetische Compose-Environment-Fixture aus
 - der CI-Job führt `docker compose version` als harte Capability-Prüfung aus;
@@ -503,7 +510,10 @@ kein behaupteter Defekt.
   ergänzen und Python-Entrypoints auf `uv run --no-sync` setzen
 - `uv:latest` auf `uv:0.10.0` pinnen
 - Frontend auf Node 22 und `npm ci`
+- Frontend-`.env` als öffentlichen Vite-Build-Input erhalten und Cesium samt
+  Engine/Widgets auf den bereits qualifizierten Versionsstand fixieren
 - CI und Quality-Loop spiegeln dieselben Befehle
+- der repositoryweite Python-Lint läuft aus der gelockten Backend-Toolchain
 - CI-Job `test-ops-contracts` nutzt `services/backend/uv.lock`, führt
   `uv run pytest ../../tests/ops -q` aus und exportiert ausschließlich die
   synthetische Compose-Fixture; davor muss `docker compose version` erfolgreich
@@ -537,6 +547,8 @@ Build-Smoke für alle betroffenen Images durchführen.
 - CI, Docker und Nightly lösen keine neue Dependency-Version auf
 - ein App-Container lädt beim Start keine Dependencies nach und übernimmt keine
   Host-Environment-Artefakte in sein Image
+- der Frontend-Rebuild kompiliert den konfigurierten Spatial-Scope ein und
+  verwendet exakt den bereits qualifizierten Cesium-Versionssatz
 - der CI-Job `test-ops-contracts` führt alle bis dahin vorhandenen Root/Ops-
   Contracts automatisch und ohne Host-`.env` aus
 
@@ -579,8 +591,41 @@ Build-Smoke für alle betroffenen Images durchführen.
   `/home/deadpool-ultra/.local/bin`-Adapter, der auf dem auditierten Host Node
   `v22.23.1` und npm `10.9.8` bereitstellt; der Unit-Sync bleibt bewusst bis
   nach Review/Merge offen.
+- REVIEW-RED: Drei gezielte Regressionen belegten den ausgeschlossenen
+  Frontend-`.env`-Build-Input, den Cesium-Sprung von qualifiziertem `1.142.0`
+  auf Lock-Stand `1.144.0` und den unlocked verschachtelten Collection-Runner.
+  Der erweiterte Cesium-Contract blieb anschließend rot, bis auch Engine
+  `26.0.0` und Widgets `16.0.0` statt neuer Transitiven erzwungen wurden. Ein
+  weiterer gezielter RED-Test bestätigte, dass der Python-Lint mit einem
+  separaten `uvx`-Ruff `0.15.15` statt einer getrackten Service-Toolchain lief.
+- REVIEW-GREEN: Der Frontend-Kontext erhält `.env`, während `.env.*`,
+  `node_modules` und Build-Caches ausgeschlossen bleiben. Manifest, Overrides,
+  Lock und installierter Baum verwenden exakt Cesium `1.142.0`, Engine `26.0.0`
+  und Widgets `16.0.0`. Der Collection-Runner verwendet `uv run --locked`.
+  Der dynamische Drift-Test ist ausdrücklich als `uv`-Charakterisierung benannt;
+  separate Contracts erzwingen die tatsächliche Verdrahtung in CI, Docker und
+  Nightly. Der CI-Lint synchronisiert die Backend-Extras gelockt und führt den
+  Full-Service-Check mit dem dort gelockten Ruff `0.16.4` aus.
+- REVIEW-VERIFY: Die kombinierte Dependency-/Quality-Contract-Suite meldete
+  `36 passed`; die finale vollständige Ops-Suite einschließlich des zusätzlichen
+  CI-Lint-Contracts meldete `47 passed`. Der reale Full-Service-Lint war grün.
+  `npm ci`, ESLint, TypeScript und alle `625` Frontend-Tests waren grün. Zwei
+  ansonsten identische
+  Frontend-Builds mit ein- und ausgeschaltetem synthetischem Spatial-Flag
+  erzeugten unterschiedliche Main-Bundles; beide Images bestanden den
+  `--network none`-Smoke und enthielten im finalen Nginx-Layer keine `.env`.
+  Der finale vollständige Quality-Loop wiederholte Backend `585`, Frontend
+  `625`, Intelligence `484`, Data Ingestion `1445 passed, 1 skipped,
+  17 deselected` und Vision Enrichment `22` samt aller Ratchets grün. Der
+  read-only Live-Smoke meldete `14 passed, 0 failed, 1 skipped`; der Handoff
+  unter `/tmp/odin-task119-s04-final-osint/` trägt `Status: PASS`. Ein erster
+  identischer Lauf ohne explizites `COMPOSE_PROJECT_NAME=osint` fand wegen der
+  Worktree-Isolation keine Dienste und endete ausschließlich im Smoke; er blieb
+  als FAIL-Handoff erhalten, es wurde nichts gestartet oder verändert.
 
 **Commit:** `build(ops): lock deployment dependencies across services`
+
+**Review-Fix-Commit:** `fix(ops): close locked dependency review gaps`
 
 ---
 

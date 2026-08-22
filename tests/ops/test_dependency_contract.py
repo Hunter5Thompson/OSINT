@@ -89,6 +89,20 @@ def test_every_ci_uv_setup_is_version_pinned() -> None:
     )
 
 
+def test_python_lint_ci_uses_the_locked_backend_toolchain() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    block = _job_block(workflow, "lint-python")
+
+    assert "working-directory: services/backend" in block
+    assert 'version: "0.10.0"' in block
+    assert "uv sync --locked --all-extras" in block
+    assert "uv run --locked ruff check" in block
+    assert "uvx" not in block
+    assert "RUFF_VERSION" not in block
+
+
 def test_frontend_ci_uses_node_22_and_npm_ci() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
         encoding="utf-8"
@@ -163,8 +177,33 @@ def test_frontend_image_and_context_use_frozen_install() -> None:
     assert "COPY package.json package-lock.json ./" in dockerfile
     assert "RUN npm ci" in dockerfile
     assert "RUN npm install" not in dockerfile
-    assert {".env", ".env.*", "node_modules", "dist", "coverage"} <= ignored
+    assert {".env.*", "node_modules", "dist", "coverage"} <= ignored
+    assert ".env" not in ignored
     assert "package-lock.json" not in ignored
+
+
+def test_frontend_cesium_version_matches_the_qualified_install() -> None:
+    service = ROOT / "services" / "frontend"
+    manifest = json.loads((service / "package.json").read_text(encoding="utf-8"))
+    lock = json.loads((service / "package-lock.json").read_text(encoding="utf-8"))
+
+    assert manifest["dependencies"]["cesium"] == "1.142.0"
+    assert manifest["overrides"]["@cesium/engine"] == "26.0.0"
+    assert manifest["overrides"]["@cesium/widgets"] == "16.0.0"
+    assert lock["packages"][""]["dependencies"]["cesium"] == "1.142.0"
+    assert lock["packages"]["node_modules/cesium"]["version"] == "1.142.0"
+    engine_versions = {
+        package["version"]
+        for path, package in lock["packages"].items()
+        if path.endswith("node_modules/@cesium/engine")
+    }
+    widget_versions = {
+        package["version"]
+        for path, package in lock["packages"].items()
+        if path.endswith("node_modules/@cesium/widgets")
+    }
+    assert engine_versions == {"26.0.0"}
+    assert widget_versions == {"16.0.0"}
 
 
 def test_quality_loop_uses_frozen_installs() -> None:
@@ -177,6 +216,22 @@ def test_quality_loop_uses_frozen_installs() -> None:
     assert "uv run --with" not in quality_loop
     assert "npm ci" in quality_loop
     assert "npm install" not in quality_loop
+
+
+def test_nested_ops_uv_runner_cannot_update_the_ingestion_lock() -> None:
+    source = (ROOT / "tests" / "ops" / "test_quality_loop.py").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(
+        r"def test_default_ingestion_suite_excludes_live_spark_smoke.*?(?=\n    def |\Z)",
+        source,
+        re.DOTALL,
+    )
+
+    assert match is not None
+    runner = match.group(0)
+    assert '"--locked"' in runner
+    assert runner.index('"--locked"') < runner.index('"pytest"')
 
 
 @pytest.mark.parametrize("service", PYTHON_SERVICES)
@@ -197,7 +252,10 @@ def test_agents_documents_tracked_lock_policy_and_frozen_commands() -> None:
     assert "Node 22" in agents
 
 
-def test_locked_mode_rejects_manifest_drift(tmp_path: Path) -> None:
+def test_uv_lock_check_characterization_rejects_manifest_drift(
+    tmp_path: Path,
+) -> None:
+    """Characterize uv; deployment-path wiring is asserted separately above."""
     source = ROOT / "services" / "data-ingestion"
     project = tmp_path / "project"
     project.mkdir()

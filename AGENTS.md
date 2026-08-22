@@ -30,6 +30,9 @@ Deployment lockfiles are tracked source artifacts:
 CI, Docker and the nightly quality loop use **uv 0.10.0** with
 `uv sync --locked`; service test environments add `--all-extras`. Frontend
 uses **Node 22** with `npm ci`. Local ad-hoc training lockfiles remain ignored.
+`services/frontend/.env` is an intentional Vite build input and may contain only
+public `VITE_*` build values; `.env.*`, `node_modules` and build caches remain
+excluded from the frontend Docker context.
 
 ## Docker Compose: profiles, not monolithic
 

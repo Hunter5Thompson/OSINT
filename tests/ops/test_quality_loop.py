@@ -144,6 +144,7 @@ class QualityLoopTests(unittest.TestCase):
             [
                 "uv",
                 "run",
+                "--locked",
                 "pytest",
                 "--collect-only",
                 "-q",
