@@ -48,6 +48,7 @@ class QualityLoopTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             env = os.environ.copy()
+            env["ODIN_REPO_ROOT"] = str(ROOT)
             env["ODIN_QUALITY_LOOP_DRY_RUN"] = "1"
             env["ODIN_QUALITY_LOG_DIR"] = str(tmp_path)
             env["ODIN_QUALITY_STAMP"] = "test"
@@ -171,6 +172,7 @@ class QualityLoopTests(unittest.TestCase):
                 "{broken", encoding="utf-8"
             )
             env = os.environ.copy()
+            env["ODIN_REPO_ROOT"] = str(ROOT)
             env["ODIN_QUALITY_LOOP_DRY_RUN"] = "1"
             env["ODIN_QUALITY_LOG_DIR"] = str(tmp_path)
             env["ODIN_QUALITY_STAMP"] = "test"
