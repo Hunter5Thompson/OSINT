@@ -1651,7 +1651,8 @@ Observation-Producer.
 # ══════════════════════════════════════════
 # TASK-119: Operational Trust Chain Hardening
 # ══════════════════════════════════════════
-# Status: IN PROGRESS — S01-S02 DONE ✅; S03 HOST APPLY PENDING | Priorität: P0 → P2
+# Status: IN PROGRESS — S01-S02 DONE ✅; S03 REVIEW-FIXES VERIFIED,
+#         HOST APPLY + RE-REVIEW PENDING | Priorität: P0 → P2
 #
 # Design-Spec:
 #   docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md
@@ -1668,7 +1669,8 @@ Observation-Producer.
 # Slices:
 #   S01 [P0] [DONE ✅] Kanonischer Munin Runtime Model Contract
 #   S02 [P0] [DONE ✅ 2026-08-22] Hermetischer Quality-Loop
-#   S03 [P0] [IN PROGRESS — CODE ✅ / HOST APPLY ⏳] Local Exposure Floor
+#   S03 [P0] [IN PROGRESS — REVIEW-FIXES ✅ / HOST APPLY + RE-REVIEW ⏳]
+#       Local Exposure Floor
 #   S04 [P1] [REVIEW COMPLETE 2026-08-22; CI/MERGE PENDING] Locked Dependency Contract
 #   S05 [P1] [REVIEW BACKLOG REFINED 2026-08-22] Runtime Provenance, Deploy und Drift
 #   S06 [P1] Evidence Hygiene am Codec-Seam

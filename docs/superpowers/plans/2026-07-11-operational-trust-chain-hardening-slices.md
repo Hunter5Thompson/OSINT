@@ -2,7 +2,8 @@
 
 **Datum:** 2026-07-11
 
-**Status:** IN EXECUTION — S01-S02 DONE; S03 CODE VERIFIED, HOST APPLY PENDING
+**Status:** IN EXECUTION — S01-S02 DONE; S03 REVIEW-FIXES VERIFIED,
+HOST APPLY + RE-REVIEW PENDING
 
 **Design-Spec:**
 `docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md`
@@ -338,13 +339,34 @@ Exit-Code im PR dokumentieren.
   `deadpool-ultra`, nicht Root. Reports/Handoffs lagen außerhalb des Repositories
   unter `/tmp/odin-task119-s02-*`.
 
+### REVIEW-FOLLOW-UP — 2026-08-22
+
+- RED: Der Review reproduzierte auf einer frischen Backend-Umgebung, dass
+  `tests/ops` vor `uv sync --all-extras` lief. Weil Pytest ein optionales
+  Backend-Extra ist, endete der Nightly-Loop dadurch bereits in seiner ersten
+  Testsuite. Die neue Reihenfolge-Gegenprobe war vor dem Fix rot.
+- GREEN: Eine explizite Sektion `Backend Environment` synchronisiert nun die
+  Backend-Extras vor `Ops Contracts`; die Backend-Suite verwendet anschließend
+  dieselbe Umgebung ohne zweiten Sync. Die Spark-Deselection-Gegenprobe prüft
+  weiter den Ausschluss der Live-Tests, aber nicht mehr eine fragile exakte
+  Anzahl.
+- VERIFY: In einer neu erzeugten externen Umgebung unter `/tmp` installierte
+  `uv sync --all-extras` Pytest frisch; anschließend liefen alle `27 tests/ops`
+  grün. Der vollständige Quality-Loop war ebenfalls PASS.
+- OFFEN: Der versionsgebundene NVM-Pfad der systemd-Unit bleibt als LOW für S04
+  offen; S04 vereinheitlicht den Node-22-/Locked-Dependency-Vertrag. Der eigene
+  PR-CI-Job für `tests/ops` bleibt ebenfalls expliziter S04-Umfang.
+
 **Commit:** `fix(ops): isolate nightly quality gate from host environment`
+
+**Review-Fix-Commit:** `fix(ops): sync backend before ops contracts`
 
 ---
 
 ## S03 — Local Exposure Floor
 
-**Status:** IN PROGRESS — CODE VERIFIED; HOST PERMISSIONS + DEPLOY PENDING
+**Status:** IN PROGRESS — REVIEW-FIXES VERIFIED; HOST PERMISSIONS, RE-REVIEW +
+DEPLOY PENDING
 
 **Priorität:** P0
 
@@ -459,6 +481,47 @@ ss -ltn | rg ':(5173|6333|6334|6379|7474|7687|8000|8001|8002|8003|8010|8011|8080
   beiden operativen Schritten ausdrücklich nicht DONE.
 
 **Commit:** `fix(ops): bind ODIN host ports to loopback by default`
+
+### REVIEW-CORRECTION — 2026-08-22
+
+- REVIDIERTER VORZUSTAND: Die erste S03-Verifikation war nicht ausreichend.
+  Mit `ODIN_BIND_HOST=0.0.0.0` nur in der ausgewählten `.env` renderte Compose
+  alle betroffenen Host-Ports weit, während der Doctor fälschlich den Shell-
+  Default `127.0.0.1` prüfte. Außerdem war der Modus-`600`-Test an das echte
+  Repository gekoppelt. Die nachgeschärfte fokussierte Suite startete mit
+  `9 failed, 8 passed`.
+- GREEN: `odin.sh` besitzt nun eine gemeinsame globale Auswahl
+  `--env-file PATH`; jeder Compose-Lifecycle-Aufruf erhält exakt diese Datei.
+  Der Doctor lässt Compose selbst den effektiven Bind-Host aus derselben Datei
+  und mit derselben Shell-Priorität auflösen. Exposure-, Dateimodus- und
+  Secret-Precondition-Fehler werden gesammelt statt beim ersten Fehler
+  abzubrechen.
+- HERMETIK + SECRET-SUCHE: Doctor-Tests kopieren Script und Compose-Dateien in
+  ein temporäres Repository. Die Suche umfasst `.env`, `.env.local`,
+  `.env.spark` und andere `.env.*`-Varianten, ausgenommen `.env.example`;
+  `.gitignore` schützt dieselben Varianten vor versehentlichem Tracking.
+- RECOVERY: Start-, Swap- und profilbezogene Up-Kommandos prüfen ein fehlendes
+  oder leeres `NEO4J_PASSWORD` freundlich vor dem ersten Lifecycle-Eingriff.
+  `ps`, `logs`, `down`, `stop`, `rm`, `exec` und der Doctor-Config-Check bleiben
+  bei verlorener Env-Datei über einen nicht geheimen Recovery-Sentinel nutzbar.
+  Eine interne Allowlist verbietet diesem Pfad ausdrücklich `up`, `start`,
+  `run`, `create`, `restart`, `build` und `pull`; der Sentinel kann keinen
+  Container starten. Die required Compose-Interpolation bleibt daher als
+  Schutz für direkte Startversuche erhalten.
+- VERIFY: S03 fokussiert `11 passed`; vollständige Ops-Suite `27 passed`;
+  `bash -n`, Test-Ruff und hermetischer Compose-Render grün. Ein reales
+  `./odin.sh --env-file <missing> ps` gegen das eigene leere Probeprojekt endete
+  mit Exit `0`. Der Full-Quality-Loop war PASS: Backend `585 passed`, Frontend
+  `625 passed`, Intelligence `484 passed`, Data Ingestion `1445 passed,
+  1 skipped, 17 deselected`, Vision Enrichment `22 passed`; alle Coverage-
+  Ratchets grün; Smoke `14 passed, 0 failed, 1 skipped`. Handoff:
+  `/tmp/odin-task119-review-full/handoff-20260822-review.md`.
+- WEITERHIN OFFEN: Die drei realen Secret-Dateien im kanonischen Checkout
+  wurden nicht verändert und stehen weiterhin auf Modus `664`; die laufenden
+  Container wurden nicht neu erstellt. Host-`chmod 600`, unabhängiger Re-Review,
+  Merge und anschließendes Recreate bleiben in genau dieser Reihenfolge offen.
+
+**Review-Fix-Commit:** `fix(ops): align doctor with compose environment`
 
 ---
 
