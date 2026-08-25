@@ -98,3 +98,32 @@ Under **Option B** the matrix must be clipped to `street`/`city`/`metro`/`region
 | `services/frontend/src/pages/WorldviewPage.tsx` | `useGDACSEvents(effectiveLayers.gdacs, 720)` |
 
 Raw output: `sweep-result.json`, `fine-result.json`, `idle-result.json` and five `baseline-*.png` in the session scratchpad (not committed).
+
+---
+
+## Task 10 decision — Option B (2026-08-25)
+
+**Choice:** the collective budget works **inside** the DDC. The DDC on both pilots is unchanged.
+
+**Finding (from Task 1, not from reading source):** labels are drawn up to a sharp cut between 4 500 km and 5 000 km, coinciding with `DistanceDisplayCondition(0, 5_000_000)`. At 15 000 km: 182 created, 0 drawn. Oblique pitch at fixed altitude changes the count (3 000 km: 10 → 2), confirming distance not height.
+
+**Matrix clip:**
+
+| Row | Band | Action |
+|---|---|---|
+| `street` / `city` / `metro` | < 1 000 km | keep |
+| `regional` | 1 000–8 000 km | **keep** — live to ≈4 700 km, the densest measured band |
+| `global` | ≥ 8 000 km | **deleted** — 0 drawn at every sample |
+
+`labelViewScaleForAltitude` folds `≥ 8 000 km` and non-finite altitudes into `regional`. Acceptance for this slice is **0 – ~5 000 km**. The globe view from the TASK-114 screenshot remains unaddressed (DDC still blanks it). Do not reintroduce "street/city/metro only".
+
+**Final matrix (provisional counts, four live rows):**
+
+```
+street    < 50 km      8 / 20 / 40 / 60 / 80
+city      < 250 km     6 / 16 / 32 / 48 / 64
+metro     < 1 000 km   5 / 12 / 24 / 36 / 48
+regional  ≥ 1 000 km   4 / 10 / 20 / 30 / 40   (DDC blanks this above ~5 000 km)
+```
+
+Density stops: 0 / 25 / 50 / 75 / 100. Cell values not re-tuned from Task 5; visual calibration inside the live envelope is still open (Task 4 Steps 5–7 / Task 9 Step 7 on a real GPU).

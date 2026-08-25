@@ -14,22 +14,22 @@ import {
 } from "../labelBudget";
 
 describe("labelViewScaleForAltitude", () => {
-  it("classifies five altitude scales", () => {
+  it("classifies four live altitude scales — globe folds into regional", () => {
     expect(labelViewScaleForAltitude(10_000)).toBe("street");
     expect(labelViewScaleForAltitude(100_000)).toBe("city");
     expect(labelViewScaleForAltitude(500_000)).toBe("metro");
     expect(labelViewScaleForAltitude(3_000_000)).toBe("regional");
-    expect(labelViewScaleForAltitude(15_000_000)).toBe("global");
+    expect(labelViewScaleForAltitude(15_000_000)).toBe("regional");
   });
 
-  it("maps non-finite altitude to global and negative to street", () => {
-    expect(labelViewScaleForAltitude(Number.NaN)).toBe("global");
-    expect(labelViewScaleForAltitude(Number.POSITIVE_INFINITY)).toBe("global");
-    expect(labelViewScaleForAltitude(Number.NEGATIVE_INFINITY)).toBe("global");
+  it("maps non-finite altitude to regional (outermost live scale) and negative to street", () => {
+    expect(labelViewScaleForAltitude(Number.NaN)).toBe("regional");
+    expect(labelViewScaleForAltitude(Number.POSITIVE_INFINITY)).toBe("regional");
+    expect(labelViewScaleForAltitude(Number.NEGATIVE_INFINITY)).toBe("regional");
     expect(labelViewScaleForAltitude(-1)).toBe("street");
   });
 
-  it("aligns metro/regional/global boundaries with lod.ts bands", () => {
+  it("aligns metro/regional boundaries with lod.ts; globe-band altitude stays regional", () => {
     expect(labelViewScaleForAltitude(LOCAL_ALTITUDE_M - 1)).toBe("metro");
     expect(bandForHeight(LOCAL_ALTITUDE_M - 1)).toBe("LOCAL");
 
@@ -39,7 +39,8 @@ describe("labelViewScaleForAltitude", () => {
     expect(labelViewScaleForAltitude(GLOBE_ALTITUDE_M - 1)).toBe("regional");
     expect(bandForHeight(GLOBE_ALTITUDE_M - 1)).toBe("REGIONAL");
 
-    expect(labelViewScaleForAltitude(GLOBE_ALTITUDE_M)).toBe("global");
+    // Option B: no global budget row. DDC draws nothing up here; the scale is regional.
+    expect(labelViewScaleForAltitude(GLOBE_ALTITUDE_M)).toBe("regional");
     expect(bandForHeight(GLOBE_ALTITUDE_M)).toBe("GLOBE");
   });
 });
@@ -82,10 +83,14 @@ describe("profileForDensity / defaultDensityForProfile", () => {
 });
 
 describe("VIEW_SCALE_BUDGETS", () => {
-  const scales: LabelViewScale[] = ["street", "city", "metro", "regional", "global"];
+  const scales: LabelViewScale[] = ["street", "city", "metro", "regional"];
 
   it("exposes frozen density stops", () => {
     expect([...DENSITY_STOPS]).toEqual([0, 25, 50, 75, 100]);
+  });
+
+  it("has no global row — Option B, measured DDC envelope ends at 5e6 m", () => {
+    expect(Object.keys(VIEW_SCALE_BUDGETS).sort()).toEqual(["city", "metro", "regional", "street"]);
   });
 
   it("has integer cells, increasing density within scale, non-increasing pullback, worst < 250", () => {
@@ -105,7 +110,6 @@ describe("VIEW_SCALE_BUDGETS", () => {
       expect(VIEW_SCALE_BUDGETS.street[stop]).toBeGreaterThanOrEqual(VIEW_SCALE_BUDGETS.city[stop]);
       expect(VIEW_SCALE_BUDGETS.city[stop]).toBeGreaterThanOrEqual(VIEW_SCALE_BUDGETS.metro[stop]);
       expect(VIEW_SCALE_BUDGETS.metro[stop]).toBeGreaterThanOrEqual(VIEW_SCALE_BUDGETS.regional[stop]);
-      expect(VIEW_SCALE_BUDGETS.regional[stop]).toBeGreaterThanOrEqual(VIEW_SCALE_BUDGETS.global[stop]);
     }
   });
 });
@@ -116,7 +120,7 @@ describe("labelBudgetFor", () => {
     expect(labelBudgetFor(100_000, 50)).toBe(VIEW_SCALE_BUDGETS.city[50]);
     expect(labelBudgetFor(500_000, 50)).toBe(VIEW_SCALE_BUDGETS.metro[50]);
     expect(labelBudgetFor(3_000_000, 50)).toBe(VIEW_SCALE_BUDGETS.regional[50]);
-    expect(labelBudgetFor(15_000_000, 50)).toBe(VIEW_SCALE_BUDGETS.global[50]);
+    expect(labelBudgetFor(15_000_000, 50)).toBe(VIEW_SCALE_BUDGETS.regional[50]);
 
     const stop: DensityStop = 25;
     expect(labelBudgetFor(10_000, 13)).toBe(VIEW_SCALE_BUDGETS.street[stop]);
