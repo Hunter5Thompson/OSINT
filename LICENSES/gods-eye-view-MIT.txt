@@ -1,0 +1,35 @@
+God's Eye View — MIT License (adapted source code)
+Upstream: https://github.com/bilawalsidhu/gods-eye-view
+Pinned commit: 880a672b5e16ad3e41d318801d3a5203f9201923
+
+ODIN adapts the following source files from that commit:
+  services/frontend/src/lib/renderGovernor.ts
+  services/frontend/src/lib/labelBudget.ts
+  services/frontend/src/lib/labelQuota.ts
+  services/frontend/src/lib/labelArbiter.ts
+
+MIT License
+
+Copyright (c) 2026 Bilawal Sidhu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+NOTE: upstream's LICENSE carves out third-party DATA and 3D models from the MIT
+grant. ODIN adapts SOURCE CODE ONLY — no upstream dataset, texture, or model is
+used, so that carve-out does not apply here.
