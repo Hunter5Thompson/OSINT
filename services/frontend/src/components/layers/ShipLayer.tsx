@@ -4,6 +4,7 @@ import type { Vessel } from "../../types";
 import { classifyShip, getShipTypeIcon, ICON_COLORS } from "./icons/shipIcons";
 import { glyphColor } from "./glyphTokens";
 import { usePerformance } from "../globe/PerformanceGuard";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 interface ShipLayerProps {
   viewer: Cesium.Viewer | null;
@@ -44,6 +45,7 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
       vectorCollectionRef.current = new Cesium.PolylineCollection();
       viewer.scene.primitives.add(vectorCollectionRef.current);
     }
+    governorRequestRender("ship-setup");
 
     return () => {
       if (!viewer.isDestroyed()) {
@@ -62,7 +64,10 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
 
     bc.removeAll();
     vc.removeAll();
-    if (!visibleRef.current) return;
+    if (!visibleRef.current) {
+      governorRequestRender("ship-render");
+      return;
+    }
 
     const cameraAlt = viewer.camera.positionCartographic.height;
     const showVectors = degradationRef.current < 3 && cameraAlt < VECTOR_ALT_THRESHOLD;
@@ -146,6 +151,7 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
         vectorCount++;
       }
     }
+    governorRequestRender("ship-render");
   }, [viewer]);
 
   // Re-render on data change

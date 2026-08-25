@@ -5,6 +5,7 @@ import { glyphColor } from "./glyphTokens";
 import type { Satellite } from "../../types";
 import { usePerformance } from "../globe/PerformanceGuard";
 import { GLOBE_ALTITUDE_M, ORBIT_LOD_ALTITUDE_M } from "../../lib/lod";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 export function shouldRenderCone(sat: {
   lat: number;
@@ -94,6 +95,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
       coneCollectionRef.current = new Cesium.PolylineCollection();
       viewer.scene.primitives.add(coneCollectionRef.current);
     }
+    governorRequestRender("satellite-setup");
 
     return () => {
       if (!viewer.isDestroyed()) {
@@ -135,7 +137,10 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
 
     pc.removeAll();
     oc.removeAll();
-    if (!visible || satellites.length === 0) return;
+    if (!visible || satellites.length === 0) {
+      governorRequestRender("satellite-render");
+      return;
+    }
 
     const now = new Date();
     const cameraAlt = viewer.camera.positionCartographic.height;
@@ -205,6 +210,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
         }
       }
     }
+    governorRequestRender("satellite-render");
   }, [satellites, visible, viewer, degradation, propagateOrbitArc]);
 
   useEffect(() => {
@@ -240,6 +246,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
           }
         }
         oc.show = shouldShow;
+        governorRequestRender("satellite-orbits");
       }
     };
 
@@ -272,7 +279,10 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
 
       clearCone();
 
-      if (!satData || !shouldRenderCone(satData)) return;
+      if (!satData || !shouldRenderCone(satData)) {
+        governorRequestRender("satellite-cone");
+        return;
+      }
 
       const color = CATEGORY_COLORS[satData.category ?? "active"] ?? CATEGORY_COLORS["active"]!;
       const radiusM = satData.footprint_radius_km! * 1000;
@@ -330,6 +340,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
           outline: false,
         },
       });
+      governorRequestRender("satellite-cone");
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
     return () => {

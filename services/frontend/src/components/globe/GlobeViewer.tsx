@@ -4,6 +4,7 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { ShaderType } from "../../types";
 import { applyCRTShader, applyNightVisionShader, applyFLIRShader, clearShaders } from "../shaders/shaderUtils";
 import { applyTilesetPerformanceConfig } from "./tilesetConfig";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 interface GlobeViewerProps {
   onViewerReady: (viewer: Cesium.Viewer) => void;
@@ -83,6 +84,7 @@ export function GlobeViewer({
       viewer.scene.primitives.add(tileset);
       buildingsTilesetRef.current = tileset;
       onPhotorealTilesetReady?.(tileset);
+      governorRequestRender("globe-tileset");
     };
 
     // Load Google Photorealistic 3D Tiles via the Cesium ion asset (2275207),
@@ -133,6 +135,7 @@ export function GlobeViewer({
         bordersLayer.brightness = 0.9;
         bordersLayer.contrast = 1.15;
         borderLayerRef.current = bordersLayer;
+        governorRequestRender("globe-borders");
       })
       .catch(() => {
         // Overlay unavailable (token/access) — keep globe running without borders.
@@ -199,12 +202,14 @@ export function GlobeViewer({
   useEffect(() => {
     if (borderLayerRef.current) {
       borderLayerRef.current.show = showCountryBorders;
+      governorRequestRender("globe-borders-show");
     }
   }, [showCountryBorders]);
 
   useEffect(() => {
     if (buildingsTilesetRef.current) {
       buildingsTilesetRef.current.show = showCityBuildings;
+      governorRequestRender("globe-buildings-show");
     }
   }, [showCityBuildings]);
 
@@ -229,6 +234,7 @@ export function GlobeViewer({
       default:
         break;
     }
+    governorRequestRender("globe-shader");
   }, [activeShader]);
 
   return (

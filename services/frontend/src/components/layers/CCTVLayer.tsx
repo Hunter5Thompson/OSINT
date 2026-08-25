@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 interface CCTVLayerProps {
   viewer: Cesium.Viewer | null;
@@ -20,6 +21,7 @@ export function CCTVLayer({ viewer, visible }: CCTVLayerProps) {
       collectionRef.current = new Cesium.BillboardCollection({ scene: viewer.scene });
       viewer.scene.primitives.add(collectionRef.current);
     }
+    governorRequestRender("cctv-setup");
 
     return () => {
       if (collectionRef.current && !viewer.isDestroyed()) {
@@ -34,7 +36,10 @@ export function CCTVLayer({ viewer, visible }: CCTVLayerProps) {
     if (!bc) return;
 
     bc.removeAll();
-    if (!visible) return;
+    if (!visible) {
+      governorRequestRender("cctv-render");
+      return;
+    }
 
     // Placeholder webcam locations (to be replaced with Windy API data)
     const cameras = [
@@ -53,6 +58,7 @@ export function CCTVLayer({ viewer, visible }: CCTVLayerProps) {
         eyeOffset: new Cesium.Cartesian3(0, 0, -50),
       });
     }
+    governorRequestRender("cctv-render");
   }, [visible]);
 
   return null;

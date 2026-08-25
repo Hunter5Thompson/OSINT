@@ -2,6 +2,11 @@ import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import { glyphColor } from "./glyphTokens";
 import { positionAtTime, type MilTrackRender } from "./milTrackAdapter";
+import {
+  governorRequestRender,
+  holdContinuousRender,
+  releaseContinuousRender,
+} from "../../lib/renderGovernor";
 
 export function branchColor(branch: string | null): Cesium.Color {
   switch ((branch || "").toUpperCase()) {
@@ -89,6 +94,7 @@ export function MilAircraftLayer({
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
       handlerRef.current = h;
     }
+    governorRequestRender("milair-setup");
     return () => {
       if (handlerRef.current) {
         handlerRef.current.destroy();
@@ -117,7 +123,10 @@ export function MilAircraftLayer({
     bc.removeAll();
     idMapRef.current.clear();
     billboardMapRef.current.clear();
-    if (!visible) return;
+    if (!visible) {
+      governorRequestRender("milair-render");
+      return;
+    }
 
     for (const t of tracks) {
       if (t.points.length === 0) continue;
@@ -151,6 +160,7 @@ export function MilAircraftLayer({
       idMapRef.current.set(bb as unknown as object, t);
       billboardMapRef.current.set(t.icao24, { bb, track: t });
     }
+    governorRequestRender("milair-render");
   }, [tracks, visible, viewer, discontinuityEpoch]);
 
   // Move each billboard to the interpolated position at the clock cursor every frame.
@@ -161,6 +171,11 @@ export function MilAircraftLayer({
       tickRemoveRef.current();
       tickRemoveRef.current = null;
     }
+    if (!visible) {
+      releaseContinuousRender("milair-tick");
+      return;
+    }
+    holdContinuousRender("milair-tick");
     const remove = viewer.clock.onTick.addEventListener(() => {
       const t = getTimeMs();
       for (const { bb, track } of billboardMapRef.current.values()) {
@@ -179,8 +194,9 @@ export function MilAircraftLayer({
         tickRemoveRef.current();
         tickRemoveRef.current = null;
       }
+      releaseContinuousRender("milair-tick");
     };
-  }, [viewer, getTimeMs]);
+  }, [viewer, getTimeMs, visible]);
 
   return null;
 }

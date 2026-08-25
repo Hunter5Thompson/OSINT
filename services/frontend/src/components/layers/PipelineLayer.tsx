@@ -4,6 +4,7 @@ import type { PipelineGeoJSON, PipelineFeature } from "../../types";
 import { PIPELINE_COLORS, PIPELINE_LOD_THRESHOLDS } from "../../types/pipeline";
 import { densifyLonLatSegment } from "./geoPath";
 import { glyphColor } from "./glyphTokens";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 interface PipelineLayerProps {
   viewer: Cesium.Viewer | null;
@@ -84,6 +85,7 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
     viewer.scene.primitives.add(polylineCollectionRef.current);
     viewer.scene.primitives.add(billboardCollectionRef.current);
     viewer.scene.primitives.add(labelCollectionRef.current);
+    governorRequestRender("pipeline-setup");
 
     return () => {
       if (!viewer.isDestroyed()) {
@@ -181,6 +183,7 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
           distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, LABEL_ALTITUDE_THRESHOLD),
         });
       }
+      governorRequestRender("pipeline-render");
     },
     [pipelines],
   );
@@ -210,6 +213,7 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
         if (lc) {
           lc.show = shouldShowLabels && visible;
         }
+        governorRequestRender("pipeline-labels");
       }
     };
 
@@ -227,6 +231,7 @@ export function PipelineLayer({ viewer, pipelines, visible }: PipelineLayerProps
     if (polylineCollectionRef.current) polylineCollectionRef.current.show = visible;
     if (billboardCollectionRef.current) billboardCollectionRef.current.show = visible;
     if (labelCollectionRef.current) labelCollectionRef.current.show = visible && labelsVisibleRef.current;
+    governorRequestRender("pipeline-visibility");
   }, [visible]);
 
   return null;

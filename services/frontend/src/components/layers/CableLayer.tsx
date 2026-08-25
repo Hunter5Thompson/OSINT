@@ -3,6 +3,7 @@ import * as Cesium from "cesium";
 import type { SubmarineCable, LandingPoint } from "../../types";
 import { densifyLonLatSegment } from "./geoPath";
 import { glyphColor } from "./glyphTokens";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 interface CableLayerProps {
   viewer: Cesium.Viewer | null;
@@ -56,6 +57,7 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
       labelCollectionRef.current = new Cesium.LabelCollection({ scene: viewer.scene });
       viewer.scene.primitives.add(labelCollectionRef.current);
     }
+    governorRequestRender("cable-setup");
 
     return () => {
       if (polylineCollectionRef.current && !viewer.isDestroyed()) {
@@ -84,6 +86,7 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
     if (shouldShow !== labelsVisibleRef.current) {
       labelsVisibleRef.current = shouldShow;
       lc.show = shouldShow && visible;
+      governorRequestRender("cable-labels");
     }
   }, [viewer, visible]);
 
@@ -111,7 +114,10 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
     // Label visibility managed by camera listener
     lc.show = visible && labelsVisibleRef.current;
 
-    if (!visible) return;
+    if (!visible) {
+      governorRequestRender("cable-render");
+      return;
+    }
 
     // Pre-build landing point name lookup (O(n) instead of O(n*m))
     const lpNameMap = new Map(landingPoints.map((lp) => [lp.id, lp.name]));
@@ -206,6 +212,7 @@ export function CableLayer({ viewer, cables, landingPoints, visible }: CableLaye
         translucencyByDistance: new Cesium.NearFarScalar(100_000, 1.0, 8_000_000, 0.2),
       });
     }
+    governorRequestRender("cable-render");
   }, [cables, landingPoints, visible]);
 
   return null;

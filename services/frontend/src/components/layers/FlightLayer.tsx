@@ -4,6 +4,11 @@ import type { Aircraft } from "../../types";
 import { glyphColor } from "./glyphTokens";
 import { classifyAircraft, getAircraftTypeIcon } from "./icons/aircraftIcons";
 import { usePerformance, type DegradationLevel } from "../globe/PerformanceGuard";
+import {
+  governorRequestRender,
+  holdContinuousRender,
+  releaseContinuousRender,
+} from "../../lib/renderGovernor";
 
 interface FlightLayerProps {
   viewer: Cesium.Viewer | null;
@@ -57,11 +62,13 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
       trailCollectionRef.current = new Cesium.PolylineCollection();
       viewer.scene.primitives.add(trailCollectionRef.current);
     }
+    governorRequestRender("flight-setup");
 
     return () => {
       if (interpolationTimerRef.current) {
         clearInterval(interpolationTimerRef.current);
         interpolationTimerRef.current = null;
+        releaseContinuousRender("flight-interpolation");
       }
 
       if (trailCollectionRef.current && !viewer.isDestroyed()) {
@@ -85,7 +92,10 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
 
     bc.show = visible;
     if (trailCollectionRef.current) trailCollectionRef.current.show = visible;
-    if (!visible) return;
+    if (!visible) {
+      governorRequestRender("flight-render");
+      return;
+    }
 
     const now = Date.now();
     const activeIds = new Set<string>();
@@ -171,16 +181,19 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         trailBuffersRef.current.delete(id);
       }
     }
+    governorRequestRender("flight-render");
   }, [flights, visible]);
 
   useEffect(() => {
     if (interpolationTimerRef.current) {
       clearInterval(interpolationTimerRef.current);
       interpolationTimerRef.current = null;
+      releaseContinuousRender("flight-interpolation");
     }
 
     if (!visible) return;
 
+    holdContinuousRender("flight-interpolation");
     interpolationTimerRef.current = setInterval(() => {
       const now = Date.now();
       const deg = degradationRef.current;
@@ -264,6 +277,7 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         clearInterval(interpolationTimerRef.current);
         interpolationTimerRef.current = null;
       }
+      releaseContinuousRender("flight-interpolation");
     };
   }, [visible]);
 

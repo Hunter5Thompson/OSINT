@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { GDACSEvent } from "../../types";
 import { glyphColor } from "./glyphTokens";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 export const EVENT_TYPE_LABELS: Record<string, string> = {
   EQ: "Earthquake",
@@ -121,6 +122,7 @@ export function GDACSLayer({ viewer, events, visible, onSelect }: GDACSLayerProp
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
       handlerRef.current = h;
     }
+    governorRequestRender("gdacs-setup");
     return () => {
       if (handlerRef.current) {
         handlerRef.current.destroy();
@@ -143,7 +145,10 @@ export function GDACSLayer({ viewer, events, visible, onSelect }: GDACSLayerProp
     bc.removeAll();
     lc.removeAll();
     idMapRef.current.clear();
-    if (!visible) return;
+    if (!visible) {
+      governorRequestRender("gdacs-render");
+      return;
+    }
 
     for (const ev of events) {
       const position = Cesium.Cartesian3.fromDegrees(ev.longitude, ev.latitude, 0);
@@ -170,6 +175,7 @@ export function GDACSLayer({ viewer, events, visible, onSelect }: GDACSLayerProp
         scale: 0.9,
       });
     }
+    governorRequestRender("gdacs-render");
   }, [events, visible, viewer]);
 
   return null;

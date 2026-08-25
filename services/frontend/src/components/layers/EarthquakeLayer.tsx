@@ -9,6 +9,11 @@ import {
   bulkScaleByDistance,
   bulkTranslucencyByDistance,
 } from "../../lib/lod";
+import {
+  governorRequestRender,
+  holdContinuousRender,
+  releaseContinuousRender,
+} from "../../lib/renderGovernor";
 import type { StrictPointLayerAdapter } from "../../spatial/pointLayerSpatialAdapter";
 
 const MAX_QUAKES = 250;
@@ -80,6 +85,7 @@ export function EarthquakeLayer({
       labelCollectionRef.current = new Cesium.LabelCollection({ scene: viewer.scene });
       viewer.scene.primitives.add(labelCollectionRef.current);
     }
+    governorRequestRender("earthquake-setup");
 
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -101,7 +107,10 @@ export function EarthquakeLayer({
     bc.removeAll();
     lc.removeAll();
     pulsesRef.current = [];
-    if (!visibleRef.current) return;
+    if (!visibleRef.current) {
+      governorRequestRender("earthquake-render");
+      return;
+    }
 
     const spatiallyScoped = spatialAdapterRef.current?.apply(earthquakesRef.current).records
       ?? earthquakesRef.current;
@@ -162,6 +171,7 @@ export function EarthquakeLayer({
         color,
       });
     }
+    governorRequestRender("earthquake-render");
   }, [viewer]);
 
   // Re-render on data / visibility change
@@ -185,8 +195,10 @@ export function EarthquakeLayer({
   useEffect(() => {
     if (!visible) {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      releaseContinuousRender("earthquake-pulse");
       return;
     }
+    holdContinuousRender("earthquake-pulse");
 
     const animate = () => {
       const now = Date.now();
@@ -234,6 +246,7 @@ export function EarthquakeLayer({
 
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      releaseContinuousRender("earthquake-pulse");
     };
   }, [visible]);
 

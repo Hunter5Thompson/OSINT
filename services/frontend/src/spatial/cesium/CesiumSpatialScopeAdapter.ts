@@ -13,6 +13,7 @@ import type {
   ResolvedPresentationInput,
 } from "../contracts";
 import { bandForHeight } from "../../lib/lod";
+import { governorRequestRender } from "../../lib/renderGovernor";
 import {
   buildScopePrimitives,
   CesiumScopePrimitiveHandle,
@@ -106,6 +107,7 @@ export class ViewerSpatialCesiumRuntime implements SpatialCesiumRuntime {
 
   constructor(private readonly viewer: Cesium.Viewer) {
     viewer.scene.primitives.add(this.root);
+    governorRequestRender("scope-runtime-mount");
   }
 
   createContainer(): SpatialPrimitiveContainer {
@@ -364,6 +366,7 @@ export class CesiumSpatialScopeAdapter {
         primitive.show = true;
       }
       staging.show = true;
+      governorRequestRender("scope-handoff");
       if (previous !== null && this.active === previous) {
         this.runtime.unmount(previous.container);
       }
@@ -398,6 +401,7 @@ export class CesiumSpatialScopeAdapter {
         previous.container.show = true;
         this.attachCameraListener();
       }
+      governorRequestRender("scope-handoff");
       throw error;
     } finally {
       acquired?.release();
@@ -428,6 +432,7 @@ export class CesiumSpatialScopeAdapter {
       this.runtime.unmount(container);
     }
     this.staging.clear();
+    governorRequestRender("scope-clear");
   }
 
   dispose(): void {
@@ -520,6 +525,7 @@ export class CesiumSpatialScopeAdapter {
       );
       this.assertLodCurrent(active, lodGeneration, controller.signal);
       for (const primitive of staged) primitive.show = true;
+      governorRequestRender("scope-lod");
       for (const primitive of active.renderPrimitives) active.container.remove(primitive);
       active.renderPrimitives = staged;
       active.activeRenderAssetId = activeRenderDescriptor?.assetId ?? null;

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { ReconScene } from "../../lib/recon/types";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 const PIN_RADIUS = 14;
 const PIN_COLOR = new Cesium.Color(0.92, 0.65, 0.20, 1.0); // amber per Hlidskjalf
@@ -58,6 +59,7 @@ export function ReconLayer({ viewer, scenes, visible, onSelect }: ReconLayerProp
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
       handlerRef.current = h;
     }
+    governorRequestRender("recon-setup");
     return () => {
       if (handlerRef.current) {
         handlerRef.current.destroy();
@@ -76,7 +78,10 @@ export function ReconLayer({ viewer, scenes, visible, onSelect }: ReconLayerProp
     if (!bc) return;
     bc.removeAll();
     idMapRef.current.clear();
-    if (!visible) return;
+    if (!visible) {
+      governorRequestRender("recon-render");
+      return;
+    }
 
     const pinImage = createReconPin();
     for (const scene of scenes) {
@@ -93,6 +98,7 @@ export function ReconLayer({ viewer, scenes, visible, onSelect }: ReconLayerProp
       });
       idMapRef.current.set(billboard as unknown as object, scene);
     }
+    governorRequestRender("recon-render");
   }, [scenes, visible]);
 
   return null;

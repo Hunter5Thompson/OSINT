@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { EONETEvent } from "../../types";
 import { glyphColor } from "./glyphTokens";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 const LABEL_ALTITUDE_THRESHOLD = 5_000_000;
 
@@ -122,6 +123,7 @@ export function EONETLayer({ viewer, events, visible, onSelect }: EONETLayerProp
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
       handlerRef.current = h;
     }
+    governorRequestRender("eonet-setup");
     return () => {
       if (handlerRef.current) {
         handlerRef.current.destroy();
@@ -144,7 +146,10 @@ export function EONETLayer({ viewer, events, visible, onSelect }: EONETLayerProp
     bc.removeAll();
     lc.removeAll();
     idMapRef.current.clear();
-    if (!visible) return;
+    if (!visible) {
+      governorRequestRender("eonet-render");
+      return;
+    }
 
     for (const ev of events) {
       const position = Cesium.Cartesian3.fromDegrees(ev.longitude, ev.latitude, 0);
@@ -170,6 +175,7 @@ export function EONETLayer({ viewer, events, visible, onSelect }: EONETLayerProp
         scale: 0.9,
       });
     }
+    governorRequestRender("eonet-render");
   }, [events, visible, viewer]);
 
   return null;

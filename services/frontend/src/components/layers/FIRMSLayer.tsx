@@ -7,6 +7,11 @@ import {
   bulkScaleByDistance,
   bulkTranslucencyByDistance,
 } from "../../lib/lod";
+import {
+  governorRequestRender,
+  holdContinuousRender,
+  releaseContinuousRender,
+} from "../../lib/renderGovernor";
 
 const MAX_FIRMS = 400;
 
@@ -102,6 +107,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
       handlerRef.current = h;
     }
+    governorRequestRender("firms-setup");
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (handlerRef.current) {
@@ -124,7 +130,10 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
     bc.removeAll();
     idMapRef.current.clear();
     pulsesRef.current = [];
-    if (!visibleRef.current) return;
+    if (!visibleRef.current) {
+      governorRequestRender("firms-render");
+      return;
+    }
 
     const bounds = getViewBounds(viewer);
     const shown = selectVisible(
@@ -164,6 +173,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
         pulsesRef.current.push({ ring, color });
       }
     }
+    governorRequestRender("firms-render");
   }, [viewer]);
 
   // Re-render on data / visibility change
@@ -185,8 +195,10 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
   useEffect(() => {
     if (!visible) {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      releaseContinuousRender("firms-pulse");
       return;
     }
+    holdContinuousRender("firms-pulse");
     // The loop reads pulsesRef.current live each frame, so explosion rings added or
     // removed by renderVisible() on camera move are handled without restarting the effect.
     const animate = () => {
@@ -203,6 +215,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
     animFrameRef.current = requestAnimationFrame(animate);
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      releaseContinuousRender("firms-pulse");
     };
   }, [visible]);
 

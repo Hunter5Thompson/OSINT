@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import { feature as topojsonFeature } from "topojson-client";
+import { governorRequestRender } from "../../../lib/renderGovernor";
 
 /** Wider than the old 0.6 (screen-space px) so the line reads over photoreal terrain. */
 export const BORDER_WIDTH = 2.0;
@@ -79,6 +80,7 @@ export function CountryBorders({ viewer, visible }: Props) {
       });
       viewer.scene.groundPrimitives.add(primitive);
       primitiveRef.current = primitive;
+      governorRequestRender("country-borders-add");
     })().catch((e) => console.error("CountryBorders load failed:", e));
 
     return () => {
@@ -88,6 +90,7 @@ export function CountryBorders({ viewer, visible }: Props) {
       if (!primitive || viewer.isDestroyed()) return;
       try {
         viewer.scene.groundPrimitives.remove(primitive);
+        governorRequestRender("country-borders-remove");
       } catch {
         /* primitive already destroyed via viewer teardown */
       }

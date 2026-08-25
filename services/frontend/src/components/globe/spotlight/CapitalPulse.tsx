@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import { useSpotlight } from "./SpotlightContext";
+import {
+  governorRequestRender,
+  holdContinuousRender,
+  releaseContinuousRender,
+} from "../../../lib/renderGovernor";
 
 interface Props {
   viewer: Cesium.Viewer | null;
@@ -43,7 +48,12 @@ export function CapitalPulse({ viewer }: Props) {
     };
     update();
     const remove = viewer.scene.preUpdate.addEventListener(update);
-    return () => remove();
+    holdContinuousRender("capital-pulse");
+    governorRequestRender("capital-pulse");
+    return () => {
+      remove();
+      releaseContinuousRender("capital-pulse");
+    };
   }, [viewer, capital]);
 
   if (!isActive) return null;

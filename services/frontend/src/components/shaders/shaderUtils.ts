@@ -2,6 +2,7 @@ import * as Cesium from "cesium";
 import { CRT_SHADER } from "./CRTShader.glsl";
 import { NIGHT_VISION_SHADER } from "./NightVisionShader.glsl";
 import { FLIR_SHADER } from "./FLIRShader.glsl";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 const SHADER_STAGE_NAME = "worldview_postprocess";
 
@@ -22,6 +23,7 @@ export function applyCRTShader(viewer: Cesium.Viewer): void {
     fragmentShader: CRT_SHADER,
   });
   viewer.scene.postProcessStages.add(stage);
+  governorRequestRender("shader-crt");
 }
 
 export function applyNightVisionShader(viewer: Cesium.Viewer): void {
@@ -30,6 +32,7 @@ export function applyNightVisionShader(viewer: Cesium.Viewer): void {
     fragmentShader: NIGHT_VISION_SHADER,
   });
   viewer.scene.postProcessStages.add(stage);
+  governorRequestRender("shader-nv");
 }
 
 export function applyFLIRShader(viewer: Cesium.Viewer): void {
@@ -38,4 +41,5 @@ export function applyFLIRShader(viewer: Cesium.Viewer): void {
     fragmentShader: FLIR_SHADER,
   });
   viewer.scene.postProcessStages.add(stage);
+  governorRequestRender("shader-flir");
 }

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import * as Cesium from "cesium";
+import { governorRequestRender } from "../../../lib/renderGovernor";
 
 interface Props {
   viewer: Cesium.Viewer | null;
@@ -46,6 +47,7 @@ export function Graticule({ viewer }: Props) {
     }
 
     viewer.scene.primitives.add(collection);
+    governorRequestRender("graticule-add");
 
     return () => {
       if (viewer.isDestroyed()) return;

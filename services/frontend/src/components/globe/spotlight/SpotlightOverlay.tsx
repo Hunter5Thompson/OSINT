@@ -1,6 +1,11 @@
 import { useEffect } from "react";
 import * as Cesium from "cesium";
 import { useSpotlight, type CircleTarget, type CountryTarget } from "./SpotlightContext";
+import {
+  governorRequestRender,
+  holdContinuousRender,
+  releaseContinuousRender,
+} from "../../../lib/renderGovernor";
 
 interface Props {
   viewer: Cesium.Viewer | null;
@@ -100,16 +105,16 @@ function mountCircle(viewer: Cesium.Viewer, target: CircleTarget): () => void {
     asynchronous: true,
   });
   viewer.scene.primitives.add(primitive);
+  governorRequestRender("spotlight-add");
 
-  const start = performance.now();
-  const listener = () => {
-    const t = performance.now() - start;
-    material.uniforms.alpha = Math.min(1, t / FADE_IN_MS);
-  };
-  viewer.scene.preUpdate.addEventListener(listener);
+  const listener = startFadeIn(viewer, material);
 
   return () => {
-    if (viewer.isDestroyed()) return;
+    releaseContinuousRender("spotlight-fade-in");
+    if (viewer.isDestroyed()) {
+      releaseContinuousRender("spotlight-fade-out");
+      return;
+    }
     fadeOutAndRemove(viewer, material, primitive, listener);
   };
 }
@@ -152,18 +157,33 @@ function mountCountry(viewer: Cesium.Viewer, target: CountryTarget): () => void 
     asynchronous: true,
   });
   viewer.scene.primitives.add(primitive);
+  governorRequestRender("spotlight-add");
 
+  const listener = startFadeIn(viewer, material);
+
+  return () => {
+    releaseContinuousRender("spotlight-fade-in");
+    if (viewer.isDestroyed()) {
+      releaseContinuousRender("spotlight-fade-out");
+      return;
+    }
+    fadeOutAndRemove(viewer, material, primitive, listener);
+  };
+}
+
+function startFadeIn(viewer: Cesium.Viewer, material: Cesium.Material): () => void {
   const start = performance.now();
+  holdContinuousRender("spotlight-fade-in");
   const listener = () => {
     const t = performance.now() - start;
     material.uniforms.alpha = Math.min(1, t / FADE_IN_MS);
+    if (t >= FADE_IN_MS) {
+      viewer.scene.preUpdate.removeEventListener(listener);
+      releaseContinuousRender("spotlight-fade-in");
+    }
   };
   viewer.scene.preUpdate.addEventListener(listener);
-
-  return () => {
-    if (viewer.isDestroyed()) return;
-    fadeOutAndRemove(viewer, material, primitive, listener);
-  };
+  return listener;
 }
 
 function fadeOutAndRemove(
@@ -173,6 +193,8 @@ function fadeOutAndRemove(
   inListener: () => void
 ): void {
   viewer.scene.preUpdate.removeEventListener(inListener);
+  releaseContinuousRender("spotlight-fade-in");
+  holdContinuousRender("spotlight-fade-out");
   const start = performance.now();
   const startAlpha = material.uniforms.alpha as number;
   const fade = () => {
@@ -181,7 +203,10 @@ function fadeOutAndRemove(
     material.uniforms.alpha = a;
     if (a <= 0) {
       viewer.scene.preUpdate.removeEventListener(fade);
-      viewer.scene.primitives.remove(primitive);
+      if (!viewer.isDestroyed()) {
+        viewer.scene.primitives.remove(primitive);
+      }
+      releaseContinuousRender("spotlight-fade-out");
     }
   };
   viewer.scene.preUpdate.addEventListener(fade);

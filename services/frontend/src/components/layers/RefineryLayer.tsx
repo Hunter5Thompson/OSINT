@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { RefineryGeoJSON, RefineryProperties } from "../../types";
 import { glyphColor } from "./glyphTokens";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 const ICON_COLOR = "#ff8f00";
 const LABEL_ALTITUDE_THRESHOLD = 5_000_000;
@@ -120,6 +121,7 @@ export function RefineryLayer({ viewer, refineries, visible, onSelect }: Refiner
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
       handlerRef.current = h;
     }
+    governorRequestRender("refinery-setup");
     return () => {
       if (handlerRef.current) {
         handlerRef.current.destroy();
@@ -142,7 +144,10 @@ export function RefineryLayer({ viewer, refineries, visible, onSelect }: Refiner
     bc.removeAll();
     lc.removeAll();
     idMapRef.current.clear();
-    if (!visible || !refineries) return;
+    if (!visible || !refineries) {
+      governorRequestRender("refinery-render");
+      return;
+    }
 
     if (!iconRef.current) {
       iconRef.current = createRefineryIcon(32);
@@ -177,6 +182,7 @@ export function RefineryLayer({ viewer, refineries, visible, onSelect }: Refiner
         scale: 0.9,
       });
     }
+    governorRequestRender("refinery-render");
   }, [refineries, visible, viewer]);
 
   return null;

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { DatacenterGeoJSON, DatacenterProperties } from "../../types";
 import { glyphColor } from "./glyphTokens";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 const ICON_COLOR = "#00e5ff";
 const LABEL_ALTITUDE_THRESHOLD = 5_000_000;
@@ -101,6 +102,7 @@ export function DatacenterLayer({ viewer, datacenters, visible, onSelect }: Data
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
       handlerRef.current = h;
     }
+    governorRequestRender("datacenter-setup");
     return () => {
       if (handlerRef.current) {
         handlerRef.current.destroy();
@@ -123,7 +125,10 @@ export function DatacenterLayer({ viewer, datacenters, visible, onSelect }: Data
     bc.removeAll();
     lc.removeAll();
     idMapRef.current.clear();
-    if (!visible || !datacenters) return;
+    if (!visible || !datacenters) {
+      governorRequestRender("datacenter-render");
+      return;
+    }
 
     if (!iconRef.current) {
       iconRef.current = createDatacenterIcon(32);
@@ -158,6 +163,7 @@ export function DatacenterLayer({ viewer, datacenters, visible, onSelect }: Data
         scale: 0.9,
       });
     }
+    governorRequestRender("datacenter-render");
   }, [datacenters, visible, viewer]);
 
   return null;

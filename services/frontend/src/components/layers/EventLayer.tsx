@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { IntelEvent } from "../../types";
 import { usePerformance } from "../globe/PerformanceGuard";
+import {
+  governorRequestRender,
+  holdContinuousRender,
+  releaseContinuousRender,
+} from "../../lib/renderGovernor";
 
 interface EventLayerProps {
   viewer: Cesium.Viewer | null;
@@ -156,6 +161,7 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
       labelCollectionRef.current = new Cesium.LabelCollection({ scene: viewer.scene });
       viewer.scene.primitives.add(labelCollectionRef.current);
     }
+    governorRequestRender("event-setup");
 
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -178,6 +184,7 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
     if (shouldShow !== labelsVisibleRef.current) {
       labelsVisibleRef.current = shouldShow;
       lc.show = shouldShow && visible;
+      governorRequestRender("event-labels");
     }
   }, [viewer, visible]);
 
@@ -198,7 +205,10 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
     pulsesRef.current = [];
     fadeListRef.current = [];
 
-    if (!visible) return;
+    if (!visible) {
+      governorRequestRender("event-render");
+      return;
+    }
 
     const placements = buildPlacements(events);
 
@@ -261,14 +271,17 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
 
     bc.show = visible;
     lc.show = visible && labelsVisibleRef.current;
+    governorRequestRender("event-render");
   }, [events, visible]);
 
   // Pulse animation loop
   useEffect(() => {
     if (!visible) {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      releaseContinuousRender("event-pulse");
       return;
     }
+    holdContinuousRender("event-pulse");
 
     const animate = () => {
       const now = Date.now();
@@ -309,6 +322,7 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
 
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      releaseContinuousRender("event-pulse");
     };
   }, [visible]);
 

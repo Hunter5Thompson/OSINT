@@ -10,6 +10,7 @@ import type {
 import type { ScopeKey } from "../contracts";
 import { spatialScopeColor } from "./hlidskjalfCesiumPalette";
 import type { SpatialChildPickId } from "./resolveWorldviewPick";
+import { governorRequestRender } from "../../lib/renderGovernor";
 
 const MAX_CHUNK_VERTICES = 8_000;
 const MAX_CHUNK_MILLISECONDS = 8;
@@ -195,6 +196,7 @@ export class CesiumScopePrimitiveHandle implements ScopePrimitiveHandle {
 
   set show(value: boolean) {
     this.primitive.show = value;
+    governorRequestRender("scope-primitive-show");
   }
 
   get ready(): boolean {
