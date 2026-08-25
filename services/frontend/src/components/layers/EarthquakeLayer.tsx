@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import type { Earthquake } from "../../types";
+import type { LabelArbiterApi, LabelRequest } from "../../hooks/useLabelArbiter";
 import { glyphColor } from "./glyphTokens";
 import { usePerformance } from "../globe/PerformanceGuard";
 import {
@@ -24,6 +25,7 @@ interface EarthquakeLayerProps {
   earthquakes: Earthquake[];
   visible: boolean;
   spatialAdapter?: StrictPointLayerAdapter<Earthquake>;
+  labelArbiter?: LabelArbiterApi;
 }
 
 function magnitudeToColor(mag: number): Cesium.Color {
@@ -57,6 +59,7 @@ export function EarthquakeLayer({
   earthquakes,
   visible,
   spatialAdapter,
+  labelArbiter,
 }: EarthquakeLayerProps) {
   const collectionRef = useRef<Cesium.BillboardCollection | null>(null);
   const labelCollectionRef = useRef<Cesium.LabelCollection | null>(null);
@@ -72,6 +75,8 @@ export function EarthquakeLayer({
   visibleRef.current = visible;
   const spatialAdapterRef = useRef(spatialAdapter);
   spatialAdapterRef.current = spatialAdapter;
+  const labelArbiterRef = useRef(labelArbiter);
+  labelArbiterRef.current = labelArbiter;
 
   // Setup: create BillboardCollection + LabelCollection
   useEffect(() => {
@@ -108,6 +113,7 @@ export function EarthquakeLayer({
     lc.removeAll();
     pulsesRef.current = [];
     if (!visibleRef.current) {
+      labelArbiterRef.current?.remove("earthquakes");
       governorRequestRender("earthquake-render");
       return;
     }
@@ -121,6 +127,19 @@ export function EarthquakeLayer({
       bounds,
       { cap: MAX_QUAKES, rank: (q) => q.magnitude },
     );
+
+    const requests: LabelRequest[] = shown.map((quake) => {
+      const size = magnitudeToSize(quake.magnitude);
+      return {
+        key: `earthquakes:${quake.id}`,
+        position: Cesium.Cartesian3.fromDegrees(quake.longitude, quake.latitude, 0),
+        text: `M${quake.magnitude.toFixed(1)}`,
+        fontSizePx: 11,
+        pixelOffsetY: -size - 5,
+        priority: quake.magnitude,
+      };
+    });
+    labelArbiterRef.current?.submit("earthquakes", requests);
 
     // Shared immutable NearFarScalar instances, reused across every billboard this pass.
     const scaleByDistance = bulkScaleByDistance();
@@ -149,6 +168,18 @@ export function EarthquakeLayer({
         translucencyByDistance,
       });
 
+      pulsesRef.current.push({
+        billboard,
+        ringBillboard,
+        magnitude: quake.magnitude,
+        eventTimeMs: new Date(quake.time).getTime(),
+        baseSize: size,
+        color,
+      });
+
+      const arbiter = labelArbiterRef.current;
+      if (arbiter && !arbiter.isSelected(`earthquakes:${quake.id}`)) continue;
+
       lc.add({
         position,
         text: `M${quake.magnitude.toFixed(1)}`,
@@ -161,23 +192,20 @@ export function EarthquakeLayer({
         eyeOffset: new Cesium.Cartesian3(0, 0, -50),
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, QUAKE_LABEL_ALTITUDE_M),
       });
-
-      pulsesRef.current.push({
-        billboard,
-        ringBillboard,
-        magnitude: quake.magnitude,
-        eventTimeMs: new Date(quake.time).getTime(),
-        baseSize: size,
-        color,
-      });
     }
     governorRequestRender("earthquake-render");
   }, [viewer]);
 
+  useEffect(() => {
+    return () => {
+      labelArbiterRef.current?.remove("earthquakes");
+    };
+  }, []);
+
   // Re-render on data / visibility change
   useEffect(() => {
     renderVisible();
-  }, [earthquakes, visible, spatialAdapter, renderVisible]);
+  }, [earthquakes, visible, spatialAdapter, renderVisible, labelArbiter?.version]);
 
   useEffect(() => spatialAdapter?.subscribe(renderVisible), [renderVisible, spatialAdapter]);
 

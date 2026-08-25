@@ -2,38 +2,12 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render } from "@testing-library/react";
 import * as Cesium from "cesium";
 import { EarthquakeLayer } from "../EarthquakeLayer";
+import type { LabelArbiterApi } from "../../../hooks/useLabelArbiter";
 import type { Earthquake } from "../../../types";
 import type { StrictPointLayerAdapter } from "../../../spatial/pointLayerSpatialAdapter";
+import { fakeViewer } from "./fakeViewer";
 
 afterEach(() => vi.restoreAllMocks());
-
-function fakeViewer(
-  rect: Cesium.Rectangle = Cesium.Rectangle.fromDegrees(-180, -85, 180, 85),
-): Cesium.Viewer & { _fireMoveEnd: () => void; _computeViewRectangle: ReturnType<typeof vi.fn> } {
-  const primitives = { add: vi.fn((p: unknown) => p), remove: vi.fn() };
-  const moveEndListeners: Array<() => void> = [];
-  const computeViewRectangle = vi.fn(() => rect);
-  return {
-    scene: {
-      primitives,
-      requestRender: vi.fn(),
-      frameState: { mode: Cesium.SceneMode.SCENE3D },
-      globe: { ellipsoid: Cesium.Ellipsoid.WGS84 },
-    },
-    camera: {
-      positionCartographic: { height: 3_000_000 },
-      computeViewRectangle,
-      moveEnd: {
-        addEventListener: vi.fn((cb: () => void) => { moveEndListeners.push(cb); }),
-        removeEventListener: vi.fn(),
-      },
-    },
-    canvas: document.createElement("canvas"),
-    isDestroyed: () => false,
-    _fireMoveEnd: () => moveEndListeners.forEach((cb) => cb()),
-    _computeViewRectangle: computeViewRectangle,
-  } as unknown as Cesium.Viewer & { _fireMoveEnd: () => void; _computeViewRectangle: ReturnType<typeof vi.fn> };
-}
 
 const quake = (over: Partial<Earthquake>): Earthquake => ({
   id: over.id ?? "q",
@@ -199,5 +173,79 @@ describe("EarthquakeLayer", () => {
     labelAdd.mockClear();
     viewer._fireMoveEnd();
     expect(labelAdd.mock.calls.length).toBe(0);
+  });
+
+  it("submits label requests with world positions, never screen coordinates", () => {
+    vi.spyOn(Cesium.LabelCollection.prototype, "add");
+    const submit = vi.fn<LabelArbiterApi["submit"]>();
+    const arbiter: LabelArbiterApi = {
+      submit,
+      remove: vi.fn<LabelArbiterApi["remove"]>(),
+      isSelected: () => true,
+      version: 0,
+    };
+    const viewer = fakeViewer();
+    render(
+      <EarthquakeLayer
+        viewer={viewer}
+        earthquakes={[quake({ id: "q1" })]}
+        visible={true}
+        labelArbiter={arbiter}
+      />,
+    );
+    expect(submit).toHaveBeenCalledWith("earthquakes", expect.any(Array));
+    const requests = submit.mock.calls[0]![1];
+    expect(requests.length).toBeGreaterThan(0);
+    const request = requests[0]!;
+    expect(request).toEqual(
+      expect.objectContaining({
+        key: "earthquakes:q1",
+        text: "M5.2",
+        fontSizePx: 11,
+        pixelOffsetY: expect.any(Number),
+        priority: 5.2,
+      }),
+    );
+    expect(request.position).toBeInstanceOf(Cesium.Cartesian3);
+    expect(request).not.toHaveProperty("rect");
+  });
+
+  it("removes its requests when it goes invisible", () => {
+    vi.spyOn(Cesium.LabelCollection.prototype, "add");
+    const remove = vi.fn<LabelArbiterApi["remove"]>();
+    const arbiter: LabelArbiterApi = {
+      submit: vi.fn<LabelArbiterApi["submit"]>(),
+      remove,
+      isSelected: () => true,
+      version: 0,
+    };
+    const viewer = fakeViewer();
+    const fixtures = [quake({ id: "q1" })];
+    const { rerender } = render(
+      <EarthquakeLayer
+        viewer={viewer}
+        earthquakes={fixtures}
+        visible={true}
+        labelArbiter={arbiter}
+      />,
+    );
+    rerender(
+      <EarthquakeLayer
+        viewer={viewer}
+        earthquakes={fixtures}
+        visible={false}
+        labelArbiter={arbiter}
+      />,
+    );
+    expect(remove).toHaveBeenCalledWith("earthquakes");
+  });
+
+  it("KEEPS existing label behaviour when no arbiter is supplied", () => {
+    const labelAdd = vi.spyOn(Cesium.LabelCollection.prototype, "add");
+    const viewer = fakeViewer();
+    render(
+      <EarthquakeLayer viewer={viewer} earthquakes={[quake({ id: "a" })]} visible={true} />,
+    );
+    expect(labelAdd).toHaveBeenCalled();
   });
 });

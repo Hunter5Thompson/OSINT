@@ -1,8 +1,11 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { GDACSEvent } from "../../types";
+import type { LabelArbiterApi, LabelRequest } from "../../hooks/useLabelArbiter";
 import { glyphColor } from "./glyphTokens";
 import { governorRequestRender } from "../../lib/renderGovernor";
+
+const MAX_GDACS_LABELS = 300;
 
 export const EVENT_TYPE_LABELS: Record<string, string> = {
   EQ: "Earthquake",
@@ -92,15 +95,18 @@ interface GDACSLayerProps {
   events: GDACSEvent[];
   visible: boolean;
   onSelect?: (e: GDACSEvent) => void;
+  labelArbiter?: LabelArbiterApi;
 }
 
-export function GDACSLayer({ viewer, events, visible, onSelect }: GDACSLayerProps) {
+export function GDACSLayer({ viewer, events, visible, onSelect, labelArbiter }: GDACSLayerProps) {
   const billboardCollectionRef = useRef<Cesium.BillboardCollection | null>(null);
   const labelCollectionRef = useRef<Cesium.LabelCollection | null>(null);
   const idMapRef = useRef<Map<object, GDACSEvent>>(new Map());
   const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const labelArbiterRef = useRef(labelArbiter);
+  labelArbiterRef.current = labelArbiter;
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -139,6 +145,12 @@ export function GDACSLayer({ viewer, events, visible, onSelect }: GDACSLayerProp
   }, [viewer]);
 
   useEffect(() => {
+    return () => {
+      labelArbiterRef.current?.remove("gdacs");
+    };
+  }, []);
+
+  useEffect(() => {
     const bc = billboardCollectionRef.current;
     const lc = labelCollectionRef.current;
     if (!bc || !lc) return;
@@ -146,9 +158,24 @@ export function GDACSLayer({ viewer, events, visible, onSelect }: GDACSLayerProp
     lc.removeAll();
     idMapRef.current.clear();
     if (!visible) {
+      labelArbiterRef.current?.remove("gdacs");
       governorRequestRender("gdacs-render");
       return;
     }
+
+    const ranked = events
+      .slice()
+      .sort((a, b) => b.severity - a.severity)
+      .slice(0, MAX_GDACS_LABELS);
+    const requests: LabelRequest[] = ranked.map((ev) => ({
+      key: `gdacs:${ev.id}`,
+      position: Cesium.Cartesian3.fromDegrees(ev.longitude, ev.latitude, 0),
+      text: ev.event_name || (EVENT_TYPE_LABELS[ev.event_type] ?? ev.event_type),
+      fontSizePx: 11,
+      pixelOffsetY: -22,
+      priority: ev.severity,
+    }));
+    labelArbiterRef.current?.submit("gdacs", requests);
 
     for (const ev of events) {
       const position = Cesium.Cartesian3.fromDegrees(ev.longitude, ev.latitude, 0);
@@ -160,6 +187,9 @@ export function GDACSLayer({ viewer, events, visible, onSelect }: GDACSLayerProp
         eyeOffset: new Cesium.Cartesian3(0, 0, -30),
       });
       idMapRef.current.set(bb as unknown as object, ev);
+
+      const arbiter = labelArbiterRef.current;
+      if (arbiter && !arbiter.isSelected(`gdacs:${ev.id}`)) continue;
 
       const labelText = ev.event_name || (EVENT_TYPE_LABELS[ev.event_type] ?? ev.event_type);
       lc.add({
@@ -176,7 +206,7 @@ export function GDACSLayer({ viewer, events, visible, onSelect }: GDACSLayerProp
       });
     }
     governorRequestRender("gdacs-render");
-  }, [events, visible, viewer]);
+  }, [events, visible, viewer, labelArbiter?.version]);
 
   return null;
 }

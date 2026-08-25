@@ -107,6 +107,7 @@ import { useDatacenters } from "../hooks/useDatacenters";
 import { useRefineries } from "../hooks/useRefineries";
 import { useEONETEvents } from "../hooks/useEONETEvents";
 import { useGDACSEvents } from "../hooks/useGDACSEvents";
+import { useLabelArbiter, type LabelArbiterApi } from "../hooks/useLabelArbiter";
 import { getConfig } from "../services/api";
 import { useSpatialBoundaryProvenance } from "../hooks/useSpatialBoundaryProvenance";
 import type {
@@ -197,6 +198,7 @@ interface GlobeChildrenProps {
   gdacsEvents: GDACSEvent[];
   chronikSpatialScope: SpatialQueryRef | null | undefined;
   scopeGeneration: number;
+  labelArbiter: LabelArbiterApi;
 }
 
 function GlobeChildren({
@@ -211,6 +213,7 @@ function GlobeChildren({
   gdacsEvents,
   chronikSpatialScope,
   scopeGeneration,
+  labelArbiter,
 }: GlobeChildrenProps) {
   const { dispatch: dispatchSpotlight } = useSpotlight();
 
@@ -313,6 +316,7 @@ function GlobeChildren({
         viewer={viewer}
         events={gdacsEvents}
         visible={layers.gdacs}
+        labelArbiter={labelArbiter}
         onSelect={(event) => {
           setSelected({ type: "gdacs", data: event });
           dispatchSpotlight({
@@ -799,6 +803,7 @@ function WorldviewContent({
   const { scenes: reconScenes } = useReconManifest();
   const { openScene } = useRecon();
 
+  const labelArbiter = useLabelArbiter(viewer, 50);
   const hasViewer = useMemo(() => viewer != null && !viewer.isDestroyed(), [viewer]);
 
   useEffect(() => {
@@ -911,6 +916,7 @@ function WorldviewContent({
           earthquakes={earthquakes}
           visible={effectiveLayers.earthquakes}
           spatialAdapter={earthquakeSpatialAdapter ?? undefined}
+          labelArbiter={labelArbiter}
         />
         <ShipLayer viewer={viewer} vessels={vessels} visible={effectiveLayers.vessels} />
         <CCTVLayer viewer={viewer} visible={effectiveLayers.cctv} />
@@ -940,6 +946,7 @@ function WorldviewContent({
           gdacsEvents={gdacsEvents}
           chronikSpatialScope={chronikSpatialScope}
           scopeGeneration={scopeStateRevision}
+          labelArbiter={labelArbiter}
         />
         <MutuallyExclusiveCountryPath
           spatialEnabled={spatialEnabled}
