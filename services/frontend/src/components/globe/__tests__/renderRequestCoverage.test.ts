@@ -103,3 +103,11 @@ describe("explicit-render coverage", () => {
     expect(src.slice(src.indexOf("viewer.clock.onTick") - 600)).toMatch(/if\s*\(!visible\)/);
   });
 });
+
+describe("governor install", () => {
+  it("installs and uninstalls the governor in GlobeViewer", () => {
+    const src = readFileSync(join(SRC, "components/globe/GlobeViewer.tsx"), "utf8");
+    expect(src).toContain("installRenderGovernor(viewer)");
+    expect(src).toContain("uninstallRenderGovernor()");
+  });
+});

@@ -4,7 +4,7 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { ShaderType } from "../../types";
 import { applyCRTShader, applyNightVisionShader, applyFLIRShader, clearShaders } from "../shaders/shaderUtils";
 import { applyTilesetPerformanceConfig } from "./tilesetConfig";
-import { governorRequestRender } from "../../lib/renderGovernor";
+import { governorRequestRender, installRenderGovernor, uninstallRenderGovernor } from "../../lib/renderGovernor";
 
 interface GlobeViewerProps {
   onViewerReady: (viewer: Cesium.Viewer) => void;
@@ -165,9 +165,11 @@ export function GlobeViewer({
     });
 
     viewerRef.current = viewer;
+    installRenderGovernor(viewer);
     onViewerReady(viewer);
 
     return () => {
+      uninstallRenderGovernor();
       if (nightLayerRef.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
         viewerRef.current.imageryLayers.remove(nightLayerRef.current, false);
         nightLayerRef.current = null;
