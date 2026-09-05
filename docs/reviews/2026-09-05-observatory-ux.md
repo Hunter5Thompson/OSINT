@@ -166,6 +166,15 @@ sowie alle anderen Worktrees wurden nicht verändert oder in den Commit aufgenom
 5. TASK-114/LOD bleibt wichtig; das native Scope-Menü löst keine dichten
    operativen Layer. Schreibworkflows, Provider-Recovery und alle externen
    Quellen wurden nicht vollständig abgenommen.
+6. **Scope-Wechsel noch nicht live freigegeben:** Der abschließende Browsertest
+   wählt Germany im nativen Picker. `/api/spatial/scope` für `country:DEU`
+   liefert 200 und die URL erhält `scope=country%3ADEU`, aber Breadcrumb und
+   weitere Timeline-Anfragen bleiben auf World. Kein JavaScript-Fehler, kein
+   erfolgreicher Scope-Commit innerhalb der Testfrist. Die Auswahl sendet das
+   korrekte Kommando (Unit-Test und HTTP-Nachweis); Router-Acknowledgement und
+   Controller-Commit unter laufendem Cesium müssen separat reproduziert und
+   korrigiert werden. Die erfolgreiche Seitennavigation ist kein Beleg für
+   einen funktionierenden Scope-Wechsel.
 
 ### Testprotokoll dieser Fortsetzung
 
