@@ -86,6 +86,7 @@ export function OverlayPanel({
     return (
       <button
         type="button"
+        className="observatory-panel-tab"
         aria-label={`expand ${label}`}
         onClick={onExpand}
         style={{ ...collapsedTab, ...style }}
@@ -98,6 +99,7 @@ export function OverlayPanel({
   return (
     <section
       role="region"
+      className="observatory-panel"
       aria-label={label}
       style={{
         ...panelBase,
@@ -113,6 +115,7 @@ export function OverlayPanel({
         {onClose ? (
           <button
             type="button"
+            className="observatory-panel-close"
             aria-label={`close ${label}`}
             onClick={onClose}
             style={panelCloseBtn}

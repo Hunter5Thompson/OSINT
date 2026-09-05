@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { TickerPanel } from "./TickerPanel";
 
 vi.mock("../../hooks/useSignalFeed", () => ({
@@ -24,6 +24,12 @@ vi.mock("../../hooks/useSignalFeed", () => ({
 }));
 
 describe("TickerPanel", () => {
+  it("opens a signal through the supplied selection action", () => {
+    const onSelect = vi.fn();
+    render(<TickerPanel onSelect={onSelect} />);
+    fireEvent.click(screen.getByRole("button", { name: /sinjar cluster/i }));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ event_id: "01ABC" }));
+  });
   it("renders live signal items using Landing's feed hook", () => {
     render(<TickerPanel />);
     expect(screen.getByRole("region", { name: /Ticker/i })).toBeInTheDocument();

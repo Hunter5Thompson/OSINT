@@ -75,6 +75,8 @@ import { LayersPanel } from "../components/worldview/LayersPanel";
 import { SearchPanel } from "../components/worldview/SearchPanel";
 import { InspectorPanel, type Selected } from "../components/worldview/InspectorPanel";
 import { TickerPanel } from "../components/worldview/TickerPanel";
+import { WorkspaceBar } from "../components/worldview/WorkspaceBar";
+import { layersForMode, WORKSPACE_MODES } from "../components/worldview/workspaceModes";
 import { WorldviewHudLoader } from "../components/worldview/WorldviewHudLoader";
 import { SpotlightProvider, useSpotlight } from "../components/globe/spotlight/SpotlightContext";
 import {
@@ -660,6 +662,8 @@ function WorldviewContent({
   const [viewer, setViewer] = useState<Cesium.Viewer | null>(null);
   const [photorealTileset, setPhotorealTileset] = useState<Cesium.Cesium3DTileset | null>(null);
   const [config, setConfig] = useState<ClientConfig | null>(null);
+  const [configError, setConfigError] = useState(false);
+  const [configAttempt, setConfigAttempt] = useState(0);
   const [layers, setLayers] = useState<LayerVisibility>(DEFAULT_LAYERS);
   const runtimeSpatialStatuses = useMemo(
     () => layerSpatialStatuses(currentScopeKind, containmentSnapshot),
@@ -698,6 +702,7 @@ function WorldviewContent({
     [currentScopeKey, scopeStateRevision],
   );
   const [searchSeed, setSearchSeed] = useState("");
+  const [focusMode, setFocusMode] = useState(false);
   const [expandedPanels, setExpandedPanels] = useState<Record<PanelId, boolean>>({
     layers: false,
     search: false,
@@ -802,16 +807,24 @@ function WorldviewContent({
   const hasViewer = useMemo(() => viewer != null && !viewer.isDestroyed(), [viewer]);
 
   useEffect(() => {
+    let active = true;
     void getConfig()
-      .then(setConfig)
+      .then(value => {
+        if (!active) return;
+        setConfig(value);
+        setConfigError(false);
+      })
       .catch(() => {
+        if (!active) return;
+        setConfigError(true);
         setConfig({
           cesium_ion_token: "",
           default_layers: DEFAULT_LAYERS,
           api_version: "v1",
         });
       });
-  }, []);
+    return () => { active = false; };
+  }, [configAttempt]);
 
   useEffect(() => {
     if (!config?.default_layers) return;
@@ -825,6 +838,8 @@ function WorldviewContent({
     const layerParam = params.get("layer");
     const filterParam = params.get("filter");
     const entityParam = params.get("entity");
+    const mode = WORKSPACE_MODES.find(item => item.id === params.get("mode"));
+    if (mode) setLayers(layersForMode(mode.id));
 
     if (layerParam && isLayerKey(layerParam)) {
       setLayers((prev) => ({ ...prev, [layerParam]: true }));
@@ -837,7 +852,7 @@ function WorldviewContent({
       setExpandedPanels((prev) => ({ ...prev, layers: true }));
     }
 
-    const searchFromEntity = decodeEntityQuery(entityParam);
+    const searchFromEntity = params.get("q")?.trim() || decodeEntityQuery(entityParam);
     if (searchFromEntity) {
       setSearchSeed(searchFromEntity);
       setExpandedPanels((prev) => ({ ...prev, search: true }));
@@ -846,16 +861,25 @@ function WorldviewContent({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.repeat
+        || target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
+      if (event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setFocusMode(previous => !previous);
+      }
       if (event.key === "/") {
         const target = event.target as HTMLElement | null;
         if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
         event.preventDefault();
+        setFocusMode(false);
         setExpandedPanels((prev) => ({ ...prev, search: true }));
       }
 
       if (event.key.toLowerCase() === "l" && !event.ctrlKey && !event.metaKey && !event.altKey) {
         const target = event.target as HTMLElement | null;
         if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
+        setFocusMode(false);
         setExpandedPanels((prev) => ({ ...prev, layers: !prev.layers }));
       }
     };
@@ -882,7 +906,7 @@ function WorldviewContent({
 
   if (!config) {
     return (
-      <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+      <div className="worldview-workspace" style={{ flex: 1, position: "relative", minHeight: 0 }}>
         <WorldviewHudLoader />
       </div>
     );
@@ -892,7 +916,7 @@ function WorldviewContent({
     <SpotlightProvider>
     <PerformanceGuard>
     <TimeProvider viewer={viewer}>
-      <div style={{ flex: 1, position: "relative", minHeight: 0 }} data-page="worldview">
+      <div className="worldview-workspace" data-degraded={configError || !config.cesium_ion_token} style={{ flex: 1, position: "relative", minHeight: 0 }} data-page="worldview">
         <div style={{ position: "absolute", inset: 0 }}>
           <GlobeViewer
             onViewerReady={handleViewerReady}
@@ -965,7 +989,7 @@ function WorldviewContent({
               <div
                 style={{
                   position: "absolute",
-                  top: 16,
+                  top: configError || !config.cesium_ion_token ? 120 : 76,
                   left: "50%",
                   zIndex: 10,
                   transform: "translateX(-50%)",
@@ -996,7 +1020,16 @@ function WorldviewContent({
 
         {!hasViewer ? <WorldviewHudLoader /> : null}
 
-        <div style={{ position: "absolute", top: 16, left: 16, zIndex: 10 }}>
+        <WorkspaceBar layers={layers} focusMode={focusMode}
+          onMode={mode => setLayers(layersForMode(mode))}
+          onFocus={() => setFocusMode(previous => !previous)} />
+
+        {configError || !config.cesium_ion_token ? <div className="worldview-availability" role={configError ? "alert" : "status"}>
+          <span>{configError ? "Backend unavailable. Reference map only; live data, search and regional scopes cannot load." : "Reference map · Detailed imagery unavailable."}</span>
+          {configError && <button type="button" onClick={() => setConfigAttempt(previous => previous + 1)}>Retry connection</button>}
+        </div> : null}
+
+        <div className="worldview-left-rail" hidden={focusMode}>
           {expandedPanels.layers ? (
             <OverlayPanel
               paragraph="I"
@@ -1027,7 +1060,7 @@ function WorldviewContent({
           )}
         </div>
 
-        <div style={{ position: "absolute", top: 16, right: 16, zIndex: 10 }}>
+        <div className="worldview-right-rail" hidden={focusMode}>
           {expandedPanels.search ? (
             <OverlayPanel
               paragraph="II"
@@ -1048,9 +1081,6 @@ function WorldviewContent({
               {null}
             </OverlayPanel>
           )}
-        </div>
-
-        <div style={{ position: "absolute", top: 86, right: 16, zIndex: 10 }}>
           <InspectorPanel
             selected={selected}
             onClose={() => setSelected(null)}
@@ -1061,14 +1091,20 @@ function WorldviewContent({
 
         {/* The ticker is globally sourced; hide it below world until it has a scoped lane. */}
         {!spatialEnabled || currentScopeKind === "world" ? (
-          <div style={{ position: "absolute", left: 16, bottom: 106, zIndex: 10 }}>
+          <div className="worldview-ticker-rail" hidden={focusMode}>
             <TickerPanel
               variant={expandedPanels.ticker ? "expanded" : "collapsed"}
               onClose={() => setExpandedPanels((prev) => ({ ...prev, ticker: false }))}
               onExpand={() => setExpandedPanels((prev) => ({ ...prev, ticker: true }))}
+              onSelect={signal => {
+                setSearchSeed(signal.payload.title || signal.payload.source || signal.type);
+                setExpandedPanels(previous => ({ ...previous, search: true }));
+              }}
             />
           </div>
         ) : null}
+
+        <div className="worldview-navigation-hint" aria-hidden="true">Drag to explore <span>·</span> Scroll to zoom <span>·</span> <kbd>/</kbd> Search <span>·</span> <kbd>L</kbd> Layers</div>
 
         <EventCallout
           eventId={selectedEventId}

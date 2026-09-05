@@ -1,6 +1,8 @@
 import { useSignalFeed } from "../../hooks/useSignalFeed";
 import { OverlayPanel, type OverlayPanelVariant } from "../hlidskjalf/OverlayPanel";
 import { SignalFeedItem } from "../hlidskjalf/SignalFeedItem";
+import { FeedConnection } from "../hlidskjalf/FeedConnection";
+import type { SignalEnvelope } from "../../types/signals";
 
 type Severity = "sent" | "amb" | "sage" | "dim";
 
@@ -8,6 +10,7 @@ interface TickerPanelProps {
   variant?: OverlayPanelVariant;
   onClose?: () => void;
   onExpand?: () => void;
+  onSelect?: (signal: SignalEnvelope) => void;
 }
 
 function mapSeverity(severity: string | undefined): Severity {
@@ -31,7 +34,7 @@ function formatTime(iso: string): string {
   return `${hh}:${mm}Z`;
 }
 
-export function TickerPanel({ variant = "expanded", onClose, onExpand }: TickerPanelProps = {}) {
+export function TickerPanel({ variant = "expanded", onClose, onExpand, onSelect }: TickerPanelProps = {}) {
   const { items, status } = useSignalFeed();
 
   if (variant === "collapsed") {
@@ -51,15 +54,11 @@ export function TickerPanel({ variant = "expanded", onClose, onExpand }: TickerP
       onClose={onClose}
     >
       <div style={{ display: "grid", gap: "0.15rem", maxHeight: 228, overflowY: "auto" }}>
-        {status === "reconnecting" ? (
-          <span className="mono" style={{ color: "var(--ash)", fontSize: "0.65rem" }}>
-            § reconnecting...
-          </span>
-        ) : null}
+        <FeedConnection status={status} />
 
         {items.length === 0 && status !== "reconnecting" ? (
           <span className="mono" style={{ color: "var(--ash)", fontSize: "0.65rem" }}>
-            - no signals yet -
+            Waiting for signals. Explore the map while updates arrive.
           </span>
         ) : null}
 
@@ -69,6 +68,7 @@ export function TickerPanel({ variant = "expanded", onClose, onExpand }: TickerP
             severity={mapSeverity(entry.payload.severity)}
             ts={formatTime(entry.ts)}
             text={entry.payload.title || entry.type}
+            onClick={onSelect ? () => onSelect(entry) : undefined}
           />
         ))}
       </div>

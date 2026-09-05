@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../../components/globe/GlobeViewer", () => ({
@@ -58,10 +58,11 @@ vi.mock("../../spatial/react", () => ({
 
 import { WorldviewPage } from "../../pages/WorldviewPage";
 import { ReconProvider } from "../../state/ReconContext";
+import { getConfig } from "../../services/api";
 
-function renderWorldview() {
+function renderWorldview(path = "/worldview") {
   return render(
-    <MemoryRouter initialEntries={["/worldview"]}>
+    <MemoryRouter initialEntries={[path]}>
       <ReconProvider>
         <WorldviewPage />
       </ReconProvider>
@@ -70,6 +71,19 @@ function renderWorldview() {
 }
 
 describe("WorldviewPage", () => {
+  it("uses the headline query instead of reducing a signal deep-link to its source", async () => {
+    renderWorldview("/worldview?entity=gdelt%3A123-1&q=Black%20Sea");
+    expect(await screen.findByRole("textbox", { name: /Search entities/i })).toHaveValue("Black Sea");
+  });
+  it("explains unavailable services while keeping the map workspace accessible", async () => {
+    vi.mocked(getConfig).mockRejectedValueOnce(new Error("offline"));
+    renderWorldview();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Backend unavailable/i);
+    expect(screen.getByRole("button", { name: /retry connection/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /Map working mode/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /retry connection/i }));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
   it("renders the globe and four overlay panel tabs/expanded forms", async () => {
     renderWorldview();
     expect(await screen.findByTestId("spatial-scope-provider")).toBeInTheDocument();

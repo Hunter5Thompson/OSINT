@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { Orrery } from "./Orrery";
 
 /**
@@ -145,6 +145,7 @@ const TABS: readonly TabDef[] = [
 ] as const;
 
 export function TopBar({ warRoomActive = false }: { warRoomActive?: boolean }) {
+  const navigate = useNavigate();
   const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
@@ -160,10 +161,10 @@ export function TopBar({ warRoomActive = false }: { warRoomActive?: boolean }) {
   const location = useMemo(() => coarseLocation(), []);
 
   return (
-    <header style={headerStyle} role="banner">
+    <header className="observatory-topbar" style={headerStyle} role="banner">
       <div style={brandStyle}>
         <Orrery size="s" />
-        <span style={wordmarkStyle}>Hlíðskjalf</span>
+        <div className="observatory-brand"><strong>ODIN<span> / </span></strong><span style={wordmarkStyle}>Hlíðskjalf</span></div>
       </div>
 
       <nav style={navStyle} aria-label="Primary">
@@ -172,6 +173,13 @@ export function TopBar({ warRoomActive = false }: { warRoomActive?: boolean }) {
             key={tab.to}
             to={tab.to}
             end={tab.to === "/"}
+            onClick={(event) => {
+              if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+              event.preventDefault();
+              // Commit primary navigation before the continuously updating globe
+              // can interrupt a concurrent route transition.
+              void navigate(tab.to, { flushSync: true });
+            }}
             style={({ isActive }) => (isActive ? tabActiveStyle : tabBaseStyle)}
           >
             {({ isActive }) => {

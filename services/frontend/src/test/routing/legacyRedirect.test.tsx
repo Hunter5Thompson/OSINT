@@ -42,7 +42,7 @@ describe("legacy query redirect + AppShell", () => {
 
   it("stays on Landing when / has no migration query", async () => {
     renderAt("/");
-    expect(await screen.findByText(/Index Rerum/i)).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: /Situation summary/i })).toBeInTheDocument();
     expect(screen.queryByTestId("worldview-page")).not.toBeInTheDocument();
   });
 

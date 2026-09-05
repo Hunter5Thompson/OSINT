@@ -12,6 +12,13 @@
 # - Enhancement-Tasks (100-111) mit vollen Specs
 # - Jeder Task ist ein self-contained Briefing für Sonnet/Haiku
 
+## Session 2026-09-05 — Observatory UX
+
+UI-Einstieg, Karten-Arbeitsmodi, Fokusmodus, transparente Fehlerzustände und
+Navigation/Lifecycle überarbeitet. Analyse, Validierung und nächste Schritte:
+[Session-Notizen](docs/reviews/2026-09-05-observatory-ux.md).
+TASK-114 und die verbleibenden TASK-119-Slices werden dadurch nicht geschlossen.
+
 ---
 
 # ══════════════════════════════════════════

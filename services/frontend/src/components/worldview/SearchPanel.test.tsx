@@ -3,6 +3,17 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { SearchPanel } from "./SearchPanel";
 
 describe("SearchPanel", () => {
+  it("distinguishes service failure from no matches and retries the same query", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ nodes: [{ id: "loc:1", name: "Black Sea", type: "Location" }] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SearchPanel viewer={null} initialQuery="Black Sea" />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/search unavailable/i);
+    expect(screen.queryByText(/no matches/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /retry search/i }));
+    expect(await screen.findByRole("button", { name: /Black Sea/i })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     vi.restoreAllMocks();
   });
