@@ -12,6 +12,14 @@
 # - Enhancement-Tasks (100-111) mit vollen Specs
 # - Jeder Task ist ein self-contained Briefing für Sonnet/Haiku
 
+## Session 2026-09-06 — Regional atlas and strategic layers
+
+Kamera-/Scope-Wechsel, Ländergrenzen, deutsche Bundesländer, Regionalhauptstädte,
+Flugzeug-/Schiffssymbole und drei strategische Referenz-Layer überarbeitet.
+Abdeckung, Quellen, Live-Nachweise und verbleibende Grenzen:
+[Session-Notizen](docs/reviews/2026-09-06-regional-atlas.md).
+Keine pauschale Schließung von TASK-114 oder TASK-119.
+
 ## Session 2026-09-05 — Observatory UX
 
 UI-Einstieg, Karten-Arbeitsmodi, Fokusmodus, transparente Fehlerzustände und

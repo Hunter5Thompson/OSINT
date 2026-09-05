@@ -1,0 +1,22 @@
+.regional-atlas { position: absolute; left: 18px; bottom: 170px; z-index: 11; width: 278px; max-height: calc(100vh - 390px); overflow: auto; padding: 18px; color: var(--bone); border: 1px solid #c6a45d66; border-top: 2px solid #d9b86d; background: linear-gradient(145deg, #182731f5, #0b1219f5); box-shadow: 0 16px 48px #0006; backdrop-filter: blur(14px); }
+.regional-atlas__eyebrow { color: #d9b86d; font: 9px "Martian Mono", monospace; letter-spacing: .16em; text-transform: uppercase; }
+.regional-atlas__heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.regional-atlas h2 { font: italic 30px "Instrument Serif", serif; margin: 8px 0 16px; }
+.regional-atlas button { cursor: pointer; color: inherit; background: transparent; border: 1px solid #80909844; padding: 5px 9px; }
+.regional-atlas button:focus-visible { outline: 2px solid #e8c66a; outline-offset: 2px; }
+.regional-atlas__stats { display: flex; gap: 20px; font-size: 10px; color: #b7b9b7; padding-bottom: 14px; border-bottom: 1px solid #80909833; }
+.regional-atlas__stats strong { display: block; color: #eee5d1; font: 27px "Instrument Serif", serif; }
+.regional-atlas__profile { padding-top: 16px; }
+.regional-atlas h3 { font: 23px "Instrument Serif", serif; margin: 8px 0 12px; }
+.regional-atlas dl { margin: 0; }.regional-atlas dt { font-size: 10px; color: #a5afb0; }.regional-atlas dd { margin: 3px 0 11px; font-size: 14px; }
+.regional-atlas .regional-atlas__explore { width: 100%; border-color: #d9b86d88; color: #e8c66a; margin-bottom: 10px; }
+.regional-atlas__hint { font-size: 11px; line-height: 1.6; color: #bdc2bd; }
+.regional-atlas__list { display: grid; gap: 4px; max-height: 148px; overflow: auto; margin-top: 12px; }
+.regional-atlas__list button { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px; text-align: left; font-size: 11px; }
+.regional-atlas__list small { color: #bba77b; font-size: 10px; }.regional-atlas__list button[aria-pressed="true"] { background: #d9b86d1a; border-color: #d9b86d99; }
+.regional-atlas footer { margin-top: 14px; font-size: 9px; line-height: 1.6; color: #97a3a5; }.regional-atlas a { color: #d9b86d; }
+.regional-atlas--collapsed { padding-bottom: 0; }
+@media (max-width: 700px) { .regional-atlas { left: 10px; width: 220px; bottom: 145px; max-height: 36vh; padding: 12px; }.regional-atlas h2 { font-size: 23px; }.regional-atlas__list { max-height: 90px; } }
+.worldview-scope-navigation { position: absolute; top: 76px; left: 50%; z-index: 10; transform: translateX(-50%); max-width: calc(100% - 32px); }
+.worldview-scope-navigation[data-availability-warning="true"] { top: 120px; }
+@media (max-width: 700px) { .worldview-scope-navigation { top: 176px; left: 10px; right: 10px; transform: none; max-width: none; }.worldview-scope-navigation[data-availability-warning="true"] { top: 210px; } }

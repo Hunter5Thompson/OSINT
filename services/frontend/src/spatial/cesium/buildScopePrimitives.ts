@@ -8,7 +8,7 @@ import type {
   Position2D,
 } from "../catalog";
 import type { ScopeKey } from "../contracts";
-import { spatialScopeColor } from "./hlidskjalfCesiumPalette";
+import { regionalFillColor, spatialScopeColor } from "./hlidskjalfCesiumPalette";
 import type { SpatialChildPickId } from "./resolveWorldviewPick";
 
 const MAX_CHUNK_VERTICES = 8_000;
@@ -174,9 +174,28 @@ export async function buildScopeGeometry<TPosition>(
   assertNotAborted(options.signal);
 
   const cameraSource = activeFeatures.length > 0 ? activeFeatures : childFeatures;
-  const cameraPositions = cameraSource.flatMap((feature) =>
+  let cameraPositions = cameraSource.flatMap((feature) =>
     feature.geometry.polygons.flatMap((polygon) => polygon.flatMap((ring) => ring)),
   );
+  // Keep all territories rendered, but frame the largest land component.
+  // Otherwise France/USA plus overseas islands aim the camera at an ocean.
+  let largestArea = -1;
+  geometryFeatures(options.activeAsset).forEach((feature, featureIndex) => {
+    feature.geometry.polygons.forEach((polygon, polygonIndex) => {
+      const ring = unwrapRenderRing(polygon[0] ?? []);
+      let area = 0;
+      for (let i = 1; i < ring.length; i++) {
+        const a = ring[i - 1]!; const b = ring[i]!;
+        area += a[0] * b[1] - b[0] * a[1];
+      }
+      const meanLatitude = ring.reduce((sum, point) => sum + point[1], 0) / Math.max(1, ring.length);
+      const weightedArea = Math.abs(area) * Math.cos(meanLatitude * Math.PI / 180);
+      if (weightedArea > largestArea) {
+        largestArea = weightedArea;
+        cameraPositions = [...(activeFeatures[featureIndex]?.geometry.polygons[polygonIndex]?.[0] ?? [])];
+      }
+    });
+  });
   return { activeFeatures, childFeatures, cameraPositions };
 }
 
@@ -253,7 +272,9 @@ function polygonInstances(
         }),
         ...(id === undefined ? {} : { id }),
         attributes: {
-          color: Cesium.ColorGeometryInstanceAttribute.fromColor(color),
+          color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+            feature.scopeKey?.startsWith("admin1:") ? regionalFillColor(feature.scopeKey) : color,
+          ),
         },
       }));
     }

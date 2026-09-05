@@ -47,13 +47,14 @@ export function getShipTypeIcon(
 
   const size = 20;
   const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = size * 2;
+  canvas.height = size * 2;
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
   const color = ICON_COLORS[type];
 
+  ctx.scale(2, 2);
   ctx.translate(size / 2, size / 2);
   ctx.rotate((bucket * Math.PI) / 180);
 
@@ -62,10 +63,10 @@ export function getShipTypeIcon(
       // Hull + superstructure + mast
       ctx.beginPath();
       ctx.moveTo(0, -8);
-      ctx.lineTo(-4, 0);
+      ctx.lineTo(-3, -4);
       ctx.lineTo(-5, 6);
       ctx.lineTo(5, 6);
-      ctx.lineTo(4, 0);
+      ctx.lineTo(3, -4);
       ctx.closePath();
       ctx.fillStyle = color;
       ctx.globalAlpha = 0.9;
@@ -91,8 +92,10 @@ export function getShipTypeIcon(
       ctx.fillStyle = color;
       ctx.globalAlpha = 0.9;
       ctx.fill();
-      // Island
+      // Contrasting island and flight-deck centerline.
+      ctx.fillStyle = "#071016";
       ctx.fillRect(3, -1, 2, 4);
+      ctx.fillRect(-1, -5, 0.6, 10);
       break;
 
     case "submarine":
@@ -103,6 +106,7 @@ export function getShipTypeIcon(
       ctx.globalAlpha = 0.8;
       ctx.fill();
       // Conning tower
+      ctx.fillStyle = "#071016";
       ctx.fillRect(-1.5, -3, 3, 3);
       break;
 
@@ -119,7 +123,8 @@ export function getShipTypeIcon(
       ctx.globalAlpha = 0.7;
       ctx.fill();
       // Tank circles
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#071016";
       ctx.beginPath();
       ctx.arc(0, 1, 2, 0, Math.PI * 2);
       ctx.fill();
@@ -141,9 +146,12 @@ export function getShipTypeIcon(
       ctx.globalAlpha = 0.8;
       ctx.fill();
       // Container rectangles
-      ctx.globalAlpha = 0.5;
-      ctx.fillRect(-3, 0, 6, 3);
-      ctx.fillRect(-3, 4, 6, 2);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#071016";
+      for (const y of [-1, 2, 5]) {
+        ctx.fillRect(-3, y, 2.5, 2);
+        ctx.fillRect(0.5, y, 2.5, 2);
+      }
       break;
 
     case "civilian":
@@ -163,8 +171,14 @@ export function getShipTypeIcon(
   }
 
   ctx.globalAlpha = 1.0;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 0.5;
+  // Stern bridge and heading glint remain visible at normal map scale.
+  ctx.fillStyle = "#f5f0e5";
+  ctx.fillRect(-2, 6, 4, 1);
+  ctx.strokeStyle = "#f5f0e5";
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(0, -7);
+  ctx.lineTo(0, -4);
   ctx.stroke();
 
   iconCache.set(key, canvas);

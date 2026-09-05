@@ -39,6 +39,7 @@ import {
   layerSpatialStatuses,
 } from "../spatial/layerScopePolicy";
 import { SpatialScopeBreadcrumb } from "../spatial/SpatialScopeBreadcrumb";
+import { RegionalAtlas } from "../spatial/RegionalAtlas";
 import { WorldviewKeyboardCoordinator } from "../spatial/WorldviewKeyboardCoordinator";
 import { MutuallyExclusiveCountryPath } from "../spatial/WorldviewCountryPath";
 import {
@@ -65,6 +66,7 @@ import { FIRMSLayer } from "../components/layers/FIRMSLayer";
 import { MilAircraftLayer } from "../components/layers/MilAircraftLayer";
 import { DatacenterLayer } from "../components/layers/DatacenterLayer";
 import { RefineryLayer } from "../components/layers/RefineryLayer";
+import { StrategicReferenceLayer } from "../components/layers/StrategicReferenceLayer";
 import { EONETLayer } from "../components/layers/EONETLayer";
 import { GDACSLayer } from "../components/layers/GDACSLayer";
 import { ReconLayer } from "../components/layers/ReconLayer";
@@ -133,6 +135,9 @@ type PanelId = "layers" | "search" | "ticker";
 type LandingFilter = "hotspots" | "conflict" | "nuntii" | "libri";
 
 const DEFAULT_LAYERS: LayerVisibility = {
+  nuclearPlants: false,
+  icbmBases: false,
+  militaryBases: false,
   flights: true,
   satellites: true,
   earthquakes: true,
@@ -937,6 +942,7 @@ function WorldviewContent({
           spatialAdapter={earthquakeSpatialAdapter ?? undefined}
         />
         <ShipLayer viewer={viewer} vessels={vessels} visible={effectiveLayers.vessels} />
+        <StrategicReferenceLayer viewer={viewer} layers={effectiveLayers} onSelect={(site) => setSelected({ type: "strategic", data: site })} />
         <CCTVLayer viewer={viewer} visible={effectiveLayers.cctv} />
         <EventLayerBridge
           viewer={viewer}
@@ -986,14 +992,10 @@ function WorldviewContent({
           spatialRenderer={presentationBridge === null ? null : (
             <>
               <SpatialScopeViewerBridge viewer={viewer} bridge={presentationBridge} />
+              <RegionalAtlas viewer={viewer} hidden={focusMode || expandedPanels.layers} />
               <div
-                style={{
-                  position: "absolute",
-                  top: configError || !config.cesium_ion_token ? 120 : 76,
-                  left: "50%",
-                  zIndex: 10,
-                  transform: "translateX(-50%)",
-                }}
+                className="worldview-scope-navigation"
+                data-availability-warning={configError || !config.cesium_ion_token}
               >
                 <SpatialScopeBreadcrumb />
               </div>

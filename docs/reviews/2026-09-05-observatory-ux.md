@@ -166,7 +166,9 @@ sowie alle anderen Worktrees wurden nicht verändert oder in den Commit aufgenom
 5. TASK-114/LOD bleibt wichtig; das native Scope-Menü löst keine dichten
    operativen Layer. Schreibworkflows, Provider-Recovery und alle externen
    Quellen wurden nicht vollständig abgenommen.
-6. **Scope-Wechsel noch nicht live freigegeben:** Der abschließende Browsertest
+6. **Historischer Befund, am 2026-09-06 korrigiert und live nachgetestet:**
+   Siehe [Regional-Atlas-Fortsetzung](2026-09-06-regional-atlas.md).
+   Der damalige abschließende Browsertest
    wählt Germany im nativen Picker. `/api/spatial/scope` für `country:DEU`
    liefert 200 und die URL erhält `scope=country%3ADEU`, aber Breadcrumb und
    weitere Timeline-Anfragen bleiben auf World. Kein JavaScript-Fehler, kein

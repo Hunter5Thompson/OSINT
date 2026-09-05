@@ -70,7 +70,7 @@ export function useReactRouterScopeNavigation(
         search: request.search,
         hash: request.hash,
       },
-      { replace: request.replace, state: request.state },
+      { replace: request.replace, state: request.state, flushSync: true },
     ),
     clock: options.clock,
   });

@@ -63,6 +63,9 @@ const PANEL_GROUPS: PanelGroup[] = [
       { key: "milAircraft", label: "Mil-air" },
       { key: "datacenters", label: "Datacenters" },
       { key: "refineries", label: "Refineries" },
+      { key: "nuclearPlants", label: "Nuclear Power Plants" },
+      { key: "icbmBases", label: "ICBM Bases" },
+      { key: "militaryBases", label: "Major Military Bases" },
       { key: "eonet", label: "EONET" },
       { key: "gdacs", label: "GDACS" },
       { key: "recon", label: "Recon" },
@@ -299,6 +302,9 @@ export function LayersPanel({
                     <span style={{ color: enabled ? "var(--bone)" : "var(--stone)", fontSize: "0.78rem" }}>
                       {item.label}
                     </span>
+                    {toggleKey === "nuclearPlants" && <div style={spatialStatusStyle}>195 historical WRI records · not live</div>}
+                    {toggleKey === "icbmBases" && <div style={spatialStatusStyle}>3 US wing HQs · curated reference</div>}
+                    {toggleKey === "militaryBases" && <div style={spatialStatusStyle}>4 major bases · starter coverage</div>}
                     {spatialStatus === undefined ? null : (
                       <div
                         data-testid={`layer-scope-${toggleKey}`}

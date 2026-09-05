@@ -13,6 +13,7 @@ const allOff: LayerVisibility = {
   countryBorders: false, cityBuildings: false, firmsHotspots: false,
   milAircraft: false, datacenters: false, refineries: false, eonet: false, gdacs: false,
   recon: false,
+  nuclearPlants: false, icbmBases: false, militaryBases: false,
 };
 
 const provenanceData: SpatialBoundaryProvenance = {
@@ -42,6 +43,12 @@ const readyProvenance: SpatialBoundaryProvenanceState = {
 };
 
 describe("LayersPanel", () => {
+  it("exposes the three strategic reference layers", () => {
+    render(<LayersPanel layers={allOff} onToggle={() => {}} activeShader="none" onShaderChange={() => {}} />);
+    for (const name of ["Nuclear Power Plants", "ICBM Bases", "Major Military Bases"]) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+  });
   it("renders registry-owned scope behavior beside runtime layers", () => {
     const spatialStatuses: Partial<Record<keyof LayerVisibility, LayerSpatialStatus>> = {
       flights: {

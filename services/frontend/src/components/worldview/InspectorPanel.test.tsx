@@ -11,6 +11,16 @@ afterEach(() => {
 });
 
 describe("InspectorPanel", () => {
+  it("labels strategic sites as reference data and exposes source provenance", () => {
+    render(<InspectorPanel viewer={null} onClose={() => {}} selected={{ type: "strategic", data: {
+      id: "reference", name: "Reference plant", country: "DEU", kind: "nuclearPlants",
+      latitude: 50, longitude: 8, capacityMw: 1200, source: "https://www.wri.org/",
+      sourceLabel: "WRI reference", note: "Historical dataset; not live. Operating status not verified.",
+    } }} />);
+    expect(screen.getByText(/Operating status not verified/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /WRI reference/ })).toHaveAttribute("href", "https://www.wri.org/");
+    expect(screen.getByText(/1,200 MW/)).toBeInTheDocument();
+  });
   it("is hidden when nothing is selected", () => {
     const { container } = render(
       <InspectorPanel selected={null} onClose={vi.fn()} viewer={null} />,

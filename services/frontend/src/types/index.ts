@@ -374,6 +374,9 @@ export interface GDACSEvent {
 // ── UI State Types ──
 
 export interface LayerVisibility {
+  nuclearPlants: boolean;
+  icbmBases: boolean;
+  militaryBases: boolean;
   flights: boolean;
   satellites: boolean;
   earthquakes: boolean;

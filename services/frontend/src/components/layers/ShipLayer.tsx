@@ -95,7 +95,9 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
       const billboard = bc.add({
         position,
         image: getShipTypeIcon(shipType, vessel.course),
-        scale: 0.8,
+        width: 28,
+        height: 28,
+        scale: 0.9,
         eyeOffset: new Cesium.Cartesian3(0, 0, -50),
       });
       (billboard as unknown as Record<string, unknown>)._vesselData = {

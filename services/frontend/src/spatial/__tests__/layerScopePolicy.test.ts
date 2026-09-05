@@ -27,6 +27,9 @@ const ALL_LAYER_KEYS = [
   "eonet",
   "gdacs",
   "recon",
+  "nuclearPlants",
+  "icbmBases",
+  "militaryBases",
 ] as const satisfies readonly (keyof LayerVisibility)[];
 
 const allEnabled = Object.fromEntries(

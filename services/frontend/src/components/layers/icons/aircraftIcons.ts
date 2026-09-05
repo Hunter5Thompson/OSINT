@@ -40,14 +40,14 @@ export function classifyAircraft(
     isMilitary
   ) return "uav";
 
+  // Explicit type evidence takes precedence over speed/callsign heuristics.
+  if (isMilitary && /^(B52|B1|B2|TU95|TU160)$/.test(at)) return "bomber";
+
   // Military transport: known callsign prefixes
   if (isMilitary && MILITARY_CALLSIGN_PREFIXES.some((p) => cs.startsWith(p))) return "transport_mil";
 
   // Fighter: military + fast + high
   if (isMilitary && velocityMs > 200 && altitudeM > 5000) return "fighter";
-
-  // Bomber/heavy mil: military + large type codes
-  if (isMilitary && (at.includes("B52") || at.includes("B1") || at.includes("B2") || at.includes("TU"))) return "bomber";
 
   // Generic military
   if (isMilitary) return "fighter";
@@ -69,13 +69,14 @@ export function getAircraftTypeIcon(
 
   const size = 24;
   const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = size * 2;
+  canvas.height = size * 2;
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas.toDataURL();
 
   const color = ICON_COLORS[type];
 
+  ctx.scale(2, 2);
   ctx.translate(size / 2, size / 2);
   ctx.rotate((bucket * Math.PI) / 180);
 
@@ -154,22 +155,43 @@ export function getAircraftTypeIcon(
 
     case "civilian":
     default:
-      // Standard airliner
+      // Swept-wing airliner: fuselage, wings and separate tailplane.
       ctx.beginPath();
       ctx.moveTo(0, -10);
-      ctx.lineTo(-8, 4);
-      ctx.lineTo(0, 2);
-      ctx.lineTo(8, 4);
+      ctx.lineTo(-1.6, -7);
+      ctx.lineTo(-1.6, -3);
+      ctx.lineTo(-10, 2);
+      ctx.lineTo(-10, 4);
+      ctx.lineTo(-1.6, 1);
+      ctx.lineTo(-1, 7);
+      ctx.lineTo(-4, 9);
+      ctx.lineTo(-4, 10);
+      ctx.lineTo(0, 9);
+      ctx.lineTo(4, 10);
+      ctx.lineTo(4, 9);
+      ctx.lineTo(1, 7);
+      ctx.lineTo(1.6, 1);
+      ctx.lineTo(10, 4);
+      ctx.lineTo(10, 2);
+      ctx.lineTo(1.6, -3);
+      ctx.lineTo(1.6, -7);
       ctx.closePath();
       break;
   }
 
   ctx.fillStyle = color;
-  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = "#071016";
+  ctx.lineWidth = 1.6;
+  ctx.lineJoin = "round";
+  ctx.stroke();
   ctx.fill();
-  ctx.globalAlpha = 1.0;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 0.5;
+  // A quiet dorsal highlight makes heading legible against land and ocean.
+  ctx.strokeStyle = "#ffffff";
+  ctx.globalAlpha = 0.65;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(0, -7);
+  ctx.lineTo(0, 5);
   ctx.stroke();
 
   const dataUrl = canvas.toDataURL();

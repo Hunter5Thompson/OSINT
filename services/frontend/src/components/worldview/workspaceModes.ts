@@ -19,6 +19,9 @@ export const WORKSPACE_MODES = [
 export type WorkspaceMode = (typeof WORKSPACE_MODES)[number]["id"];
 export function layersForMode(mode: WorkspaceMode): LayerVisibility {
   return {
+    nuclearPlants: mode === "infrastructure",
+    icbmBases: false,
+    militaryBases: false,
     countryBorders: true,
     cityBuildings: true,
     recon: true,

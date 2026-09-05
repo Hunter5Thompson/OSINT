@@ -40,8 +40,8 @@ describe("MilAircraft helpers", () => {
 
   it("createJetIcon returns canvas with visible pixels", () => {
     const c = createJetIcon(Cesium.Color.CYAN, 24);
-    expect(c.width).toBe(24);
-    expect(c.height).toBe(24);
+    expect(c.width).toBe(48);
+    expect(c.height).toBe(48);
     expect(c.getContext("2d")).not.toBeNull();
   });
 });

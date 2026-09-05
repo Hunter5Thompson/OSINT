@@ -66,6 +66,19 @@ const regionalChildPack = childPackFor("Ukraine regional", regionalGeometry);
 const localChildPack = childPackFor("Ukraine local", localGeometry);
 const childPack = overviewChildPack;
 
+it("fits the mainland instead of the ocean between distant overseas polygons", async () => {
+  const result = await buildScopeGeometry({
+    activeAsset: geometry([
+      [[[-5, 43], [8, 43], [8, 51], [-5, 51], [-5, 43]]],
+      [[[-54, 2], [-52, 2], [-52, 5], [-54, 5], [-54, 2]]],
+    ]),
+    childAsset: null, stateRevision: 1, signal: new AbortController().signal,
+    convertPosition: (position) => position,
+  });
+  expect(result.activeFeatures[0]?.geometry.polygons).toHaveLength(2);
+  expect(result.cameraPositions.every(([lon]) => lon >= -5)).toBe(true);
+});
+
 function descriptor(lod: GeometryLod, seed: string): RenderAssetDescriptor {
   return {
     role: "render",
@@ -441,7 +454,7 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
 
   it("uses zero-duration camera fit for reduced motion and a dateline sphere", async () => {
     const { adapter, runtime } = setup({ reducedMotion: true });
-    const current = adapter.present(presentation(), 1, new AbortController().signal);
+    const current = adapter.present(presentation(child), 1, new AbortController().signal);
     await readyPresentation(runtime, current);
 
     expect(runtime.flyCalls).toHaveLength(1);
@@ -450,6 +463,19 @@ describe("CesiumSpatialScopeAdapter lifecycle", () => {
     const sphere = Cesium.BoundingSphere.fromPoints([...positions]);
     expect(sphere.radius).toBeLessThan(250_000);
     expect(sphere.center.x).toBeLessThan(0);
+  });
+
+  it("preserves the user's camera when the world boundary finishes loading", async () => {
+    const { adapter, runtime } = setup();
+    await readyPresentation(runtime, adapter.present(presentation(world), 1, new AbortController().signal));
+    expect(runtime.flyCalls).toHaveLength(0);
+  });
+
+  it("does not reframe the same country when its presentation is refreshed", async () => {
+    const { adapter, runtime } = setup();
+    await readyPresentation(runtime, adapter.present(presentation(child), 1, new AbortController().signal));
+    await readyPresentation(runtime, adapter.present(presentation(child), 2, new AbortController().signal));
+    expect(runtime.flyCalls).toHaveLength(1);
   });
 
   it("falls back to the only reviewed outline when camera height requests another LOD", async () => {
