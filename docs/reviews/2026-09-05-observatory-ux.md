@@ -58,7 +58,7 @@ weil diese UI-Überarbeitung abgeschlossen ist.
 | --- | --- | --- |
 | Hoch | TASK-114 dokumentiert fehlendes gemeinsames LOD/Clustering. Die dazugehörige Implementierung liegt separat unter `.worktrees/task-114-declutter-p1`; sie ist nicht Teil dieses Changes. | Den vorhandenen Branch anhand seiner Tests und realer, dichter Datenbestände prüfen und gezielt integrieren. Die neuen Modi ersetzen kein Clustering. |
 | Hoch | `services/frontend/src/services/api.ts` liest `VITE_ADMIN_TOKEN` und sendet ihn als `X-Admin-Token`. Im Browser-Bundle eingebettete Werte sind keine privaten Server-Credentials. TASK-119 S05 enthält diesen Punkt bereits. | Den vorgesehenen Auth-Vertrag als eigenständigen Change umsetzen und mit Negativtests prüfen. Hier wurden weder Tokens gelesen noch Zugriffsrechte verändert. |
-| Hoch | Kein ODIN-Backend-Listener auf 8080 und keine laufenden ODIN-Container während der Prüfung. Die UI erreicht entsprechend keine Live-Daten. | Den freigegebenen ODIN-Betriebsmodus separat starten und Datenalter, Feed-Zustand, Spatial-Recovery und Analyseweg im laufenden Stack abnehmen. Kein GPU-/Provider-Wechsel erfolgte in dieser Session. |
+| Hoch | Die erste UI-Prüfung lief ohne Backend. Nach der expliziten Startfreigabe wurde der reale Stack geprüft; siehe Live-Abnahme unten. | Die dort dokumentierten Feed-Ausfälle, Zählabfragen und Analyse-Latenz gezielt bearbeiten. |
 | Mittel | Der Spatial-Breadcrumb bleibt bei fehlendem Katalog auf `Loading spatial scope`. Die neue Verfügbarkeitsmeldung erklärt die übergeordnete Ursache, ersetzt aber keine Recovery des Katalogzustands. | Hydration-Fehler im Spatial-State explizit sichtbar machen und Wiederherstellung nach Rückkehr des Backends testen; fehlgeschlagene Scopes weiterhin geschlossen halten. |
 | Mittel | `/api/graph/search` sucht Entity-Namen mit `CONTAINS $q` (`services/backend/app/routers/graph.py`). Ein kompletter Nachrichtentitel ist nicht zwingend ein Entity-Name. | Einen serverseitigen, belegbaren Signal-zu-Entity-/Ereignis-Vertrag schaffen. Der neue Link ist eine erhaltene Suchanfrage, keine behauptete automatische Auflösung. |
 | Mittel | Spatial ist im lokalen Code nur bei explizitem `VITE_SPATIAL_SCOPE_ENABLED=true` aktiv; Compose setzt einen Default von true. | Den bereits unter TASK-119 S05 erfassten Dev-/Build-Vertrag vereinheitlichen und Clean-Clone-Prüfung ergänzen. |
@@ -102,3 +102,80 @@ keine Änderungen an Lockfiles, Datenbanken, GPU-Konfiguration oder Backend-Code
 Die vorgefundenen ungetrackten Dateien `docs/odin-stack-onepager.html` und
 `docs/superpowers/plans/2026-08-25-task-114-declutter-p1-render-and-labels.md`
 sowie alle anderen Worktrees wurden nicht verändert oder in den Commit aufgenommen.
+
+## Live-Abnahme nach Startfreigabe (2026-09-05, ab 21:30 UTC)
+
+### Laufender Stand
+
+- Start über `odin.sh`: zunächst `interactive`, anschließend `interactive-spark`.
+  Frontend, Backend, Intelligence und Spark-Ingestion wurden aus diesem Worktree
+  gebaut. UI: `http://localhost:5173`; Backend: `http://localhost:8080`.
+- Lokales Modellinventar: `qwen3.5` und `munin`; Spark meldet
+  `Qwen/Qwen3.8-27B`. Kein zweites lokales LLM gestartet. TTS, Open WebUI und
+  Splat-Dienste blieben unberührt. Alle ODIN-Hostports bleiben an Loopback gebunden.
+- Qdrant startete mit 1.168.585 Punkten und Status green. Bestehende Volumes
+  wurden weiterverwendet. Der freigegebene Scheduler nimmt echte Daten auf;
+  der vorhandene Auto-Promoter erzeugt dabei reguläre Incidents.
+- `odin.sh smoke`: 14 bestanden, 0 fehlgeschlagen, 1 übersprungen
+  (absichtlich inaktiver lokaler Ingestion-27B-Modus).
+
+### Tatsächlich geprüft
+
+- Durch den Produktions-Nginx: Backend/Config, Spatial-Katalog, Graphsuche,
+  Erdbeben, Kabel und vorhandene Reports jeweils HTTP 200. Stichprobe:
+  14 Graph-Treffer für Germany, 107 Erdbeben, 728 Kabel/1.925 Landepunkte,
+  zehn vorhandene Reports; Flug-Smoke mit über 9.000 Flugzeugen.
+- SSE liefert echte aktuelle Empfangsereignisse, unter anderem RSS, FIRMS,
+  USGS und EONET. Empfangszeit ist nicht automatisch Publikations-/Ereigniszeit.
+- Erster ReAct-Aufruf: Timeout nach 120 Sekunden, als SSE-Fehler sichtbar.
+  Direkter Modell-Canary danach: nichtleere Antwort. Zweiter ReAct-Aufruf:
+  vollständiges `result` und `done`, drei dokumentierte Qdrant-Suchaufrufe,
+  vier Quellbezeichnungen und nichtleerer Bericht, nach etwa 114 Sekunden.
+  Bericht weist auf alte/dünne Evidenz hin; dies ist Funktionsnachweis, keine
+  unabhängige fachliche Verifikation seiner Aussagen. Kein Report gespeichert.
+- Reale Chromium-Mauseingaben: Modi/Layer, Fokus/Wiederherstellung, Suchfokus
+  und drei Worldview-/Briefing-Wechsel mit echtem Backend bestanden. Frühe
+  Durchläufe scheiterten unter Renderinglast bzw. an verdeckten Bedienelementen;
+  der erfolgreiche Durchlauf schloss Incident-Toasts über den neuen Knopf.
+  Keine JavaScript-Fehler im erfolgreichen Durchlauf. Software-WebGL ist träge;
+  flüssiges Hardware-Rendering ist damit nicht abgenommen.
+
+### Im Live-Test zusätzlich korrigiert
+
+- Incident-Toasts waren nicht manuell schließbar und verdeckten Kartenmodi
+  bzw. auf schmalen Screens die Navigation. Jetzt: expliziter zugänglicher
+  Schließen-Knopf, begrenzte Breite und Position oberhalb der unteren
+  Kartenleiste statt über den oberen Bedienelementen.
+- Nach Katalog-Hydration belegten sämtliche Länder als Buttons einen großen
+  Teil des Globus. Eine native Gebietsauswahl ersetzt diese Button-Wand;
+  Breadcrumb, Parent-Navigation und `child-click`-Scope-Kommando bleiben erhalten.
+- Beide Änderungen mit roten Regressionstests begonnen. Keine Änderung der
+  Spatial-Policy, kein Daten-Fallback und keine Datenbankmigration.
+
+### Offene Befunde aus echten Antworten
+
+1. NOAA NHC: `CurrentSummaries.json` liefert 404; GDACS Eventlist liefert 400.
+2. GDELT Raw: `lastupdate.txt` antwortet auf HTTP mit HTTPS-Redirect (301),
+   den der vorhandene Downloader als Fehler behandelt. Andere Feeds laufen;
+   Container-health bedeutet daher keine vollständige Quellenabdeckung.
+3. Die Landing-Zählung aller Qdrant-Signale fällt unter laufender Ingestion
+   zeitweise aus (`nuntii_source=qdrant:signals:unavailable`, Backend-Timeout).
+   UI zeigt dafür einen unbekannten Wert. Ein SSE-Ereignis belegt für sich
+   weder eine erfolgreiche Qdrant-Schreibung noch vollständige 24h-Zählung.
+4. Analyse-Latenz liegt nahe am 120s-Limit; ein Kaltstart-Aufruf scheiterte.
+5. TASK-114/LOD bleibt wichtig; das native Scope-Menü löst keine dichten
+   operativen Layer. Schreibworkflows, Provider-Recovery und alle externen
+   Quellen wurden nicht vollständig abgenommen.
+
+### Testprotokoll dieser Fortsetzung
+
+- Frontend nach zusätzlicher UX-Korrektur: 642 Tests / 114 Dateien; Lint,
+  Type-Check und Produktionsbuild bestanden. Bundle-Größenwarnungen bleiben.
+- Backend: 585 Tests, Ruff und striktes Mypy bestanden; eine bestehende
+  Starlette/httpx-Deprecation-Warnung.
+- Intelligence: 484 Tests bestanden.
+- Data-Ingestion: 1.445 bestanden, 1 übersprungen, 17 abgewählt. Die
+  Standardkonfiguration schließt `live`-Tests aus; kein vollständiges Live-Testgate.
+- Vision-Enrichment: 22 Tests bestanden; Vision-Service wurde nicht gestartet.
+- Python-Tests nutzten die vorhandenen lokalen uv-Umgebungen. Docker-Builds
+  installierten mit dem gepinnten uv und `--locked`; keine Lockfile-Änderung.
