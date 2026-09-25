@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -96,18 +96,29 @@ def _normalize_iso(value: str | None) -> str | None:
     return dt.isoformat()
 
 
+_FUTURE_SKEW_TOLERANCE = timedelta(days=1)
+
+
 def _resolve_timeline(
     *, occurred_at: str | None, observed_at: str | None,
     published_at: str | None, ingested_at: str,
 ) -> tuple[str, str]:
-    """Canonical timeline_at + time_basis by precedence. Never fabricates a time."""
+    """Canonical timeline_at + time_basis by precedence. Never fabricates a time.
+
+    A candidate later than ingestion (+ clock-skew tolerance) cannot have happened yet —
+    typically an LLM reading a *planned* date as occurred_at — so it is skipped.
+    """
+    horizon = datetime.fromisoformat(ingested_at.replace("Z", "+00:00"))
+    if horizon.tzinfo is None:
+        horizon = horizon.replace(tzinfo=UTC)
+    horizon += _FUTURE_SKEW_TOLERANCE
     for value, basis in (
         (occurred_at, "occurred"),
         (observed_at, "observed"),
         (published_at, "published"),
     ):
         norm = _normalize_iso(value)
-        if norm is not None:
+        if norm is not None and datetime.fromisoformat(norm) <= horizon:
             return norm, basis
     return ingested_at, "ingested"
 
