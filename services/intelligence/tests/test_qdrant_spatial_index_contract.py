@@ -30,7 +30,7 @@ def test_local_index_contract_matches_shared_vector_exactly() -> None:
     expected = _contract_indexes()
 
     assert expected == PAYLOAD_INDEXES
-    assert len(PAYLOAD_INDEXES) == 17
+    assert len(PAYLOAD_INDEXES) == 18
     assert sum(field.startswith("spatial_") or field == "geo" for field in expected) == 8
     contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
     assert {"spatial_conflict", "spatial_conflict_scope_keys"} <= set(

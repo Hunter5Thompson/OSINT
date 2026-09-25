@@ -79,3 +79,10 @@ class TestTypedIndexes:
         assert by_field["feed_name"] == "keyword"
         assert by_field["fulltext_retry_epoch"] == "float"       # server-side Range filter field
         assert set(by_field) == set(PAYLOAD_INDEXES)
+
+
+def test_ingested_epoch_has_float_range_index_for_freshness_order_by():
+    # backend /api/health/feeds orders by ingested_epoch; Qdrant needs a range index
+    from rag.qdrant_schema import PAYLOAD_INDEXES
+
+    assert PAYLOAD_INDEXES["ingested_epoch"] == "float"

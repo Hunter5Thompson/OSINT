@@ -16,7 +16,7 @@ import polars as pl
 import structlog
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from feeds.provenance import provenance_fields
+from feeds.provenance import ingestion_timestamps, provenance_fields
 from gdelt_raw.ids import qdrant_point_id_for_doc
 from gdelt_raw.schemas import GDELTEventWrite
 from gdelt_raw.spatial import raw_location_identity_for_event
@@ -86,7 +86,7 @@ def build_payload(
         "codebook_types_linked": row.get("codebook_types_linked") or [],
         "gdelt_date": gdelt_date_iso,
         "published_at": row.get("published_at"),
-        "ingested_at": datetime.now(UTC).isoformat(),
+        **ingestion_timestamps(),
         **(
             spatial_payload
             if spatial_payload is not None

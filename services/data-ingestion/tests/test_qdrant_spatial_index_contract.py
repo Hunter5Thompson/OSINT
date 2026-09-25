@@ -29,7 +29,7 @@ def test_local_index_contract_matches_shared_vector_exactly() -> None:
     expected = _contract_indexes()
 
     assert expected == PAYLOAD_INDEXES
-    assert len(PAYLOAD_INDEXES) == 17
+    assert len(PAYLOAD_INDEXES) == 18
     contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
     assert {"spatial_conflict", "spatial_conflict_scope_keys"} <= set(
         contract["unindexed_audit_fields"]
@@ -52,3 +52,9 @@ def test_ingestion_validator_rejects_existing_wrong_type() -> None:
 
     with pytest.raises(QdrantSchemaMismatch, match="geo.*keyword.*geo"):
         validate_payload_index_schema(info)
+
+
+def test_ingested_epoch_float_index_matches_intelligence_contract():
+    from qdrant_doctor.schema import PAYLOAD_INDEXES
+
+    assert PAYLOAD_INDEXES["ingested_epoch"] == "float"

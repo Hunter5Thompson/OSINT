@@ -2,10 +2,12 @@
 
 Provides the source-identification subset of contracts/qdrant-provenance-v1.json:
 `source_type` + `provider` (+ optional `published_at`). The third required field,
-`ingested_at`, is set by the caller at point-write time (e.g. base.py / each
-collector), not here. Credibility is read-side policy and must NOT be written here.
+`ingested_at`, is set by the caller at point-write time via `ingestion_timestamps()`.
+Credibility is read-side policy and must NOT be written here.
 """
 from __future__ import annotations
+
+from datetime import UTC, datetime
 
 WRITE_SOURCE_TYPES = {"rss", "telegram", "gdelt", "notebooklm", "dataset"}
 
@@ -44,3 +46,13 @@ def dataset_provenance(source: str, published_at: str | None = None) -> dict[str
         provider=DATASET_PROVIDERS[source],
         published_at=published_at,
     )
+
+
+def ingestion_timestamps() -> dict[str, str | float]:
+    """Point-write stamps from ONE instant: ISO `ingested_at` + numeric `ingested_epoch`.
+
+    `ingested_epoch` is the range-indexed field the backend feed-freshness watchdog
+    orders by; every Qdrant writer must emit both.
+    """
+    now = datetime.now(UTC)
+    return {"ingested_at": now.isoformat(), "ingested_epoch": now.timestamp()}

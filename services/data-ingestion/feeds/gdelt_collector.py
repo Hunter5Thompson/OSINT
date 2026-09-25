@@ -12,6 +12,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
+from feeds.provenance import ingestion_timestamps
 from pipeline import (
     ExtractionConfigError,
     ExtractionTransientError,
@@ -230,7 +231,7 @@ class GDELTCollector:
                         "source_country": source_country,
                         "seen_date": seendate,
                         "content_hash": chash,
-                        "ingested_at": datetime.now(UTC).isoformat(),
+                        **ingestion_timestamps(),
                         "codebook_type": (
                             enrichment["codebook_type"] if enrichment else "other.unclassified"
                         ),

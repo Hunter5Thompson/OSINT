@@ -21,6 +21,7 @@ from app.routers import (
     cables,
     earthquakes,
     eonet,
+    feed_health,
     firms,
     flights,
     gdacs,
@@ -252,6 +253,7 @@ app.mount(
 
 # S1 Hlidskjalf routers (already at /api, no alias needed)
 app.include_router(signals.router, prefix="/api")
+app.include_router(feed_health.router, prefix="/api")
 app.include_router(almanac.router, prefix="/api")
 app.include_router(landing.router, prefix="/api")
 app.include_router(incidents.router, prefix="/api")

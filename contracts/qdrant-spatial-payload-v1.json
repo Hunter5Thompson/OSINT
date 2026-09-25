@@ -43,6 +43,7 @@
     {"field": "fulltext_status", "schema": "keyword", "group": "corpus"},
     {"field": "superseded_by_fulltext", "schema": "bool", "group": "corpus"},
     {"field": "fulltext_retry_epoch", "schema": "float", "group": "corpus"},
+    {"field": "ingested_epoch", "schema": "float", "group": "corpus"},
     {
       "field": "spatial_about_scope_revision_tokens",
       "schema": "keyword",

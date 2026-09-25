@@ -546,6 +546,31 @@ smoke() {
       _inc_fail
     fi
 
+    # Feed freshness: is data still landing per source? (stale/missing = FAIL,
+    # unknown = WARN, e.g. before the ingested_epoch range index exists)
+    local feeds_json
+    feeds_json=$(curl -sf --max-time 20 "http://localhost:8080/api/health/feeds" 2>/dev/null) || feeds_json=""
+    if [[ -z "$feeds_json" ]]; then
+      printf "  %-28s %s\n" "Feed freshness" "FAIL (endpoint unreachable)"
+      _inc_fail
+    else
+      local src status detail
+      while IFS=$'\t' read -r src status detail; do
+        case "$status" in
+          fresh)   printf "  %-28s %s\n" "Feed $src" "OK ($detail)"; _inc_pass ;;
+          unknown) printf "  %-28s %s\n" "Feed $src" "WARN (unknown: $detail)"; _inc_skip ;;
+          *)       printf "  %-28s %s\n" "Feed $src" "FAIL ($status, $detail)"; _inc_fail ;;
+        esac
+      done < <(echo "$feeds_json" | python3 -c "
+import sys, json
+for s in json.load(sys.stdin)['sources']:
+    age = s.get('age_s')
+    detail = (f\"{age // 60} min old, max {s['max_age_s'] // 60} min\" if age is not None
+              else (s.get('error') or 'no data')[:60])
+    print(f\"{s['source']}\t{s['status']}\t{detail}\")
+")
+    fi
+
     # Frontend reachable?
     _check_if_running "frontend" "Frontend (Vite)" "http://localhost:5173"
     echo ""

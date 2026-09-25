@@ -13,7 +13,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
-from feeds.provenance import provenance_fields
+from feeds.provenance import ingestion_timestamps, provenance_fields
 from pipeline import (
     ExtractionConfigError,
     ExtractionTransientError,
@@ -156,7 +156,7 @@ def build_rss_payload(
         "summary": (summary or "")[:1000],
         "published": published_at,
         "content_hash": content_hash,
-        "ingested_at": datetime.now(UTC).isoformat(),
+        **ingestion_timestamps(),
         "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
         "entities": enrichment["entities"] if enrichment else [],
     }
