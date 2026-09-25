@@ -501,7 +501,8 @@ async def test_loader_accepts_the_reviewed_reference_catalog() -> None:
     assert state.active_catalog_revision == "spatial-v1-0180e188358c"
     germany = loader.get_scope(state.active_catalog_revision, "country:DEU")
     assert germany.scope.children_available
-    assert loader.get_scope(state.active_catalog_revision, "admin1:iso3166-2:DE-BY").scope.label == "Bayern"
+    bavaria = loader.get_scope(state.active_catalog_revision, "admin1:iso3166-2:DE-BY")
+    assert bavaria.scope.label == "Bayern"
     assert germany.presentation.outline_lods
     france = loader.get_scope(state.active_catalog_revision, "country:FRA")
     assert france.presentation.outline_lods["overview"]
