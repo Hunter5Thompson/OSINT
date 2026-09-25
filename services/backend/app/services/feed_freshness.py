@@ -35,6 +35,13 @@ class FeedFreshnessReport(BaseModel):
     sources: list[SourceFreshness]
 
 
+def _describe_error(exc: Exception) -> str:
+    text = " ".join(str(exc).split())
+    if "No range index" in text:
+        return "ingested_epoch range index missing - run ensure_payload_indexes"
+    return text[:200]
+
+
 async def _source_freshness(
     client: Any, collection: str, source: str, max_age_s: int, now: float
 ) -> SourceFreshness:
@@ -54,7 +61,8 @@ async def _source_freshness(
         epoch = float((points[0].payload or {})["ingested_epoch"])
     except Exception as exc:  # noqa: BLE001 - any failure must degrade, never read as fresh
         return SourceFreshness(
-            source=source, status="unknown", max_age_s=max_age_s, error=str(exc)[:200]
+            source=source, status="unknown", max_age_s=max_age_s,
+            error=_describe_error(exc),
         )
     age = max(0, int(now - epoch))
     return SourceFreshness(

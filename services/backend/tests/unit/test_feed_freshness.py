@@ -110,3 +110,33 @@ def test_feeds_health_endpoint_serves_report() -> None:
     assert body["status"] == "degraded"
     assert {s["status"] for s in body["sources"]} == {"missing"}
     assert "rss" in {s["source"] for s in body["sources"]}
+
+
+@pytest.mark.asyncio
+async def test_multiline_query_error_is_collapsed_to_one_line() -> None:
+    # qdrant-client errors embed "\nRaw response content:\n..." — consumers parse
+    # line/tab-delimited output (odin.sh smoke), so the error must be one line.
+    client = _client_by_source(
+        {"rss": RuntimeError('Unexpected Response: 400\nRaw response content:\n\tb"x"')}
+    )
+    report = await compute_feed_freshness(
+        client, collection="odin_intel", max_age_s={"rss": 7200}, now=NOW
+    )
+    error = report.sources[0].error or ""
+    assert "\n" not in error and "\t" not in error
+    assert error.startswith("Unexpected Response: 400 Raw response content:")
+
+
+@pytest.mark.asyncio
+async def test_missing_range_index_names_the_remedy() -> None:
+    raw = (
+        "Unexpected Response: 400 (Bad Request)\nRaw response content:\n"
+        'b\'{"status":{"error":"Wrong input: No range index for `order_by` key"}}\''
+    )
+    client = _client_by_source({"rss": RuntimeError(raw)})
+    report = await compute_feed_freshness(
+        client, collection="odin_intel", max_age_s={"rss": 7200}, now=NOW
+    )
+    assert report.sources[0].error == (
+        "ingested_epoch range index missing - run ensure_payload_indexes"
+    )
