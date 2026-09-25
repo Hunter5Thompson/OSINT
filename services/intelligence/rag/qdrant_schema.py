@@ -41,6 +41,7 @@ PAYLOAD_INDEXES: dict[str, str] = {
     "fulltext_status": "keyword",
     "superseded_by_fulltext": "bool",
     "fulltext_retry_epoch": "float",
+    "ingested_epoch": "float",
     "spatial_about_scope_revision_tokens": "keyword",
     "spatial_occurrence_scope_revision_tokens": "keyword",
     "geo": "geo",

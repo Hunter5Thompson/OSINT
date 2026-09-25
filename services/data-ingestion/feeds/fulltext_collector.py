@@ -20,6 +20,7 @@ from config import settings
 from feeds._fulltext_fetch import fetch_fulltext
 from feeds.content_quality import content_junk_reason, strip_data_uris
 from feeds.fulltext_chunker import chunk_markdown
+from feeds.provenance import ingestion_timestamps
 from qdrant_doctor.schema import validate_collection_schema
 from qdrant_spatial import unavailable_spatial_payload
 
@@ -96,7 +97,7 @@ def build_fulltext_payload(
         "fulltext_article_id": article_id(url),
         "chunk_index": chunk_index,
         "chunk_count": chunk_count,
-        "ingested_at": datetime.now(UTC).isoformat(),
+        **ingestion_timestamps(),
     }
 
 

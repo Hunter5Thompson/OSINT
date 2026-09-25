@@ -46,6 +46,23 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1024
     intelligence_url: str = "http://localhost:8003"
 
+    # Feed freshness watchdog: max age (s) of the newest Qdrant point per source before it
+    # counts as stale. Sized to how often new data plausibly lands, not the poll interval.
+    feed_max_age_s: dict[str, int] = Field(
+        default_factory=lambda: {
+            "gdelt_gkg": 3_600,
+            "rss": 7_200,
+            "rss_fulltext": 21_600,
+            "telegram": 21_600,
+            "firms": 43_200,
+            "usgs": 86_400,
+            "eonet": 259_200,
+            "gdacs": 259_200,
+            "portwatch": 1_209_600,
+            "ucdp": 3_888_000,
+        }
+    )
+
     # HTTP API
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 

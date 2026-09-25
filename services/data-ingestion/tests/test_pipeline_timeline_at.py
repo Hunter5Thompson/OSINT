@@ -114,3 +114,33 @@ async def test_malformed_llm_timestamp_hint_falls_back_to_ingested_in_write():
     assert params["time_basis"] == "ingested"
     # timeline_at must still be a parseable ISO instant (the honest ingest time)
     datetime.fromisoformat(params["timeline_at"])
+
+
+def test_future_occurred_is_not_a_timeline_basis():
+    # LLM extracts a *planned* date ("Kenya's 2027 elections") as occurred_at.
+    # A time after ingestion cannot have occurred -> fall through, never plot the future.
+    at, basis = _resolve_timeline(
+        occurred_at="2027-01-01T00:00:00+00:00", observed_at=None,
+        published_at="2026-05-03T00:00:00+00:00",
+        ingested_at="2026-05-04T00:00:00+00:00",
+    )
+    assert at == "2026-05-03T00:00:00+00:00" and basis == "published"
+
+
+def test_future_candidates_all_skipped_falls_back_to_ingested():
+    at, basis = _resolve_timeline(
+        occurred_at="2028-12-31T00:00:00+00:00",
+        observed_at="2027-01-01T00:00:00+00:00",
+        published_at="2027-06-01T00:00:00+00:00",
+        ingested_at="2026-05-04T00:00:00+00:00",
+    )
+    assert at == "2026-05-04T00:00:00+00:00" and basis == "ingested"
+
+
+def test_small_clock_skew_within_a_day_is_tolerated():
+    # date-only / timezone-ahead sources may land a few hours past ingestion
+    at, basis = _resolve_timeline(
+        occurred_at="2026-05-04T20:00:00+00:00", observed_at=None, published_at=None,
+        ingested_at="2026-05-04T00:00:00+00:00",
+    )
+    assert at == "2026-05-04T20:00:00+00:00" and basis == "occurred"

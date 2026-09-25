@@ -13,7 +13,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import Settings, settings
-from feeds.provenance import provenance_fields
+from feeds.provenance import ingestion_timestamps, provenance_fields
 from feeds.telegram_models import ChannelConfig, ChannelsFile
 from qdrant_doctor.schema import validate_collection_schema
 
@@ -51,8 +51,6 @@ def build_telegram_payload(
 ) -> dict:
     """Pure Telegram Qdrant payload builder (no I/O). The Telegram message date
     (`published`) IS publication time."""
-    import datetime
-
     return {
         **provenance_fields(
             source_type="telegram",
@@ -64,7 +62,7 @@ def build_telegram_payload(
         "url": url,
         "published": published,
         "content_hash": content_hash,
-        "ingested_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        **ingestion_timestamps(),
         "codebook_type": enrichment["codebook_type"] if enrichment else "other.unclassified",
         "entities": enrichment["entities"] if enrichment else [],
         "telegram_channel": channel.handle,
