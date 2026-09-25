@@ -151,6 +151,41 @@ services:
 YAML
 }
 
+warmup_local_llm() {
+  # The first request after a vLLM (re)start pays kernel warm-up (~15 s tiny, up to
+  # ~90 s inside a ReAct prompt), which blew the 120 s analysis budget. Wait for the
+  # local server, then send one tiny request per served model (base + LoRA adapters).
+  # Never fatal: a cold model is slower, not broken.
+  local url="${ODIN_LOCAL_VLLM_URL:-http://127.0.0.1:8000}"
+  local timeout_s="${ODIN_WARMUP_TIMEOUT_S:-600}"
+  local deadline=$((SECONDS + timeout_s))
+  local models_json=""
+  echo "Warming local LLM at ${url} (timeout ${timeout_s}s)..."
+  while (( SECONDS < deadline )); do
+    models_json=$(curl -sf --max-time 5 "${url}/v1/models" 2>/dev/null) || models_json=""
+    [[ -n "$models_json" ]] && break
+    sleep 5
+  done
+  local models
+  models=$(printf '%s' "$models_json" | python3 -c \
+    'import json,sys; [print(m["id"]) for m in json.load(sys.stdin).get("data", [])]' \
+    2>/dev/null) || models=""
+  if [[ -z "$models" ]]; then
+    echo "  WARN: local LLM not ready within ${timeout_s}s — first query will be slow"
+    return 0
+  fi
+  local model
+  while IFS= read -r model; do
+    if curl -sf --max-time 300 -o /dev/null "${url}/v1/chat/completions" \
+      -H 'content-type: application/json' \
+      -d "{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply OK.\"}],\"max_tokens\":5,\"chat_template_kwargs\":{\"enable_thinking\":false}}"; then
+      echo "  warmed ${model}"
+    else
+      echo "  WARN: warm-up request for ${model} failed"
+    fi
+  done <<< "$models"
+}
+
 start_mode() {
   local mode="$1"
   case "$mode" in
@@ -169,6 +204,7 @@ start_mode() {
       echo "Starting INTERACTIVE mode: Qwen3.5-9B + Reranker + API + UI"
       compose_run --profile interactive up -d --remove-orphans \
         "${CORE_SERVICES[@]}" "${INTERACTIVE_SERVICES[@]}"
+      warmup_local_llm
       ;;
     interactive-spark)
       # Prevent conflicts: stop local 27B ingestion stack so only Spark-backed ingestion runs.
@@ -183,6 +219,7 @@ start_mode() {
       echo "Starting INTERACTIVE+SPARK mode: 9B local + Ingestion via Spark"
       compose_run --profile interactive --profile interactive-spark up -d --remove-orphans \
         "${CORE_SERVICES[@]}" "${INTERACTIVE_SERVICES[@]}" data-ingestion-spark
+      warmup_local_llm
       ;;
     *)
       echo "Unknown mode: $mode"
@@ -566,7 +603,7 @@ import sys, json
 for s in json.load(sys.stdin)['sources']:
     age = s.get('age_s')
     detail = (f\"{age // 60} min old, max {s['max_age_s'] // 60} min\" if age is not None
-              else (s.get('error') or 'no data')[:60])
+              else (s.get('error') or 'no data')[:90])
     detail = ' '.join(str(detail).split())
     print(f\"{s['source']}\t{s['status']}\t{detail}\")
 ")
