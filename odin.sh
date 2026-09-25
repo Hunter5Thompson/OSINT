@@ -567,6 +567,7 @@ for s in json.load(sys.stdin)['sources']:
     age = s.get('age_s')
     detail = (f\"{age // 60} min old, max {s['max_age_s'] // 60} min\" if age is not None
               else (s.get('error') or 'no data')[:60])
+    detail = ' '.join(str(detail).split())
     print(f\"{s['source']}\t{s['status']}\t{detail}\")
 ")
     fi
