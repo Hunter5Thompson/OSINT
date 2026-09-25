@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import { IncidentToast } from "./IncidentToast";
@@ -21,6 +21,18 @@ const inc: Incident = {
 };
 
 describe("IncidentToast", () => {
+  it("can be dismissed without navigating away from the workspace", () => {
+    const onDismiss = vi.fn();
+    render(
+      <MemoryRouter>
+        <IncidentToast incident={inc} onDismiss={onDismiss} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss incident notification" }));
+    expect(onDismiss).toHaveBeenCalledOnce();
+    expect(screen.getByRole("link", { name: /open war room/i })).toHaveAttribute("href", "/warroom/inc-001");
+  });
+
   it("renders nothing when incident is null", () => {
     const { container } = render(
       <MemoryRouter>
@@ -37,6 +49,8 @@ describe("IncidentToast", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText(/Kurdistan/)).toBeInTheDocument();
+    expect(screen.getByRole("status").style.top).toBe("");
+    expect(screen.getByRole("status").style.bottom).toBe("160px");
     const link = screen.getByRole("link", { name: /open war room/i });
     expect(link).toHaveAttribute("href", "/warroom/inc-001");
   });

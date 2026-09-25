@@ -18,10 +18,11 @@ export interface IncidentToastProps {
 
 const containerStyle: CSSProperties = {
   position: "fixed",
-  top: "60px",
+  bottom: "160px",
   right: "16px",
   zIndex: 1000,
   width: "320px",
+  maxWidth: "calc(100vw - 32px)",
   background: "rgba(18,17,14,0.92)",
   border: "1px solid var(--sentinel)",
   borderTop: "2px solid var(--sentinel)",
@@ -73,7 +74,17 @@ export function IncidentToast({ incident, onDismiss, ttlMs = 12_000 }: IncidentT
 
   return (
     <aside role="status" aria-live="polite" data-part="incident-toast" style={containerStyle}>
-      <div style={eyebrowStyle}>incident · live</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={eyebrowStyle}>incident · live</span>
+        <button
+          type="button"
+          aria-label="Dismiss incident notification"
+          onClick={onDismiss}
+          style={{ background: "transparent", border: 0, color: "var(--bone)", cursor: "pointer", minWidth: 32, minHeight: 32, fontSize: 20 }}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
       <h2 style={titleStyle}>{incident.title}</h2>
       <div style={metaStyle}>
         {formatCoords(incident.coords, 2)}

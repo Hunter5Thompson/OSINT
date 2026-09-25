@@ -189,9 +189,7 @@ def compile_catalog(
         drop_policy=drop_policy,
     )
     active_plan = {
-        entry.scope_key: entry
-        for entry in catalog_plan.scopes
-        if entry.activation == "active"
+        entry.scope_key: entry for entry in catalog_plan.scopes if entry.activation == "active"
     }
     admin0_by_scope = {
         feature.record.scope_key: feature
@@ -254,6 +252,16 @@ def compile_catalog(
 
         assets: dict[str, EmittedAsset] = {}
         _add_asset(assets, world_pack)
+        country_outlines = {
+            feature.record.scope_key: emit_render_boundary(
+                world_output[_admin0_feature_id(feature)], lod=Lod.OVERVIEW
+            )
+            for feature in admin0
+            if feature.record.scope_key in active_plan
+            and feature.record.scope_key not in admin1_builds
+        }
+        for asset in country_outlines.values():
+            _add_asset(assets, asset)
         for built in admin1_builds.values():
             _add_asset(assets, built.parent_render)
             _add_asset(assets, built.child_pack)
@@ -285,14 +293,13 @@ def compile_catalog(
             active_plan=active_plan,
             admin0=admin0,
             world_pack=world_pack,
+            country_outlines=country_outlines,
             containment_assets=containment_assets,
             admin1_builds=admin1_builds,
             asset_ids=tuple(assets),
             attribution_sources_hash=attribution_sources_sha256(attribution_records),
         )
-        admin1_feasibility_records = _admin1_containment_feasibility_records(
-            admin1_builds
-        )
+        admin1_feasibility_records = _admin1_containment_feasibility_records(admin1_builds)
         feasibility = build_feasibility_report(
             catalog_revision=manifest.catalog_revision,
             containment_records=feasibility_records + admin1_feasibility_records,
@@ -471,9 +478,7 @@ def _admin0_source_code(
     for key in ("UN_A3", "ISO_N3", "ISO_N3_EH"):
         value = properties.get(key)
         candidate = (
-            str(value)
-            if isinstance(value, (str, int)) and not isinstance(value, bool)
-            else ""
+            str(value) if isinstance(value, (str, int)) and not isinstance(value, bool) else ""
         )
         if re.fullmatch(r"[0-9]{3}", candidate):
             candidates.append(candidate)
@@ -516,9 +521,7 @@ def _emit_world_pack(
         if feature.record.scope_key is not None:
             if feature.record.scope_key not in active_plan:
                 continue
-            features.append(
-                ScopePackFeature(feature.record.scope_key, feature.label, geometry)
-            )
+            features.append(ScopePackFeature(feature.record.scope_key, feature.label, geometry))
         else:
             if feature.record.non_scope_reason is None:
                 raise ValueError(f"NON_SCOPE_REASON_MISSING: {feature.source_code}")
@@ -546,9 +549,12 @@ def _build_admin1(
     tool: PinnedTopologyTool,
     work_dir: Path,
 ) -> _Admin1Build:
-    if entry.scope_key != "country:UKR" or source.source_id != "geoboundaries-gbopen-ukr-admin1":
+    if source.source_id == "natural-earth-admin1":
+        features = _parse_natural_earth_admin1(source_bytes, entry.scope_key)
+    elif entry.scope_key == "country:UKR" and source.source_id == "geoboundaries-gbopen-ukr-admin1":
+        features = _parse_admin1_zip(source_bytes)
+    else:
         raise ValueError(f"UNSUPPORTED_ADMIN1_BUILD: {entry.scope_key}")
-    features = _parse_admin1_zip(source_bytes)
     work_dir.mkdir()
     regional_work = work_dir / "regional"
     regional_work.mkdir()
@@ -594,9 +600,7 @@ def _build_admin1(
         tool=tool,
         work_dir=containment_work,
     )
-    containment_output = {
-        feature.feature_id: feature.geometry for feature in containment_features
-    }
+    containment_output = {feature.feature_id: feature.geometry for feature in containment_features}
     child_containment: dict[str, EmittedAsset] = {}
     for feature in features:
         result = build_containment(
@@ -627,6 +631,39 @@ def _build_admin1(
         metrics=metrics,
         containment_metrics=containment_metrics,
     )
+
+
+def _parse_natural_earth_admin1(payload: bytes, country_scope: str) -> tuple[_Admin1Feature, ...]:
+    raw = _json_object(payload, context="Natural Earth Admin1")
+    if raw.get("type") != "FeatureCollection" or not isinstance(raw.get("features"), list):
+        raise ValueError("INVALID_ADMIN1_SOURCE")
+    features: list[_Admin1Feature] = []
+    for feature in raw["features"]:
+        properties = feature.get("properties", {})
+        if properties.get("adm0_a3") != country_scope.removeprefix("country:"):
+            continue
+        code, label = properties.get("iso_3166_2"), properties.get("name")
+        if (
+            not isinstance(code, str)
+            or not _ADMIN1_ISO.fullmatch(code)
+            or not isinstance(label, str)
+        ):
+            raise ValueError("ADMIN1_IDENTITY_UNAVAILABLE")
+        raw_geometry = feature["geometry"]
+        rings, vertices = _raw_geometry_counts(raw_geometry)
+        features.append(
+            _Admin1Feature(
+                scope_key=f"admin1:iso3166-2:{code}",
+                label=label,
+                geometry=normalize_geometry(raw_geometry, precision=6),
+                source_bytes=len(canonical_json_bytes(raw_geometry)),
+                raw_ring_count=rings,
+                raw_vertex_count=vertices,
+            )
+        )
+    if not features or len({feature.scope_key for feature in features}) != len(features):
+        raise ValueError("ADMIN1_IDENTITY_MISSING_OR_DUPLICATE")
+    return tuple(sorted(features, key=lambda feature: feature.scope_key))
 
 
 def _parse_admin1_zip(payload: bytes) -> tuple[_Admin1Feature, ...]:
@@ -705,9 +742,7 @@ def _build_required_containment(
         for feature in admin0
         if feature.record.scope_key in active_plan
     }
-    raw_ring_counts = {
-        scope_key: feature.raw_ring_count for scope_key, feature in scoped.items()
-    }
+    raw_ring_counts = {scope_key: feature.raw_ring_count for scope_key, feature in scoped.items()}
     top_ten = {
         scope_key
         for scope_key, _ in sorted(
@@ -789,6 +824,7 @@ def _build_catalog_manifest(
     active_plan: Mapping[str, CatalogPlanEntry],
     admin0: Sequence[_Admin0Feature],
     world_pack: EmittedAsset,
+    country_outlines: Mapping[str, EmittedAsset],
     containment_assets: Mapping[str, EmittedAsset],
     admin1_builds: Mapping[str, _Admin1Build],
     asset_ids: tuple[str, ...],
@@ -837,12 +873,10 @@ def _build_catalog_manifest(
         outline_lods = (
             {Lod.REGIONAL: _geometry_descriptor(built.parent_render)}
             if built is not None
-            else {}
+            else {Lod.OVERVIEW: _geometry_descriptor(country_outlines[scope_key])}
         )
         children_lods = (
-            {Lod.REGIONAL: _geometry_descriptor(built.child_pack)}
-            if built is not None
-            else {}
+            {Lod.REGIONAL: _geometry_descriptor(built.child_pack)} if built is not None else {}
         )
         records.append(
             ManifestScopeInput(
@@ -902,17 +936,15 @@ def _build_catalog_manifest(
                     path=("world", scope_key, child.scope_key),
                     provenance=_provenance(
                         source=built.source,
-                        representation_id="geoboundaries-gbopen-ukr-admin1",
+                        representation_id=built.source.source_id,
                         dispute_status="none",
                         boundary_policy=catalog_plan.boundary_policy,
                     ),
                     presentation=ScopePresentation(
                         outline_lods={
-                            Lod.REGIONAL: _geometry_descriptor(
-                                built.child_render[child.scope_key]
-                            )
+                            Lod.REGIONAL: _geometry_descriptor(built.child_render[child.scope_key])
                         },
-                        containment=_containment_descriptor(child_containment)
+                        containment=_containment_descriptor(child_containment),
                     ),
                     provenance_ref=built.source.source_id,
                     derivation_inputs=DerivationInputs(
@@ -1020,8 +1052,7 @@ def _load_drop_policy(path: Path) -> _DropPolicy:
             or not isinstance(position, list)
             or len(position) != 2
             or any(
-                isinstance(item, bool) or not isinstance(item, (int, float))
-                for item in position
+                isinstance(item, bool) or not isinstance(item, (int, float)) for item in position
             )
         ):
             raise ValueError("INVALID_NORMALIZATION_DROP_RULE")
@@ -1130,9 +1161,7 @@ def _lod_audit_bytes(
         }
     ]
     for scope_key, built in sorted(admin1_builds.items()):
-        original_vertices = sum(
-            vertex_count(feature.geometry) for feature in built.full_features
-        )
+        original_vertices = sum(vertex_count(feature.geometry) for feature in built.full_features)
         records.extend(
             (
                 {
@@ -1144,9 +1173,7 @@ def _lod_audit_bytes(
                     "output_vertices": built.metrics.vertex_count,
                     "max_error_m": built.metrics.max_error_m,
                     "protected_feature_count": built.metrics.protected_feature_count,
-                    "removed_degenerate_ring_count": (
-                        built.metrics.removed_degenerate_ring_count
-                    ),
+                    "removed_degenerate_ring_count": (built.metrics.removed_degenerate_ring_count),
                 },
                 {
                     "asset_id": built.parent_render.asset_id,
@@ -1157,9 +1184,7 @@ def _lod_audit_bytes(
                     "output_vertices": built.parent_render.counts.vertex_count,
                     "max_error_m": built.metrics.max_error_m,
                     "protected_feature_count": built.metrics.protected_feature_count,
-                    "removed_degenerate_ring_count": (
-                        built.metrics.removed_degenerate_ring_count
-                    ),
+                    "removed_degenerate_ring_count": (built.metrics.removed_degenerate_ring_count),
                 },
             )
         )
@@ -1177,9 +1202,7 @@ def _lod_audit_bytes(
                     "protected_feature_count": sum(
                         len(polygon) for polygon in feature.geometry.polygons
                     ),
-                    "removed_degenerate_ring_count": (
-                        built.metrics.removed_degenerate_ring_count
-                    ),
+                    "removed_degenerate_ring_count": (built.metrics.removed_degenerate_ring_count),
                 }
             )
             asset = built.child_containment[feature.scope_key]

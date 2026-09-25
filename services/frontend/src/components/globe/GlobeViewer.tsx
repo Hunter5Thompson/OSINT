@@ -4,6 +4,7 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { ShaderType } from "../../types";
 import { applyCRTShader, applyNightVisionShader, applyFLIRShader, clearShaders } from "../shaders/shaderUtils";
 import { applyTilesetPerformanceConfig } from "./tilesetConfig";
+import { createBaseLayer } from "./baseLayer";
 
 interface GlobeViewerProps {
   onViewerReady: (viewer: Cesium.Viewer) => void;
@@ -38,6 +39,7 @@ export function GlobeViewer({
     Cesium.Ion.defaultAccessToken = cesiumToken;
 
     const viewer = new Cesium.Viewer(containerRef.current, {
+      baseLayer: createBaseLayer(cesiumToken),
       timeline: false,
       animation: false,
       baseLayerPicker: false,
@@ -53,7 +55,7 @@ export function GlobeViewer({
     });
 
     // Dark atmosphere
-    viewer.scene.globe.enableLighting = true;
+    viewer.scene.globe.enableLighting = Boolean(cesiumToken);
     if (viewer.scene.skyAtmosphere) {
       viewer.scene.skyAtmosphere.brightnessShift = -0.3;
     }
@@ -61,100 +63,104 @@ export function GlobeViewer({
     viewer.scene.fog.density = 0.0002;
     viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0a0a0a");
 
-    // Cesium World Terrain — relief + bathymetry
-    try {
-      viewer.scene.setTerrain(
-        Cesium.Terrain.fromWorldTerrain({
-          requestWaterMask: true,
-          requestVertexNormals: true,
-        }),
-      );
-      viewer.scene.verticalExaggeration = 1.5;
-    } catch {
-      // Terrain unavailable — continue without relief
-    }
+    // Remote detail is optional; the bundled reference map needs no services.
+    if (cesiumToken) {
+      // Cesium World Terrain — relief + bathymetry
+      try {
+        viewer.scene.setTerrain(
+          Cesium.Terrain.fromWorldTerrain({
+            requestWaterMask: true,
+            requestVertexNormals: true,
+          }),
+        );
+        viewer.scene.verticalExaggeration = 1.5;
+      } catch {
+        // Terrain unavailable — continue without relief
+      }
 
-    // Google Photorealistic 3D Tiles with night-side darkening
-    const addBuildingsTileset = (tileset: Cesium.Cesium3DTileset) => {
-      if (viewer.isDestroyed()) return;
-      applyTilesetPerformanceConfig(tileset);
-      tileset.show = showBuildingsRef.current;
-      (tileset as unknown as { _odinPhotoreal?: boolean })._odinPhotoreal = true;
-      viewer.scene.primitives.add(tileset);
-      buildingsTilesetRef.current = tileset;
-      onPhotorealTilesetReady?.(tileset);
-    };
+      // Google Photorealistic 3D Tiles with night-side darkening
+      const addBuildingsTileset = (tileset: Cesium.Cesium3DTileset) => {
+        if (viewer.isDestroyed()) return;
+        applyTilesetPerformanceConfig(tileset);
+        tileset.show = showBuildingsRef.current;
+        (tileset as unknown as { _odinPhotoreal?: boolean })._odinPhotoreal = true;
+        viewer.scene.primitives.add(tileset);
+        buildingsTilesetRef.current = tileset;
+        onPhotorealTilesetReady?.(tileset);
+      };
 
-    // Load Google Photorealistic 3D Tiles via the Cesium ion asset (2275207),
-    // NOT createGooglePhotorealistic3DTileset(): since Cesium 1.120 the no-arg
-    // helper requires a Google Maps API key (GoogleMaps.defaultApiKey) and
-    // rejects without one — we only have an ion token, so the helper silently
-    // fell back to OSM buildings. fromIonAssetId brokers the Google session
-    // through the ion token (verified working) and is stable across 1.13x.
-    void Cesium.Cesium3DTileset.fromIonAssetId(2275207)
-      .then((tileset) => {
-        tileset.customShader = new Cesium.CustomShader({
-          fragmentShaderText: /* glsl */ `
-            void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
-              // Darken fragments on the night side of the Earth
-              vec3 normalEC = fsInput.attributes.normalEC;
-              float NdotL = dot(normalEC, czm_sunDirectionEC);
-              // Smooth day-to-night transition at the terminator
-              float nightFactor = smoothstep(-0.05, 0.15, -NdotL);
-              material.diffuse *= mix(1.0, 0.03, nightFactor);
-            }
-          `,
-        });
-        addBuildingsTileset(tileset);
-      })
-      .catch((e) => {
-        // Surface WHY (the old silent catch hid the Cesium-1.139 key regression),
-        // then fall back to OpenStreetMap buildings if Google is unavailable.
-        console.warn("[GlobeViewer] Google photoreal 3D tiles unavailable, falling back to OSM:", e);
-        void Cesium.createOsmBuildingsAsync()
-          .then((tileset) => {
-            tileset.style = new Cesium.Cesium3DTileStyle({
-              color: "color('rgb(146,158,175)', 0.55)",
-            });
-            addBuildingsTileset(tileset);
-          })
-          .catch(() => {
-            // No 3D buildings available — continue with terrain-only.
+      // Load Google Photorealistic 3D Tiles via the Cesium ion asset (2275207),
+      // NOT createGooglePhotorealistic3DTileset(): since Cesium 1.120 the no-arg
+      // helper requires a Google Maps API key (GoogleMaps.defaultApiKey) and
+      // rejects without one — we only have an ion token, so the helper silently
+      // fell back to OSM buildings. fromIonAssetId brokers the Google session
+      // through the ion token (verified working) and is stable across 1.13x.
+      void Cesium.Cesium3DTileset.fromIonAssetId(2275207)
+        .then((tileset) => {
+          tileset.customShader = new Cesium.CustomShader({
+            fragmentShaderText: /* glsl */ `
+              void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+                // Darken fragments on the night side of the Earth
+                vec3 normalEC = fsInput.attributes.normalEC;
+                float NdotL = dot(normalEC, czm_sunDirectionEC);
+                // Smooth day-to-night transition at the terminator
+                float nightFactor = smoothstep(-0.05, 0.15, -NdotL);
+                material.diffuse *= mix(1.0, 0.03, nightFactor);
+              }
+            `,
           });
-      });
-
-    // Country borders + place labels overlay.
-    void Cesium.createWorldImageryAsync({ style: Cesium.IonWorldImageryStyle.ROAD })
-      .then((provider) => {
-        if (viewer.isDestroyed()) return;
-        const bordersLayer = viewer.imageryLayers.addImageryProvider(provider);
-        bordersLayer.show = showBordersRef.current;
-        bordersLayer.alpha = 0.45;
-        bordersLayer.brightness = 0.9;
-        bordersLayer.contrast = 1.15;
-        borderLayerRef.current = bordersLayer;
-      })
-      .catch(() => {
-        // Overlay unavailable (token/access) — keep globe running without borders.
-      });
-
-    // NASA Black Marble (VIIRS) for night side city lights
-    // Cesium ion asset id: 3812
-    void Cesium.IonImageryProvider.fromAssetId(3812)
-      .then((provider) => {
-        if (viewer.isDestroyed()) return;
-        const nightLayer = new Cesium.ImageryLayer(provider, {
-          dayAlpha: 0.0,
-          nightAlpha: 0.9,
-          brightness: 1.2,
-          gamma: 1.05,
+          addBuildingsTileset(tileset);
+        })
+        .catch((e) => {
+          // Surface WHY (the old silent catch hid the Cesium-1.139 key regression),
+          // then fall back to OpenStreetMap buildings if Google is unavailable.
+          console.warn("[GlobeViewer] Google photoreal 3D tiles unavailable, falling back to OSM:", e);
+          void Cesium.createOsmBuildingsAsync()
+            .then((tileset) => {
+              tileset.style = new Cesium.Cesium3DTileStyle({
+                color: "color('rgb(146,158,175)', 0.55)",
+              });
+              addBuildingsTileset(tileset);
+            })
+            .catch(() => {
+              // No 3D buildings available — continue with terrain-only.
+            });
         });
-        viewer.imageryLayers.add(nightLayer);
-        nightLayerRef.current = nightLayer;
-      })
-      .catch(() => {
-        // Graceful fallback if token/asset access fails.
-      });
+
+      // Country borders + place labels overlay.
+      void Cesium.createWorldImageryAsync({ style: Cesium.IonWorldImageryStyle.ROAD })
+        .then((provider) => {
+          if (viewer.isDestroyed()) return;
+          const bordersLayer = viewer.imageryLayers.addImageryProvider(provider);
+          bordersLayer.show = showBordersRef.current;
+          bordersLayer.alpha = 0.45;
+          bordersLayer.brightness = 0.9;
+          bordersLayer.contrast = 1.15;
+          borderLayerRef.current = bordersLayer;
+        })
+        .catch(() => {
+          // Overlay unavailable (token/access) — keep globe running without borders.
+        });
+
+      // NASA Black Marble (VIIRS) for night side city lights
+      // Cesium ion asset id: 3812
+      void Cesium.IonImageryProvider.fromAssetId(3812)
+        .then((provider) => {
+          if (viewer.isDestroyed()) return;
+          const nightLayer = new Cesium.ImageryLayer(provider, {
+            dayAlpha: 0.0,
+            nightAlpha: 0.9,
+            brightness: 1.2,
+            gamma: 1.05,
+          });
+          viewer.imageryLayers.add(nightLayer);
+          nightLayerRef.current = nightLayer;
+        })
+        .catch(() => {
+          // Graceful fallback if token/asset access fails.
+        });
+
+    }
 
     // Initial camera position (Europe overview)
     viewer.camera.setView({
@@ -165,6 +171,12 @@ export function GlobeViewer({
     onViewerReady(viewer);
 
     return () => {
+      // Stop the owned render loop before disposal: a throwing primitive can
+      // leave Cesium half-destroyed while its next animation frame is queued.
+      if (!viewer.isDestroyed()) {
+        viewer.useDefaultRenderLoop = false;
+        viewer.clock.shouldAnimate = false;
+      }
       if (nightLayerRef.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
         viewerRef.current.imageryLayers.remove(nightLayerRef.current, false);
         nightLayerRef.current = null;

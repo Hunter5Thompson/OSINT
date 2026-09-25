@@ -44,6 +44,7 @@ def test_source_lock_contains_real_pinned_release_metadata() -> None:
         "geoboundaries-gbopen-ukr-admin1",
         "mapshaper",
         "natural-earth-admin0",
+        "natural-earth-admin1",
         "odin-country-crosswalk",
     }
     assert by_id["natural-earth-admin0"].release == "5.1.2+f1890d9f152c"

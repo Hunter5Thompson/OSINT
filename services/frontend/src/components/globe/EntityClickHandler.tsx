@@ -119,7 +119,8 @@ export function EntityClickHandler({
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
 
-    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    const canvas = viewer.scene.canvas;
+    const handler = new Cesium.ScreenSpaceEventHandler(canvas);
     const capabilities = prefetchCapabilities ?? readSpatialPrefetchCapabilities();
     const hoverPrefetch = (
       countryInteractionRef.current.mode === "spatial"
@@ -151,7 +152,7 @@ export function EntityClickHandler({
         },
         Cesium.ScreenSpaceEventType.MOUSE_MOVE,
       );
-      viewer.scene.canvas.addEventListener("pointerleave", onPointerLeave);
+      canvas.addEventListener("pointerleave", onPointerLeave);
     }
 
     handler.setInputAction((movement: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
@@ -512,7 +513,7 @@ export function EntityClickHandler({
 
     return () => {
       hoverPrefetch?.dispose();
-      viewer.scene.canvas.removeEventListener("pointerleave", onPointerLeave);
+      canvas.removeEventListener("pointerleave", onPointerLeave);
       handler.destroy();
     };
   }, [viewer, dispatchSpotlight, country, prefetchCapabilities]);

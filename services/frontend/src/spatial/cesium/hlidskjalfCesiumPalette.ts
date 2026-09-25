@@ -1,5 +1,13 @@
 import * as Cesium from "cesium";
 
+/** Muted atlas tints distinguish neighboring provinces, not risk or allegiance. */
+export function regionalFillColor(scopeKey: string): Cesium.Color {
+  const colors = ["#b49b68", "#608d9e", "#81966d", "#91768e", "#ae7c63", "#658f8a"];
+  let hash = 0;
+  for (const character of scopeKey) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return Cesium.Color.fromCssColorString(colors[hash % colors.length] ?? colors[0]!).withAlpha(0.2);
+}
+
 export type SpatialScopeColorRole =
   | "activeFill"
   | "scopeOutline"

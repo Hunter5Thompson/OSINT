@@ -1,366 +1,323 @@
-/**
- * LandingPage · Astrolabe (Hlíðskjalf §4.1).
- *
- * Wires the four hero numerals (Hotspots / Conflictus / Nuntii / Libri)
- * to `/api/landing/summary?window=24h`, the Signal Feed to
- * `useSignalFeed()` (SSE + /api/signals/latest hydration), and clicks to
- * the Worldview deep-link filters.
- *
- * Ships in ODIN S1 Task 6. Visual polish (grain overlay, staggered reveal
- * animation) lands in Task 7.
- */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ReferenceGlobe } from "../components/landing/ReferenceGlobe";
+import { FeedConnection } from "../components/hlidskjalf/FeedConnection";
 import { NumericHero } from "../components/hlidskjalf/NumericHero";
 import type { NumericAccent } from "../components/hlidskjalf/NumericHero";
-import { Orrery } from "../components/hlidskjalf/Orrery";
-import { SectionHeading } from "../components/hlidskjalf/SectionHeading";
-import { SignalFeedItem } from "../components/hlidskjalf/SignalFeedItem";
-import type { SignalSeverity as FeedSeverity } from "../components/hlidskjalf/SignalFeedItem";
 import { useSignalFeed } from "../hooks/useSignalFeed";
 import { getLandingSummary } from "../services/api";
 import type { LandingSummary } from "../types/landing";
-import type { SignalEnvelope, SignalSeverity } from "../types/signals";
+import type { SignalEnvelope } from "../types/signals";
 
-type FilterKey = "hotspots" | "conflict" | "nuntii" | "libri";
-
-const INTRO_ACTIONS = [
-  { to: "/worldview", label: "Enter Worldview" },
-  { to: "/briefing", label: "Open Briefing" },
-  { to: "/warroom", label: "War Room" },
+const WORKFLOWS = [
+  {
+    n: "01",
+    to: "/worldview?mode=overview",
+    title: "Read the world",
+    detail: "Place events in their geographic context.",
+    tag: "SITUATION",
+  },
+  {
+    n: "02",
+    to: "/worldview?mode=infrastructure",
+    title: "Follow the connections",
+    detail: "Explore energy, transport and digital lifelines.",
+    tag: "INFRASTRUCTURE",
+  },
+  {
+    n: "03",
+    to: "/briefing",
+    title: "Build your understanding",
+    detail: "Investigate the evidence. Bring it into a briefing.",
+    tag: "INTELLIGENCE",
+  },
 ] as const;
 
-const CAPABILITIES = [
-  { label: "Hugin", detail: "ingestion pipeline" },
-  { label: "Signalia", detail: "Signal Feed / SSE" },
-  { label: "Vectorium", detail: "Qdrant vector search" },
-  { label: "Memoria", detail: "Neo4j graph memory" },
-  { label: "Fenestra", detail: "24h landing window" },
-] as const;
-
-const SEVERITY_MAP: Record<SignalSeverity, FeedSeverity> = {
-  critical: "sent",
-  high: "amb",
-  medium: "sage",
-  low: "dim",
-};
-
-function mapSeverity(sev?: string): FeedSeverity {
-  if (sev && sev in SEVERITY_MAP) return SEVERITY_MAP[sev as SignalSeverity];
-  return "dim";
-}
-
-function formatTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "--:--Z";
-    const hh = String(d.getUTCHours()).padStart(2, "0");
-    const mm = String(d.getUTCMinutes()).padStart(2, "0");
-    return `${hh}:${mm}Z`;
-  } catch {
-    return "--:--Z";
-  }
-}
-
-function entityParam(env: SignalEnvelope): string {
-  const { payload } = env;
-  const source = (payload.source || env.type.replace(/^signal\./, "")).trim() || "signal";
-  const id = payload.redis_id || env.event_id;
-  return `${source}:${id}`;
-}
-
-interface TileSpec {
-  key: FilterKey;
-  label: string;
-  accent: NumericAccent;
-  value: number | null;
-  source: string;
-  forceZero?: boolean;
-  pendingLabel?: string;
-}
-
-function tileValueDisplay(spec: TileSpec): {
-  display: string | number;
-  subLabel: string | undefined;
-} {
-  if (spec.forceZero) {
-    return { display: 0, subLabel: spec.pendingLabel };
-  }
-  if (spec.value === null || spec.value === undefined) {
-    return { display: "—", subLabel: `source:${spec.source}` };
-  }
-  return { display: spec.value, subLabel: undefined };
-}
-
-function LandingIntro() {
+function utcDate(iso: string): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "Time unavailable";
   return (
-    <section
-      data-part="landing-intro"
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))",
-        gap: "2rem",
-        alignItems: "stretch",
-        paddingBottom: "2rem",
-        borderBottom: "1px solid var(--granite)",
-      }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-        <span className="eyebrow">ODIN · Hlíðskjalf</span>
-        <h1
-          className="serif"
-          style={{
-            margin: "0.65rem 0 1rem",
-            maxWidth: "46rem",
-            color: "var(--parchment)",
-            fontSize: "clamp(3rem, 6vw, 5.75rem)",
-            lineHeight: 0.95,
-            fontWeight: 400,
-          }}
-        >
-          See the operating picture before it becomes a report.
-        </h1>
-        <p
-          style={{
-            maxWidth: "42rem",
-            margin: 0,
-            color: "var(--bone)",
-            fontSize: "1rem",
-            lineHeight: 1.65,
-          }}
-        >
-          ODIN fuses live signals, infrastructure layers, incident context, and
-          briefing workflows into one tactical intelligence surface.
-        </p>
-        <nav
-          aria-label="Landing entry points"
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.75rem",
-            marginTop: "1.5rem",
-          }}
-        >
-          {INTRO_ACTIONS.map((action, index) => (
-            <Link
-              key={action.to}
-              to={action.to}
-              className="mono"
-              style={{
-                border: `1px solid ${index === 0 ? "var(--amber)" : "var(--granite)"}`,
-                color: index === 0 ? "var(--parchment)" : "var(--stone)",
-                textDecoration: "none",
-                textTransform: "uppercase",
-                letterSpacing: "0.12em",
-                fontSize: "0.72rem",
-                padding: "0.75rem 0.95rem",
-                background: index === 0 ? "rgba(196, 129, 58, 0.08)" : "transparent",
-              }}
-            >
-              {action.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-
-      <aside
-        aria-label="ODIN capabilities"
-        style={{
-          border: "1px solid var(--granite)",
-          padding: "1rem",
-          display: "grid",
-          gap: "0.75rem",
-          alignContent: "start",
-        }}
-      >
-        <SectionHeading label="Subsystemata" />
-        {CAPABILITIES.map((capability) => (
-          <div
-            key={capability.label}
-            style={{
-              borderTop: "1px solid var(--granite)",
-              paddingTop: "0.75rem",
-            }}
-          >
-            <span className="mono" style={{ color: "var(--parchment)", fontSize: "0.78rem" }}>
-              {capability.label}
-            </span>
-            <span
-              style={{
-                display: "block",
-                marginTop: "0.2rem",
-                color: "var(--stone)",
-                fontSize: "0.84rem",
-              }}
-            >
-              {capability.detail}
-            </span>
-          </div>
-        ))}
-      </aside>
-    </section>
+    new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+    }).format(date) + " UTC"
   );
 }
 
 export function LandingPage() {
   const navigate = useNavigate();
   const [summary, setSummary] = useState<LandingSummary | null>(null);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
-  const { items: feedItems } = useSignalFeed();
+  const [summaryError, setSummaryError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const { items: feedItems, status } = useSignalFeed();
 
   useEffect(() => {
     let active = true;
-    getLandingSummary("24h")
-      .then((s) => {
-        if (active) setSummary(s);
+    setSummaryError(false);
+    void getLandingSummary("24h")
+      .then((data) => {
+        if (active) setSummary(data);
       })
-      .catch((err: unknown) => {
-        if (!active) return;
-        setSummaryError(err instanceof Error ? err.message : String(err));
+      .catch(() => {
+        if (active) setSummaryError(true);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [attempt]);
 
-  const tiles = useMemo<TileSpec[]>(() => {
-    return [
-      {
-        key: "hotspots",
-        label: "Hotspots",
-        accent: "sent",
-        value: summary?.hotspots_24h ?? null,
-        source: summary?.hotspots_source ?? "unavailable",
-      },
-      {
-        key: "conflict",
-        label: "Conflictus",
-        accent: "amber",
-        value: summary?.conflict_24h ?? null,
-        source: summary?.conflict_source ?? "unavailable",
-      },
-      {
-        key: "nuntii",
-        label: "Nuntii",
-        accent: "sage",
-        value: summary?.nuntii_24h ?? null,
-        source: summary?.nuntii_source ?? "unavailable",
-      },
-      {
-        key: "libri",
-        label: "Libri",
-        accent: "parchment",
-        value: summary?.libri_24h ?? 0,
-        source: summary?.libri_source ?? "reports",
-        forceZero: summary?.reports_not_available_yet ?? true,
-        pendingLabel: "pending · S3",
-      },
-    ];
-  }, [summary]);
+  const tiles: {
+    key: string;
+    label: string;
+    value: number | null;
+    accent: NumericAccent;
+    source?: string;
+    to: string;
+    pending?: boolean;
+  }[] = [
+    {
+      key: "hotspots",
+      label: "Hotspots",
+      value: summary?.hotspots_24h ?? null,
+      accent: "sent",
+      source: summary?.hotspots_source,
+      to: "/worldview?filter=hotspots",
+    },
+    {
+      key: "conflict",
+      label: "Conflict events",
+      value: summary?.conflict_24h ?? null,
+      accent: "amber",
+      source: summary?.conflict_source,
+      to: "/worldview?filter=conflict",
+    },
+    {
+      key: "nuntii",
+      label: "News signals",
+      value: summary?.nuntii_24h ?? null,
+      accent: "sage",
+      source: summary?.nuntii_source,
+      to: "/worldview?filter=nuntii",
+    },
+    {
+      key: "libri",
+      label: "Briefings",
+      value: summary?.reports_not_available_yet
+        ? null
+        : (summary?.libri_24h ?? null),
+      accent: "parchment",
+      to: "/briefing",
+      pending: summary?.reports_not_available_yet,
+    },
+  ];
 
-  const handleTileClick = (key: FilterKey) => {
-    navigate(`/worldview?filter=${key}`);
-  };
-
-  const handleFeedClick = (env: SignalEnvelope) => {
-    navigate(`/worldview?entity=${encodeURIComponent(entityParam(env))}`);
-  };
+  function openSignal(signal: SignalEnvelope) {
+    const source =
+      signal.payload.source || signal.type.replace(/^signal\./, "");
+    const params = new URLSearchParams({
+      entity: source + ":" + (signal.payload.redis_id || signal.event_id),
+    });
+    if (signal.payload.title) params.set("q", signal.payload.title);
+    navigate("/worldview?" + params);
+  }
 
   return (
-    <div
-      data-page="landing"
-      style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        padding: "2rem 2.5rem",
-        gap: "2rem",
-        minHeight: 0,
-        overflow: "auto",
-      }}
-    >
-      <LandingIntro />
+    <div data-page="landing" className="situation-home">
+      <div className="situation-masthead">
+        <span className="eyebrow">ODIN · Hlíðskjalf</span>
+        <span className="mono">GEOPOLITICAL OBSERVATORY</span>
+      </div>
+      <section data-part="landing-intro" className="situation-hero">
+        <div className="situation-hero-copy">
+          <span className="situation-edition">
+            <span /> A WORLD IN CONTEXT
+          </span>
+          <h1>
+            Your operating picture.
+            <br />
+            <em>A world connected.</em>
+          </h1>
+          <p>
+            Go beyond the headline. Explore the places, movements and
+            infrastructure shaping the geopolitical landscape.
+          </p>
+          <nav aria-label="Landing entry points" className="situation-actions">
+            <Link
+              className="observatory-button observatory-button-primary"
+              to="/worldview?mode=overview"
+            >
+              Enter Worldview <span aria-hidden="true">↗</span>
+            </Link>
+            <Link className="observatory-button" to="/briefing">
+              Open Briefing
+            </Link>
+            <Link className="situation-warroom" to="/warroom">
+              War Room <span aria-hidden="true">↗</span>
+            </Link>
+          </nav>
+          <div className="situation-hero-note">
+            <span className="mono">01 — OBSERVE</span>
+            <span>Locate. Connect. Understand.</span>
+          </div>
+        </div>
+        <div className="situation-atlas">
+          <div className="atlas-corner atlas-corner-tl" />
+          <div className="atlas-corner atlas-corner-br" />
+          <span className="atlas-heading mono">THE GLOBAL PERSPECTIVE</span>
+          <ReferenceGlobe />
+          <div className="atlas-caption">
+            <span className="mono">GEOGRAPHIC REFERENCE</span>
+            <span>
+              Explore the interactive globe <span aria-hidden="true">↗</span>
+            </span>
+          </div>
+          <Link
+            className="atlas-link"
+            to="/worldview?mode=overview"
+            aria-label="Explore the interactive globe"
+          />
+        </div>
+      </section>
 
-      <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-        <SectionHeading label="Index Rerum · last 24h" />
-        <span className="mono" style={{ color: "var(--ash)", fontSize: "0.75rem" }}>
-          {summaryError ? `err · ${summaryError}` : summary ? "live" : "loading"}
-        </span>
-      </header>
-
-      <section
-        data-part="numerals"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))",
-          gap: "1.5rem",
-        }}
-      >
-        {tiles.map((tile) => {
-          const { display, subLabel } = tileValueDisplay(tile);
-          return (
+      <section aria-label="Situation summary" className="situation-summary">
+        <header className="situation-section-heading">
+          <h2>
+            At a glance <span>Last 24 hours</span>
+          </h2>
+          <div className="summary-status" role="status">
+            {summaryError ? (
+              <>
+                <span>Summary unavailable</span>
+                <button type="button" onClick={() => setAttempt((n) => n + 1)}>
+                  Retry summary
+                </button>
+              </>
+            ) : summary ? (
+              <span>Snapshot · {utcDate(summary.generated_at)}</span>
+            ) : (
+              <span>Loading summary…</span>
+            )}
+          </div>
+        </header>
+        <div data-part="numerals" className="situation-metrics">
+          {tiles.map((tile) => (
             <button
+              className="situation-metric"
               key={tile.key}
               type="button"
               data-tile={tile.key}
               aria-label={tile.label}
-              onClick={() => handleTileClick(tile.key)}
-              style={{
-                background: "transparent",
-                border: "none",
-                borderTop: "1px solid var(--granite)",
-                padding: "1rem 0 0 0",
-                textAlign: "left",
-                cursor: "pointer",
-                color: "inherit",
-              }}
+              onClick={() => navigate(tile.to)}
             >
               <NumericHero
-                value={display}
+                value={tile.value ?? "—"}
                 label={tile.label}
                 accent={tile.accent}
-                sub={subLabel}
+                sub={
+                  tile.pending
+                    ? "Reports pending"
+                    : tile.value === null
+                      ? "Data unavailable"
+                      : undefined
+                }
               />
+              <span className="metric-arrow" aria-hidden="true">
+                ↗
+              </span>
+              {tile.source && (
+                <span className="metric-source">Source · {tile.source}</span>
+              )}
             </button>
-          );
-        })}
+          ))}
+        </div>
       </section>
 
-      <hr className="hair" style={{ border: 0, borderTop: "1px solid var(--granite)" }} />
-
-      <section
-        data-part="feed-and-orrery"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))",
-          gap: "2rem",
-          alignItems: "start",
-        }}
-      >
-        <div>
-          <SectionHeading label="Signal Feed · live" />
-          <div data-part="signal-feed" style={{ marginTop: "0.75rem" }}>
+      <section className="situation-lower">
+        <div className="situation-signals">
+          <header className="situation-section-heading">
+            <h2>Signal desk</h2>
+            <FeedConnection status={status} />
+          </header>
+          <p className="situation-section-description">
+            Latest received signals. Select a headline to investigate.
+          </p>
+          <div data-part="signal-feed">
             {feedItems.length === 0 ? (
-              <span style={{ color: "var(--ash)", fontSize: "0.85rem" }}>
-                — no signals yet —
-              </span>
+              <div className="situation-empty">
+                <span className="serif">Waiting for the next signal.</span>
+                <p>
+                  {status === "live"
+                    ? "The stream is connected. Incoming signals will appear here."
+                    : "The feed is not connected yet. You can still explore the map and your briefings."}
+                </p>
+                <Link to="/worldview?mode=overview">
+                  Explore Worldview <span aria-hidden="true">↗</span>
+                </Link>
+              </div>
             ) : (
-              feedItems.map((env) => (
-                <SignalFeedItem
-                  key={env.event_id}
-                  severity={mapSeverity(env.payload.severity)}
-                  ts={formatTime(env.ts)}
-                  text={env.payload.title || env.type}
-                  onClick={() => handleFeedClick(env)}
-                />
+              feedItems.map((signal) => (
+                <button
+                  className="situation-signal"
+                  type="button"
+                  key={signal.event_id}
+                  onClick={() => openSignal(signal)}
+                >
+                  <span
+                    className="signal-severity"
+                    data-severity={signal.payload.severity ?? "unknown"}
+                    aria-hidden="true"
+                  />
+                  <span className="signal-story">
+                    <span className="signal-meta">
+                      {signal.payload.source ||
+                        signal.type.replace(/^signal\./, "")}{" "}
+                      <span>· {signal.payload.severity ?? "Unrated"}</span>
+                    </span>
+                    <span className="signal-headline">
+                      {signal.payload.title || signal.type}
+                    </span>
+                    <time dateTime={signal.ts}>{utcDate(signal.ts)}</time>
+                  </span>
+                  <span className="signal-arrow" aria-hidden="true">
+                    ↗
+                  </span>
+                </button>
               ))
             )}
           </div>
         </div>
-        <div data-part="orrery-anchor">
-          <Orrery size="m" />
-        </div>
+        <aside
+          className="situation-workflows"
+          aria-label="Exploration workflows"
+        >
+          <header className="situation-section-heading">
+            <h2>Choose your perspective</h2>
+          </header>
+          {WORKFLOWS.map((workflow) => (
+            <Link
+              key={workflow.n}
+              to={workflow.to}
+              className="situation-workflow"
+            >
+              <span className="workflow-number mono">{workflow.n}</span>
+              <span>
+                <span className="eyebrow">{workflow.tag}</span>
+                <strong>{workflow.title}</strong>
+                <span className="workflow-detail">{workflow.detail}</span>
+              </span>
+              <span aria-hidden="true">↗</span>
+            </Link>
+          ))}
+        </aside>
       </section>
+      <footer className="situation-footer">
+        <span>ODIN / OPEN-SOURCE INTELLIGENCE</span>
+        <span>Observe with curiosity. Assess with evidence.</span>
+      </footer>
     </div>
   );
 }

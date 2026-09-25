@@ -149,7 +149,7 @@ export class ViewerSpatialCesiumRuntime implements SpatialCesiumRuntime {
     const sphere = Cesium.BoundingSphere.fromPoints(cartesian);
     this.viewer.camera.flyToBoundingSphere(sphere, {
       duration,
-      offset: new Cesium.HeadingPitchRange(0, -Cesium.Math.PI_OVER_TWO, 0),
+      offset: new Cesium.HeadingPitchRange(0, -Cesium.Math.PI_OVER_TWO, sphere.radius * 3.2),
     });
   }
 
@@ -379,10 +379,14 @@ export class CesiumSpatialScopeAdapter {
       };
       this.updateHighWater();
       staging = null;
-      this.runtime.flyToBoundingSphere(
-        build.cameraPositions,
-        this.prefersReducedMotion() ? 0 : 1.2,
-      );
+      // A full-world bounding sphere has its centre inside the Earth. Fitting
+      // it on hydration/recovery pulls the user's view away from their country.
+      if (input.scopeKey !== "world" && previous?.input.scopeKey !== input.scopeKey) {
+        this.runtime.flyToBoundingSphere(
+          build.cameraPositions,
+          this.prefersReducedMotion() ? 0 : 1.2,
+        );
+      }
       this.attachCameraListener();
     } catch (error: unknown) {
       if (staging !== null) {

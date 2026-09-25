@@ -315,7 +315,7 @@ describe("WorldView pick classification", () => {
 });
 
 describe("SpatialScopeBreadcrumb", () => {
-  it("exposes every direct child as a native drilldown button", () => {
+  it("keeps direct children in a compact native scope picker", () => {
     const module = new InteractiveModule(readySnapshot("ukraine"));
     render(
       <ScopeHarness module={module}>
@@ -323,9 +323,10 @@ describe("SpatialScopeBreadcrumb", () => {
       </ScopeHarness>,
     );
 
-    const child = screen.getByRole("button", { name: "Donetsk" });
-    expect(child).toHaveAttribute("type", "button");
-    fireEvent.click(child);
+    expect(screen.queryByRole("button", { name: "Donetsk" })).not.toBeInTheDocument();
+    const picker = screen.getByRole("combobox", { name: "Explore spatial scope" });
+    expect(screen.getByRole("option", { name: "Donetsk" })).toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: "admin1:iso3166-2:UA-14" } });
     expect(module.commands[0]).toEqual({
       type: "enter",
       target: parseScopeKeyCandidate("admin1:iso3166-2:UA-14"),

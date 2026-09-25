@@ -2,6 +2,14 @@
   "schema_version": 1,
   "sources": [
     {
+      "source_id": "natural-earth-admin1",
+      "release": "5.1.2+f1890d9f152c",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/f1890d9f152c896d250a77557a5751a93d494776/geojson/ne_10m_admin_1_states_provinces.geojson",
+      "sha256": "22d0e3ad85eb3e27f17cabf8ba2d50e554fbc27a87796ff891d958185da62fb5",
+      "license_id": "public-domain",
+      "attribution": "Natural Earth; reference administrative boundaries, not a statement of sovereignty"
+    },
+    {
       "source_id": "geoboundaries-gbopen-ukr-admin1",
       "release": "2023-12-12+9469f09592ce",
       "url": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09592ced973a3448cf66b6100b741b64c0d/releaseData/gbOpen/UKR/ADM1/geoBoundaries-UKR-ADM1-all.zip",

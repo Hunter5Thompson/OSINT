@@ -13,12 +13,14 @@ import type { CountryHit } from "../globe/hooks/useCountryHitTest";
 import type { CountrySelection } from "../../spatial/selection";
 import type { SpatialQueryRef } from "../../spatial/contracts";
 import { formatCoords } from "../../lib/coords";
+import { STRATEGIC_LABELS, type StrategicSite } from "../layers/referenceData";
 import {
   CountryHeader,
   SpatialCountryHeader,
 } from "../globe/spotlight/CountryHeader";
 
 export type Selected =
+  | { type: "strategic"; data: StrategicSite }
   | { type: "firms"; data: FIRMSHotspot }
   | { type: "aircraft"; data: MilTrackRender }
   | { type: "datacenter"; data: DatacenterProperties }
@@ -176,6 +178,19 @@ function InspectorBody({
   spatialQuery: SpatialQueryRef | null;
 }) {
   switch (selected.type) {
+    case "strategic": {
+      const site = selected.data;
+      return <>
+        <div style={labelStyle}>Reference atlas · {STRATEGIC_LABELS[site.kind]}</div>
+        <h2 style={titleStyle}>{site.name}</h2>
+        <Property label="Country" value={site.country} />
+        <Property label="Reference location" value={formatCoords([site.latitude, site.longitude])} />
+        {site.capacityMw != null && <Property label="Nameplate capacity · historical dataset" value={`${site.capacityMw.toLocaleString()} MW`} />}
+        <p style={valueStyle}>{site.note}</p>
+        <a style={sourceLinkStyle} href={site.source} target="_blank" rel="noopener noreferrer">{site.sourceLabel} ↗</a>
+        {site.coordinateSource && <p><a style={sourceLinkStyle} href={site.coordinateSource} target="_blank" rel="noopener noreferrer">Coordinate source ↗</a></p>}
+      </>;
+    }
     case "spatial-country":
       return (
         <SpatialCountryHeader selection={selected.data} query={spatialQuery} />

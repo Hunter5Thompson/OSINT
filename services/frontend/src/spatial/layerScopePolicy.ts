@@ -41,6 +41,12 @@ export interface LayerSpatialCapability {
 const ALL_SCOPE_KINDS = ["world", "country", "admin1", "admin2"] as const;
 const WORLD_ONLY = ["world"] as const;
 
+const referenceContext = (layerId: LayerSpatialId): LayerSpatialCapability => ({
+  layerId, relation: "context", behavior: "global-context",
+  supportedKinds: ALL_SCOPE_KINDS, precision: "global",
+  stalePolicy: "not-applicable", unsupportedBehavior: "label-global-context",
+});
+
 const unsupported = (
   layerId: LayerSpatialId,
   relation: SpatialRelation,
@@ -57,6 +63,9 @@ const unsupported = (
 export const LAYER_SPATIAL_CAPABILITIES: Readonly<
   Record<LayerSpatialId, LayerSpatialCapability>
 > = {
+  nuclearPlants: referenceContext("nuclearPlants"),
+  icbmBases: referenceContext("icbmBases"),
+  militaryBases: referenceContext("militaryBases"),
   flights: unsupported("flights", "intersects"),
   satellites: {
     layerId: "satellites",

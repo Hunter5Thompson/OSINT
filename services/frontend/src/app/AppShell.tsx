@@ -18,9 +18,12 @@ function IncidentLayer({ children }: { children: React.ReactNode }) {
   const toastIncident = active && active.id !== dismissedId ? active : null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+    <div className="observatory-shell" style={{ display: "flex", flexDirection: "column", height: "100dvh" }}>
+      <a className="skip-navigation" href="#main-content">Skip to content</a>
       <TopBar warRoomActive={Boolean(active)} />
       <main
+        id="main-content"
+        tabIndex={-1}
         style={{
           flex: 1,
           display: "flex",

@@ -701,6 +701,10 @@ def test_offline_compiler_builds_byte_identical_revision_twice(tmp_path: Path) -
     )
     assert poland["scope"]["children_available"] is False
     assert poland["presentation"]["children_lods"] == {}
+    # A country must remain renderable even without an admin1 package.
+    assert poland["presentation"]["preferred_lod"] is None
+    outline = poland["presentation"]["outline_lods"]["overview"]
+    assert (first / "assets" / f"{outline['asset_id']}.json").is_file()
 
     child_pack_id = ukraine["presentation"]["children_lods"]["regional"]["asset_id"]
     child_pack = json.loads((first / "assets" / f"{child_pack_id}.json").read_bytes())

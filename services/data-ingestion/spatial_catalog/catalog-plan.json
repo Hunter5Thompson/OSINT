@@ -364,9 +364,9 @@
     },
     {
       "activation": "active",
-      "children_source_id": null,
+      "children_source_id": "natural-earth-admin1",
       "client_strict_containment_required": false,
-      "max_level": "country",
+      "max_level": "admin1",
       "representation_id": "natural-earth-110m-admin0",
       "representation_source_id": "natural-earth-admin0",
       "scope_key": "country:DEU"

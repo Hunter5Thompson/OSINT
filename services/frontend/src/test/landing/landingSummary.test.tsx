@@ -93,18 +93,18 @@ describe("LandingPage · intro", () => {
         name: /operating picture/i,
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Index Rerum · last 24h/i)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /Situation summary/i })).toBeInTheDocument();
   });
 
-  it("renders static capability labels without health status claims", async () => {
+  it("offers exploration workflows without internal subsystem jargon or health claims", async () => {
     installFetch({ summary: fullSummary });
     renderAt("/");
 
-    expect(await screen.findByText(/Hugin/i)).toBeInTheDocument();
-    expect(screen.getByText(/Signalia/i)).toBeInTheDocument();
-    expect(screen.getByText(/Vectorium/i)).toBeInTheDocument();
-    expect(screen.getByText(/Memoria/i)).toBeInTheDocument();
-    expect(screen.getByText(/Fenestra/i)).toBeInTheDocument();
+    expect(await screen.findByRole("complementary", { name: /Exploration workflows/i })).toBeInTheDocument();
+    expect(screen.getByText(/Read the world/i)).toBeInTheDocument();
+    expect(screen.getByText(/Follow the connections/i)).toBeInTheDocument();
+    expect(screen.getByText(/Build your understanding/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Qdrant vector search/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/online/i)).not.toBeInTheDocument();
   });
 });
@@ -149,8 +149,8 @@ describe("LandingPage · numerals", () => {
     await waitFor(() => expect(screen.getByText("187")).toBeInTheDocument());
     expect(screen.getByText("44")).toBeInTheDocument();
     expect(screen.getByText("28")).toBeInTheDocument();
-    // Libri: 0 with reports_not_available_yet.
-    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(1);
+    // Unavailable reports are unknown, never a fabricated measured zero.
+    expect(within(screen.getByRole("button", { name: "Briefings" })).getByText("—")).toBeInTheDocument();
   });
 
   it("shows em dash + source string when a metric is null", async () => {
@@ -171,7 +171,7 @@ describe("LandingPage · numerals", () => {
     expect(dash.length).toBeGreaterThan(0);
   });
 
-  it("shows 0 and a pending-S3 label on Libri when reports_not_available_yet", async () => {
+  it("shows a pending label on Briefings when reports_not_available_yet", async () => {
     installFetch({ summary: fullSummary });
     renderAt("/");
 

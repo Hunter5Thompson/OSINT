@@ -63,6 +63,35 @@ function renderWorldview() {
 }
 
 describe("WorldviewPage hotkeys", () => {
+  it("preserves a typed search when temporarily focusing the map", async () => {
+    renderWorldview();
+    fireEvent.click(await screen.findByRole("button", { name: /expand Search/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /Search entities/i }), { target: { value: "Black Sea" } });
+    fireEvent.click(screen.getByRole("button", { name: /enter focus mode/i }));
+    expect(screen.queryByRole("textbox", { name: /Search entities/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /exit focus mode/i }));
+    expect(screen.getByRole("textbox", { name: /Search entities/i })).toHaveValue("Black Sea");
+  });
+  it("does not hijack shortcuts in editable content or with browser modifiers", async () => {
+    renderWorldview();
+    await screen.findByRole("button", { name: /expand Search/i });
+    const editor = document.createElement("div");
+    editor.setAttribute("contenteditable", "true");
+    document.body.appendChild(editor);
+    fireEvent.keyDown(editor, { key: "/" });
+    fireEvent.keyDown(window, { key: "/", ctrlKey: true });
+    expect(screen.queryByPlaceholderText(/search entities/i)).not.toBeInTheDocument();
+    editor.remove();
+  });
+
+  it("restores the expanded panels after leaving focus mode", async () => {
+    renderWorldview();
+    fireEvent.click(await screen.findByRole("button", { name: /expand Layers/i }));
+    fireEvent.click(screen.getByRole("button", { name: /enter focus mode/i }));
+    expect(screen.queryByRole("region", { name: /^Layers$/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /exit focus mode/i }));
+    expect(screen.getByRole("region", { name: /^Layers$/i })).toBeInTheDocument();
+  });
   it("does NOT trigger the Search panel when / is typed inside an input", async () => {
     renderWorldview();
     // Expand the search panel first so its <input> is in the DOM.

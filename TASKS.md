@@ -12,6 +12,24 @@
 # - Enhancement-Tasks (100-111) mit vollen Specs
 # - Jeder Task ist ein self-contained Briefing für Sonnet/Haiku
 
+## Session 2026-09-06 — Regional atlas and strategic layers
+
+Kamera-/Scope-Wechsel, Ländergrenzen, deutsche Bundesländer, Regionalhauptstädte,
+Flugzeug-/Schiffssymbole und drei strategische Referenz-Layer überarbeitet.
+Abdeckung, Quellen, Live-Nachweise und verbleibende Grenzen:
+[Session-Notizen](docs/reviews/2026-09-06-regional-atlas.md).
+Keine pauschale Schließung von TASK-114 oder TASK-119.
+
+## Session 2026-09-05 — Observatory UX
+
+UI-Einstieg, Karten-Arbeitsmodi, Fokusmodus, transparente Fehlerzustände und
+Navigation/Lifecycle überarbeitet. Analyse, Validierung und nächste Schritte:
+[Session-Notizen](docs/reviews/2026-09-05-observatory-ux.md).
+TASK-114 und die verbleibenden TASK-119-Slices werden dadurch nicht geschlossen.
+Fortsetzung nach Startfreigabe: `interactive-spark` läuft mit realen Daten;
+Live-Abnahme, Feed-Ausfälle, Analyse-Latenz und zusätzliche Toast-/Scope-UX-Fixes
+sind in denselben Session-Notizen dokumentiert.
+
 ---
 
 # ══════════════════════════════════════════

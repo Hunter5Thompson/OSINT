@@ -79,20 +79,29 @@ export function SpatialScopeBreadcrumb() {
           Eine Ebene hoch
         </button>
       ) : null}
-      {scope.children.map((child) => (
-        <button
-          key={child.key}
-          type="button"
-          onClick={() => { void scope.enter(child.key, "child-click"); }}
+      {scope.children.length > 0 ? (
+        <select
+          aria-label="Explore spatial scope"
+          value=""
+          disabled={scope.pending !== null}
+          onChange={(event) => {
+            const child = scope.children.find((item) => item.key === event.target.value);
+            if (child) void scope.enter(child.key, "child-click");
+          }}
           style={{
             ...buttonStyle,
             color: "var(--signal)",
+            background: "var(--obsidian)",
             border: "1px solid var(--granite)",
+            maxWidth: "100%",
           }}
         >
-          {child.shortLabel}
-        </button>
-      ))}
+          <option value="" disabled>Explore areas · {scope.children.length}</option>
+          {scope.children.map((child) => (
+            <option key={child.key} value={child.key}>{child.shortLabel}</option>
+          ))}
+        </select>
+      ) : null}
       <span key="scope-status" role="status" aria-live="polite" aria-atomic="true">
         {statusMessage}
       </span>

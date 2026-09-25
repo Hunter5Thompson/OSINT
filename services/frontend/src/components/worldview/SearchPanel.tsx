@@ -22,6 +22,8 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "", onAccept }: Se
   const [query, setQuery] = useState(initialQuery);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<GraphNode[] | null>(null);
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -34,6 +36,8 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "", onAccept }: Se
 
   useEffect(() => {
     const normalized = query.trim();
+    setError(false);
+    setResults(null);
     if (normalized.length < 2) {
       setResults(null);
       setLoading(false);
@@ -57,7 +61,7 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "", onAccept }: Se
         }
       } catch {
         if (!cancelled) {
-          setResults([]);
+          setError(true);
         }
       } finally {
         if (!cancelled) {
@@ -71,7 +75,7 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "", onAccept }: Se
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [query]);
+  }, [query, attempt]);
 
   return (
     <div>
@@ -80,6 +84,7 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "", onAccept }: Se
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="search entities..."
+        aria-label="Search entities"
         style={{
           width: "100%",
           background: "transparent",
@@ -95,6 +100,10 @@ export function SearchPanel({ viewer: _viewer, initialQuery = "", onAccept }: Se
       />
 
       <div style={{ marginTop: "0.7rem", minHeight: 28 }}>
+        {error ? <div className="search-unavailable" role="alert">
+          <p>Search unavailable. Check the connection and try again.</p>
+          <button type="button" onClick={() => setAttempt(previous => previous + 1)}>Retry search</button>
+        </div> : null}
         {loading ? (
           <span className="mono" style={{ color: "var(--ash)", fontSize: "0.66rem" }}>
             § searching…

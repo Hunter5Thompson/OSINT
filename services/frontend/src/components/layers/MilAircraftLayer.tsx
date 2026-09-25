@@ -20,28 +20,34 @@ export function branchColor(branch: string | null): Cesium.Color {
 
 export function createJetIcon(color: Cesium.Color, size = 24): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = size * 2;
+  canvas.height = size * 2;
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
   const cx = size / 2;
+  ctx.scale(2, 2);
   ctx.translate(cx, cx);
   ctx.fillStyle = `rgba(${color.red * 255}, ${color.green * 255}, ${color.blue * 255}, 0.95)`;
   ctx.strokeStyle = "rgba(0,0,0,0.8)";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, -size * 0.45);
-  ctx.lineTo(size * 0.1, size * 0.1);
-  ctx.lineTo(size * 0.45, size * 0.2);
-  ctx.lineTo(size * 0.1, size * 0.25);
-  ctx.lineTo(size * 0.08, size * 0.4);
-  ctx.lineTo(-size * 0.08, size * 0.4);
-  ctx.lineTo(-size * 0.1, size * 0.25);
-  ctx.lineTo(-size * 0.45, size * 0.2);
-  ctx.lineTo(-size * 0.1, size * 0.1);
+  ctx.lineTo(size * 0.08, -size * 0.1);
+  ctx.lineTo(size * 0.43, size * 0.22);
+  ctx.lineTo(size * 0.13, size * 0.16);
+  ctx.lineTo(size * 0.1, size * 0.3);
+  ctx.lineTo(size * 0.22, size * 0.42);
+  ctx.lineTo(-size * 0.22, size * 0.42);
+  ctx.lineTo(-size * 0.1, size * 0.3);
+  ctx.lineTo(-size * 0.13, size * 0.16);
+  ctx.lineTo(-size * 0.43, size * 0.22);
+  ctx.lineTo(-size * 0.08, -size * 0.1);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.7)";
+  ctx.lineWidth = 0.7;
+  ctx.beginPath(); ctx.moveTo(0, -size * 0.3); ctx.lineTo(0, size * 0.25); ctx.stroke();
   return canvas;
 }
 
@@ -142,6 +148,8 @@ export function MilAircraftLayer({
       const bb = bc.add({
         position: Cesium.Cartesian3.fromDegrees(last.lon, last.lat, last.altitude_m ?? 0),
         image: createJetIcon(color, 24),
+        width: 28,
+        height: 28,
         scale: 0.8,
         rotation: Cesium.Math.toRadians(-(last.heading ?? 0) + 90),
         alignedAxis: Cesium.Cartesian3.UNIT_Z,
