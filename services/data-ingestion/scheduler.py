@@ -20,7 +20,7 @@ from config import settings
 from feeds.correlation_job import CorrelationJob
 from feeds.eonet_collector import EONETCollector
 from feeds.firms_collector import FIRMSCollector
-from feeds.fulltext_collector import FulltextCollector
+from feeds.fulltext_collector import FulltextCollector, unavailable_dependencies
 from feeds.gdacs_collector import GDACSCollector
 from feeds.hapi_collector import HAPICollector
 from feeds.hotspot_updater import HotspotUpdater
@@ -375,6 +375,10 @@ async def run_fulltext_collector() -> None:
     """Think-tank full-text enrichment — opt-in (FULLTEXT_ENABLED)."""
     if not settings.fulltext_enabled:
         log.info("fulltext_job_disabled")
+        return
+    down = await unavailable_dependencies()
+    if down:
+        log.warning("fulltext_job_skipped_dependencies_down", down=down)
         return
     collector = await _construct_off_loop(FulltextCollector)   # Qdrant owner → off-loop
     try:

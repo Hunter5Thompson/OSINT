@@ -297,6 +297,16 @@ services:
       - GDELT_FILTER_MODE=${GDELT_FILTER_MODE:-alpha}
       - GDELT_CAMEO_ROOT_ALLOWLIST=${GDELT_CAMEO_ROOT_ALLOWLIST:-15,18,19,20}
       - GDELT_BACKFILL_PARALLEL_SLICES=${GDELT_BACKFILL_PARALLEL_SLICES:-4}
+      # Think-tank full-text enrichment (TASK-113). crawl4ai/docling are separate
+      # compose projects publishing on the host; reach them via the host gateway
+      # rather than joining their networks (a missing external network would stop
+      # ingestion from starting). The job skips runs while crawl4ai/docling/TEI is down.
+      - FULLTEXT_ENABLED=${ODIN_FULLTEXT_ENABLED:-true}
+      - FULLTEXT_BATCH_SIZE=${ODIN_FULLTEXT_BATCH_SIZE:-10}
+      - CRAWL4AI_URL=${ODIN_CRAWL4AI_URL:-http://host.docker.internal:11235}
+      - DOCLING_URL=${ODIN_DOCLING_URL:-http://host.docker.internal:5001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./services/backend/data/spatial:/app/data/spatial:ro
       - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram:/data/telegram
@@ -352,6 +362,16 @@ services:
       - GDELT_FILTER_MODE=${GDELT_FILTER_MODE:-alpha}
       - GDELT_CAMEO_ROOT_ALLOWLIST=${GDELT_CAMEO_ROOT_ALLOWLIST:-15,18,19,20}
       - GDELT_BACKFILL_PARALLEL_SLICES=${GDELT_BACKFILL_PARALLEL_SLICES:-4}
+      # Think-tank full-text enrichment (TASK-113). crawl4ai/docling are separate
+      # compose projects publishing on the host; reach them via the host gateway
+      # rather than joining their networks (a missing external network would stop
+      # ingestion from starting). The job skips runs while crawl4ai/docling/TEI is down.
+      - FULLTEXT_ENABLED=${ODIN_FULLTEXT_ENABLED:-true}
+      - FULLTEXT_BATCH_SIZE=${ODIN_FULLTEXT_BATCH_SIZE:-10}
+      - CRAWL4AI_URL=${ODIN_CRAWL4AI_URL:-http://host.docker.internal:11235}
+      - DOCLING_URL=${ODIN_DOCLING_URL:-http://host.docker.internal:5001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./services/backend/data/spatial:/app/data/spatial:ro
       - ${ODIN_DATA_DIR:-${HOME}/ODIN/odin-data}/telegram:/data/telegram

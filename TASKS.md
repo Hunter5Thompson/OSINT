@@ -1477,7 +1477,14 @@ Observation-Producer.
 # ══════════════════════════════════════════
 # TASK-113: Container-native Think-Tank Full-Text Scheduler (Host-Bridge ablösen)
 # ══════════════════════════════════════════
-# Status: OFFEN | Aufwand: 0.5–1 Tag | Priorität: mittel
+# Status: ERLEDIGT (2026-09-27) | Aufwand: 0.5–1 Tag | Priorität: mittel
+#
+# Umsetzung: statt fremder Netze (Startabhängigkeit!) erreicht data-ingestion(-spark)
+# crawl4ai/docling über extra_hosts host.docker.internal:host-gateway (2026-09-27 vom
+# osint_default aus verifiziert routbar). FULLTEXT_ENABLED=true, Batch 10 per Compose
+# (ODIN_FULLTEXT_* überschreibbar). Der Health-Gate der Bridge lebt jetzt im Job
+# (unavailable_dependencies: crawl4ai/docling/TEI) — sonst verbrennt ein Ausfall die
+# Retry-Versuche des Backlogs. ops/fulltext-enrich/ entfernt, User-Timer deaktiviert.
 #
 # Kontext: P2 Slice A (rss_fulltext) ist live (PR #38, main 874d6db). Einmaliger Backfill
 # 2026-06-05 (1.053 Artikel → 8.297 Chunks) durch, Read-Path nutzt rss_fulltext. Laufende
