@@ -13,7 +13,7 @@ from feeds.base import BaseCollector
 
 log = structlog.get_logger("noaa_nhc_collector")
 
-_NHC_URL = "https://www.nhc.noaa.gov/CurrentSummaries.json"
+_NHC_URL = "https://www.nhc.noaa.gov/CurrentStorms.json"
 
 _CLASSIFICATION_MAP = {
     "TD": "Tropical Depression",
@@ -26,30 +26,58 @@ _CLASSIFICATION_MAP = {
 }
 
 
+_COMPASS = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+            "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _movement_text(direction_deg: Any, speed_kt: Any) -> str:
+    """NHC movementDir (degrees, 0 = north) + movementSpeed (knots)."""
+    if speed_kt is None or direction_deg is None:
+        return "unknown"
+    speed = _as_int(speed_kt)
+    if speed == 0:
+        return "stationary"
+    point = _COMPASS[int((_as_int(direction_deg) % 360 + 11.25) // 22.5) % 16]
+    return f"{point} at {speed} kt"
+
+
 class NOAANHCCollector(BaseCollector):
     """Collect tropical weather advisories from NOAA NHC."""
 
     def _parse_storms(self, data: dict[str, Any]) -> list[dict[str, Any]]:
+        """Parse NHC CurrentStorms.json (numbers arrive as strings, position in
+        latitudeNumeric/longitudeNumeric, movement as degrees + knots)."""
         storms: list[dict[str, Any]] = []
         for storm in data.get("activeStorms", []):
+            lat = storm.get("latitudeNumeric")
+            lon = storm.get("longitudeNumeric")
+            if lat is None or lon is None:
+                log.warning("noaa_nhc_storm_without_position", storm_id=storm.get("id"))
+                continue
+
             classification_code = str(storm.get("classification", ""))
-            classification = _CLASSIFICATION_MAP.get(classification_code, classification_code)
-
-            movement = storm.get("movement", {})
-            movement_text = (
-                movement.get("text", "") if isinstance(movement, dict) else str(movement)
-            )
-
+            advisory = storm.get("publicAdvisory") or {}
             storms.append({
                 "storm_id": str(storm.get("id", "")),
                 "storm_name": str(storm.get("name", "")),
-                "classification": classification,
-                "wind_speed_kt": int(storm.get("intensity", 0)),
-                "pressure_mb": int(storm.get("pressure", 0)),
-                "latitude": float(storm.get("lat", 0)),
-                "longitude": float(storm.get("lon", 0)),
-                "movement": movement_text,
-                "advisory_number": str(storm.get("advisoryNumber", "")),
+                "classification": _CLASSIFICATION_MAP.get(
+                    classification_code, classification_code),
+                "wind_speed_kt": _as_int(storm.get("intensity")),
+                "pressure_mb": _as_int(storm.get("pressure")),
+                "latitude": float(lat),
+                "longitude": float(lon),
+                "movement": _movement_text(
+                    storm.get("movementDir"), storm.get("movementSpeed")),
+                "advisory_number": str(advisory.get("advNum", "")),
+                "advisory_url": advisory.get("url"),
+                "last_update": storm.get("lastUpdate"),
             })
         return storms
 
@@ -92,7 +120,7 @@ class NOAANHCCollector(BaseCollector):
                 process_item,
             )
 
-            storm_url = (
+            storm_url = storm["advisory_url"] or (
                 f"https://www.nhc.noaa.gov/text/refresh/{storm['storm_id']}+shtml"
             )
             # Transient/config errors skip Qdrant upsert so the storm advisory
