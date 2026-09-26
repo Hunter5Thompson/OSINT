@@ -4,6 +4,7 @@ import fakeredis.aioredis
 import httpx
 import polars as pl
 import pytest
+import structlog
 
 from gdelt_raw.downloader import LastUpdateEntry
 from gdelt_raw.run import run_forward, run_forward_slice
@@ -387,3 +388,33 @@ async def test_forward_first_run_processes_only_announced_slice(tmp_path, monkey
     _, calls = await _forward_with(
         monkeypatch, tmp_path, last_done=None, latest="20260926114500")
     assert [c[0] for c in calls] == ["20260926114500"]
+
+
+# ── GDELT sometimes never publishes a file (live 2026-09-26: 19:45 gkg 404 while
+#    20:00/20:15 were complete). Stopping there forever would stall ingestion. ──
+
+
+@pytest.mark.asyncio
+async def test_forward_skips_slice_missing_beyond_grace_window(tmp_path, monkeypatch):
+    with structlog.testing.capture_logs() as logs:
+        state, calls = await _forward_with(
+            monkeypatch, tmp_path, last_done="20260926190000", latest="20260926204500",
+            unavailable={"20260926194500"})
+
+    assert [c[0] for c in calls] == [
+        "20260926191500", "20260926193000",
+        "20260926200000", "20260926201500", "20260926203000", "20260926204500"]
+    assert await state.get_last_slice("parquet") == "20260926204500"
+    skipped = [e for e in logs if e["event"] == "gdelt_slice_missing_skipped"]
+    assert [e["slice"] for e in skipped] == ["20260926194500"]
+
+
+@pytest.mark.asyncio
+async def test_forward_waits_for_recent_missing_slice(tmp_path, monkeypatch):
+    """Within the grace window a 404 is 'not published yet': block, don't skip."""
+    state, calls = await _forward_with(
+        monkeypatch, tmp_path, last_done="20260926190000", latest="20260926203000",
+        unavailable={"20260926194500"})
+
+    assert [c[0] for c in calls] == ["20260926191500", "20260926193000"]
+    assert await state.get_last_slice("parquet") == "20260926193000"
