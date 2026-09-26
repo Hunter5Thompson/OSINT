@@ -224,3 +224,31 @@ async def test_portwatch_config_skips_disruption_upsert(collector):
     collector._batch_upsert.assert_not_called()
     err_keys = [c.args[0] for c in mock_err.call_args_list]
     assert err_keys.count("extraction_skipped_config") == 1
+
+
+@pytest.mark.asyncio
+async def test_disruptions_have_record_specific_document_urls(collector):
+    _flow_only(collector)
+    second = {"attributes": {**SAMPLE_DISRUPTION_RESPONSE["features"][0]["attributes"],
+                             "eventid": 1000553}}
+    collector._fetch_paginated = AsyncMock(side_effect=[
+        {"features": []}, {"features": [SAMPLE_DISRUPTION_RESPONSE["features"][0], second]},
+    ])
+    with patch("pipeline.process_item", new=AsyncMock()) as process:
+        await collector.collect()
+    urls = [call.kwargs['url'] for call in process.await_args_list]
+    assert len(set(urls)) == 2
+    assert urls[0].endswith('#eventid=1000552')
+    assert urls[1].endswith('#eventid=1000553')
+
+
+@pytest.mark.asyncio
+async def test_disruption_without_identity_is_not_ingested(collector):
+    _flow_only(collector)
+    collector._fetch_paginated = AsyncMock(side_effect=[
+        {"features": []}, {"features": [{"attributes": {"eventname": "unknown"}}]},
+    ])
+    with patch("pipeline.process_item", new=AsyncMock()) as process:
+        await collector.collect()
+    process.assert_not_called()
+    collector._batch_upsert.assert_not_called()

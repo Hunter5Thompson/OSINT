@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import quote
 
 import structlog
 
@@ -176,6 +177,14 @@ class PortWatchCollector(BaseCollector):
 
         disruption_points = []
         for record in disruption_records:
+            if not record["disruption_id"]:
+                log.warning("portwatch_disruption_missing_identity")
+                continue
+            # One FeatureServer endpoint serves many independent records. Keep
+            # the original source URL but distinguish Document identity by ID.
+            document_url = (
+                f"{_DISRUPTIONS_URL}#eventid={quote(record['disruption_id'], safe='')}"
+            )
             chash = self._content_hash("disruption", record["disruption_id"])
             point_id = self._point_id(chash)
             is_dup = await self._dedup_check(point_id)
@@ -196,7 +205,7 @@ class PortWatchCollector(BaseCollector):
                 await process_item(
                     title=f"PortWatch Disruption: {record['name']}",
                     text=description,
-                    url=_DISRUPTIONS_URL,
+                    url=document_url,
                     source="portwatch",
                     settings=self.settings,
                     redis_client=self.redis,

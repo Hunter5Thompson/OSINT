@@ -12,6 +12,18 @@
 # - Enhancement-Tasks (100-111) mit vollen Specs
 # - Jeder Task ist ein self-contained Briefing für Sonnet/Haiku
 
+## Session 2026-09-26 — Neo4j uniqueness repair
+
+Offline-Dumps erstellt und auf isolierter Kopie wiederhergestellt; anschließend
+2.410 belegbare Event-Duplikate und sechs Entity-Paare produktiv zusammengeführt.
+Incident-, Event- und Entity-Constraints aktiv, Negativkontrollen bestanden,
+Beziehungen und ursprüngliche Eigenschaften geprüft erhalten. PortWatch-Störungen
+bekommen künftig Datensatz-IDs in der Dokument-URL. Data Ingestion: 1.502 Tests
+bestanden; ODIN-Smoke: 24 bestanden. **87.107 historische Event-Identitäten bleiben
+explizit ungeklärt erhalten**, insbesondere generische PortWatch-API-Datensätze.
+Befunde, Dateien, Wiederherstellung, Testbelege und nächste semantische Prüfung:
+[Reparaturbericht](docs/runbooks/2026-09-26-neo4j-uniqueness-repair.md).
+
 ## Session 2026-09-06 — Regional atlas and strategic layers
 
 Kamera-/Scope-Wechsel, Ländergrenzen, deutsche Bundesländer, Regionalhauptstädte,

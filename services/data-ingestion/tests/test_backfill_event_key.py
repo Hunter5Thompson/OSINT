@@ -1,4 +1,61 @@
+import pytest
+
 from migrations.backfill_event_key import EventRow, plan_backfill
+
+
+def test_repeated_document_rows_do_not_count_as_duplicate_nodes():
+    row = EventRow(2, "event", "type", "https://example.org/a", "article")
+    plan = plan_backfill([row, row])
+    assert plan.total == 1
+    assert plan.merges == []
+
+
+def test_conflicting_document_context_aborts_before_writes():
+    with pytest.raises(ValueError, match="document"):
+        plan_backfill([
+            EventRow(2, "event", "type", "https://example.org/a", "article"),
+            EventRow(2, "event", "type", "https://example.org/b", "another"),
+        ])
+
+
+def test_shared_api_url_never_proves_event_identity():
+    url = "https://example.org/Daily/FeatureServer/0/query"
+    plan = plan_backfill([EventRow(2, "Port Closure", "t", url, "daily"),
+                          EventRow(3, "Port Closure", "t", url, "daily")])
+    assert plan.merges == []
+    assert plan.key_for(2) != plan.key_for(3)
+    assert set(plan.unresolved) == {2, 3}
+
+
+def test_existing_key_survives_document_title_drift():
+    row = EventRow(2, "event", "type", "https://example.org/a", "new title",
+                   existing_key="original-key")
+    assert plan_backfill([row]).key_for(2) == "original-key"
+
+
+def test_different_event_facts_are_not_merged():
+    rows = [EventRow(2, "event", "t", "https://example.org/a", "article",
+                     properties={"summary": "on Monday"}),
+            EventRow(3, "event", "t", "https://example.org/a", "article",
+                     properties={"summary": "on Tuesday"})]
+    plan = plan_backfill(rows)
+    assert plan.merges == []
+    assert plan.key_for(2) != plan.key_for(3)
+    assert len(plan.unresolved) == 2
+
+
+def test_missing_document_url_is_rejected():
+    with pytest.raises(ValueError, match="URL"):
+        plan_backfill([EventRow(2, "event", "t", "", "article")])
+
+
+def test_existing_key_collision_with_different_facts_is_rejected():
+    rows = [EventRow(2, "event", "t", "https://example.org/a", "article",
+                     existing_key="same", properties={"summary": "Monday"}),
+            EventRow(3, "event", "t", "https://example.org/a", "article",
+                     existing_key="same", properties={"summary": "Tuesday"})]
+    with pytest.raises(ValueError, match="existing key"):
+        plan_backfill(rows)
 
 
 def test_plan_groups_duplicates_and_picks_lowest_id_survivor():

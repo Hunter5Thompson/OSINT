@@ -4,7 +4,9 @@
 //   1. migrations/neo4j_entity_type_canonicalization.cypher  (lowercase -> UPPERCASE)
 //   2. migrations/neo4j_duplicate_merge.cypher               (merge eligible same-name groups)
 //   3. The PREFLIGHT below -- it MUST return zero rows before step 4.
-//   4. The CREATE CONSTRAINT below.
+//   4. Verify the standalone entity_name_type index is the Entity(name,type)
+//      RANGE index with no owningConstraint, then run entity_name_type_drop_index.cypher.
+//   5. The CREATE CONSTRAINT below, while writers remain paused.
 //
 // Why the preflight: neo4j_duplicate_merge.cypher intentionally SKIPS the ~414
 // multi-type semantic-conflict groups (e.g. "X" as both PERSON and
@@ -32,8 +34,7 @@
 // RETURN name, type, c ORDER BY c DESC;
 
 // ---- CONSTRAINT (run only after the preflight is clean) ----
-// NOTE: Neo4j auto-creates a backing range index for this constraint, so the
-// explicit entity_name_type range index (gdelt_raw/migrations/phase2_indexes.cypher)
-// becomes redundant once this is applied and may be dropped by the operator.
+// Neo4j 5.26 rejects this constraint while the standalone index on the same
+// schema exists. Drop that verified index FIRST; this creates its replacement.
 CREATE CONSTRAINT entity_name_type_unique IF NOT EXISTS
   FOR (e:Entity) REQUIRE (e.name, e.type) IS UNIQUE;
