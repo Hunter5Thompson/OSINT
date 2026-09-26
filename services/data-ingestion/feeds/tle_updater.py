@@ -19,6 +19,10 @@ log = structlog.get_logger(__name__)
 # CelesTrak TLE Groups
 # ---------------------------------------------------------------------------
 CELESTRAK_BASE = "https://celestrak.org/NORAD/elements/gp.php"
+# CelesTrak refreshes GP data once every 2 h and answers a re-download within
+# that window with 403 (repeat offenders risk an IP block).
+CELESTRAK_UPDATE_INTERVAL_S = 7200
+_NOT_UPDATED_MARKER = "has not updated since your last successful"
 
 TLE_GROUPS: list[dict[str, str]] = [
     {"name": "active", "param": "GROUP=active&FORMAT=tle"},
@@ -100,11 +104,21 @@ class TLEUpdater:
                 follow_redirects=True,
             ) as client:
                 resp = await client.get(url)
+                if resp.status_code == 403 and _NOT_UPDATED_MARKER in resp.text:
+                    log.info("tle_group_not_updated", group=group["name"])
+                    return None
                 resp.raise_for_status()
                 return resp.text
         except httpx.HTTPError as exc:
             log.warning("tle_fetch_failed", group=group["name"], error=str(exc))
             return None
+
+    async def _cached_within_update_cycle(self, group_name: str) -> bool:
+        """True if the group was stored less than one CelesTrak cycle ago
+        (derived from the remaining TTL of the key written by _store_group)."""
+        r = await self._get_redis()
+        remaining = await r.ttl(f"tle:group:{group_name}")
+        return remaining > settings.tle_cache_ttl - CELESTRAK_UPDATE_INTERVAL_S
 
     async def _store_group(self, group_name: str, satellites: list[dict[str, str]]) -> None:
         """Store parsed satellite data in Redis as a hash with TTL."""
@@ -131,6 +145,9 @@ class TLEUpdater:
 
         for group in TLE_GROUPS:
             try:
+                if await self._cached_within_update_cycle(group["name"]):
+                    log.info("tle_group_fresh_skip", group=group["name"])
+                    continue
                 raw = await self._fetch_group(group)
                 if raw is None:
                     continue
