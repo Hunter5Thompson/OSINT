@@ -214,11 +214,8 @@ function InspectorBody({
           <Property label="§ Coordinates" value={formatCoords([h.latitude, h.longitude])} />
           <Property label="§ FRP" value={`${h.frp.toFixed(1)} MW`} />
           <Property label="§ Brightness" value={`${h.brightness.toFixed(1)} K`} />
-          <Property label="§ Region" value={h.bbox_name || "-"} />
+          <Property label="§ Country" value={h.country_iso3 ?? "-"} />
           <Property label="§ Confidence" value={h.confidence || "-"} />
-          {h.possible_explosion ? (
-            <Property label="§ Flag" value="possible explosion" />
-          ) : null}
         </>
       );
     }

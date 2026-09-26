@@ -32,8 +32,9 @@ class FIRMSHotspot(BaseModel):
     acq_date: str
     acq_time: str
     satellite: str
-    bbox_name: str
-    possible_explosion: bool
+    # Resolved from the spatial catalog at ingestion; None for points written
+    # before that (their fetch-box name is not a place and is not exposed).
+    country_iso3: str | None = None
     firms_map_url: str
 
 
@@ -60,8 +61,7 @@ def _point_to_hotspot(point: Any) -> FIRMSHotspot | None:
             acq_date=acq_date,
             acq_time=str(p.get("acq_time", "")),
             satellite=str(p.get("satellite", "")),
-            bbox_name=str(p.get("bbox_name", "")),
-            possible_explosion=bool(p.get("possible_explosion", False)),
+            country_iso3=p.get("country_iso3") or None,
             firms_map_url=_build_map_url(acq_date, lat, lon),
         )
     except (KeyError, ValueError, TypeError):

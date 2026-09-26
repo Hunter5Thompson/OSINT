@@ -64,8 +64,7 @@ describe("FIRMSLayer component", () => {
     latitude: 48, longitude: 37,
     frp: 20, brightness: 370, confidence: "n",
     acq_date: "2026-04-11", acq_time: "1200",
-    satellite: "VIIRS_SNPP_NRT", bbox_name: "ukraine",
-    possible_explosion: false,
+    satellite: "VIIRS_SNPP_NRT", country_iso3: "UKR",
     firms_map_url: "https://example/",
     ...over,
   });

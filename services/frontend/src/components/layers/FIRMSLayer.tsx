@@ -43,22 +43,6 @@ export function createFIRMSDot(radius: number, color: Cesium.Color): HTMLCanvasE
   return canvas;
 }
 
-export function createFIRMSRing(size: number, color: Cesium.Color): HTMLCanvasElement {
-  const canvasSize = Math.ceil(size * 4);
-  const canvas = document.createElement("canvas");
-  canvas.width = canvasSize;
-  canvas.height = canvasSize;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return canvas;
-  const center = canvasSize / 2;
-  ctx.beginPath();
-  ctx.arc(center, center, size, 0, Math.PI * 2);
-  ctx.strokeStyle = `rgba(${color.red * 255}, ${color.green * 255}, ${color.blue * 255}, 0.8)`;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  return canvas;
-}
-
 interface FIRMSLayerProps {
   viewer: Cesium.Viewer | null;
   hotspots: FIRMSHotspot[];
@@ -66,16 +50,9 @@ interface FIRMSLayerProps {
   onSelect?: (h: FIRMSHotspot) => void;
 }
 
-interface FIRMSPulse {
-  ring: Cesium.Billboard;
-  color: Cesium.Color;
-}
-
 export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerProps) {
   const collectionRef = useRef<Cesium.BillboardCollection | null>(null);
   const idMapRef = useRef<Map<object, FIRMSHotspot>>(new Map());
-  const pulsesRef = useRef<FIRMSPulse[]>([]);
-  const animFrameRef = useRef<number | null>(null);
   const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
@@ -103,7 +80,6 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
       handlerRef.current = h;
     }
     return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (handlerRef.current) {
         handlerRef.current.destroy();
         handlerRef.current = null;
@@ -113,7 +89,6 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
       }
       collectionRef.current = null;
       idMapRef.current.clear();
-      pulsesRef.current = [];
     };
   }, [viewer]);
 
@@ -123,7 +98,6 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
 
     bc.removeAll();
     idMapRef.current.clear();
-    pulsesRef.current = [];
     if (!visibleRef.current) return;
 
     const bounds = getViewBounds(viewer);
@@ -151,18 +125,6 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
         translucencyByDistance,
       });
       idMapRef.current.set(dot as unknown as object, h);
-      if (h.possible_explosion) {
-        // No scaleByDistance on the ring — the pulse animation owns its scale.
-        const ring = bc.add({
-          position,
-          image: createFIRMSRing(size * 1.5, color),
-          scale: 1.0,
-          eyeOffset: new Cesium.Cartesian3(0, 0, -44),
-          translucencyByDistance,
-        });
-        idMapRef.current.set(ring as unknown as object, h);
-        pulsesRef.current.push({ ring, color });
-      }
     }
   }, [viewer]);
 
@@ -180,31 +142,6 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
       if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
     };
   }, [viewer, renderVisible]);
-
-  // Pulse animation for explosion hotspots
-  useEffect(() => {
-    if (!visible) {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      return;
-    }
-    // The loop reads pulsesRef.current live each frame, so explosion rings added or
-    // removed by renderVisible() on camera move are handled without restarting the effect.
-    const animate = () => {
-      const now = Date.now();
-      const phase = (now * 0.003) % (Math.PI * 2);
-      const scale = 1.0 + 0.5 * Math.sin(phase);
-      const alpha = 0.8 - 0.4 * Math.sin(phase);
-      for (const p of pulsesRef.current) {
-        p.ring.scale = scale;
-        p.ring.color = p.color.withAlpha(alpha);
-      }
-      animFrameRef.current = requestAnimationFrame(animate);
-    };
-    animFrameRef.current = requestAnimationFrame(animate);
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [visible]);
 
   return null;
 }

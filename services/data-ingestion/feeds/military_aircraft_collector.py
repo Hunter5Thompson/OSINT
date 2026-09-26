@@ -67,7 +67,7 @@ REGION_BBOXES: dict[str, tuple[float, float, float, float]] = {
     "western":     ( 25.0,  75.0, -25.0,  45.0),
 }
 
-# Regions to skip when classifying a specific point (meta-regions)
+# Meta-regions excluded from the hotspot coverage filter
 _SKIP_CLASSIFY = {"pacific", "western"}
 
 _FT_TO_M = 0.3048
@@ -93,18 +93,23 @@ def identify_branch(icao24: str) -> str | None:
     return None
 
 
-def classify_region(lat: float, lon: float) -> str:
-    """Return the geopolitical hotspot region name for a lat/lon coordinate.
+def in_hotspot_coverage(lat: float, lon: float) -> bool:
+    """Whether a position falls inside any hotspot box (meta-regions excluded).
 
-    Meta-regions ("pacific", "western") are skipped so they don't shadow
-    specific hotspot matches.  Returns "unknown" when no box matches.
+    The boxes overlap (Rostov sits in "ukraine", Baghdad in "iran", Seoul in
+    "north_korea"), so they only decide which aircraft are worth writing. The
+    place itself comes from the spatial catalog, never from a box name.
     """
-    for region, (lat_min, lat_max, lon_min, lon_max) in REGION_BBOXES.items():
-        if region in _SKIP_CLASSIFY:
-            continue
-        if lat_min <= lat <= lat_max and lon_min <= lon <= lon_max:
-            return region
-    return "unknown"
+    return any(
+        lat_min <= lat <= lat_max and lon_min <= lon <= lon_max
+        for region, (lat_min, lat_max, lon_min, lon_max) in REGION_BBOXES.items()
+        if region not in _SKIP_CLASSIFY
+    )
+
+
+def observation_place_name(country_iso3: str | None) -> str:
+    """Location.name for a sensor observation: the resolved country or 'unresolved'."""
+    return country_iso3 or "unresolved"
 
 
 def build_aircraft_location_statement(
@@ -131,7 +136,6 @@ def build_aircraft_location_statement(
         "statement": (
             "MERGE (l:Location {loc_key: $loc_key}) "
             "ON CREATE SET l.name = $name, l.type = 'aircraft_observation', "
-            "              l.region = $region, "
             "              l.lat = $latitude, l.lon = $longitude "
             "SET l.source_country_code = $source_country_code, "
             "    l.source_country_code_system = $source_country_code_system, "
@@ -150,8 +154,7 @@ def build_aircraft_location_statement(
         ),
         "parameters": {
             "loc_key": f"aircraft-observation:{aircraft['dedup_key']}",
-            "name": aircraft["region"],
-            "region": aircraft["region"],
+            "name": observation_place_name(normalized.country_iso3),
             "latitude": latitude,
             "longitude": longitude,
             **spatial_property_parameters(normalized),
@@ -214,7 +217,7 @@ class MilitaryAircraftCollector(BaseCollector):
 
             branch = identify_branch(icao24)
             has_pos = lat is not None and lon is not None
-            region = classify_region(lat, lon) if has_pos else "unknown"
+            in_coverage = in_hotspot_coverage(lat, lon) if has_pos else False
 
             # Dedup key: icao24 + 15-minute bucket
             ts_bucket = _round_to_15min(int(now_ts))
@@ -230,7 +233,7 @@ class MilitaryAircraftCollector(BaseCollector):
                 "speed_ms": speed_ms,
                 "heading": ac.get("track"),
                 "military_branch": branch,
-                "region": region,
+                "in_coverage": in_coverage,
                 "timestamp": int(now_ts),
                 "dedup_key": f"{icao24}|{ts_bucket}",
                 "source": "adsb.fi",
@@ -408,8 +411,8 @@ class MilitaryAircraftCollector(BaseCollector):
                 continue
             seen.add(dedup_key)
 
-            # Only write aircraft in known hotspot regions (skip "unknown")
-            if ac["region"] == "unknown":
+            # Only write aircraft positioned inside the hotspot coverage
+            if not ac["in_coverage"]:
                 continue
 
             try:

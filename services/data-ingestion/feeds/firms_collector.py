@@ -13,6 +13,12 @@ from qdrant_client.models import PointStruct
 
 from config import Settings
 from feeds.base import BaseCollector
+from graph_integrity.spatial_normalizer import (
+    RawLocationIdentity,
+    SpatialNormalizationIndex,
+    load_active_normalization_index,
+    normalize_location,
+)
 from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
 
 log = structlog.get_logger(__name__)
@@ -33,7 +39,8 @@ def _firms_observed_at(acq_date: str, acq_time: str | int | None) -> str | None:
     hhmm = str(acq_time).zfill(4)
     return f"{acq_date}T{hhmm[:2]}:{hhmm[2:]}:00+00:00"
 
-# Geopolitical hotspot bounding boxes: "west,south,east,north"
+# Fetch areas around geopolitical hotspots: "west,south,east,north". They
+# overlap and are not countries: a pixel's place comes from the spatial catalog.
 FIRMS_BBOXES: dict[str, str] = {
     "ukraine": "22.0,44.0,40.0,52.5",
     "russia": "30.0,50.0,60.0,70.0",
@@ -52,25 +59,28 @@ FIRMS_SATELLITES: list[str] = [
     "VIIRS_NOAA21_NRT",
 ]
 
-# Heuristic thresholds for explosion detection
-_EXPLOSION_FRP_THRESHOLD = 80.0
-_EXPLOSION_BRIGHTNESS_THRESHOLD = 380.0
-
-
-def is_possible_explosion(frp: float, brightness: float) -> bool:
-    """Return True when fire radiative power + brightness exceed explosion thresholds.
-
-    Thresholds: frp > 80 MW and brightness > 380 K.
-    Natural fires rarely exceed both simultaneously in small scan areas.
-    """
-    return frp > _EXPLOSION_FRP_THRESHOLD and brightness > _EXPLOSION_BRIGHTNESS_THRESHOLD
-
-
 class FIRMSCollector(BaseCollector):
     """Fetch NASA FIRMS VIIRS NRT thermal anomalies and ingest into Qdrant + Neo4j."""
 
-    def __init__(self, settings: Settings, redis_client: Any | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        redis_client: Any | None = None,
+        *,
+        spatial_index: SpatialNormalizationIndex | None = None,
+    ) -> None:
         super().__init__(settings, redis_client)
+        self._spatial_index = spatial_index
+
+    def _country_iso3(self, lat: float, lon: float) -> str | None:
+        if self._spatial_index is None:
+            self._spatial_index = load_active_normalization_index(
+                self.settings.spatial_catalog_path,
+                crosswalk_path=self.settings.spatial_country_crosswalk_path,
+            )
+        return normalize_location(
+            RawLocationIdentity(latitude=lat, longitude=lon), self._spatial_index,
+        ).country_iso3
 
     # ------------------------------------------------------------------
     # Public helpers (also used by tests)
@@ -87,7 +97,7 @@ class FIRMSCollector(BaseCollector):
         key = f"{lat:.4f}|{lon:.4f}|{acq_date}|{acq_time}"
         return self._content_hash(key)
 
-    def _parse_csv(self, text: str, bbox_name: str) -> list[dict]:
+    def _parse_csv(self, text: str, fetch_area: str) -> list[dict]:
         """Parse FIRMS CSV response into a list of normalised event dicts."""
         reader = csv.DictReader(io.StringIO(text))
         rows: list[dict] = []
@@ -96,11 +106,13 @@ class FIRMSCollector(BaseCollector):
                 lat = float(row["latitude"])
                 lon = float(row["longitude"])
                 frp = float(row.get("frp") or 0)
+                # VIIRS I4 saturates near 367 K, so brightness cannot separate
+                # explosions from large fires; no explosion flag is derived.
                 brightness = float(row.get("bright_ti4") or 0)
                 rows.append(
                     {
                         "source": "firms",
-                        "bbox_name": bbox_name,
+                        "fetch_area": fetch_area,
                         "latitude": lat,
                         "longitude": lon,
                         "brightness": brightness,
@@ -112,11 +124,10 @@ class FIRMSCollector(BaseCollector):
                         "daynight": row.get("daynight", ""),
                         "scan": float(row.get("scan") or 0),
                         "track": float(row.get("track") or 0),
-                        "possible_explosion": is_possible_explosion(frp, brightness),
                     }
                 )
             except (ValueError, KeyError) as exc:
-                log.warning("firms_row_parse_error", bbox=bbox_name, error=str(exc))
+                log.warning("firms_row_parse_error", bbox=fetch_area, error=str(exc))
         return rows
 
     # ------------------------------------------------------------------
@@ -182,10 +193,10 @@ class FIRMSCollector(BaseCollector):
                     if await self._dedup_check(pid):
                         continue
 
-                    explosion_flag = " [POSSIBLE EXPLOSION]" if row["possible_explosion"] else ""
+                    row["country_iso3"] = self._country_iso3(row["latitude"], row["longitude"])
                     title = (
                         f"FIRMS thermal anomaly at {row['latitude']:.4f},{row['longitude']:.4f}"
-                        f" ({bbox_name}){explosion_flag}"
+                        f" ({row['country_iso3'] or 'country unresolved'})"
                     )
                     embed_text = (
                         f"{title}. FRP: {row['frp']} MW, Brightness: {row['brightness']} K, "
