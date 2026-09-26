@@ -6,6 +6,7 @@ import asyncio
 import os
 from pathlib import Path
 
+import httpx
 import redis.asyncio as aioredis
 import structlog
 from qdrant_client import AsyncQdrantClient
@@ -15,7 +16,11 @@ from gdelt_raw.config import get_settings
 from gdelt_raw.run import run_forward
 from gdelt_raw.state import GDELTState
 from gdelt_raw.writers.neo4j_writer import Neo4jWriter
-from gdelt_raw.writers.qdrant_writer import QdrantWriter, default_tei_embed
+from gdelt_raw.writers.qdrant_writer import (
+    QdrantWriter,
+    default_tei_embed,
+    default_tei_embed_batch,
+)
 from graph_integrity.spatial_normalizer import load_active_normalization_index
 
 log = structlog.get_logger(__name__)
@@ -43,18 +48,25 @@ async def run_once() -> None:
     )
     tei_url = os.getenv("TEI_EMBED_URL", "http://localhost:8001")
 
+    tei_client = httpx.AsyncClient(timeout=60.0)
+
     async def embed(text: str) -> list[float]:
         return await default_tei_embed(text, tei_url=tei_url)
+
+    async def embed_batch(texts: list[str]) -> list[list[float]]:
+        return await default_tei_embed_batch(texts, tei_url=tei_url, client=tei_client)
 
     qdrant = QdrantWriter(
         client=qdrant_client,
         embed=embed,
+        embed_batch=embed_batch,
         collection=settings.qdrant_collection,
         embedding_dimensions=settings.embedding_dimensions,
         enable_hybrid=settings.enable_hybrid,
         spatial_index=spatial_index,
     )
     try:
+        await neo4j.ensure_schema()
         await run_forward(state, neo4j, qdrant, Path(gdelt_cfg.parquet_path))
     finally:
         try:
@@ -63,7 +75,10 @@ async def run_once() -> None:
             try:
                 await qdrant.close()
             finally:
-                await r.aclose()
+                try:
+                    await tei_client.aclose()
+                finally:
+                    await r.aclose()
 
 
 def collect() -> None:

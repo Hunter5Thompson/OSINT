@@ -34,7 +34,7 @@ async def test_run_once_uses_project_qdrant_collection():
     fake_redis = AsyncMock()
     fake_state = MagicMock()
 
-    fake_neo4j = MagicMock()
+    fake_neo4j = MagicMock(ensure_schema=AsyncMock())
     fake_neo4j.close = AsyncMock()
 
     fake_qdrant_client = MagicMock()
@@ -90,7 +90,7 @@ async def test_run_once_passes_gdelt_parquet_path_to_run_forward():
         async def close(self):
             pass
 
-    fake_neo4j = MagicMock()
+    fake_neo4j = MagicMock(ensure_schema=AsyncMock())
     fake_neo4j.close = AsyncMock()
 
     mock_run_forward = AsyncMock()
@@ -126,7 +126,7 @@ async def test_run_once_passes_gdelt_parquet_path_to_run_forward():
 
 async def test_run_once_closes_all_owned_clients_when_forward_fails():
     fake_redis = MagicMock(aclose=AsyncMock())
-    fake_neo4j = MagicMock(close=AsyncMock())
+    fake_neo4j = MagicMock(close=AsyncMock(), ensure_schema=AsyncMock())
     fake_qdrant = MagicMock(close=AsyncMock())
 
     with (
@@ -152,7 +152,7 @@ async def test_run_once_closes_all_owned_clients_when_forward_fails():
 
 async def test_run_once_passes_active_spatial_index_to_gdelt_writer():
     fake_index = object()
-    fake_neo4j = MagicMock(close=AsyncMock())
+    fake_neo4j = MagicMock(close=AsyncMock(), ensure_schema=AsyncMock())
     neo4j_writer = MagicMock(return_value=fake_neo4j)
     fake_qdrant = MagicMock(close=AsyncMock())
     qdrant_writer = MagicMock(return_value=fake_qdrant)
@@ -183,3 +183,28 @@ async def test_run_once_passes_active_spatial_index_to_gdelt_writer():
     )
     assert neo4j_writer.call_args.kwargs["spatial_index"] is fake_index
     assert qdrant_writer.call_args.kwargs["spatial_index"] is fake_index
+
+
+async def test_run_once_ensures_neo4j_schema_before_forward():
+    order: list[str] = []
+    fake_neo4j = MagicMock(ensure_schema=AsyncMock())
+    fake_neo4j.close = AsyncMock()
+    fake_neo4j.ensure_schema = AsyncMock(side_effect=lambda: order.append("schema"))
+    fake_qdrant = MagicMock(close=AsyncMock())
+
+    async def fake_forward(*args, **kwargs):
+        order.append("forward")
+
+    with (
+        patch("feeds.gdelt_raw_collector.aioredis.from_url", return_value=AsyncMock()),
+        patch("feeds.gdelt_raw_collector.GDELTState", return_value=MagicMock()),
+        patch("feeds.gdelt_raw_collector.Neo4jWriter", return_value=fake_neo4j),
+        patch("feeds.gdelt_raw_collector.AsyncQdrantClient", return_value=MagicMock()),
+        patch("feeds.gdelt_raw_collector.QdrantWriter", return_value=fake_qdrant),
+        patch("feeds.gdelt_raw_collector.run_forward", new=fake_forward),
+    ):
+        from feeds.gdelt_raw_collector import run_once
+
+        await run_once()
+
+    assert order == ["schema", "forward"]

@@ -105,6 +105,15 @@ async def default_tei_embed(text: str, tei_url: str, http_timeout: float = 30.0)
         return data[0] if isinstance(data[0], list) else data
 
 
+async def default_tei_embed_batch(
+    texts: list[str], tei_url: str, client: httpx.AsyncClient,
+) -> list[list[float]]:
+    """One TEI /embed call for many texts (reuses the caller's connection pool)."""
+    resp = await client.post(f"{tei_url}/embed", json={"inputs": texts})
+    resp.raise_for_status()
+    return resp.json()
+
+
 class QdrantWriter:
     def __init__(
         self,
@@ -112,12 +121,16 @@ class QdrantWriter:
         embed: Callable[[str], Awaitable[list[float]]],
         collection: str,
         *,
+        embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]] | None = None,
+        embed_batch_size: int = 32,
         embedding_dimensions: int = 1024,
         enable_hybrid: bool = False,
         spatial_index: SpatialNormalizationIndex | None = None,
     ):
         self._client = client
         self._embed = embed
+        self._embed_batch = embed_batch
+        self._embed_batch_size = embed_batch_size
         self._collection = collection
         self._embedding_dimensions = embedding_dimensions
         self._enable_hybrid = enable_hybrid
@@ -169,25 +182,26 @@ class QdrantWriter:
             return 0
         df = pl.read_parquet(path)
         event_rows = self._event_rows(parquet_base, slice_id, date)
-        points: list[PointStruct] = []
+        rows: list[dict[str, Any]] = []
         for row in df.to_dicts():
-            doc_id = row.get("doc_id")
-            if not doc_id:
+            if not row.get("doc_id"):
                 log.warning(
                     "gdelt_writer_row_skipped_no_doc_id",
                     writer="qdrant", url=row.get("url"),
                 )
                 continue
-            text = build_embed_text(row)
-            content_hash = hashlib.sha256(text.encode()).hexdigest()
-            vector = await self._embed(text)
+            rows.append(row)
+        texts = [build_embed_text(row) for row in rows]
+        vectors = await self._embed_all(texts)
+        points: list[PointStruct] = []
+        for row, text, vector in zip(rows, texts, vectors, strict=True):
             payload = build_payload(
                 row,
                 spatial_payload=self._spatial_payload(row, event_rows),
             )
-            payload["content_hash"] = content_hash
+            payload["content_hash"] = hashlib.sha256(text.encode()).hexdigest()
             points.append(PointStruct(
-                id=qdrant_point_id_for_doc(doc_id),
+                id=qdrant_point_id_for_doc(row["doc_id"]),
                 vector=vector,
                 payload=payload,
             ))
@@ -196,6 +210,20 @@ class QdrantWriter:
             await self._client.upsert(collection_name=self._collection, points=points)
         log.info("qdrant_written", slice=slice_id, count=len(points))
         return len(points)
+
+    async def _embed_all(self, texts: list[str]) -> list[list[float]]:
+        if self._embed_batch is None:
+            return [await self._embed(t) for t in texts]
+        vectors: list[list[float]] = []
+        for i in range(0, len(texts), self._embed_batch_size):
+            chunk = texts[i:i + self._embed_batch_size]
+            out = await self._embed_batch(chunk)
+            if len(out) != len(chunk):
+                raise ValueError(
+                    f"TEI embedding count mismatch: sent {len(chunk)}, got {len(out)}"
+                )
+            vectors.extend(out)
+        return vectors
 
     def _event_rows(
         self,
