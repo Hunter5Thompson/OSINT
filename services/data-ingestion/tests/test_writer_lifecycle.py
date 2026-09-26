@@ -153,6 +153,8 @@ async def test_scheduler_constructs_qdrant_owners_outside_event_loop(
     # fulltext_collector is gated — enable it so the wrapper reaches _construct_off_loop.
     # Harmless for all other parametrized cases (they don't read this flag).
     monkeypatch.setattr(scheduler.settings, "fulltext_enabled", True, raising=False)
+    # ...and its dependency gate must not probe real crawl4ai/docling/TEI.
+    monkeypatch.setattr(scheduler, "unavailable_dependencies", AsyncMock(return_value=[]))
 
     owner = MagicMock(close=AsyncMock())
     setattr(owner, operation, AsyncMock())
