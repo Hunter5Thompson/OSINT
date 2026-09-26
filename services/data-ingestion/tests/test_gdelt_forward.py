@@ -396,10 +396,17 @@ async def test_forward_first_run_processes_only_announced_slice(tmp_path, monkey
 
 @pytest.mark.asyncio
 async def test_forward_skips_slice_missing_beyond_grace_window(tmp_path, monkeypatch):
-    with structlog.testing.capture_logs() as logs:
-        state, calls = await _forward_with(
-            monkeypatch, tmp_path, last_done="20260926190000", latest="20260926204500",
-            unavailable={"20260926194500"})
+    from gdelt_raw.config import get_settings
+
+    monkeypatch.setenv("GDELT_FORWARD_MISSING_GRACE_SLICES", "4")
+    get_settings.cache_clear()
+    try:
+        with structlog.testing.capture_logs() as logs:
+            state, calls = await _forward_with(
+                monkeypatch, tmp_path, last_done="20260926190000", latest="20260926204500",
+                unavailable={"20260926194500"})
+    finally:
+        get_settings.cache_clear()
 
     assert [c[0] for c in calls] == [
         "20260926191500", "20260926193000",
@@ -418,3 +425,10 @@ async def test_forward_waits_for_recent_missing_slice(tmp_path, monkeypatch):
 
     assert [c[0] for c in calls] == ["20260926191500", "20260926193000"]
     assert await state.get_last_slice("parquet") == "20260926193000"
+
+
+def test_missing_grace_default_tolerates_late_files():
+    """Files ~40 min late were observed live; the default must wait longer."""
+    from gdelt_raw.config import GDELTSettings
+
+    assert GDELTSettings(_env_file=None).forward_missing_grace_slices >= 6

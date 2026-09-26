@@ -17,8 +17,9 @@ class GDELTSettings(BaseSettings):
     # newest N slices a forward tick may catch up; older gaps -> backfill CLI
     forward_max_catchup_slices: int = 8
     # a 404 slice this many slices older than the announced one is treated as
-    # never-published and skipped (younger 404s = not published yet -> wait)
-    forward_missing_grace_slices: int = 4
+    # never-published and skipped (younger 404s = not published yet -> wait;
+    # files ~40 min late were observed live, so keep a 1.5 h margin)
+    forward_missing_grace_slices: int = 6
     download_timeout: float = 60.0
     max_parse_error_pct: float = 5.0
     parquet_path: str = "/data/gdelt"
