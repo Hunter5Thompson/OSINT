@@ -119,8 +119,6 @@ RSS_FEEDS: list[dict[str, str]] = [
     # ── Conflict / Crisis ──
     {"name": "Crisis Group", "url": "https://www.crisisgroup.org/rss.xml",
      "provider": "crisisgroup.org"},
-    {"name": "ReliefWeb", "url": "https://reliefweb.int/updates/rss.xml",
-     "provider": "reliefweb.int"},
 ]
 
 MAX_ENTRIES_PER_FEED = 15
