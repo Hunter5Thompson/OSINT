@@ -17,7 +17,7 @@ from gdelt_raw.parser import parse_events
 
 log = structlog.get_logger(__name__)
 
-_BASE = "http://data.gdeltproject.org/gdeltv2"
+_BASE = "https://data.gdeltproject.org/gdeltv2"
 
 COUNT_EXISTING_GEOLESS = """
 UNWIND $rows AS row

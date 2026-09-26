@@ -3,7 +3,7 @@ from gdelt_raw.config import GDELTSettings
 
 def test_defaults_loadable():
     s = GDELTSettings(_env_file=None)
-    assert s.base_url == "http://data.gdeltproject.org/gdeltv2"
+    assert s.base_url == "https://data.gdeltproject.org/gdeltv2"
     assert s.forward_interval_seconds == 900
     assert s.parquet_path == "/data/gdelt"
     assert s.filter_mode == "alpha"

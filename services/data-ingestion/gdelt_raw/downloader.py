@@ -41,13 +41,25 @@ def slice_id_from_url(url: str) -> str:
     return url.rsplit("/", 1)[-1].split(".", 1)[0]
 
 
+_GDELT_HTTP_PREFIX = "http://data.gdeltproject.org/"
+
+
+def _https_for_gdelt(url: str) -> str:
+    """GDELT's CDN answers plain http with a 301 to https, but lastupdate.txt
+    still lists http:// URLs. Upgrade them so we never take the plaintext hop."""
+    if url.startswith(_GDELT_HTTP_PREFIX):
+        return "https://" + url[len("http://"):]
+    return url
+
+
 def parse_lastupdate(text: str) -> list[LastUpdateEntry]:
     entries: list[LastUpdateEntry] = []
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line:
             continue
-        size_s, md5, url = line.split(maxsplit=2)
+        size_s, md5, raw_url = line.split(maxsplit=2)
+        url = _https_for_gdelt(raw_url)
         entries.append(
             LastUpdateEntry(
                 size=int(size_s),
@@ -62,7 +74,9 @@ def parse_lastupdate(text: str) -> list[LastUpdateEntry]:
 
 async def fetch_lastupdate() -> list[LastUpdateEntry]:
     settings = get_settings()
-    async with httpx.AsyncClient(timeout=settings.download_timeout) as client:
+    async with httpx.AsyncClient(
+        timeout=settings.download_timeout, follow_redirects=True
+    ) as client:
         resp = await client.get(f"{settings.base_url}/lastupdate.txt")
         resp.raise_for_status()
         return parse_lastupdate(resp.text)
@@ -84,7 +98,9 @@ async def download_slice(
     settings = get_settings()
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / entry.url.rsplit("/", 1)[-1]
-    async with httpx.AsyncClient(timeout=settings.download_timeout) as client:
+    async with httpx.AsyncClient(
+        timeout=settings.download_timeout, follow_redirects=True
+    ) as client:
         resp = await client.get(entry.url)
         resp.raise_for_status()
         content = resp.content

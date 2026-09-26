@@ -194,7 +194,7 @@ def doctor():
 
         # GDELT CDN
         try:
-            async with httpx.AsyncClient(timeout=10) as c:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as c:
                 r = await c.get(f"{settings.base_url}/lastupdate.txt")
                 r.raise_for_status()
             click.echo("GDELT CDN:       ✓")
