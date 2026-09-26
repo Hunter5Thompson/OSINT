@@ -201,6 +201,8 @@ exit 0
         ),
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
         "SPARK_VLLM_URL": "http://127.0.0.1:1",
+        # stub curl serves no models; don't wait for a local LLM warm-up
+        "ODIN_WARMUP_TIMEOUT_S": "0",
     }
     result = subprocess.run(
         [str(repository / "odin.sh"), *arguments],
