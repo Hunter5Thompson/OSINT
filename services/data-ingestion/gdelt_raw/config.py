@@ -14,6 +14,8 @@ class GDELTSettings(BaseSettings):
 
     base_url: str = "https://data.gdeltproject.org/gdeltv2"
     forward_interval_seconds: int = 900
+    # newest N slices a forward tick may catch up; older gaps -> backfill CLI
+    forward_max_catchup_slices: int = 8
     download_timeout: float = 60.0
     max_parse_error_pct: float = 5.0
     parquet_path: str = "/data/gdelt"
