@@ -40,12 +40,14 @@ from spatial_catalog.manifest import (
 )
 from spatial_catalog.models import ScopeKind
 from spatial_catalog.normalize import BoundaryGeometry, normalize_geometry
-from spatial_catalog.topology import contains_point
+from spatial_catalog.topology import GeoExtent, calculate_extent, contains_point
 
 type SourceCode = Annotated[StrictStr, StringConstraints(min_length=1, max_length=128)]
 type SourceName = Annotated[StrictStr, StringConstraints(min_length=1, max_length=300)]
 
 _BOUNDARY_EPSILON_M = 0.1
+# ~1 km: far above the boundary epsilon, far below any scope's size.
+_EXTENT_MARGIN_DEG = 0.01
 _EARTH_RADIUS_M = 6_371_008.8
 
 
@@ -141,6 +143,7 @@ class _ScopeRecord:
     derivation_revision: str
     compatible_derivation_revisions: tuple[str, ...]
     containment: BoundaryGeometry | None
+    extent: GeoExtent | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +280,11 @@ def build_normalization_index(
             derivation_revision=scope_derivation_revisions[scope_key],
             compatible_derivation_revisions=compatible_revisions,
             containment=containment.get(scope_key),
+            extent=(
+                calculate_extent(containment[scope_key])
+                if containment.get(scope_key) is not None
+                else None
+            ),
         )
 
     country_iso3_by_scope: dict[str, str | None] = {}
@@ -692,6 +700,10 @@ def _resolve_coordinate(
         geometry = record.containment
         if geometry is None:
             continue
+        if record.extent is not None and not _extent_may_touch(
+            record.extent, longitude=longitude, latitude=latitude,
+        ):
+            continue
         on_boundary = _on_boundary(
             geometry,
             longitude=longitude,
@@ -843,6 +855,28 @@ def _precision(
     if country_scope_key is not None:
         return SpatialPrecision.COUNTRY
     return None
+
+
+def _extent_may_touch(extent: GeoExtent, *, longitude: float, latitude: float) -> bool:
+    """False only when the point is clearly outside the scope's vertex extent.
+
+    Edges are straight in lon/lat, so the vertex extent bounds every edge; the
+    margin dwarfs _BOUNDARY_EPSILON_M, and longitude is not narrowed near the
+    poles where a metre spans many degrees. Longitude spans never wrap, so the
+    point is also tried one turn east and west to meet spans at +/-180."""
+    if extent.kind == "world":
+        return True
+    assert extent.south is not None and extent.north is not None
+    if not (extent.south - _EXTENT_MARGIN_DEG <= latitude
+            <= extent.north + _EXTENT_MARGIN_DEG):
+        return False
+    if abs(latitude) > 85.0:
+        return True
+    return any(
+        span.west - _EXTENT_MARGIN_DEG <= candidate <= span.east + _EXTENT_MARGIN_DEG
+        for span in extent.longitude
+        for candidate in (longitude, longitude - 360.0, longitude + 360.0)
+    )
 
 
 def _on_boundary(
