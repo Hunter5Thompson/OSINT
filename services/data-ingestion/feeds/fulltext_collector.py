@@ -101,6 +101,30 @@ def build_fulltext_payload(
     }
 
 
+async def unavailable_dependencies(
+    *, transport: httpx.AsyncBaseTransport | None = None,
+) -> list[str]:
+    """Names of fetch/embed dependencies whose /health is not 2xx.
+
+    Checked before a run selects anything: with crawl4ai, docling or TEI down,
+    every selected teaser would take a retry attempt and the backlog would drift
+    to failed_permanent without a single real fetch."""
+    checks = {
+        "crawl4ai": settings.crawl4ai_url,
+        "docling": settings.docling_url,
+        "tei": settings.tei_embed_url,
+    }
+    down = []
+    async with httpx.AsyncClient(timeout=6.0, transport=transport) as client:
+        for name, base in checks.items():
+            try:
+                resp = await client.get(f"{base}/health")
+                resp.raise_for_status()
+            except httpx.HTTPError:
+                down.append(name)
+    return down
+
+
 class FulltextCollector:
     """Decoupled full-text enrichment: select teasers → fetch → chunk → embed →
     upsert chunks → soft-supersede teaser. Two-phase (NOT atomic): a crash between
