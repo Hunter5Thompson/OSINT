@@ -1965,3 +1965,27 @@ Observation-Producer.
 #     über `effectiveLayers` verborgen.
 #   - Regression: Frontend 616, Intelligence 450 und Backend 579 Tests grün; ESLint,
 #     TypeScript, Ruff und Mypy ebenfalls grün.
+
+# Session-Notes — 2026-09-27: Spatial-/Quellen-/Graph-Audit zu PR #119
+# - Basis: main 245d3d4, PR-Head 5e47d8f; Live-DBs ausschließlich lesend geprüft.
+# - Bericht: docs/reports/2026-09-27-spatial-source-graph-audit.md
+# - Evidenz: docs/reports/2026-09-27-spatial-source-graph-audit-evidence.json
+# - Lokale Testkorrekturen: services/backend/tests/unit/test_spatial_catalog.py
+#   und services/intelligence/tests/test_spatial_catalog.py lesen active/served
+#   aus dem Pointer; Intelligence prüft beide served Revisionen.
+# - docs/runbooks/spatial-intelligence-contract-deploy.md ergänzt: getrennte
+#   Catalog-/Derivation-Verträge, explizite UI-Recovery, koordinierter Cutover,
+#   getrennte Neo4j-/Qdrant-Reparatur und exakter Before-State für Namenscleanup.
+# - Vorher beide CI-Fehler lokal reproduziert. Danach vollständige Backend-Suite
+#   593 passed (eine bestehende Starlette-Deprecation-Warnung), Intelligence
+#   486 passed; Ruff für die geänderten Tests grün. Vorhandene Haupt-Checkout-venvs
+#   mit PR-Worktree-CWD verwendet; kein frisches Lockfile-/CI-Environment.
+# - Deploy-Blocker: 62 gespeicherte konfliktfreie GDELT-Zuordnungen behalten eine
+#   kompatible Revision, obwohl der neue Normalizer für dieselbe Quelle conflict
+#   ergibt. 106/10.057 exportierte Locations wechseln resolved -> conflict.
+# - Weitere offene Maßnahmen: USGS MENTIONS/DESCRIBES-Mismatch, FIRMS/GDELT-
+#   Korrelationsvertrag, Spatial-Adapter für weitere Feeds, Backfills und feinere
+#   Containment-/Crosswalk-Abdeckung. Diese Produktionsfixes sind nicht umgesetzt.
+# - Nächster Schritt: A1 aus dem Bericht mit Regressionen und abgestimmtem
+#   Re-Normalisierungs-/Cutover-Vertrag schließen, erst dann Deploy entscheiden.
+# - Kein Push, Merge, Neustart, Pointerwechsel oder Datenbank-Apply ausgeführt.

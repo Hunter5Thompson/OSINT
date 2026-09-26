@@ -1,0 +1,163 @@
+{
+  "counts": {
+    "locations": 10057,
+    "resolved->resolved": 9687,
+    "resolved->conflict": 106,
+    "stored_nonconflict_accepted_but_now_conflict": 62,
+    "unresolved->unresolved": 223,
+    "conflict->conflict": 41
+  },
+  "examples": [
+    {
+      "key": "gdelt:loc:-1021785",
+      "code": "NP",
+      "system": "gdelt-gec",
+      "country": "NP",
+      "lat": 27.0104,
+      "lon": 84.8773,
+      "scope": "country:NPL",
+      "derivation": "spatial-derive-v1-568db3ecee7a",
+      "conflict": false,
+      "new_conflicts": [
+        "country:IND",
+        "country:NPL"
+      ]
+    },
+    {
+      "key": "gdelt:loc:-1032240",
+      "code": "CB",
+      "system": "gdelt-gec",
+      "country": "CB",
+      "lat": 14.3909,
+      "lon": 104.681,
+      "scope": "country:KHM",
+      "derivation": "spatial-derive-v1-db40add5ccd1",
+      "conflict": false,
+      "new_conflicts": [
+        "country:KHM",
+        "country:THA"
+      ]
+    },
+    {
+      "key": "gdelt:loc:-1084207",
+      "code": "NG",
+      "system": "gdelt-gec",
+      "country": "NG",
+      "lat": 13.7762,
+      "lon": 5.20742,
+      "scope": "country:NER",
+      "derivation": "spatial-derive-v1-2598f257f352",
+      "conflict": false,
+      "new_conflicts": [
+        "country:NER",
+        "country:NGA"
+      ]
+    },
+    {
+      "key": "gdelt:loc:-1209181",
+      "code": "SF",
+      "system": "gdelt-gec",
+      "country": "SF",
+      "lat": -25.7884,
+      "lon": 31.0532,
+      "scope": "country:ZAF",
+      "derivation": "spatial-derive-v1-c6e70feed201",
+      "conflict": false,
+      "new_conflicts": [
+        "country:SWZ",
+        "country:ZAF"
+      ]
+    },
+    {
+      "key": "gdelt:loc:-1251784",
+      "code": "SF",
+      "system": "gdelt-gec",
+      "country": "SF",
+      "lat": -25.4536,
+      "lon": 31.9688,
+      "scope": "country:ZAF",
+      "derivation": "spatial-derive-v1-c6e70feed201",
+      "conflict": false,
+      "new_conflicts": [
+        "country:MOZ",
+        "country:ZAF"
+      ]
+    },
+    {
+      "key": "gdelt:loc:-1322098",
+      "code": "SL",
+      "system": "gdelt-gec",
+      "country": "SL",
+      "lat": 8.5,
+      "lon": -10.3333,
+      "scope": "country:SLE",
+      "derivation": "spatial-derive-v1-7b100d380dd3",
+      "conflict": false,
+      "new_conflicts": [
+        "country:GIN",
+        "country:SLE"
+      ]
+    },
+    {
+      "key": "gdelt:loc:-1426081",
+      "code": "FR",
+      "system": "gdelt-gec",
+      "country": "FR",
+      "lat": 46.3833,
+      "lon": 6.58333,
+      "scope": "country:FRA",
+      "derivation": "spatial-derive-v1-51253946ccec",
+      "conflict": false,
+      "new_conflicts": [
+        "country:CHE",
+        "country:FRA"
+      ]
+    },
+    {
+      "key": "gdelt:loc:-1501475",
+      "code": "EI",
+      "system": "gdelt-gec",
+      "country": "EI",
+      "lat": 54.1167,
+      "lon": -6.73333,
+      "scope": "country:IRL",
+      "derivation": "spatial-derive-v1-c851cdc397b2",
+      "conflict": false,
+      "new_conflicts": [
+        "country:GBR",
+        "country:IRL"
+      ]
+    }
+  ],
+  "audit_context": {
+    "date_local": "2026-09-27",
+    "timezone": "Europe/Berlin",
+    "capture_window_utc": "2026-09-26T23:31:00Z/2026-09-26T23:36:00Z",
+    "main_commit": "245d3d4",
+    "reviewed_pr_head": "5e47d8f52f2dd741151f48d16f2d576df22a85d1",
+    "previous_catalog": "spatial-v1-0180e188358c",
+    "candidate_catalog": "spatial-v1-a8e3a4af02d0",
+    "method": "Read-only Neo4j export of gdelt:loc: records; local normalization of identical raw inputs against both catalogs. Stored conflict=false, scope and derivation checked against candidate compatibility.",
+    "limitation": "Concurrent ingestion; separate queries are not one atomic snapshot. Conflict does not establish which geographic source is correct."
+  },
+  "normalizer_counterexamples": [
+    {
+      "country_code": "IRQ",
+      "country_code_system": "iso3",
+      "latitude": 24.7136,
+      "longitude": 46.6753,
+      "old_status": "resolved",
+      "new_status": "conflict",
+      "old_derivation_accepted": true
+    },
+    {
+      "country_code": "RUS",
+      "country_code_system": "iso3",
+      "latitude": 52.2297,
+      "longitude": 21.0122,
+      "old_status": "resolved",
+      "new_status": "conflict",
+      "old_derivation_accepted": true
+    }
+  ]
+}
