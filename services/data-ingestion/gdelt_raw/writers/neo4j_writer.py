@@ -15,6 +15,7 @@ from neo4j import AsyncGraphDatabase
 from pydantic import BaseModel, ValidationError
 
 from gdelt_raw.ids import build_location_id
+from gdelt_raw.migrations.apply import apply_phase1
 from gdelt_raw.schemas import GDELTDocumentWrite, GDELTEventWrite
 from gdelt_raw.spatial import raw_location_identity_for_event
 from graph_integrity.spatial_normalizer import (
@@ -238,6 +239,18 @@ def _validate_rows(rows: list[dict], model: type[BaseModel], stream: str) -> lis
     return valid
 
 
+PHASE1_CONSTRAINTS: tuple[str, ...] = (
+    "gdelt_event_id_unique", "gdelt_doc_id_unique",
+    "source_name_unique", "theme_code_unique",
+)
+
+_PRESENT_CONSTRAINTS = """
+SHOW CONSTRAINTS YIELD name
+WHERE name IN $names
+RETURN collect(name) AS present
+"""
+
+
 class Neo4jWriter:
     def __init__(
         self,
@@ -249,6 +262,30 @@ class Neo4jWriter:
     ):
         self._driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
         self._spatial_index = spatial_index
+        self._schema_checked = False
+
+    async def ensure_schema(self) -> None:
+        """Make sure the phase-1 uniqueness constraints exist.
+
+        They back every MERGE on event_id/doc_id/name/theme_code; without them
+        each MERGE is a label scan (~1M GDELTDocument nodes). Idempotent; a
+        failure (e.g. duplicates) is logged loudly but never blocks ingestion.
+        """
+        if self._schema_checked:
+            return
+        self._schema_checked = True
+        async with self._driver.session() as session:
+            result = await session.run(_PRESENT_CONSTRAINTS, names=list(PHASE1_CONSTRAINTS))
+            record = await result.single()
+        present = set(record["present"]) if record else set()
+        missing = [c for c in PHASE1_CONSTRAINTS if c not in present]
+        if not missing:
+            return
+        log.warning("gdelt_neo4j_constraints_missing", missing=missing)
+        try:
+            await apply_phase1(self._driver)
+        except Exception as exc:
+            log.error("gdelt_neo4j_schema_apply_failed", missing=missing, error=str(exc))
 
     async def close(self):
         await self._driver.close()

@@ -1,6 +1,8 @@
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import polars as pl
 import pytest
 
@@ -314,3 +316,79 @@ async def test_qdrant_skips_row_with_null_doc_id(tmp_path):
     (_, kwargs) = mock_client.upsert.call_args
     assert len(kwargs["points"]) == 1
     assert embedder.call_count == 1  # skipped row must not burn a TEI call
+
+
+# ── TEI batching: one /embed call per batch instead of per document ─────────
+
+
+def _gkg_rows(n: int) -> pl.DataFrame:
+    return pl.DataFrame({
+        "doc_id": [f"gdelt:gkg:b{i}" for i in range(n)],
+        "url": [f"https://ex.com/{i}" for i in range(n)],
+        "source_name": ["ex.com"] * n,
+        "gdelt_date": ["2026-04-25T12:00:00"] * n,
+        "themes": [["MILITARY"]] * n, "persons": [[]] * n, "organizations": [[]] * n,
+        "linked_event_ids": [[]] * n, "goldstein_min": [None] * n,
+        "goldstein_avg": [None] * n, "cameo_roots_linked": [[]] * n,
+        "codebook_types_linked": [[]] * n,
+        "tone_polarity": [0.0] * n, "word_count": [i for i in range(n)],
+    })
+
+
+@pytest.mark.asyncio
+async def test_upsert_embeds_in_batches_and_keeps_vector_order(tmp_path):
+    gkg_dir = tmp_path / "gkg" / "date=2026-04-25"
+    gkg_dir.mkdir(parents=True)
+    _gkg_rows(70).write_parquet(gkg_dir / "20260425120000.parquet")
+
+    batches: list[int] = []
+
+    async def embed_batch(texts: list[str]) -> list[list[float]]:
+        batches.append(len(texts))
+        # encode the row index (title = doc_id "gdelt:gkg:b<i>") into the vector
+        return [[float(t.split("\n")[0].rsplit("b", 1)[1])] + [0.0] * 1023 for t in texts]
+
+    client = MagicMock()
+    client.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
+    client.create_collection = AsyncMock()
+    client.upsert = AsyncMock()
+    single = AsyncMock()
+    w = QdrantWriter(client=client, embed=single, embed_batch=embed_batch,
+                     embed_batch_size=32, collection="test")
+
+    n = await w.upsert_from_parquet(tmp_path, "20260425120000", "2026-04-25")
+
+    assert n == 70
+    assert batches == [32, 32, 6]
+    single.assert_not_awaited()
+    points = client.upsert.call_args.kwargs["points"]
+    for p in points:  # each point carries the vector of its own row
+        assert p.vector[0] == float(p.payload["title"].rsplit("b", 1)[1])
+
+
+@pytest.mark.asyncio
+async def test_upsert_rejects_embedding_count_mismatch(tmp_path):
+    gkg_dir = tmp_path / "gkg" / "date=2026-04-25"
+    gkg_dir.mkdir(parents=True)
+    _gkg_rows(3).write_parquet(gkg_dir / "20260425120000.parquet")
+
+    client = MagicMock(upsert=AsyncMock())
+    w = QdrantWriter(client=client, embed=AsyncMock(),
+                     embed_batch=AsyncMock(return_value=[[0.0] * 1024]),
+                     collection="test")
+
+    with pytest.raises(ValueError, match="embedding count"):
+        await w.upsert_from_parquet(tmp_path, "20260425120000", "2026-04-25")
+    client.upsert.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_default_tei_embed_batch_posts_list(httpx_mock):
+    from gdelt_raw.writers.qdrant_writer import default_tei_embed_batch
+
+    httpx_mock.add_response(url="http://tei/embed", json=[[1.0, 2.0], [3.0, 4.0]])
+    async with httpx.AsyncClient() as client:
+        out = await default_tei_embed_batch(["a", "b"], tei_url="http://tei", client=client)
+
+    assert out == [[1.0, 2.0], [3.0, 4.0]]
+    assert json.loads(httpx_mock.get_requests()[0].content) == {"inputs": ["a", "b"]}

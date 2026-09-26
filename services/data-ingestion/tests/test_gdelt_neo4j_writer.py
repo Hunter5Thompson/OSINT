@@ -288,3 +288,73 @@ async def test_write_mentions_empty_is_noop():
     counts = await w.write_mentions([], "20260425120000")
     assert counts == {"written": 0, "existing": 0,
                       "dropped_no_document": 0, "dropped_no_event": 0}
+
+
+# ---------------------------------------------------------------------------
+# Schema guard: without the phase-1 uniqueness constraints every MERGE on
+# event_id / doc_id is a label scan over ~1M nodes (≈9 min per slice in prod,
+# 2026-09-26). The writer must (re)establish them instead of degrading silently.
+# ---------------------------------------------------------------------------
+
+
+def _driver_reporting_constraints(present: list[str]) -> MagicMock:
+    record = {"present": present}
+    result = MagicMock()
+    result.single = AsyncMock(return_value=record)
+    session = MagicMock()
+    session.run = AsyncMock(return_value=result)
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    driver = MagicMock()
+    driver.session = MagicMock(return_value=ctx)
+    return driver
+
+
+@pytest.mark.asyncio
+async def test_ensure_schema_noop_when_constraints_present(monkeypatch):
+    from gdelt_raw.writers.neo4j_writer import PHASE1_CONSTRAINTS, Neo4jWriter
+
+    apply = AsyncMock()
+    monkeypatch.setattr("gdelt_raw.writers.neo4j_writer.apply_phase1", apply)
+    writer = Neo4jWriter("bolt://localhost:7687", "neo4j", "x")
+    writer._driver = _driver_reporting_constraints(list(PHASE1_CONSTRAINTS))
+
+    await writer.ensure_schema()
+
+    apply.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ensure_schema_applies_missing_constraints_once(monkeypatch):
+    from gdelt_raw.writers.neo4j_writer import Neo4jWriter
+
+    apply = AsyncMock()
+    monkeypatch.setattr("gdelt_raw.writers.neo4j_writer.apply_phase1", apply)
+    writer = Neo4jWriter("bolt://localhost:7687", "neo4j", "x")
+    writer._driver = _driver_reporting_constraints(["theme_code_unique"])
+
+    with structlog.testing.capture_logs() as logs:
+        await writer.ensure_schema()
+        await writer.ensure_schema()
+
+    apply.assert_awaited_once_with(writer._driver)
+    missing = next(e for e in logs if e["event"] == "gdelt_neo4j_constraints_missing")
+    assert "gdelt_event_id_unique" in missing["missing"]
+    assert "theme_code_unique" not in missing["missing"]
+
+
+@pytest.mark.asyncio
+async def test_ensure_schema_failure_is_loud_but_does_not_block_ingestion(monkeypatch):
+    from gdelt_raw.writers.neo4j_writer import Neo4jWriter
+
+    apply = AsyncMock(side_effect=RuntimeError("duplicates found"))
+    monkeypatch.setattr("gdelt_raw.writers.neo4j_writer.apply_phase1", apply)
+    writer = Neo4jWriter("bolt://localhost:7687", "neo4j", "x")
+    writer._driver = _driver_reporting_constraints([])
+
+    with structlog.testing.capture_logs() as logs:
+        await writer.ensure_schema()
+
+    assert any(e["event"] == "gdelt_neo4j_schema_apply_failed"
+               and e["log_level"] == "error" for e in logs)
