@@ -37,7 +37,7 @@ def test_slice_ids_from_parquet(tmp_path):
 
 def test_export_url_for():
     assert export_url_for("20260613221500") == (
-        "http://data.gdeltproject.org/gdeltv2/20260613221500.export.CSV.zip"
+        "https://data.gdeltproject.org/gdeltv2/20260613221500.export.CSV.zip"
     )
 
 

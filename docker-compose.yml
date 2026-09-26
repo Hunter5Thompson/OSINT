@@ -291,7 +291,7 @@ services:
       # would parse that as an empty list — silently filtering EVERYTHING
       # out. The Pydantic defaults baked into the Settings class are richer
       # and safer; let the container use those.
-      - GDELT_BASE_URL=${GDELT_BASE_URL:-http://data.gdeltproject.org/gdeltv2}
+      - GDELT_BASE_URL=${GDELT_BASE_URL:-https://data.gdeltproject.org/gdeltv2}
       - GDELT_FORWARD_INTERVAL_SECONDS=${GDELT_FORWARD_INTERVAL_SECONDS:-900}
       - GDELT_PARQUET_PATH=${GDELT_PARQUET_PATH:-/data/gdelt}
       - GDELT_FILTER_MODE=${GDELT_FILTER_MODE:-alpha}
@@ -346,7 +346,7 @@ services:
       # would parse that as an empty list — silently filtering EVERYTHING
       # out. The Pydantic defaults baked into the Settings class are richer
       # and safer; let the container use those.
-      - GDELT_BASE_URL=${GDELT_BASE_URL:-http://data.gdeltproject.org/gdeltv2}
+      - GDELT_BASE_URL=${GDELT_BASE_URL:-https://data.gdeltproject.org/gdeltv2}
       - GDELT_FORWARD_INTERVAL_SECONDS=${GDELT_FORWARD_INTERVAL_SECONDS:-900}
       - GDELT_PARQUET_PATH=${GDELT_PARQUET_PATH:-/data/gdelt}
       - GDELT_FILTER_MODE=${GDELT_FILTER_MODE:-alpha}

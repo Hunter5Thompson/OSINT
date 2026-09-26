@@ -91,3 +91,61 @@ async def test_backfill_downloads_historical_slice_without_md5(tmp_path, httpx_m
     )
     out = await download_slice(entry, tmp_path, verify_md5=False)
     assert out.read_bytes() == payload
+
+
+# ── GDELT CDN moved to HTTPS (plain http now answers 301) ──────────────────
+
+
+def test_parse_lastupdate_upgrades_gdelt_http_urls_to_https():
+    """lastupdate.txt still lists http:// slice URLs; downloading them verbatim
+    hits the 301. The parser must hand out https:// URLs for the GDELT CDN."""
+    entries = parse_lastupdate(LASTUPDATE_SAMPLE)
+    assert all(e.url.startswith("https://data.gdeltproject.org/") for e in entries)
+    assert entries[0].slice_id == "20260425120000"
+
+
+def test_parse_lastupdate_leaves_foreign_hosts_untouched():
+    line = "1 abc http://mirror.example.org/gdeltv2/20260425120000.export.CSV.zip\n"
+    assert parse_lastupdate(line)[0].url.startswith("http://mirror.example.org/")
+
+
+@pytest.mark.asyncio
+async def test_fetch_lastupdate_follows_permanent_redirect(monkeypatch, httpx_mock):
+    from gdelt_raw.config import get_settings
+    from gdelt_raw.downloader import fetch_lastupdate
+
+    monkeypatch.setenv("GDELT_BASE_URL", "http://data.gdeltproject.org/gdeltv2")
+    get_settings.cache_clear()
+    try:
+        httpx_mock.add_response(
+            url="http://data.gdeltproject.org/gdeltv2/lastupdate.txt",
+            status_code=301,
+            headers={"Location": "https://data.gdeltproject.org:443/gdeltv2/lastupdate.txt"},
+        )
+        httpx_mock.add_response(
+            url="https://data.gdeltproject.org:443/gdeltv2/lastupdate.txt",
+            text=LASTUPDATE_SAMPLE,
+        )
+        entries = await fetch_lastupdate()
+    finally:
+        get_settings.cache_clear()
+    assert [e.stream for e in entries] == ["events", "mentions", "gkg"]
+
+
+@pytest.mark.asyncio
+async def test_download_slice_follows_permanent_redirect(tmp_path, httpx_mock):
+    payload = b"redirected-zip"
+    old = "http://mirror.example.org/gdeltv2/20260425120000.export.CSV.zip"
+    new = "https://mirror.example.org/gdeltv2/20260425120000.export.CSV.zip"
+    httpx_mock.add_response(url=old, status_code=301, headers={"Location": new})
+    httpx_mock.add_response(url=new, content=payload)
+
+    entry = LastUpdateEntry(
+        size=len(payload),
+        md5=hashlib.md5(payload).hexdigest(),
+        url=old,
+        stream="events",
+        slice_id="20260425120000",
+    )
+    out = await download_slice(entry, tmp_path)
+    assert out.read_bytes() == payload

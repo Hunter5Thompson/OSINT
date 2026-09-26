@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 class GDELTSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="GDELT_", extra="ignore")
 
-    base_url: str = "http://data.gdeltproject.org/gdeltv2"
+    base_url: str = "https://data.gdeltproject.org/gdeltv2"
     forward_interval_seconds: int = 900
     download_timeout: float = 60.0
     max_parse_error_pct: float = 5.0
