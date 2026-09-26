@@ -287,3 +287,103 @@ async def test_forward_skips_latest_slice_when_cdn_file_not_available(tmp_path, 
     assert await state.get_last_slice("parquet") is None
     assert await state.get_last_slice("neo4j") is None
     assert await state.get_last_slice("qdrant") is None
+
+
+# ── Forward gap-fill: lastupdate.txt announces a slice ~8 min before its files
+#    exist, so "latest only" 404s on (almost) every tick and never catches up. ──
+
+
+def _lastupdate_for(slice_id: str) -> list[LastUpdateEntry]:
+    base = "https://data.gdeltproject.org/gdeltv2"
+    return [
+        LastUpdateEntry(1, "md5e", f"{base}/{slice_id}.export.CSV.zip", "events", slice_id),
+        LastUpdateEntry(1, "md5m", f"{base}/{slice_id}.mentions.CSV.zip", "mentions", slice_id),
+        LastUpdateEntry(1, "md5g", f"{base}/{slice_id}.gkg.csv.zip", "gkg", slice_id),
+    ]
+
+
+def _recording_forward_slice(state, calls, unavailable=()):
+    async def fake(entries, *, state=state, verify_md5=True, **kwargs):
+        sid = entries[0].slice_id
+        if sid in unavailable:
+            req = httpx.Request("GET", entries[0].url)
+            raise httpx.HTTPStatusError(
+                "not ready", request=req, response=httpx.Response(404, request=req))
+        calls.append((sid, verify_md5, [e.url for e in entries]))
+        await state.set_last_slice("parquet", sid)
+    return fake
+
+
+async def _forward_with(monkeypatch, tmp_path, *, last_done, latest, unavailable=()):
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+    if last_done:
+        await state.set_last_slice("parquet", last_done)
+    calls: list = []
+    monkeypatch.setattr("gdelt_raw.run.fetch_lastupdate",
+                        AsyncMock(return_value=_lastupdate_for(latest)))
+    monkeypatch.setattr("gdelt_raw.run.replay_pending", AsyncMock())
+    monkeypatch.setattr("gdelt_raw.run.run_forward_slice",
+                        _recording_forward_slice(state, calls, unavailable))
+    await run_forward(state, MagicMock(), MagicMock(), tmp_path)
+    return state, calls
+
+
+@pytest.mark.asyncio
+async def test_forward_catches_up_missed_slices_oldest_first(tmp_path, monkeypatch):
+    state, calls = await _forward_with(
+        monkeypatch, tmp_path, last_done="20260926110000", latest="20260926114500")
+
+    assert [c[0] for c in calls] == ["20260926111500", "20260926113000", "20260926114500"]
+    # historical slices: no MD5 in lastupdate -> verify off, https URLs from base_url
+    assert calls[0][1] is False
+    assert calls[0][2][0] == "https://data.gdeltproject.org/gdeltv2/20260926111500.export.CSV.zip"
+    # the announced slice keeps its lastupdate MD5 verification
+    assert calls[-1][1] is True
+    assert await state.get_last_slice("parquet") == "20260926114500"
+
+
+@pytest.mark.asyncio
+async def test_forward_stops_at_unpublished_slice_and_retries_next_tick(tmp_path, monkeypatch):
+    state, calls = await _forward_with(
+        monkeypatch, tmp_path, last_done="20260926110000", latest="20260926114500",
+        unavailable={"20260926114500"})
+
+    assert [c[0] for c in calls] == ["20260926111500", "20260926113000"]
+    assert await state.get_last_slice("parquet") == "20260926113000"
+
+
+@pytest.mark.asyncio
+async def test_forward_does_not_skip_past_a_missing_slice(tmp_path, monkeypatch):
+    """Order matters: a later slice must not advance last_slice past a gap."""
+    state, calls = await _forward_with(
+        monkeypatch, tmp_path, last_done="20260926110000", latest="20260926114500",
+        unavailable={"20260926111500"})
+
+    assert calls == []
+    assert await state.get_last_slice("parquet") == "20260926110000"
+
+
+@pytest.mark.asyncio
+async def test_forward_catchup_is_bounded_to_recent_window(tmp_path, monkeypatch):
+    """A weeks-old last_slice must not trigger thousands of downloads per tick;
+    older gaps are the backfill CLI's job."""
+    from gdelt_raw.config import get_settings
+
+    monkeypatch.setenv("GDELT_FORWARD_MAX_CATCHUP_SLICES", "4")
+    get_settings.cache_clear()
+    try:
+        state, calls = await _forward_with(
+            monkeypatch, tmp_path, last_done="20260814174500", latest="20260926114500")
+    finally:
+        get_settings.cache_clear()
+
+    assert [c[0] for c in calls] == [
+        "20260926110000", "20260926111500", "20260926113000", "20260926114500"]
+
+
+@pytest.mark.asyncio
+async def test_forward_first_run_processes_only_announced_slice(tmp_path, monkeypatch):
+    _, calls = await _forward_with(
+        monkeypatch, tmp_path, last_done=None, latest="20260926114500")
+    assert [c[0] for c in calls] == ["20260926114500"]

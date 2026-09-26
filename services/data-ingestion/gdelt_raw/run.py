@@ -191,28 +191,59 @@ async def run_forward(state: GDELTState, neo4j_writer, qdrant_writer,
 
     latest_slice = max(by_slice.keys())
     last_done = await state.get_last_slice("parquet")
-    if last_done == latest_slice:
+    if last_done is not None and last_done >= latest_slice:
         log.info("gdelt_no_new_slice", latest=latest_slice)
         return
 
-    with tempfile.TemporaryDirectory() as tmp:
-        try:
-            await run_forward_slice(
-                by_slice[latest_slice],
-                state=state, parquet_base=parquet_base,
-                neo4j_writer=neo4j_writer, qdrant_writer=qdrant_writer,
-                tmp_dir=Path(tmp),
-            )
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 404:
-                log.warning(
-                    "gdelt_latest_slice_unavailable",
-                    slice=latest_slice,
-                    url=str(exc.request.url),
-                    status=exc.response.status_code,
+    todo = _forward_slice_ids(last_done, latest_slice,
+                              get_settings().forward_max_catchup_slices)
+    # lastupdate.txt announces a slice minutes before its files exist, so walk
+    # oldest -> newest and stop at the first unpublished one without advancing
+    # state; the next tick resumes there. Older slices carry no MD5.
+    for sid in todo:
+        announced = by_slice.get(sid)
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                await run_forward_slice(
+                    announced or _entries_from_base(sid),
+                    state=state, parquet_base=parquet_base,
+                    neo4j_writer=neo4j_writer, qdrant_writer=qdrant_writer,
+                    tmp_dir=Path(tmp), verify_md5=announced is not None,
                 )
-                return
-            raise
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 404:
+                    log.warning(
+                        "gdelt_latest_slice_unavailable",
+                        slice=sid,
+                        url=str(exc.request.url),
+                        status=exc.response.status_code,
+                    )
+                    return
+                raise
+
+
+def _entries_from_base(slice_id: str) -> list[LastUpdateEntry]:
+    """Slice file entries built from base_url (no MD5 — not in lastupdate.txt)."""
+    base = get_settings().base_url
+    return [
+        LastUpdateEntry(0, "", f"{base}/{slice_id}.export.CSV.zip", "events", slice_id),
+        LastUpdateEntry(0, "", f"{base}/{slice_id}.mentions.CSV.zip", "mentions", slice_id),
+        LastUpdateEntry(0, "", f"{base}/{slice_id}.gkg.csv.zip", "gkg", slice_id),
+    ]
+
+
+def _forward_slice_ids(last_done: str | None, latest: str, max_slices: int) -> list[str]:
+    """Slices after ``last_done`` up to ``latest``, capped to the newest ``max_slices``."""
+    if last_done is None:
+        return [latest]
+    fmt = "%Y%m%d%H%M%S"
+    start = datetime.strptime(last_done, fmt) + timedelta(minutes=15)
+    ids = list(enumerate_slices_for_range(start, datetime.strptime(latest, fmt)))
+    if len(ids) > max_slices:
+        log.warning("gdelt_forward_gap_exceeds_catchup", first_missing=ids[0],
+                    resume_from=ids[-max_slices], skipped=len(ids) - max_slices)
+        ids = ids[-max_slices:]
+    return ids
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +334,6 @@ async def run_backfill(
     log.info("gdelt_backfill_start", job_id=job_id, total=job.total)
 
     sem = asyncio.Semaphore(parallel)
-    settings = get_settings()
 
     async def _worker():
         while True:
@@ -315,14 +345,7 @@ async def run_backfill(
                 await mark_slice_done(state, job_id, sid)
                 continue
             async with sem:
-                entries = [
-                    LastUpdateEntry(0, "",
-                        f"{settings.base_url}/{sid}.export.CSV.zip", "events", sid),
-                    LastUpdateEntry(0, "",
-                        f"{settings.base_url}/{sid}.mentions.CSV.zip", "mentions", sid),
-                    LastUpdateEntry(0, "",
-                        f"{settings.base_url}/{sid}.gkg.csv.zip", "gkg", sid),
-                ]
+                entries = _entries_from_base(sid)
                 with tempfile.TemporaryDirectory() as tmp:
                     try:
                         # Historical slices: no lastupdate -> no MD5 -> verify_md5=False
