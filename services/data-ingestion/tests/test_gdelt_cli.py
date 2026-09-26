@@ -31,7 +31,7 @@ def test_cli_config_dumps_settings():
 def test_cli_backfill_accepts_minute_precise_bounds(monkeypatch):
     """A gap rarely starts at midnight; --from/--to must take a slice time."""
     from datetime import datetime
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
 
     captured = {}
 
@@ -40,10 +40,9 @@ def test_cli_backfill_accepts_minute_precise_bounds(monkeypatch):
 
     monkeypatch.setattr("gdelt_raw.cli.run_backfill", fake_run_backfill)
     monkeypatch.setattr(
-        "gdelt_raw.cli._get_clients",
-        AsyncMock(return_value=(object(), object(), object())),
+        "gdelt_raw.cli.open_clients",
+        AsyncMock(return_value=MagicMock(aclose=AsyncMock())),
     )
-    monkeypatch.setattr("gdelt_raw.cli._close_clients", AsyncMock())
 
     result = CliRunner().invoke(
         main, ["backfill", "--from", "2026-08-14T18:00", "--to", "2026-09-26T10:30"],

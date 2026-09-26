@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import random
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
+import graph_integrity.spatial_normalizer as sn
 from graph_integrity.spatial_normalizer import (
     AdministrativeCodeSystem,
     CountryCodeSystem,
@@ -490,3 +492,49 @@ def test_index_tracks_only_reviewed_compatible_derivation_revisions() -> None:
         )
         is False
     )
+
+
+# --- Extent prefilter for coordinate resolution ------------------------------
+# _resolve_coordinate ran the exact boundary-distance scan against every scope's
+# full geometry for every point (~20M segment distances per GDELT slice, ~19 s).
+# A scope's vertex extent bounds all its edges, so a point clearly outside it can
+# be neither inside nor on the boundary: the prefilter may only skip work.
+
+
+def _probe_points(index) -> list[tuple[float, float]]:
+    rng = random.Random(20260927)
+    points = [(rng.uniform(-180, 180), rng.uniform(-90, 90)) for _ in range(30)]
+    points += [(179.999, 65.0), (-179.999, 65.0), (180.0, -16.5), (-180.0, -16.5),
+               (0.0, 90.0), (12.0, -89.9), (0.0, 0.0), (37.8, 48.0)]
+    # Exact vertices (boundary) and near-misses on both sides of them.
+    for record in index.scopes.values():
+        if record.containment is None:
+            continue
+        ring = record.containment.polygons[0][0]
+        for lon, lat in ring[:1]:
+            points.append((lon, lat))
+            for dlon, dlat in ((1e-7, 0.0), (0.02, 0.02)):
+                if -180 <= lon + dlon <= 180 and -90 <= lat + dlat <= 90:
+                    points.append((lon + dlon, lat + dlat))
+    return points
+
+
+@pytest.mark.parametrize("fixture_name", ["published_index", "shared_border_index"])
+def test_prefilter_does_not_change_any_resolution(fixture_name, request):
+    index = request.getfixturevalue(fixture_name)
+    points = _probe_points(index)
+    fast = [normalize_location(RawLocationIdentity(longitude=lon, latitude=lat), index)
+            for lon, lat in points]
+    with patch.object(sn, "_extent_may_touch", return_value=True):
+        exact = [normalize_location(RawLocationIdentity(longitude=lon, latitude=lat), index)
+                 for lon, lat in points]
+    assert fast == exact
+
+
+def test_boundary_scan_only_runs_for_candidate_scopes(published_index):
+    point = {"longitude": 37.8, "latitude": 48.0}
+    with_geometry = [r for r in published_index.scopes.values() if r.containment]
+    candidates = [r for r in with_geometry if sn._extent_may_touch(r.extent, **point)]
+    with patch.object(sn, "_on_boundary", wraps=sn._on_boundary) as scan:
+        normalize_location(RawLocationIdentity(**point), published_index)
+    assert scan.call_count == len(candidates) < len(with_geometry) / 2

@@ -41,23 +41,23 @@ async def test_run_once_uses_project_qdrant_collection():
 
     with (
         patch(
-            "feeds.gdelt_raw_collector.aioredis.from_url",
+            "gdelt_raw.clients.aioredis.from_url",
             return_value=fake_redis,
         ),
         patch(
-            "feeds.gdelt_raw_collector.GDELTState",
+            "gdelt_raw.clients.GDELTState",
             return_value=fake_state,
         ),
         patch(
-            "feeds.gdelt_raw_collector.Neo4jWriter",
+            "gdelt_raw.clients.Neo4jWriter",
             return_value=fake_neo4j,
         ),
         patch(
-            "feeds.gdelt_raw_collector.AsyncQdrantClient",
+            "gdelt_raw.clients.AsyncQdrantClient",
             return_value=fake_qdrant_client,
         ),
         patch(
-            "feeds.gdelt_raw_collector.QdrantWriter",
+            "gdelt_raw.clients.QdrantWriter",
             FakeQdrantWriter,
         ),
         patch(
@@ -96,11 +96,11 @@ async def test_run_once_passes_gdelt_parquet_path_to_run_forward():
     mock_run_forward = AsyncMock()
 
     with (
-        patch("feeds.gdelt_raw_collector.aioredis.from_url", return_value=AsyncMock()),
-        patch("feeds.gdelt_raw_collector.GDELTState", return_value=MagicMock()),
-        patch("feeds.gdelt_raw_collector.Neo4jWriter", return_value=fake_neo4j),
-        patch("feeds.gdelt_raw_collector.AsyncQdrantClient", return_value=MagicMock()),
-        patch("feeds.gdelt_raw_collector.QdrantWriter", FakeQdrantWriter),
+        patch("gdelt_raw.clients.aioredis.from_url", return_value=AsyncMock()),
+        patch("gdelt_raw.clients.GDELTState", return_value=MagicMock()),
+        patch("gdelt_raw.clients.Neo4jWriter", return_value=fake_neo4j),
+        patch("gdelt_raw.clients.AsyncQdrantClient", return_value=MagicMock()),
+        patch("gdelt_raw.clients.QdrantWriter", FakeQdrantWriter),
         patch("feeds.gdelt_raw_collector.run_forward", new=mock_run_forward),
     ):
         from feeds.gdelt_raw_collector import run_once
@@ -130,11 +130,11 @@ async def test_run_once_closes_all_owned_clients_when_forward_fails():
     fake_qdrant = MagicMock(close=AsyncMock())
 
     with (
-        patch("feeds.gdelt_raw_collector.aioredis.from_url", return_value=fake_redis),
-        patch("feeds.gdelt_raw_collector.GDELTState", return_value=MagicMock()),
-        patch("feeds.gdelt_raw_collector.Neo4jWriter", return_value=fake_neo4j),
-        patch("feeds.gdelt_raw_collector.AsyncQdrantClient", return_value=MagicMock()),
-        patch("feeds.gdelt_raw_collector.QdrantWriter", return_value=fake_qdrant),
+        patch("gdelt_raw.clients.aioredis.from_url", return_value=fake_redis),
+        patch("gdelt_raw.clients.GDELTState", return_value=MagicMock()),
+        patch("gdelt_raw.clients.Neo4jWriter", return_value=fake_neo4j),
+        patch("gdelt_raw.clients.AsyncQdrantClient", return_value=MagicMock()),
+        patch("gdelt_raw.clients.QdrantWriter", return_value=fake_qdrant),
         patch(
             "feeds.gdelt_raw_collector.run_forward",
             new=AsyncMock(side_effect=RuntimeError("boom")),
@@ -159,16 +159,16 @@ async def test_run_once_passes_active_spatial_index_to_gdelt_writer():
 
     with (
         patch(
-            "feeds.gdelt_raw_collector.aioredis.from_url",
+            "gdelt_raw.clients.aioredis.from_url",
             return_value=MagicMock(aclose=AsyncMock()),
         ),
-        patch("feeds.gdelt_raw_collector.GDELTState", return_value=MagicMock()),
-        patch("feeds.gdelt_raw_collector.Neo4jWriter", neo4j_writer),
-        patch("feeds.gdelt_raw_collector.AsyncQdrantClient", return_value=MagicMock()),
-        patch("feeds.gdelt_raw_collector.QdrantWriter", qdrant_writer),
+        patch("gdelt_raw.clients.GDELTState", return_value=MagicMock()),
+        patch("gdelt_raw.clients.Neo4jWriter", neo4j_writer),
+        patch("gdelt_raw.clients.AsyncQdrantClient", return_value=MagicMock()),
+        patch("gdelt_raw.clients.QdrantWriter", qdrant_writer),
         patch("feeds.gdelt_raw_collector.run_forward", new=AsyncMock()),
         patch(
-            "feeds.gdelt_raw_collector.load_active_normalization_index",
+            "gdelt_raw.clients.load_active_normalization_index",
             return_value=fake_index,
         ) as load_index,
     ):
@@ -196,11 +196,11 @@ async def test_run_once_ensures_neo4j_schema_before_forward():
         order.append("forward")
 
     with (
-        patch("feeds.gdelt_raw_collector.aioredis.from_url", return_value=AsyncMock()),
-        patch("feeds.gdelt_raw_collector.GDELTState", return_value=MagicMock()),
-        patch("feeds.gdelt_raw_collector.Neo4jWriter", return_value=fake_neo4j),
-        patch("feeds.gdelt_raw_collector.AsyncQdrantClient", return_value=MagicMock()),
-        patch("feeds.gdelt_raw_collector.QdrantWriter", return_value=fake_qdrant),
+        patch("gdelt_raw.clients.aioredis.from_url", return_value=AsyncMock()),
+        patch("gdelt_raw.clients.GDELTState", return_value=MagicMock()),
+        patch("gdelt_raw.clients.Neo4jWriter", return_value=fake_neo4j),
+        patch("gdelt_raw.clients.AsyncQdrantClient", return_value=MagicMock()),
+        patch("gdelt_raw.clients.QdrantWriter", return_value=fake_qdrant),
         patch("feeds.gdelt_raw_collector.run_forward", new=fake_forward),
     ):
         from feeds.gdelt_raw_collector import run_once
