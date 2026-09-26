@@ -283,6 +283,22 @@ def validate_manifest(manifest: CatalogManifest) -> None:
     CatalogManifest.model_validate(manifest.model_dump(mode="json"))
 
 
+def _extends_code_only_derivation(previous: DerivationInputs, current: DerivationInputs) -> bool:
+    """A code-only derivation gaining coordinate containment stays compatible.
+
+    Without assignment assets a scope could only be assigned through the
+    crosswalk, so with the same crosswalk and path those assignments are exactly
+    what the extended derivation still produces; containment only adds
+    coordinate-resolved ones. Changed geometry or crosswalk is never compatible.
+    """
+    return (
+        not previous.assignment_asset_ids
+        and bool(current.assignment_asset_ids)
+        and previous.crosswalk_sha256 == current.crosswalk_sha256
+        and previous.scope_path == current.scope_path
+    )
+
+
 def _build_scope_record(
     scope_input: ManifestScopeInput,
     *,
@@ -296,7 +312,10 @@ def _build_scope_record(
 
     compatible = list(reviewed or (current,))
     carry_forward_from = None
-    if previous is not None and previous.derivation_revision == current:
+    if previous is not None and (
+        previous.derivation_revision == current
+        or _extends_code_only_derivation(previous.derivation_inputs, scope_input.derivation_inputs)
+    ):
         if previous_catalog_revision is None:
             raise ValueError("previous manifest revision context is required for carry-forward")
         carry_forward_from = previous_catalog_revision

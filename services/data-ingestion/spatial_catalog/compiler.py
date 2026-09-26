@@ -49,6 +49,8 @@ from spatial_catalog.lod import (
     vertex_count,
 )
 from spatial_catalog.manifest import (
+    CatalogManifest,
+    CatalogPointer,
     DerivationInputs,
     ManifestDraft,
     ManifestScopeInput,
@@ -287,6 +289,7 @@ def compile_catalog(
             for source in source_lock.sources
         )
         manifest = _build_catalog_manifest(
+            previous=_active_manifest(output_root),
             source_lock=source_lock,
             crosswalk_source=crosswalk_source,
             catalog_plan=catalog_plan,
@@ -743,19 +746,10 @@ def _build_required_containment(
         if feature.record.scope_key in active_plan
     }
     raw_ring_counts = {scope_key: feature.raw_ring_count for scope_key, feature in scoped.items()}
-    top_ten = {
-        scope_key
-        for scope_key, _ in sorted(
-            raw_ring_counts.items(),
-            key=lambda item: (-item[1], item[0]),
-        )[:10]
-    }
-    mandatory = {
-        entry.scope_key
-        for entry in active_plan.values()
-        if entry.client_strict_containment_required
-    }
-    required = top_ten | mandatory
+    # Every active country: coordinate normalization resolves points only through
+    # containment assets. The spec's "ten largest by ring count" is the feasibility
+    # sample, which these records still cover; it is not the coverage policy.
+    required = set(scoped)
     assets: dict[str, EmittedAsset] = {}
     records: list[ContainmentFeasibilityRecord] = []
     for scope_key in sorted(required):
@@ -816,8 +810,26 @@ def _admin1_containment_feasibility_records(
     return tuple(sorted(records, key=lambda record: record.scope_key))
 
 
+def _active_manifest(output_root: Path) -> CatalogManifest | None:
+    """The verified catalog the pointer currently activates, if any.
+
+    New manifests derive against it so unchanged or compatibly extended
+    derivations carry their compatible revisions forward.
+    """
+    pointer_path = output_root.parent / "catalog-pointer.json"
+    if not pointer_path.is_file():
+        return None
+    pointer = CatalogPointer.model_validate_json(pointer_path.read_bytes())
+    active = output_root / pointer.active_catalog_revision
+    if not active.is_dir():
+        return None
+    verify_catalog(active)
+    return CatalogManifest.model_validate_json((active / "manifest.json").read_bytes())
+
+
 def _build_catalog_manifest(
     *,
+    previous: CatalogManifest | None,
     source_lock: SourceLock,
     crosswalk_source: LockedSource,
     catalog_plan: CatalogPlan,
@@ -962,7 +974,8 @@ def _build_catalog_manifest(
             attribution_sources_sha256=attribution_sources_hash,
             scopes=tuple(records),
             assets=asset_ids,
-        )
+        ),
+        previous=previous,
     )
 
 

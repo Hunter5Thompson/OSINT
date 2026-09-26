@@ -738,3 +738,63 @@ def test_offline_compiler_builds_byte_identical_revision_twice(tmp_path: Path) -
     for child_key in expected_children:
         assert reported[child_key]["status"] == "pass"
         assert reported[child_key]["max_error_m"] <= 50
+
+
+    # A rebuild into a root with an active catalog must derive against it, so
+    # derivation compatibility (carry-forward) can reach the new manifest.
+    import spatial_catalog.compiler as compiler_module
+
+    seen_previous = []
+    original_build_manifest = compiler_module.build_manifest
+
+    def capturing_build_manifest(draft, *, previous=None):
+        seen_previous.append(previous)
+        return original_build_manifest(draft, previous=previous)
+
+    compiler_module.build_manifest = capturing_build_manifest
+    try:
+        again = compile_catalog(
+            source_lock=source_lock,
+            cache_dir=cache,
+            output_root=tmp_path / "first",
+            policy="odin-reference-v1",
+            catalog_plan_path=plan_path,
+        )
+    finally:
+        compiler_module.build_manifest = original_build_manifest
+    assert again.name == first.name
+    assert seen_previous and seen_previous[0] is not None
+    assert seen_previous[0].catalog_revision == first.name
+
+def test_every_active_country_gets_containment_not_only_top_ten() -> None:
+    """The normalizer resolves coordinates only through containment assets.
+    Limiting them to the ten ring-richest countries (a feasibility sample) left
+    Iraq, Saudi Arabia, Türkiye, Israel, Korea ... unresolvable."""
+    from types import SimpleNamespace
+
+    from spatial_catalog.compiler import _Admin0Feature, _build_required_containment
+
+    scope_keys = [f"country:{code}" for code in (
+        "AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "GGG", "HHH", "III", "JJJ", "KKK", "LLL",
+    )]
+    admin0 = [
+        _Admin0Feature(
+            source_code=key[-3:],
+            label=key,
+            record=SimpleNamespace(scope_key=key),
+            geometry=_geometry(float(index)),
+            source_bytes=100,
+            normalized_bytes=90,
+            raw_ring_count=index + 1,
+            raw_vertex_count=5,
+        )
+        for index, key in enumerate(scope_keys)
+    ]
+    active_plan = {
+        key: SimpleNamespace(client_strict_containment_required=False) for key in scope_keys
+    }
+
+    assets, records, _ = _build_required_containment(admin0, active_plan=active_plan)
+
+    assert set(assets) == set(scope_keys)
+    assert {record.scope_key for record in records} == set(scope_keys)

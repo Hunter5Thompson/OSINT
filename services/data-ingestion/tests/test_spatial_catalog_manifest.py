@@ -17,6 +17,7 @@ from spatial_catalog.manifest import (
 from spatial_catalog.models import (
     CONTRACT_DOC_OWNERS,
     CatalogProvenance,
+    ContainmentDescriptor,
     GeometryDescriptor,
     Lod,
     ScopeKind,
@@ -272,4 +273,84 @@ def test_shared_contract_symbols_have_one_normative_doc_owner() -> None:
     assert all(
         owner.endswith("02-scope-identity-and-boundary-policy.md")
         for _, owner in CONTRACT_DOC_OWNERS
+    )
+
+
+CONTAINMENT_A = "c" * 64
+CONTAINMENT_B = "d" * 64
+
+
+def _draft_with_ukraine(
+    *, containment_asset: str | None, crosswalk: str = CROSSWALK_HASH,
+) -> ManifestDraft:
+    base = _draft()
+    world = next(s for s in base.scopes if s.scope.key == "world")
+    presentation = ScopePresentation()
+    if containment_asset is not None:
+        presentation = ScopePresentation(
+            containment=ContainmentDescriptor(
+                asset_id=containment_asset,
+                media_type="application/vnd.odin.boundary+json;v=1",
+                byte_length=100,
+                vertex_count=10,
+                role="containment",
+                max_error_m=0,
+            ),
+        )
+    path = ("world", "country:UKR")
+    ukraine = ManifestScopeInput(
+        scope=_node("country:UKR", ScopeKind.COUNTRY, "world", children_available=False),
+        path=path,
+        provenance=_provenance(),
+        presentation=presentation,
+        provenance_ref="natural-earth-admin0",
+        derivation_inputs=DerivationInputs(
+            crosswalk_sha256=crosswalk,
+            scope_path=path,
+            assignment_asset_ids=(containment_asset,) if containment_asset else (),
+        ),
+    )
+    assets = (WORLD_PACK_ID,) + ((containment_asset,) if containment_asset else ())
+    return base.model_copy(update={"scopes": (world, ukraine), "assets": assets})
+
+
+def _ukraine(manifest: CatalogManifest):
+    return next(s for s in manifest.scopes if s.scope.key == "country:UKR")
+
+
+def test_adding_containment_to_code_only_scope_keeps_prior_revisions_compatible() -> None:
+    """Assignments under a code-only derivation came from the unchanged crosswalk;
+    adding coordinate containment must not orphan them on the read path."""
+    code_only = build_manifest(_draft_with_ukraine(containment_asset=None))
+    extended = build_manifest(
+        _draft_with_ukraine(containment_asset=CONTAINMENT_A), previous=code_only,
+    )
+
+    before, after = _ukraine(code_only), _ukraine(extended)
+    assert after.derivation_revision != before.derivation_revision
+    assert before.derivation_revision in after.compatible_derivation_revisions
+    assert after.compatible_derivation_revisions[0] == after.derivation_revision
+    assert after.carry_forward_from == code_only.catalog_revision
+
+
+def test_changed_containment_geometry_is_not_silently_compatible() -> None:
+    first = build_manifest(_draft_with_ukraine(containment_asset=CONTAINMENT_A))
+    second = build_manifest(
+        _draft_with_ukraine(containment_asset=CONTAINMENT_B), previous=first,
+    )
+
+    assert _ukraine(first).derivation_revision not in (
+        _ukraine(second).compatible_derivation_revisions
+    )
+
+
+def test_containment_extension_with_changed_crosswalk_is_not_compatible() -> None:
+    code_only = build_manifest(_draft_with_ukraine(containment_asset=None))
+    extended = build_manifest(
+        _draft_with_ukraine(containment_asset=CONTAINMENT_A, crosswalk="f" * 64),
+        previous=code_only,
+    )
+
+    assert _ukraine(code_only).derivation_revision not in (
+        _ukraine(extended).compatible_derivation_revisions
     )
