@@ -45,3 +45,12 @@ async def test_slice_is_fully_done_requires_all_three_streams_plus_stores(state)
     await state.set_store_state("20260425120000", "neo4j", "done")
     await state.set_store_state("20260425120000", "qdrant", "done")
     assert await state.is_slice_fully_done("20260425120000")
+
+
+@pytest.mark.asyncio
+async def test_advance_last_slice_only_moves_forward(state):
+    assert await state.advance_last_slice("parquet", "20260926120000") is True
+    assert await state.advance_last_slice("parquet", "20260814180000") is False
+    assert await state.get_last_slice("parquet") == "20260926120000"
+    assert await state.advance_last_slice("parquet", "20260926121500") is True
+    assert await state.get_last_slice("parquet") == "20260926121500"

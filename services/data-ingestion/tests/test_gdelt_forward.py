@@ -432,3 +432,41 @@ def test_missing_grace_default_tolerates_late_files():
     from gdelt_raw.config import GDELTSettings
 
     assert GDELTSettings(_env_file=None).forward_missing_grace_slices >= 6
+
+
+@pytest.mark.asyncio
+async def test_older_slice_does_not_regress_forward_checkpoints(tmp_path):
+    """Backfill writes historical slices through run_forward_slice while the
+    forward scheduler keeps running; an old slice must never pull last_slice
+    back, or the next forward tick would re-walk the whole gap."""
+    r = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = GDELTState(r)
+    newest, old = "20260926213000", "20260814180000"
+    for store in ("parquet", "neo4j", "qdrant"):
+        await state.set_last_slice(store, newest)
+
+    neo4j = MagicMock()
+    neo4j.write_from_parquet = AsyncMock()
+    qdrant = MagicMock()
+    qdrant.upsert_from_parquet = AsyncMock(return_value=0)
+
+    async def fake_filter_write(parsed, slice_id, *, state, parquet_base):
+        for st in ("events", "mentions", "gkg"):
+            await state.set_stream_parquet(slice_id, st, "done")
+
+    with patch("gdelt_raw.run._extract_and_parse", new=AsyncMock()), \
+         patch("gdelt_raw.run._filter_and_write_parquet", new=fake_filter_write):
+        entries = [
+            LastUpdateEntry(0, "", f"http://x/{old}.export.CSV.zip", "events", old),
+            LastUpdateEntry(0, "", f"http://x/{old}.mentions.CSV.zip", "mentions", old),
+            LastUpdateEntry(0, "", f"http://x/{old}.gkg.csv.zip", "gkg", old),
+        ]
+        await run_forward_slice(
+            entries, state=state, parquet_base=tmp_path,
+            neo4j_writer=neo4j, qdrant_writer=qdrant, tmp_dir=tmp_path / "work",
+            verify_md5=False,
+        )
+
+    for store in ("parquet", "neo4j", "qdrant"):
+        assert await state.get_last_slice(store) == newest
+    assert await state.is_slice_fully_done(old)
