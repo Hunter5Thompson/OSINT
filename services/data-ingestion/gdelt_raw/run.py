@@ -141,7 +141,7 @@ async def run_forward_slice(
         for s in ("events", "mentions", "gkg")
     ]
     if all(s == "done" for s in parquet_states):
-        await state.set_last_slice("parquet", slice_id)
+        await state.advance_last_slice("parquet", slice_id)
     else:
         stream_state = dict(zip(("events", "mentions", "gkg"), parquet_states, strict=True))
         log.error("gdelt_slice_incomplete", slice=slice_id, streams=stream_state)
@@ -156,7 +156,7 @@ async def run_forward_slice(
     try:
         await neo4j_writer.write_from_parquet(parquet_base, slice_id, date)
         await state.set_store_state(slice_id, "neo4j", "done")
-        await state.set_last_slice("neo4j", slice_id)
+        await state.advance_last_slice("neo4j", slice_id)
         await state.remove_pending("neo4j", slice_id)
     except Exception as e:
         log.error("gdelt_neo4j_write_failed", slice=slice_id, error=str(e))
@@ -168,7 +168,7 @@ async def run_forward_slice(
     try:
         await qdrant_writer.upsert_from_parquet(parquet_base, slice_id, date)
         await state.set_store_state(slice_id, "qdrant", "done")
-        await state.set_last_slice("qdrant", slice_id)
+        await state.advance_last_slice("qdrant", slice_id)
         await state.remove_pending("qdrant", slice_id)
     except Exception as e:
         log.error("gdelt_qdrant_write_failed", slice=slice_id, error=str(e))

@@ -66,6 +66,21 @@ class GDELTState:
     async def get_last_slice(self, store: StoreName) -> str | None:
         return await self.r.get(_last_slice_key(store))
 
+    async def advance_last_slice(self, store: StoreName, slice_id: str) -> bool:
+        """Move last_slice[store] to slice_id only if it is unset or older.
+
+        Forward, replay and backfill all write through run_forward_slice; a
+        historical slice must never pull the forward checkpoint back. Slice ids
+        are fixed-width timestamps, so string order is time order. Not atomic:
+        callers that advance the same store concurrently are the forward tick
+        (newest slices) and backfill/replay (older ones), so a lost race can only
+        drop an older id. Returns whether the pointer moved."""
+        current = await self.get_last_slice(store)
+        if current is not None and current >= slice_id:
+            return False
+        await self.set_last_slice(store, slice_id)
+        return True
+
     async def is_slice_fully_done(self, slice_id: str) -> bool:
         for st in ("events", "mentions", "gkg"):
             if await self.get_stream_parquet(slice_id, st) != "done":

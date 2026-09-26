@@ -133,20 +133,25 @@ def forward():
     click.echo("forward tick complete")
 
 
+# Minute precision lets a backfill target a gap's exact slices instead of whole days.
+_BACKFILL_FORMATS = ["%Y-%m-%d", "%Y-%m-%dT%H:%M"]
+
+
 @main.command()
 @click.option("--from", "from_date", required=True,
-              type=click.DateTime(formats=["%Y-%m-%d"]),
-              help="Backfill start (inclusive), format YYYY-MM-DD")
+              type=click.DateTime(formats=_BACKFILL_FORMATS),
+              help="Backfill start (inclusive, UTC), YYYY-MM-DD or YYYY-MM-DDTHH:MM")
 @click.option("--to", "to_date", default=None,
-              type=click.DateTime(formats=["%Y-%m-%d"]),
-              help="Backfill end (inclusive), default=yesterday UTC")
+              type=click.DateTime(formats=_BACKFILL_FORMATS),
+              help="Backfill end (inclusive, UTC), YYYY-MM-DD or YYYY-MM-DDTHH:MM; "
+                   "default=yesterday UTC")
 @click.option("--parallel", default=4, type=int)
 def backfill(from_date: datetime, to_date: datetime | None, parallel: int):
     """Historical backfill."""
     _now = datetime.now(UTC).replace(tzinfo=None)
     to_date = to_date or (_now - timedelta(days=1))
     job_id = f"backfill-{_now.strftime('%Y-%m-%d')}-{uuid.uuid4().hex[:4]}"
-    click.echo(f"Job: {job_id}  {from_date:%Y-%m-%d} → {to_date:%Y-%m-%d}")
+    click.echo(f"Job: {job_id}  {from_date:%Y-%m-%d %H:%M} → {to_date:%Y-%m-%d %H:%M}")
 
     async def _go():
         settings = get_settings()
