@@ -195,11 +195,13 @@ async def run_forward(state: GDELTState, neo4j_writer, qdrant_writer,
         log.info("gdelt_no_new_slice", latest=latest_slice)
         return
 
-    todo = _forward_slice_ids(last_done, latest_slice,
-                              get_settings().forward_max_catchup_slices)
+    settings = get_settings()
+    todo = _forward_slice_ids(last_done, latest_slice, settings.forward_max_catchup_slices)
     # lastupdate.txt announces a slice minutes before its files exist, so walk
     # oldest -> newest and stop at the first unpublished one without advancing
-    # state; the next tick resumes there. Older slices carry no MD5.
+    # state; the next tick resumes there. A slice still missing well behind the
+    # announced one was never published (GDELT drops files) and is skipped.
+    # Older slices carry no MD5.
     for sid in todo:
         announced = by_slice.get(sid)
         with tempfile.TemporaryDirectory() as tmp:
@@ -212,6 +214,11 @@ async def run_forward(state: GDELTState, neo4j_writer, qdrant_writer,
                 )
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == 404:
+                    if (_slices_between(sid, latest_slice)
+                            >= settings.forward_missing_grace_slices):
+                        log.warning("gdelt_slice_missing_skipped", slice=sid,
+                                    url=str(exc.request.url), latest=latest_slice)
+                        continue
                     log.warning(
                         "gdelt_latest_slice_unavailable",
                         slice=sid,
@@ -220,6 +227,12 @@ async def run_forward(state: GDELTState, neo4j_writer, qdrant_writer,
                     )
                     return
                 raise
+
+
+def _slices_between(older: str, newer: str) -> int:
+    fmt = "%Y%m%d%H%M%S"
+    delta = datetime.strptime(newer, fmt) - datetime.strptime(older, fmt)
+    return int(delta.total_seconds() // 900)
 
 
 def _entries_from_base(slice_id: str) -> list[LastUpdateEntry]:
