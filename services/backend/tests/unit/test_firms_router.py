@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-def _make_point(pid: str, lat: float, lon: float, frp: float, explosion: bool = False) -> object:
+def _make_point(
+    pid: str, lat: float, lon: float, frp: float, country_iso3: str | None = None,
+) -> object:
     class P:
         id = pid
         payload = {
@@ -21,8 +23,8 @@ def _make_point(pid: str, lat: float, lon: float, frp: float, explosion: bool = 
             "acq_date": "2026-04-11",
             "acq_time": "1423",
             "satellite": "VIIRS_SNPP_NRT",
-            "bbox_name": "ukraine",
-            "possible_explosion": explosion,
+            "fetch_area": "ukraine",
+            "country_iso3": country_iso3,
             "ingested_epoch": 1744300000.0,
         }
 
@@ -35,7 +37,7 @@ async def test_firms_hotspots_happy_path() -> None:
     mock_qdrant = AsyncMock()
     mock_qdrant.scroll.return_value = (
         [
-            _make_point("id-a", 48.1, 37.8, 92.0, explosion=True),
+            _make_point("id-a", 48.1, 37.8, 92.0, country_iso3="UKR"),
             _make_point("id-b", 48.2, 37.9, 45.0),
             _make_point("id-c", 31.4, 34.4, 12.0),
         ],
@@ -54,7 +56,13 @@ async def test_firms_hotspots_happy_path() -> None:
     body = resp.json()
     assert len(body) == 3
     assert body[0]["id"] == "id-a"
-    assert body[0]["possible_explosion"] is True
+    assert body[0]["country_iso3"] == "UKR"
+    assert body[1]["country_iso3"] is None
+    # Fetch boxes are not places; the unreachable explosion flag is gone.
+    for hotspot in body:
+        assert "bbox_name" not in hotspot
+        assert "fetch_area" not in hotspot
+        assert "possible_explosion" not in hotspot
     assert body[0]["frp"] == 92.0
     assert body[0]["firms_map_url"].startswith("https://firms.modaps.eosdis.nasa.gov/map/#")
     assert "48.1000" in body[0]["firms_map_url"]
@@ -117,3 +125,29 @@ def test_firms_hotspots_since_hours_too_high_returns_422() -> None:
     client = TestClient(app)
     resp = client.get("/api/firms/hotspots?since_hours=169")
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_firms_hotspots_legacy_payload_has_no_country() -> None:
+    """Points written before country resolution carry only the fetch-box name."""
+
+    class Legacy:
+        id = "legacy"
+        payload = {
+            "source": "firms", "latitude": 47.2, "longitude": 39.7, "frp": 5.0,
+            "brightness": 330.0, "confidence": "n", "acq_date": "2026-04-11",
+            "acq_time": "0100", "satellite": "N", "bbox_name": "ukraine",
+            "possible_explosion": False,
+        }
+
+    mock_qdrant = AsyncMock()
+    mock_qdrant.scroll.return_value = ([Legacy()], None)
+    mock_cache = AsyncMock()
+    mock_cache.get.return_value = None
+    app.state.cache = mock_cache
+
+    with patch("app.routers.firms.get_qdrant_client", AsyncMock(return_value=mock_qdrant)):
+        resp = TestClient(app).get("/api/firms/hotspots")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["country_iso3"] is None

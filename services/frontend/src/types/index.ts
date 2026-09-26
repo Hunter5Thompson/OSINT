@@ -74,8 +74,8 @@ export interface FIRMSHotspot {
   acq_date: string;
   acq_time: string;
   satellite: string;
-  bbox_name: string;
-  possible_explosion: boolean;
+  /** Resolved from the spatial catalog; null for hotspots ingested before that. */
+  country_iso3: string | null;
   firms_map_url: string;
 }
 

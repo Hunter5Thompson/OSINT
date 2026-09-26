@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,9 +11,23 @@ from feeds.firms_collector import (
     FIRMS_BBOXES,
     FIRMS_SATELLITES,
     FIRMSCollector,
-    is_possible_explosion,
 )
+from graph_integrity.spatial_normalizer import load_normalization_index
 from pipeline import ExtractionConfigError, ExtractionTransientError
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.fixture(scope="module")
+def spatial_index():
+    return load_normalization_index(
+        REPOSITORY_ROOT
+        / "services/backend/data/spatial/catalogs/spatial-v1-e76a16bff799",
+        crosswalk_path=(
+            REPOSITORY_ROOT
+            / "services/data-ingestion/spatial_catalog/data/country_crosswalk.json"
+        ),
+    )
 
 
 @pytest.fixture
@@ -35,10 +50,10 @@ def mock_settings():
 
 
 @pytest.fixture
-def collector(mock_settings):
+def collector(mock_settings, spatial_index):
     with patch("feeds.base.QdrantClient") as mock_qdrant:
         mock_qdrant.return_value = MagicMock()
-        c = FIRMSCollector(settings=mock_settings)
+        c = FIRMSCollector(settings=mock_settings, spatial_index=spatial_index)
     c.qdrant.retrieve.return_value = []
     return c
 
@@ -48,19 +63,6 @@ SAMPLE_CSV = (
     "36.5000,40.7000,400.5,0.39,0.36,2026-04-01,0130,N,high,2.0NRT,290.1,95.2,N\n"
     "36.5001,40.7001,350.0,0.39,0.36,2026-04-01,0130,N,nominal,2.0NRT,280.0,50.0,D\n"
 )
-
-
-def test_explosion_heuristic_positive():
-    assert is_possible_explosion(frp=95.2, brightness=400.5) is True
-
-
-def test_explosion_heuristic_negative():
-    assert is_possible_explosion(frp=50.0, brightness=350.0) is False
-
-
-def test_explosion_heuristic_boundary():
-    assert is_possible_explosion(frp=80.0, brightness=380.0) is False
-    assert is_possible_explosion(frp=80.1, brightness=380.1) is True
 
 
 def test_bboxes_have_correct_format():
@@ -82,9 +84,10 @@ def test_parse_csv(collector):
     assert len(rows) == 2
     assert rows[0]["latitude"] == 36.5
     assert rows[0]["frp"] == 95.2
-    assert rows[0]["possible_explosion"] is True
-    assert rows[0]["bbox_name"] == "ukraine"
-    assert rows[1]["possible_explosion"] is False
+    assert rows[0]["fetch_area"] == "ukraine"
+    assert "bbox_name" not in rows[0]
+    # VIIRS I4 saturates at ~367 K, so a >380 K test can never fire: no flag at all.
+    assert all("possible_explosion" not in row for row in rows)
 
 
 def test_dedup_hash_ignores_satellite(collector):
@@ -145,3 +148,35 @@ async def test_firms_config_skips_upsert(collector):
     assert any(
         c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
     )
+
+
+@pytest.mark.asyncio
+async def test_firms_title_names_resolved_country_not_fetch_box(collector):
+    """Rostov lies in the "ukraine" fetch box; the model must read RUS."""
+    csv_text = (
+        "latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,"
+        "confidence,version,bright_ti5,frp,daynight\n"
+        "47.2000,39.7000,367.0,0.39,0.36,2026-04-01,0130,N,high,2.0NRT,300.0,120.0,N\n"
+        "33.3000,44.4000,340.0,0.39,0.36,2026-04-01,0131,N,nominal,2.0NRT,290.0,10.0,N\n"
+    )
+    collector._fetch_csv = AsyncMock(return_value=csv_text)
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._build_point = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._ensure_collection = AsyncMock()
+    process = AsyncMock()
+
+    with (
+        patch("feeds.firms_collector.FIRMS_SATELLITES", ["VIIRS_SNPP_NRT"]),
+        patch("feeds.firms_collector.FIRMS_BBOXES", {"ukraine": "22,44,40,52"}),
+        patch("feeds.firms_collector.process_item", new=process),
+    ):
+        await collector.collect()
+
+    titles = [c.kwargs["title"] for c in process.call_args_list]
+    assert titles == [
+        "FIRMS thermal anomaly at 47.2000,39.7000 (RUS)",
+        "FIRMS thermal anomaly at 33.3000,44.4000 (country unresolved)",
+    ]
+    rows = [c.args[1] for c in collector._build_point.call_args_list]
+    assert [r["country_iso3"] for r in rows] == ["RUS", None]

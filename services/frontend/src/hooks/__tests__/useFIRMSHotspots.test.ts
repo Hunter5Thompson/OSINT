@@ -17,8 +17,7 @@ describe("useFIRMSHotspots", () => {
       {
         id: "h1", latitude: 48.1, longitude: 37.8, frp: 100, brightness: 390,
         confidence: "h", acq_date: "2026-04-11", acq_time: "1200",
-        satellite: "VIIRS_SNPP_NRT", bbox_name: "ukraine",
-        possible_explosion: true,
+        satellite: "VIIRS_SNPP_NRT", country_iso3: "UKR",
         firms_map_url: "https://example/",
       },
     ]);
@@ -33,7 +32,7 @@ describe("useFIRMSHotspots", () => {
       {
         id: "h1", latitude: 0, longitude: 0, frp: 0, brightness: 0,
         confidence: "", acq_date: "", acq_time: "",
-        satellite: "", bbox_name: "", possible_explosion: false,
+        satellite: "", country_iso3: null,
         firms_map_url: "",
       },
     ]);

@@ -10,8 +10,8 @@ import pytest
 from feeds.military_aircraft_collector import (
     MilitaryAircraftCollector,
     build_aircraft_location_statement,
-    classify_region,
     identify_branch,
+    in_hotspot_coverage,
 )
 from graph_integrity.spatial_normalizer import load_normalization_index
 
@@ -81,10 +81,36 @@ def test_identify_branch_faf():
 def test_identify_branch_iaf():
     assert identify_branch("738A00") == "IAF"
 
-def test_classify_region():
-    assert classify_region(48.0, 35.0) == "ukraine"
-    assert classify_region(33.0, 44.0) == "iran"
-    assert classify_region(0.0, 0.0) == "unknown"
+def test_hotspot_coverage_is_a_filter_not_a_place():
+    assert in_hotspot_coverage(48.0, 35.0) is True
+    assert in_hotspot_coverage(33.3, 44.4) is True   # Baghdad: inside the old "iran" box
+    assert in_hotspot_coverage(0.0, 0.0) is False
+    assert in_hotspot_coverage(52.5, 13.4) is False  # Berlin: only in a meta-region
+
+
+@pytest.mark.parametrize(
+    ("name", "lat", "lon", "expected"),
+    [
+        # First-match boxes used to label these "ukraine" / "iran" / "north_korea".
+        ("Rostov-on-Don", 47.2, 39.7, "RUS"),
+        ("Belgorod", 50.6, 36.6, "RUS"),
+        ("Baghdad", 33.3, 44.4, "unresolved"),   # IRQ not in the test catalog
+        ("Seoul", 37.6, 127.0, "unresolved"),    # KOR not in the test catalog
+    ],
+)
+def test_aircraft_location_is_named_by_country_not_hotspot_box(
+    collector, spatial_index, name, lat, lon, expected,
+) -> None:
+    raw = {**SAMPLE_ADSB_FI_RESPONSE,
+           "ac": [{**SAMPLE_ADSB_FI_RESPONSE["ac"][0], "lat": lat, "lon": lon}]}
+    aircraft = collector._parse_adsb_fi(raw)[0]
+    assert "region" not in aircraft
+
+    write = build_aircraft_location_statement(aircraft, spatial_index)
+
+    assert write["parameters"]["name"] == expected, name
+    assert "region" not in write["parameters"]
+    assert "l.region" not in write["statement"]
 
 SAMPLE_ADSB_FI_RESPONSE = {
     "ac": [
@@ -125,15 +151,13 @@ def test_aircraft_location_is_observation_keyed_and_spatially_normalized(
 
     assert "MERGE (l:Location {loc_key: $loc_key})" in write["statement"]
     assert "point({longitude: $longitude, latitude: $latitude})" in write["statement"]
-    assert "$region" in write["statement"]
     assert "ukraine" not in write["statement"]
     assert write["parameters"]["loc_key"].startswith("aircraft-observation:adf7c8|")
-    assert write["parameters"]["name"] == "ukraine"
+    assert write["parameters"]["name"] == "UKR"
     assert write["parameters"]["latitude"] == 48.5
     assert write["parameters"]["longitude"] == 35.2
     assert write["parameters"]["country_scope_key"] == "country:UKR"
     assert write["parameters"]["spatial_precision"] == "point"
-    assert write["parameters"]["region"] == "ukraine"
     for field in (
         "source_country_code",
         "source_country_code_system",
@@ -157,7 +181,7 @@ def test_aircraft_location_is_observation_keyed_and_spatially_normalized(
 def test_aircraft_null_island_sentinel_has_no_location_write(spatial_index) -> None:
     aircraft = {
         "dedup_key": "000001|1712000000",
-        "region": "unknown",
+        "in_coverage": False,
         "latitude": 0.0,
         "longitude": 0.0,
     }
@@ -178,7 +202,7 @@ def test_aircraft_incomplete_position_has_no_location_write(
 ) -> None:
     aircraft = {
         "dedup_key": "000001|1712000000",
-        "region": "unknown",
+        "in_coverage": False,
         "latitude": latitude,
         "longitude": longitude,
     }

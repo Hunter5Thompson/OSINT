@@ -43,8 +43,7 @@ describe("InspectorPanel", () => {
             acq_date: "2026-04-21",
             acq_time: "1000",
             satellite: "VIIRS",
-            bbox_name: "sinjar-ridge",
-            possible_explosion: false,
+            country_iso3: "IRQ",
             firms_map_url: "https://firms.modaps.eosdis.nasa.gov/...",
           },
         }}
@@ -55,6 +54,11 @@ describe("InspectorPanel", () => {
     expect(screen.getByRole("region", { name: /Inspector/i })).toBeInTheDocument();
     expect(screen.getByText(/12.340N · 56.780E/)).toBeInTheDocument();
     expect(screen.getByText(/FIRMS hotspot · VIIRS/)).toBeInTheDocument();
+    expect(screen.getByText("§ Country")).toBeInTheDocument();
+    expect(screen.getByText("IRQ")).toBeInTheDocument();
+    // Fetch boxes are not places, and the I4 explosion flag was unreachable.
+    expect(screen.queryByText("§ Region")).toBeNull();
+    expect(screen.queryByText("§ Flag")).toBeNull();
   });
 
   it("calls onClose when × is clicked", () => {
