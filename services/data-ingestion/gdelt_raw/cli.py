@@ -12,17 +12,11 @@ from pathlib import Path
 
 import click
 import httpx
-import redis.asyncio as aioredis
-from qdrant_client import AsyncQdrantClient
 
-from config import settings
+from gdelt_raw.clients import open_clients
 from gdelt_raw.config import get_settings
 from gdelt_raw.recovery import reconcile_forward_state, replay_pending
 from gdelt_raw.run import run_backfill, run_forward
-from gdelt_raw.state import GDELTState
-from gdelt_raw.writers.neo4j_writer import Neo4jWriter
-from gdelt_raw.writers.qdrant_writer import QdrantWriter, default_tei_embed
-from graph_integrity.spatial_normalizer import load_active_normalization_index
 
 
 def _run(coro):
@@ -31,51 +25,6 @@ def _run(coro):
 
 def _bool_env(name: str, default: bool = False) -> bool:
     return os.getenv(name, str(default)).lower() in {"1", "true", "yes"}
-
-
-async def _get_clients():
-    spatial_index = load_active_normalization_index(
-        settings.spatial_catalog_path,
-        crosswalk_path=settings.spatial_country_crosswalk_path,
-    )
-    r = aioredis.from_url(
-        os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-        decode_responses=True,
-    )
-    state = GDELTState(r)
-    neo4j = Neo4jWriter(
-        uri=os.getenv("NEO4J_URL", "bolt://localhost:7687"),
-        user=os.getenv("NEO4J_USER", "neo4j"),
-        password=os.getenv("NEO4J_PASSWORD", ""),
-        spatial_index=spatial_index,
-    )
-    qdrant_client = AsyncQdrantClient(
-        url=os.getenv("QDRANT_URL", "http://localhost:6333")
-    )
-    tei_url = os.getenv("TEI_EMBED_URL", "http://localhost:8001")
-
-    async def embed(text: str) -> list[float]:
-        return await default_tei_embed(text, tei_url=tei_url)
-
-    qdrant = QdrantWriter(
-        client=qdrant_client,
-        embed=embed,
-        collection=settings.qdrant_collection,
-        embedding_dimensions=settings.embedding_dimensions,
-        enable_hybrid=settings.enable_hybrid,
-        spatial_index=spatial_index,
-    )
-    return state, neo4j, qdrant
-
-
-async def _close_clients(state, neo4j, qdrant) -> None:
-    try:
-        await neo4j.close()
-    finally:
-        try:
-            await qdrant.close()
-        finally:
-            await state.r.aclose()
 
 
 @click.group()
@@ -87,7 +36,8 @@ def main():
 def status():
     """Show last processed slice and pending counts."""
     async def _go():
-        state, neo4j, qdrant = await _get_clients()
+        clients = await open_clients()
+        state = clients.state
         try:
             for store in ("parquet", "neo4j", "qdrant"):
                 last = await state.get_last_slice(store)
@@ -96,7 +46,7 @@ def status():
                 pending = await state.list_pending(store, limit=100)
                 click.echo(f"pending[{store:>6}]: {len(pending)}")
         finally:
-            await _close_clients(state, neo4j, qdrant)
+            await clients.aclose()
     _run(_go())
 
 
@@ -104,7 +54,8 @@ def status():
 def reconcile():
     """Report stores whose last_slice trails the parquet checkpoint (WP-10)."""
     async def _go():
-        state, neo4j, qdrant = await _get_clients()
+        clients = await open_clients()
+        state = clients.state
         try:
             report = await reconcile_forward_state(state)
             click.echo(f"parquet last_slice: {report['parquet']}")
@@ -115,7 +66,7 @@ def reconcile():
                 click.echo(f"\nLagging: {report['lagging']} — run `forward` "
                            f"or `resume <job>` to replay pending slices.")
         finally:
-            await _close_clients(state, neo4j, qdrant)
+            await clients.aclose()
     _run(_go())
 
 
@@ -124,11 +75,12 @@ def forward():
     """Run a single forward tick."""
     async def _go():
         settings = get_settings()
-        state, neo4j, qdrant = await _get_clients()
+        clients = await open_clients()
+        state, neo4j, qdrant = clients.state, clients.neo4j, clients.qdrant
         try:
             await run_forward(state, neo4j, qdrant, Path(settings.parquet_path))
         finally:
-            await _close_clients(state, neo4j, qdrant)
+            await clients.aclose()
     _run(_go())
     click.echo("forward tick complete")
 
@@ -155,7 +107,8 @@ def backfill(from_date: datetime, to_date: datetime | None, parallel: int):
 
     async def _go():
         settings = get_settings()
-        state, neo4j, qdrant = await _get_clients()
+        clients = await open_clients()
+        state, neo4j, qdrant = clients.state, clients.neo4j, clients.qdrant
         try:
             await run_backfill(
                 from_date, to_date,
@@ -164,7 +117,7 @@ def backfill(from_date: datetime, to_date: datetime | None, parallel: int):
                 job_id=job_id, parallel=parallel,
             )
         finally:
-            await _close_clients(state, neo4j, qdrant)
+            await clients.aclose()
     _run(_go())
 
 
@@ -175,7 +128,8 @@ def resume(job_id: str):
     async def _go():
         from gdelt_raw.run import resume_backfill_pending
         settings = get_settings()
-        state, neo4j, qdrant = await _get_clients()
+        clients = await open_clients()
+        state, neo4j, qdrant = clients.state, clients.neo4j, clients.qdrant
         try:
             n = await resume_backfill_pending(state, job_id)
             click.echo(f"Re-enqueued {n} failed slice(s) for job {job_id}")
@@ -185,7 +139,7 @@ def resume(job_id: str):
             )
             click.echo("replay_pending complete")
         finally:
-            await _close_clients(state, neo4j, qdrant)
+            await clients.aclose()
     _run(_go())
 
 
@@ -217,7 +171,8 @@ def doctor():
 
         # Redis
         try:
-            state, neo4j, qdrant = await _get_clients()
+            clients = await open_clients()
+            state, neo4j, qdrant = clients.state, clients.neo4j, clients.qdrant
             await state.r.ping()
             click.echo("Redis:           ✓")
         except Exception as e:
@@ -257,7 +212,7 @@ def doctor():
 
         if state is not None and neo4j is not None and qdrant is not None:
             with contextlib.suppress(Exception):
-                await _close_clients(state, neo4j, qdrant)
+                await clients.aclose()
 
         # Filter config summary (quick sanity check)
         click.echo(f"Filter mode:     {settings.filter_mode}")

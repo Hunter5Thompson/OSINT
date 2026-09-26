@@ -3,82 +3,25 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 
-import httpx
-import redis.asyncio as aioredis
 import structlog
-from qdrant_client import AsyncQdrantClient
 
-from config import settings
+from gdelt_raw.clients import open_clients
 from gdelt_raw.config import get_settings
 from gdelt_raw.run import run_forward
-from gdelt_raw.state import GDELTState
-from gdelt_raw.writers.neo4j_writer import Neo4jWriter
-from gdelt_raw.writers.qdrant_writer import (
-    QdrantWriter,
-    default_tei_embed,
-    default_tei_embed_batch,
-)
-from graph_integrity.spatial_normalizer import load_active_normalization_index
 
 log = structlog.get_logger(__name__)
 
 
 async def run_once() -> None:
-    gdelt_cfg = get_settings()
-    spatial_index = load_active_normalization_index(
-        settings.spatial_catalog_path,
-        crosswalk_path=settings.spatial_country_crosswalk_path,
-    )
-    r = aioredis.from_url(
-        os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-        decode_responses=True,
-    )
-    state = GDELTState(r)
-    neo4j = Neo4jWriter(
-        uri=os.getenv("NEO4J_URL", "bolt://localhost:7687"),
-        user=os.getenv("NEO4J_USER", "neo4j"),
-        password=os.getenv("NEO4J_PASSWORD", ""),
-        spatial_index=spatial_index,
-    )
-    qdrant_client = AsyncQdrantClient(
-        url=os.getenv("QDRANT_URL", "http://localhost:6333")
-    )
-    tei_url = os.getenv("TEI_EMBED_URL", "http://localhost:8001")
-
-    tei_client = httpx.AsyncClient(timeout=60.0)
-
-    async def embed(text: str) -> list[float]:
-        return await default_tei_embed(text, tei_url=tei_url)
-
-    async def embed_batch(texts: list[str]) -> list[list[float]]:
-        return await default_tei_embed_batch(texts, tei_url=tei_url, client=tei_client)
-
-    qdrant = QdrantWriter(
-        client=qdrant_client,
-        embed=embed,
-        embed_batch=embed_batch,
-        collection=settings.qdrant_collection,
-        embedding_dimensions=settings.embedding_dimensions,
-        enable_hybrid=settings.enable_hybrid,
-        spatial_index=spatial_index,
-    )
+    clients = await open_clients()
     try:
-        await neo4j.ensure_schema()
-        await run_forward(state, neo4j, qdrant, Path(gdelt_cfg.parquet_path))
+        await clients.neo4j.ensure_schema()
+        await run_forward(clients.state, clients.neo4j, clients.qdrant,
+                          Path(get_settings().parquet_path))
     finally:
-        try:
-            await neo4j.close()
-        finally:
-            try:
-                await qdrant.close()
-            finally:
-                try:
-                    await tei_client.aclose()
-                finally:
-                    await r.aclose()
+        await clients.aclose()
 
 
 def collect() -> None:
