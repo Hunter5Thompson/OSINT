@@ -222,3 +222,125 @@ def test_build_gdacs_payload_stamps_provenance_and_no_published():
     assert "credibility_score" not in payload
     assert "ingested_at" in payload
     assert "ingested_epoch" in payload
+
+
+# ── GDACS MAP API schema change (2026-09): eventtype required, 1 per call,
+#    multi-geometry features per event, severity moved to severitydata ────────
+
+
+def _feature(eid, geom_type, coords, cls=None, **props):
+    p = {"eventtype": "TC", "eventid": eid, "eventname": "Storm X",
+         "alertlevel": "Orange", "country": "Japan",
+         "fromdate": "2026-09-20T00:00:00", "todate": "2026-09-25T00:00:00", **props}
+    if cls is not None:
+        p["Class"] = cls
+    return {"type": "Feature", "geometry": {"type": geom_type, "coordinates": coords},
+            "properties": p}
+
+
+MAP_TC_MULTIGEOM = {
+    "type": "FeatureCollection",
+    "features": [
+        _feature(7, "LineString", [[130.0, 20.0], [131.0, 21.0]], cls="Line_Line_0"),
+        _feature(7, "Polygon", [[[130, 20], [131, 20], [131, 21], [130, 20]]], cls="Poly_Cones"),
+        _feature(7, "Point", [131.5, 21.5], cls="Point_Polygon_Point_0"),
+        _feature(7, "Point", [132.0, 22.0], cls="Point_Centroid",
+                 severitydata={"severity": 83.3, "severitytext": "Tropical Storm",
+                               "severityunit": "km/h"}),
+    ],
+}
+
+
+class TestGDACSMapSchema:
+    def test_one_event_per_eventid_using_centroid(self, collector):
+        events = collector._parse_features(MAP_TC_MULTIGEOM)
+        assert len(events) == 1
+        assert events[0]["gdacs_id"] == "TC_7"
+        assert (events[0]["latitude"], events[0]["longitude"]) == (22.0, 132.0)
+
+    def test_non_point_geometry_never_becomes_an_event(self, collector):
+        data = {"type": "FeatureCollection", "features": [
+            _feature(8, "LineString", [[1.0, 2.0], [3.0, 4.0]]),
+            _feature(9, "Polygon", [[[1, 2], [3, 4], [5, 6], [1, 2]]]),
+        ]}
+        assert collector._parse_features(data) == []
+
+    def test_severity_read_from_severitydata(self, collector):
+        events = collector._parse_features(MAP_TC_MULTIGEOM)
+        assert events[0]["severity"] == 83.3
+
+    def test_empty_eventname_falls_back_to_name(self, collector):
+        data = {"type": "FeatureCollection", "features": [
+            _feature(10, "Point", [168.4, -21.3], cls="Point_Centroid", eventtype="EQ",
+                     eventname="", name="Earthquake in New Caledonia"),
+        ]}
+        assert collector._parse_features(data)[0]["event_name"] == "Earthquake in New Caledonia"
+
+
+def _resp(status, body=None):
+    r = MagicMock()
+    r.status_code = status
+    r.json.return_value = body if body is not None else {}
+    if status >= 400:
+        import httpx
+        req = httpx.Request("GET", "https://www.gdacs.org/x")
+        r.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "err", request=req, response=httpx.Response(status, request=req))
+    else:
+        r.raise_for_status = MagicMock()
+    return r
+
+
+def _wire_collect(collector):
+    collector._ensure_collection = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._embed = AsyncMock(return_value=[0.0] * 1024)
+    collector.qdrant.retrieve.return_value = [MagicMock()]  # existing → no LLM path
+
+
+@pytest.mark.asyncio
+async def test_collect_requests_each_event_type_separately(collector):
+    from feeds.gdacs_collector import GDACS_EVENT_TYPES
+
+    _wire_collect(collector)
+    collector.http.get = AsyncMock(return_value=_resp(200, {"features": []}))
+    await collector.collect()
+
+    requested = [c.kwargs["params"]["eventtype"] for c in collector.http.get.call_args_list]
+    assert requested == list(GDACS_EVENT_TYPES)
+    assert {"EQ", "TC", "FL", "VO", "DR", "WF"} <= set(GDACS_EVENT_TYPES)
+
+
+@pytest.mark.asyncio
+async def test_collect_isolates_failing_event_types(collector):
+    """VO answers 404 when MAP has nothing; a 500 on another type must not
+    drop the events of the healthy types."""
+    _wire_collect(collector)
+
+    def by_type(url, *, params, timeout):
+        t = params["eventtype"]
+        if t == "VO":
+            return _resp(404)
+        if t == "FL":
+            return _resp(500)
+        if t == "TC":
+            return _resp(200, MAP_TC_MULTIGEOM)
+        return _resp(200, {"features": []})
+
+    collector.http.get = AsyncMock(side_effect=by_type)
+    await collector.collect()
+
+    collector._batch_upsert.assert_awaited_once()
+    points = collector._batch_upsert.await_args.args[0]
+    assert [p.payload["gdacs_id"] for p in points] == ["TC_7"]
+
+
+@pytest.mark.asyncio
+async def test_collect_dedupes_events_across_responses(collector):
+    _wire_collect(collector)
+    collector.http.get = AsyncMock(return_value=_resp(200, SAMPLE_GEOJSON))
+    await collector.collect()
+
+    points = collector._batch_upsert.await_args.args[0]
+    ids = [p.payload["gdacs_id"] for p in points]
+    assert sorted(ids) == ["EQ_1001", "TC_2002"]

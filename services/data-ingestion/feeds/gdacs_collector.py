@@ -19,6 +19,22 @@ from feeds.provenance import dataset_provenance
 log = structlog.get_logger("gdacs_collector")
 
 _GDACS_URL = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP"
+# The MAP endpoint requires exactly one ``eventtype`` per request (2026-09 API
+# change: a bare call answers 400 "Eventtype is required.").
+GDACS_EVENT_TYPES: tuple[str, ...] = ("EQ", "TC", "FL", "VO", "DR", "WF")
+_CENTROID_CLASS = "Point_Centroid"
+
+
+def _severity(props: dict[str, Any]) -> float:
+    """Legacy ``severity.value`` or current ``severitydata.severity``; 0.0 if unusable."""
+    for key, field in (("severity", "value"), ("severitydata", "severity")):
+        obj = props.get(key)
+        if isinstance(obj, dict) and obj.get(field) is not None:
+            try:
+                return float(obj[field])
+            except (TypeError, ValueError):
+                return 0.0
+    return 0.0
 
 
 def build_gdacs_payload(event: dict, description: str) -> dict:
@@ -39,50 +55,65 @@ class GDACSCollector(BaseCollector):
     """Collect disaster alerts from GDACS API."""
 
     def _parse_features(self, data: dict[str, Any]) -> list[dict[str, Any]]:
-        events: list[dict[str, Any]] = []
+        """One event per GDACS event id, located at its point centroid.
+
+        MAP responses carry several features per event (centroid, forecast
+        tracks, cone polygons, buffer points); only a ``Point`` feature is a
+        location, and when ``Class`` is present only ``Point_Centroid`` is.
+        """
+        events: dict[str, dict[str, Any]] = {}
         for feature in data.get("features", []):
             props = feature.get("properties", {})
-            geom = feature.get("geometry", {})
+            geom = feature.get("geometry") or {}
             coords = geom.get("coordinates", [])
-            if len(coords) < 2:
+            if geom.get("type") != "Point" or len(coords) < 2:
+                continue
+            if props.get("Class", _CENTROID_CLASS) != _CENTROID_CLASS:
                 continue
 
             event_type = str(props.get("eventtype", ""))
             event_id = str(props.get("eventid", ""))
-            severity_obj = props.get("severity", {})
-            try:
-                severity = (
-                    float(severity_obj.get("value", 0)) if isinstance(severity_obj, dict) else 0.0
-                )
-            except (TypeError, ValueError):
-                severity = 0.0
+            gdacs_id = f"{event_type}_{event_id}"
+            if gdacs_id in events:
+                continue
 
-            events.append({
-                "gdacs_id": f"{event_type}_{event_id}",
+            events[gdacs_id] = {
+                "gdacs_id": gdacs_id,
                 "event_type": event_type,
-                "event_name": str(props.get("eventname", "")),
+                "event_name": str(props.get("eventname") or props.get("name") or ""),
                 "alert_level": str(props.get("alertlevel", "")),
-                "severity": severity,
+                "severity": _severity(props),
                 "country": str(props.get("country", "")),
                 "latitude": coords[1],
                 "longitude": coords[0],
                 "from_date": str(props.get("fromdate", "")),
                 "to_date": str(props.get("todate", "")),
-            })
-        return events
+            }
+        return list(events.values())
+
+    async def _fetch_event_type(self, event_type: str) -> list[dict[str, Any]]:
+        """Fetch one event type; a failure only drops that type."""
+        try:
+            resp = await self.http.get(
+                _GDACS_URL, params={"eventtype": event_type}, timeout=60
+            )
+            if resp.status_code == 404:  # MAP answers 404 when a type has no events
+                log.info("gdacs_no_events", event_type=event_type)
+                return []
+            resp.raise_for_status()
+            return self._parse_features(resp.json())
+        except Exception:
+            log.exception("gdacs_fetch_failed", event_type=event_type)
+            return []
 
     async def collect(self) -> None:
         await self._ensure_collection()
 
-        try:
-            resp = await self.http.get(_GDACS_URL, timeout=60)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception:
-            log.exception("gdacs_fetch_failed")
-            return
-
-        events = self._parse_features(data)
+        by_id: dict[str, dict[str, Any]] = {}
+        for event_type in GDACS_EVENT_TYPES:
+            for event in await self._fetch_event_type(event_type):
+                by_id.setdefault(event["gdacs_id"], event)
+        events = list(by_id.values())
         log.info("gdacs_parsed", count=len(events))
 
         if not events:
