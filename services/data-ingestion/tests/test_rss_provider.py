@@ -68,3 +68,10 @@ def test_build_rss_payload_published_none_when_missing():
     assert "published_at" not in payload
     assert payload["published"] is None
     assert payload["spatial_about_scope_revision_tokens"] == []
+
+
+def test_reliefweb_rss_is_not_polled():
+    """ReliefWeb's WAF blocks our RSS polling (406 "Blocked due to bot activity");
+    its official API needs an org-approved appname. Dropped 2026-09-26 — it had
+    never contributed a single point to odin_intel."""
+    assert not any("reliefweb.int" in f["url"] for f in RSS_FEEDS)
