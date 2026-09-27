@@ -2,6 +2,7 @@
   "contract_version": 1,
   "scope_revision_token": {
     "prefix": "sr1",
+    "array_order": "country-admin1-admin2-then-scope-key-and-revision",
     "separator": "|",
     "maximum_ascii_bytes": 229,
     "about_field": "spatial_about_scope_revision_tokens",

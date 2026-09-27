@@ -1073,3 +1073,23 @@ async def test_input_fingerprint_supports_named_dense_and_sparse_vectors():
     )
     assert report["input_fingerprint"]
     assert store.replace_calls == []
+
+
+@pytest.mark.asyncio
+async def test_preview_accepts_canonical_parent_before_child_tokens():
+    from rag.spatial_reenrich import ReenrichmentJob, preview_spatial_reenrichment
+
+    class ParentChildProjector:
+        def project(self, point, job):
+            projection = _projection(job.target_projection_revision)
+            projection['spatial_occurrence_scope_revision_tokens'] = [
+                'sr1|country:UKR|spatial-derive-v1-d30efa07e141',
+                'sr1|admin1:iso3166-2:UA-14|spatial-derive-v1-4d1de888e0c7',
+            ]
+            return projection
+
+    report = await preview_spatial_reenrichment(
+        FakeStore([{'source': 'gdelt_gkg'}]), ParentChildProjector(),
+        ReenrichmentJob('gdelt_gkg', 'spatial-projection-v1-111111111111'),
+    )
+    assert report['complete'] is True

@@ -59,8 +59,8 @@ async def test_source_projector_runs_through_real_qdrant_preview_engine(monkeypa
                         payload={
                             "source": "usgs",
                             "usgs_id": "one",
-                            "latitude": 33.3152,
-                            "longitude": 44.3661,
+                            "latitude": 48.0,
+                            "longitude": 37.8,
                         },
                     ),
                 ),
