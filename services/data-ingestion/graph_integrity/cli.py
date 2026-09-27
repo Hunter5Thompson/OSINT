@@ -12,6 +12,7 @@ from graph_integrity import (
     cleanup_null_island,
     geo_gdelt,
     geo_incident,
+    materialize_aircraft_theatre_edges,
     reenrich_spatial_scope,
     rekey_incident_locations,
     report,
@@ -56,7 +57,21 @@ def build_parser() -> argparse.ArgumentParser:
         dest="lanes",
     )
     _add_spatial_batch_arguments(spatial_reenrich)
+    theatre = sub.add_parser("materialize-aircraft-theatre-edges")
+    theatre.add_argument("--batch-size", type=int, default=500)
+    theatre.add_argument("--report-out", type=Path)
+    theatre.add_argument("--approved-report", type=Path)
+    _add_mode_arguments(theatre)
+    theatre_revert = sub.add_parser("revert-aircraft-theatre-edges")
+    theatre_revert.add_argument("--batch-size", type=int, default=500)
+    _add_mode_arguments(theatre_revert)
     return p
+
+
+def _add_mode_arguments(parser: argparse.ArgumentParser) -> None:
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--apply", action="store_true")
 
 
 def _add_spatial_batch_arguments(parser: argparse.ArgumentParser) -> None:
@@ -64,9 +79,7 @@ def _add_spatial_batch_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--report-out", type=Path)
     parser.add_argument("--approved-report", type=Path)
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--dry-run", action="store_true")
-    mode.add_argument("--apply", action="store_true")
+    _add_mode_arguments(parser)
 
 
 async def _amain(args: argparse.Namespace) -> None:
@@ -164,6 +177,28 @@ async def _amain(args: argparse.Namespace) -> None:
 
             result = await _run_reviewed(run_reenrichment, args)
             _emit_report(result, args.report_out)
+        elif args.command == "materialize-aircraft-theatre-edges":
+            spatial_index = load_active_normalization_index(
+                cfg.spatial_catalog_path,
+                crosswalk_path=cfg.spatial_country_crosswalk_path,
+            )
+
+            async def run_materialization(*, dry_run: bool) -> dict[str, Any]:
+                return await materialize_aircraft_theatre_edges.run(
+                    client,
+                    spatial_index,
+                    batch_size=args.batch_size,
+                    dry_run=dry_run,
+                )
+
+            result = await _run_reviewed(run_materialization, args)
+            _emit_report(result, args.report_out)
+        elif args.command == "revert-aircraft-theatre-edges":
+            n = await materialize_aircraft_theatre_edges.revert(
+                client, batch_size=args.batch_size, dry_run=args.dry_run
+            )
+            suffix = "materialized (dry-run)" if args.dry_run else "reverted"
+            print(f"revert-aircraft-theatre-edges: {n} edges {suffix}")
     finally:
         await client.close()
 

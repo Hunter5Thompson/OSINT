@@ -114,3 +114,24 @@ async def test_apply_without_reviewed_dry_run_is_rejected_before_runner() -> Non
         await _run_reviewed(runner, args)
 
     runner.assert_not_awaited()
+
+
+def test_aircraft_theatre_materialization_cli_requires_explicit_mode():
+    parser = build_parser()
+    args = parser.parse_args(
+        ["materialize-aircraft-theatre-edges", "--dry-run", "--report-out", "r.json"]
+    )
+    assert args.dry_run is True and args.apply is False
+    assert args.batch_size == 500
+    with pytest.raises(SystemExit):
+        parser.parse_args(["materialize-aircraft-theatre-edges"])
+    with pytest.raises(SystemExit):
+        parser.parse_args(["materialize-aircraft-theatre-edges", "--dry-run", "--apply"])
+
+
+def test_aircraft_theatre_revert_cli_requires_explicit_mode():
+    parser = build_parser()
+    assert parser.parse_args(["revert-aircraft-theatre-edges", "--dry-run"]).dry_run is True
+    assert parser.parse_args(["revert-aircraft-theatre-edges", "--apply"]).apply is True
+    with pytest.raises(SystemExit):
+        parser.parse_args(["revert-aircraft-theatre-edges"])
