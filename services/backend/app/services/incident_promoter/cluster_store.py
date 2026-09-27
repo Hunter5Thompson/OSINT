@@ -182,7 +182,7 @@ class ClusterStore:
         rule_based = _apply_escalation_rule(existing.detector_id, next_count)
         new_severity = _max_severity(_max_severity(existing.severity, hit.severity), rule_based)
         try:
-            incident = await incident_store.apply_signal_update(
+            mutation = await incident_store.apply_signal_update(
                 existing.incident_id,
                 timeline_event=update_event,
                 severity=new_severity,
@@ -197,22 +197,36 @@ class ClusterStore:
                 error=str(exc),
             )
             return
-        if incident is None:
+        incident = mutation.incident
+        if mutation.status == "not_found" or incident is None:
+            await self.drop_cluster(
+                hit.cluster_key, expected_incident_id=existing.incident_id
+            )
+            return
+        if mutation.status != "applied" or incident.status.value != "open":
+            await self.sync_incident_status(
+                incident_id=existing.incident_id, status=incident.status.value
+            )
             return
         async with self._lock:
-            existing.hit_count = next_count
-            existing.last_signal_ts = now
-            existing.severity = new_severity
-            existing.contributing_signal_ids = (
-                existing.contributing_signal_ids + list(hit.contributing_signal_ids)
+            current = self._by_key.get(hit.cluster_key)
+            if current is None or current.incident_id != existing.incident_id:
+                return
+            if current.incident_status != "open":
+                return
+            current.hit_count += max(1, len(hit.contributing_signal_ids))
+            current.last_signal_ts = max(current.last_signal_ts, now)
+            current.severity = _max_severity(current.severity, incident.severity)
+            current.contributing_signal_ids = (
+                current.contributing_signal_ids + list(hit.contributing_signal_ids)
             )[-50:]
         incident_event_stream.publish("incident.update", incident)
         logger.info(
             "promoter_cluster_updated",
             cluster_key=hit.cluster_key,
             incident_id=incident.id,
-            hit_count=existing.hit_count,
-            severity=new_severity,
+            hit_count=current.hit_count,
+            severity=current.severity,
         )
 
     async def _handle_create(
@@ -331,6 +345,18 @@ class ClusterStore:
             state.incident_status = "promoted"
         logger.info("promoter_mark_promoted", cluster_key=cluster_key, incident_id=incident_id)
 
+    async def sync_incident_status(self, incident_id: str, *, status: str) -> None:
+        """Reflect an observed terminal DB state without listener/cooldown effects."""
+        async with self._lock:
+            cluster_key = self._by_incident_id.get(incident_id)
+            state = self._by_key.get(cluster_key) if cluster_key is not None else None
+            if state is None:
+                return
+            if status == "promoted":
+                state.incident_status = "promoted"
+            elif status in {"silenced", "closed"}:
+                state.incident_status = "terminal"
+
     async def mark_silenced(self, incident_id: str, *, until: datetime) -> None:
         """Mark a cluster as silenced: remove state, record cooldown, fire listeners."""
         async with self._lock:
@@ -370,9 +396,18 @@ class ClusterStore:
         expired = [k for k, t in self._cooldowns.items() if t <= now]
         return SweepSnapshot(stale_open, stale_promoted, expired)
 
-    async def drop_cluster(self, cluster_key: str) -> None:
+    async def drop_cluster(
+        self, cluster_key: str, *, expected_incident_id: str | None = None
+    ) -> None:
         """Remove a cluster (state + mapping) and fire termination listeners."""
         async with self._lock:
+            state = self._by_key.get(cluster_key)
+            if (
+                state is not None
+                and expected_incident_id is not None
+                and state.incident_id != expected_incident_id
+            ):
+                return
             state = self._by_key.pop(cluster_key, None)
             if state is not None:
                 self._by_incident_id.pop(state.incident_id, None)

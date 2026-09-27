@@ -231,6 +231,131 @@ async def test_sweeper_closes_stale_open_and_drops_promoted(
     assert promoted_record.status == IncidentStatus.PROMOTED
 
 
+@pytest.mark.parametrize(
+    ("database_status", "expected_local", "expected_present"),
+    [
+        ("closed", None, False),
+        ("promoted", "promoted", True),
+        ("silenced", "terminal", True),
+        ("missing", None, False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_sweeper_syncs_terminal_race_without_false_close_or_listener_reset(
+    fake_clock, fake_incident_store, fake_incident_event_stream,
+    database_status, expected_local, expected_present,
+):
+    from app.models.incident import IncidentStatus, IncidentTimelineEvent
+    from app.services.incident_promoter.cluster_store import ClusterStore
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.base import ClusterHit
+    from app.services.incident_promoter.promoter import Promoter
+
+    cfg = PromoterConfig.from_env()
+    store = ClusterStore(clock=fake_clock)
+    key = "firms:geo:7.0:7.0"
+    hit = ClusterHit(
+        cluster_key=key, detector_id="firms", incident_kind="firms.cluster",
+        title="sweeper race", severity="high", coords=(7.0, 7.0), location="",
+        sources_to_merge=[], layer_hints_to_merge=["auto_promoter:v1"],
+        timeline_event=IncidentTimelineEvent(t_offset_s=0.0, kind="trigger"),
+        contributing_signal_ids=["x"],
+    )
+    await store.handle(hit, incident_store=fake_incident_store,
+                       incident_event_stream=fake_incident_event_stream)
+    state = store.get_by_cluster_key(key)
+    assert state is not None
+    terminated: list[tuple[str, object]] = []
+    store.add_termination_listener(
+        lambda cluster_key, suppress_until=None: terminated.append(
+            (cluster_key, suppress_until)
+        )
+    )
+    if database_status == "missing":
+        fake_incident_store._by_id.pop(state.incident_id)
+    else:
+        terminal_status = IncidentStatus(database_status)
+        await fake_incident_store.close_incident(state.incident_id, terminal_status)
+    fake_clock.advance(cfg.quiet_window_sec + 1)
+    promoter = Promoter(
+        signal_stream=None, cluster_store=store, incident_store=fake_incident_store,
+        incident_event_stream=fake_incident_event_stream, config=cfg, clock=fake_clock,
+        detectors=[],
+    )
+
+    await promoter._sweep_once()  # noqa: SLF001
+
+    local = store.get_by_cluster_key(key)
+    assert (local is not None) is expected_present
+    if local is not None:
+        assert local.incident_status == expected_local
+    assert fake_incident_event_stream.types().count("incident.close") == 0
+    if database_status in {"closed", "missing"}:
+        assert terminated == [(key, None)]
+    else:
+        assert terminated == []
+    assert store.cooldowns() == {}
+
+
+@pytest.mark.asyncio
+async def test_late_sweeper_not_found_cannot_drop_replacement_cluster(
+    fake_clock, fake_incident_store, fake_incident_event_stream
+):
+    import asyncio
+    from dataclasses import replace
+
+    from app.models.incident import IncidentTimelineEvent
+    from app.services.incident_promoter.cluster_store import ClusterStore
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.base import ClusterHit
+    from app.services.incident_promoter.promoter import Promoter
+    from app.services.incident_store import MutationResult
+
+    cfg = PromoterConfig.from_env()
+    store = ClusterStore(clock=fake_clock)
+    key = "firms:geo:8.0:8.0"
+    hit = ClusterHit(
+        cluster_key=key, detector_id="firms", incident_kind="firms.cluster",
+        title="old sweeper state", severity="high", coords=(8.0, 8.0), location="",
+        sources_to_merge=[], layer_hints_to_merge=["auto_promoter:v1"],
+        timeline_event=IncidentTimelineEvent(t_offset_s=0, kind="trigger"),
+        contributing_signal_ids=["x"],
+    )
+    await store.handle(hit, incident_store=fake_incident_store,
+                       incident_event_stream=fake_incident_event_stream)
+    old_state = store.get_by_cluster_key(key)
+    assert old_state is not None
+    fake_clock.advance(cfg.quiet_window_sec + 1)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class DelayedMissingStore:
+        async def close_incident(self, *_args, **_kwargs):
+            entered.set()
+            await release.wait()
+            return MutationResult("not_found", None)
+
+    promoter = Promoter(
+        signal_stream=None, cluster_store=store, incident_store=DelayedMissingStore(),
+        incident_event_stream=fake_incident_event_stream, config=cfg, clock=fake_clock,
+        detectors=[],
+    )
+    sweep_task = asyncio.create_task(promoter._sweep_once())  # noqa: SLF001
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    await store.drop_cluster(key, expected_incident_id=old_state.incident_id)
+    await store.handle(
+        replace(hit, title="replacement sweeper state", contributing_signal_ids=["new"]),
+        incident_store=fake_incident_store,
+        incident_event_stream=fake_incident_event_stream,
+    )
+    replacement = store.get_by_cluster_key(key)
+    assert replacement is not None and replacement.incident_id != old_state.incident_id
+    release.set()
+    await sweep_task
+
+    assert store.get_by_cluster_key(key).incident_id == replacement.incident_id
+
+
 async def test_rehydrate_preserves_detector_id_for_escalation(
     fake_clock, fake_incident_store, fake_incident_event_stream, signal_envelope_factory
 ):

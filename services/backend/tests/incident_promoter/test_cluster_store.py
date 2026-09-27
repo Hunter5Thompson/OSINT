@@ -84,6 +84,230 @@ async def test_handle_create_path(fake_clock, fake_incident_store, fake_incident
 
 
 @pytest.mark.asyncio
+async def test_reordered_applied_updates_increment_local_count_and_never_lower_severity(
+    fake_clock, fake_incident_store, fake_incident_event_stream
+):
+    import asyncio
+    from dataclasses import replace
+
+    from app.models.incident import IncidentTimelineEvent
+    from app.services.incident_promoter.cluster_store import ClusterStore
+    from app.services.incident_promoter.detectors.base import ClusterHit
+    from app.services.incident_store import MutationResult
+
+    key = "firms:geo:48.0:37.8"
+    ignition = ClusterHit(
+        cluster_key=key, detector_id="firms", incident_kind="firms.cluster",
+        title="Ignition", severity="high", coords=(48.0, 37.8), location="",
+        sources_to_merge=["FIRMS"], layer_hints_to_merge=["firms", "auto_promoter:v1"],
+        timeline_event=IncidentTimelineEvent(t_offset_s=0, kind="trigger", text="seed"),
+        contributing_signal_ids=["a", "b", "c"],
+    )
+    store = ClusterStore(clock=fake_clock)
+    await store.handle(
+        ignition,
+        incident_store=fake_incident_store,
+        incident_event_stream=fake_incident_event_stream,
+    )
+    first_entered = asyncio.Event()
+    release_first = asyncio.Event()
+    calls = 0
+
+    class ReorderedStore:
+        async def apply_signal_update(self, incident_id, *, timeline_event, severity,
+                                      sources_to_merge, layer_hints_to_merge):
+            nonlocal calls
+            calls += 1
+            current = fake_incident_store.get(incident_id)
+            updated = current.model_copy(update={
+                "timeline": [*current.timeline, timeline_event],
+                "severity": severity,
+                "sources": list(dict.fromkeys([*current.sources, *sources_to_merge])),
+                "layer_hints": list(dict.fromkeys([*current.layer_hints, *layer_hints_to_merge])),
+            })
+            fake_incident_store._by_id[incident_id] = updated
+            if calls == 1:
+                first_entered.set()
+                await release_first.wait()
+            return MutationResult("applied", updated)
+
+    first_hit = replace(
+        ignition,
+        title="delayed high",
+        severity="high",
+        timeline_event=IncidentTimelineEvent(t_offset_s=1, kind="signal", text="high"),
+        contributing_signal_ids=["d"],
+    )
+    second_hit = replace(
+        ignition,
+        title="fast critical",
+        severity="critical",
+        timeline_event=IncidentTimelineEvent(t_offset_s=2, kind="signal", text="critical"),
+        contributing_signal_ids=["e"],
+    )
+    backend = ReorderedStore()
+    first = asyncio.create_task(store.handle(
+        first_hit, incident_store=backend, incident_event_stream=fake_incident_event_stream
+    ))
+    await asyncio.wait_for(first_entered.wait(), timeout=1)
+    await store.handle(
+        second_hit, incident_store=backend, incident_event_stream=fake_incident_event_stream
+    )
+    release_first.set()
+    await first
+
+    state = store.get_by_cluster_key(key)
+    assert state is not None
+    assert state.hit_count == 5
+    assert state.severity == "critical"
+    assert state.contributing_signal_ids == ["a", "b", "c", "e", "d"]
+    assert fake_incident_event_stream.types().count("incident.update") == 2
+
+
+@pytest.mark.asyncio
+async def test_late_open_result_does_not_publish_after_local_promotion(
+    fake_clock, fake_incident_store, fake_incident_event_stream
+):
+    import asyncio
+    from dataclasses import replace
+
+    from app.models.incident import IncidentTimelineEvent
+    from app.services.incident_promoter.detectors.base import ClusterHit
+    from app.services.incident_store import MutationResult
+
+    hit = ClusterHit(
+        cluster_key="firms:geo:48.0:37.8", detector_id="firms",
+        incident_kind="firms.cluster", title="Ignition", severity="high",
+        coords=(48.0, 37.8), location="", sources_to_merge=["FIRMS"],
+        layer_hints_to_merge=["firms", "auto_promoter:v1"],
+        timeline_event=IncidentTimelineEvent(t_offset_s=0, kind="trigger"),
+        contributing_signal_ids=["a"],
+    )
+    store = ClusterStore(clock=fake_clock)
+    await store.handle(hit, incident_store=fake_incident_store,
+                       incident_event_stream=fake_incident_event_stream)
+    state = store.get_by_cluster_key(hit.cluster_key)
+    assert state is not None
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class DelayedStore:
+        async def apply_signal_update(self, incident_id, **_kwargs):
+            entered.set()
+            await release.wait()
+            return MutationResult("applied", fake_incident_store.get(incident_id))
+
+    task = asyncio.create_task(
+        store.handle(
+            replace(hit, timeline_event=IncidentTimelineEvent(
+                t_offset_s=1, kind="signal", text="late"
+            )),
+            incident_store=DelayedStore(),
+            incident_event_stream=fake_incident_event_stream,
+        )
+    )
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    await store.mark_promoted(state.incident_id)
+    release.set()
+    await task
+
+    assert store.get_by_cluster_key(hit.cluster_key).incident_status == "promoted"
+    assert fake_incident_event_stream.types() == ["incident.open"]
+
+
+@pytest.mark.asyncio
+async def test_unchanged_terminal_update_syncs_local_state_without_update_event(
+    fake_clock, fake_incident_store, fake_incident_event_stream
+):
+    from dataclasses import replace
+
+    from app.models.incident import IncidentStatus, IncidentTimelineEvent
+    from app.services.incident_promoter.detectors.base import ClusterHit
+
+    hit = ClusterHit(
+        cluster_key="firms:geo:48.0:37.8", detector_id="firms",
+        incident_kind="firms.cluster", title="Ignition", severity="high",
+        coords=(48.0, 37.8), location="", sources_to_merge=["FIRMS"],
+        layer_hints_to_merge=["firms", "auto_promoter:v1"],
+        timeline_event=IncidentTimelineEvent(t_offset_s=0, kind="trigger"),
+        contributing_signal_ids=["a"],
+    )
+    store = ClusterStore(clock=fake_clock)
+    await store.handle(hit, incident_store=fake_incident_store,
+                       incident_event_stream=fake_incident_event_stream)
+    state = store.get_by_cluster_key(hit.cluster_key)
+    assert state is not None
+    await fake_incident_store.close_incident(state.incident_id, IncidentStatus.SILENCED)
+
+    await store.handle(
+        replace(hit, timeline_event=IncidentTimelineEvent(
+            t_offset_s=1, kind="signal", text="after silence"
+        )),
+        incident_store=fake_incident_store,
+        incident_event_stream=fake_incident_event_stream,
+    )
+
+    assert store.get_by_cluster_key(hit.cluster_key).incident_status == "terminal"
+    assert fake_incident_event_stream.types() == ["incident.open"]
+    assert store.cooldowns() == {}
+
+
+@pytest.mark.asyncio
+async def test_late_not_found_update_cannot_drop_replacement_cluster(
+    fake_clock, fake_incident_store, fake_incident_event_stream
+):
+    import asyncio
+    from dataclasses import replace
+
+    from app.models.incident import IncidentTimelineEvent
+    from app.services.incident_promoter.detectors.base import ClusterHit
+    from app.services.incident_store import MutationResult
+
+    hit = ClusterHit(
+        cluster_key="firms:geo:48.0:37.8", detector_id="firms",
+        incident_kind="firms.cluster", title="old", severity="high",
+        coords=(48.0, 37.8), location="", sources_to_merge=["FIRMS"],
+        layer_hints_to_merge=["firms", "auto_promoter:v1"],
+        timeline_event=IncidentTimelineEvent(t_offset_s=0, kind="trigger"),
+        contributing_signal_ids=["a"],
+    )
+    store = ClusterStore(clock=fake_clock)
+    await store.handle(hit, incident_store=fake_incident_store,
+                       incident_event_stream=fake_incident_event_stream)
+    old_state = store.get_by_cluster_key(hit.cluster_key)
+    assert old_state is not None
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class DelayedMissingStore:
+        async def apply_signal_update(self, *_args, **_kwargs):
+            entered.set()
+            await release.wait()
+            return MutationResult("not_found", None)
+
+    old_task = asyncio.create_task(
+        store.handle(
+            replace(hit, title="old delayed", timeline_event=IncidentTimelineEvent(
+                t_offset_s=1, kind="signal", text="old"
+            )),
+            incident_store=DelayedMissingStore(),
+            incident_event_stream=fake_incident_event_stream,
+        )
+    )
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    await store.drop_cluster(hit.cluster_key, expected_incident_id=old_state.incident_id)
+    replacement = replace(hit, title="replacement", contributing_signal_ids=["new"])
+    await store.handle(replacement, incident_store=fake_incident_store,
+                       incident_event_stream=fake_incident_event_stream)
+    new_state = store.get_by_cluster_key(hit.cluster_key)
+    assert new_state is not None and new_state.incident_id != old_state.incident_id
+    release.set()
+    await old_task
+
+    assert store.get_by_cluster_key(hit.cluster_key).incident_id == new_state.incident_id
+
+
+@pytest.mark.asyncio
 async def test_invalid_create_releases_reservation_and_next_valid_hit_creates(
     fake_clock, fake_incident_store, fake_incident_event_stream
 ):
@@ -162,7 +386,8 @@ async def test_failed_create_retries_same_id_and_keeps_ignition_metadata(
             })
             assert isinstance(updated, Incident)
             self.records[incident_id] = updated
-            return updated
+            from app.services.incident_store import MutationResult
+            return MutationResult("applied", updated)
 
     store = ClusterStore(clock=fake_clock)
     incident_store = PersistThenFailStore()
@@ -247,7 +472,8 @@ async def test_retry_accumulates_distinct_hits_across_multiple_create_failures(
                 "layer_hints": list(dict.fromkeys([*current.layer_hints, *layer_hints_to_merge])),
             })
             self.records[incident_id] = updated
-            return updated
+            from app.services.incident_store import MutationResult
+            return MutationResult("applied", updated)
 
     key = "firms:geo:48.0:37.8"
     def make_hit(title: str, ids: list[str], *, kind: str) -> ClusterHit:

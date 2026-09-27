@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models.incident import Incident, IncidentStatus
+from app.services.incident_store import MutationResult
 
 
 def _fake_incident(id_: str) -> Incident:
@@ -35,8 +36,11 @@ def test_promote_calls_cluster_store_mark_promoted(monkeypatch):
         new=AsyncMock(return_value=_fake_incident("inc-promote-1")),
     ), patch(
         "app.routers.incidents.incident_store.close_incident",
-        new=AsyncMock(return_value=_fake_incident("inc-promote-1").model_copy(
-            update={"status": IncidentStatus.PROMOTED}
+        new=AsyncMock(return_value=MutationResult(
+            "applied",
+            _fake_incident("inc-promote-1").model_copy(
+                update={"status": IncidentStatus.PROMOTED}
+            ),
         )),
     ):
         with TestClient(app) as client:
@@ -77,8 +81,11 @@ def test_silence_calls_cluster_store_mark_silenced(monkeypatch):
         new=AsyncMock(return_value=_fake_incident("inc-silence-1")),
     ), patch(
         "app.routers.incidents.incident_store.close_incident",
-        new=AsyncMock(return_value=_fake_incident("inc-silence-1").model_copy(
-            update={"status": IncidentStatus.SILENCED}
+        new=AsyncMock(return_value=MutationResult(
+            "applied",
+            _fake_incident("inc-silence-1").model_copy(
+                update={"status": IncidentStatus.SILENCED}
+            ),
         )),
     ):
         with TestClient(app) as client:

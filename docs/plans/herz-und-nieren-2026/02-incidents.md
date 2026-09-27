@@ -18,7 +18,7 @@ Gemeinsamer Vertrag: [README](README.md). Alle Pfade relativ zu `services/backen
 
 ## ~~I02 — Reservierung und Ignition nach Create-Fehlern wiederholbar machen~~ — FACHLICH ABGENOMMEN
 
-**Review 2026-09-27:** Implementierungscommit `3528d50`, PR #132; keine offenen Findings. Unabhängig 108 Promoter-/Pipeline-/Store-Tests, Ruff, fokussiertes Mypy und Diff-Check bestanden. Stabile Create-ID und ursprünglicher Request bleiben bei Fehlern erhalten; neue Retry-Beiträge werden dedupliziert bis zur erfolgreichen Anlage gesammelt. Der interne create-only-Pfad setzt `incident_id_unique` voraus. Kein Live-DB-Nachweis, keine dauerhafte Outbox, keine Prozesscrash-Garantie oder allgemeine Update-Wiederholung. CI und Merge separat prüfen; der folgende Vertrag bleibt als Abschlussnachweis erhalten.
+**Review 2026-09-27:** Implementierungscommit `3528d50`, PR #132, gemergt als `a3fc29c` um `2026-09-27T17:23:57Z`; keine offenen Findings. Unabhängig 108 Promoter-/Pipeline-/Store-Tests, Ruff, fokussiertes Mypy und Diff-Check bestanden. Stabile Create-ID und ursprünglicher Request bleiben bei Fehlern erhalten; neue Retry-Beiträge werden dedupliziert bis zur erfolgreichen Anlage gesammelt. Der interne create-only-Pfad setzt `incident_id_unique` voraus. Kein Live-DB-Nachweis, keine dauerhafte Outbox, keine Prozesscrash-Garantie oder allgemeine Update-Wiederholung.
 
 **F-01 Recovery · P0 · M · nach I01.**
 
@@ -42,7 +42,11 @@ Gemeinsamer Vertrag: [README](README.md). Alle Pfade relativ zu `services/backen
 
 ## I04 — Incident-Mutationen in der Datenbank serialisieren
 
-**F-33 · P0 · L/Senior.** Zunächst konkreten Transaktionspatch entwerfen und reviewen; danach zwei Unterläufe Persistenz, dann Router/Promoter-Reaktionen.
+**Status 2026-09-27:** Umsetzung vollständig, gezielte und vollständige Backend-Checks
+grün; unabhängige Senior-Abnahme/Review offen. Transaktionsvertrag siehe
+[I04-Transaktionsentwurf](I04-transaction-design.md).
+
+**F-33 · P0 · L/Senior.** Vor Implementierung konkreten Transaktionspatch entwerfen und reviewen (erledigt); danach Unterlauf Persistenz, dann Router-/Promoter-Reaktionen.
 
 **Scope:** `app/services/incident_store.py`, `app/cypher/incident_write.py`, `app/services/neo4j_client.py` nur benötigte Async-Transaktionsschnittstelle, `app/routers/incidents.py`, `app/services/incident_promoter/{cluster_store,promoter}.py`; `tests/test_incident_store.py`, Router-/Promotertests und neuer isolierter Neo4j-Nebenläufigkeitstest.
 
