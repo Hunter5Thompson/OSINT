@@ -195,6 +195,7 @@ def test_shared_contract_pins_the_reviewed_ua14_pair_tokens() -> None:
     assert token_contract == {
         "prefix": "sr1",
         "separator": "|",
+        "array_order": "country-admin1-admin2-then-scope-key-and-revision",
         "maximum_ascii_bytes": 229,
         "about_field": "spatial_about_scope_revision_tokens",
         "occurrence_field": "spatial_occurrence_scope_revision_tokens",
