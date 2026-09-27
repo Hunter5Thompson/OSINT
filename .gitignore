@@ -50,3 +50,9 @@ training/**/artifacts/*
 !training/**/artifacts/spike-notes.md
 !training/**/artifacts/base-manifest.json
 !training/**/artifacts/gate-report.md
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# archify visual-check sidecars (screenshots, regenerable)
+*.visual-check.*
