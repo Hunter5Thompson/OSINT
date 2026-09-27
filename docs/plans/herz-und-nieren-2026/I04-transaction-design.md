@@ -1,7 +1,9 @@
 # HN-I04 incident mutation transaction design
 
-**State:** Senior design review approved on 2026-09-27. Implementation proceeds in two
-subruns: persistence and isolated Neo4j race proof first; then router/promoter reactions.
+**State:** Senior design and implementation review approved on 2026-09-27. Both
+subruns completed in commit `12b4842` (PR #133, merge pending). Independent validation:
+729 backend tests with `NEO4J_URL=bolt://127.0.0.1:1`, 12 isolated real Neo4j tests,
+Ruff, Mypy and diff checks passed. No outstanding review findings.
 
 ## Transaction contract
 

@@ -40,10 +40,15 @@ Gemeinsamer Vertrag: [README](README.md). Alle Pfade relativ zu `services/backen
 
 **GREEN:** einen konsistenten `now`-Wert für Anlage/last_seen nutzen und vor Eviction setzen bzw. erst nach vollständiger Initialisierung evicten. Kein pauschales Erhöhen der Kapazität, keine Änderung der Jaccard-/Ignition-Schwellen. Fake-Clock statt realer Wartezeiten.
 
-## I04 — Incident-Mutationen in der Datenbank serialisieren
+## ~~I04 — Incident-Mutationen in der Datenbank serialisieren~~ — FACHLICH ABGENOMMEN
 
-**Status 2026-09-27:** Umsetzung vollständig, gezielte und vollständige Backend-Checks
-grün; unabhängige Senior-Abnahme/Review offen. Transaktionsvertrag siehe
+**Review 2026-09-27:** Implementierungscommit `12b4842`, PR #133; keine offenen Findings.
+Unabhängig 729 Backend-Tests mit `NEO4J_URL=bolt://127.0.0.1:1`, zwölf echte
+Neo4j-Race-/Replay-Tests auf isolierter Neo4j 5.26.23, Ruff, Mypy (90 Quelldateien)
+und Diff-Check bestanden. Die Altcode-Negativkontrolle verlor einen Timeline-Eintrag;
+terminale Router-Noops lösten falsche lokale Aktionen aus. Keine Produktivdatenänderung
+oder Deployment; keine Prozesscrash-/Exactly-once-Garantie. CI und Merge separat prüfen.
+Transaktionsvertrag siehe
 [I04-Transaktionsentwurf](I04-transaction-design.md).
 
 **F-33 · P0 · L/Senior.** Vor Implementierung konkreten Transaktionspatch entwerfen und reviewen (erledigt); danach Unterlauf Persistenz, dann Router-/Promoter-Reaktionen.
