@@ -27,6 +27,11 @@ from app.services.spatial_catalog import (
 )
 
 _REHYDRATE_LIMIT = 500
+
+
+def _ordinal_ms(now: datetime) -> int:
+    """Epoch milliseconds. A modulo here wrapped rehydrate order about every 23 days."""
+    return int(now.timestamp() * 1000)
 _incident_spatial_catalog: SpatialCatalogLoader | None = None
 
 
@@ -158,7 +163,7 @@ async def get_incident(incident_id: str) -> Incident | None:
 async def create_incident(payload: IncidentCreateRequest) -> Incident:
     incident_id = f"inc-{uuid4().hex[:8]}"
     now = datetime.now(UTC)
-    ordinal = int(now.timestamp() * 1000) % 2_000_000_000
+    ordinal = _ordinal_ms(now)
     initial = IncidentTimelineEvent(
         t_offset_s=0.0,
         kind="trigger",
@@ -196,7 +201,7 @@ async def append_timeline_event(
         return None
     next_timeline = [*current.timeline, event]
     next_record = current.model_copy(update={"timeline": next_timeline})
-    ordinal = int(datetime.now(UTC).timestamp() * 1000) % 2_000_000_000
+    ordinal = _ordinal_ms(datetime.now(UTC))
     rows = await write_query(
         INCIDENT_UPSERT,
         _upsert_params(next_record, ordinal, await _incident_projection(next_record)),
@@ -233,7 +238,7 @@ async def apply_signal_update(
             "layer_hints": merged_hints,
         }
     )
-    ordinal = int(datetime.now(UTC).timestamp() * 1000) % 2_000_000_000
+    ordinal = _ordinal_ms(datetime.now(UTC))
     rows = await write_query(
         INCIDENT_UPSERT,
         _upsert_params(next_record, ordinal, await _incident_projection(next_record)),
@@ -257,7 +262,7 @@ async def close_incident(
     next_record = current.model_copy(
         update={"status": status, "closed_ts": when or datetime.now(UTC)}
     )
-    ordinal = int(datetime.now(UTC).timestamp() * 1000) % 2_000_000_000
+    ordinal = _ordinal_ms(datetime.now(UTC))
     rows = await write_query(
         INCIDENT_UPSERT,
         _upsert_params(next_record, ordinal, await _incident_projection(next_record)),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import ValidationError
 
 from app.config import settings
 from app.services.feed_freshness import FeedFreshnessReport, compute_feed_freshness
@@ -21,8 +22,11 @@ _CACHE_TTL_S = 60
 async def get_feed_freshness(request: Request) -> FeedFreshnessReport:
     cache = request.app.state.cache
     cached = await cache.get(_CACHE_KEY)
-    if cached is not None:
-        return FeedFreshnessReport(**cached)
+    if isinstance(cached, dict):
+        try:
+            return FeedFreshnessReport.model_validate(cached)
+        except ValidationError:
+            log.warning("feed_health_cache_invalid")
 
     try:
         qdrant = await get_qdrant_client()

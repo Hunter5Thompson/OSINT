@@ -4,6 +4,7 @@ import math
 import re
 
 import structlog
+from pydantic import ValidationError
 
 from app.models.satellite import Satellite
 from app.services.cache_service import CacheService
@@ -25,17 +26,46 @@ _COUNTRY_PREFIXES: dict[str, str] = {
 }
 
 
-def _detect_country(name: str) -> str | None:
-    """Detect operator country from satellite name prefix."""
+_COUNTRY_PREFIX_ITEMS = tuple(
+    sorted(_COUNTRY_PREFIXES.items(), key=lambda item: len(item[0]), reverse=True)
+)
+_MILITARY_PREFIXES = (
+    "MILSTAR",
+    "YAOGAN",
+    "COSMOS",
+    "SBIRS",
+    "NROL",
+    "NOSS",
+    "USA",
+    "DSP",
+    "WGS",
+)
+_RECON_PREFIXES = ("YAOGAN", "COSMOS", "NROL", "NOSS", "USA")
+
+
+def _has_prefix_token(name: str, prefix: str) -> bool:
+    """True when ``prefix`` starts the name and the next character is not a letter."""
     upper = name.upper()
-    for prefix, country in _COUNTRY_PREFIXES.items():
-        # Match "USA 169", "USA-169", "NROL-39", "COSMOS 2667" etc.
-        if upper.startswith(prefix):
-            # Ensure prefix is a word boundary (not middle of another word)
-            rest = upper[len(prefix):]
-            if not rest or not rest[0].isalpha():
-                return country
-    if "ISS" in upper:
+    token = prefix.upper()
+    if not upper.startswith(token):
+        return False
+    rest = upper[len(token) :]
+    return not rest or not rest[0].isalpha()
+
+
+def _has_word(name: str, word: str) -> bool:
+    return word.upper() in re.split(r"[^A-Z0-9]+", name.upper())
+
+
+def _detect_country(name: str) -> str | None:
+    """Detect operator country from a name prefix or a whole token.
+
+    ``ISS`` matches the station. ``SWISSCUBE`` and ``MISSION`` do not.
+    """
+    for prefix, country in _COUNTRY_PREFIX_ITEMS:
+        if _has_prefix_token(name, prefix):
+            return country
+    if _has_word(name, "ISS"):
         return "INT"
     return None
 
@@ -44,12 +74,11 @@ def _detect_type(name: str, category: str) -> str:
     """Detect satellite type from name + existing category."""
     upper = name.upper()
     if category == "military":
-        # Sub-classify military — recon or comms (no generic "military" value)
-        if any(k in upper for k in ("NROL", "USA ", "NOSS", "YAOGAN", "COSMOS 25")):
+        if any(_has_prefix_token(name, prefix) for prefix in _RECON_PREFIXES):
             return "recon"
-        if any(k in upper for k in ("MILSTAR", "AEHF", "MUOS", "WGS", "DSCS")):
+        if any(token in upper for token in ("MILSTAR", "AEHF", "MUOS", "WGS", "DSCS")):
             return "comms"
-        return "recon"  # conservative: unclassified mil → recon
+        return "recon"
     if category == "gps":
         return "gps"
     if category == "weather":
@@ -67,17 +96,31 @@ def _detect_type(name: str, category: str) -> str:
 CACHE_KEY = "satellites:tle"
 CACHE_TTL = 7200  # 2 hours — CelesTrak updates every 2h
 
-# Fetch multiple targeted groups instead of one giant "active" dump
-# to avoid CelesTrak rate-limiting. Each group is small and fast.
+# Targeted groups first. ``active`` is always merged afterwards and deduped by
+# NORAD id; a failure on that large group does not discard the targeted sets.
 _CELESTRAK_GROUPS = [
     "stations", "military", "weather", "science",
     "gps-ops", "galileo", "beidou", "glonass-operational",
     "starlink", "oneweb", "iridium-NEXT",
     "geo", "intelsat", "ses",
-    "active",  # fallback — try large group last
+    "active",
 ]
 
 _CELESTRAK_BASE = "https://celestrak.org/NORAD/elements/gp.php"
+
+
+def _satellites_from_cache(cached: object) -> list[Satellite] | None:
+    if not isinstance(cached, list) or not cached:
+        return None
+    satellites: list[Satellite] = []
+    for item in cached:
+        if not isinstance(item, dict):
+            continue
+        try:
+            satellites.append(Satellite.model_validate(item))
+        except ValidationError:
+            continue
+    return satellites or None
 
 
 async def get_satellites(
@@ -85,9 +128,9 @@ async def get_satellites(
     cache: CacheService,
 ) -> list[Satellite]:
     """Fetch satellite TLE data, cached for 2 hours."""
-    cached = await cache.get(CACHE_KEY)
-    if cached is not None:
-        return [Satellite(**s) for s in cached]
+    fresh = _satellites_from_cache(await cache.get(CACHE_KEY))
+    if fresh is not None:
+        return fresh
 
     satellites = await _fetch_celestrak_groups(proxy)
     if satellites:
@@ -98,38 +141,46 @@ async def get_satellites(
     return satellites
 
 
+def _celestrak_text_unusable(text: str) -> bool:
+    """Skip error pages. A real TLE set is kept even if a name contains ``error``."""
+    if "not updated" in text.lower():
+        return True
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("1 ") or stripped.startswith("2 "):
+            return False
+    lowered = text.lower()
+    return "error" in lowered or "invalid" in lowered or not text.strip()
+
+
 async def _fetch_celestrak_groups(proxy: ProxyService) -> list[Satellite]:
     """Fetch TLE data from multiple CelesTrak groups for broad coverage."""
     all_sats: dict[int, Satellite] = {}  # dedup by NORAD ID
+    failures = 0
+    last_error: Exception | None = None
 
     for group in _CELESTRAK_GROUPS:
-        # If we already have enough from targeted groups, skip "active"
-        if group == "active" and len(all_sats) > 500:
-            logger.info(
-                "celestrak_skip_active",
-                reason="enough from targeted groups",
-                count=len(all_sats),
-            )
-            break
-
+        url = f"{_CELESTRAK_BASE}?GROUP={group}&FORMAT=tle"
         try:
-            url = f"{_CELESTRAK_BASE}?GROUP={group}&FORMAT=tle"
             text = await proxy.get_text(url)
-
-            # CelesTrak returns error messages as plain text
-            if "not updated" in text.lower() or "error" in text.lower():
-                logger.debug("celestrak_group_unavailable", group=group)
-                continue
-
-            parsed = _parse_tle_text(text)
-            for sat in parsed:
-                if sat.norad_id not in all_sats:
-                    all_sats[sat.norad_id] = sat
-
-            logger.info("celestrak_group_fetched", group=group, count=len(parsed))
-        except Exception:
+        except Exception as exc:
+            failures += 1
+            last_error = exc
             logger.debug("celestrak_group_failed", group=group)
             continue
+
+        if _celestrak_text_unusable(text):
+            logger.debug("celestrak_group_unavailable", group=group)
+            continue
+
+        parsed = _parse_tle_text(text)
+        for sat in parsed:
+            if sat.norad_id not in all_sats:
+                all_sats[sat.norad_id] = sat
+        logger.info("celestrak_group_fetched", group=group, count=len(parsed))
+
+    if not all_sats and failures == len(_CELESTRAK_GROUPS) and last_error is not None:
+        raise last_error
 
     satellites = list(all_sats.values())
     logger.info("celestrak_total", count=len(satellites), groups_tried=len(_CELESTRAK_GROUPS))
@@ -152,7 +203,13 @@ def _parse_tle_text(text: str) -> list[Satellite]:
             continue
 
         norad_match = re.match(r"2\s+(\d+)", line2)
-        norad_id = int(norad_match.group(1)) if norad_match else 0
+        if norad_match is None:
+            i += 3
+            continue
+        norad_id = int(norad_match.group(1))
+        if norad_id <= 0:
+            i += 3
+            continue
 
         incl_match = re.search(r"^\d\s+\d+\s+([\d.]+)", line2)
         inclination = float(incl_match.group(1)) if incl_match else 0.0
@@ -185,17 +242,14 @@ def _parse_tle_text(text: str) -> list[Satellite]:
 
 def _categorize(name: str, inclination: float) -> str:
     """Categorize satellite based on name and orbit parameters."""
-    name_upper = name.upper()
-    if any(
-        k in name_upper
-        for k in ("USA ", "NROL", "NOSS", "MILSTAR", "DSP", "SBIRS", "WGS", "YAOGAN", "COSMOS 2")
-    ):
+    if any(_has_prefix_token(name, prefix) for prefix in _MILITARY_PREFIXES):
         return "military"
-    if any(k in name_upper for k in ("NOAA", "METEO", "GOES", "HIMAWARI", "FENGYUN")):
+    name_upper = name.upper()
+    if any(token in name_upper for token in ("NOAA", "METEO", "GOES", "HIMAWARI", "FENGYUN")):
         return "weather"
-    if any(k in name_upper for k in ("GPS", "NAVSTAR", "GLONASS", "GALILEO", "BEIDOU")):
+    if any(token in name_upper for token in ("GPS", "NAVSTAR", "GLONASS", "GALILEO", "BEIDOU")):
         return "gps"
-    if any(k in name_upper for k in ("ISS", "TIANGONG", "CSS")):
+    if any(_has_word(name, word) for word in ("ISS", "TIANGONG", "CSS")):
         return "station"
     if math.isclose(inclination, 0.0, abs_tol=5.0):
         return "geo"
