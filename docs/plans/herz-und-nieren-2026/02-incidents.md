@@ -2,9 +2,9 @@
 
 Gemeinsamer Vertrag: [README](README.md). Alle Pfade relativ zu `services/backend`, sofern anders bezeichnet.
 
-## ~~I01 — FIRMS-Produzent und Detektor auf denselben Koordinatenvertrag bringen~~ — FACHLICH ABGENOMMEN
+## ~~I01 — FIRMS-Produzent und Detektor auf denselben Koordinatenvertrag bringen~~ — GEMERGT
 
-**Review 2026-09-27:** Implementierungscommit `a900604`, PR #131; keine offenen Findings. Unabhängig 50 Backend- und 8 Collector-Tests bestanden. CI/Merge separat prüfen. Historische Incidents wurden nicht verändert; die Spezifikation bleibt als Abschlussnachweis erhalten.
+**Review 2026-09-27:** Implementierungscommit `a900604`, PR #131; keine offenen Findings. Unabhängig 50 Backend- und 8 Collector-Tests bestanden. PR #131 als `a45a13c` gemergt. Historische Incidents wurden nicht verändert; die Spezifikation bleibt als Abschlussnachweis erhalten.
 
 **F-01 Koordinaten · P0 · S.**
 
@@ -16,7 +16,9 @@ Gemeinsamer Vertrag: [README](README.md). Alle Pfade relativ zu `services/backen
 
 **Abnahme:** Detektor-/Router-/Collector-FIRMS-Tests. Kein Austausch von Latitude/Longitude im Frontend; dort sind Felder bereits richtig. Historische Incidents in separatem Datenpaket untersuchen.
 
-## I02 — Reservierung und Ignition nach Create-Fehlern wiederholbar machen
+## ~~I02 — Reservierung und Ignition nach Create-Fehlern wiederholbar machen~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27:** Implementierungscommit `3528d50`, PR #132; keine offenen Findings. Unabhängig 108 Promoter-/Pipeline-/Store-Tests, Ruff, fokussiertes Mypy und Diff-Check bestanden. Stabile Create-ID und ursprünglicher Request bleiben bei Fehlern erhalten; neue Retry-Beiträge werden dedupliziert bis zur erfolgreichen Anlage gesammelt. Der interne create-only-Pfad setzt `incident_id_unique` voraus. Kein Live-DB-Nachweis, keine dauerhafte Outbox, keine Prozesscrash-Garantie oder allgemeine Update-Wiederholung. CI und Merge separat prüfen; der folgende Vertrag bleibt als Abschlussnachweis erhalten.
 
 **F-01 Recovery · P0 · M · nach I01.**
 

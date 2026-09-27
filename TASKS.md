@@ -45,18 +45,20 @@ Router→Parser- und Collector-URL-Verträge decken asymmetrische Koordinaten, N
 und Grenzen ab. Senior-Review von `a900604` ohne offene Findings; unabhängig
 50 Backend- und 8 Collector-Tests bestanden. Historische Incidents unverändert.
 
-**HN-I02 — implementiert, unabhängiger Review offen:** Create-Fehler, Requestvalidierung
+**~~HN-I02~~ — fachlich abgenommen (PR #132, Merge offen):** Create-Fehler, Requestvalidierung
 und Cancellation lösen die Cluster-Reservierung verlässlich; ein validierter Pending-Create
 behält Request und interne Incident-ID für Wiederholungen innerhalb derselben
 ClusterStore-Lebensdauer. Der Incident-Store verwendet für diese ID ein create-only
 MERGE und gibt bei Wiederholung den aktuellen Record zurück. FIRMS-Beiträge aus dem
 fehlgeschlagenen Create bleiben auch über mehrere Fehlversuche erhalten; neue Retry-
-Signale werden dedupliziert und nach dem Create genau einmal als Updates angewandt.
+Signale werden dedupliziert und nach dem Create über den bestehenden Updatepfad
+verarbeitet; dessen eigene Persistenzfehler erhalten keine neue Retry-Garantie.
 Terminale/promoted Records werden nicht als open publiziert oder vom Promoter erneut
 geöffnet. Pending gilt nur für die Lebensdauer des ClusterStore; kein allgemeiner
 Update-Retry, keine dauerhafte Outbox oder Prozesscrash-Garantie. Gezielte Suite:
-107 Incident-Promoter-/Pipeline-/Store-Tests, Ruff, fokussiertes Mypy und Diff-Check
-erfolgreich.
+108 Incident-Promoter-/Pipeline-/Store-Tests, Ruff, fokussiertes Mypy und Diff-Check
+unabhängig auf Implementierungscommit `3528d50` erfolgreich. Senior-Review ohne
+offene Findings; CI und Merge separat prüfen.
 Der Idempotenzpfad setzt die vorhandene Neo4j-Constraint `incident_id_unique` voraus;
 kein Live-DB-Test, keine dauerhafte Outbox und kein Prozesscrash-/Exactly-once-Nachweis.
 
