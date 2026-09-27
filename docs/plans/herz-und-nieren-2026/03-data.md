@@ -32,12 +32,12 @@ Gemeinsamer Vertrag: [README](README.md). Backendpfade relativ zu `services/back
 
 **GREEN:** Event-`WHERE` unmittelbar an Event-MATCH binden, danach OPTIONAL MATCH. Kaputte Location-Koordinate macht das Koordinatenpaar null und liefert das Event ohne Geometrie; echte 0 erhalten. Paarweise finite Bereichsprüfung, keine halben Koordinaten/NaN. Parameterbindung und Limit erhalten. Semantisch weiterhin „Event mit optionalem Ort“, nicht still auf INNER JOIN ändern. Mehrfach-Locations als bestehende Kardinalitätsgrenze dokumentieren, kein ungeplantes Datenmodell-Redesign.
 
-## ~~D04 — Cache-Rows von FIRMS/EONET/GDACS isolieren~~ — FACHLICH ABGENOMMEN
+## ~~D04 — Cache-Rows von FIRMS/EONET/GDACS isolieren~~ — GEMERGT
 
 **Review 2026-09-27, B02 / PR #135:** Implementierungscommit `dd8d0af`; keine offenen Findings. Gemischte Cachelisten behalten valide Nachbarn und reparieren den Cache mit bestehender TTL; falsche Roots und vollständig ungültige Listen lösen gezielte Recovery aus. Gültiges `[]` bleibt Cachetreffer, Qdrant-Ausfälle bleiben 503. Finite Messwerte und Koordinatengrenzen geprüft.
 Gemeinsame B02-Abnahme: 106 fokussierte Tests; unabhängig 821 Backend-Tests mit
 `NEO4J_URL=bolt://127.0.0.1:1`, Ruff, Mypy (91 Dateien) und Diff-Check grün.
-Keine Livefeeds oder Produktionsdatenzugriffe; PR-CI und Merge separat prüfen, kein Deployment.
+Keine Livefeeds oder Produktionsdatenzugriffe; alle 13 PR-Checks grün, PR #135 gemergt als `6742481`. Kein Deployment.
 
 **F-09 · P1 · S je Router, drei Unterläufe.**
 
@@ -47,12 +47,12 @@ Keine Livefeeds oder Produktionsdatenzugriffe; PR-CI und Merge separat prüfen, 
 
 **GREEN:** pro Modell validieren, schmale Exceptions, Diagnose/invalid-count, kaputten Cache-Key gezielt invalidieren oder gültigen Teil nach vorhandener TTL-Policy ersetzen. Gültiges leeres Array beibehalten, damit Nulltreffer nicht dauernd Qdrant abfragen. Keine automatische Übernahme des Vessel-„empty is miss“-Sondervertrags. Kein generisches Cacheframework bauen.
 
-## ~~D05 — Kabel-Parser und Cache-Recovery~~ — FACHLICH ABGENOMMEN
+## ~~D05 — Kabel-Parser und Cache-Recovery~~ — GEMERGT
 
 **Review 2026-09-27, B02 / PR #135:** Implementierungscommit `dd8d0af`; keine offenen Findings. Cache-Recovery, gültige leere Datasets, isolierte Null-/Strukturfehler und Live-Nachbarn geprüft. Ungültige Segmente einschließlich nichtendlicher Zusatzkoordinaten und Zahlenüberläufe verlieren keine validen Nachbarsegmente. Bool-/Owner-/Einheitenregeln sowie Gbps- und nmi-Konversion geprüft.
 Gemeinsame B02-Abnahme: 106 fokussierte Tests; unabhängig 821 Backend-Tests mit
 `NEO4J_URL=bolt://127.0.0.1:1`, Ruff, Mypy (91 Dateien) und Diff-Check grün.
-Keine Livefeeds oder Produktionsdatenzugriffe; PR-CI und Merge separat prüfen, kein Deployment.
+Keine Livefeeds oder Produktionsdatenzugriffe; alle 13 PR-Checks grün, PR #135 gemergt als `6742481`. Kein Deployment.
 
 **F-08/F-37 · P1 für Ausfälle, P2 Attribute · M; Unterläufe Root/Recovery, dann Attribute.**
 
@@ -86,7 +86,9 @@ Keine Livefeeds oder Produktionsdatenzugriffe; PR-CI und Merge separat prüfen, 
 
 **Abnahme:** gleiche valid/invalid Fixturematrix in getrennten Services. Vollständig unbrauchbare erwartete Gruppe als Parsefehler behandeln; bei gesunden anderen Gruppen Teilergebnisse mit Diagnose, bei ausschließlich Fehlern Upstream-Fehler statt unkommentiertem `[]`. Legitime leere Quelle als eigenen Fall festlegen. Keine Behauptung weltweiter/neuer Katalogabdeckung vor X04.
 
-## D08 — Ingestion-Poison-Rows und unbekannte Werte
+## ~~D08 — Ingestion-Poison-Rows und unbekannte Werte~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27, B03 / PR #136:** Implementierung `f4988aa`; keine offenen Findings. RSS isoliert fehlerhafte optionale Content-Felder und behält Summary/Nachbarn. USGS bewahrt unbekannte Tiefe samt Concern-Nullwerten bis zu Qdrant-/Neo4j-Schreibparametern; echte Tiefe 0 und Millisekundenstrings bleiben gültig. UCDP unterscheidet unbekannte Werte von numerischer Null und isoliert fehlerhafte Rows. EONET wählt gültige Point-Geometrien nach UTC-Zeitpunkt und meldet beschädigte Geometrien aggregiert. Eigene RED/GREEN-Unterläufe; vorhandene Provenienzverträge grün. Gemeinsame unabhängige Abnahme: 1669 Ingestion-Tests bestanden, ein bestehender Dev-Compose-Test ausgelassen, 23 Live-Tests standardmäßig ausgeschlossen; Ruff und Diff-Check grün. Keine Livefeeds, Produktionsschreibtests oder Deployment.
 
 **F-13/F-20/F-21 · P1, RSS P2 · vier getrennte S-Aufträge.**
 
@@ -117,12 +119,12 @@ Keine Livefeeds oder Produktionsdatenzugriffe; PR-CI und Merge separat prüfen, 
 
 **RED:** zivile Beispieladressen aus berichteten Länderblöcken bleiben ohne Branch; verifizierte militärische Fixture bleibt korrekt. Frontend bekannte Typcodes priorisieren; VIPER/RAPTOR/HAWK/COBRA allein kein Transportnachweis; langsam/niedriges unbekanntes Militär kein automatischer Fighter. Neues neutrales `military_unknown`-Icon mit vollständigem Union/Switch/Cache-Vertrag. Callsign-Heuristiken nicht als Identitätsbeweis behandeln. Tests plus Browservergleich neutral/known/civilian.
 
-## ~~D11 — Feed-Freshness pro Quelle fehlertolerant~~ — FACHLICH ABGENOMMEN
+## ~~D11 — Feed-Freshness pro Quelle fehlertolerant~~ — GEMERGT
 
 **Review 2026-09-27, B02 / PR #135:** Implementierungscommit `dd8d0af`; keine offenen Findings. Ungültige Sekundenepochen einschließlich Bool, Millisekunden, NaN/Infinity und Überlauf bleiben quellenisoliert unknown. Benannte Zukunftstoleranz 60 Sekunden; Grenzen 60/61 Sekunden geprüft. Gesunde Nachbarquellen bleiben erhalten; Root-Infrastrukturfehler weiterhin 503.
 Gemeinsame B02-Abnahme: 106 fokussierte Tests; unabhängig 821 Backend-Tests mit
 `NEO4J_URL=bolt://127.0.0.1:1`, Ruff, Mypy (91 Dateien) und Diff-Check grün.
-Keine Livefeeds oder Produktionsdatenzugriffe; PR-CI und Merge separat prüfen, kein Deployment.
+Keine Livefeeds oder Produktionsdatenzugriffe; alle 13 PR-Checks grün, PR #135 gemergt als `6742481`. Kein Deployment.
 
 **F-38 · P1 · S.** `app/services/feed_freshness.py`, `tests/unit/test_feed_freshness.py`, `test_feed_health_router.py`.
 

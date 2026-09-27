@@ -17,7 +17,7 @@
 Auf Nutzerauftrag werden die 36 offenen Herz-und-Nieren-Fix-Tickets in **13 Themen-PRs**
 gebündelt. Der [Bündelplan](docs/plans/herz-und-nieren-2026/README.md#bündelplan-und-reihenfolge)
 ersetzt die Einzel-PR-Regel; Einzeltests, Senior-Review und Mergefreigabe bleiben erhalten.
-**B01 = I05 → I06 plus I03 ist gemergt (PR #134, Merge `77a98ad`). B02 = D04/D05/D11 ist fachlich abgenommen (PR #135, Merge offen).** X04-Designvorlage liegt vor; Entscheidung offen;
+**B01 = I05 → I06 plus I03 ist gemergt (PR #134, Merge `77a98ad`). B02 = D04/D05/D11 ist gemergt (PR #135, Merge `6742481`). B03 = D08/A01/A05/A06 ist fachlich abgenommen (PR #136, Merge offen).** X04-Designvorlage liegt vor; Entscheidung offen;
 vier Designaufträge und R01 sind keine stillschweigend abgeschlossenen Fixes.
 PR #133 / HN-I04 ist seit 2026-09-27T18:34:17Z gemergt (`1eb5fdb`).
 
@@ -34,12 +34,25 @@ betroffene Tests, Mypy `app/` (91 Dateien) und Diff-Check grün. Das Rehydrate-L
 Senior-Review von `2ea0365` ohne offene Findings, alle Abschlusschecks unabhängig
 wiederholt. Keine Produktionsdatenänderung, kein Deployment.
 
-**~~HN-B02 (D04/D05/D11)~~ — FACHLICH ABGENOMMEN (PR #135):** D04 isoliert beschädigte FIRMS/EONET/GDACS-Cachezeilen
+**~~HN-B02 (D04/D05/D11)~~ — GEMERGT (PR #135, Merge `6742481`):** D04 isoliert beschädigte FIRMS/EONET/GDACS-Cachezeilen
 bei Erhalt valider Nachbarn und validiert finite Geokoordinaten. D05 behandelt Kabel-Cache-
 Recovery, isolierte Featurefehler, Einheiten und Koordinaten. D11 klassifiziert ungültige
 Sekundenepochen pro Quelle als unknown. Gezielte RED/GREEN: 106 Backend-Tests; Abschluss:
 821 Backend-Tests, Ruff `app/`, Mypy `app/` (91 Dateien) und Diff-Check grün. Volltest nutzte
-`NEO4J_URL=bolt://127.0.0.1:1`; keine Livefeeds/-DB/-Dienste verwendet. Unabhängiger Senior-Review von `dd8d0af` ohne offene Findings; Abschlusschecks unabhängig wiederholt. PR-CI und Merge separat prüfen; kein Deployment.
+`NEO4J_URL=bolt://127.0.0.1:1`; keine Livefeeds/-DB/-Dienste verwendet. Unabhängiger Senior-Review von `dd8d0af` ohne offene Findings; Abschlusschecks unabhängig wiederholt. Alle 13 PR-Checks grün; PR #135 gemergt als `6742481`. Kein Deployment.
+
+**~~HN-B03 (D08/A01/A05/A06)~~ — FACHLICH ABGENOMMEN (PR #136):**
+Implementierung `f4988aa`, unabhängiger Senior-Review ohne offene Findings. D08
+isoliert fehlerhafte RSS-/USGS-/UCDP-/EONET-Rows und erhält unbekannte Messwerte.
+A01 trennt HAPI-Record-Identität von Quellen-URL bis in Document-/Event-Schreibpfade.
+A05 verwendet gültige GDACS-Alternativwerte; A06 weist ungemappte Konfiguration ab
+und erhält GKG-Quellen bei nicht klassifizierbaren Override-Events.
+Abschluss unabhängig wiederholt: 1669 Ingestion-Tests bestanden, ein bestehender
+Dev-Compose-Test ausgelassen, 23 Live-Tests standardmäßig ausgeschlossen. Ruff `.`
+und Diff-Check grün. Testumgebung: `NEO4J_PASSWORD=''`, Neo4j-/Qdrant-URLs auf
+unerreichbare lokale Ziele. HAPI-Constraint nur als operator-run Datei vorbereitet;
+vor parallelem HAPI-Deployment separat anwenden. Keine historischen Datenkorrekturen,
+keine Livefeeds oder Produktionsschreibtests. PR-CI und Merge separat prüfen.
 
 ## Fixplan Herz und Nieren 2026 — laufende Umsetzung
 
