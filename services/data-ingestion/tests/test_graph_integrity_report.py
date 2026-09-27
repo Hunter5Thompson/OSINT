@@ -83,6 +83,7 @@ def test_location_writer_inventory_enumerates_supported_and_unsupported_lanes():
         "rss_pipeline",
         "military_aircraft",
         "backend_incident",
+        "sensor_observation",
         "intelligence_link_event_location",
         "graph_integrity_geo_gdelt",
         "graph_integrity_geo_incident",
@@ -92,13 +93,13 @@ def test_location_writer_inventory_enumerates_supported_and_unsupported_lanes():
         lane["lane"]
         for lane in lanes.values()
         if lane["active"] and lane["normalization"] == "shared_spatial_normalizer"
-    } == {"gdelt_raw", "rss_pipeline", "military_aircraft"}
+    } == {"gdelt_raw", "rss_pipeline", "military_aircraft", "sensor_observation"}
     assert lanes["backend_incident"] == {
         "lane": "backend_incident",
         "path": "services/backend/app/cypher/incident_write.py",
         "active": True,
-        "normalization": "unsupported",
-        "reason": "cross_service_normalizer_not_integrated",
+        "normalization": "catalog_point_projection",
+        "reason": "incident_store_project_incident_point",
     }
     assert lanes["intelligence_link_event_location"]["active"] is False
     assert lanes["intelligence_link_event_location"]["reason"] == "no_production_call_sites"

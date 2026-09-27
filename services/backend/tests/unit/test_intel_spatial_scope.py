@@ -79,8 +79,12 @@ async def test_intel_router_resolves_server_owned_token_and_defaults_either(
     assert isinstance(token, SpatialScopeTokenV1)
     assert token.scope_key == "country:UKR"
     assert token.catalog_revision == revision
-    assert token.compatible_derivation_revisions == (
-        "spatial-derive-v1-d30efa07e141",
+    manifest = json.loads(
+        (REFERENCE_SPATIAL_ROOT / "catalogs" / revision / "manifest.json").read_text()
+    )
+    expected = next(scope for scope in manifest["scopes"] if scope["scope"]["key"] == "country:UKR")
+    assert token.compatible_derivation_revisions == tuple(
+        expected["compatible_derivation_revisions"]
     )
     assert captured["spatial_relation"] == "either"
     assert captured["region"] is None

@@ -36,7 +36,7 @@ def test_plan06a_batch_semantics_match_shared_file_format_contract() -> None:
     assert contract["contract_version"] == 1
     assert contract["semantics"] == {
         "dry_run_writes": 0,
-        "apply_requires": "approved-complete-full-lane-dry-run",
+        "apply_requires": "approved-complete-dry-run",
         "checkpoint_after": "complete-confirmed-batch",
         "report_fingerprint": "sha256-canonical-json-excluding-self",
     }
@@ -49,6 +49,7 @@ def test_plan06a_batch_semantics_match_shared_file_format_contract() -> None:
         ],
         "checkpoint_entry_fields": ["job_key", "last_record_id"],
         "cursor_semantics": "last-confirmed-record-id",
+        "approval_scan": "full-lane-on-fresh-checkpoint; fresh-approved-suffix-on-resume",
     }
 
 
@@ -161,12 +162,17 @@ class FakeClient:
                         if key not in {"record_id", "action", "latitude", "longitude"}:
                             stored[key] = value
                     stored["has_geo"] = update["latitude"] is not None
-                else:
+                elif update["action"] != "label_only":
                     stored["spatial_catalog_revision"] = update["spatial_catalog_revision"]
-                    stored["spatial_derivation_revision"] = update[
-                        "spatial_derivation_revision"
-                    ]
-                    stored["spatial_conflict"] = True
+                    stored["spatial_derivation_revision"] = update["spatial_derivation_revision"]
+                    stored["spatial_conflict"] = update["action"] == "conflict"
+                    for key in (
+                        "country_iso3",
+                        "country_scope_key",
+                        "admin1_scope_key",
+                        "admin2_scope_key",
+                    ):
+                        stored[key] = None
                     stored["spatial_conflict_scope_keys"] = update["spatial_conflict_scope_keys"]
             return [{"updated": len(batch)}]
         raise AssertionError(f"unexpected query: {query}")
@@ -304,7 +310,7 @@ async def test_conflict_is_marked_and_unresolved_record_is_not_mutated(spatial_i
         "country:USA",
     ]
     assert client.apply_calls[0][0]["spatial_derivation_revision"] is None
-    assert client.rows["gdelt:loc:1"]["country_scope_key"] == "country:LEGACY"
+    assert client.rows["gdelt:loc:1"]["country_scope_key"] is None
     assert client.rows["gdelt:loc:1"]["spatial_derivation_revision"] is None
     assert client.rows["gdelt:loc:2"] == unresolved
 
@@ -328,8 +334,8 @@ async def test_source_null_island_is_invalid_and_never_backfilled(
 
     assert report["invalid_coordinate"] == 1
     assert report["resolvable"] == 0
-    assert report["writes_applied"] == 0
-    assert client.apply_calls == []
+    assert report["writes_applied"] == int(lane == "military_aircraft")
+    assert not client.apply_calls or client.apply_calls[0][0]["action"] == "label_only"
 
 
 @pytest.mark.asyncio
@@ -489,6 +495,7 @@ def test_cypher_is_static_parameterized_and_preserves_raw_properties() -> None:
         "rss_pipeline",
         "military_aircraft",
         "backend_incident",
+        "sensor_observation",
     }
     assert set(COUNT_UNSTABLE_LOCATION_RECORDS) == set(FETCH_LOCATION_BATCHES)
     for query in FETCH_LOCATION_BATCHES.values():
@@ -497,10 +504,11 @@ def test_cypher_is_static_parameterized_and_preserves_raw_properties() -> None:
         assert "ORDER BY l.loc_key" in query
     assert "$rows" in APPLY_SPATIAL_BATCH
     assert "point({longitude: row.longitude, latitude: row.latitude})" in (APPLY_SPATIAL_BATCH)
-    assert APPLY_SPATIAL_BATCH.count(
-        "l.spatial_derivation_revision = row.spatial_derivation_revision"
-    ) == 2
-    for raw_property in ("name", "country", "lat", "lon", "geo_basis", "loc_key"):
+    assert (
+        APPLY_SPATIAL_BATCH.count("l.spatial_derivation_revision = row.spatial_derivation_revision")
+        == 2
+    )
+    for raw_property in ("country", "lat", "lon", "geo_basis", "loc_key"):
         assert f"l.{raw_property} =" not in APPLY_SPATIAL_BATCH
 
 
@@ -541,3 +549,81 @@ def test_dry_run_approval_is_content_addressed_and_rejects_drift() -> None:
     incomplete["report_fingerprint"] = report_fingerprint(incomplete)
     with pytest.raises(ValueError, match="incomplete"):
         validate_dry_run_approval(incomplete, incomplete)
+
+
+@pytest.mark.asyncio
+async def test_unresolved_reenrichment_revokes_stored_assignment(spatial_index) -> None:
+    client = FakeClient(
+        [
+            _row(
+                "gdelt:loc:stale",
+                country="ZZ",
+                lat=None,
+                lon=None,
+                country_scope_key="country:UKR",
+                spatial_derivation_revision="old",
+            )
+        ]
+    )
+    report = await run_spatial_batch(
+        client,
+        spatial_index,
+        MemoryCheckpointStore(),
+        BatchJob("reenrichment", "gdelt_raw", _target_revision(spatial_index)),
+        dry_run=True,
+    )
+    assert report["writes_planned"] == 1
+
+
+@pytest.mark.asyncio
+async def test_approval_fingerprint_covers_inputs_not_only_counts(spatial_index) -> None:
+    job = BatchJob("backfill", "gdelt_raw", _target_revision(spatial_index))
+    reports = []
+    for longitude in (37.8, 37.81):
+        reports.append(
+            await run_spatial_batch(
+                FakeClient([_row("gdelt:loc:1", lon=longitude)]),
+                spatial_index,
+                MemoryCheckpointStore(),
+                job,
+                dry_run=True,
+            )
+        )
+    with pytest.raises(ValueError, match="drifted"):
+        validate_dry_run_approval(*reports)
+
+
+@pytest.mark.asyncio
+async def test_aircraft_cleanup_plans_honest_label_and_preserves_before_state(spatial_index):
+    client = FakeClient(
+        [
+            _row(
+                "aircraft-observation:1",
+                name="ukraine",
+                region="ukraine",
+                lat=0.0,
+                lon=0.0,
+                country_iso3="UKR",
+            )
+        ]
+    )
+    job = BatchJob("backfill", "military_aircraft", _target_revision(spatial_index))
+    report = await run_spatial_batch(
+        client, spatial_index, MemoryCheckpointStore(), job, dry_run=False
+    )
+    assert report["writes_applied"] == 1
+    update = client.apply_calls[0][0]
+    assert update["aircraft_name"] == "unresolved"
+    assert update["previous_name"] == "ukraine"
+    assert update["previous_region"] == "ukraine"
+    assert "REMOVE l.region" in APPLY_SPATIAL_BATCH
+
+
+def test_scope_map_rejects_duplicate_scope_with_different_revision():
+    with pytest.raises(ValueError, match="unique"):
+        BatchJob(
+            "reenrichment",
+            "gdelt_raw",
+            None,
+            target_scope_revisions=(("country:UKR", "a"), ("country:UKR", "b")),
+        )

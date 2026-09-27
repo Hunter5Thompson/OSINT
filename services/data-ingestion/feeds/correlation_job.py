@@ -1,16 +1,13 @@
 """FIRMS cross-correlation batch job.
 
-Correlates FIRMS thermal anomalies (possible_explosion=true) with
-conflict events from any source (GDELT, UCDP, RSS) within a
-configurable radius and time window. Writes CORROBORATED_BY
-relationships to Neo4j.
+Correlates structured FIRMS thermal observations with canonical graph Events.
+Distance/time proximity is an observation, not independent corroboration.
 """
 
 from __future__ import annotations
 
 import asyncio
-import math
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -25,6 +22,7 @@ from qdrant_client.models import (
 
 from config import Settings
 from feeds.geo import haversine_km
+from graph_integrity.spatial_normalizer import load_active_normalization_index
 
 log = structlog.get_logger(__name__)
 
@@ -33,27 +31,25 @@ SCROLL_LIMIT = 200
 _REDIS_KEY_LAST_RUN = "correlation:last_run"
 
 
-# Conflict sources to correlate against FIRMS hits
-CONFLICT_SOURCES = ("gdelt", "ucdp", "rss")
-
 # Codebook types that indicate conflict/violence (boost score)
-CONFLICT_CODEBOOK_TYPES = frozenset({
-    "military.airstrike",
-    "military.drone_attack",
-    "military.shelling",
-    "military.ground_combat",
-    "political.armed_clash",
-})
+CONFLICT_CODEBOOK_TYPES = frozenset(
+    {
+        "military.airstrike",
+        "military.drone_attack",
+        "military.shelling",
+        "military.ground_combat",
+        "political.armed_clash",
+    }
+)
 
 
 def correlation_score(
     distance_km: float,
     days_diff: int,
-    possible_explosion: bool,
     conflict_codebook_type: str,
     firms_confidence: str,
 ) -> float:
-    """Compute correlation confidence between a FIRMS and a conflict event.
+    """Compute an uncalibrated proximity ranking between a FIRMS and a conflict event.
 
     Returns a score from 0.0 to 1.0.
     """
@@ -68,8 +64,6 @@ def correlation_score(
 
     # Additive bonuses, capped at 1.0
     bonus = 0.0
-    if possible_explosion:
-        bonus += 0.3
     if conflict_codebook_type in CONFLICT_CODEBOOK_TYPES:
         bonus += 0.2
     if firms_confidence == "high":
@@ -81,47 +75,17 @@ def correlation_score(
 def build_firms_filter(last_run_epoch: float) -> Filter:
     """Build a Qdrant filter for FIRMS points since *last_run_epoch*.
 
-    Only returns points with source=firms, possible_explosion=True, and
+    Only returns points with source=firms and
     ingested_epoch >= last_run_epoch.
     """
     return Filter(
         must=[
             FieldCondition(key="source", match=MatchValue(value="firms")),
-            FieldCondition(key="possible_explosion", match=MatchValue(value=True)),
             FieldCondition(
                 key="ingested_epoch",
                 range=Range(gte=last_run_epoch),
             ),
         ]
-    )
-
-
-def build_conflict_bbox_filter(lat: float, lon: float) -> Filter:
-    """Build a Qdrant filter for conflict events within ~50 km of (lat, lon).
-
-    Matches any source in CONFLICT_SOURCES (gdelt, ucdp, rss).
-    The lat window is always ±0.5°.  The lon window is widened by
-    1/cos(lat) to keep a roughly square ground footprint.
-    """
-    lat_delta = 0.5
-    cos_lat = math.cos(math.radians(lat))
-    lon_delta = 0.5 / max(cos_lat, 1e-6)
-
-    return Filter(
-        must=[
-            FieldCondition(
-                key="latitude",
-                range=Range(gte=lat - lat_delta, lte=lat + lat_delta),
-            ),
-            FieldCondition(
-                key="longitude",
-                range=Range(gte=lon - lon_delta, lte=lon + lon_delta),
-            ),
-        ],
-        should=[
-            FieldCondition(key="source", match=MatchValue(value=src))
-            for src in CONFLICT_SOURCES
-        ],
     )
 
 
@@ -213,45 +177,94 @@ class CorrelationJob:
     # Neo4j writer
     # ------------------------------------------------------------------
 
-    async def _write_corroboration(
-        self,
-        client: httpx.AsyncClient,
-        firms_url: str,
-        conflict_url: str,
-        score: float,
-        distance_km: float,
-        days_diff: int,
-    ) -> None:
-        """Write a CORROBORATED_BY relationship between two Document nodes."""
-        cypher = (
-            "MATCH (f:Document {url: $firms_url}) "
-            "MATCH (a:Document {url: $conflict_url}) "
-            "MERGE (f)-[r:CORROBORATED_BY]->(a) "
-            "SET r.score = $score, "
-            "    r.distance_km = $distance_km, "
-            "    r.days_diff = $days_diff, "
-            "    r.updated_at = datetime()"
-        )
-        payload = {
-            "statements": [
-                {
-                    "statement": cypher,
-                    "parameters": {
-                        "firms_url": firms_url,
-                        "conflict_url": conflict_url,
-                        "score": score,
-                        "distance_km": distance_km,
-                        "days_diff": days_diff,
-                    },
-                }
-            ]
-        }
-        resp = await client.post(
+    async def _graph_rows(self, client, statement, parameters):
+        response = await client.post(
             f"{self.settings.neo4j_http_url}/db/neo4j/tx/commit",
-            json=payload,
+            json={"statements": [{"statement": statement, "parameters": parameters}]},
             auth=(self.settings.neo4j_user, self.settings.neo4j_password),
         )
-        resp.raise_for_status()
+        response.raise_for_status()
+        body = response.json()
+        if body.get("errors"):
+            raise RuntimeError(f"Neo4j correlation query failed: {body['errors']}")
+        result = body["results"][0]
+        return [dict(zip(result["columns"], row["row"], strict=True)) for row in result["data"]]
+
+    async def _event_candidates(self, client, observation):
+        index = load_active_normalization_index(
+            self.settings.spatial_catalog_path,
+            crosswalk_path=self.settings.spatial_country_crosswalk_path,
+        )
+        observed = date.fromisoformat(observation["acq_date"])
+        window = timedelta(days=self.settings.correlation_time_window_days)
+        # Join canonical Events, never a document-level GKG coordinate proxy.
+        # Indexed GDELT time remains explicitly labelled on the resulting edge.
+        return await self._graph_rows(
+            client,
+            """
+MATCH (e:Event)-[:OCCURRED_AT]->(l:Location)
+WHERE e.codebook_type IN $types
+  AND e.timeline_at >= datetime($start) AND e.timeline_at < datetime($end)
+  AND l.spatial_conflict = false AND l.geo IS NOT NULL
+  AND l.spatial_derivation_revision IN $derivations
+  AND point.distance(l.geo, point({latitude: $latitude, longitude: $longitude})) <= $radius_m
+RETURN DISTINCT coalesce(e.event_id, e.event_key) AS event_id,
+       l.lat AS latitude, l.lon AS longitude,
+       toString(date(e.timeline_at)) AS event_date, e.time_basis AS time_basis,
+       e.codebook_type AS codebook_type
+""",
+            {
+                "derivations": sorted(
+                    {
+                        revision
+                        for scope in index.scopes.values()
+                        for revision in scope.compatible_derivation_revisions
+                    }
+                ),
+                "types": sorted(CONFLICT_CODEBOOK_TYPES),
+                "start": (observed - window).isoformat() + "T00:00:00Z",
+                "end": (observed + window + timedelta(days=1)).isoformat() + "T00:00:00Z",
+                "latitude": observation["latitude"],
+                "longitude": observation["longitude"],
+                "radius_m": self.settings.correlation_radius_km * 1000,
+            },
+        )
+
+    async def _write_proximity(
+        self,
+        client,
+        *,
+        firms_url,
+        event_id,
+        score,
+        distance_km,
+        days_diff,
+        time_basis,
+    ) -> int:
+        rows = await self._graph_rows(
+            client,
+            """
+MATCH (f:Document {url: $firms_url})
+MATCH (e:Event)
+WHERE e.event_id = $event_id OR e.event_key = $event_id
+MERGE (f)-[r:SPATIOTEMPORAL_PROXIMITY {method: 'distance-time-v1'}]->(e)
+SET r.score = $score, r.distance_km = $distance_km, r.days_diff = $days_diff,
+    r.event_time_basis = $time_basis, r.updated_at = datetime()
+RETURN count(r) AS written
+""",
+            {
+                "firms_url": firms_url,
+                "event_id": event_id,
+                "score": score,
+                "distance_km": distance_km,
+                "days_diff": days_diff,
+                "time_basis": time_basis,
+            },
+        )
+        written = int(rows[0]["written"])
+        if written != 1:
+            raise RuntimeError("observation and event not linked uniquely")
+        return written
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -262,7 +275,8 @@ class CorrelationJob:
         last_run_epoch = await self._get_last_run_epoch()
         log.info("correlation.run.start", last_run_epoch=last_run_epoch)
 
-        firms_filter = build_firms_filter(last_run_epoch)
+        replay_from = min(last_run_epoch, datetime.now(UTC).timestamp() - 7 * 86400)
+        firms_filter = build_firms_filter(replay_from)
         firms_points = await self._scroll_all(firms_filter)
         log.info("correlation.firms_loaded", count=len(firms_points))
 
@@ -276,17 +290,24 @@ class CorrelationJob:
                 f_date: str = p.get("acq_date", "")
                 f_url: str = p.get("url", "")
                 f_confidence: str = p.get("confidence", "nominal")
-                f_explosion: bool = bool(p.get("possible_explosion", False))
+                if not f_url or not f_date:
+                    log.warning("correlation.observation_missing_identity_or_time")
+                    continue
+                try:
+                    conflict_points = await self._event_candidates(client, p)
+                except Exception:
+                    log.exception("correlation.event_lookup_failed", firms_url=f_url)
+                    failed_pairs.append((f_url, "lookup"))
+                    continue
 
-                conflict_filter = build_conflict_bbox_filter(f_lat, f_lon)
-                conflict_points = await self._scroll_all(conflict_filter)
-
-                for cp in conflict_points:
-                    a = cp.payload
+                for a in conflict_points:
                     a_lat: float = a["latitude"]
                     a_lon: float = a["longitude"]
                     a_date: str = _extract_event_date(a)
-                    a_url: str = a.get("url", "")
+                    event_id = a.get("event_id")
+                    if not event_id or not a.get("event_date"):
+                        continue
+                    a_url = str(event_id)
                     a_codebook_type: str = a.get("codebook_type", "")
 
                     # Precise distance check
@@ -295,10 +316,14 @@ class CorrelationJob:
                         continue
 
                     # Time window check
-                    if f_date and a_date and not passes_time_filter(
-                        f_date,
-                        a_date,
-                        window_days=self.settings.correlation_time_window_days,
+                    if (
+                        f_date
+                        and a_date
+                        and not passes_time_filter(
+                            f_date,
+                            a_date,
+                            window_days=self.settings.correlation_time_window_days,
+                        )
                     ):
                         continue
 
@@ -306,16 +331,12 @@ class CorrelationJob:
                     days_diff = 0
                     if f_date and a_date:
                         days_diff = abs(
-                            (
-                                date.fromisoformat(a_date)
-                                - date.fromisoformat(f_date)
-                            ).days
+                            (date.fromisoformat(a_date) - date.fromisoformat(f_date)).days
                         )
 
                     score = correlation_score(
                         distance_km=dist_km,
                         days_diff=days_diff,
-                        possible_explosion=f_explosion,
                         conflict_codebook_type=a_codebook_type,
                         firms_confidence=f_confidence,
                     )
@@ -325,18 +346,19 @@ class CorrelationJob:
 
                     # Write to Neo4j
                     try:
-                        await self._write_corroboration(
+                        await self._write_proximity(
                             client=client,
                             firms_url=f_url,
-                            conflict_url=a_url,
+                            event_id=event_id,
                             score=score,
                             distance_km=dist_km,
                             days_diff=days_diff,
+                            time_basis=a.get("time_basis"),
                         )
                         log.info(
-                            "correlation.pair_written",
+                            "correlation.proximity_written",
                             firms_url=f_url,
-                            conflict_url=a_url,
+                            event_id=event_id,
                             score=score,
                             distance_km=dist_km,
                         )
@@ -344,7 +366,7 @@ class CorrelationJob:
                         log.exception(
                             "correlation.write_failed",
                             firms_url=f_url,
-                            conflict_url=a_url,
+                            event_id=event_id,
                         )
                         failed_pairs.append((f_url, a_url))
 

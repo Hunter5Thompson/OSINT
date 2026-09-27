@@ -192,6 +192,11 @@ class DerivationInputs(StrictFrozenModel):
     crosswalk_sha256: AssetId
     scope_path: tuple[ScopeKey, ...] = Field(min_length=1, max_length=4)
     assignment_asset_ids: tuple[AssetId, ...] = ()
+    # Omitted on legacy manifests to preserve their immutable canonical bytes.
+    resolution_context_sha256: AssetId | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
 
     @model_validator(mode="after")
     def validate_inputs(self) -> DerivationInputs:
@@ -515,9 +520,7 @@ _LEXICAL_SCOPE_KEY: Final = re.compile(r"^[A-Za-z0-9:._-]+$")
 _CATALOG_REVISION: Final = re.compile(r"^spatial-v[0-9]+-[a-f0-9]{12,64}$")
 _ASSET_ID: Final = re.compile(r"^[a-f0-9]{64}$")
 _NORMALIZABLE_ISO3: Final = re.compile(r"^country:([A-Za-z]{3})$")
-_NORMALIZABLE_ISO3166_2: Final = re.compile(
-    r"^admin1:iso3166-2:([A-Za-z]{2})-([A-Za-z0-9]{1,3})$"
-)
+_NORMALIZABLE_ISO3166_2: Final = re.compile(r"^admin1:iso3166-2:([A-Za-z]{2})-([A-Za-z0-9]{1,3})$")
 _SCOPE_KEY_PATTERNS: Final[tuple[tuple[ScopeKind, str | None, re.Pattern[str]], ...]] = (
     (ScopeKind.WORLD, None, re.compile(r"^world$")),
     (ScopeKind.COUNTRY, "iso3166-1", re.compile(r"^country:([A-Z]{3})$")),
@@ -627,6 +630,8 @@ def derive_derivation_revision(inputs: DerivationInputs) -> str:
         "scope_path": inputs.scope_path,
         "assignment_asset_ids": tuple(sorted(inputs.assignment_asset_ids)),
     }
+    if inputs.resolution_context_sha256 is not None:
+        payload["resolution_context_sha256"] = inputs.resolution_context_sha256
     digest = hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
     return f"spatial-derive-v1-{digest[:12]}"
 

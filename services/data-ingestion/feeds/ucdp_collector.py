@@ -128,6 +128,8 @@ class UCDPCollector(BaseCollector):
             "region": raw.get("region", ""),
             "latitude": float(lat_str) if lat_str else None,
             "longitude": float(lon_str) if lon_str else None,
+            "where_prec": raw.get("where_prec"),
+            "date_prec": raw.get("date_prec"),
             "date_start": raw.get("date_start", ""),
             "date_end": raw.get("date_end", ""),
             "side_a": raw.get("side_a", ""),
@@ -195,6 +197,12 @@ class UCDPCollector(BaseCollector):
                         text=embed_text,
                         url=payload["url"],
                         source="ucdp",
+                        occurred_at=(
+                            payload.get("date_start")
+                            if payload.get("date_prec") in (1, "1")
+                            else None
+                        ),
+                        source_evidence={**payload, "source": "ucdp"},
                         settings=self.settings,
                         redis_client=self.redis,
                     )

@@ -7,12 +7,9 @@ from pathlib import Path
 import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-PAYLOAD_CONTRACT_PATH = (
-    REPOSITORY_ROOT / "contracts/qdrant-spatial-payload-v1.json"
-)
+PAYLOAD_CONTRACT_PATH = REPOSITORY_ROOT / "contracts/qdrant-spatial-payload-v1.json"
 CATALOG_MANIFEST_PATH = (
-    REPOSITORY_ROOT
-    / "services/backend/data/spatial/catalogs/spatial-v1-e76a16bff799/manifest.json"
+    REPOSITORY_ROOT / "services/backend/data/spatial/catalogs/spatial-v1-e76a16bff799/manifest.json"
 )
 BATCH_CONTRACT_PATH = REPOSITORY_ROOT / "contracts/spatial-batch-file-formats-v1.json"
 
@@ -846,7 +843,7 @@ def test_shared_batch_contract_pins_plan06a_and_qdrant_semantics() -> None:
     assert contract["contract_version"] == 1
     assert contract["semantics"] == {
         "dry_run_writes": 0,
-        "apply_requires": "approved-complete-full-lane-dry-run",
+        "apply_requires": "approved-complete-dry-run",
         "checkpoint_after": "complete-confirmed-batch",
         "report_fingerprint": "sha256-canonical-json-excluding-self",
     }
@@ -1028,3 +1025,51 @@ async def test_reviewed_dry_run_validation_detects_report_drift() -> None:
     drifted["writes_planned"] = 2
     with pytest.raises(ValueError, match="drifted"):
         validate_dry_run_approval(report, drifted)
+
+
+@pytest.mark.asyncio
+async def test_approval_detects_payload_drift_even_when_coverage_counts_match():
+    from rag.spatial_reenrich import (
+        ReenrichmentJob,
+        preview_spatial_reenrichment,
+        validate_dry_run_approval,
+    )
+
+    job = ReenrichmentJob("analysis", "spatial-projection-v1-111111111111")
+    before = await preview_spatial_reenrichment(
+        FakeStore([{"source": "usgs", "latitude": 33.0}]),
+        FakeProjector(),
+        job,
+    )
+    after = await preview_spatial_reenrichment(
+        FakeStore([{"source": "usgs", "latitude": 34.0}]),
+        FakeProjector(),
+        job,
+    )
+    with pytest.raises(ValueError, match="drift"):
+        validate_dry_run_approval(before, after)
+
+
+@pytest.mark.asyncio
+async def test_input_fingerprint_supports_named_dense_and_sparse_vectors():
+    from dataclasses import replace
+
+    from qdrant_client.models import SparseVector
+
+    from rag.spatial_reenrich import ReenrichmentJob, preview_spatial_reenrichment
+
+    store = FakeStore([{"source": "usgs"}])
+    store.points[0] = replace(
+        store.points[0],
+        vector={
+            "dense": [0.1, 0.2],
+            "sparse": SparseVector(indices=[1, 8], values=[0.3, 0.4]),
+        },
+    )
+    report = await preview_spatial_reenrichment(
+        store,
+        FakeProjector(),
+        ReenrichmentJob("analysis", "spatial-projection-v1-111111111111"),
+    )
+    assert report["input_fingerprint"]
+    assert store.replace_calls == []

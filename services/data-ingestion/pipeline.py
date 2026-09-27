@@ -30,6 +30,7 @@ from graph_integrity.spatial_normalizer import (
     spatial_property_parameters,
 )
 from nlm_ingest.schemas import normalize_entity_type
+from source_spatial import observation_geo_fragment
 
 log = structlog.get_logger(__name__)
 
@@ -297,10 +298,19 @@ _RESPONSE_SCHEMA = {
                 "additionalProperties": False,
                 "properties": {
                     "name": {"type": "string"},
-                    "type": {"type": "string", "enum": [
-                        "person", "organization", "location", "weapon_system",
-                        "satellite", "vessel", "aircraft", "military_unit",
-                    ]},
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "person",
+                            "organization",
+                            "location",
+                            "weapon_system",
+                            "satellite",
+                            "vessel",
+                            "aircraft",
+                            "military_unit",
+                        ],
+                    },
                     "confidence": {"type": "number"},
                 },
                 "required": ["name", "type"],
@@ -364,6 +374,7 @@ async def process_item(
     published_at: str | None = None,
     content_hash: str | None = None,
     raise_on_write_error: bool = False,
+    source_evidence: dict[str, Any] | None = None,
 ) -> dict | None:
     """Extract intelligence from a feed item, write to Neo4j, publish to Redis.
 
@@ -400,10 +411,19 @@ async def process_item(
         ingested_at = datetime.now(UTC).isoformat()
         try:
             await _write_to_neo4j(
-                events, entities, url, title, source, settings,
-                occurred_at=occurred_at, observed_at=observed_at,
-                published_at=published_at, ingested_at=ingested_at,
-                locations=locations, doc_content_hash=content_hash,
+                events,
+                entities,
+                url,
+                title,
+                source,
+                settings,
+                occurred_at=occurred_at,
+                observed_at=observed_at,
+                published_at=published_at,
+                ingested_at=ingested_at,
+                locations=locations,
+                doc_content_hash=content_hash,
+                source_evidence=source_evidence,
             )
         except Neo4jWriteError as e:
             log.error("pipeline_neo4j_failed", url=url, error=str(e))
@@ -531,18 +551,21 @@ async def _write_to_neo4j(
     locations: list[dict] | None = None,
     doc_content_hash: str | None = None,
     spatial_index: SpatialNormalizationIndex | None = None,
+    source_evidence: dict[str, Any] | None = None,
 ) -> None:
     """Write extraction results to Neo4j via HTTP transactional API."""
     statements = []
 
     # Upsert Document
-    statements.append({
-        "statement": (
-            "MERGE (d:Document {url: $url}) "
-            "SET d.title = $title, d.source = $source, d.updated_at = datetime() "
-        ),
-        "parameters": {"url": doc_url, "title": doc_title, "source": doc_source},
-    })
+    statements.append(
+        {
+            "statement": (
+                "MERGE (d:Document {url: $url}) "
+                "SET d.title = $title, d.source = $source, d.updated_at = datetime() "
+            ),
+            "parameters": {"url": doc_url, "title": doc_title, "source": doc_source},
+        }
+    )
 
     # Upsert Entities with MENTIONS
     for entity in entities:
@@ -571,10 +594,7 @@ async def _write_to_neo4j(
                 )
                 # Fail-soft: pass through unchanged so a single bad LLM emission
                 # does not block the whole document.
-        statement = (
-            "MERGE (e:Entity {name: $name, type: $type}) "
-            "SET e.last_seen = datetime() "
-        )
+        statement = "MERGE (e:Entity {name: $name, type: $type}) SET e.last_seen = datetime() "
         parameters = {
             "name": entity_name,
             "type": entity_type,
@@ -589,11 +609,7 @@ async def _write_to_neo4j(
                 "[a IN $aliases WHERE NOT a IN coalesce(e.aliases, [])] "
             )
             parameters["aliases"] = list(canon.aliases)
-        statement += (
-            "WITH e "
-            "MATCH (d:Document {url: $url}) "
-            "MERGE (d)-[r:MENTIONS]->(e)"
-        )
+        statement += "WITH e MATCH (d:Document {url: $url}) MERGE (d)-[r:MENTIONS]->(e)"
         statements.append({"statement": statement, "parameters": parameters})
 
     # Create Events — stamp the canonical timeline anchor with honest precedence
@@ -626,39 +642,43 @@ async def _write_to_neo4j(
     for event in events:
         ev_occurred = occurred_at or event.get("timestamp")
         timeline_at, time_basis = _resolve_timeline(
-            occurred_at=ev_occurred, observed_at=observed_at,
-            published_at=published_at, ingested_at=effective_ingested,
+            occurred_at=ev_occurred,
+            observed_at=observed_at,
+            published_at=published_at,
+            ingested_at=effective_ingested,
         )
         ev_codebook_type = event.get("codebook_type", "other.unclassified")
         ev_key = _event_key(doc_hash, ev_codebook_type, event.get("title", ""))
         # event_key identifies the same event (doc hash + codebook_type + normalized title), so a
         # re-MERGE is the SAME event: freeze the create-time fields (ON CREATE SET) and only stamp
         # updated_at on re-match — do not overwrite with a later re-extraction.
-        statements.append({
-            "statement": (
-                "MERGE (ev:Event {event_key: $event_key}) "
-                "ON CREATE SET "
-                "  ev.title = $title, ev.summary = $summary,"
-                "  ev.codebook_type = $codebook_type,"
-                "  ev.severity = $severity, ev.confidence = $confidence,"
-                "  ev.timeline_at = datetime($timeline_at), ev.time_basis = $time_basis "
-                "ON MATCH SET ev.updated_at = datetime() "
-                "WITH ev "
-                "MATCH (d:Document {url: $url}) "
-                "MERGE (d)-[:DESCRIBES]->(ev)"
-            ),
-            "parameters": {
-                "event_key": ev_key,
-                "title": event.get("title", ""),
-                "summary": event.get("summary", ""),
-                "codebook_type": ev_codebook_type,
-                "severity": event.get("severity", "low"),
-                "confidence": event.get("confidence", 0.5),
-                "timeline_at": timeline_at,
-                "time_basis": time_basis,
-                "url": doc_url,
-            },
-        })
+        statements.append(
+            {
+                "statement": (
+                    "MERGE (ev:Event {event_key: $event_key}) "
+                    "ON CREATE SET "
+                    "  ev.title = $title, ev.summary = $summary,"
+                    "  ev.codebook_type = $codebook_type,"
+                    "  ev.severity = $severity, ev.confidence = $confidence,"
+                    "  ev.timeline_at = datetime($timeline_at), ev.time_basis = $time_basis "
+                    "ON MATCH SET ev.updated_at = datetime() "
+                    "WITH ev "
+                    "MATCH (d:Document {url: $url}) "
+                    "MERGE (d)-[:DESCRIBES]->(ev)"
+                ),
+                "parameters": {
+                    "event_key": ev_key,
+                    "title": event.get("title", ""),
+                    "summary": event.get("summary", ""),
+                    "codebook_type": ev_codebook_type,
+                    "severity": event.get("severity", "low"),
+                    "confidence": event.get("confidence", 0.5),
+                    "timeline_at": timeline_at,
+                    "time_basis": time_basis,
+                    "url": doc_url,
+                },
+            }
+        )
         # Append the country-scope fragment to the event statement; no point is invented.
         # `ev` is still in scope from the preceding `MERGE (d)-[:DESCRIBES]->(ev)`.
         frag = (
@@ -669,6 +689,12 @@ async def _write_to_neo4j(
             if active_spatial_index is not None
             else None
         )
+        if source_evidence is not None:
+            frag = (
+                observation_geo_fragment(source_evidence, active_spatial_index)
+                if active_spatial_index is not None
+                else None
+            )
         if frag is not None:
             statements[-1]["statement"] += frag["cypher"]
             statements[-1]["parameters"].update(frag["parameters"])

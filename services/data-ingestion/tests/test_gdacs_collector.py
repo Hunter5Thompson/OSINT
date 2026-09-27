@@ -244,9 +244,17 @@ MAP_TC_MULTIGEOM = {
         _feature(7, "LineString", [[130.0, 20.0], [131.0, 21.0]], cls="Line_Line_0"),
         _feature(7, "Polygon", [[[130, 20], [131, 20], [131, 21], [130, 20]]], cls="Poly_Cones"),
         _feature(7, "Point", [131.5, 21.5], cls="Point_Polygon_Point_0"),
-        _feature(7, "Point", [132.0, 22.0], cls="Point_Centroid",
-                 severitydata={"severity": 83.3, "severitytext": "Tropical Storm",
-                               "severityunit": "km/h"}),
+        _feature(
+            7,
+            "Point",
+            [132.0, 22.0],
+            cls="Point_Centroid",
+            severitydata={
+                "severity": 83.3,
+                "severitytext": "Tropical Storm",
+                "severityunit": "km/h",
+            },
+        ),
     ],
 }
 
@@ -292,6 +300,7 @@ def _resp(status, body=None):
 
 
 def _wire_collect(collector):
+    collector._refresh_observation_location = AsyncMock()
     collector._ensure_collection = AsyncMock()
     collector._batch_upsert = AsyncMock()
     collector._embed = AsyncMock(return_value=[0.0] * 1024)

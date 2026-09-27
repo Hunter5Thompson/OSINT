@@ -86,3 +86,26 @@ async def test_batch_upsert_calls_qdrant(collector):
     points = [MagicMock()]
     await collector._batch_upsert(points)
     collector.qdrant.upsert.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_upsert_projects_structured_coordinates_at_shared_write_seam(collector):
+    from qdrant_client.models import PointStruct
+
+    from config import Settings
+
+    collector.settings = Settings()
+    point = PointStruct(
+        id=1,
+        vector=[0.0],
+        payload={
+            "source": "usgs",
+            "usgs_id": "one",
+            "latitude": 48.0,
+            "longitude": 37.8,
+        },
+    )
+    await collector._batch_upsert([point])
+    written = collector.qdrant.upsert.call_args.kwargs["points"][0].payload
+    assert written["spatial_occurrence_scope_revision_tokens"]
+    assert written["source"] == "usgs"

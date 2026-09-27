@@ -16,9 +16,7 @@ from pipeline import ExtractionConfigError, ExtractionTransientError, process_it
 
 log = structlog.get_logger(__name__)
 
-USGS_FEED_URL = (
-    "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson"
-)
+USGS_FEED_URL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson"
 
 # Radius around a nuclear test site that triggers enrichment
 PROXIMITY_RADIUS_KM = 100.0
@@ -156,7 +154,7 @@ class USGSCollector(BaseCollector):
     # Neo4j nuclear enrichment write (eventual consistency)
     # ------------------------------------------------------------------
 
-    async def _write_near_test_site(self, event: dict) -> None:
+    async def _write_near_test_site(self, event: dict) -> int:
         """Write NEAR_TEST_SITE relationship to Neo4j after process_item() completes.
 
         This is intentionally NOT atomic with process_item() — the relationship
@@ -166,18 +164,19 @@ class USGSCollector(BaseCollector):
         """
         site_name = event["nearest_test_site"]
         if not site_name:
-            return
+            return 0
 
         cypher = """
 MERGE (nts:NuclearTestSite {name: $site_name})
 ON CREATE SET nts.latitude  = $site_lat,
               nts.longitude = $site_lon
 WITH nts
-MATCH (d:Document {url: $event_url})-[:MENTIONS]->(e:Event)
+MATCH (d:Document {url: $event_url})-[:DESCRIBES]->(e:Event)
 MERGE (e)-[r:NEAR_TEST_SITE]->(nts)
 ON CREATE SET r.distance_km   = $distance_km,
               r.concern_score  = $concern_score,
               r.concern_level  = $concern_level
+RETURN count(r) AS written
 """
         site_lat, site_lon = NUCLEAR_TEST_SITES[site_name]
         params = {
@@ -205,11 +204,16 @@ ON CREATE SET r.distance_km   = $distance_km,
                     usgs_id=event["usgs_id"],
                 )
             else:
+                written = int(resp.json()["results"][0]["data"][0]["row"][0])
+                if not written:
+                    log.warning("usgs_neo4j_event_missing", usgs_id=event["usgs_id"])
+                    return 0
                 log.debug(
                     "usgs_neo4j_near_test_site_written",
                     usgs_id=event["usgs_id"],
                     site=site_name,
                 )
+                return written
         except Exception as exc:
             log.warning(
                 "usgs_neo4j_near_test_site_failed",
@@ -217,6 +221,8 @@ ON CREATE SET r.distance_km   = $distance_km,
                 site=site_name,
                 error=str(exc),
             )
+
+        return 0
 
     # ------------------------------------------------------------------
     # Main collect loop
@@ -251,6 +257,10 @@ ON CREATE SET r.distance_km   = $distance_km,
             pid = self._point_id(chash)
 
             if await self._dedup_check(pid):
+                # Proximity is a separate idempotent write; Qdrant dedup must not
+                # hide an earlier missing Event or a transient Neo4j failure.
+                if event["nearest_test_site"]:
+                    await self._write_near_test_site(event)
                 continue
 
             title = (
@@ -259,14 +269,9 @@ ON CREATE SET r.distance_km   = $distance_km,
                 else f"M{event['magnitude']} earthquake"
             )
             if event["nearest_test_site"]:
-                title += (
-                    f" — {event['distance_to_site_km']} km from {event['nearest_test_site']}"
-                )
+                title += f" — {event['distance_to_site_km']} km from {event['nearest_test_site']}"
 
-            embed_text = (
-                f"{title}. Depth: {event['depth_km']} km, "
-                f"Time: {event['event_time']}."
-            )
+            embed_text = f"{title}. Depth: {event['depth_km']} km, Time: {event['event_time']}."
             if event["concern_level"]:
                 embed_text += f" Nuclear concern level: {event['concern_level']}."
 
@@ -278,19 +283,16 @@ ON CREATE SET r.distance_km   = $distance_km,
                     text=embed_text,
                     url=event["url"],
                     source="usgs",
+                    source_evidence={**event, "source": "usgs"},
                     settings=self.settings,
                     redis_client=self.redis,
                     occurred_at=event.get("event_time"),
                 )
             except ExtractionTransientError as exc:
-                log.warning(
-                    "extraction_skipped_transient", url=event["url"], error=str(exc)
-                )
+                log.warning("extraction_skipped_transient", url=event["url"], error=str(exc))
                 continue
             except ExtractionConfigError as exc:
-                log.error(
-                    "extraction_skipped_config", url=event["url"], error=str(exc)
-                )
+                log.error("extraction_skipped_config", url=event["url"], error=str(exc))
                 continue
 
             # Nuclear proximity (eventual consistency, see docstring)

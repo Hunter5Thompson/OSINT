@@ -19,12 +19,10 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_PATH = REPOSITORY_ROOT / "contracts/qdrant-spatial-payload-v1.json"
 LANE_CONTRACT_PATH = REPOSITORY_ROOT / "contracts/qdrant-spatial-writer-lanes-v1.json"
 CATALOG_DIRECTORY = (
-    REPOSITORY_ROOT
-    / "services/backend/data/spatial/catalogs/spatial-v1-e76a16bff799"
+    REPOSITORY_ROOT / "services/backend/data/spatial/catalogs/spatial-v1-e76a16bff799"
 )
 CROSSWALK_PATH = (
-    REPOSITORY_ROOT
-    / "services/data-ingestion/spatial_catalog/data/country_crosswalk.json"
+    REPOSITORY_ROOT / "services/data-ingestion/spatial_catalog/data/country_crosswalk.json"
 )
 
 
@@ -392,12 +390,17 @@ def test_unsupported_payload_is_explicit_and_has_no_filterable_keys() -> None:
     assert payload["spatial_derivations"] == []
 
 
-def test_lane_inventory_keeps_scope_bounded_to_two_supported_writers() -> None:
+def test_lane_inventory_includes_reviewed_structured_source_adapters() -> None:
     contract = json.loads(LANE_CONTRACT_PATH.read_text(encoding="utf-8"))
 
     assert [item["lane"] for item in contract["supported_writers"]] == [
         "gdelt_raw_gkg",
         "notebooklm_claim",
+        "usgs",
+        "firms",
+        "ucdp",
+        "eonet",
+        "gdacs",
     ]
     assert {item["lane"] for item in contract["unavailable_writers"]} == {
         "intelligence_legacy_indexer",

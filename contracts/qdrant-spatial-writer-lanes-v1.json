@@ -5,21 +5,72 @@
       "lane": "gdelt_raw_gkg",
       "payload_source": "gdelt_gkg",
       "writer": "services/data-ingestion/gdelt_raw/writers/qdrant_writer.py",
-      "relations": ["occurrence"],
+      "relations": [
+        "occurrence"
+      ],
       "evidence": "exact linked_event_ids join to canonical event parquet ActionGeo fields"
     },
     {
       "lane": "notebooklm_claim",
       "payload_source_type": "notebooklm",
       "writer": "services/data-ingestion/nlm_ingest/ingest_qdrant.py",
-      "relations": ["about"],
+      "relations": [
+        "about"
+      ],
       "evidence": "exact claim entity reference to one typed extracted geo entity and one reviewed name crosswalk entry"
+    },
+    {
+      "lane": "usgs",
+      "payload_source": "usgs",
+      "writer": "services/data-ingestion/feeds/base.py",
+      "relations": [
+        "occurrence"
+      ],
+      "evidence": "stable source identity and valid structured coordinate pair via source_spatial.py"
+    },
+    {
+      "lane": "firms",
+      "payload_source": "firms",
+      "writer": "services/data-ingestion/feeds/base.py",
+      "relations": [
+        "occurrence"
+      ],
+      "evidence": "stable source identity and valid structured coordinate pair via source_spatial.py"
+    },
+    {
+      "lane": "ucdp",
+      "payload_source": "ucdp",
+      "writer": "services/data-ingestion/feeds/base.py",
+      "relations": [
+        "occurrence"
+      ],
+      "evidence": "stable source identity, where_prec=1, valid coordinate pair via source_spatial.py; missing precision requires source replay"
+    },
+    {
+      "lane": "eonet",
+      "payload_source": "eonet",
+      "writer": "services/data-ingestion/feeds/base.py",
+      "relations": [
+        "occurrence"
+      ],
+      "evidence": "stable source identity and valid structured coordinate pair via source_spatial.py"
+    },
+    {
+      "lane": "gdacs",
+      "payload_source": "gdacs",
+      "writer": "services/data-ingestion/feeds/base.py",
+      "relations": [
+        "occurrence"
+      ],
+      "evidence": "stable source identity and reported point centroid; not the full affected area"
     }
   ],
   "unavailable_writers": [
     {
       "lane": "intelligence_legacy_indexer",
-      "payload_sources": ["dynamic"],
+      "payload_sources": [
+        "dynamic"
+      ],
       "writer": "services/intelligence/rag/indexer.py",
       "reason": "legacy region string is not reviewed spatial evidence"
     },
@@ -27,9 +78,6 @@
       "lane": "legacy_feed_collectors",
       "payload_sources": [
         "adsb.fi",
-        "eonet",
-        "firms",
-        "gdacs",
         "gdelt",
         "hapi",
         "noaa_nhc",
@@ -37,19 +85,19 @@
         "portwatch",
         "rss",
         "rss_fulltext",
-        "telegram",
-        "ucdp",
-        "usgs"
+        "telegram"
       ],
       "writers": [
         "services/data-ingestion/feeds",
         "services/data-ingestion/feeds/fulltext_collector.py"
       ],
-      "reason": "not migrated in Plan 07A; source-specific structured evidence contract is unavailable"
+      "reason": "no reviewed source-specific spatial evidence adapter"
     },
     {
       "lane": "suv_structured",
-      "payload_sources": ["suv_structured"],
+      "payload_sources": [
+        "suv_structured"
+      ],
       "writers": [
         "services/data-ingestion/suv_structured/build_companies.py",
         "services/data-ingestion/suv_structured/build_procurements.py"

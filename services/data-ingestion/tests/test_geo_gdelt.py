@@ -150,3 +150,24 @@ def test_fetch_and_parse_orchestrates_download_and_parse(tmp_path, monkeypatch):
 
     rows = geo_gdelt._fetch_and_parse("20260613221500")
     assert rows == fake_rows
+
+
+def test_legacy_backfill_projects_current_spatial_contract(tmp_path):
+    _seed_one_slice(tmp_path)
+    rows = [
+        {
+            "global_event_id": 1,
+            "action_geo_lat": 48.0,
+            "action_geo_long": 37.8,
+            "action_geo_fullname": "Donetsk",
+            "action_geo_country_code": "UP",
+            "action_geo_feature_id": "-1",
+        }
+    ]
+    client = _FakeClient()
+    asyncio.run(geo_gdelt.run(client, tmp_path, fetch=lambda _: rows))
+    row = client.calls[0][1]["rows"][0]
+    assert row["country_iso3"] == "UKR"
+    assert row["source_country_code_system"] == "gdelt-gec"
+    assert row["spatial_derivation_revision"]
+    assert "l.spatial_derivation_revision = row.spatial_derivation_revision" in BACKFILL_OCCURRED_AT

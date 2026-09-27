@@ -7,19 +7,42 @@ so it only references labels/relationships/properties that exist.
 LABELS = ("Entity", "Event", "Source", "Location", "Document")
 
 RELATIONSHIPS = (
-    "INVOLVES", "REPORTED_BY", "OCCURRED_AT", "MENTIONS",
-    "OPERATES", "HEADQUARTERED_IN",
-    "PROCURES", "CONTRACTED_TO", "CONCERNS_SYSTEM",
+    "DESCRIBES",
+    "NEAR_TEST_SITE",
+    "SPATIOTEMPORAL_PROXIMITY",
+    "INVOLVES",
+    "REPORTED_BY",
+    "OCCURRED_AT",
+    "MENTIONS",
+    "OPERATES",
+    "HEADQUARTERED_IN",
+    "PROCURES",
+    "CONTRACTED_TO",
+    "CONCERNS_SYSTEM",
 )
 
 ENTITY_PROPERTIES = (
-    "name", "type", "aliases", "confidence",
-    "first_seen", "last_seen", "id",
+    "name",
+    "type",
+    "aliases",
+    "confidence",
+    "first_seen",
+    "last_seen",
+    "id",
 )
 
 EVENT_PROPERTIES = (
-    "id", "title", "summary", "timestamp",
-    "codebook_type", "severity", "confidence",
+    "event_id",
+    "event_key",
+    "timeline_at",
+    "time_basis",
+    "id",
+    "title",
+    "summary",
+    "timestamp",
+    "codebook_type",
+    "severity",
+    "confidence",
 )
 
 SOURCE_PROPERTIES = ("url", "name", "last_fetched")

@@ -498,7 +498,9 @@ async def test_loader_accepts_the_reviewed_reference_catalog() -> None:
     state = await loader.load()
 
     assert isinstance(state, CatalogReadyState)
-    assert state.active_catalog_revision == "spatial-v1-0180e188358c"
+    pointer = json.loads((reference_root / "catalog-pointer.json").read_bytes())
+    assert state.active_catalog_revision == pointer["active_catalog_revision"]
+    assert state.served_catalog_revisions == tuple(pointer["served_catalog_revisions"])
     germany = loader.get_scope(state.active_catalog_revision, "country:DEU")
     assert germany.scope.children_available
     bavaria = loader.get_scope(state.active_catalog_revision, "admin1:iso3166-2:DE-BY")
