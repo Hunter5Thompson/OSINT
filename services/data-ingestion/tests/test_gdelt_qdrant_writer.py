@@ -392,3 +392,57 @@ async def test_default_tei_embed_batch_posts_list(httpx_mock):
 
     assert out == [[1.0, 2.0], [3.0, 4.0]]
     assert json.loads(httpx_mock.get_requests()[0].content) == {"inputs": ["a", "b"]}
+
+
+@pytest.mark.asyncio
+async def test_invalid_linked_event_is_skipped_not_fatal_for_the_slice(
+    tmp_path,
+    spatial_index,
+):
+    """Live slice 20260827091500: one linked event with a null GoldsteinScale
+    must not keep the slice's 542 documents out of Qdrant (mirrors WP-02
+    skip-and-log in the Neo4j writer, which rejects the same event)."""
+    gkg = pl.DataFrame({
+        "doc_id": ["gdelt:gkg:r1", "gdelt:gkg:r2"],
+        "url": ["https://ex.com/1", "https://ex.com/2"],
+        "source_name": ["ex.com", "ex.com"],
+        "title": ["t1", "t2"],
+        "gdelt_date": ["2026-04-25T12:00:00", "2026-04-25T12:00:00"],
+        "themes": [["ARMEDCONFLICT"], []],
+        "persons": [[], []],
+        "organizations": [[], []],
+        "linked_event_ids": [["gdelt:event:1", "gdelt:event:2"], ["gdelt:event:1"]],
+        "goldstein_min": [-6.0, None],
+        "goldstein_avg": [-6.0, None],
+        "cameo_roots_linked": [[19], [12]],
+        "codebook_types_linked": [["conflict.armed"], []],
+        "tone_polarity": [8.4, 1.0],
+        "word_count": [599, 10],
+    })
+    events = pl.DataFrame([
+        _event_row(event_id="gdelt:event:1", goldstein=None, cameo_code="1213"),
+        _event_row(event_id="gdelt:event:2"),
+    ])
+    for stream, frame in (("gkg", gkg), ("events", events)):
+        stream_dir = tmp_path / stream / "date=2026-04-25"
+        stream_dir.mkdir(parents=True)
+        frame.write_parquet(stream_dir / "20260425120000.parquet")
+
+    client = MagicMock()
+    client.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
+    client.create_collection = AsyncMock()
+    client.upsert = AsyncMock()
+    writer = QdrantWriter(
+        client=client,
+        embed=AsyncMock(return_value=[0.1] * 1024),
+        collection="test",
+        spatial_index=spatial_index,
+    )
+
+    written = await writer.upsert_from_parquet(tmp_path, "20260425120000", "2026-04-25")
+
+    assert written == 2
+    points = {p.payload["doc_id"]: p for p in client.upsert.await_args.kwargs["points"]}
+    evidence = [d["evidence_id"] for d in points["gdelt:gkg:r1"].payload["spatial_derivations"]]
+    assert evidence == ["gdelt:event:2"]
+    assert points["gdelt:gkg:r2"].payload["spatial_derivations"] == []
