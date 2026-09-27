@@ -41,6 +41,7 @@ from app.models.report import (
     ReportStatus,
     ReportUpdateRequest,
 )
+from app.services._persisted_time import parse_persisted_datetime
 from app.services.briefing import parse_munin_report
 from app.services.neo4j_client import read_query, write_query
 
@@ -64,6 +65,16 @@ _DEFAULT_MARGIN = [
 ]
 
 
+class ReportRowDecodeError(ValueError):
+    """A persisted report/message has an unreadable required timestamp."""
+
+    def __init__(self, record_id: object, field: str, cause: Exception) -> None:
+        self.record_id = str(record_id) if record_id is not None else "unknown"
+        self.field = field
+        self.cause = cause
+        super().__init__(f"invalid persisted {field} for {self.record_id}")
+
+
 def _roman_month(month_index: int) -> str:
     romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
     return romans[month_index]
@@ -75,16 +86,7 @@ def _stamp_from(now: datetime) -> str:
 
 
 def _parse_dt(value: str | datetime | None, fallback: datetime | None = None) -> datetime:
-    if isinstance(value, datetime):
-        return value.astimezone(UTC)
-    if isinstance(value, str) and value:
-        if value.endswith("Z"):
-            value = value[:-1] + "+00:00"
-        try:
-            return datetime.fromisoformat(value).astimezone(UTC)
-        except ValueError:
-            pass
-    return fallback or datetime.now(UTC)
+    return parse_persisted_datetime(value, missing_fallback=fallback)
 
 
 def _decode_metrics(raw: str | list[dict[str, Any]] | None) -> list[DossierMetric]:
@@ -157,8 +159,8 @@ def _coerce_message_role(value: object) -> MessageRole:
 
 
 def _row_to_report(row: dict[str, Any]) -> ReportRecord:
-    created_at = _parse_dt(row.get("created_at"))
-    updated_at = _parse_dt(row.get("updated_at"), fallback=created_at)
+    created_at = _decode_row_datetime(row, "created_at")
+    updated_at = _decode_row_datetime(row, "updated_at", fallback=created_at)
     return ReportRecord(
         id=str(row.get("id", "")),
         paragraph_num=int(row.get("paragraph_num") or 0),
@@ -189,8 +191,34 @@ def _row_to_message(row: dict[str, Any]) -> ReportMessage:
         id=str(row.get("id") or ""),
         role=_coerce_message_role(row.get("role")),
         text=str(row.get("text") or ""),
-        ts=_parse_dt(row.get("ts")),
+        ts=_decode_row_datetime(row, "ts"),
         refs=[str(v) for v in (row.get("refs") or [])],
+    )
+
+
+def _decode_row_datetime(
+    row: dict[str, Any], field: str, *, fallback: datetime | None = None
+) -> datetime:
+    try:
+        return _parse_dt(row.get(field), fallback=fallback)
+    except (TypeError, ValueError) as exc:
+        raise ReportRowDecodeError(row.get("id"), field, exc) from exc
+
+
+def _log_report_decode_errors(event: str, errors: list[ReportRowDecodeError]) -> None:
+    if not errors:
+        return
+    log.warning(
+        event,
+        invalid_count=len(errors),
+        invalid_rows=[
+            {
+                "record_id": error.record_id,
+                "field": error.field,
+                "error_class": type(error.cause).__name__,
+            }
+            for error in errors[:20]
+        ],
     )
 
 
@@ -242,7 +270,15 @@ async def _next_paragraph() -> int:
 
 async def list_reports(limit: int = 200) -> list[ReportRecord]:
     rows = await read_query(REPORT_LIST, {"limit": limit})
-    return [_row_to_report(r) for r in rows]
+    reports: list[ReportRecord] = []
+    decode_errors: list[ReportRowDecodeError] = []
+    for row in rows:
+        try:
+            reports.append(_row_to_report(row))
+        except ReportRowDecodeError as exc:
+            decode_errors.append(exc)
+    _log_report_decode_errors("report_rows_decode_degraded", decode_errors)
+    return reports
 
 
 async def get_report(report_id: str) -> ReportRecord | None:
@@ -441,7 +477,15 @@ async def list_report_messages(report_id: str, limit: int = 500) -> list[ReportM
         REPORT_MESSAGES_BY_REPORT_ID,
         {"report_id": report_id, "limit": limit},
     )
-    return [_row_to_message(r) for r in rows]
+    messages: list[ReportMessage] = []
+    decode_errors: list[ReportRowDecodeError] = []
+    for row in rows:
+        try:
+            messages.append(_row_to_message(row))
+        except ReportRowDecodeError as exc:
+            decode_errors.append(exc)
+    _log_report_decode_errors("report_messages_decode_degraded", decode_errors)
+    return messages
 
 
 async def append_report_message(

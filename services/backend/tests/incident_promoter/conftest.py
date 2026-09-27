@@ -14,7 +14,7 @@ from app.models.incident import (
     IncidentTimelineEvent,
 )
 from app.models.signals import SignalEnvelope, SignalPayload
-from app.services.incident_store import MutationResult
+from app.services.incident_store import MutationResult, RehydrationResult
 
 
 class FakeClock:
@@ -112,13 +112,17 @@ class FakeIncidentStore:
         self._by_id[incident_id] = next_record
         return MutationResult("applied", next_record)
 
-    async def list_owned_for_rehydrate(self) -> list[Incident]:
-        return [
-            i
-            for i in self._by_id.values()
-            if i.status in (IncidentStatus.OPEN, IncidentStatus.PROMOTED)
-            and "auto_promoter:v1" in i.layer_hints
-        ]
+    async def list_owned_for_rehydrate(self) -> RehydrationResult:
+        return RehydrationResult(
+            incidents=[
+                i
+                for i in self._by_id.values()
+                if i.status in (IncidentStatus.OPEN, IncidentStatus.PROMOTED)
+                and "auto_promoter:v1" in i.layer_hints
+            ],
+            degraded=False,
+            invalid_rows=0,
+        )
 
     # Test helpers — direct read access
     def get(self, incident_id: str) -> Incident | None:

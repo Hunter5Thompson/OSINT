@@ -145,6 +145,7 @@ class TelegramTopicDetector:
         if not shingles:
             return None
         channel = _channel_of(envelope.payload.url)
+        now = self._clock()
 
         # Find best matching centroid
         best_key: str | None = None
@@ -166,31 +167,34 @@ class TelegramTopicDetector:
             cluster_key = "telegram:topic:" + hashlib.sha1(
                 ("|".join(sorted(" ".join(t) for t in shingles))).encode()
             ).hexdigest()[:12]
+        else:
+            cluster_key = best_key
+
+        suppress_until = self._suppressed_until.get(cluster_key)
+        if suppress_until is not None:
+            if now < suppress_until:
+                return None
+            self._suppressed_until.pop(cluster_key, None)
+
+        if best_key is None:
             centroid = _Centroid(
                 cluster_key=cluster_key,
                 tokens=shingles,
                 unigram_tokens=unigrams,
                 domain=channel,
+                last_seen_ts=now,
             )
             self._centroids[cluster_key] = centroid
             self._evict_if_needed()
         else:
-            cluster_key = best_key
             centroid = self._centroids[cluster_key]
             # widen centroid tokens lazily (both representations)
             centroid.tokens |= shingles
             centroid.unigram_tokens |= unigrams
 
-        # Suppression check
-        suppress_until = self._suppressed_until.get(cluster_key)
-        if suppress_until is not None:
-            if self._clock() < suppress_until:
-                return None
-            self._suppressed_until.pop(cluster_key, None)
-
-        self._prune(centroid)
-        centroid.deque.append((self._clock(), envelope.event_id))
-        centroid.last_seen_ts = self._clock()
+        self._prune(centroid, now)
+        centroid.deque.append((now, envelope.event_id))
+        centroid.last_seen_ts = now
 
         if centroid.ignited:
             return self._build_update_hit(envelope, cluster_key)
@@ -223,8 +227,8 @@ class TelegramTopicDetector:
         )
         self._centroids.pop(oldest_key, None)
 
-    def _prune(self, centroid: _Centroid) -> None:
-        cutoff = self._clock() - timedelta(seconds=self._config.telegram_window_sec)
+    def _prune(self, centroid: _Centroid, now: datetime) -> None:
+        cutoff = now - timedelta(seconds=self._config.telegram_window_sec)
         while centroid.deque and centroid.deque[0][0] < cutoff:
             centroid.deque.popleft()
 

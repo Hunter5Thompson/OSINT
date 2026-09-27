@@ -130,6 +130,71 @@ def test_telegram_lru_evicts_at_capacity(signal_envelope_factory, fake_clock):
     assert len(det._centroids) == 3  # noqa: SLF001
 
 
+@pytest.mark.parametrize("advance_seconds", [0, 60])
+def test_telegram_newest_centroid_survives_full_capacity_and_ignites(
+    signal_envelope_factory, fake_clock, advance_seconds
+):
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.telegram import TelegramTopicDetector
+
+    cfg = PromoterConfig.from_env()
+    cfg = cfg.__class__(**{**cfg.__dict__, "telegram_min_hits": 3})
+    det = TelegramTopicDetector(config=cfg, clock=fake_clock, max_centroids=1)
+    old_title = "alpha bravo charlie delta echo foxtrot golf"
+    new_title = "zulu yankee xray whisky victor hotel india"
+
+    for _ in range(3):
+        old_hit = det.detect(_tg_envelope(signal_envelope_factory, old_title))
+    assert old_hit is not None
+    old_key = old_hit.cluster_key
+    if advance_seconds:
+        fake_clock.advance(advance_seconds)
+
+    assert det.detect(_tg_envelope(signal_envelope_factory, new_title)) is None
+    new_key = next(iter(det._centroids))  # noqa: SLF001
+    assert new_key != old_key
+    assert old_key not in det._centroids  # noqa: SLF001
+    assert det.detect(_tg_envelope(signal_envelope_factory, new_title)) is None
+    ignition = det.detect(_tg_envelope(signal_envelope_factory, new_title))
+
+    assert ignition is not None
+    assert ignition.cluster_key == new_key
+    update = det.detect(_tg_envelope(signal_envelope_factory, new_title))
+    assert update is not None
+    assert update.cluster_key == new_key
+
+
+def test_telegram_suppressed_topic_cannot_evict_active_centroid_at_capacity(
+    signal_envelope_factory, fake_clock
+):
+    from datetime import timedelta
+
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.telegram import TelegramTopicDetector
+
+    det = TelegramTopicDetector(
+        config=PromoterConfig.from_env(), clock=fake_clock, max_centroids=1
+    )
+    suppressed_title = "alpha bravo charlie delta echo foxtrot golf"
+    active_title = "zulu yankee xray whisky victor hotel india"
+    for _ in range(3):
+        suppressed_hit = det.detect(_tg_envelope(signal_envelope_factory, suppressed_title))
+    assert suppressed_hit is not None
+    suppressed_key = suppressed_hit.cluster_key
+    det.on_cluster_terminated(
+        suppressed_key, suppress_until=fake_clock() + timedelta(hours=1)
+    )
+
+    assert det.detect(_tg_envelope(signal_envelope_factory, active_title)) is None
+    active_key = next(iter(det._centroids))  # noqa: SLF001
+    assert active_key != suppressed_key
+    fake_clock.advance(1)
+
+    assert det.detect(_tg_envelope(signal_envelope_factory, suppressed_title)) is None
+    assert list(det._centroids) == [active_key]  # noqa: SLF001
+    assert suppressed_key not in det._centroids  # noqa: SLF001
+
+
 def test_telegram_on_cluster_terminated_with_suppress(signal_envelope_factory, fake_clock):
     from datetime import timedelta
 

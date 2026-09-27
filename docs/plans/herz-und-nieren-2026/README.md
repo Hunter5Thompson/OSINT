@@ -1,6 +1,6 @@
 # Fixplan: Herz und Nieren 2026 Alpha
 
-**Status: aktiv; HN-S01 und HN-S02 abgeschlossen (PR #128, Merge `732fadc`), HN-S03 gemergt (PR #129, Merge `58843a7`, CI erfolgreich), HN-I01 gemergt (PR #131, `a45a13c`), HN-I02 gemergt (PR #132, `a3fc29c`); HN-I04 gemergt (PR #133, `1eb5fdb`).** Baseline: `374c5cc460ebea44ad27f0ddfe09a11fd2d57e83` (2026-09-27). [Senior-Bewertung mit vollständiger Finding-Matrix](../../reports/Herz_und_Nieren_2026_Alpha_Review.md).
+**Status: aktiv; HN-S01 und HN-S02 abgeschlossen (PR #128, Merge `732fadc`), HN-S03 gemergt (PR #129, Merge `58843a7`, CI erfolgreich), HN-I01 gemergt (PR #131, `a45a13c`), HN-I02 gemergt (PR #132, `a3fc29c`); HN-I04 gemergt (PR #133, `1eb5fdb`). B01 I05/I06/I03 implementiert, Senior-Review offen.** Baseline: `374c5cc460ebea44ad27f0ddfe09a11fd2d57e83` (2026-09-27). [Senior-Bewertung mit vollständiger Finding-Matrix](../../reports/Herz_und_Nieren_2026_Alpha_Review.md).
 
 ## Ausführung mit Senior und GPT-6-Luna
 
@@ -67,6 +67,8 @@ X01–X04 bleiben vier **offene Designaufträge**, keine implizite Autorisierung
 Produktpolitik. X01/X02 werden in B06 und X03 in B12 mitgeführt; ihre unabhängigen
 Fixes können vorher abgeschlossen werden. X04 beginnt **früh neben B01** als
 read-only Designarbeit und wird vor B13 entschieden, nicht erst am Ende entdeckt.
+Die [frühe X04-Entscheidungsvorlage](X04-design-notes.md) liegt vor; Formatfreigabe
+und Umsetzung bleiben offen.
 Die Designnotizen werden in die ohnehin anstehenden Bündel-PRs aufgenommen.
 
 Die 13 PRs decken die 36 schon konkretisierten Fix-Tickets ab. Eine nach X04

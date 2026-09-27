@@ -55,7 +55,10 @@ class _FakeGraph:
                 r.get("scope_key") == scope and i != rid for i, r in self.by_id.items()
             ):
                 raise ConstraintError("already exists, constraint `report_scope_key_unique`")
-            self.by_id[rid] = dict(params)
+            record = self.by_id.get(rid, {})
+            record.update(params)
+            record.setdefault("created_at", params.get("now"))
+            self.by_id[rid] = record
             return [self._row(rid)]
         return []
 
@@ -82,6 +85,8 @@ class _FakeGraph:
             "title": p.get("title", ""),
             "confidence": p.get("confidence", 0.0),
             "spatial_application_json": p.get("spatial_application_json"),
+            "created_at": p.get("created_at") or p.get("now"),
+            "updated_at": p.get("now"),
         }
 
 
@@ -153,7 +158,10 @@ async def test_alias_lookup_uses_parameterized_allowlist_and_returns_alias(
 
     async def read(cypher, params):
         calls.append((cypher, params))
-        return [{"id": "r-legacy", "scope_key": "country:XKX", "paragraph_num": 1}]
+        return [{
+            "id": "r-legacy", "scope_key": "country:XKX", "paragraph_num": 1,
+            "created_at": "2026-09-27T12:00:00Z",
+        }]
 
     monkeypatch.setattr(report_store, "read_query", read)
     report = await report_store.get_report_by_scope_keys(
@@ -183,11 +191,15 @@ async def test_canonical_report_wins_duplicate_alias_conflict_without_write(
 
     async def read(cypher, params):
         return [
-            {"id": "r-alias", "scope_key": "country:XKX", "paragraph_num": 1},
+            {
+                "id": "r-alias", "scope_key": "country:XKX", "paragraph_num": 1,
+                "created_at": "2026-09-27T12:00:00Z",
+            },
             {
                 "id": "r-canonical",
                 "scope_key": "country:odin:kosovo",
                 "paragraph_num": 2,
+                "created_at": "2026-09-27T12:00:00Z",
             },
         ]
 
@@ -248,7 +260,10 @@ async def test_get_or_create_rereads_winner_on_scope_race(monkeypatch):
     # True race: scope read misses, the CREATE loses to a concurrent racer (scope ConstraintError),
     # the racer's id (r-005) ≠ our id (r-009) so create_report re-raises, and get_or_create re-reads
     # the winner via REPORT_BY_SCOPE.
-    winner = {"id": "r-005", "scope_key": "country:RACE", "paragraph_num": 5}
+    winner = {
+        "id": "r-005", "scope_key": "country:RACE", "paragraph_num": 5,
+        "created_at": "2026-09-27T12:00:00Z",
+    }
     reads = {"scope": 0}
 
     async def read(cypher, params):

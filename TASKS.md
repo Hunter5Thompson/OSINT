@@ -21,6 +21,18 @@ Nächstes Bündel: **B01 = I05 → I06 plus I03**. X04-Design früh parallel vor
 vier Designaufträge und R01 sind keine stillschweigend abgeschlossenen Fixes.
 PR #133 / HN-I04 ist seit 2026-09-27T18:34:17Z gemergt (`1eb5fdb`).
 
+**HN-B01 — IMPLEMENTIERT, REVIEW OFFEN (I05 → I06 → I03):** I05 isoliert fehlerhafte
+Incident-Rows, zeigt Rehydrate-/Taskausfälle im Promoter-Inspector und sperrt Drain
+bei Poison-Rows oder DB-Ausfall. I06 nutzt einen gemeinsamen UTC-Parser für
+persistierte Zeiten; ungültige Listenzeilen werden isoliert. I03 schützt aktuelle
+Telegram-Centroids und lässt unterdrückte Themen nicht aktive Einträge verdrängen.
+Einzelnachweise: I05 gezielte 67 Tests + markierter Neo4j-Querytest; I06 67 Zeit-/Store-/Report-Tests;
+I03 17 Telegram-Tests. Abschluss: 769 Backend-Tests mit `NEO4J_URL=bolt://127.0.0.1:1`,
+13 echte Tests ausschließlich auf markierter isolierter Neo4j, Ruff `app/` plus
+betroffene Tests, Mypy `app/` (91 Dateien) und Diff-Check grün. Das Rehydrate-Limit
+500 bleibt bestehen; keine Vollständigkeitsbehauptung darüber hinaus. Senior-Review,
+PR-CI und Merge bleiben offen; kein Produktions-DB-Test oder Live-Datenzugriff.
+
 ## Fixplan Herz und Nieren 2026 — laufende Umsetzung
 
 Lokale Paket-IDs aus [dem Fixplan](docs/plans/herz-und-nieren-2026/README.md),
