@@ -208,3 +208,43 @@ def test_aircraft_incomplete_position_has_no_location_write(
     }
 
     assert build_aircraft_location_statement(aircraft, spatial_index) is None
+
+
+# SPOTTED_AT.timestamp contract: epoch milliseconds (adsb.fi reports `now` in ms).
+
+
+def test_parse_keeps_adsb_fi_epoch_ms_and_buckets_dedup_by_15_minutes(collector):
+    raw = {**SAMPLE_ADSB_FI_RESPONSE, "now": 1_790_458_913_700}
+    ac = collector._parse_adsb_fi(raw)[0]
+    assert ac["timestamp"] == 1_790_458_913_700
+    bucket = int(ac["dedup_key"].split("|")[1])
+    assert bucket % 900_000 == 0
+    assert bucket <= ac["timestamp"] < bucket + 900_000
+
+
+def test_parse_polls_within_one_quarter_hour_share_a_dedup_key(collector):
+    first = collector._parse_adsb_fi({**SAMPLE_ADSB_FI_RESPONSE, "now": 1_790_458_200_000})[0]
+    later = collector._parse_adsb_fi({**SAMPLE_ADSB_FI_RESPONSE, "now": 1_790_459_099_999})[0]
+    nxt = collector._parse_adsb_fi({**SAMPLE_ADSB_FI_RESPONSE, "now": 1_790_459_100_000})[0]
+    assert first["dedup_key"] == later["dedup_key"] != nxt["dedup_key"]
+
+
+def test_parse_normalizes_epoch_seconds_and_missing_now_to_ms(collector, monkeypatch):
+    seconds = collector._parse_adsb_fi({**SAMPLE_ADSB_FI_RESPONSE, "now": 1_790_458_913})[0]
+    assert seconds["timestamp"] == 1_790_458_913_000
+
+    monkeypatch.setattr("feeds.military_aircraft_collector.time.time", lambda: 1_790_458_913.25)
+    without_now = {k: v for k, v in SAMPLE_ADSB_FI_RESPONSE.items() if k != "now"}
+    assert collector._parse_adsb_fi(without_now)[0]["timestamp"] == 1_790_458_913_250
+
+
+def test_location_write_keeps_coordinates_consistent_with_latest_observation(
+    collector, spatial_index,
+) -> None:
+    # A repeated poll in the same bucket updates the edge; the Location's
+    # lat/lon/name must move with its geo and country derivation.
+    aircraft = collector._parse_adsb_fi(SAMPLE_ADSB_FI_RESPONSE)[0]
+    statement = build_aircraft_location_statement(aircraft, spatial_index)["statement"]
+    on_create = statement.split("ON CREATE SET", 1)[1].split(" SET ", 1)[0]
+    assert "l.lat" not in on_create and "l.name" not in on_create
+    assert "l.lat = $latitude" in statement and "l.name = $name" in statement

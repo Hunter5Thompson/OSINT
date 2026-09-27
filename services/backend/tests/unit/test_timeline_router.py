@@ -842,3 +842,25 @@ def test_movements_unknown_kind_422(client):
         f"/api/timeline/window{W}&domain=movements&tier=fine&movement_kind=bicycle"
     )
     assert resp.status_code == 422
+
+
+def test_movements_window_compares_and_returns_stored_epoch_ms(client):
+    """SPOTTED_AT.timestamp is epoch ms: window params are ms, ts_ms is passed through."""
+    with patch("app.routers.timeline.read_query", new_callable=AsyncMock) as mock:
+        mock.side_effect = [[], [{"total": 0}]]
+        resp = client.get(
+            "/api/timeline/window?t_start=2026-09-26T00:00:00Z&t_end=2026-09-26T01:00:00Z"
+            "&domain=movements&tier=fine&movement_kind=mil_aircraft"
+        )
+    assert resp.status_code == 200
+    (samples_query, params), (count_query, count_params) = (
+        call.args for call in mock.await_args_list
+    )
+    assert params["start_ms"] == 1_790_380_800_000
+    assert params["end_ms"] == 1_790_384_400_000
+    assert "start_s" not in params and "end_s" not in params
+    assert count_params["start_ms"] == params["start_ms"]
+    for query in (samples_query, count_query):
+        assert "r.timestamp >= $start_ms AND r.timestamp <= $end_ms" in query
+    assert "ts_ms: x.timestamp," in samples_query
+    assert "x.timestamp * 1000" not in samples_query
