@@ -20,7 +20,7 @@ Gemeinsamer Vertrag: [README](README.md). S01/S03 benötigen Senior-Review. Hier
 
 ## ~~S02 — Query-URLs und lokale Worker-Dateien getrennt validieren~~ — FACHLICH ABGENOMMEN
 
-**Review 2026-09-27:** Commit `8b30249`, PR #128; 50 Intelligence-, 37 Backend- und 20 Worker-Tests unabhängig bestanden. Keine offenen Review-Findings. Merge und CI-Status separat prüfen; S03 bleibt offen. Die folgende Spezifikation bleibt als Abschlussnachweis erhalten.
+**Review 2026-09-27:** Commit `8b30249`, PR #128, gemergt als `732fadc`; alle CI-Tests, Ruff und CodeQL erfolgreich. 50 Intelligence-, 37 Backend- und 20 Worker-Tests unabhängig bestanden. Keine offenen Review-Findings. S03 bleibt offen. Die folgende Spezifikation bleibt als Abschlussnachweis erhalten.
 
 **F-04 Pfad/API, F-12 Pfad · P0 · M · unabhängig.** Unterläufe: S02a Intelligence+Backend; S02b Worker.
 
@@ -32,7 +32,9 @@ Gemeinsamer Vertrag: [README](README.md). S01/S03 benötigen Senior-Review. Hier
 
 **RED/Abnahme:** gültiges Bild innerhalb der Wurzel; `../`, ähnlich benanntes Nachbarverzeichnis, Symlink nach außen, Verzeichnis statt Datei, übergroße Datei. Ablehnung vor Dateilesen/LLM-Call. Direkter Intelligence-HTTP-Request muss ebenso 422 liefern wie Backend. Keine Produktionsdateien als Testziel. S03 bleibt nötig für Remote-Downloads.
 
-## S03 — Remote-Download an geprüfte IP binden
+## ~~S03 — Remote-Download an geprüfte IP binden~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27:** Implementierungscommit `a514db8`, PR #129, keine offenen Findings. Unabhängig 94 Tests, Ruff, Offline-Lockfile-Check und Diff-Check bestanden. Die Tests prüfen IP-Pinning, TLS-Parameter und Loader mit Teststreams, keinen Live-Zertifikatshandshake. CI/Merge separat prüfen. Die Spezifikation bleibt als Abschlussnachweis erhalten.
 
 **F-04 Netzwerk · P0 · L/Senior · nach S02.** Intelligence `agents/tools/vision.py`, optional neuer lokaler Transporthelper, `config.py`, Visiontests.
 

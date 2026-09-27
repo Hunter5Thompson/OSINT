@@ -35,35 +35,60 @@ class TestUrlValidation:
     def test_data_url_rejected(self):
         assert validate_image_url("data:image/png;base64,abc") is False
 
-    @pytest.mark.parametrize("url", [
-        "http://example.com/image.jpg", "https://user:pass@example.com/a.png",
-        "https://@example.com/a.png",
-        "/tmp/odin/images/a.png", "file:///tmp/a.png", "data:image/png;base64,AA==",
-        "https:///missing-host.png", "https://example.com:bad/a.png", "https://", "https://[bad",
-    ])
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://example.com/image.jpg",
+            "https://user:pass@example.com/a.png",
+            "https://@example.com/a.png",
+            "/tmp/odin/images/a.png",
+            "file:///tmp/a.png",
+            "data:image/png;base64,AA==",
+            "https:///missing-host.png",
+            "https://example.com:bad/a.png",
+            "https://",
+            "https://[bad",
+        ],
+    )
     def test_shared_query_contract_rejects_non_https_or_credentials(self, url):
         from main import QueryRequest
+
         with pytest.raises(ValidationError):
             QueryRequest(query="inspect", spatial_relation="either", image_url=url)
 
-    @pytest.mark.parametrize("url", [
-        "https://example.com/image.jpg", "https://8.8.8.8/a.png",
-    ])
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://example.com/image.jpg",
+            "https://8.8.8.8/a.png",
+        ],
+    )
     def test_shared_query_contract_accepts_https_public_hosts(self, url):
         from main import QueryRequest
+
         request = QueryRequest(query="inspect", spatial_relation="either", image_url=url)
         assert request.image_url == url
 
-    @pytest.mark.parametrize("url", [
-        "http://example.com/image.jpg", "https://user:pass@example.com/a.png",
-        "https://@example.com/a.png", "/tmp/odin/images/a.png", "file:///tmp/a.png",
-        "data:image/png;base64,AA==", "https:///missing-host.png",
-        "https://example.com:bad/a.png", "https://", "https://[bad",
-    ])
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://example.com/image.jpg",
+            "https://user:pass@example.com/a.png",
+            "https://@example.com/a.png",
+            "/tmp/odin/images/a.png",
+            "file:///tmp/a.png",
+            "data:image/png;base64,AA==",
+            "https:///missing-host.png",
+            "https://example.com:bad/a.png",
+            "https://",
+            "https://[bad",
+        ],
+    )
     def test_http_query_rejects_image_url_before_pipeline(self, url):
         from fastapi.testclient import TestClient
 
         from main import app
+
         with patch(
             "main.run_intelligence_query", side_effect=AssertionError("must not run")
         ) as run:
@@ -77,6 +102,7 @@ class TestUrlValidation:
     @pytest.mark.asyncio
     async def test_loader_rechecks_url_contract(self):
         from agents.tools.vision import _load_image
+
         with patch("agents.tools.vision._download_image") as download:
             with pytest.raises(ValueError):
                 await _load_image("https://user:pass@example.com/a.png")
@@ -99,8 +125,23 @@ class TestPrivateIpDetection:
     def test_public_ip_not_private(self):
         assert _is_private_ip("8.8.8.8") is False
 
-    def test_invalid_ip_treated_as_not_private(self):
-        assert _is_private_ip("not-an-ip") is False
+    def test_invalid_ip_fails_closed(self):
+        assert _is_private_ip("not-an-ip") is True
+
+    @pytest.mark.parametrize(
+        "address",
+        [
+            "100.64.0.1",  # CGNAT is neither private nor reserved per ipaddress
+            "0.0.0.0",
+            "240.0.0.1",
+            "ff02::1",
+            "::ffff:8.8.8.8",  # mapped public IPv4 remains forbidden
+            "4000::1",  # reserved IPv6 space, despite is_global on Python 3.12
+            "64:ff9b::a00:1",  # reserved NAT64 prefix
+        ],
+    )
+    def test_all_non_global_and_mapped_addresses_are_blocked(self, address):
+        assert _is_private_ip(address) is True
 
 
 class TestAnalyzeImageTool:

@@ -2495,6 +2495,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpcore" },
     { name = "httpx" },
     { name = "langchain-community" },
     { name = "langchain-core" },
@@ -2529,6 +2530,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpcore", specifier = ">=1.0.9" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "langchain-community", specifier = ">=0.3.0" },
     { name = "langchain-core", specifier = ">=0.3.0" },
