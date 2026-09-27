@@ -31,11 +31,13 @@ Senior-Review von `8b30249` ohne offene Findings; unabhängig 50 Intelligence-,
 `732fadc`; CI-Tests, Ruff und CodeQL erfolgreich. S03 bleibt für sichere
 Remote-Download-Verbindungen offen.
 
-**HN-S03 — IMPLEMENTIERT (Review offen):** Remote-Bilddownloads lösen DNS
+**~~HN-S03~~ — fachlich abgenommen (PR #129, Merge offen):** Remote-Bilddownloads lösen DNS
 asynchron auf, prüfen jede Antwort und verbinden gepinnt per httpcore zu einer
 numerischen IP bei unverändertem TLS-Host. Responses sind redirectfrei und
 encoded/decoded größen- sowie zeitbegrenzt; Pillow dekodiert vollständig.
-Transportdesign, Regressionen und Fokusverifikation stehen in PR.
+Senior-Review von `a514db8` ohne offene Findings; unabhängig 94 Tests, Ruff,
+Offline-Lockfile-Check und Diff-Check bestanden. CI und Merge separat prüfen.
+Netzwerk-/TLS-Verhalten über Teststreams geprüft, kein Live-Zertifikatshandshake.
 
 ## Session 2026-09-26 — Neo4j uniqueness repair
 
