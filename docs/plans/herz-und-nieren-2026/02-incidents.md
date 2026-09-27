@@ -30,7 +30,11 @@ Gemeinsamer Vertrag: [README](README.md). Alle Pfade relativ zu `services/backen
 
 **Abnahme:** oben genannte Tests, keine Polling-Sleeps in Racetests, kontrollierte Async-Barrieren. Keine automatische Wiederholung mit neuer ID bei unklarem DB-Commit ohne Idempotenzprüfung.
 
-## I03 — Telegram-Centroids vor Eviction zeitlich initialisieren
+## ~~I03 — Telegram-Centroids vor Eviction zeitlich initialisieren~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27, B01 / PR #134:** Implementierungscommit `2ea0365`; keine offenen Findings. Kapazität eins mit gleicher und fortgeschrittener Fake-Uhr, anschließende Ignition/Updates und unterdrückte Topics an der Kapazitätsgrenze geprüft. Ein gemeinsamer now-Wert initialisiert neue Centroids vor Eviction; Suppression wird vor Insert/Eviction geprüft.
+Unabhängig 769 Backend-Tests, 13 isolierte Neo4j-Tests, Ruff, Mypy (91 Dateien)
+und Diff-Check bestanden. PR-CI und Merge separat prüfen; kein Deployment.
 
 **F-32 · P1 · S.**
 
@@ -61,7 +65,11 @@ Transaktionsvertrag siehe
 
 **RED/Abnahme:** Update↔Silence, Update↔Close, Update↔Promote, zwei Updates, zwei Abschlüsse, fehlender Incident. Zwei unabhängige DB-Sessions, kontrollierter Interleave. Kein Reopen, keine verlorene Timeline/Quelle, Severity sinkt nicht. SSE/`mark_promoted`/`mark_silenced` nur beim passenden tatsächlichen Übergang. Mocks ergänzen, ersetzen aber den DB-Racetest nicht. Transaktionsretry muss idempotent sein; Callback publiziert niemals selbst SSE. Event-Auslieferung bei Prozesscrash ist kein Exactly-once-Versprechen dieses Patches.
 
-## I05 — Poison-Rows isolieren und Promoter-Ausfall sichtbar machen
+## ~~I05 — Poison-Rows isolieren und Promoter-Ausfall sichtbar machen~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27, B01 / PR #134:** Implementierungscommit `2ea0365`; keine offenen Findings. Gültige Nachbarzeilen bleiben lesbar; bounded aggregierte Diagnose für Datenfehler. Eigene unbekannte/null Statuswerte erreichen den Decoder (echter isolierter Neo4j-Test). Degradierte Rehydration behält gültige Cluster, sperrt aber den Drain; DB-Ausfälle sind unhealthy. Echte asyncio-Tasks belegen sichtbare Drain-Cancellation trotz laufendem Sweeper. Single-Read-Datenfehler bleiben Fehler, keine 404. Das bestehende Rehydrate-Limit 500 bleibt erhalten; keine globale Vollständigkeitsgarantie und keine automatische Datenreparatur oder Wiederaufnahme nach fehlgeschlagenem Start.
+Unabhängig 769 Backend-Tests, 13 isolierte Neo4j-Tests, Ruff, Mypy (91 Dateien)
+und Diff-Check bestanden. PR-CI und Merge separat prüfen; kein Deployment.
 
 **F-34 · P0 · M · nach I04.**
 
@@ -73,7 +81,11 @@ Transaktionsvertrag siehe
 
 **Abnahme:** Liste/Promoter/Inspector-Testkette. Ungültige Einzelobjekt-Leseanfragen als Datenfehler behandeln, nicht in 404 umdeuten. Keine Live-Reparatur oder Löschung der beschädigten Daten.
 
-## I06 — Historische Zeitwerte deterministisch lesen
+## ~~I06 — Historische Zeitwerte deterministisch lesen~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27, B01 / PR #134:** Implementierungscommit `2ea0365`; keine offenen Findings. Gemeinsamer Parser liest naive Zeitwerte ausdrücklich als UTC und normalisiert zonierte Werte. Report updated_at fällt nur bei fehlendem/null Wert auf created_at zurück; fehlerhafte Werte bleiben Fehler. Report-/Nachrichtenlisten isolieren ausschließlich Zeit-Decodefehler; DB-Ausfälle propagieren. Create-Defaults unverändert.
+Unabhängig 769 Backend-Tests, 13 isolierte Neo4j-Tests, Ruff, Mypy (91 Dateien)
+und Diff-Check bestanden. PR-CI und Merge separat prüfen; kein Deployment.
 
 **F-35 Zeitteil · P1 · M · nach I05.**
 
