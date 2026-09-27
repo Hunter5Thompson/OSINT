@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
 from app.config import settings
@@ -23,6 +24,7 @@ _CACHE_TTL_S = 120
 
 
 class GDACSEvent(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     id: str
     event_type: str
     event_name: str
@@ -33,6 +35,27 @@ class GDACSEvent(BaseModel):
     longitude: float
     from_date: str
     to_date: str
+
+    @field_validator("latitude")
+    @classmethod
+    def validate_latitude(cls, value: float) -> float:
+        if not math.isfinite(value) or not -90 <= value <= 90:
+            raise ValueError("latitude out of range")
+        return value
+
+    @field_validator("longitude")
+    @classmethod
+    def validate_longitude(cls, value: float) -> float:
+        if not math.isfinite(value) or not -180 <= value <= 180:
+            raise ValueError("longitude out of range")
+        return value
+
+    @field_validator("severity")
+    @classmethod
+    def validate_severity(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("severity must be finite")
+        return value
 
 
 def _point_to_event(point: Any) -> GDACSEvent | None:
@@ -50,7 +73,7 @@ def _point_to_event(point: Any) -> GDACSEvent | None:
             from_date=str(p.get("from_date", "")),
             to_date=str(p.get("to_date", "")),
         )
-    except (KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError, ValidationError):
         return None
 
 
@@ -63,7 +86,24 @@ async def get_gdacs_events(
     cache = request.app.state.cache
     cached = await cache.get(cache_key)
     if cached is not None:
-        return [GDACSEvent(**e) for e in cached]
+        if isinstance(cached, list):
+            valid: list[GDACSEvent] = []
+            invalid_count = 0
+            for row in cached:
+                try:
+                    valid.append(GDACSEvent.model_validate(row))
+                except (ValidationError, TypeError):
+                    invalid_count += 1
+            if invalid_count:
+                log.warning("gdacs_cache_rows_invalid", invalid_count=invalid_count)
+            if not invalid_count or valid:
+                if invalid_count:
+                    await cache.set(
+                        cache_key, [row.model_dump() for row in valid], ttl_seconds=_CACHE_TTL_S
+                    )
+                return valid
+        log.warning("gdacs_cache_snapshot_invalid")
+        await cache.delete(cache_key)
 
     cutoff = int(time.time()) - since_hours * 3600
     flt = Filter(

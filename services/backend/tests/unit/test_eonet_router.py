@@ -100,3 +100,63 @@ async def test_eonet_events_qdrant_down() -> None:
 
     assert resp.status_code == 503
     assert "qdrant" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_eonet_cache_rows_are_isolated_and_repaired() -> None:
+    good = {
+        "id": "cached-good", "title": "Good", "category": "Wildfires",
+        "status": "open", "latitude": 48.1, "longitude": 37.8,
+        "event_date": "2026-04-11T00:00:00Z",
+    }
+    cache = AsyncMock()
+    cache.get.return_value = [good, None, {**good, "id": "bad", "longitude": 181}]
+    app.state.cache = cache
+    qdrant = AsyncMock()
+    with patch("app.routers.eonet.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/eonet/events")
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == ["cached-good"]
+    cache.set.assert_awaited_once()
+    qdrant.scroll.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_eonet_all_invalid_cache_is_deleted_and_qdrant_error_is_503() -> None:
+    cache = AsyncMock()
+    cache.get.return_value = [None, {"id": "broken"}]
+    app.state.cache = cache
+    qdrant = AsyncMock()
+    qdrant.scroll.side_effect = ConnectionError("offline")
+    with patch("app.routers.eonet.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/eonet/events")
+    assert response.status_code == 503
+    cache.delete.assert_awaited_once_with("eonet:events:168h")
+
+
+@pytest.mark.asyncio
+async def test_eonet_empty_cache_list_is_a_valid_hit() -> None:
+    cache = AsyncMock()
+    cache.get.return_value = []
+    app.state.cache = cache
+    qdrant = AsyncMock()
+    with patch("app.routers.eonet.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/eonet/events")
+    assert response.status_code == 200
+    assert response.json() == []
+    qdrant.scroll.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_eonet_wrong_cache_root_is_deleted_and_refreshed() -> None:
+    cache = AsyncMock()
+    cache.get.return_value = {"unexpected": "root"}
+    app.state.cache = cache
+    qdrant = AsyncMock()
+    qdrant.scroll.return_value = ([], None)
+    with patch("app.routers.eonet.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/eonet/events")
+    assert response.status_code == 200
+    assert response.json() == []
+    cache.delete.assert_awaited_once_with("eonet:events:168h")
+    cache.set.assert_awaited_once()

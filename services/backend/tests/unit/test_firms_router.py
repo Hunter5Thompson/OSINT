@@ -151,3 +151,55 @@ async def test_firms_hotspots_legacy_payload_has_no_country() -> None:
 
     assert resp.status_code == 200
     assert resp.json()[0]["country_iso3"] is None
+
+
+@pytest.mark.asyncio
+async def test_firms_cache_rows_are_isolated_and_repaired() -> None:
+    good = {
+        "id": "cached-good", "latitude": 48.1, "longitude": 37.8,
+        "frp": 10.0, "brightness": 350.0, "confidence": "n",
+        "acq_date": "2026-04-11", "acq_time": "1200", "satellite": "N",
+        "firms_map_url": "https://example.test/map",
+    }
+    mock_cache = AsyncMock()
+    mock_cache.get.return_value = [
+        good, None, {**good, "id": "bad", "latitude": 1000},
+        {**good, "id": "nonfinite", "frp": float("nan")},
+    ]
+    app.state.cache = mock_cache
+    qdrant = AsyncMock()
+
+    with patch("app.routers.firms.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/firms/hotspots")
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == ["cached-good"]
+    mock_cache.set.assert_awaited_once()
+    qdrant.scroll.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_firms_bad_cache_root_recovers_and_empty_list_is_a_hit() -> None:
+    cache = AsyncMock()
+    cache.get.return_value = {"not": "a row list"}
+    app.state.cache = cache
+    qdrant = AsyncMock()
+    qdrant.scroll.return_value = ([], None)
+
+    with patch("app.routers.firms.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/firms/hotspots")
+
+    assert response.status_code == 200
+    assert response.json() == []
+    cache.delete.assert_awaited_once_with("firms:hotspots:24h")
+    cache.set.assert_awaited_once()
+    qdrant.scroll.assert_awaited_once()
+
+    cache.reset_mock()
+    cache.get.return_value = []
+    qdrant.reset_mock()
+    with patch("app.routers.firms.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/firms/hotspots")
+    assert response.status_code == 200
+    assert response.json() == []
+    qdrant.scroll.assert_not_called()
