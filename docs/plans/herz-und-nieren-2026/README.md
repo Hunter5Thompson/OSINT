@@ -1,6 +1,6 @@
 # Fixplan: Herz und Nieren 2026 Alpha
 
-**Status: aktiv; HN-S01 abgeschlossen, HN-S02 fachlich abgenommen (PR #128, Merge offen), alle übrigen Pakete offen.** Baseline: `374c5cc460ebea44ad27f0ddfe09a11fd2d57e83` (2026-09-27). [Senior-Bewertung mit vollständiger Finding-Matrix](../../reports/Herz_und_Nieren_2026_Alpha_Review.md).
+**Status: aktiv; HN-S01 und HN-S02 abgeschlossen (PR #128, Merge `732fadc`), HN-S03 implementiert (Review offen), alle übrigen Pakete offen.** Baseline: `374c5cc460ebea44ad27f0ddfe09a11fd2d57e83` (2026-09-27). [Senior-Bewertung mit vollständiger Finding-Matrix](../../reports/Herz_und_Nieren_2026_Alpha_Review.md).
 
 ## Ausführung für ein kleineres LLM
 
@@ -23,7 +23,7 @@ Die Reihenfolge ist sequenziell ausführbar; keine zusätzlichen Agenten nötig.
 
 | Welle | Pakete in Reihenfolge | Abschlusskriterium |
 |---|---|---|
-| 0 – Schadensgrenzen | ~~S01~~ (erledigt), ~~S02~~ (abgenommen; Merge offen), S03; I01, I02, I04, I05 | freie gefährliche Pfade begrenzt; FIRMS korrekt; keine Statusrückschreibung/Poison-Row-Ausfälle |
+| 0 – Schadensgrenzen | ~~S01~~ (erledigt), ~~S02~~ (gemergt), **S03 (implementiert; Review offen)**; I01, I02, I04, I05 | freie gefährliche Pfade begrenzt; FIRMS korrekt; keine Statusrückschreibung/Poison-Row-Ausfälle |
 | 1 – verlässliche Daten | S04, I06, I03; D03, D04, D05, D01, D02, D08, D10, D11; A01, A03, A04 | keine falschen Messwerte/Zeitpunkte durch Defaults, keine Batchverluste durch eine Zeile |
 | 2 – Analyse und Bedienung | L02, L03, L04, L01, L05, L06; U01, U02, U03, U04, U06, U07, U08 | Analysefelder/Trace korrekt, Replay/Picking/Races regressionsgetestet |
 | 3 – restliche Härtung | D06, D07, D09, U05; A05, A06, A07, A08 | verbleibende Parser-/Darstellungsfehler geschlossen |

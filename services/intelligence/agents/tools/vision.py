@@ -6,18 +6,16 @@ Security: URL validation, SSRF protection, size/dimension limits.
 from __future__ import annotations
 
 import base64
-import ipaddress
-import socket
 from io import BytesIO
 from urllib.parse import urlparse
 
-import httpx
 import structlog
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolRuntime
 from PIL import Image
 
 from agents.tools.capabilities import tool_allowed_for_state
+from agents.tools.vision_transport import download_image, is_global_unicast
 from config import settings
 from graph.state import AgentState
 
@@ -42,64 +40,27 @@ def validate_image_url(url: str) -> bool:
 
 
 def _is_private_ip(ip_str: str) -> bool:
-    """Check if an IP address is in a private/reserved range."""
-    try:
-        addr = ipaddress.ip_address(ip_str)
-        return addr.is_private or addr.is_loopback or addr.is_reserved
-    except ValueError:
-        return False
+    """Return true unless the address is validated global unicast."""
+    return not is_global_unicast(ip_str)
 
 
 async def _download_image(url: str) -> bytes:
     """Download image with SSRF protection and size limits."""
-    if not validate_image_url(url):
-        raise ValueError("image_url must be an absolute HTTPS URL without credentials")
-    parsed = urlparse(url)
-    hostname = parsed.hostname or ""
-
-    # Resolve hostname and check for private IPs
-    try:
-        resolved_ips = socket.getaddrinfo(hostname, None)
-        for _, _, _, _, sockaddr in resolved_ips:
-            ip = sockaddr[0]
-            if _is_private_ip(ip):
-                raise ValueError(f"URL resolves to private IP: {ip}")
-    except socket.gaierror as e:
-        raise ValueError(f"Cannot resolve hostname: {hostname}") from e
-
-    max_size = settings.vision_max_file_size_mb * 1024 * 1024
-
-    async with httpx.AsyncClient(
-        timeout=settings.vision_download_timeout_s,
-        follow_redirects=False,
-    ) as client:
-        # HEAD check for content type
-        head_resp = await client.head(url)
-        content_type = head_resp.headers.get("content-type", "")
-        if not content_type.startswith("image/"):
-            raise ValueError(f"Not an image: content-type={content_type}")
-
-        content_length = int(head_resp.headers.get("content-length", 0))
-        if content_length > max_size:
-            raise ValueError(f"Image too large: {content_length} bytes (max {max_size})")
-
-        # Download
-        resp = await client.get(url)
-        resp.raise_for_status()
-
-        if len(resp.content) > max_size:
-            raise ValueError(f"Image too large: {len(resp.content)} bytes")
-
-        return resp.content
+    return await download_image(
+        url,
+        max_bytes=settings.vision_max_file_size_mb * 1024 * 1024,
+        timeout_s=settings.vision_download_timeout_s,
+    )
 
 
 def _validate_dimensions(image_bytes: bytes) -> None:
     """Check image dimensions are within limits."""
-    img = Image.open(BytesIO(image_bytes))
-    w, h = img.size
-    max_dim = settings.vision_max_dimension
-    if w > max_dim or h > max_dim:
-        raise ValueError(f"Image dimensions {w}x{h} exceed max {max_dim}x{max_dim}")
+    with Image.open(BytesIO(image_bytes)) as img:
+        w, h = img.size
+        max_dim = settings.vision_max_dimension
+        if w > max_dim or h > max_dim:
+            raise ValueError(f"Image dimensions {w}x{h} exceed max {max_dim}x{max_dim}")
+        img.load()
 
 
 async def _load_image(url: str) -> str:

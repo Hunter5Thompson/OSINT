@@ -22,13 +22,20 @@ Quote-Angriffe (DELETE, LOAD CSV, CALL, MERGE) fail closed; unbekannte Template-
 werden kontrolliert abgewiesen. Verifikation: 122 fokussierte Intelligence-Tests,
 Ruff und `git diff --check` bestanden.
 
-**~~HN-S02~~ — fachlich abgenommen (PR #128, Merge offen):** Intelligence- und Backend-Query-Eingänge
+**~~HN-S02~~ — MERGED (PR #128, Commit `732fadc`):** Intelligence- und Backend-Query-Eingänge
 verlangen absolute HTTPS-Bild-URLs ohne Credentials; Loader revalidiert selbst.
 Vision-Worker liest ausschließlich reguläre Dateien unter der konfigurierten
 `/data/telegram/media`-Wurzel, symlink-sicher per dir-fd und mit Byteobergrenze.
 Senior-Review von `8b30249` ohne offene Findings; unabhängig 50 Intelligence-,
-37 Backend- und 20 Worker-Tests bestanden. CI/Merge separat offen; S03 bleibt
-für sichere Remote-Download-Verbindungen offen.
+37 Backend- und 20 Worker-Tests bestanden. PR #128 am 2026-09-27 gemergt als
+`732fadc`; CI-Tests, Ruff und CodeQL erfolgreich. S03 bleibt für sichere
+Remote-Download-Verbindungen offen.
+
+**HN-S03 — IMPLEMENTIERT (Review offen):** Remote-Bilddownloads lösen DNS
+asynchron auf, prüfen jede Antwort und verbinden gepinnt per httpcore zu einer
+numerischen IP bei unverändertem TLS-Host. Responses sind redirectfrei und
+encoded/decoded größen- sowie zeitbegrenzt; Pillow dekodiert vollständig.
+Transportdesign, Regressionen und Fokusverifikation stehen in PR.
 
 ## Session 2026-09-26 — Neo4j uniqueness repair
 

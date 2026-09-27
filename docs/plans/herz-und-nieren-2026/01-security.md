@@ -20,7 +20,7 @@ Gemeinsamer Vertrag: [README](README.md). S01/S03 benötigen Senior-Review. Hier
 
 ## ~~S02 — Query-URLs und lokale Worker-Dateien getrennt validieren~~ — FACHLICH ABGENOMMEN
 
-**Review 2026-09-27:** Commit `8b30249`, PR #128; 50 Intelligence-, 37 Backend- und 20 Worker-Tests unabhängig bestanden. Keine offenen Review-Findings. Merge und CI-Status separat prüfen; S03 bleibt offen. Die folgende Spezifikation bleibt als Abschlussnachweis erhalten.
+**Review 2026-09-27:** Commit `8b30249`, PR #128, gemergt als `732fadc`; alle CI-Tests, Ruff und CodeQL erfolgreich. 50 Intelligence-, 37 Backend- und 20 Worker-Tests unabhängig bestanden. Keine offenen Review-Findings. S03 bleibt offen. Die folgende Spezifikation bleibt als Abschlussnachweis erhalten.
 
 **F-04 Pfad/API, F-12 Pfad · P0 · M · unabhängig.** Unterläufe: S02a Intelligence+Backend; S02b Worker.
 
