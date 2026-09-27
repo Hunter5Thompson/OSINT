@@ -2017,3 +2017,15 @@ Observation-Producer.
 #   Aliase; fehlende Rohbelege/Präzision benötigen separaten Source-Replay.
 # - Kein Push/Merge/Deploy, Neustart oder Datenbank-Apply; Haupt-Checkout und seine
 #   fremden/untracked Dateien bleiben erhalten. Operator-Ablauf im Runbook aktualisiert.
+
+# Session-Notes — 2026-09-27: PR #119 Cutover, Token-Reihenfolge
+# - PR #119 nach zwölf grünen Checks gemergt (fe7a1e0); Haupt-Checkout vor
+#   Runtime-Wechsel fast-forward aktualisiert, fremde untracked Dateien erhalten.
+# - Writer/Reader pausiert. Neo4j-Dumps und Qdrant-Snapshots unter
+#   /data/odin-backups/spatial-cutover-20260927T003349Z erstellt und separat
+#   wiederhergestellt: 2.627.173 Knoten, 67.019.865 Kanten, 1.967.003 odin_intel-
+#   Punkte und 6 Smoke-Punkte exakt bestätigt. Noch kein Re-Normalisierungs-Apply.
+# - Live-Preview findet parent-first versus lexikalische Token-Sortierung:
+#   Regression rot reproduziert, Validator auf bestehenden Projektor-/Payload-
+#   Vertrag korrigiert. Integrationstest nutzt jetzt eine Land+Admin1-Position.
+# - Kleiner Folge-PR vor Apply; keine Aufweichung der Einzigartigkeitsprüfung.

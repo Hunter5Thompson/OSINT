@@ -773,9 +773,9 @@ def _validated_projection(
             isinstance(token, str) and _valid_pair_token(token) for token in tokens
         ):
             raise ValueError(f"invalid pair-token array: {token_field}")
-        if len(tokens) != len(set(tokens)) or tokens != sorted(tokens):
+        if len(tokens) != len(set(tokens)) or tokens != sorted(tokens, key=_pair_token_order):
             raise ValueError(
-                f"pair-token array must be unique and sorted: {token_field}"
+                f"pair-token array must be unique and parent-first: {token_field}"
             )
         token_count += len(tokens)
 
@@ -851,6 +851,13 @@ def _coverage_snapshot(
 
 def _projection_owned(field: str) -> bool:
     return field.startswith("spatial_") or field in _RAW_SPATIAL_FIELDS
+
+
+def _pair_token_order(token: str) -> tuple[int, str, str]:
+    """Match the shared projector's country/admin1/admin2 canonical order."""
+    _, scope_key, revision = token.split("|")
+    kind = scope_key.split(":", 1)[0]
+    return {"country": 1, "admin1": 2, "admin2": 3}[kind], scope_key, revision
 
 
 def _valid_pair_token(token: str) -> bool:
