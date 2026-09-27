@@ -1,4 +1,7 @@
+from unittest.mock import patch
+
 import polars as pl
+import pytest
 
 from gdelt_raw.filter import apply_filters
 
@@ -6,7 +9,7 @@ from gdelt_raw.filter import apply_filters
 def _events_df() -> pl.DataFrame:
     return pl.DataFrame({
         "global_event_id": [1, 2, 3, 4],
-        "event_root_code": [19, 3, 18, 1],  # only 19,18 tactical
+        "event_root_code": [19, 3, 18, 14],  # root 14 is mapped, but not tactical
         "quad_class": [4, 1, 4, 1],
         "goldstein_scale": [-6.5, 1.0, -4.2, 0.5],
         "avg_tone": [-4.0, 2.0, -3.5, 1.0],
@@ -15,7 +18,7 @@ def _events_df() -> pl.DataFrame:
         "num_articles": [9, 4, 2, 1],
         "date_added": [20260425120000] * 4,
         "fraction_date": [2026.3164] * 4,
-        "event_code": ["193", "030", "180", "010"],
+        "event_code": ["193", "030", "180", "140"],
         "source_url": [f"https://ex.com/{i}" for i in range(4)],
     })
 
@@ -49,7 +52,7 @@ def test_tactical_filter_keeps_roots_18_19():
 
 
 def test_nuclear_theme_override_keeps_event_outside_cameo_allowlist():
-    """Event 4 has event_root_code=1 (not in allowlist) but is referenced
+    """Event 4 has mapped root 14 (not in allowlist) but is referenced
     by GKG doc r1 which has NUCLEAR theme → must be kept."""
     res = apply_filters(_events_df(), _mentions_df(), _gkg_df(),
                         cameo_roots=[15, 18, 19, 20],
@@ -60,6 +63,45 @@ def test_nuclear_theme_override_keeps_event_outside_cameo_allowlist():
     # And filter_reason distinguishes
     rows = res.events.filter(pl.col("global_event_id") == 4).to_dicts()
     assert rows[0]["filter_reason"] == "nuclear_override"
+    assert rows[0]["codebook_type"] == "civil.protest"
+
+
+def test_unmapped_nuclear_event_is_skipped_but_gkg_source_is_retained():
+    events = _events_df().with_columns(
+        pl.when(pl.col("global_event_id") == 4)
+        .then(1)
+        .otherwise(pl.col("event_root_code"))
+        .alias("event_root_code")
+    )
+    with patch("gdelt_raw.filter.log.warning") as warning:
+        result = apply_filters(
+            events,
+            _mentions_df(),
+            _gkg_df(),
+            cameo_roots=[15, 18, 19, 20],
+            theme_alpha=["ARMEDCONFLICT", "KILL"],
+            theme_nuclear_override=["NUCLEAR", "WMD"],
+        )
+    assert 4 not in result.events.get_column("global_event_id").to_list()
+    source_doc = result.gkg.filter(pl.col("gkg_record_id") == "r1").to_dicts()[0]
+    assert source_doc["linked_event_ids"] == ["gdelt:event:3"]
+    warning.assert_called_once_with(
+        "gdelt_nuclear_override_unmapped_roots",
+        invalid_count=1,
+        root_counts={"1": 1},
+    )
+
+
+def test_direct_filter_rejects_unmapped_allowlist_root():
+    with pytest.raises(ValueError, match="unmapped CAMEO roots"):
+        apply_filters(
+            _events_df(),
+            _mentions_df(),
+            _gkg_df(),
+            cameo_roots=[15, 18, 19, 20, 1],
+            theme_alpha=["ARMEDCONFLICT", "KILL"],
+            theme_nuclear_override=["NUCLEAR", "WMD"],
+        )
 
 
 def test_gkg_join_does_not_duplicate_docs_with_multiple_events():

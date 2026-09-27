@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -26,6 +28,45 @@ VIOLENCE_TYPES: dict[int, str] = {
     2: "non-state",
     3: "one-sided",
 }
+
+
+def _parse_int(value: object, *, default: int | None = None) -> int:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        if default is not None:
+            return default
+        raise ValueError("integer value is missing")
+    if isinstance(value, bool):
+        raise ValueError("boolean is not an integer measurement")
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("integer value is invalid") from exc
+    if not math.isfinite(number) or not number.is_integer():
+        raise ValueError("integer value must be finite and whole")
+    return int(number)
+
+
+def _optional_nonnegative_count(value: object) -> int | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    number = _parse_int(value)
+    if number < 0:
+        raise ValueError("casualty count must be nonnegative")
+    return number
+
+
+def _optional_coordinate(value: object, minimum: float, maximum: float) -> float | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, bool):
+        raise ValueError("coordinate cannot be boolean")
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("coordinate must be numeric") from exc
+    if not math.isfinite(number) or not minimum <= number <= maximum:
+        raise ValueError("coordinate is nonfinite or outside geographic bounds")
+    return number
 
 
 class UCDPCollector(BaseCollector):
@@ -109,9 +150,11 @@ class UCDPCollector(BaseCollector):
         return {}
 
     def _parse_event(self, raw: dict) -> dict:
-        lat_str = raw.get("latitude", "")
-        lon_str = raw.get("longitude", "")
-        vtype = int(raw.get("type_of_violence", 0) or 0)
+        if not isinstance(raw, Mapping):
+            raise ValueError("UCDP event must be an object")
+        vtype = _parse_int(raw.get("type_of_violence", 0), default=0)
+        latitude = _optional_coordinate(raw.get("latitude"), -90, 90)
+        longitude = _optional_coordinate(raw.get("longitude"), -180, 180)
         return {
             "source": "ucdp",
             "ucdp_id": str(raw.get("id", "")),
@@ -121,13 +164,13 @@ class UCDPCollector(BaseCollector):
             "url": f"https://ucdp.uu.se/event/{raw.get('id', '')}",
             "violence_type": vtype,
             "violence_type_label": VIOLENCE_TYPES.get(vtype, "unknown"),
-            "best_estimate": int(raw.get("best", 0) or 0),
-            "low_estimate": int(raw.get("low", 0) or 0),
-            "high_estimate": int(raw.get("high", 0) or 0),
+            "best_estimate": _optional_nonnegative_count(raw.get("best")),
+            "low_estimate": _optional_nonnegative_count(raw.get("low")),
+            "high_estimate": _optional_nonnegative_count(raw.get("high")),
             "country": raw.get("country", ""),
             "region": raw.get("region", ""),
-            "latitude": float(lat_str) if lat_str else None,
-            "longitude": float(lon_str) if lon_str else None,
+            "latitude": latitude,
+            "longitude": longitude,
             "where_prec": raw.get("where_prec"),
             "date_prec": raw.get("date_prec"),
             "date_start": raw.get("date_start", ""),
@@ -175,7 +218,12 @@ class UCDPCollector(BaseCollector):
 
             points: list[PointStruct] = []
             for raw_event in results:
-                event_id = str(raw_event.get("id", ""))
+                try:
+                    payload = self._parse_event(raw_event)
+                except (ValueError, TypeError, OverflowError) as exc:
+                    log.warning("ucdp_event_invalid", error=str(exc))
+                    continue
+                event_id = payload["ucdp_id"]
                 if not event_id:
                     continue
 
@@ -185,7 +233,6 @@ class UCDPCollector(BaseCollector):
                 if await self._dedup_check(pid):
                     continue
 
-                payload = self._parse_event(raw_event)
                 source_text = raw_event.get("source_article", "")
                 embed_text = f"{payload['title']}. {source_text}"[:2000]
 

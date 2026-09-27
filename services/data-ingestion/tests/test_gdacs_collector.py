@@ -277,6 +277,29 @@ class TestGDACSMapSchema:
         events = collector._parse_features(MAP_TC_MULTIGEOM)
         assert events[0]["severity"] == 83.3
 
+    @pytest.mark.parametrize("bad_value", ["unknown", None, float("nan"), float("inf")])
+    def test_invalid_legacy_severity_falls_back_to_severitydata(self, collector, bad_value):
+        feature = _feature(
+            21,
+            "Point",
+            [1.0, 2.0],
+            cls="Point_Centroid",
+            severity={"value": bad_value},
+            severitydata={"severity": 42.5},
+        )
+        assert collector._parse_features({"features": [feature]})[0]["severity"] == 42.5
+
+    def test_valid_legacy_severity_wins_over_alternate(self, collector):
+        feature = _feature(
+            22,
+            "Point",
+            [1.0, 2.0],
+            cls="Point_Centroid",
+            severity={"value": 21.25},
+            severitydata={"severity": 42.5},
+        )
+        assert collector._parse_features({"features": [feature]})[0]["severity"] == 21.25
+
     def test_empty_eventname_falls_back_to_name(self, collector):
         data = {"type": "FeatureCollection", "features": [
             _feature(10, "Point", [168.4, -21.3], cls="Point_Centroid", eventtype="EQ",

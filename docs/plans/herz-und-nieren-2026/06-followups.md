@@ -2,13 +2,18 @@
 
 Gemeinsamer Vertrag: [README](README.md). A-Pakete enthalten konkrete Repro-Gates: zuerst reproduzieren, dann minimal korrigieren. X-Pakete sind **Designaufträge**, keine bereits freigegebenen Produktänderungen. Das kleine Modell soll hier eine knappe Entscheidungsvorlage liefern und keine Architektur erfinden.
 
-## A01 — HAPI-Zahlen und Identität
+## ~~A01 — HAPI-Zahlen und Identität~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27, B03 / PR #136:** Implementierung `f4988aa`; keine offenen Findings. Nullwerte bleiben unbekannt; kaputte Zahlen und Identitätsfelder werden pro Record isoliert. Kanonischer vorhandener Record-Hash wird bis zur Event-Identität durchgereicht; separate namespaced Document-ID bei MERGE, MENTIONS und DESCRIBES. Pipeline-Cypher-Capture belegt verschiedene Länder/Monate/Eventtypen bei gleicher URL und gleichem Eventtitel sowie stabiles Retry. Legacy-URL-Vertrag und ID-Guard geprüft. Constraint ausschließlich deklarativ vorbereitet; keine ausgeführte Datenbankmigration oder historische Reparatur.
+Gemeinsame unabhängige Abnahme: 1669 Ingestion-Tests bestanden, ein bestehender Dev-Compose-Test ausgelassen, 23 Live-Tests standardmäßig ausgeschlossen; Ruff und Diff-Check grün. PR-CI und Merge separat prüfen; kein Deployment.
 
 **Unnummerierter Hinweis 1 · P1 · M, zwei Unterläufe.** Data-Ingestion `feeds/hapi_collector.py`, `pipeline.py` nur Identitäts-/Dedup-Aufrufer lesen, zugehörige Tests neu/erweitern.
 
 **RED:** `events=null`, `fatalities=null`, fehlerhafte Zahlen zwischen gesunden Records/Ländern. Fehlend ist nicht nachweislich null Todesfälle; je Feldvertrag null erhalten oder diesen Aggregate-Record diagnostiziert auslassen. Kein kompletter Länderabbruch.
 
 **Identitäts-Repro:** zwei Länder, Perioden und Eventtypen durch gemocktes `process_item`/Document-Upsert bis Identität verfolgen. Gemeinsame API-URL darf als Provenienzlink bleiben, aber darf unabhängige Reports nicht zusammen deduplizieren/überschreiben. Fix erst nach belegtem Identity-Pfad: kanonischer Record-Key aus Land+Periode+Eventtyp; Quell-URL und Identität getrennt, keine zufällige Querystring-ID erfinden. Neue Contractfixture und betroffene Pipeline-/Writer-Tests. Historische Collisions separat inventarisieren.
+
+**B03-Identitätsentwurf (2026-09-27):** Der vorhandene Hash aus Land/Monat/Eventtyp bleibt die Qdrant-Dedup-ID und wird zusätzlich als Event-Identitätsbasis an die Pipeline übergeben. `hapi:conflict-events:<hash>` ist die separate Document-ID; die echte API-URL bleibt Quellenlink. Nur der explizite HAPI-Pfad verwendet `Document:HAPIDocument {doc_id}` bei MERGE und allen zugehörigen MATCH-Schritten. Andere Collector-Aufrufer behalten ihren URL-Vertrag. Die scoped Uniqueness-Constraint wird als operator-run Migration vorbereitet; vor parallelen HAPI-Schreiben muss sie separat angewandt und geprüft werden. Dieser PR führt keine Live-DDL aus. Bereits vorhandene Qdrant-Punkte bleiben dedupliziert und historische zusammengeführte Graph-Dokumente unverändert; R01 bleibt separat.
 
 ## A02 — TLE-Checksumme und Paar-ID
 
@@ -30,7 +35,10 @@ Gemeinsamer Vertrag: [README](README.md). A-Pakete enthalten konkrete Repro-Gate
 
 **GREEN:** MATCH über vorhandene kanonische Name+Type-Identität, parametergebunden; vorhandene Typnormalisierung/Constraints nutzen. Echte isolierte Neo4j-Fixture prüft Kantenanzahl. Kein globaler Homonym-Merge und kein automatisches Entfernen alter Kanten; Altdatenbedarf gesondert melden.
 
-## A05 — GDACS-Alternativwert trotz erstem Parsefehler lesen
+## ~~A05 — GDACS-Alternativwert trotz erstem Parsefehler lesen~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27, B03 / PR #136:** Implementierung `f4988aa`; keine offenen Findings. Unparsebarer oder nichtendlicher erster Severity-Wert verhindert den gültigen Alternativwert nicht mehr. Gültiger erster Wert gewinnt; bestehender Fallback 0.0 bei ausschließlich unbrauchbaren Kandidaten bleibt erhalten.
+Gemeinsame unabhängige Abnahme: 1669 Ingestion-Tests bestanden, ein bestehender Dev-Compose-Test ausgelassen, 23 Live-Tests standardmäßig ausgeschlossen; Ruff und Diff-Check grün. PR-CI und Merge separat prüfen; kein Deployment.
 
 **Unnummerierter Hinweis 5 · P2 · S.** Data-Ingestion `feeds/gdacs_collector.py::_severity`, entsprechende Collectortests.
 
@@ -38,7 +46,12 @@ Gemeinsamer Vertrag: [README](README.md). A-Pakete enthalten konkrete Repro-Gate
 
 **GREEN:** nach ungeeignetem Kandidat nächste Quelle versuchen; finite Zahlen verlangen. Gültiger erster Wert gewinnt. Keine pauschale 0 bei erstem Fehler, keine Severity-Neuskalierung.
 
-## A06 — Ungemappte CAMEO-Konfiguration früh ablehnen
+## ~~A06 — Ungemappte CAMEO-Konfiguration früh ablehnen~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27, B03 / PR #136:** Implementierung `f4988aa`; keine offenen Findings. Konfiguration und direkter Filter-Einstieg lehnen ungemappte Allowlist-Roots ab. Nicht mappbare Nuclear-Override-Events werden mit Diagnose entfernt, ihre GKG-Quellen bleiben erhalten; Verweise zeigen ausschließlich auf erhaltene Events. Gemappter Override außerhalb der Allowlist bleibt möglich. Writer-Vertrag weist leere/Whitespace-Typen zurück.
+Gemeinsame unabhängige Abnahme: 1669 Ingestion-Tests bestanden, ein bestehender Dev-Compose-Test ausgelassen, 23 Live-Tests standardmäßig ausgeschlossen; Ruff und Diff-Check grün. PR-CI und Merge separat prüfen; kein Deployment.
+
+**B03-Override-Vertrag:** Mappbare Roots außerhalb der Allowlist bleiben als Nuclear-Override zulässig (Regression mit Root 14). Nicht mappbare Override-Events werden mit Root-/Count-Diagnose ausgelassen; GKG-Quelldokumente bleiben erhalten, ihre Event-Verweise werden nur aus tatsächlich erhaltenen Events gebildet. Keine erfundene Ersatzklassifikation.
 
 **Unnummerierter Hinweis 6 · P2 · S.** Data-Ingestion `gdelt_raw/{cameo_mapping,filter,config}.py`, passende Tests.
 

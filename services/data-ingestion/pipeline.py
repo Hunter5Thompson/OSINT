@@ -373,6 +373,7 @@ async def process_item(
     observed_at: str | None = None,
     published_at: str | None = None,
     content_hash: str | None = None,
+    document_id: str | None = None,
     raise_on_write_error: bool = False,
     source_evidence: dict[str, Any] | None = None,
 ) -> dict | None:
@@ -381,6 +382,14 @@ async def process_item(
     Returns enrichment dict with codebook_type/entities/events, or None on failure.
     Caller continues with Qdrant upsert regardless.
     """
+    # A scoped HAPI document key is deliberately narrow; other feed callers retain
+    # the legacy URL identity unless they explicitly provide the HAPI key format.
+    if document_id is not None and (
+        source != "hapi"
+        or re.fullmatch(r"hapi:conflict-events:[0-9a-f]{64}", document_id) is None
+    ):
+        raise ValueError("document_id is reserved for namespaced HAPI conflict-event records")
+
     # Step 1: Call vLLM for extraction
     # ExtractionTransientError / ExtractionConfigError propagate to caller (collector).
     extraction = await _call_vllm(title, text, url, settings)
@@ -423,6 +432,7 @@ async def process_item(
                 ingested_at=ingested_at,
                 locations=locations,
                 doc_content_hash=content_hash,
+                document_id=document_id,
                 source_evidence=source_evidence,
             )
         except Neo4jWriteError as e:
@@ -550,22 +560,43 @@ async def _write_to_neo4j(
     ingested_at: str | None = None,
     locations: list[dict] | None = None,
     doc_content_hash: str | None = None,
+    document_id: str | None = None,
     spatial_index: SpatialNormalizationIndex | None = None,
     source_evidence: dict[str, Any] | None = None,
 ) -> None:
     """Write extraction results to Neo4j via HTTP transactional API."""
     statements = []
 
-    # Upsert Document
-    statements.append(
-        {
-            "statement": (
-                "MERGE (d:Document {url: $url}) "
-                "SET d.title = $title, d.source = $source, d.updated_at = datetime() "
-            ),
-            "parameters": {"url": doc_url, "title": doc_title, "source": doc_source},
-        }
-    )
+    # Legacy feed identity remains URL-based. HAPI has one endpoint URL for all
+    # aggregate rows, so its caller supplies a stable row-scoped document key.
+    if document_id is None:
+        document_match = "MATCH (d:Document {url: $url}) "
+        statements.append(
+            {
+                "statement": (
+                    "MERGE (d:Document {url: $url}) "
+                    "SET d.title = $title, d.source = $source, d.updated_at = datetime() "
+                ),
+                "parameters": {"url": doc_url, "title": doc_title, "source": doc_source},
+            }
+        )
+    else:
+        document_match = "MATCH (d:Document:HAPIDocument {doc_id: $doc_id}) "
+        statements.append(
+            {
+                "statement": (
+                    "MERGE (d:Document:HAPIDocument {doc_id: $doc_id}) "
+                    "ON CREATE SET d.url = $url, d.source = $source "
+                    "SET d.title = $title, d.updated_at = datetime() "
+                ),
+                "parameters": {
+                    "doc_id": document_id,
+                    "url": doc_url,
+                    "title": doc_title,
+                    "source": doc_source,
+                },
+            }
+        )
 
     # Upsert Entities with MENTIONS
     for entity in entities:
@@ -600,6 +631,8 @@ async def _write_to_neo4j(
             "type": entity_type,
             "url": doc_url,
         }
+        if document_id is not None:
+            parameters["doc_id"] = document_id
         # Preserve the original spelling as provenance only when we actually
         # rewrote the name — avoids stamping a redundant aliases list on the
         # entities whose name was left unchanged.
@@ -609,7 +642,7 @@ async def _write_to_neo4j(
                 "[a IN $aliases WHERE NOT a IN coalesce(e.aliases, [])] "
             )
             parameters["aliases"] = list(canon.aliases)
-        statement += "WITH e MATCH (d:Document {url: $url}) MERGE (d)-[r:MENTIONS]->(e)"
+        statement += f"WITH e {document_match}MERGE (d)-[r:MENTIONS]->(e)"
         statements.append({"statement": statement, "parameters": parameters})
 
     # Create Events — stamp the canonical timeline anchor with honest precedence
@@ -663,7 +696,7 @@ async def _write_to_neo4j(
                     "  ev.timeline_at = datetime($timeline_at), ev.time_basis = $time_basis "
                     "ON MATCH SET ev.updated_at = datetime() "
                     "WITH ev "
-                    "MATCH (d:Document {url: $url}) "
+                    f"{document_match}"
                     "MERGE (d)-[:DESCRIBES]->(ev)"
                 ),
                 "parameters": {
@@ -679,6 +712,8 @@ async def _write_to_neo4j(
                 },
             }
         )
+        if document_id is not None:
+            statements[-1]["parameters"]["doc_id"] = document_id
         # Append the country-scope fragment to the event statement; no point is invented.
         # `ev` is still in scope from the preceding `MERGE (d)-[:DESCRIBES]->(ev)`.
         frag = (

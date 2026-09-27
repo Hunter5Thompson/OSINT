@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
 import feedparser
@@ -165,6 +166,18 @@ def _point_id_from_hash(content_hash: str) -> int:
     return int(content_hash[:16], 16)
 
 
+def _content_value(entry: Mapping[str, object]) -> str:
+    """Return the first RSS content value when usable; ignore malformed optional data."""
+    content = entry.get("content")
+    if not isinstance(content, list) or not content:
+        return ""
+    first = content[0]
+    if not isinstance(first, Mapping):
+        return ""
+    value = first.get("value")
+    return value if isinstance(value, str) else ""
+
+
 class RSSCollector:
     """Fetch RSS feeds, generate embeddings, and upsert into Qdrant."""
 
@@ -260,8 +273,13 @@ class RSSCollector:
 
         points: list[PointStruct] = []
         for entry in entries:
-            title = entry.get("title", "").strip()
-            link = entry.get("link", "").strip()
+            if not isinstance(entry, Mapping):
+                log.warning("rss_entry_invalid", feed=name)
+                continue
+            raw_title = entry.get("title", "")
+            raw_link = entry.get("link", "")
+            title = raw_title.strip() if isinstance(raw_title, str) else ""
+            link = raw_link.strip() if isinstance(raw_link, str) else ""
             if not title or not link:
                 continue
 
@@ -282,8 +300,9 @@ class RSSCollector:
                 continue
 
             # Build text for embedding
-            summary = entry.get("summary", "")
-            content = entry.get("content", [{}])[0].get("value", "") if entry.get("content") else ""
+            raw_summary = entry.get("summary", "")
+            summary = raw_summary if isinstance(raw_summary, str) else ""
+            content = _content_value(entry)
             embed_text = f"{title}\n{summary or content}"[:2000]
 
             published_parsed = entry.get("published_parsed")

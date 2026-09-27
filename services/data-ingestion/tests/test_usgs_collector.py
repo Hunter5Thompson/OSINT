@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from qdrant_client.models import PointStruct
 
 from feeds.usgs_collector import (
     NUCLEAR_TEST_SITES,
@@ -125,6 +126,194 @@ def test_parse_features(collector):
     assert far["usgs_id"] == "us7000far"
     assert far["nearest_test_site"] is None
     assert far["concern_score"] is None
+
+
+def test_null_depth_stays_unknown_without_concern_enrichment(collector):
+    feature = {
+        "id": "depth-unknown",
+        "properties": {"mag": 5.2, "place": "near Punggye-ri", "time": 1712000000000},
+        "geometry": {"coordinates": [129.1, 41.3, None]},
+    }
+    event = collector._parse_features([feature])[0]
+    assert event["depth_km"] is None
+    assert event["concern_score"] is None
+    assert event["concern_level"] is None
+
+
+def test_zero_depth_keeps_existing_near_site_concern_score(collector):
+    feature = {
+        "id": "depth-zero",
+        "properties": {"mag": 5.2, "place": "Punggye-ri", "time": 1712000000000},
+        "geometry": {"coordinates": [129.08, 41.28, 0]},
+    }
+
+    event = collector._parse_features([feature])[0]
+
+    assert event["depth_km"] == 0.0
+    assert event["nearest_test_site"] == "Punggye-ri (DPRK)"
+    assert event["concern_score"] == concern_score(
+        5.2, event["distance_to_site_km"], 0.0
+    )
+    assert event["concern_level"] == concern_level(event["concern_score"])
+
+
+def test_bad_timestamp_row_isolated_and_numeric_string_milliseconds_allowed(collector):
+    good = {
+        "id": "good-before",
+        "properties": {"mag": 4.5, "place": "Japan", "time": 1712000000000},
+        "geometry": {"coordinates": [139.7, 34.7, 30]},
+    }
+    bad = {
+        "id": "bad-time",
+        "properties": {"mag": 5.0, "place": "bad", "time": "broken"},
+        "geometry": {"coordinates": [139.7, 34.7, 30]},
+    }
+    numeric_string = {
+        "id": "good-after",
+        "properties": {"mag": 4.5, "place": "Japan", "time": "1712000000000"},
+        "geometry": {"coordinates": [139.7, 34.7, 30]},
+    }
+    events = collector._parse_features([good, bad, numeric_string])
+    assert [event["usgs_id"] for event in events] == ["good-before", "good-after"]
+    assert events[0]["event_time"] == events[1]["event_time"]
+
+
+@pytest.mark.parametrize(
+    "bad_time",
+    [None, True, float("nan"), float("inf"), 10**400, "broken"],
+)
+def test_invalid_time_values_are_isolated(collector, bad_time):
+    good = {
+        "id": "good",
+        "properties": {"mag": 4.5, "place": "Japan", "time": 1712000000000},
+        "geometry": {"coordinates": [139.7, 34.7, 30]},
+    }
+    invalid = {
+        "id": "bad",
+        "properties": {"mag": 5.0, "place": "bad", "time": bad_time},
+        "geometry": {"coordinates": [139.7, 34.7, 30]},
+    }
+    events = collector._parse_features([good, invalid, good | {"id": "good-after"}])
+    assert [event["usgs_id"] for event in events] == ["good", "good-after"]
+
+
+def test_missing_required_time_is_isolated(collector):
+    good = {
+        "id": "good",
+        "properties": {"mag": 4.5, "place": "Japan", "time": 1712000000000},
+        "geometry": {"coordinates": [139.7, 34.7, 30]},
+    }
+    missing = {
+        "id": "missing-time",
+        "properties": {"mag": 5.0, "place": "bad"},
+        "geometry": {"coordinates": [139.7, 34.7, 30]},
+    }
+    events = collector._parse_features([good, missing, good | {"id": "good-after"}])
+    assert [event["usgs_id"] for event in events] == ["good", "good-after"]
+
+
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf")])
+def test_nonfinite_magnitude_isolated_from_valid_neighbors(collector, bad_value):
+    good = {
+        "id": "good",
+        "properties": {"mag": 4.5, "place": "Japan", "time": 1712000000000},
+        "geometry": {"coordinates": [139.7, 34.7, 30]},
+    }
+    bad = {
+        "id": "bad",
+        "properties": {"mag": bad_value, "place": "bad", "time": 1712000000000},
+        "geometry": {"coordinates": [139.7, 34.7, 30]},
+    }
+    events = collector._parse_features([good, bad, good | {"id": "good-after"}])
+    assert [event["usgs_id"] for event in events] == ["good", "good-after"]
+
+
+@pytest.mark.parametrize(
+    "coordinates",
+    [[float("nan"), 0, 1], [0, float("inf"), 1], [181, 0, 1], [0, 91, 1]],
+)
+def test_invalid_coordinates_are_isolated_from_valid_neighbors(collector, coordinates):
+    good = {
+        "id": "good",
+        "properties": {"mag": 4.5, "place": "Japan", "time": 1712000000000},
+        "geometry": {"coordinates": [139.7, 34.7, 30]},
+    }
+    bad = {
+        "id": "bad",
+        "properties": {"mag": 5.0, "place": "bad", "time": 1712000000000},
+        "geometry": {"coordinates": coordinates},
+    }
+    events = collector._parse_features([good, bad, good | {"id": "good-after"}])
+    assert [event["usgs_id"] for event in events] == ["good", "good-after"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_depth_is_preserved_in_evidence_and_qdrant_payload(collector):
+    event = {
+        "id": "unknown-depth",
+        "properties": {
+            "mag": 5.2,
+            "place": "near Punggye-ri",
+            "time": 1712000000000,
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/unknown-depth",
+        },
+        "geometry": {"coordinates": [129.1, 41.3, None]},
+    }
+    collector._ensure_collection = AsyncMock()
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._write_near_test_site = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector.http.get = AsyncMock()
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json.return_value = {"features": [event]}
+    collector.http.get.return_value = response
+
+    async def build_point(text, payload, content_hash):
+        return PointStruct(id=1, vector=[0.0], payload=payload.copy())
+
+    collector._build_point = AsyncMock(side_effect=build_point)
+    with patch("feeds.usgs_collector.process_item", new=AsyncMock()) as process:
+        await collector.collect()
+
+    evidence = process.await_args.kwargs["source_evidence"]
+    assert "Depth: unknown" in process.await_args.kwargs["text"]
+    assert "Depth: None" not in process.await_args.kwargs["text"]
+    assert evidence["depth_km"] is None
+    assert evidence["concern_score"] is None
+    assert evidence["concern_level"] is None
+    payload = collector._batch_upsert.await_args.args[0][0].payload
+    assert payload["depth_km"] is None
+    assert payload["concern_score"] is None
+    assert payload["concern_level"] is None
+
+
+@pytest.mark.asyncio
+async def test_unknown_depth_writes_null_concern_values_to_neo4j_payload(collector):
+    event = collector._parse_features([{
+        "id": "unknown-depth-near-site",
+        "properties": {
+            "mag": 5.2,
+            "place": "near Punggye-ri",
+            "time": 1712000000000,
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/unknown-depth-near-site",
+        },
+        "geometry": {"coordinates": [129.08, 41.28, None]},
+    }])[0]
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json.return_value = {
+        "errors": [],
+        "results": [{"columns": ["written"], "data": [{"row": [1]}]}],
+    }
+    collector.http.post = AsyncMock(return_value=response)
+
+    assert await collector._write_near_test_site(event) == 1
+
+    payload = collector.http.post.await_args.kwargs["json"]
+    parameters = payload["statements"][0]["parameters"]
+    assert parameters["concern_score"] is None
+    assert parameters["concern_level"] is None
 
 
 # ── Extraction error skip tests (Task 7) ────────────────────────────

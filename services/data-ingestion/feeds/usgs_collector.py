@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,6 +17,13 @@ from feeds.geo import haversine_km
 from pipeline import ExtractionConfigError, ExtractionTransientError, process_item
 
 log = structlog.get_logger(__name__)
+
+
+def _safe_feature_id(feature: object) -> str | None:
+    if not isinstance(feature, Mapping):
+        return None
+    value = feature.get("id")
+    return str(value)[:100] if isinstance(value, (str, int)) else None
 
 USGS_FEED_URL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson"
 
@@ -101,35 +110,78 @@ class USGSCollector(BaseCollector):
         """Parse GeoJSON feature list into normalised event dicts."""
         results: list[dict] = []
         for feature in features:
-            props = feature.get("properties", {})
-            geo = feature.get("geometry", {})
-            coords = geo.get("coordinates", [None, None, None])
-
             try:
-                lon = float(coords[0])
-                lat = float(coords[1])
-                depth_km = float(coords[2] or 0.0)
-            except (TypeError, ValueError, IndexError):
-                log.warning("usgs_bad_geometry", feature_id=feature.get("id"))
+                if not isinstance(feature, Mapping):
+                    raise ValueError("feature must be an object")
+                props = feature.get("properties")
+                geo = feature.get("geometry")
+                if not isinstance(props, Mapping) or not isinstance(geo, Mapping):
+                    raise ValueError("feature properties and geometry must be objects")
+                coords = geo.get("coordinates")
+                if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+                    raise ValueError("coordinates must contain longitude and latitude")
+                raw_lon, raw_lat = coords[0], coords[1]
+                if any(
+                    isinstance(value, bool) or not isinstance(value, (int, float))
+                    for value in (raw_lon, raw_lat)
+                ):
+                    raise ValueError("coordinates must be numeric")
+                lon = float(raw_lon)
+                lat = float(raw_lat)
+                if not math.isfinite(lon) or not math.isfinite(lat):
+                    raise ValueError("coordinates must be finite")
+                if not -180 <= lon <= 180 or not -90 <= lat <= 90:
+                    raise ValueError("coordinates out of range")
+                raw_depth = coords[2] if len(coords) > 2 else None
+                if raw_depth is not None and (
+                    isinstance(raw_depth, bool) or not isinstance(raw_depth, (int, float))
+                ):
+                    raise ValueError("depth must be numeric or null")
+                depth_km = None if raw_depth is None else float(raw_depth)
+                if depth_km is not None and not math.isfinite(depth_km):
+                    raise ValueError("depth must be finite")
+            except (TypeError, ValueError, IndexError, OverflowError):
+                log.warning("usgs_bad_geometry", feature_id=_safe_feature_id(feature))
                 continue
 
-            magnitude = props.get("mag")
             try:
-                magnitude = float(magnitude)
-            except (TypeError, ValueError):
-                magnitude = 0.0
+                raw_magnitude = props.get("mag")
+                if (
+                    isinstance(raw_magnitude, bool)
+                    or not isinstance(raw_magnitude, (int, float))
+                ):
+                    raise ValueError("magnitude missing or not numeric")
+                magnitude = float(raw_magnitude)
+                if not math.isfinite(magnitude):
+                    raise ValueError("magnitude must be finite")
+            except (TypeError, ValueError, OverflowError):
+                log.warning("usgs_bad_magnitude", feature_id=_safe_feature_id(feature))
+                continue
+
+            try:
+                raw_time = props.get("time")
+                if (
+                    isinstance(raw_time, bool)
+                    or not isinstance(raw_time, (int, float, str))
+                    or (isinstance(raw_time, str) and not raw_time.strip())
+                ):
+                    raise ValueError("time missing or not numeric")
+                ts_ms = float(raw_time)
+                if not math.isfinite(ts_ms):
+                    raise ValueError("time must be finite milliseconds")
+                event_time = datetime.fromtimestamp(ts_ms / 1000, tz=UTC).isoformat()
+            except (TypeError, ValueError, OverflowError, OSError):
+                log.warning("usgs_bad_time", feature_id=_safe_feature_id(feature))
+                continue
 
             site_name, site_dist = self._nearest_test_site(lat, lon)
 
             # Compute enrichment only for events near a test site
             cscore: float | None = None
             clevel: str | None = None
-            if site_name is not None and site_dist is not None:
+            if site_name is not None and site_dist is not None and depth_km is not None:
                 cscore = concern_score(magnitude, site_dist, depth_km)
                 clevel = concern_level(cscore)
-
-            ts_ms = props.get("time") or 0
-            event_time = datetime.fromtimestamp(ts_ms / 1000, tz=UTC).isoformat()
 
             results.append(
                 {
@@ -271,7 +323,10 @@ RETURN count(r) AS written
             if event["nearest_test_site"]:
                 title += f" — {event['distance_to_site_km']} km from {event['nearest_test_site']}"
 
-            embed_text = f"{title}. Depth: {event['depth_km']} km, Time: {event['event_time']}."
+            depth_text = (
+                f"{event['depth_km']} km" if event["depth_km"] is not None else "unknown"
+            )
+            embed_text = f"{title}. Depth: {depth_text}, Time: {event['event_time']}."
             if event["concern_level"]:
                 embed_text += f" Nuclear concern level: {event['concern_level']}."
 

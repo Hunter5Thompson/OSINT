@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from gdelt_raw.config import GDELTSettings
 
 
@@ -20,3 +23,8 @@ def test_allowlist_parses_from_csv_env(monkeypatch):
     s = GDELTSettings()
     assert s.cameo_root_allowlist == [18, 19]
     assert s.theme_allowlist == ["ARMEDCONFLICT", "NUCLEAR"]
+
+
+def test_allowlist_rejects_root_without_codebook_mapping():
+    with pytest.raises(ValidationError, match="unmapped CAMEO roots"):
+        GDELTSettings(_env_file=None, cameo_root_allowlist=[1])

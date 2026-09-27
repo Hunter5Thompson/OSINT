@@ -1,5 +1,6 @@
 """Tests for the intelligence extraction pipeline."""
 
+import hashlib
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -129,6 +130,124 @@ class TestProcessItem:
         # Second post call should be to Neo4j
         neo4j_call = mock_client.post.call_args_list[1]
         assert "/db/neo4j/tx/commit" in str(neo4j_call)
+        statements = neo4j_call.kwargs["json"]["statements"]
+        assert "MERGE (d:Document {url: $url})" in statements[0]["statement"]
+        assert all("HAPIDocument" not in s["statement"] for s in statements)
+
+    @pytest.mark.parametrize(
+        ("source", "document_id"),
+        [("rss", "hapi:conflict-events:" + "a" * 64), ("hapi", "wrong-id")],
+    )
+    async def test_hapi_document_id_guard_runs_before_extraction(self, source, document_id):
+        with (
+            patch("pipeline._call_vllm", new=AsyncMock()) as extract,
+            pytest.raises(ValueError, match="reserved for namespaced HAPI"),
+        ):
+            await process_item(
+                title="Bad identity",
+                text="content",
+                url="https://example.test/report",
+                source=source,
+                document_id=document_id,
+                settings=_make_settings(),
+            )
+        extract.assert_not_awaited()
+
+    async def test_hapi_records_have_distinct_document_identity_and_retry_stability(self):
+        """HAPI aggregates share a URL, so identity must include its record hash."""
+        captured: list[dict] = []
+        neo4j_response = _mock_neo4j_response()
+
+        class CaptureClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def post(self, _url, *, json, auth):
+                captured.append(json)
+                return neo4j_response
+
+        extraction = {
+            "events": [{
+                "title": "Conflict event",
+                "summary": "Same extracted title",
+                "codebook_type": "military.airstrike",
+                "severity": "high",
+                "confidence": 0.8,
+            }],
+            "entities": [{"name": "Conflict actor", "type": "organization"}],
+            "locations": [],
+        }
+        url = "https://hapi.humdata.org/api/v2/coordination-context/conflict-events"
+        with (
+            patch("pipeline._call_vllm", new=AsyncMock(return_value=extraction)),
+            patch("pipeline.httpx.AsyncClient", return_value=CaptureClient()),
+        ):
+            for country, period, event_type in (
+                ("UKR", "2026-03", "political_violence"),
+                ("SYR", "2026-04", "civilian_targeting"),
+                ("UKR", "2026-03", "civilian_targeting"),
+                ("UKR", "2026-03", "political_violence"),
+            ):
+                record_hash = hashlib.sha256(
+                    f"{country}|{period}|{event_type}".lower().encode()
+                ).hexdigest()
+                await process_item(
+                    title=f"HAPI {country} {period}",
+                    text=f"{event_type} report",
+                    url=url,
+                    source="hapi",
+                    content_hash=record_hash,
+                    document_id=f"hapi:conflict-events:{record_hash}",
+                    settings=_make_settings(),
+                )
+
+        doc_statements = [
+            request["statements"][0]
+            for request in captured
+            if "Document" in request["statements"][0]["statement"]
+        ]
+        assert len(doc_statements) == 4
+        assert all("HAPIDocument" in statement["statement"] for statement in doc_statements)
+        document_ids = [statement["parameters"]["doc_id"] for statement in doc_statements]
+        assert len(set(document_ids)) == 3
+        assert document_ids[0] == document_ids[3]
+        event_keys = [
+            next(
+                statement["parameters"]["event_key"]
+                for statement in request["statements"]
+                if "Event" in statement["statement"]
+            )
+            for request in captured
+        ]
+        assert len(set(event_keys)) == 3
+        assert event_keys[0] == event_keys[3]
+        entity_statements = [
+            statement
+            for request in captured
+            for statement in request["statements"]
+            if "MENTIONS" in statement["statement"]
+        ]
+        event_statements = [
+            statement
+            for request in captured
+            for statement in request["statements"]
+            if "DESCRIBES" in statement["statement"]
+        ]
+        assert len(entity_statements) == len(event_statements) == 4
+        assert all("MATCH (d:Document:HAPIDocument {doc_id: $doc_id})" in s["statement"]
+                   for s in entity_statements + event_statements)
+        assert all("doc_id" in s["parameters"] for s in entity_statements + event_statements)
+        for request in captured:
+            document_id = request["statements"][0]["parameters"]["doc_id"]
+            assert all(
+                s["parameters"]["doc_id"] == document_id
+                for s in request["statements"][1:]
+            )
+        statements = doc_statements + entity_statements + event_statements
+        assert all(s["parameters"]["url"] == url for s in statements)
 
     async def test_neo4j_write_uses_http_url_when_driver_url_is_bolt(self):
         """The shared pipeline writes through Neo4j HTTP API, not the Bolt driver URI."""
