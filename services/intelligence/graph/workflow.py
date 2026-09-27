@@ -460,7 +460,10 @@ def _ensure_graph_client() -> None:
     from config import settings
     try:
         _graph_client = GraphClient(
-            settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password
+            settings.neo4j_uri,
+            settings.neo4j_user,
+            settings.neo4j_password,
+            query_timeout_s=settings.neo4j_query_timeout_s,
         )
         set_graph_client(_graph_client)
         logger.info("graph_client_initialized")

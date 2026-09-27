@@ -32,7 +32,10 @@ def _get_graph_client() -> GraphClient | None:
     if _graph_client is None and settings.neo4j_uri:
         with contextlib.suppress(Exception):
             _graph_client = GraphClient(
-                settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password,
+                settings.neo4j_uri,
+                settings.neo4j_user,
+                settings.neo4j_password,
+                query_timeout_s=settings.neo4j_query_timeout_s,
             )
     return _graph_client
 

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -26,10 +27,13 @@ class Settings(BaseSettings):
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
+    neo4j_query_timeout_s: float = Field(default=15.0, gt=0)
     # RAG feature flags
     enable_hybrid: bool = False       # Phase 2: needs sparse vectors in Qdrant
     enable_rerank: bool = True
     enable_graph_context: bool = True
+    # Legacy LLM-generated Cypher is opt-in; the keyword prefilter is not authorization.
+    enable_free_cypher: bool = False
     # Read-corpus scoping (P1+P4) — tunable via env
     # (RAG_TIER_BOOST_LAMBDA, RAG_ANALYSIS_POOL, RAG_REALTIME_POOL,
     #  RAG_REALTIME_SCORE_THRESHOLD, RAG_FINAL_K, RAG_TELEGRAM_MAX)

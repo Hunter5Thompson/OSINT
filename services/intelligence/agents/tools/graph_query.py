@@ -1,7 +1,7 @@
-"""graph_query tool — NL→Cypher via templates with free Cypher fallback.
+"""graph_query tool — NL→Cypher through reviewed templates.
 
-Template-first: route_to_template picks a predefined query.
-Fallback: LLM-generated Cypher, guarded by validate_cypher_readonly + LIMIT injection.
+Template routing is always available. The legacy free-Cypher fallback is opt-in
+through ENABLE_FREE_CYPHER and the application prefilter is not a security boundary.
 """
 
 from __future__ import annotations
@@ -15,11 +15,13 @@ from langchain_core.tools import BaseTool, tool
 from langgraph.prebuilt import ToolRuntime
 
 from agents.tools.graph_templates import (
+    InvalidTemplateLimitError,
     build_cypher_from_template,
     inject_limit,
     select_scoped_template,
     select_template,
 )
+from config import settings
 from graph.read_queries import validate_cypher_readonly
 from graph.state import AgentState
 from spatial import (
@@ -50,13 +52,16 @@ def _with_graph_application(
             if output.startswith("SPATIAL_SCOPE_UNSUPPORTED_RELATION")
             else "template-not-allowlisted"
         )
+    elif output.startswith("Query rejected"):
+        status = "unsupported"
+        completeness = "unknown"
+        detail_code = "query-rejected"
     elif output.startswith(
         (
             "Graph database not available",
             "Graph query failed",
             "Graph query generation failed",
             "Could not generate a graph query",
-            "Query rejected",
         )
     ):
         status = "failed"
@@ -108,13 +113,16 @@ async def execute_graph_query(
 
     Args:
         template_id: If set, use this template with params.
-        cypher: If set (and no template_id), use as free Cypher (validated).
+        cypher: Free Cypher, accepted only with ENABLE_FREE_CYPHER=true.
         params: Query parameters.
         graph_client: Neo4j GraphClient instance. Falls back to module-level.
 
     Returns:
         Formatted text result for the agent.
     """
+    if not template_id and cypher is not None and not settings.enable_free_cypher:
+        return "Query rejected: free Cypher queries are disabled."
+
     client = graph_client or _graph_client
     if client is None:
         return "Graph database not available. Cannot query knowledge graph."
@@ -140,6 +148,12 @@ async def execute_graph_query(
         else:
             return "No query specified. Provide a template_id or cypher string."
 
+    except InvalidTemplateLimitError as e:
+        return f"Query rejected: {e}"
+    except KeyError:
+        return "Query rejected: unknown graph template."
+
+    try:
         rows = await client.run_query(query_cypher, merged_params, read_only=True)
         duration_ms = int((time.monotonic() - start) * 1000)
 
@@ -176,7 +190,10 @@ async def execute_scoped_graph_query(
     client = graph_client or _graph_client
     if client is None:
         return "Graph database not available. Cannot query knowledge graph."
-    selected = select_scoped_template(template_id, token.kind, params)
+    try:
+        selected = select_scoped_template(template_id, token.kind, params)
+    except InvalidTemplateLimitError as e:
+        return f"Query rejected: {e}"
     if selected is None:
         return f"SPATIAL_SCOPE_UNSUPPORTED: graph template {template_id}"
     query_cypher, merged_params = selected
@@ -337,6 +354,8 @@ async def query_knowledge_graph(
 
     if template_id:
         output = await execute_graph_query(template_id=template_id, params=params)
+    elif not settings.enable_free_cypher:
+        output = "Query rejected: free Cypher queries are disabled."
     else:
         # No template matched — fallback to LLM-generated Cypher
         output = await _free_cypher_fallback(question)
@@ -409,9 +428,9 @@ def _match_intent(question: str) -> tuple[str | None, dict]:
 
 
 async def _free_cypher_fallback(question: str) -> str:
-    """Generate Cypher via LLM when no template matches.
+    """Generate Cypher via LLM when enabled and no reviewed template matches.
 
-    Uses schema whitelist in prompt, validates output through all safety layers.
+    The keyword scan is a lightweight prefilter, not a security boundary.
     """
     from graph.schema_whitelist import schema_prompt_block
 

@@ -1,18 +1,20 @@
-"""
-LLM generiert Cypher für Read-Queries.
-Safety: Keyword-Blocklist + Semicolon-Check + Neo4j READ_ACCESS enforcement.
+"""Lightweight prefilter for Cypher writes and multi-statement queries.
+
+Neo4j READ_ACCESS is a routing preference, not an authorization boundary.
+Callers must not treat this keyword scan as a complete Cypher security check.
 """
 
 import re
 
 
 def validate_cypher_readonly(cypher: str) -> bool:
-    """Reject write/admin operations in LLM-generated Cypher.
+    """Reject obvious write/admin operations in a Cypher string.
 
-    Defense-in-depth layer 1 (application-level).
-    Layer 2 is Neo4j session with default_access_mode=READ_ACCESS.
+    This is a lightweight application prefilter, not a complete security boundary.
+    Neo4j READ_ACCESS selects a read route; database permissions must enforce access.
 
-    Returns True only if the query looks safe to execute read-only.
+    Returns True when this limited scan finds no known write keyword or semicolon;
+    that result does not prove the query is safe or read-only.
     """
     # Block multi-statement injection via semicolons
     if ";" in cypher:

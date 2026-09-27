@@ -12,12 +12,21 @@ log = structlog.get_logger(__name__)
 class GraphClient:
     """Thin async wrapper around the Neo4j Bolt driver.
 
-    Enforces READ_ACCESS at the Neo4j session level for read-only queries
-    (defense-in-depth layer 2, complementing validate_cypher_readonly).
+    Requests READ_ACCESS routing for read-only queries. This is not a server-side
+    authorization boundary; the Neo4j account must carry suitable read-only rights.
     """
 
-    def __init__(self, uri: str, user: str, password: str) -> None:
+    def __init__(
+        self,
+        uri: str,
+        user: str,
+        password: str,
+        query_timeout_s: float = 15.0,
+    ) -> None:
+        if query_timeout_s <= 0:
+            raise ValueError("query_timeout_s must be positive")
         self._driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+        self._query_timeout_s = query_timeout_s
 
     async def close(self) -> None:
         await self._driver.close()
@@ -33,5 +42,6 @@ class GraphClient:
             session_kwargs["default_access_mode"] = neo4j.READ_ACCESS
 
         async with self._driver.session(**session_kwargs) as session:
-            result = await session.run(cypher, params or {})
+            query = neo4j.Query(cypher, timeout=self._query_timeout_s)
+            result = await session.run(query, params or {})
             return [dict(record) async for record in result]

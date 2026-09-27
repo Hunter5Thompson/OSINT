@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import neo4j
 import pytest
 
 from graph.client import GraphClient
@@ -68,6 +69,22 @@ class TestGraphClientRunQuery:
             assert call_kwargs is not None
             kwargs = call_kwargs.kwargs if call_kwargs.kwargs else {}
             assert "default_access_mode" in kwargs
+
+    async def test_query_uses_driver_timeout(self, mock_driver):
+        _, session = mock_driver
+        session.run.return_value = _async_iter([])
+
+        with patch("graph.client.AsyncGraphDatabase") as mock_agd:
+            mock_agd.driver.return_value = mock_driver[0]
+            client = GraphClient(
+                "bolt://localhost:7687", "neo4j", "pass", query_timeout_s=2.5
+            )
+            await client.run_query("MATCH (n) RETURN n", read_only=True)
+
+        query = session.run.call_args.args[0]
+        assert isinstance(query, neo4j.Query)
+        assert query.text == "MATCH (n) RETURN n"
+        assert query.timeout == 2.5
 
 
 class TestGraphClientClose:

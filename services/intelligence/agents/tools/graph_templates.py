@@ -11,6 +11,14 @@ from typing import TypedDict
 
 from spatial import ScopeKind
 
+MAX_TEMPLATE_LIMIT = 100
+DEFAULT_TEMPLATE_LIMIT = 100
+
+
+class InvalidTemplateLimitError(ValueError):
+    """Raised when a caller supplies a non-integer template limit."""
+
+
 TEMPLATES: dict[str, dict] = {
     "entity_lookup": {
         "description": "Find an entity by name — returns properties and type",
@@ -117,6 +125,21 @@ TEMPLATES: dict[str, dict] = {
 class ScopedGraphTemplate(TypedDict):
     cypher: str
     defaults: dict[str, object]
+
+
+def _merge_template_params(
+    cypher: str,
+    defaults: dict[str, object],
+    params: dict[str, object],
+) -> dict[str, object]:
+    merged = dict(defaults)
+    merged.update(params)
+    if "$limit" in cypher:
+        limit = merged.get("limit", DEFAULT_TEMPLATE_LIMIT)
+        if type(limit) is not int:
+            raise InvalidTemplateLimitError("template limit must be an integer")
+        merged["limit"] = min(MAX_TEMPLATE_LIMIT, max(1, limit))
+    return merged
 
 
 # Complete literal query strings are intentional. A scoped read never appends a
@@ -349,8 +372,7 @@ def select_scoped_template(
     template = SCOPED_TEMPLATES.get((template_id, scope_kind))
     if template is None:
         return None
-    merged = dict(template["defaults"])
-    merged.update(params)
+    merged = _merge_template_params(template["cypher"], template["defaults"], params)
     return template["cypher"], merged
 
 
@@ -365,8 +387,7 @@ def select_template(
     if template is None:
         return None
 
-    merged = dict(template["defaults"])
-    merged.update(params)
+    merged = _merge_template_params(template["cypher"], template["defaults"], params)
     return template["cypher"], merged
 
 

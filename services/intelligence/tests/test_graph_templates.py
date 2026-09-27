@@ -3,11 +3,14 @@
 import pytest
 
 from agents.tools.graph_templates import (
+    SCOPED_TEMPLATES,
     TEMPLATES,
     build_cypher_from_template,
     inject_limit,
+    select_scoped_template,
     select_template,
 )
+from spatial import ScopeKind
 
 
 class TestTemplateRegistry:
@@ -50,6 +53,53 @@ class TestSelectTemplate:
         assert result is not None
         _, params = result
         assert params["limit"] == 20
+
+    @pytest.mark.parametrize("selector", [select_template, select_scoped_template])
+    @pytest.mark.parametrize(
+        ("requested", "expected"),
+        [(-1, 1), (0, 1), (1, 1), (100, 100), (101, 100), (10**9, 100)],
+    )
+    def test_limit_is_bounded_after_defaults_and_params_are_merged(
+        self, selector, requested, expected
+    ):
+        if selector is select_template:
+            result = selector("event_timeline", {"location": "Kyiv", "limit": requested})
+        else:
+            result = selector(
+                "event_timeline",
+                ScopeKind.COUNTRY,
+                {"location": "Kyiv", "limit": requested},
+            )
+
+        assert result is not None
+        _, params = result
+        assert params["limit"] == expected
+
+    @pytest.mark.parametrize("selector", [select_template, select_scoped_template])
+    @pytest.mark.parametrize("requested", [True, "10", None])
+    def test_non_integer_limit_is_rejected_after_merge(self, selector, requested):
+        with pytest.raises((TypeError, ValueError)):
+            if selector is select_template:
+                selector("event_timeline", {"location": "Kyiv", "limit": requested})
+            else:
+                selector(
+                    "event_timeline",
+                    ScopeKind.COUNTRY,
+                    {"location": "Kyiv", "limit": requested},
+                )
+
+    def test_every_global_and_scoped_template_uses_a_bounded_default(self):
+        for template_id, template in TEMPLATES.items():
+            if "$limit" in template["cypher"]:
+                selected = select_template(template_id, {})
+                assert selected is not None
+                assert 1 <= selected[1]["limit"] <= 100
+
+        for (template_id, scope_kind), template in SCOPED_TEMPLATES.items():
+            if "$limit" in template["cypher"]:
+                selected = select_scoped_template(template_id, scope_kind, {})
+                assert selected is not None
+                assert 1 <= selected[1]["limit"] <= 100
 
 
 class TestInjectLimit:
