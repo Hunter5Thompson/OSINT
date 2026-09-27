@@ -1,5 +1,6 @@
 """Intelligence analysis endpoints with SSE streaming."""
 
+import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -22,7 +23,22 @@ log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/intel", tags=["intelligence"])
 
 # In-memory history (replaced by persistent storage in production)
+_HISTORY_LIMIT = 50
 _history: list[IntelAnalysis] = []
+_HOTSPOT_ID_NOISE = re.compile(r"[^A-Za-z0-9._:-]+")
+
+
+def _remember(analysis: IntelAnalysis) -> None:
+    _history.append(analysis)
+    if len(_history) > _HISTORY_LIMIT:
+        del _history[:-_HISTORY_LIMIT]
+
+
+def hotspot_prompt(hotspot_id: str) -> str:
+    """One line, bounded, so a path segment cannot break the agent prompt."""
+    cleaned = _HOTSPOT_ID_NOISE.sub(" ", hotspot_id).strip()
+    cleaned = cleaned[:80] or "unknown"
+    return f"Intelligence analysis for hotspot: {cleaned}"
 
 
 def _shared_http_client(request: Request) -> httpx.AsyncClient | None:
@@ -64,7 +80,7 @@ async def query_intel(query: IntelQuery, request: Request) -> EventSourceRespons
         ):
             if ev.get("event") == "result":
                 try:
-                    _history.append(IntelAnalysis.model_validate_json(ev["data"]))
+                    _remember(IntelAnalysis.model_validate_json(ev["data"]))
                 except Exception:  # noqa: BLE001
                     pass
             yield ev
@@ -78,7 +94,7 @@ async def query_hotspot_intel(
 ) -> EventSourceResponse | Response:
     """Run intelligence analysis focused on a specific hotspot."""
     query = IntelQuery(
-        query=f"Intelligence analysis for hotspot: {hotspot_id}",
+        query=hotspot_prompt(hotspot_id),
         hotspot_id=hotspot_id,
     )
     return await query_intel(query, request)

@@ -1,8 +1,10 @@
 """Flight data service - fetches from OpenSky Network and adsb.fi."""
 
+import math
 from datetime import UTC, datetime
 
 import structlog
+from pydantic import ValidationError
 
 from app.config import settings
 from app.models.flight import Aircraft
@@ -13,130 +15,36 @@ logger = structlog.get_logger()
 
 CACHE_KEY = "flights:all"
 
-# Callsign prefixes that indicate military aircraft
-_MILITARY_CALLSIGN_PREFIXES = (
-    "RCH", "EVAC", "DUKE", "VALOR", "REACH", "FORGE", "COBRA", "HAWK",
-    "VIPER", "RAPTOR", "REAPER", "SIGINT", "FORTE", "NCHO", "TOPCAT",
-    "RRR",  # Royal Air Force
-    "IAM",  # Italian Air Force
-    "GAF",  # German Air Force
-    "FAF",  # French Air Force
-    "CNV",  # US Navy
-    "RFR",  # French Air Force
+# Longer prefixes first so REACH wins over RCH and the suffix is a digit, not HAWKER.
+_MILITARY_CALLSIGN_PREFIXES = tuple(
+    sorted(
+        (
+            "RCH",
+            "EVAC",
+            "DUKE",
+            "VALOR",
+            "REACH",
+            "FORGE",
+            "COBRA",
+            "HAWK",
+            "VIPER",
+            "RAPTOR",
+            "REAPER",
+            "SIGINT",
+            "FORTE",
+            "NCHO",
+            "TOPCAT",
+            "RRR",  # Royal Air Force
+            "IAM",  # Italian Air Force
+            "GAF",  # German Air Force
+            "FAF",  # French Air Force
+            "CNV",  # US Navy
+            "RFR",  # French Air Force
+        ),
+        key=len,
+        reverse=True,
+    )
 )
-
-
-def _is_military_callsign(callsign: str | None) -> bool:
-    """Heuristic military detection from callsign prefix."""
-    if not callsign:
-        return False
-    cs = callsign.strip().upper()
-    return any(cs.startswith(p) for p in _MILITARY_CALLSIGN_PREFIXES)
-
-
-async def get_flights(
-    proxy: ProxyService,
-    cache: CacheService,
-) -> list[Aircraft]:
-    """Fetch flight data: cache → adsb.fi → OpenSky → FR24 public feed."""
-    cached = await cache.get(CACHE_KEY)
-    if cached is not None:
-        return [Aircraft(**a) for a in cached]
-
-    # adsb.fi primary (has aircraft_type + military dbFlags)
-    aircraft = await _fetch_adsb_fi(proxy)
-    if not aircraft:
-        aircraft = await _fetch_opensky(proxy)
-    if not aircraft:
-        aircraft = await _fetch_fr24(proxy)
-
-    if aircraft:
-        await cache.set(
-            CACHE_KEY,
-            [a.model_dump(mode="json") for a in aircraft],
-            settings.flight_cache_ttl_s,
-        )
-
-    return aircraft
-
-
-async def _fetch_opensky(proxy: ProxyService) -> list[Aircraft]:
-    """Fetch from OpenSky Network API."""
-    try:
-        auth = None
-        if settings.opensky_user and settings.opensky_pass:
-            auth = (settings.opensky_user, settings.opensky_pass)
-
-        data = await proxy.get_json(settings.opensky_api_url, auth=auth)
-        states = data.get("states", [])
-        if not states:
-            return []
-
-        aircraft: list[Aircraft] = []
-        for s in states:
-            if s[6] is None or s[5] is None:
-                continue
-            callsign = (s[1] or "").strip() or None
-            aircraft.append(
-                Aircraft(
-                    icao24=s[0],
-                    callsign=callsign,
-                    longitude=float(s[5]),
-                    latitude=float(s[6]),
-                    altitude_m=float(s[7] or 0),
-                    velocity_ms=float(s[9] or 0),
-                    heading=float(s[10] or 0),
-                    vertical_rate=float(s[11] or 0),
-                    on_ground=bool(s[8]),
-                    last_contact=datetime.fromtimestamp(s[4] or 0, tz=UTC),
-                    is_military=_is_military_callsign(callsign),
-                )
-            )
-        logger.info("opensky_fetched", count=len(aircraft))
-        return aircraft
-    except Exception:
-        logger.warning("opensky_fetch_failed")
-        return []
-
-
-async def _fetch_adsb_fi(proxy: ProxyService) -> list[Aircraft]:
-    """Fallback: fetch from adsb.fi API."""
-    try:
-        data = await proxy.get_json(settings.adsb_fi_api_url)
-        ac_list = data.get("ac", [])
-
-        aircraft: list[Aircraft] = []
-        for ac in ac_list:
-            lat = ac.get("lat")
-            lon = ac.get("lon")
-            if lat is None or lon is None:
-                continue
-            raw_db_flags = ac.get("dbFlags", 0)
-            try:
-                db_flags = int(raw_db_flags or 0)
-            except (TypeError, ValueError):
-                db_flags = 0
-            aircraft.append(
-                Aircraft(
-                    icao24=ac.get("hex", ""),
-                    callsign=ac.get("flight", "").strip() or None,
-                    latitude=float(lat),
-                    longitude=float(lon),
-                    altitude_m=float(ac.get("alt_baro", 0) or 0) * 0.3048,
-                    velocity_ms=float(ac.get("gs", 0) or 0) * 0.5144,
-                    heading=float(ac.get("track", 0) or 0),
-                    vertical_rate=float(ac.get("baro_rate", 0) or 0) * 0.00508,
-                    on_ground=ac.get("alt_baro") == "ground",
-                    is_military=bool(db_flags & 1),
-                    aircraft_type=ac.get("t"),
-                )
-            )
-        logger.info("adsb_fi_fetched", count=len(aircraft))
-        return aircraft
-    except Exception:
-        logger.warning("adsb_fi_fetch_failed")
-        return []
-
 
 # FR24 public feed URL (no auth needed)
 _FR24_URL = (
@@ -146,53 +54,261 @@ _FR24_URL = (
 )
 
 
-async def _fetch_fr24(proxy: ProxyService) -> list[Aircraft]:
-    """Fallback: fetch from FR24 public feed (no auth, ~1500 flights)."""
+def _is_military_callsign(callsign: str | None) -> bool:
+    """Military when the prefix is the whole token or is followed by a number.
+
+    ``HAWK12`` matches. ``HAWKER`` does not: the letters after the prefix belong
+    to a different callsign.
+    """
+    if not isinstance(callsign, str):
+        return False
+    normalized = callsign.strip().upper()
+    if not normalized:
+        return False
+    for prefix in _MILITARY_CALLSIGN_PREFIXES:
+        if not normalized.startswith(prefix):
+            continue
+        rest = normalized[len(prefix) :].lstrip(" -")
+        if rest == "" or rest[0].isdigit():
+            return True
+    return False
+
+
+def _finite_number(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
     try:
-        # FR24 needs a browser-like User-Agent
-        resp = await proxy.client.get(
-            _FR24_URL,
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=15.0,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        number = float(value)
+    except ValueError:
+        return None
+    if not math.isfinite(number):
+        return None
+    return number
 
-        aircraft: list[Aircraft] = []
-        for key, val in data.items():
-            if not isinstance(val, list) or len(val) < 15:
-                continue
 
-            # FR24 array fields: [icao24, lat, lon, heading, altitude_ft, speed_kts,
-            #   squawk, radar, type, registration, timestamp, origin, dest, flight,
-            #   ?, ?, callsign, ?, ?]
-            icao24 = val[0]
-            lat = val[1]
-            lon = val[2]
-            if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
-                continue
+def _finite_degrees(value: object, *, limit: float) -> float | None:
+    number = _finite_number(value)
+    if number is None or not -limit <= number <= limit:
+        return None
+    return number
 
-            callsign = (val[16] if len(val) > 16 else val[13]) or None
-            if isinstance(callsign, str):
-                callsign = callsign.strip() or None
 
-            aircraft.append(
-                Aircraft(
-                    icao24=str(icao24),
-                    callsign=callsign,
-                    latitude=float(lat),
-                    longitude=float(lon),
-                    altitude_m=float(val[4] or 0) * 0.3048,
-                    velocity_ms=float(val[5] or 0) * 0.5144,
-                    heading=float(val[3] or 0),
-                    vertical_rate=0,
-                    on_ground=False,
-                    is_military=_is_military_callsign(callsign),
-                    aircraft_type=val[8] if len(val) > 8 and val[8] else None,
-                )
+def _number_or_zero(value: object) -> float | None:
+    if value is None or value == "":
+        return 0.0
+    return _finite_number(value)
+
+
+def _optional_callsign(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _aircraft_from_cache(cached: object) -> list[Aircraft] | None:
+    if not isinstance(cached, list) or not cached:
+        return None
+    aircraft: list[Aircraft] = []
+    for item in cached:
+        if not isinstance(item, dict):
+            continue
+        try:
+            aircraft.append(Aircraft.model_validate(item))
+        except ValidationError:
+            continue
+    return aircraft or None
+
+
+async def get_flights(
+    proxy: ProxyService,
+    cache: CacheService,
+) -> list[Aircraft]:
+    """Fetch flight data: cache, then adsb.fi, OpenSky, and the FR24 public feed.
+
+    A single malformed aircraft is skipped. The function raises only when every
+    source failed at the transport layer, so the router can answer 502 instead of
+    an empty globe.
+    """
+    fresh = _aircraft_from_cache(await cache.get(CACHE_KEY))
+    if fresh is not None:
+        return fresh
+
+    saw_payload = False
+    last_error: Exception | None = None
+    for fetcher in (_fetch_adsb_fi, _fetch_opensky, _fetch_fr24):
+        try:
+            aircraft = await fetcher(proxy)
+        except Exception as exc:
+            last_error = exc
+            logger.warning("flight_source_failed", source=fetcher.__name__, error=str(exc))
+            continue
+        saw_payload = True
+        if aircraft:
+            await cache.set(
+                CACHE_KEY,
+                [item.model_dump(mode="json") for item in aircraft],
+                settings.flight_cache_ttl_s,
             )
-        logger.info("fr24_fetched", count=len(aircraft))
-        return aircraft
-    except Exception:
-        logger.warning("fr24_fetch_failed")
+            return aircraft
+    if not saw_payload and last_error is not None:
+        raise last_error
+    return []
+
+
+def _parse_adsb_aircraft(ac: object) -> Aircraft | None:
+    if not isinstance(ac, dict):
+        return None
+    lat = _finite_degrees(ac.get("lat"), limit=90)
+    lon = _finite_degrees(ac.get("lon"), limit=180)
+    if lat is None or lon is None:
+        return None
+    icao = ac.get("hex")
+    if not isinstance(icao, str) or not icao.strip():
+        return None
+    raw_alt = ac.get("alt_baro", 0)
+    on_ground = raw_alt == "ground"
+    if on_ground:
+        altitude_m = 0.0
+    else:
+        altitude_feet = _number_or_zero(raw_alt)
+        if altitude_feet is None:
+            return None
+        altitude_m = altitude_feet * 0.3048
+    speed_knots = _number_or_zero(ac.get("gs", 0))
+    heading = _number_or_zero(ac.get("track", 0))
+    vertical_fpm = _number_or_zero(ac.get("baro_rate", 0))
+    if speed_knots is None or heading is None or vertical_fpm is None:
+        return None
+    raw_flags = ac.get("dbFlags", 0)
+    try:
+        db_flags = int(raw_flags or 0)
+    except (TypeError, ValueError):
+        db_flags = 0
+    callsign = _optional_callsign(ac.get("flight"))
+    aircraft_type = ac.get("t")
+    return Aircraft(
+        icao24=icao.strip(),
+        callsign=callsign,
+        latitude=lat,
+        longitude=lon,
+        altitude_m=altitude_m,
+        velocity_ms=speed_knots * 0.5144,
+        heading=heading,
+        vertical_rate=vertical_fpm * 0.00508,
+        on_ground=on_ground,
+        is_military=bool(db_flags & 1) or _is_military_callsign(callsign),
+        aircraft_type=aircraft_type if isinstance(aircraft_type, str) else None,
+    )
+
+
+async def _fetch_adsb_fi(proxy: ProxyService) -> list[Aircraft]:
+    """Fetch from adsb.fi. Transport errors propagate; bad rows are skipped."""
+    data = await proxy.get_json(settings.adsb_fi_api_url)
+    ac_list = data.get("ac", []) if isinstance(data, dict) else []
+    if not isinstance(ac_list, list):
         return []
+    aircraft = [parsed for item in ac_list if (parsed := _parse_adsb_aircraft(item)) is not None]
+    logger.info("adsb_fi_fetched", count=len(aircraft))
+    return aircraft
+
+
+def _parse_opensky_state(state: object) -> Aircraft | None:
+    if not isinstance(state, list) or len(state) < 12:
+        return None
+    lat = _finite_degrees(state[6], limit=90)
+    lon = _finite_degrees(state[5], limit=180)
+    if lat is None or lon is None or not state[0]:
+        return None
+    callsign = _optional_callsign(state[1])
+    altitude = _number_or_zero(state[7])
+    speed = _number_or_zero(state[9])
+    heading = _number_or_zero(state[10])
+    vertical = _number_or_zero(state[11])
+    if altitude is None or speed is None or heading is None or vertical is None:
+        return None
+    raw_contact = state[4] or 0
+    try:
+        last_contact = datetime.fromtimestamp(float(raw_contact), tz=UTC)
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
+    return Aircraft(
+        icao24=str(state[0]),
+        callsign=callsign,
+        longitude=lon,
+        latitude=lat,
+        altitude_m=altitude,
+        velocity_ms=speed,
+        heading=heading,
+        vertical_rate=vertical,
+        on_ground=state[8] is True or state[8] == 1,
+        last_contact=last_contact,
+        is_military=_is_military_callsign(callsign),
+    )
+
+
+async def _fetch_opensky(proxy: ProxyService) -> list[Aircraft]:
+    """Fetch from OpenSky Network API."""
+    auth = None
+    if settings.opensky_user and settings.opensky_pass:
+        auth = (settings.opensky_user, settings.opensky_pass)
+    data = await proxy.get_json(settings.opensky_api_url, auth=auth)
+    states = data.get("states", []) if isinstance(data, dict) else []
+    if not isinstance(states, list):
+        return []
+    aircraft = [parsed for state in states if (parsed := _parse_opensky_state(state)) is not None]
+    logger.info("opensky_fetched", count=len(aircraft))
+    return aircraft
+
+
+def _parse_fr24_row(val: object) -> Aircraft | None:
+    if not isinstance(val, list) or len(val) < 15:
+        return None
+    lat = _finite_degrees(val[1], limit=90)
+    lon = _finite_degrees(val[2], limit=180)
+    if lat is None or lon is None or val[0] is None:
+        return None
+    callsign_raw = val[16] if len(val) > 16 else val[13]
+    callsign = _optional_callsign(callsign_raw)
+    on_ground = val[4] == "ground"
+    if on_ground:
+        altitude_m = 0.0
+    else:
+        altitude_feet = _number_or_zero(val[4])
+        if altitude_feet is None:
+            return None
+        altitude_m = altitude_feet * 0.3048
+    speed_knots = _number_or_zero(val[5])
+    heading = _number_or_zero(val[3])
+    if speed_knots is None or heading is None:
+        return None
+    aircraft_type = val[8] if len(val) > 8 and isinstance(val[8], str) and val[8] else None
+    return Aircraft(
+        icao24=str(val[0]),
+        callsign=callsign,
+        latitude=lat,
+        longitude=lon,
+        altitude_m=altitude_m,
+        velocity_ms=speed_knots * 0.5144,
+        heading=heading,
+        vertical_rate=0,
+        on_ground=on_ground,
+        is_military=_is_military_callsign(callsign),
+        aircraft_type=aircraft_type,
+    )
+
+
+async def _fetch_fr24(proxy: ProxyService) -> list[Aircraft]:
+    """Fetch from the FR24 public feed. Transport errors propagate."""
+    resp = await proxy.client.get(
+        _FR24_URL,
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=15.0,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        return []
+    aircraft = [parsed for val in data.values() if (parsed := _parse_fr24_row(val)) is not None]
+    logger.info("fr24_fetched", count=len(aircraft))
+    return aircraft
