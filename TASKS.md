@@ -38,11 +38,12 @@ Senior-Review von `a514db8` ohne offene Findings; unabhängig 94 Tests, Ruff,
 Offline-Lockfile-Check und Diff-Check bestanden. PR #129 wurde als `58843a7` gemergt;
 alle CI-Checks erfolgreich. Kein Live-Zertifikatshandshake.
 
-**HN-I01 — IMPLEMENTIERT (Review offen):** FIRMS-Map-URLs verwenden im Produzentenvertrag
+**~~HN-I01~~ — fachlich abgenommen (PR #131, Merge offen):** FIRMS-Map-URLs verwenden im Produzentenvertrag
 `@lon,lat`; der Detektor gibt konsistent `(lat, lon)` zurück und verwirft nicht-endliche
 oder außerhalb der geografischen Grenzen liegende Koordinaten. Backend-Referenzfälle,
 Router→Parser- und Collector-URL-Verträge decken asymmetrische Koordinaten, Nullmeridian
-und Grenzen ab.
+und Grenzen ab. Senior-Review von `a900604` ohne offene Findings; unabhängig
+50 Backend- und 8 Collector-Tests bestanden. Historische Incidents unverändert.
 
 ## Session 2026-09-26 — Neo4j uniqueness repair
 
