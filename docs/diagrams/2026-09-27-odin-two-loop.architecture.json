@@ -1,0 +1,370 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ODIN Two-Loop Architektur",
+    "output": "2026-09-27-odin-two-loop.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Hunter5Thompson/OSINT",
+      "provider": "github",
+      "revision": "732fadcbe9f1ad3b57526e8c3073c01d7b0b5789"
+    },
+    "views": [
+      {
+        "id": "write-loop",
+        "label": "Write Loop",
+        "focus": [
+          "feeds",
+          "collectors",
+          "extract",
+          "qdrant",
+          "redis",
+          "neo4j"
+        ],
+        "note": "Feeds werden gesammelt, per LLM extrahiert und nur über parametrisierte Templates in Neo4j geschrieben."
+      },
+      {
+        "id": "read-loop",
+        "label": "Read Loop",
+        "focus": [
+          "frontend",
+          "backend",
+          "intel",
+          "llm",
+          "qdrant",
+          "neo4j"
+        ],
+        "note": "Analystenfrage → ReAct-Agent → Qdrant-Suche und Read-only-Cypher → Synthese."
+      },
+      {
+        "id": "live-signals",
+        "label": "Live-Signale",
+        "focus": [
+          "extract",
+          "redis",
+          "backend",
+          "frontend"
+        ],
+        "note": "Neue Events laufen per Redis Stream und SSE live auf den Globus."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "feeds",
+      "type": "external",
+      "label": "Feeds",
+      "sublabel": "RSS · GDELT · FIRMS",
+      "pos": [
+        40,
+        100
+      ],
+      "size": [
+        130,
+        60
+      ]
+    },
+    {
+      "id": "collectors",
+      "type": "backend",
+      "label": "Collectors",
+      "sublabel": "data-ingestion",
+      "pos": [
+        250,
+        100
+      ],
+      "size": [
+        130,
+        60
+      ],
+      "sources": [
+        {
+          "path": "services/data-ingestion/feeds/rss_collector.py",
+          "line": 169,
+          "label": "RSS collect"
+        }
+      ]
+    },
+    {
+      "id": "extract",
+      "type": "backend",
+      "label": "LLM Extract",
+      "sublabel": "process_item",
+      "pos": [
+        460,
+        100
+      ],
+      "size": [
+        130,
+        60
+      ],
+      "sources": [
+        {
+          "path": "services/data-ingestion/pipeline.py",
+          "line": 364,
+          "end_line": 466,
+          "label": "process_item"
+        },
+        {
+          "path": "services/data-ingestion/pipeline.py",
+          "line": 539,
+          "end_line": 734,
+          "label": "_write_to_neo4j"
+        }
+      ]
+    },
+    {
+      "id": "qdrant",
+      "type": "database",
+      "label": "Qdrant",
+      "sublabel": "odin_intel :6333",
+      "pos": [
+        250,
+        290
+      ],
+      "size": [
+        130,
+        60
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "messagebus",
+      "label": "Redis Stream",
+      "sublabel": "events :6379",
+      "pos": [
+        460,
+        290
+      ],
+      "size": [
+        130,
+        60
+      ]
+    },
+    {
+      "id": "neo4j",
+      "type": "database",
+      "label": "Neo4j",
+      "sublabel": "graph :7687",
+      "pos": [
+        880,
+        290
+      ],
+      "size": [
+        130,
+        60
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "backend",
+      "label": "Qwen 9B",
+      "sublabel": "vLLM :8000",
+      "pos": [
+        40,
+        480
+      ],
+      "size": [
+        130,
+        60
+      ],
+      "sources": [
+        {
+          "path": "services/intelligence/agents/react_agent.py",
+          "line": 191,
+          "label": "llm_base_url"
+        }
+      ]
+    },
+    {
+      "id": "intel",
+      "type": "backend",
+      "label": "ReAct Agent",
+      "sublabel": "LangGraph :8003",
+      "pos": [
+        250,
+        480
+      ],
+      "size": [
+        130,
+        60
+      ],
+      "sources": [
+        {
+          "path": "services/intelligence/main.py",
+          "line": 113,
+          "label": "POST /query"
+        },
+        {
+          "path": "services/intelligence/graph/workflow.py",
+          "line": 407,
+          "end_line": 421,
+          "label": "ReAct graph"
+        }
+      ]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "Backend API",
+      "sublabel": "FastAPI :8080",
+      "pos": [
+        460,
+        480
+      ],
+      "size": [
+        130,
+        60
+      ],
+      "sources": [
+        {
+          "path": "services/backend/app/routers/intel.py",
+          "line": 49,
+          "label": "/intel/query"
+        },
+        {
+          "path": "services/backend/app/services/signal_stream.py",
+          "line": 260,
+          "label": "XREAD"
+        }
+      ]
+    },
+    {
+      "id": "frontend",
+      "type": "frontend",
+      "label": "WorldView",
+      "sublabel": "React · Cesium",
+      "pos": [
+        670,
+        480
+      ],
+      "size": [
+        130,
+        60
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "poll",
+      "from": "feeds",
+      "to": "collectors",
+      "label": "poll"
+    },
+    {
+      "id": "to-extract",
+      "from": "collectors",
+      "to": "extract",
+      "variant": "emphasis"
+    },
+    {
+      "id": "embed-upsert",
+      "from": "collectors",
+      "to": "qdrant",
+      "label": "embed+upsert",
+      "labelAt": [
+        315,
+        225
+      ]
+    },
+    {
+      "id": "xadd",
+      "from": "extract",
+      "to": "redis",
+      "label": "XADD",
+      "labelAt": [
+        525,
+        225
+      ]
+    },
+    {
+      "id": "merge",
+      "from": "extract",
+      "to": "neo4j",
+      "label": "template MERGE",
+      "variant": "security"
+    },
+    {
+      "id": "xread",
+      "from": "redis",
+      "to": "backend",
+      "label": "XREAD",
+      "labelAt": [
+        525,
+        415
+      ]
+    },
+    {
+      "id": "ui-api",
+      "from": "frontend",
+      "to": "backend",
+      "label": "REST · SSE",
+      "variant": "emphasis"
+    },
+    {
+      "id": "query",
+      "from": "backend",
+      "to": "intel",
+      "label": "/query",
+      "variant": "emphasis"
+    },
+    {
+      "id": "tool-calls",
+      "from": "intel",
+      "to": "llm",
+      "label": "tool calls"
+    },
+    {
+      "id": "vector-search",
+      "from": "intel",
+      "to": "qdrant",
+      "label": "search"
+    },
+    {
+      "id": "readonly-cypher",
+      "from": "intel",
+      "to": "neo4j",
+      "label": "read-only Cypher",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [
+        [
+          315,
+          600
+        ],
+        [
+          945,
+          600
+        ]
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Write Loop",
+      "items": [
+        "Collectors → process_item → LLM-JSON",
+        "Neo4j nur via parametrisierte MERGE-Templates"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Read Loop",
+      "items": [
+        "Backend proxied /query an den ReAct-Agent",
+        "Qdrant-Suche + Template-Cypher → Synthese"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Guardrails",
+      "items": [
+        "Kein LLM-Cypher auf dem Write-Path",
+        "validate_cypher_readonly im Read-Path"
+      ]
+    }
+  ]
+}

@@ -165,6 +165,24 @@ npm install && npm run dev    # Port 5173
 npm run build && npm run lint && npm run type-check
 ```
 
+## Code-Navigation (Graft) + Diagramme (Archify)
+
+Graft (`@nanonets/graft`, lokal installiert) baut einen deterministischen Struktur-Graphen nach `graft/` (gitignored, regenerierbar, kein LLM, kein `--deep`).
+`graft init` wird bewusst NICHT verwendet — es schreibt Hooks, Statusline und MCP in `.claude/settings.json` / `.mcp.json`.
+
+```bash
+graft build                          # Index neu bauen (~6 s)
+graft map                            # Repo-Überblick + Hotspots
+graft ask "<frage>" --source         # Symbolsuche mit Quelltext
+graft skeleton <datei>               # Signaturen einer Datei
+graft callers <symbol>               # Aufrufer
+```
+
+Graft übersieht dynamische/indirekte Referenzen — für vollständige Aussagen immer mit `rg` + Tests gegenprüfen.
+
+Archify (Skill `archify`) rendert Diagramme aus JSON; Quelle + HTML liegen in `docs/diagrams/`.
+Validieren/ausliefern mit `--repo-root <repo> --quality showcase`. `*.visual-check.*`-Sidecars werden nicht committet.
+
 ## Graph-Architektur (Two-Loop)
 
 ```
