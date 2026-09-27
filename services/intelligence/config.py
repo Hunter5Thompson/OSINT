@@ -52,7 +52,6 @@ class Settings(BaseSettings):
     vision_max_file_size_mb: int = 10
     vision_max_dimension: int = 4096
     vision_download_timeout_s: int = 10
-    vision_allowed_local_paths: list[str] = ["/tmp/odin/images/"]
 
     @property
     def llm_base_url(self) -> str:

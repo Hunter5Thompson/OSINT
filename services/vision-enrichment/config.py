@@ -1,5 +1,6 @@
 """Configuration for the Vision Enrichment service."""
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -17,6 +18,8 @@ class Settings(BaseSettings):
     vision_dead_letter_queue: str = "vision:dead_letter"
     vision_max_retries: int = 3
     vision_idle_timeout_ms: int = 600_000  # 10 min for XAUTOCLAIM
+    vision_image_root: str = "/data/telegram/media"
+    vision_max_file_size_mb: int = Field(default=10, gt=0)
 
     # Neo4j (for updating Document nodes)
     neo4j_url: str = "http://localhost:7474"

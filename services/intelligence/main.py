@@ -6,10 +6,11 @@ import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 from typing import Literal
+from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from config import settings
 from graph.workflow import run_intelligence_query, shutdown_graph_client
@@ -62,6 +63,25 @@ class QueryRequest(BaseModel):
     use_legacy: bool = False
     grounding_context: str | None = Field(default=None, max_length=4000)
     grounding_evidence: list[GroundingEvidenceItem] | None = Field(default=None, max_length=6)
+
+    @field_validator("image_url")
+    @classmethod
+    def validate_image_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = urlparse(value)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            raise ValueError("image_url must be an absolute HTTPS URL without credentials")
+        try:
+            _port = parsed.port
+        except ValueError as exc:
+            raise ValueError("image_url has an invalid port") from exc
+        return value
 
     @model_validator(mode="after")
     def reject_legacy_spatial_combinations(self) -> QueryRequest:

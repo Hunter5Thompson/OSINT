@@ -119,8 +119,17 @@ class IntelQuery(BaseModel):
             return None
 
         parsed = urlparse(value)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            raise ValueError("image_url must be an absolute http(s) URL")
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            raise ValueError("image_url must be an absolute HTTPS URL without credentials")
+        try:
+            _port = parsed.port
+        except ValueError as exc:
+            raise ValueError("image_url has an invalid port") from exc
 
         host = parsed.hostname.lower()
         if host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):

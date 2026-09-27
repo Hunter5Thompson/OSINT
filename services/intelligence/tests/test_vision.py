@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
 from agents.tools.vision import (
     _is_private_ip,
@@ -19,10 +20,10 @@ class TestUrlValidation:
     def test_http_rejected(self):
         assert validate_image_url("http://example.com/image.jpg") is False
 
-    def test_whitelisted_local_path(self):
-        assert validate_image_url("/tmp/odin/images/sat.png") is True
+    def test_local_path_rejected(self):
+        assert validate_image_url("/tmp/odin/images/sat.png") is False
 
-    def test_non_whitelisted_local_path(self):
+    def test_non_https_local_path(self):
         assert validate_image_url("/etc/passwd") is False
 
     def test_empty_url_rejected(self):
@@ -33,6 +34,53 @@ class TestUrlValidation:
 
     def test_data_url_rejected(self):
         assert validate_image_url("data:image/png;base64,abc") is False
+
+    @pytest.mark.parametrize("url", [
+        "http://example.com/image.jpg", "https://user:pass@example.com/a.png",
+        "https://@example.com/a.png",
+        "/tmp/odin/images/a.png", "file:///tmp/a.png", "data:image/png;base64,AA==",
+        "https:///missing-host.png", "https://example.com:bad/a.png", "https://", "https://[bad",
+    ])
+    def test_shared_query_contract_rejects_non_https_or_credentials(self, url):
+        from main import QueryRequest
+        with pytest.raises(ValidationError):
+            QueryRequest(query="inspect", spatial_relation="either", image_url=url)
+
+    @pytest.mark.parametrize("url", [
+        "https://example.com/image.jpg", "https://8.8.8.8/a.png",
+    ])
+    def test_shared_query_contract_accepts_https_public_hosts(self, url):
+        from main import QueryRequest
+        request = QueryRequest(query="inspect", spatial_relation="either", image_url=url)
+        assert request.image_url == url
+
+    @pytest.mark.parametrize("url", [
+        "http://example.com/image.jpg", "https://user:pass@example.com/a.png",
+        "https://@example.com/a.png", "/tmp/odin/images/a.png", "file:///tmp/a.png",
+        "data:image/png;base64,AA==", "https:///missing-host.png",
+        "https://example.com:bad/a.png", "https://", "https://[bad",
+    ])
+    def test_http_query_rejects_image_url_before_pipeline(self, url):
+        from fastapi.testclient import TestClient
+
+        from main import app
+        with patch(
+            "main.run_intelligence_query", side_effect=AssertionError("must not run")
+        ) as run:
+            response = TestClient(app).post(
+                "/query",
+                json={"query": "inspect", "spatial_relation": "either", "image_url": url},
+            )
+        assert response.status_code == 422
+        run.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_loader_rechecks_url_contract(self):
+        from agents.tools.vision import _load_image
+        with patch("agents.tools.vision._download_image") as download:
+            with pytest.raises(ValueError):
+                await _load_image("https://user:pass@example.com/a.png")
+            download.assert_not_awaited()
 
 
 class TestPrivateIpDetection:

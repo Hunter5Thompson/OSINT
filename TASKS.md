@@ -22,6 +22,13 @@ Quote-Angriffe (DELETE, LOAD CSV, CALL, MERGE) fail closed; unbekannte Template-
 werden kontrolliert abgewiesen. Verifikation: 122 fokussierte Intelligence-Tests,
 Ruff und `git diff --check` bestanden.
 
+**HN-S02 — IMPLEMENTIERT (Review offen):** Intelligence- und Backend-Query-Eingänge
+verlangen absolute HTTPS-Bild-URLs ohne Credentials; Loader revalidiert selbst.
+Vision-Worker liest ausschließlich reguläre Dateien unter der konfigurierten
+`/data/telegram/media`-Wurzel, symlink-sicher per dir-fd und mit Byteobergrenze.
+Fokustests der drei betroffenen Services bestanden; S03 bleibt für sichere
+Remote-Download-Verbindungen offen.
+
 ## Session 2026-09-26 — Neo4j uniqueness repair
 
 Offline-Dumps erstellt und auf isolierter Kopie wiederhergestellt; anschließend

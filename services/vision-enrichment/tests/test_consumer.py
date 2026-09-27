@@ -40,7 +40,9 @@ class TestConsumerSetup:
 
 class TestProcessMessage:
     async def test_calls_vision_and_updates_neo4j_and_qdrant(self):
-        consumer, mock_redis = _make_consumer()
+        consumer, mock_redis = _make_consumer(
+            vision_image_root="/mnt/fixture-root", vision_max_file_size_mb=3
+        )
 
         msg_data = {
             b"channel": b"OSINTdefender",
@@ -64,7 +66,7 @@ class TestProcessMessage:
         mock_point.id = 12345
 
         with (
-            patch("consumer.analyze_image", return_value=mock_vision_result),
+            patch("consumer.analyze_image", return_value=mock_vision_result) as mock_analyze,
             patch("consumer.httpx.AsyncClient") as mock_client_cls,
             patch("consumer.QdrantClient") as mock_qdrant_cls,
         ):
@@ -85,6 +87,15 @@ class TestProcessMessage:
             mock_qdrant_instance.scroll.return_value = ([mock_point], None)
 
             await consumer._process_message(b"stream-id-1", msg_data)
+
+            mock_analyze.assert_awaited_once_with(
+                client=mock_http,
+                vllm_url=consumer._settings.vision_vllm_url,
+                model=consumer._settings.vision_vllm_model,
+                image_path="/data/photo.jpg",
+                image_root="/mnt/fixture-root",
+                max_file_size_mb=3,
+            )
 
             # Should update Qdrant payload
             mock_qdrant_instance.set_payload.assert_called_once()
