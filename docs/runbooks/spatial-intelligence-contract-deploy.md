@@ -190,3 +190,27 @@ those aggregate nodes and their original `SPOTTED_AT` edge evidence; they are no
 newly admitted spatial observations. Edge-to-observation materialization remains a
 separate migration. Run the read-only predicate regression against configured
 Neo4j with `pytest -m live tests/integration/test_aircraft_lane_live.py`.
+
+### Historical theatre edge materialization
+
+`graph-integrity materialize-aircraft-theatre-edges` moves each historical
+`SPOTTED_AT` edge from a coordinate-free theatre aggregate onto its own
+`aircraft-observation:<dedup_key>` Location, normalized exactly like the live
+producer (catalog-derived country or `unresolved`). One statement per batch creates
+the Location and edge and deletes the old edge, so readers never see a sighting
+twice. The full original edge map is both the drift guard and the copied evidence
+(the millisecond `timestamp` is kept verbatim); provenance is recorded as
+`materialized_from_theatre` and `materialization_revision` on node and edge, plus
+`spatial_previous_name`. Theatre nodes are never deleted. Loc-key collisions fail
+the batch under `location_loc_key_unique`.
+
+1. Take a Neo4j dump.
+2. `--dry-run --report-out dry-run.json`; review `by_theatre`, `by_name`,
+   `skipped`, `existing_observation_keys` (must be 0) and `complete`.
+3. `--apply --approved-report dry-run.json` re-plans and refuses on any drift.
+4. Re-run `--dry-run`: `total` must equal the skipped count.
+
+Reversal: `graph-integrity revert-aircraft-theatre-edges --dry-run|--apply` moves
+materialized edges back onto their single theatre node and deletes the created
+Locations; it fails closed if any edge cannot be restored or a Location gained
+foreign relationships.

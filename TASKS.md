@@ -2049,3 +2049,13 @@ Observation-Producer.
 # - Backend/intelligence real scoped query passed; both served references resolve,
 #   retired revision returns 409. Collector/backfill resumed; final smoke 24/0/1.
 # - Evidence and remaining provenance limits: docs/reports/2026-09-27-spatial-live-cutover.md.
+
+# 2026-09-27 — Historical aircraft theatre edges → observation Locations
+# - New graph-integrity job materialize-aircraft-theatre-edges (+ revert). TDD: 28
+#   unit tests, 2 CLI tests; apply/revert/drift/collision verified end-to-end on a
+#   throwaway Neo4j (revert restores the exact prior edge set).
+# - Read-only prod dry-run: 14,654 edges across 9 theatres, all planned, 0 skipped,
+#   0 key collisions; 2,041 honest `unresolved` (coast/sea at Natural Earth 1:110m).
+# - Found, not fixed here: adsb.fi `now` is milliseconds; collector stores ms and
+#   buckets dedup keys by 900 ms, while /aircraft and timeline readers filter by
+#   epoch seconds. The job copies timestamps verbatim.
