@@ -81,7 +81,7 @@ async def test_drain_one_processes_a_single_envelope(
     )
     await promoter._subscribe()  # noqa: SLF001
 
-    url = "https://firms.example/#@10.0,20.0,10z"
+    url = "https://firms.example/#@20.0,10.0,10z"
     for _ in range(3):
         await signal_stream.queue.put(
             signal_envelope_factory(source="firms", url=url)
@@ -142,7 +142,7 @@ async def test_rehydrate_then_subscribe_avoids_double_create(
     await promoter._subscribe()  # noqa: SLF001
     # Enqueue a matching FIRMS envelope BEFORE rehydrate completes
     await signal_stream.queue.put(
-        signal_envelope_factory(source="firms", url="https://firms.example/#@10.0,20.0,10z")
+        signal_envelope_factory(source="firms", url="https://firms.example/#@20.0,10.0,10z")
     )
     await promoter._rehydrate()  # noqa: SLF001
     # The pre-seeded incident is in the store; queued envelope is post-ignition update
@@ -153,10 +153,10 @@ async def test_rehydrate_then_subscribe_avoids_double_create(
     # so it takes 2 more signals before emitting an ignition for the SAME cluster_key.
     # Once it does, ClusterStore sees an existing cluster (rehydrated) → UPDATE.
     await signal_stream.queue.put(
-        signal_envelope_factory(source="firms", url="https://firms.example/#@10.0,20.0,10z")
+        signal_envelope_factory(source="firms", url="https://firms.example/#@20.0,10.0,10z")
     )
     await signal_stream.queue.put(
-        signal_envelope_factory(source="firms", url="https://firms.example/#@10.0,20.0,10z")
+        signal_envelope_factory(source="firms", url="https://firms.example/#@20.0,10.0,10z")
     )
     await promoter._drain_one()  # noqa: SLF001
     await promoter._drain_one()  # noqa: SLF001

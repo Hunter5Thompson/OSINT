@@ -2,7 +2,9 @@
 
 Gemeinsamer Vertrag: [README](README.md). Alle Pfade relativ zu `services/backend`, sofern anders bezeichnet.
 
-## I01 — FIRMS-Produzent und Detektor auf denselben Koordinatenvertrag bringen
+## ~~I01 — FIRMS-Produzent und Detektor auf denselben Koordinatenvertrag bringen~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27:** Implementierungscommit `a900604`, PR #131; keine offenen Findings. Unabhängig 50 Backend- und 8 Collector-Tests bestanden. CI/Merge separat prüfen. Historische Incidents wurden nicht verändert; die Spezifikation bleibt als Abschlussnachweis erhalten.
 
 **F-01 Koordinaten · P0 · S.**
 

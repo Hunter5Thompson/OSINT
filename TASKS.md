@@ -28,16 +28,22 @@ Vision-Worker liest ausschließlich reguläre Dateien unter der konfigurierten
 `/data/telegram/media`-Wurzel, symlink-sicher per dir-fd und mit Byteobergrenze.
 Senior-Review von `8b30249` ohne offene Findings; unabhängig 50 Intelligence-,
 37 Backend- und 20 Worker-Tests bestanden. PR #128 am 2026-09-27 gemergt als
-`732fadc`; CI-Tests, Ruff und CodeQL erfolgreich. S03 bleibt für sichere
-Remote-Download-Verbindungen offen.
+`732fadc`; CI-Tests, Ruff und CodeQL erfolgreich.
 
-**~~HN-S03~~ — fachlich abgenommen (PR #129, Merge offen):** Remote-Bilddownloads lösen DNS
+**~~HN-S03~~ — MERGED (PR #129, Commit `58843a7`):** Remote-Bilddownloads lösen DNS
 asynchron auf, prüfen jede Antwort und verbinden gepinnt per httpcore zu einer
 numerischen IP bei unverändertem TLS-Host. Responses sind redirectfrei und
 encoded/decoded größen- sowie zeitbegrenzt; Pillow dekodiert vollständig.
 Senior-Review von `a514db8` ohne offene Findings; unabhängig 94 Tests, Ruff,
-Offline-Lockfile-Check und Diff-Check bestanden. CI und Merge separat prüfen.
-Netzwerk-/TLS-Verhalten über Teststreams geprüft, kein Live-Zertifikatshandshake.
+Offline-Lockfile-Check und Diff-Check bestanden. PR #129 wurde als `58843a7` gemergt;
+alle CI-Checks erfolgreich. Kein Live-Zertifikatshandshake.
+
+**~~HN-I01~~ — fachlich abgenommen (PR #131, Merge offen):** FIRMS-Map-URLs verwenden im Produzentenvertrag
+`@lon,lat`; der Detektor gibt konsistent `(lat, lon)` zurück und verwirft nicht-endliche
+oder außerhalb der geografischen Grenzen liegende Koordinaten. Backend-Referenzfälle,
+Router→Parser- und Collector-URL-Verträge decken asymmetrische Koordinaten, Nullmeridian
+und Grenzen ab. Senior-Review von `a900604` ohne offene Findings; unabhängig
+50 Backend- und 8 Collector-Tests bestanden. Historische Incidents unverändert.
 
 ## Session 2026-09-26 — Neo4j uniqueness repair
 

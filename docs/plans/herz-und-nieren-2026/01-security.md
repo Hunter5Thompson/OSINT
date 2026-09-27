@@ -1,6 +1,6 @@
 # Security-Pakete
 
-Gemeinsamer Vertrag: [README](README.md). S01/S03 benötigen Senior-Review. Hier geht es um Anwendungsgrenzen; reale Erreichbarkeit/DB-Rechte wurden im Review nicht getestet.
+Gemeinsamer Vertrag: [README](README.md). Security-Reviews werden pro Paket dokumentiert. Hier geht es um Anwendungsgrenzen; reale Erreichbarkeit/DB-Rechte wurden nicht allgemein getestet.
 
 ## ~~S01 — Freies Cypher begrenzen und Template-Limits erzwingen~~ — ERLEDIGT
 
@@ -20,7 +20,7 @@ Gemeinsamer Vertrag: [README](README.md). S01/S03 benötigen Senior-Review. Hier
 
 ## ~~S02 — Query-URLs und lokale Worker-Dateien getrennt validieren~~ — FACHLICH ABGENOMMEN
 
-**Review 2026-09-27:** Commit `8b30249`, PR #128, gemergt als `732fadc`; alle CI-Tests, Ruff und CodeQL erfolgreich. 50 Intelligence-, 37 Backend- und 20 Worker-Tests unabhängig bestanden. Keine offenen Review-Findings. S03 bleibt offen. Die folgende Spezifikation bleibt als Abschlussnachweis erhalten.
+**Review 2026-09-27:** Commit `8b30249`, PR #128, gemergt als `732fadc`; alle CI-Tests, Ruff und CodeQL erfolgreich. 50 Intelligence-, 37 Backend- und 20 Worker-Tests unabhängig bestanden. Keine offenen Review-Findings. S03 wird separat dokumentiert. Die folgende Spezifikation bleibt als Abschlussnachweis erhalten.
 
 **F-04 Pfad/API, F-12 Pfad · P0 · M · unabhängig.** Unterläufe: S02a Intelligence+Backend; S02b Worker.
 
@@ -34,7 +34,7 @@ Gemeinsamer Vertrag: [README](README.md). S01/S03 benötigen Senior-Review. Hier
 
 ## ~~S03 — Remote-Download an geprüfte IP binden~~ — FACHLICH ABGENOMMEN
 
-**Review 2026-09-27:** Implementierungscommit `a514db8`, PR #129, keine offenen Findings. Unabhängig 94 Tests, Ruff, Offline-Lockfile-Check und Diff-Check bestanden. Die Tests prüfen IP-Pinning, TLS-Parameter und Loader mit Teststreams, keinen Live-Zertifikatshandshake. CI/Merge separat prüfen. Die Spezifikation bleibt als Abschlussnachweis erhalten.
+**Review 2026-09-27:** Implementierungscommit `a514db8`, PR #129 als `58843a7` gemergt; alle CI-Checks erfolgreich. Unabhängig 94 Tests, Ruff, Offline-Lockfile-Check und Diff-Check bestanden. Die Tests prüfen IP-Pinning, TLS-Parameter und Loader mit Teststreams, keinen Live-Zertifikatshandshake. Die Spezifikation bleibt als Abschlussnachweis erhalten.
 
 **F-04 Netzwerk · P0 · L/Senior · nach S02.** Intelligence `agents/tools/vision.py`, optional neuer lokaler Transporthelper, `config.py`, Visiontests.
 

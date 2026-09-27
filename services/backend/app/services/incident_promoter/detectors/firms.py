@@ -6,32 +6,46 @@ accumulate inside the configured window.
 """
 from __future__ import annotations
 
+import math
 import re
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 from app.models.signals import SignalEnvelope
 from app.services.incident_promoter.config import PromoterConfig
 from app.services.incident_promoter.detectors.base import ClusterHit
 
-_COORD_RE = re.compile(
-    r"@(?P<lat>-?\d+(?:\.\d+)?),(?P<lon>-?\d+(?:\.\d+)?),"
-)
+_NUMBER = r"(?:-?\d+(?:\.\d+)?|[+-]?(?:nan|inf(?:inity)?))"
+_COORD_RE = re.compile(rf"@(?P<lon>{_NUMBER}),(?P<lat>{_NUMBER}),", re.IGNORECASE)
 
 
 def _parse_firms_coords(url: str | None) -> tuple[float, float] | None:
     """Return ``(lat, lon)`` extracted from a FIRMS map URL, or ``None``."""
     if not url:
         return None
-    match = _COORD_RE.search(url)
+    try:
+        parsed_url = urlsplit(url)
+        hostname = parsed_url.hostname
+    except (TypeError, ValueError):
+        return None
+    if parsed_url.scheme not in {"http", "https"} or not hostname:
+        return None
+    match = _COORD_RE.search(parsed_url.fragment)
     if not match:
         return None
     try:
-        return float(match.group("lat")), float(match.group("lon"))
-    except ValueError:
+        lat = float(match.group("lat"))
+        lon = float(match.group("lon"))
+    except (TypeError, ValueError):
         return None
+    if not math.isfinite(lat) or not math.isfinite(lon):
+        return None
+    if not -90 <= lat <= 90 or not -180 <= lon <= 180:
+        return None
+    return lat, lon
 
 
 def _bucket_key(lat: float, lon: float, *, deg: float) -> str:
