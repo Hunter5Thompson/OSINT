@@ -9,7 +9,6 @@ import base64
 import ipaddress
 import socket
 from io import BytesIO
-from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
@@ -26,17 +25,20 @@ log = structlog.get_logger(__name__)
 
 
 def validate_image_url(url: str) -> bool:
-    """Check if URL is safe: https:// or whitelisted local path."""
+    """Accept only absolute HTTPS URLs without embedded credentials."""
     if not url:
         return False
-
-    # Local file path
-    if url.startswith("/"):
-        return any(url.startswith(p) for p in settings.vision_allowed_local_paths)
-
-    # Only HTTPS
-    parsed = urlparse(url)
-    return parsed.scheme == "https"
+    try:
+        parsed = urlparse(url)
+        _port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and bool(parsed.hostname)
+        and parsed.username is None
+        and parsed.password is None
+    )
 
 
 def _is_private_ip(ip_str: str) -> bool:
@@ -50,6 +52,8 @@ def _is_private_ip(ip_str: str) -> bool:
 
 async def _download_image(url: str) -> bytes:
     """Download image with SSRF protection and size limits."""
+    if not validate_image_url(url):
+        raise ValueError("image_url must be an absolute HTTPS URL without credentials")
     parsed = urlparse(url)
     hostname = parsed.hostname or ""
 
@@ -99,15 +103,10 @@ def _validate_dimensions(image_bytes: bytes) -> None:
 
 
 async def _load_image(url: str) -> str:
-    """Load image from URL or local path and return base64 data URL."""
-    if url.startswith("/"):
-        # Local file
-        path = Path(url)
-        if not path.exists():
-            raise FileNotFoundError(f"Image not found: {url}")
-        image_bytes = path.read_bytes()
-    else:
-        image_bytes = await _download_image(url)
+    """Load image from an HTTPS URL and return base64 data URL."""
+    if not validate_image_url(url):
+        raise ValueError("image_url must be an absolute HTTPS URL without credentials")
+    image_bytes = await _download_image(url)
 
     max_size = settings.vision_max_file_size_mb * 1024 * 1024
     if len(image_bytes) > max_size:
@@ -147,7 +146,7 @@ async def analyze_image(
     if not validate_image_url(image_url):
         return (
             f"Image URL rejected: '{image_url}'. "
-            "Only HTTPS URLs or whitelisted local paths are allowed."
+            "Only absolute HTTPS URLs without credentials are allowed."
         )
 
     try:

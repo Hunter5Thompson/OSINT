@@ -119,6 +119,8 @@ class VisionConsumer:
                     vllm_url=self._settings.vision_vllm_url,
                     model=self._settings.vision_vllm_model,
                     image_path=media_path,
+                    image_root=self._settings.vision_image_root,
+                    max_file_size_mb=self._settings.vision_max_file_size_mb,
                 )
 
             if result is None:

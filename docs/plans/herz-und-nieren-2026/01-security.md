@@ -18,7 +18,9 @@ Gemeinsamer Vertrag: [README](README.md). S01/S03 benötigen Senior-Review. Hier
 
 **Abnahme:** focused Tests oben plus Scope-/Application-Marker-Tests. Kein Freischalten des alten Regex-Gates als „sicher“. Für spätere Aktivierung eigenes Senior-Design: korrekter Lexer für Kommentare/Strings/Backticks/Escapes, ein Statement, erlaubte Read-Grammatik und Funktionen, externe IO/Prozeduren ausgeschlossen, harte Gesamt-Resultat-/Zeitgrenze auch bei UNION/Subqueries und bereits vorhandenem LIMIT. DB-seitige Rechte/Read-Instanz passend zur Edition nachweisen. Dieses Folge-Design ist nicht Teil des kleinen Patches; eingeschränkte freie Funktionalität dokumentieren.
 
-## S02 — Query-URLs und lokale Worker-Dateien getrennt validieren
+## ~~S02 — Query-URLs und lokale Worker-Dateien getrennt validieren~~ — FACHLICH ABGENOMMEN
+
+**Review 2026-09-27:** Commit `8b30249`, PR #128; 50 Intelligence-, 37 Backend- und 20 Worker-Tests unabhängig bestanden. Keine offenen Review-Findings. Merge und CI-Status separat prüfen; S03 bleibt offen. Die folgende Spezifikation bleibt als Abschlussnachweis erhalten.
 
 **F-04 Pfad/API, F-12 Pfad · P0 · M · unabhängig.** Unterläufe: S02a Intelligence+Backend; S02b Worker.
 
