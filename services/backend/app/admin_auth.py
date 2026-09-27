@@ -14,11 +14,13 @@ def require_admin_token(
     supplied_token: str | None,
     area: str,
 ) -> None:
-    if not expected_token:
+    expected = expected_token.strip()
+    supplied = supplied_token.strip() if isinstance(supplied_token, str) else ""
+    if not expected:
         log.warning("admin_token_not_configured", area=area)
         raise HTTPException(
             status_code=503,
             detail=f"{area} admin token not configured",
         )
-    if supplied_token != expected_token:
+    if supplied != expected:
         raise HTTPException(status_code=401, detail="invalid admin token")

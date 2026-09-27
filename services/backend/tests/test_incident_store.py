@@ -59,6 +59,39 @@ async def test_create_incident_assigns_id_and_persists() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_incident_ordinal_is_epoch_ms_without_wrap() -> None:
+    frozen = datetime(2026, 9, 27, 12, 0, tzinfo=UTC)
+
+    class _FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:
+            return frozen
+
+    captured: dict[str, object] = {}
+
+    async def fake_write(_query: str, params: dict[str, object]) -> list[dict[str, object]]:
+        captured.update(params)
+        return [_row(id=str(params["incident_id"]))]
+
+    with (
+        patch.object(incident_store, "write_query", new=AsyncMock(side_effect=fake_write)),
+        patch.object(incident_store, "datetime", _FrozenDateTime),
+    ):
+        await incident_store.create_incident(
+            IncidentCreateRequest(
+                title="wrap",
+                kind="firms.cluster",
+                severity="low",
+                coords=(36.0, 41.0),
+            )
+        )
+
+    expected = int(frozen.timestamp() * 1000)
+    assert captured["ordinal"] == expected
+    assert expected > 2_000_000_000
+
+
+@pytest.mark.asyncio
 async def test_create_incident_uses_uuid_shape_id() -> None:
     captured: dict = {}
 

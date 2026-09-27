@@ -1,9 +1,11 @@
 """Geopolitical hotspot endpoints."""
 # ruff: noqa: E501 — DEFAULT_HOTSPOTS is a curated one-row-per-entry data table; keep entries on single lines.
 
+import math
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import ValidationError
 
 from app.models.hotspot import Hotspot
 
@@ -46,26 +48,72 @@ def _normalize_threat_level(value: Any) -> str:
     return mapping.get(raw, "MODERATE")
 
 
+def _required_coord(raw: dict[str, Any], keys: tuple[str, ...], *, limit: float) -> float:
+    for key in keys:
+        if key not in raw or raw[key] is None:
+            continue
+        value = raw[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+            raise ValueError(f"invalid {key}")
+        try:
+            number = float(value)
+        except ValueError as exc:
+            raise ValueError(f"invalid {key}") from exc
+        if not math.isfinite(number) or not -limit <= number <= limit:
+            raise ValueError(f"{key} out of range")
+        return number
+    raise ValueError("missing coordinate")
+
+
+def _sources(value: object) -> list[str]:
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if isinstance(value, list):
+        return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    return []
+
+
 def _normalize_hotspot(raw: dict[str, Any]) -> Hotspot:
-    normalized = {
-        "id": str(raw.get("id", "")),
-        "name": str(raw.get("name", "")),
-        "latitude": float(raw.get("latitude", raw.get("lat", 0.0))),
-        "longitude": float(raw.get("longitude", raw.get("lon", 0.0))),
+    hotspot_id = str(raw.get("id", "")).strip()
+    name = str(raw.get("name", "")).strip()
+    if not hotspot_id or not name:
+        raise ValueError("hotspot identity is incomplete")
+    normalized: dict[str, Any] = {
+        "id": hotspot_id,
+        "name": name,
+        "latitude": _required_coord(raw, ("latitude", "lat"), limit=90),
+        "longitude": _required_coord(raw, ("longitude", "lon"), limit=180),
         "region": str(raw.get("region", "")),
         "threat_level": _normalize_threat_level(raw.get("threat_level")),
         "description": str(raw.get("description", "")),
-        "last_updated": raw.get("last_updated", raw.get("updated_at")),
-        "sources": raw.get("sources", []),
+        "sources": _sources(raw.get("sources", [])),
     }
+    updated = raw.get("last_updated", raw.get("updated_at"))
+    if updated is not None:
+        normalized["last_updated"] = updated
     return Hotspot(**normalized)
+
+
+def _hotspots_from_rows(rows: object) -> list[Hotspot]:
+    if not isinstance(rows, list):
+        return []
+    items: list[Hotspot] = []
+    for raw in rows:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            items.append(_normalize_hotspot(raw))
+        except (ValidationError, ValueError, TypeError):
+            continue
+    return items
 
 
 @router.get("", response_model=list[Hotspot])
 async def get_hotspots(request: Request) -> list[Hotspot]:
-    cached = await request.app.state.cache.get("hotspots:all")
-    if cached is not None:
-        return [_normalize_hotspot(h) for h in cached]
+    cached = _hotspots_from_rows(await request.app.state.cache.get("hotspots:all"))
+    if cached:
+        return cached
 
     # Backward-compatible fallback for per-hotspot cache keys.
     hotspot_ids = await request.app.state.cache.get("hotspot:index")
