@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.cypher.incident_write import INCIDENT_CREATE_IDEMPOTENT
 from app.models.incident import (
     IncidentCreateRequest,
     IncidentStatus,
@@ -112,6 +113,42 @@ async def test_create_incident_uses_uuid_shape_id() -> None:
         suffix = record.id.split("-", 1)[1]
         assert len(suffix) == 8
         assert all(ch in "0123456789abcdef" for ch in suffix)
+
+
+@pytest.mark.asyncio
+async def test_create_incident_retry_uses_create_only_query_and_current_record() -> None:
+    captured: dict[str, object] = {}
+    current = _row(
+        id="inc-stable01", status="closed", title="Persisted title",
+        timeline_json=json.dumps([
+            {"t_offset_s": 0.0, "kind": "trigger", "text": "original"},
+            {"t_offset_s": 4.0, "kind": "observation", "text": "later"},
+        ]),
+    )
+
+    async def fake_write(query, params):
+        captured["query"] = query
+        captured["params"] = params
+        return [current]
+
+    with patch.object(incident_store, "write_query", new=AsyncMock(side_effect=fake_write)):
+        record = await incident_store.create_incident(
+            IncidentCreateRequest(
+                title="Retry title", kind="firms.cluster", severity="high",
+                coords=(36.0, 41.0), sources=["FIRMS"], layer_hints=["cluster:key"],
+            ),
+            incident_id="inc-stable01",
+        )
+
+    params = captured["params"]
+    assert captured["query"] == INCIDENT_CREATE_IDEMPOTENT
+    assert "ON CREATE SET" in INCIDENT_CREATE_IDEMPOTENT
+    assert "REMOVE i._promoter_create_nonce" in INCIDENT_CREATE_IDEMPOTENT
+    assert params["incident_id"] == "inc-stable01"
+    assert isinstance(params["create_nonce"], str)
+    assert record.status == IncidentStatus.CLOSED
+    assert record.title == "Persisted title"
+    assert [event.text for event in record.timeline] == ["original", "later"]
 
 
 @pytest.mark.asyncio

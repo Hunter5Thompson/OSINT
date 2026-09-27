@@ -48,6 +48,48 @@ INCIDENT_UPSERT = (
     "  i.timeline_json AS timeline_json"
 )
 
+# Internal promoter retry path. A nonce marks only the invocation that created
+# the node; every property, relationship and location write is guarded by it.
+# Replaying the same incident id therefore returns current persisted state
+# without rewriting terminal status, timeline, or spatial relationships.
+INCIDENT_CREATE_IDEMPOTENT = (
+    "MERGE (i:Incident {id: $incident_id}) "
+    "ON CREATE SET i._promoter_create_nonce = $create_nonce "
+    "WITH i, i._promoter_create_nonce = $create_nonce AS created "
+    "FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | "
+    "  SET i.created_at = datetime($now), i.ordinal = $ordinal, "
+    "      i.trigger_ts = datetime($trigger_ts), i.kind = $kind, i.title = $title, "
+    "      i.severity = $severity, i.lat = $lat, i.lon = $lon, i.location = $location, "
+    "      i.status = $status, "
+    "      i.closed_ts = CASE WHEN $closed_ts IS NULL THEN null ELSE datetime($closed_ts) END, "
+    "      i.sources = $sources, i.layer_hints = $layer_hints, "
+    "      i.timeline_json = $timeline_json, i.updated_at = datetime($now) "
+    "  FOREACH (__ IN CASE WHEN $lat IS NULL OR $lon IS NULL "
+    "    OR ($lat = 0.0 AND $lon = 0.0) THEN [] ELSE [1] END | "
+    "    MERGE (l:Location {loc_key: $loc_key}) "
+    "      ON CREATE SET l.lat = $lat, l.lon = $lon, l.name = $location, "
+    "                    l.geo_basis = 'incident_report' "
+    "    FOREACH (___ IN CASE WHEN $spatial_write THEN [1] ELSE [] END | "
+    "      SET l.country_scope_key = $country_scope_key, "
+    "          l.admin1_scope_key = $admin1_scope_key, "
+    "          l.admin2_scope_key = $admin2_scope_key, "
+    "          l.spatial_basis = $spatial_basis, l.spatial_precision = $spatial_precision, "
+    "          l.spatial_catalog_revision = $spatial_catalog_revision, "
+    "          l.spatial_derivation_revision = $spatial_derivation_revision, "
+    "          l.spatial_conflict = $spatial_conflict, "
+    "          l.spatial_conflict_scope_keys = $spatial_conflict_scope_keys, "
+    "          l.spatial_derivation_status = $spatial_derivation_status "
+    "    ) "
+    "    MERGE (i)-[:OCCURRED_AT]->(l) "
+    "  ) "
+    "  REMOVE i._promoter_create_nonce "
+    ") "
+    "RETURN i.id AS id, i.kind AS kind, i.title AS title, i.severity AS severity, "
+    "i.lat AS lat, i.lon AS lon, i.location AS location, i.status AS status, "
+    "toString(i.trigger_ts) AS trigger_ts, toString(i.closed_ts) AS closed_ts, "
+    "i.sources AS sources, i.layer_hints AS layer_hints, i.timeline_json AS timeline_json"
+)
+
 INCIDENT_DELETE = "MATCH (i:Incident {id: $incident_id}) DETACH DELETE i"
 
 INCIDENT_ID_UNIQUE_CONSTRAINT = (

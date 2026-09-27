@@ -161,6 +161,66 @@ def test_firms_detector_emits_update_after_ignition(signal_envelope_factory, fak
     assert hit.severity == "high"  # detector itself never de-escalates
 
 
+@pytest.mark.asyncio
+async def test_ignition_metadata_survives_create_ack_loss_and_firms_update(
+    signal_envelope_factory, fake_clock, fake_incident_store, fake_incident_event_stream
+):
+    from app.services.incident_promoter.cluster_store import ClusterStore
+    from app.services.incident_promoter.config import PromoterConfig
+    from app.services.incident_promoter.detectors.firms import FIRMSGeoClusterDetector
+
+    detector = FIRMSGeoClusterDetector(config=PromoterConfig.from_env(), clock=fake_clock)
+    hits = [detector.detect(_firms_envelope(signal_envelope_factory)) for _ in range(3)]
+    ignition = hits[-1]
+    assert ignition is not None
+
+    class CommitAckLossStore:
+        def __init__(self):
+            self.calls = []
+
+        async def create_incident(self, request, *, incident_id=None):
+            self.calls.append((request, incident_id))
+            record = await fake_incident_store.create_incident(request, incident_id=incident_id)
+            if len(self.calls) <= 2:
+                raise RuntimeError("commit acknowledgement lost")
+            return record
+
+        async def apply_signal_update(self, *args, **kwargs):
+            return await fake_incident_store.apply_signal_update(*args, **kwargs)
+
+    cluster_store = ClusterStore(clock=fake_clock)
+    retry_store = CommitAckLossStore()
+    await cluster_store.handle(
+        ignition, incident_store=retry_store,
+        incident_event_stream=fake_incident_event_stream,
+    )
+    next_hit = detector.detect(_firms_envelope(signal_envelope_factory))
+    assert next_hit is not None and next_hit.timeline_event.kind == "observation"
+    await cluster_store.handle(
+        next_hit, incident_store=retry_store,
+        incident_event_stream=fake_incident_event_stream,
+    )
+    later_hit = detector.detect(_firms_envelope(signal_envelope_factory))
+    assert later_hit is not None and later_hit.timeline_event.kind == "observation"
+    await cluster_store.handle(
+        later_hit, incident_store=retry_store,
+        incident_event_stream=fake_incident_event_stream,
+    )
+
+    assert len(fake_incident_store.all()) == 1
+    assert len({incident_id for _request, incident_id in retry_store.calls}) == 1
+    request = retry_store.calls[2][0]
+    assert request.title == ignition.title
+    assert request.sources == ignition.sources_to_merge
+    assert request.layer_hints == ignition.layer_hints_to_merge
+    incident = fake_incident_store.all()[0]
+    assert incident.timeline[0].text == ignition.title
+    assert len(incident.timeline) == 3
+    assert fake_incident_event_stream.types() == [
+        "incident.open", "incident.update", "incident.update"
+    ]
+
+
 def test_firms_on_cluster_terminated_natural_reset_restarts_accumulation(
     signal_envelope_factory, fake_clock
 ):

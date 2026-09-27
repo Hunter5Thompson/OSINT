@@ -8,17 +8,21 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from typing import Any, Literal, Protocol, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
+from uuid import uuid4
 
 import structlog
 
 from app.services.incident_promoter.detectors.base import ClusterHit
 
+if TYPE_CHECKING:
+    from app.models.incident import IncidentCreateRequest
+
 logger = structlog.get_logger(__name__)
 
-ClusterIncidentStatus = Literal["open", "promoted"]
+ClusterIncidentStatus = Literal["open", "promoted", "terminal"]
 
 
 class TerminationListener(Protocol):
@@ -50,6 +54,15 @@ class SweepSnapshot:
     expired_cooldown_keys: list[str]
 
 
+@dataclass(frozen=True)
+class PendingCreate:
+    incident_id: str
+    request: IncidentCreateRequest
+    initial_hit: ClusterHit
+    initial_count: int
+    deferred_hits: tuple[ClusterHit, ...] = ()
+
+
 class ClusterStore:
     """In-memory cluster lifecycle. All mutations are guarded by an asyncio lock."""
 
@@ -58,6 +71,7 @@ class ClusterStore:
         self._by_key: dict[str, ClusterState] = {}
         self._by_incident_id: dict[str, str] = {}
         self._reserving: set[str] = set()
+        self._pending_creates: dict[str, PendingCreate] = {}
         self._cooldowns: dict[str, datetime] = {}
         self._termination_listeners: list[TerminationListener] = []
         self._lock = asyncio.Lock()
@@ -71,7 +85,10 @@ class ClusterStore:
     # -- read-only snapshots ---------------------------------------------
 
     def is_empty(self) -> bool:
-        return not self._by_key and not self._cooldowns and not self._reserving
+        return (
+            not self._by_key and not self._cooldowns and not self._reserving
+            and not self._pending_creates
+        )
 
     def active_clusters(self) -> list[ClusterState]:
         """Snapshot copy — safe to read without the lock for inspector / debug."""
@@ -97,7 +114,6 @@ class ClusterStore:
         incident_event_stream: Any,
     ) -> None:
         """Phased locking: decide and reserve, then I/O, then finalize."""
-        from app.models.incident import IncidentCreateRequest
         from app.services.incident_promoter.detectors.base import ClusterHit  # noqa: F401
 
         now = self._clock()
@@ -121,11 +137,13 @@ class ClusterStore:
                     logger.info("promoter_race_dropped", cluster_key=hit.cluster_key)
                     return
                 self._reserving.add(hit.cluster_key)
+                pending = self._pending_creates.get(hit.cluster_key)
                 action = "create"
-            elif existing.incident_status == "promoted":
+            elif existing.incident_status in {"promoted", "terminal"}:
                 existing.last_signal_ts = now
                 logger.info(
-                    "promoter_promoted_absorb",
+                    "promoter_terminal_absorb" if existing.incident_status == "terminal"
+                    else "promoter_promoted_absorb",
                     cluster_key=hit.cluster_key,
                     incident_id=existing.incident_id,
                 )
@@ -135,58 +153,14 @@ class ClusterStore:
 
         # Phase 2: I/O outside lock
         if action == "create":
-            coords, extra_hints = self._resolve_create_coords(hit)
-            # `hit_count` is the count of *contributing signals* (per spec §5.1).
-            # Ignition packs all accumulated event_ids into contributing_signal_ids,
-            # so a 3-detection FIRMS ignition opens with hit_count=3.
-            initial_count = max(1, len(hit.contributing_signal_ids))
-            initial_severity = _max_severity(
-                hit.severity, _apply_escalation_rule(hit.detector_id, initial_count)
-            )
-            request = IncidentCreateRequest(
-                title=hit.title,
-                kind=hit.incident_kind,
-                severity=initial_severity,  # type: ignore[arg-type]
-                coords=coords,
-                location=hit.location,
-                sources=list(hit.sources_to_merge),
-                layer_hints=list(dict.fromkeys([*hit.layer_hints_to_merge, *extra_hints])),
-                initial_text=hit.title,
-            )
             try:
-                incident = await incident_store.create_incident(request)
-            except Exception as exc:  # noqa: BLE001 — resilience
+                await self._handle_create(
+                    hit, pending=pending, incident_store=incident_store,
+                    incident_event_stream=incident_event_stream,
+                )
+            finally:
                 async with self._lock:
                     self._reserving.discard(hit.cluster_key)
-                logger.warning(
-                    "promoter_create_failed", cluster_key=hit.cluster_key, error=str(exc)
-                )
-                return
-
-            # Phase 3: finalize
-            async with self._lock:
-                self._by_key[hit.cluster_key] = ClusterState(
-                    cluster_key=hit.cluster_key,
-                    incident_id=incident.id,
-                    detector_id=hit.detector_id,
-                    severity=initial_severity,
-                    coords=coords,
-                    hit_count=initial_count,
-                    last_signal_ts=now,
-                    created_ts=now,
-                    contributing_signal_ids=list(hit.contributing_signal_ids[-50:]),
-                    incident_status="open",
-                )
-                self._by_incident_id[incident.id] = hit.cluster_key
-                self._reserving.discard(hit.cluster_key)
-            incident_event_stream.publish("incident.open", incident)
-            logger.info(
-                "promoter_cluster_opened",
-                cluster_key=hit.cluster_key,
-                detector_id=hit.detector_id,
-                incident_id=incident.id,
-                severity=initial_severity,
-            )
             return
 
         # action == "update"
@@ -241,6 +215,110 @@ class ClusterStore:
             severity=new_severity,
         )
 
+    async def _handle_create(
+        self,
+        hit: ClusterHit,
+        *,
+        pending: PendingCreate | None,
+        incident_store: Any,
+        incident_event_stream: Any,
+    ) -> None:
+        from app.models.incident import IncidentCreateRequest
+
+        is_retry = pending is not None
+        if pending is None:
+            coords, extra_hints = self._resolve_create_coords(hit)
+            initial_count = max(1, len(hit.contributing_signal_ids))
+            initial_severity = _max_severity(
+                hit.severity, _apply_escalation_rule(hit.detector_id, initial_count)
+            )
+            request = IncidentCreateRequest(
+                title=hit.title,
+                kind=hit.incident_kind,
+                severity=initial_severity,  # type: ignore[arg-type]
+                coords=coords,
+                location=hit.location,
+                sources=list(hit.sources_to_merge),
+                layer_hints=list(dict.fromkeys([*hit.layer_hints_to_merge, *extra_hints])),
+                initial_text=hit.title,
+            )
+            pending = PendingCreate(
+                incident_id=f"inc-{uuid4().hex[:8]}", request=request,
+                initial_hit=hit, initial_count=initial_count,
+            )
+            async with self._lock:
+                self._pending_creates[hit.cluster_key] = pending
+        elif is_retry:
+            represented_ids = set(pending.initial_hit.contributing_signal_ids)
+            for deferred_hit in pending.deferred_hits:
+                represented_ids.update(deferred_hit.contributing_signal_ids)
+            new_ids = list(dict.fromkeys(
+                eid for eid in hit.contributing_signal_ids if eid not in represented_ids
+            ))
+            if new_ids:
+                pending = replace(
+                    pending,
+                    deferred_hits=(*pending.deferred_hits,
+                                   replace(hit, contributing_signal_ids=new_ids)),
+                )
+                async with self._lock:
+                    self._pending_creates[hit.cluster_key] = pending
+
+        try:
+            incident = await incident_store.create_incident(
+                pending.request, incident_id=pending.incident_id
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — resilience
+            logger.warning(
+                "promoter_create_failed", cluster_key=hit.cluster_key, error=str(exc)
+            )
+            return
+
+        # Finalize only from the record returned by the idempotent create.
+        status = str(incident.status)
+        cluster_status: ClusterIncidentStatus = (
+            "open" if status == "open" else "promoted" if status == "promoted" else "terminal"
+        )
+        initial_ids = list(dict.fromkeys(pending.initial_hit.contributing_signal_ids))
+        state = ClusterState(
+            cluster_key=hit.cluster_key,
+            incident_id=incident.id,
+            detector_id=hit.detector_id,
+            severity=incident.severity,
+            coords=incident.coords,
+            hit_count=max(pending.initial_count, len(incident.timeline)),
+            last_signal_ts=self._clock(),
+            created_ts=incident.trigger_ts,
+            contributing_signal_ids=initial_ids[-50:],
+            incident_status=cluster_status,
+        )
+        async with self._lock:
+            self._by_key[hit.cluster_key] = state
+            self._by_incident_id[incident.id] = hit.cluster_key
+            # Clear pending metadata only after the persisted result is in state.
+            self._pending_creates.pop(hit.cluster_key, None)
+
+        if cluster_status == "open":
+            incident_event_stream.publish("incident.open", incident)
+        logger.info(
+            "promoter_cluster_opened",
+            cluster_key=hit.cluster_key,
+            detector_id=hit.detector_id,
+            incident_id=incident.id,
+            severity=incident.severity,
+            returned_status=status,
+        )
+        # Replay each distinct observation that arrived while create was pending.
+        if cluster_status == "open":
+            for deferred_hit in pending.deferred_hits:
+                await self.handle(
+                    deferred_hit,
+                    incident_store=incident_store,
+                    incident_event_stream=incident_event_stream,
+                )
+
     async def mark_promoted(self, incident_id: str) -> None:
         """Mark a cluster as promoted. No-op if incident_id is unknown."""
         async with self._lock:
@@ -285,7 +363,7 @@ class ClusterStore:
         for state in self._by_key.values():
             if state.last_signal_ts > cutoff:
                 continue
-            if state.incident_status == "promoted":
+            if state.incident_status != "open":
                 stale_promoted.append(state)
             else:
                 stale_open.append(state)
