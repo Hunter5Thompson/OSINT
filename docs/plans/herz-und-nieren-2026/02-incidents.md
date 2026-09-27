@@ -40,14 +40,14 @@ Gemeinsamer Vertrag: [README](README.md). Alle Pfade relativ zu `services/backen
 
 **GREEN:** einen konsistenten `now`-Wert für Anlage/last_seen nutzen und vor Eviction setzen bzw. erst nach vollständiger Initialisierung evicten. Kein pauschales Erhöhen der Kapazität, keine Änderung der Jaccard-/Ignition-Schwellen. Fake-Clock statt realer Wartezeiten.
 
-## ~~I04 — Incident-Mutationen in der Datenbank serialisieren~~ — FACHLICH ABGENOMMEN
+## ~~I04 — Incident-Mutationen in der Datenbank serialisieren~~ — GEMERGT
 
-**Review 2026-09-27:** Implementierungscommit `12b4842`, PR #133; keine offenen Findings.
+**Review 2026-09-27:** Implementierungscommit `12b4842`, PR #133, gemergt als `1eb5fdb` am 2026-09-27T18:34:17Z; keine offenen Findings.
 Unabhängig 729 Backend-Tests mit `NEO4J_URL=bolt://127.0.0.1:1`, zwölf echte
 Neo4j-Race-/Replay-Tests auf isolierter Neo4j 5.26.23, Ruff, Mypy (90 Quelldateien)
 und Diff-Check bestanden. Die Altcode-Negativkontrolle verlor einen Timeline-Eintrag;
 terminale Router-Noops lösten falsche lokale Aktionen aus. Keine Produktivdatenänderung
-oder Deployment; keine Prozesscrash-/Exactly-once-Garantie. CI und Merge separat prüfen.
+oder Deployment; keine Prozesscrash-/Exactly-once-Garantie. Alle 13 PR-Checks grün, Merge bestätigt.
 Transaktionsvertrag siehe
 [I04-Transaktionsentwurf](I04-transaction-design.md).
 

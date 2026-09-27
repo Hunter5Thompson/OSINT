@@ -12,6 +12,15 @@
 # - Enhancement-Tasks (100-111) mit vollen Specs
 # - Jeder Task ist ein self-contained Briefing für Sonnet/Haiku
 
+## Ausführungsplan 2026-09-27 — Themenbündel
+
+Auf Nutzerauftrag werden die 36 offenen Herz-und-Nieren-Fix-Tickets in **13 Themen-PRs**
+gebündelt. Der [Bündelplan](docs/plans/herz-und-nieren-2026/README.md#bündelplan-und-reihenfolge)
+ersetzt die Einzel-PR-Regel; Einzeltests, Senior-Review und Mergefreigabe bleiben erhalten.
+Nächstes Bündel: **B01 = I05 → I06 plus I03**. X04-Design früh parallel vorbereiten;
+vier Designaufträge und R01 sind keine stillschweigend abgeschlossenen Fixes.
+PR #133 / HN-I04 ist seit 2026-09-27T18:34:17Z gemergt (`1eb5fdb`).
+
 ## Fixplan Herz und Nieren 2026 — laufende Umsetzung
 
 Lokale Paket-IDs aus [dem Fixplan](docs/plans/herz-und-nieren-2026/README.md),
@@ -62,7 +71,7 @@ offene Findings; PR #132 wurde am 2026-09-27T17:23:57Z als `a3fc29c` gemergt.
 Der Idempotenzpfad setzt die vorhandene Neo4j-Constraint `incident_id_unique` voraus;
 kein Live-DB-Test, keine dauerhafte Outbox und kein Prozesscrash-/Exactly-once-Nachweis.
 
-**~~HN-I04~~ — fachlich abgenommen (PR #133, Merge offen):** Incident-Mutationen werden in einer Neo4j-
+**~~HN-I04~~ — GEMERGT (PR #133, `1eb5fdb`):** Incident-Mutationen werden in einer Neo4j-
 Managed-Transaktion über eine explizite Schreibsperre serialisiert; Status und Timeline
 werden erst nach dem Lock gelesen und mit deterministischen UPDATEs verändert.
 Persistenz-TDD einschließlich isolierter Zwei-Session-Race-Tests sowie Router- und
@@ -70,7 +79,7 @@ Promoter-Caller sind umgesetzt. Verifikation: vollständiger Lauf mit
 `NEO4J_URL=bolt://127.0.0.1:1` (729 Backend-Tests), Ruff auf `app/`, Mypy auf
 `app/` und `git diff --check` grün; isolierte reale Neo4j-Matrix: 12 passed.
 Unabhängiger Senior-Review von `12b4842` ohne offene Findings; alle genannten
-Checks unabhängig wiederholt. CI und Merge separat prüfen. Keine Produktivdatenänderung
+Checks unabhängig wiederholt; alle 13 PR-Checks auf `128527a` grün, Merge `1eb5fdb`. Keine Produktivdatenänderung
 oder Deployment; keine Prozesscrash-/Exactly-once-Garantie.
 Der freigegebene Vertrag und die Grenzen stehen im
 [Transaktionsentwurf](docs/plans/herz-und-nieren-2026/I04-transaction-design.md),
