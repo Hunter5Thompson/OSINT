@@ -180,3 +180,28 @@ async def test_firms_title_names_resolved_country_not_fetch_box(collector):
     ]
     rows = [c.args[1] for c in collector._build_point.call_args_list]
     assert [r["country_iso3"] for r in rows] == ["RUS", None]
+    assert process.call_args_list[0].kwargs["url"].endswith("@39.7000,47.2000,10z")
+
+
+@pytest.mark.asyncio
+async def test_firms_collector_map_url_uses_lon_lat_contract(collector):
+    csv_text = (
+        "latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,"
+        "confidence,version,bright_ti5,frp,daynight\n"
+        "48.1000,37.8000,340.0,0.39,0.36,2026-04-01,0130,N,high,2.0NRT,290.0,10.0,N\n"
+    )
+    collector._fetch_csv = AsyncMock(return_value=csv_text)
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._build_point = AsyncMock()
+    collector._batch_upsert = AsyncMock()
+    collector._ensure_collection = AsyncMock()
+    process = AsyncMock()
+
+    with (
+        patch("feeds.firms_collector.FIRMS_SATELLITES", ["VIIRS_SNPP_NRT"]),
+        patch("feeds.firms_collector.FIRMS_BBOXES", {"test": "0,0,1,1"}),
+        patch("feeds.firms_collector.process_item", new=process),
+    ):
+        await collector.collect()
+
+    assert process.call_args.kwargs["url"].endswith("@37.8000,48.1000,10z")

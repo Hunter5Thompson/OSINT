@@ -1,6 +1,7 @@
 """Unit tests for FIRMSGeoClusterDetector helpers."""
 import pytest
 
+from app.routers.firms import _build_map_url
 from app.services.incident_promoter.detectors.firms import (
     _bucket_key,
     _parse_firms_coords,
@@ -8,13 +9,47 @@ from app.services.incident_promoter.detectors.firms import (
 
 
 def test_parse_firms_coords_happy():
-    url = "https://firms.modaps.eosdis.nasa.gov/map/#d:2026-05-19;@35.0903,51.6177,10z"
+    url = "https://firms.modaps.eosdis.nasa.gov/map/#d:2026-05-19;@51.6177,35.0903,10z"
     assert _parse_firms_coords(url) == (35.0903, 51.6177)
 
 
 def test_parse_firms_coords_negative():
-    url = "https://firms.example/#d:2026-05-19;@-22.5,-44.1,8z"
+    url = "https://firms.example/#d:2026-05-19;@-44.1,-22.5,8z"
     assert _parse_firms_coords(url) == (-22.5, -44.1)
+
+
+@pytest.mark.parametrize(
+    ("lat", "lon"),
+    [
+        (48.1, 37.8),
+        (35.0, 139.0),
+        (40.0, -120.0),
+        (-22.5, -44.1),
+        (48.1, 0.0),
+        (-90.0, -180.0),
+        (90.0, 180.0),
+    ],
+)
+def test_router_map_url_parses_back_to_lat_lon(lat, lon):
+    assert _parse_firms_coords(_build_map_url("2026-05-19", lat, lon)) == (lat, lon)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://firms.example/#@181,20,10z",
+        "https://firms.example/#@20,91,10z",
+        "https://firms.example/#@-181,-20,10z",
+        "https://firms.example/#@-20,-91,10z",
+        "https://firms.example/#@nan,20,10z",
+        "https://firms.example/#@20,inf,10z",
+        f"https://firms.example/#@{10 ** 400},20,10z",
+        "not-a-url#@20,10,10z",
+        "https://[bad/#@20,10,10z",
+    ],
+)
+def test_parse_firms_coords_rejects_out_of_range_values(url):
+    assert _parse_firms_coords(url) is None
 
 
 @pytest.mark.parametrize("url", ["", "no-pattern-here", "@bad,format", None])
@@ -33,7 +68,7 @@ def test_bucket_key_handles_negative_lon():
 def _firms_envelope(signal_envelope_factory, lat=35.09, lon=51.62, **kw):
     url = kw.pop(
         "url",
-        f"https://firms.modaps.eosdis.nasa.gov/map/#d:2026-05-19;@{lat},{lon},10z",
+        f"https://firms.modaps.eosdis.nasa.gov/map/#d:2026-05-19;@{lon},{lat},10z",
     )
     return signal_envelope_factory(source="firms", url=url, **kw)
 
