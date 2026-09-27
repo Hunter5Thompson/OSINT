@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
 from app.config import settings
@@ -23,6 +24,7 @@ _CACHE_TTL_S = 60
 
 
 class FIRMSHotspot(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     id: str
     latitude: float
     longitude: float
@@ -36,6 +38,20 @@ class FIRMSHotspot(BaseModel):
     # before that (their fetch-box name is not a place and is not exposed).
     country_iso3: str | None = None
     firms_map_url: str
+
+    @field_validator("latitude")
+    @classmethod
+    def validate_latitude(cls, value: float) -> float:
+        if not math.isfinite(value) or not -90 <= value <= 90:
+            raise ValueError("latitude out of range")
+        return value
+
+    @field_validator("longitude")
+    @classmethod
+    def validate_longitude(cls, value: float) -> float:
+        if not math.isfinite(value) or not -180 <= value <= 180:
+            raise ValueError("longitude out of range")
+        return value
 
 
 def _build_map_url(acq_date: str, lat: float, lon: float) -> str:
@@ -64,7 +80,7 @@ def _point_to_hotspot(point: Any) -> FIRMSHotspot | None:
             country_iso3=p.get("country_iso3") or None,
             firms_map_url=_build_map_url(acq_date, lat, lon),
         )
-    except (KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError, ValidationError):
         return None
 
 
@@ -77,7 +93,24 @@ async def get_firms_hotspots(
     cache = request.app.state.cache
     cached = await cache.get(cache_key)
     if cached is not None:
-        return [FIRMSHotspot(**h) for h in cached]
+        if isinstance(cached, list):
+            valid: list[FIRMSHotspot] = []
+            invalid_count = 0
+            for row in cached:
+                try:
+                    valid.append(FIRMSHotspot.model_validate(row))
+                except (ValidationError, TypeError):
+                    invalid_count += 1
+            if invalid_count:
+                log.warning("firms_cache_rows_invalid", invalid_count=invalid_count)
+            if not invalid_count or valid:
+                if invalid_count:
+                    await cache.set(
+                        cache_key, [row.model_dump() for row in valid], ttl_seconds=_CACHE_TTL_S
+                    )
+                return valid
+        log.warning("firms_cache_snapshot_invalid")
+        await cache.delete(cache_key)
 
     cutoff = int(time.time()) - since_hours * 3600
     flt = Filter(

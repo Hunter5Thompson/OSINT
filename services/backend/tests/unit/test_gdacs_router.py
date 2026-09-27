@@ -113,3 +113,69 @@ async def test_gdacs_events_qdrant_down() -> None:
 
     assert resp.status_code == 503
     assert "qdrant" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_gdacs_cache_rows_are_isolated_and_repaired() -> None:
+    good = {
+        "id": "cached-good", "event_type": "EQ", "event_name": "Good",
+        "alert_level": "Orange", "severity": 5.8, "country": "Turkey",
+        "latitude": 38.0, "longitude": 38.0, "from_date": "2026-04-10",
+        "to_date": "2026-04-11",
+    }
+    cache = AsyncMock()
+    cache.get.return_value = [
+        good, None, {**good, "id": "bad", "latitude": float("inf")},
+        {**good, "id": "nonfinite", "severity": float("nan")},
+    ]
+    app.state.cache = cache
+    qdrant = AsyncMock()
+    with patch("app.routers.gdacs.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/gdacs/events")
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == ["cached-good"]
+    cache.set.assert_awaited_once()
+    qdrant.scroll.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_gdacs_all_invalid_cache_is_deleted_before_recovery() -> None:
+    cache = AsyncMock()
+    cache.get.return_value = [None, {"id": "broken"}]
+    app.state.cache = cache
+    qdrant = AsyncMock()
+    qdrant.scroll.return_value = ([], None)
+    with patch("app.routers.gdacs.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/gdacs/events")
+    assert response.status_code == 200
+    assert response.json() == []
+    cache.delete.assert_awaited_once_with("gdacs:events:168h")
+    cache.set.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_gdacs_empty_cache_list_is_a_valid_hit() -> None:
+    cache = AsyncMock()
+    cache.get.return_value = []
+    app.state.cache = cache
+    qdrant = AsyncMock()
+    with patch("app.routers.gdacs.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/gdacs/events")
+    assert response.status_code == 200
+    assert response.json() == []
+    qdrant.scroll.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_gdacs_wrong_cache_root_is_deleted_and_refreshed() -> None:
+    cache = AsyncMock()
+    cache.get.return_value = {"unexpected": "root"}
+    app.state.cache = cache
+    qdrant = AsyncMock()
+    qdrant.scroll.return_value = ([], None)
+    with patch("app.routers.gdacs.get_qdrant_client", AsyncMock(return_value=qdrant)):
+        response = TestClient(app).get("/api/gdacs/events")
+    assert response.status_code == 200
+    assert response.json() == []
+    cache.delete.assert_awaited_once_with("gdacs:events:168h")
+    cache.set.assert_awaited_once()

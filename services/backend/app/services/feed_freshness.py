@@ -10,6 +10,7 @@ source reports ``unknown`` instead of a false ``fresh``.
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -18,6 +19,7 @@ from pydantic import BaseModel
 from qdrant_client.models import Direction, FieldCondition, Filter, MatchValue, OrderBy
 
 FreshnessStatus = Literal["fresh", "stale", "missing", "unknown"]
+FUTURE_CLOCK_SKEW_TOLERANCE_S = 60
 
 
 class SourceFreshness(BaseModel):
@@ -58,17 +60,25 @@ async def _source_freshness(
         )
         if not points:
             return SourceFreshness(source=source, status="missing", max_age_s=max_age_s)
-        epoch = float((points[0].payload or {})["ingested_epoch"])
+        raw_epoch = (points[0].payload or {})["ingested_epoch"]
+        if isinstance(raw_epoch, bool) or not isinstance(raw_epoch, (int, float)):
+            raise ValueError("ingested_epoch must be a numeric seconds value")
+        epoch = float(raw_epoch)
+        if not math.isfinite(epoch):
+            raise ValueError("ingested_epoch must be finite")
+        if epoch - now > FUTURE_CLOCK_SKEW_TOLERANCE_S:
+            raise ValueError("ingested_epoch exceeds allowed future clock skew")
+        age = max(0, int(now - epoch))
+        timestamp = datetime.fromtimestamp(epoch, UTC)
     except Exception as exc:  # noqa: BLE001 - any failure must degrade, never read as fresh
         return SourceFreshness(
             source=source, status="unknown", max_age_s=max_age_s,
             error=_describe_error(exc),
         )
-    age = max(0, int(now - epoch))
     return SourceFreshness(
         source=source,
         status="fresh" if age <= max_age_s else "stale",
-        last_ingested_at=datetime.fromtimestamp(epoch, UTC),
+        last_ingested_at=timestamp,
         age_s=age,
         max_age_s=max_age_s,
     )

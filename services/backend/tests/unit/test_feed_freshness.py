@@ -140,3 +140,37 @@ async def test_missing_range_index_names_the_remedy() -> None:
     assert report.sources[0].error == (
         "ingested_epoch range index missing - run ensure_payload_indexes"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "bad_epoch",
+    [NOW * 1000, float("nan"), float("inf"), True, "broken", 10**100],
+)
+async def test_invalid_epoch_isolated_to_its_source(bad_epoch: object) -> None:
+    client = _client_by_source({"healthy": NOW - 10, "broken": bad_epoch})  # type: ignore[dict-item]
+    report = await compute_feed_freshness(
+        client,
+        collection="odin_intel",
+        max_age_s={"healthy": 60, "broken": 60},
+        now=NOW,
+    )
+    by_source = {source.source: source for source in report.sources}
+    assert by_source["healthy"].status == "fresh"
+    assert by_source["broken"].status == "unknown"
+    assert report.status == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_future_epoch_beyond_skew_is_unknown_but_small_skew_is_fresh() -> None:
+    client = _client_by_source({"too_future": NOW + 61, "clock_skew": NOW + 60})
+    report = await compute_feed_freshness(
+        client,
+        collection="odin_intel",
+        max_age_s={"too_future": 60, "clock_skew": 60},
+        now=NOW,
+    )
+    by_source = {source.source: source for source in report.sources}
+    assert by_source["too_future"].status == "unknown"
+    assert by_source["clock_skew"].status == "fresh"
+    assert by_source["clock_skew"].age_s == 0

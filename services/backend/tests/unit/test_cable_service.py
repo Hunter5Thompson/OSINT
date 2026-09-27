@@ -67,6 +67,21 @@ class TestSubmarineCableModel:
         assert ds.source == "live"
         assert len(ds.cables) == 1
 
+    @pytest.mark.parametrize(
+        "coordinates",
+        [[], [[[float("nan"), 1], [2, 3]]], [[[181, 0], [2, 3]]]],
+    )
+    def test_invalid_cached_geometry_is_rejected(
+        self, coordinates: list[list[list[float]]]
+    ) -> None:
+        with pytest.raises(ValidationError):
+            SubmarineCable(id="bad", name="Bad", coordinates=coordinates)
+
+    def test_dataset_source_is_restricted_but_empty_data_is_valid(self) -> None:
+        assert CableDataset(cables=[], landing_points=[], source="live").cables == []
+        with pytest.raises(ValidationError):
+            CableDataset(cables=[], landing_points=[], source="unknown")  # type: ignore[arg-type]
+
     def test_mutable_default_isolation(self) -> None:
         a = SubmarineCable(id="a", name="A", coordinates=[[[0, 0], [1, 1]]])
         b = SubmarineCable(id="b", name="B", coordinates=[[[0, 0], [1, 1]]])
@@ -108,8 +123,79 @@ class TestParsers:
     def test_parse_color_short_hex(self) -> None:
         assert _parse_color("#f60") == "#f60"
 
+    def test_explicit_units_and_invalid_numeric_values(self) -> None:
+        assert _parse_capacity("12 Gbps") == pytest.approx(0.012)
+        assert _parse_length("500 nmi") == pytest.approx(926.0)
+        assert _parse_capacity("12 widgets") is None
+        assert _parse_length("500 furlongs") is None
+        for bad in (-1, float("nan"), float("inf"), True):
+            assert _parse_capacity(bad) is None
+            assert _parse_length(bad) is None
+
+    @pytest.mark.parametrize("raw", [True, "true", "TRUE", 1, "1"])
+    def test_planned_true_values(self, raw: object) -> None:
+        geo = {"features": [{
+            "properties": {"id": "5", "name": "P", "is_planned": raw},
+            "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        }]}
+        assert _parse_cables(geo)[0].is_planned is True
+
+    @pytest.mark.parametrize("raw", [False, "false", "FALSE", 0, "0", None])
+    def test_planned_false_values(self, raw: object) -> None:
+        geo = {"features": [{
+            "properties": {"id": "5", "name": "P", "is_planned": raw},
+            "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        }]}
+        assert _parse_cables(geo)[0].is_planned is False
+
 
 class TestParseCables:
+    def test_poison_feature_is_skipped_without_logger_failure(self) -> None:
+        geo = {"features": [None, {
+            "properties": {"id": "good", "name": "Good"},
+            "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        }]}
+        cables = _parse_cables(geo)
+        assert [cable.id for cable in cables] == ["good"]
+
+    @pytest.mark.parametrize("broken", [
+        {"properties": None, "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}},
+        {"properties": {"id": "bad", "name": "Bad"}, "geometry": None},
+    ])
+    def test_null_properties_or_geometry_is_isolated(self, broken: dict[str, object]) -> None:
+        good = {
+            "properties": {"id": "good", "name": "Good"},
+            "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        }
+        cables = _parse_cables({"features": [good, broken]})
+        assert [cable.id for cable in cables] == ["good"]
+
+    @pytest.mark.parametrize("bad_root", [{}, {"features": None}, []])
+    def test_malformed_geojson_root_is_not_valid_empty_data(self, bad_root: object) -> None:
+        with pytest.raises(ValueError):
+            _parse_cables(bad_root)  # type: ignore[arg-type]
+
+    def test_invalid_segment_is_removed_without_null_island(self) -> None:
+        geo = {"features": [{
+            "properties": {"id": "1", "name": "C"},
+            "geometry": {"type": "MultiLineString", "coordinates": [
+                [[0, 0], [1, 1]], [[float("nan"), 2], [3, 4]],
+                [[10**400, 2], [3, 4]],
+            ]},
+        }]}
+        cable = _parse_cables(geo)[0]
+        assert cable.coordinates == [[[0, 0], [1, 1]]]
+
+    def test_nonfinite_third_coordinate_only_removes_that_segment(self) -> None:
+        geo = {"features": [{
+            "properties": {"id": "1", "name": "C"},
+            "geometry": {"type": "MultiLineString", "coordinates": [
+                [[0, 0], [1, 1]], [[2, 2, float("nan")], [3, 3, 4]],
+            ]},
+        }]}
+        cable = _parse_cables(geo)[0]
+        assert cable.coordinates == [[[0, 0], [1, 1]]]
+
     def test_multilinestring(self) -> None:
         geo = {
             "features": [
@@ -142,7 +228,8 @@ class TestParseCables:
                 {"properties": {"id": "3", "name": "X"}, "geometry": {"type": "MultiLineString"}}
             ]
         }
-        assert _parse_cables(geo) == []
+        with pytest.raises(ValueError):
+            _parse_cables(geo)
 
     def test_skip_unknown_geometry_type(self) -> None:
         geo = {
@@ -153,7 +240,8 @@ class TestParseCables:
                 }
             ]
         }
-        assert _parse_cables(geo) == []
+        with pytest.raises(ValueError):
+            _parse_cables(geo)
 
     def test_is_planned_flag(self) -> None:
         geo = {
@@ -191,7 +279,56 @@ class TestParseLandingPoints:
                 }
             ]
         }
-        assert _parse_landing_points(geo) == []
+        with pytest.raises(ValueError):
+            _parse_landing_points(geo)
+
+    def test_optional_owner_field_is_filtered_and_valid_cable_retained(self) -> None:
+        geo = {"features": [{
+            "properties": {
+                "id": "1", "name": "Cable", "owners": [" A ", None, 5, ""],
+                "landing_points": ["lp1", None, 9],
+            },
+            "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        }]}
+        cable = _parse_cables(geo)[0]
+        assert cable.owners == "A"
+        assert cable.landing_point_ids == ["lp1", "9"]
+
+    def test_coordinate_string_does_not_create_landing_point(self) -> None:
+        geo = {"features": [{
+            "properties": {"id": "lp", "name": "Invalid"},
+            "geometry": {"type": "Point", "coordinates": "12"},
+        }]}
+        with pytest.raises(ValueError):
+            _parse_landing_points(geo)
+
+    def test_overflowing_bad_coordinate_does_not_discard_valid_neighbor(self) -> None:
+        geo = {"features": [
+            {
+                "properties": {"id": "bad", "name": "Invalid"},
+                "geometry": {"type": "Point", "coordinates": [10**400, 2]},
+            },
+            {
+                "properties": {"id": "good", "name": "Good"},
+                "geometry": {"type": "Point", "coordinates": [1, 2]},
+            },
+        ]}
+        assert [point.id for point in _parse_landing_points(geo)] == ["good"]
+
+    def test_unknown_planned_flag_defaults_false(self) -> None:
+        geo = {"features": [{
+            "properties": {"id": "1", "name": "Cable", "is_planned": "perhaps"},
+            "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        }]}
+        assert _parse_cables(geo)[0].is_planned is False
+
+    def test_unusable_optional_rfs_is_null(self) -> None:
+        for rfs in ({"year": 2030}, True):
+            geo = {"features": [{
+                "properties": {"id": "1", "name": "Cable", "rfs": rfs},
+                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            }]}
+            assert _parse_cables(geo)[0].rfs is None
 
 
 class TestFallback:
@@ -268,6 +405,17 @@ class TestGetCableDataset:
         cache.set.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_structurally_valid_empty_live_dataset_remains_live(self) -> None:
+        cache = AsyncMock()
+        cache.get.return_value = None
+        proxy = AsyncMock()
+        proxy.get_json.side_effect = [{"features": []}, {"features": []}]
+        dataset = await get_cable_dataset(proxy, cache)
+        assert dataset.source == "live"
+        assert dataset.cables == []
+        assert dataset.landing_points == []
+
+    @pytest.mark.asyncio
     async def test_cache_miss_live_fails_uses_fallback(self) -> None:
         cache = AsyncMock()
         cache.get.return_value = None
@@ -276,3 +424,56 @@ class TestGetCableDataset:
 
         ds = await get_cable_dataset(proxy, cache)
         assert ds.source == "fallback"
+
+    @pytest.mark.asyncio
+    async def test_corrupt_cache_is_deleted_and_refreshed_from_live(self) -> None:
+        cache = AsyncMock()
+        cache.get.return_value = []
+        proxy = AsyncMock()
+        proxy.get_json.side_effect = [
+            {"features": [{
+                "properties": {"id": "1", "name": "Live"},
+                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            }]},
+            {"features": []},
+        ]
+        dataset = await get_cable_dataset(proxy, cache)
+        assert dataset.source == "live"
+        assert [cable.id for cable in dataset.cables] == ["1"]
+        cache.delete.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("corrupt", [
+        [],
+        {"cables": [], "source": "live"},
+        {"cables": [{"id": "bad"}], "landing_points": [], "source": "live"},
+    ])
+    async def test_corrupt_cache_shapes_are_deleted_and_refreshed(self, corrupt: object) -> None:
+        cache = AsyncMock()
+        cache.get.return_value = corrupt
+        proxy = AsyncMock()
+        proxy.get_json.side_effect = [{"features": []}, {"features": []}]
+        dataset = await get_cable_dataset(proxy, cache)
+        assert dataset.source == "live"
+        assert dataset.cables == []
+        cache.delete.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_mixed_live_features_keep_valid_cable_neighbors(self) -> None:
+        cache = AsyncMock()
+        cache.get.return_value = None
+        proxy = AsyncMock()
+        good = {
+            "properties": {"id": "good", "name": "Good"},
+            "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        }
+        proxy.get_json.side_effect = [
+            {"features": [good, None, {
+                "properties": None,
+                "geometry": {"type": "LineString", "coordinates": [[2, 2], [3, 3]]},
+            }, good | {"properties": {"id": "good-2", "name": "Good 2"}}]},
+            {"features": []},
+        ]
+        dataset = await get_cable_dataset(proxy, cache)
+        assert dataset.source == "live"
+        assert [cable.id for cable in dataset.cables] == ["good", "good-2"]
