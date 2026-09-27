@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import structlog
+from pydantic import ValidationError
 
 from gdelt_raw.schemas import GDELTEventWrite
 from gdelt_raw.writers.neo4j_writer import (
@@ -59,6 +60,12 @@ def _event(**overrides: object) -> GDELTEventWrite:
     }
     values.update(overrides)
     return GDELTEventWrite.model_validate(values)
+
+
+@pytest.mark.parametrize("codebook_type", ["", " \t "])
+def test_event_writer_rejects_empty_codebook_type(codebook_type: str) -> None:
+    with pytest.raises(ValidationError):
+        _event(codebook_type=codebook_type)
 
 
 def test_merge_location_writes_geo_and_all_spatial_fields_with_parameters() -> None:

@@ -16,10 +16,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import polars as pl
+import structlog
 
 from gdelt_raw.cameo_mapping import map_cameo_root
 from gdelt_raw.ids import build_doc_id, build_event_id
 from gdelt_raw.theme_matching import ThemeMatcher, any_match_in_themes, compile_patterns
+
+log = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -46,6 +49,10 @@ def apply_filters(
     theme_alpha: list[str],
     theme_nuclear_override: list[str],
 ) -> FilterResult:
+    unmapped_allowlist = sorted(root for root in cameo_roots if map_cameo_root(root) is None)
+    if unmapped_allowlist:
+        raise ValueError(f"unmapped CAMEO roots in filter allowlist: {unmapped_allowlist}")
+
     # 1. tactical events
     tactical_ids = set(
         events_df.filter(pl.col("event_root_code").is_in(cameo_roots))
@@ -68,6 +75,29 @@ def apply_filters(
         mentions_df.filter(pl.col("mention_identifier").is_in(nuclear_urls))
         .get_column("global_event_id").to_list()
     )
+
+    # Nuclear override may bring in roots outside the tactical allowlist, but
+    # every retained Event still needs a canonical codebook type. Keep the GKG
+    # source row; drop only the unclassifiable Event and its linked-event edge.
+    unmapped_nuclear_ids: set[int] = set()
+    unmapped_root_counts: dict[int, int] = {}
+    nuclear_only_ids = nuclear_ids - tactical_ids
+    if nuclear_only_ids:
+        nuclear_candidates = events_df.filter(
+            pl.col("global_event_id").is_in(nuclear_only_ids)
+        ).select("global_event_id", "event_root_code")
+        for event_id, root_value in nuclear_candidates.iter_rows():
+            if root_value is None or map_cameo_root(int(root_value)) is None:
+                unmapped_nuclear_ids.add(int(event_id))
+                root = int(root_value) if root_value is not None else -1
+                unmapped_root_counts[root] = unmapped_root_counts.get(root, 0) + 1
+    if unmapped_nuclear_ids:
+        log.warning(
+            "gdelt_nuclear_override_unmapped_roots",
+            invalid_count=len(unmapped_nuclear_ids),
+            root_counts={str(root): count for root, count in sorted(unmapped_root_counts.items())},
+        )
+        nuclear_ids -= unmapped_nuclear_ids
 
     # 5. union
     final_ids = tactical_ids | nuclear_ids

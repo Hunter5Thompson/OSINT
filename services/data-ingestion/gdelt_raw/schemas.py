@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class GDELTEventWrite(BaseModel):
@@ -39,6 +39,13 @@ class GDELTEventWrite(BaseModel):
     action_geo_fullname: str | None = None
     action_geo_country_code: str | None = None
     action_geo_feature_id: str | None = None
+
+    @field_validator("codebook_type")
+    @classmethod
+    def _require_nonempty_codebook_type(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("codebook_type must not be empty")
+        return value
 
 
 class GDELTDocumentWrite(BaseModel):

@@ -8,6 +8,7 @@ Location and Qdrant projection.
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import UTC, datetime
 from typing import Any
 
@@ -30,11 +31,17 @@ def _severity(props: dict[str, Any]) -> float:
     """Legacy ``severity.value`` or current ``severitydata.severity``; 0.0 if unusable."""
     for key, field in (("severity", "value"), ("severitydata", "severity")):
         obj = props.get(key)
-        if isinstance(obj, dict) and obj.get(field) is not None:
-            try:
-                return float(obj[field])
-            except (TypeError, ValueError):
-                return 0.0
+        if not isinstance(obj, dict):
+            continue
+        value = obj.get(field)
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            severity = float(value)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if math.isfinite(severity):
+            return severity
     return 0.0
 
 

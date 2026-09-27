@@ -165,6 +165,131 @@ class TestEONETParser:
         assert events[0]["latitude"] == 10.0
         assert events[0]["longitude"] == 5.0
 
+    def test_null_or_invalid_geometry_dates_are_ignored_per_event(self, collector):
+        response = {
+            "events": [
+                {
+                    "id": "E_BAD_DATES",
+                    "title": "Storm with bad geometry rows",
+                    "categories": [{"id": "severeStorms"}],
+                    "geometry": [
+                        None,
+                        {"type": "Point", "date": None, "coordinates": [1, 2]},
+                        {"type": "Point", "date": "not-a-date", "coordinates": [2, 3]},
+                        {
+                            "type": "Point",
+                            "date": "2026-04-10T12:00:00Z",
+                            "coordinates": [3, 4],
+                        },
+                    ],
+                },
+                {
+                    "id": "E_GOOD_AFTER",
+                    "title": "Good neighbor",
+                    "categories": [{"id": "wildfires"}],
+                    "geometry": [{
+                        "type": "Point",
+                        "date": "2026-04-11T12:00:00Z",
+                        "coordinates": [5, 6],
+                    }],
+                },
+            ]
+        }
+        events = collector._parse_events(response)
+        assert [event["eonet_id"] for event in events] == ["E_BAD_DATES", "E_GOOD_AFTER"]
+        assert events[0]["event_date"] == "2026-04-10T12:00:00Z"
+
+    def test_latest_point_is_selected_by_instant_not_date_string_order(self, collector):
+        response = {
+            "events": [{
+                "id": "E_OFFSET",
+                "title": "Timezone offset",
+                "categories": [{"id": "severeStorms"}],
+                "geometry": [
+                    {
+                        "type": "Point",
+                        "date": "2026-01-01T00:30:00+01:00",
+                        "coordinates": [1, 2],
+                    },
+                    {
+                        "type": "Point",
+                        "date": "2025-12-31T23:45:00Z",
+                        "coordinates": [3, 4],
+                    },
+                ],
+            }]
+        }
+        event = collector._parse_events(response)[0]
+        assert event["longitude"] == 3
+        assert event["event_date"] == "2025-12-31T23:45:00Z"
+
+    def test_event_without_any_valid_point_date_is_skipped(self, collector):
+        response = {"events": [{
+            "id": "E_NO_VALID_POINT",
+            "title": "Bad",
+            "categories": [{"id": "wildfires"}],
+            "geometry": [
+                {"type": "Point", "date": None, "coordinates": [1, 2]},
+                {"type": "Point", "date": "bad", "coordinates": [3, 4]},
+            ],
+        }]}
+        assert collector._parse_events(response) == []
+
+    def test_invalid_newer_point_does_not_replace_valid_older_point(self, collector):
+        response = {"events": [{
+            "id": "E_VALID_COORDINATE_FALLBACK",
+            "title": "Coordinates",
+            "categories": [{"id": "wildfires"}],
+            "geometry": [
+                {
+                    "type": "Point",
+                    "date": "2026-04-10T12:00:00Z",
+                    "coordinates": [3.0, 4.0],
+                },
+                {
+                    "type": "Point",
+                    "date": "2026-04-11T12:00:00Z",
+                    "coordinates": [181.0, 91.0],
+                },
+            ],
+        }]}
+        event = collector._parse_events(response)[0]
+        assert event["longitude"] == 3.0
+        assert event["latitude"] == 4.0
+
+    def test_invalid_geometry_is_summarized_without_losing_valid_event(self, collector):
+        response = {"events": [
+            {
+                "id": "E_RETAINED",
+                "title": "Mixed geometry",
+                "categories": [{"id": "wildfires"}],
+                "geometry": [
+                    None,
+                    {"type": "Point", "date": "broken", "coordinates": [1, 2]},
+                    {"type": "Polygon", "date": "broken", "coordinates": []},
+                    {
+                        "type": "Point",
+                        "date": "2026-04-10T12:00:00Z",
+                        "coordinates": [3, 4],
+                    },
+                ],
+            },
+            {
+                "id": "E_SKIPPED",
+                "title": "Invalid point",
+                "geometry": [{"type": "Point", "date": None, "coordinates": [1, 2]}],
+            },
+        ]}
+        with patch("feeds.eonet_collector.log.warning") as warning:
+            events = collector._parse_events(response)
+
+        assert [event["eonet_id"] for event in events] == ["E_RETAINED"]
+        warning.assert_called_once_with(
+            "eonet_invalid_geometry_summary",
+            invalid_geometry_count=3,
+            skipped_event_count=1,
+        )
+
 
 class TestEONETContentHash:
     def test_stable_hash_for_same_id(self, collector):

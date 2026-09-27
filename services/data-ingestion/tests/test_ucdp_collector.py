@@ -79,6 +79,52 @@ def test_parse_event(collector):
     assert payload["latitude"] == 36.2
 
 
+@pytest.mark.parametrize("empty", [None, ""])
+def test_missing_or_empty_casualty_estimate_stays_unknown(collector, empty):
+    raw = SAMPLE_UCDP_RESPONSE["Result"][0] | {"best": empty}
+    payload = collector._parse_event(raw)
+    assert payload["best_estimate"] is None
+
+
+@pytest.mark.parametrize("zero", [0, 0.0, "0.0"])
+def test_zero_casualty_spellings_are_equivalent(collector, zero):
+    payload = collector._parse_event(SAMPLE_UCDP_RESPONSE["Result"][0] | {"best": zero})
+    assert payload["best_estimate"] == 0
+
+
+@pytest.mark.parametrize("zero", [0, 0.0, "0.0"])
+def test_zero_coordinate_spellings_are_preserved(collector, zero):
+    payload = collector._parse_event(
+        SAMPLE_UCDP_RESPONSE["Result"][0] | {"latitude": zero, "longitude": zero}
+    )
+    assert payload["latitude"] == 0.0
+    assert payload["longitude"] == 0.0
+
+
+@pytest.mark.parametrize("empty", [None, ""])
+def test_missing_coordinate_spellings_stay_null(collector, empty):
+    payload = collector._parse_event(
+        SAMPLE_UCDP_RESPONSE["Result"][0] | {"latitude": empty, "longitude": empty}
+    )
+    assert payload["latitude"] is None
+    assert payload["longitude"] is None
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("best", float("nan")),
+        ("low", float("inf")),
+        ("high", -1),
+        ("latitude", 91),
+        ("longitude", float("inf")),
+    ],
+)
+def test_invalid_estimate_or_coordinate_is_rejected(collector, field, bad_value):
+    with pytest.raises(ValueError):
+        collector._parse_event(SAMPLE_UCDP_RESPONSE["Result"][0] | {field: bad_value})
+
+
 @pytest.mark.asyncio
 async def test_discover_version_finds_valid(collector):
     good_resp = MagicMock()
@@ -162,3 +208,24 @@ async def test_ucdp_config_skips_upsert(collector):
     assert any(
         c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
     )
+
+
+@pytest.mark.asyncio
+async def test_invalid_ucdp_event_does_not_stop_valid_neighbors(collector):
+    good_before = SAMPLE_UCDP_RESPONSE["Result"][0] | {"id": "good-before"}
+    bad = SAMPLE_UCDP_RESPONSE["Result"][0] | {"id": "bad", "latitude": 91}
+    good_after = SAMPLE_UCDP_RESPONSE["Result"][0] | {"id": "good-after"}
+    response = _ucdp_page_resp()
+    response.json.return_value = {"TotalCount": 3, "Result": [good_before, bad, good_after]}
+    collector._discover_version = AsyncMock(return_value="v1")
+    collector.http.get = AsyncMock(return_value=response)
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._build_point = AsyncMock(return_value=MagicMock())
+    collector._batch_upsert = AsyncMock()
+    collector._ensure_collection = AsyncMock()
+
+    with patch("feeds.ucdp_collector.process_item", new=AsyncMock()) as process:
+        await collector.collect()
+
+    ids = [call.kwargs["source_evidence"]["ucdp_id"] for call in process.await_args_list]
+    assert ids == ["good-before", "good-after"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -66,6 +67,81 @@ class TestHAPIParser:
         records = collector._parse_records({"data": []}, "UKR")
         assert records == []
 
+    def test_nullable_and_malformed_counts_are_isolated_per_record(self, collector):
+        records = collector._parse_records({"data": [
+            {
+                "reference_period_start": "2026-03-01",
+                "event_type": "political_violence",
+                "events": None,
+                "fatalities": "",
+            },
+            {
+                "reference_period_start": "2026-03-01",
+                "event_type": "civilian_targeting",
+                "events": "bad-count",
+                "fatalities": 2,
+            },
+            {
+                "reference_period_start": "2026-03-01",
+                "event_type": "negative-count",
+                "events": -1,
+                "fatalities": 2,
+            },
+            {
+                "reference_period_start": "2026-03-01",
+                "event_type": "explosions",
+                "events": 3,
+                "fatalities": 0,
+            },
+        ]}, "UKR")
+
+        assert [record["event_type"] for record in records] == [
+            "political_violence", "explosions"
+        ]
+        assert records[0]["events_count"] is None
+        assert records[0]["fatalities"] is None
+        assert records[1]["events_count"] == 3
+        assert records[1]["fatalities"] == 0
+
+    def test_invalid_identity_fields_are_skipped_between_valid_records(self, collector):
+        records = collector._parse_records({"data": [
+            {
+                "reference_period_start": "2026-03-01",
+                "event_type": "political_violence",
+                "events": 1,
+                "fatalities": 0,
+            },
+            {
+                "reference_period_start": None,
+                "event_type": "civilian_targeting",
+                "events": 2,
+                "fatalities": 1,
+            },
+            {
+                "reference_period_start": "2026-04-01",
+                "event_type": None,
+                "events": 3,
+                "fatalities": 0,
+            },
+            {
+                "reference_period_start": "not-a-date",
+                "event_type": "explosions",
+                "events": 4,
+                "fatalities": 0,
+            },
+            {
+                "reference_period_start": "2026-05-01",
+                "event_type": "explosions",
+                "events": 5,
+                "fatalities": 0,
+            },
+        ]}, "UKR")
+
+        assert [(record["reference_period"], record["event_type"]) for record in records] == [
+            ("2026-03", "political_violence"),
+            ("2026-05", "explosions"),
+        ]
+
 
 class TestHAPIFocusCountries:
     def test_all_iso3(self):
@@ -88,6 +164,15 @@ class TestHAPIContentHash:
         h1 = collector._content_hash("UKR", "2026-03", "political_violence")
         h2 = collector._content_hash("SYR", "2026-03", "political_violence")
         assert h1 != h2
+
+    def test_hapi_document_constraint_is_operator_run_and_scoped(self):
+        migration = Path(__file__).parents[1] / "migrations/hapi_document_id_unique.cypher"
+        statement = migration.read_text()
+        assert "MATCH (d:HAPIDocument)" in statement
+        assert "d.doc_id AS doc_id" in statement
+        assert "CREATE CONSTRAINT hapi_document_id_unique IF NOT EXISTS" in statement
+        assert "FOR (d:HAPIDocument) REQUIRE d.doc_id IS UNIQUE" in statement
+        assert "Apply this before enabling parallel HAPI writers" in statement
 
 
 # ── Extraction error skip tests (Task 7) ────────────────────────────
@@ -149,3 +234,26 @@ async def test_hapi_config_skips_upsert(collector):
     assert any(
         c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
     )
+
+
+@pytest.mark.asyncio
+async def test_hapi_passes_canonical_record_identity_to_pipeline(collector):
+    collector.http.get = AsyncMock(return_value=_hapi_http_resp())
+    collector._ensure_collection = AsyncMock()
+    collector._dedup_check = AsyncMock(return_value=False)
+    collector._batch_upsert = AsyncMock()
+    collector._build_point = AsyncMock()
+
+    with (
+        patch("feeds.hapi_collector.FOCUS_COUNTRIES", ["UKR"]),
+        patch("feeds.hapi_collector.asyncio.sleep", new=AsyncMock()),
+        patch("pipeline.process_item", new=AsyncMock()) as process,
+    ):
+        await collector.collect()
+
+    kwargs = process.await_args_list[0].kwargs
+    record_hash = collector._content_hash("UKR", "2026-03", "political_violence")
+    assert kwargs["source"] == "hapi"
+    assert kwargs["url"] == "https://hapi.humdata.org/api/v2/coordination-context/conflict-events"
+    assert kwargs["content_hash"] == record_hash
+    assert kwargs["document_id"] == f"hapi:conflict-events:{record_hash}"

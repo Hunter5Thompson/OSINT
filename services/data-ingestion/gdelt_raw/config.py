@@ -5,8 +5,10 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from gdelt_raw.cameo_mapping import map_cameo_root
 
 
 class GDELTSettings(BaseSettings):
@@ -42,6 +44,15 @@ class GDELTSettings(BaseSettings):
     )
     backfill_parallel_slices: int = 4
     backfill_default_days: int = 30
+
+    @model_validator(mode="after")
+    def _require_mapped_allowlist_roots(self) -> GDELTSettings:
+        unmapped = sorted(
+            root for root in self.cameo_root_allowlist if map_cameo_root(root) is None
+        )
+        if unmapped:
+            raise ValueError(f"unmapped CAMEO roots in allowlist: {unmapped}")
+        return self
 
     @field_validator("cameo_root_allowlist", mode="before")
     @classmethod

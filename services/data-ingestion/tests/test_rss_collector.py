@@ -139,6 +139,53 @@ async def test_process_feed_caps_entries_per_run(mock_qdrant):
     assert len(points) == MAX_ENTRIES_PER_FEED
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("broken_content", [None, [], [42], "not-a-list"])
+async def test_bad_optional_content_does_not_abort_neighboring_rss_entries(
+    mock_qdrant, broken_content
+):
+    parsed = MagicMock()
+    first = _entry("first", "http://e/first")
+    broken = _entry("middle", "http://e/middle")
+    broken["content"] = broken_content
+    broken["summary"] = "fallback summary"
+    last = _entry("last", "http://e/last")
+    parsed.entries = [first, broken, last]
+    parsed.bozo = False
+    mock_qdrant.retrieve.return_value = []
+
+    collector = RSSCollector.__new__(RSSCollector)
+    collector.qdrant = mock_qdrant
+    collector._redis = None
+    collector._embed = AsyncMock(return_value=[0.0] * 1024)
+    enrichment = {"codebook_type": "other", "entities": []}
+
+    with (
+        patch("feeds.rss_collector.feedparser.parse", return_value=parsed),
+        patch(
+            "feeds.rss_collector.process_item", new=AsyncMock(return_value=enrichment)
+        ) as process,
+        patch("feeds.rss_collector.httpx.AsyncClient") as mock_http,
+    ):
+        feed_resp = MagicMock()
+        feed_resp.text = "<rss/>"
+        feed_resp.raise_for_status = MagicMock()
+        mock_client = AsyncMock()
+        mock_client.get.return_value = feed_resp
+        mock_http.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        count = await collector._process_feed(
+            {"name": "test", "url": "http://feed/x", "provider": "test.example.com"}
+        )
+
+    assert count == 3
+    assert [call.kwargs["title"] for call in process.await_args_list] == [
+        "first", "middle", "last"
+    ]
+    assert process.await_args_list[1].kwargs["text"] == "middle\nfallback summary"
+
+
 # ---------------------------------------------------------------------------
 # Schema preflight tests — mirror test_qdrant_preflight_ingestion.py pattern
 # ---------------------------------------------------------------------------
