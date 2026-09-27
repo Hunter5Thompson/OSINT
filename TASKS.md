@@ -2038,3 +2038,14 @@ Observation-Producer.
 #   Neo4j, without fixture writes. 25 batch/scheduler unit tests and Ruff pass.
 # - Keep point-bearing legacy observations fail-closed, including partial
 #   coordinates. Historical SPOTTED_AT edges retain their original evidence.
+
+# 2026-09-27 — Spatial live cutover completed
+# - PRs #119, #121 and #122 merged after all twelve checks passed.
+# - Restored and verified full backups before apply. Applied 17,155 Neo4j
+#   location updates and 1,923,721 Qdrant point projections. Full verification
+#   found zero remaining writes; frozen node/edge/point totals were unchanged.
+# - 4,170 aircraft labels repaired with exact before-values retained; 700 sampled
+#   vectors and non-spatial payloads preserved exactly. Coverage gaps remain explicit.
+# - Backend/intelligence real scoped query passed; both served references resolve,
+#   retired revision returns 409. Collector/backfill resumed; final smoke 24/0/1.
+# - Evidence and remaining provenance limits: docs/reports/2026-09-27-spatial-live-cutover.md.
