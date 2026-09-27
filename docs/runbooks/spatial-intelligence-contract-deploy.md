@@ -182,3 +182,11 @@ geometry and new GDELT aliases require reviewed source/boundary-policy inputs.
 UCDP records without precise `where_prec=1` remain non-filterable pending source
 replay; GDACS projects its reported centroid, not the complete affected area.
 Military-aircraft observations remain graph-only; this change adds no Qdrant writer.
+
+The aircraft cursor gate distinguishes typed `aircraft_observation` records and
+point-bearing legacy locations from historical theatre aggregate nodes. A theatre
+node without its own coordinates is not an observation missing an ID. Preserve
+those aggregate nodes and their original `SPOTTED_AT` edge evidence; they are not
+newly admitted spatial observations. Edge-to-observation materialization remains a
+separate migration. Run the read-only predicate regression against configured
+Neo4j with `pytest -m live tests/integration/test_aircraft_lane_live.py`.

@@ -106,7 +106,10 @@ RETURN count(l) AS count
 """,
     "military_aircraft": """
 MATCH (l:Location)
-WHERE l.loc_key IS NULL AND l.type = 'geopolitical_hotspot'
+WHERE l.loc_key IS NULL
+  AND (l.type = 'aircraft_observation'
+       OR (l.type = 'geopolitical_hotspot'
+           AND (l.lat IS NOT NULL OR l.lon IS NOT NULL OR l.geo IS NOT NULL)))
 RETURN count(l) AS count
 """,
     "rss_pipeline": """

@@ -2029,3 +2029,12 @@ Observation-Producer.
 #   Regression rot reproduziert, Validator auf bestehenden Projektor-/Payload-
 #   Vertrag korrigiert. Integrationstest nutzt jetzt eine Land+Admin1-Position.
 # - Kleiner Folge-PR vor Apply; keine Aufweichung der Einzigartigkeitsprüfung.
+
+# 2026-09-27 — Live spatial cutover: aircraft lane cursor gate
+# - Read-only live preview exposed nine historical theatre aggregate Locations
+#   without point geometry. These must remain outside observation-label repair.
+# - Neo4j predicate regression: two red cases (theatre falsely blocks; modern
+#   observation without cursor missed), then six green in-memory map cases on
+#   Neo4j, without fixture writes. 25 batch/scheduler unit tests and Ruff pass.
+# - Keep point-bearing legacy observations fail-closed, including partial
+#   coordinates. Historical SPOTTED_AT edges retain their original evidence.
