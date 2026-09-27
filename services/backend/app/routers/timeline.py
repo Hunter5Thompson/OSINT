@@ -553,7 +553,7 @@ async def _events_window(
 
 _MIL_TRACKS_QUERY = """
 MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
-WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
+WHERE r.timestamp >= $start_ms AND r.timestamp <= $end_ms
   AND r.latitude IS NOT NULL AND r.longitude IS NOT NULL
 WITH a, r ORDER BY r.timestamp ASC
 WITH a, collect(r) AS rs
@@ -564,7 +564,7 @@ WITH a, rs,
             OR ($west >  $east AND (x.longitude >= $west OR x.longitude <= $east)) ))] AS inbox
 WHERE size(inbox) >= 1
 WITH a, [x IN inbox | {
-    ts_ms: x.timestamp * 1000, lat: x.latitude, lon: x.longitude,
+    ts_ms: x.timestamp, lat: x.latitude, lon: x.longitude,
     altitude_m: x.altitude_m, speed_ms: x.speed_ms, heading: x.heading
   }] AS points
 RETURN a.icao24 AS icao24, a.callsign AS callsign, a.type_code AS type_code,
@@ -578,7 +578,7 @@ LIMIT $limit
 # the bbox so a shortened polyline is explicit in spatial_application.
 _MIL_TRACKS_COUNT_QUERY = """
 MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
-WHERE r.timestamp >= $start_s AND r.timestamp <= $end_s
+WHERE r.timestamp >= $start_ms AND r.timestamp <= $end_ms
   AND r.latitude IS NOT NULL AND r.longitude IS NOT NULL
 WITH a, collect(r) AS rs
 WITH a, rs,
@@ -612,7 +612,8 @@ async def _movements_window(
         raise HTTPException(status_code=501, detail=f"{movement_kind} not implemented")
 
     params = {
-        "start_s": int(start.timestamp()), "end_s": int(end.timestamp()),
+        # SPOTTED_AT.timestamp is epoch milliseconds.
+        "start_ms": int(start.timestamp() * 1000), "end_ms": int(end.timestamp() * 1000),
         "limit": limit, **spatial_filter.parameters,
     }
     try:

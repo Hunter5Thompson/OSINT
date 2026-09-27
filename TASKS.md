@@ -2059,3 +2059,13 @@ Observation-Producer.
 # - Found, not fixed here: adsb.fi `now` is milliseconds; collector stores ms and
 #   buckets dedup keys by 900 ms, while /aircraft and timeline readers filter by
 #   epoch seconds. The job copies timestamps verbatim.
+
+# 2026-09-27 — Aircraft timestamp units
+# - Contract: SPOTTED_AT.timestamp = epoch ms (all 19,010 stored edges are ms; adsb.fi
+#   `now` is ms). /api/aircraft/tracks keeps its seconds contract; timeline ts_ms is
+#   the stored value. Before: since-filter never excluded anything and the timeline
+#   military window was always empty. Verified read-only on prod: 1h → 8 tracks
+#   (was 500 from April), 2026-09-26 → 83 tracks / 285 points (was 0).
+# - Collector: explicit ms normalization incl. time.time() fallback; dedup bucket now
+#   a real 15-minute window (was 900 ms); Location lat/lon/name follow the latest
+#   observation like geo/country do. Takes effect on the next ingestion image deploy.

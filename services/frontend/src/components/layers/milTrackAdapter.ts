@@ -28,7 +28,7 @@ export function fromLiveTrack(t: AircraftTrack): MilTrackRender {
     points: t.points.map((p) => ({
       lat: p.lat, lon: p.lon, altitude_m: p.altitude_m,
       speed_ms: p.speed_ms, heading: p.heading,
-      ts_ms: p.timestamp * 1000, // collector stores epoch seconds
+      ts_ms: p.timestamp * 1000, // /api/aircraft/tracks returns epoch seconds
     })),
   };
 }

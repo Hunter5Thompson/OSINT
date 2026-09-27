@@ -3,7 +3,9 @@
 Primary source: GET https://opendata.adsb.fi/api/v2/mil — no auth, no rate limit.
 Fallback: OpenSky Network (OAuth2 client-credentials) — stub only, deferred.
 
-Dedup key: {icao24}|{timestamp_rounded_to_15min}
+Dedup key: {icao24}|{epoch_ms_rounded_down_to_15min}
+Timestamps: epoch milliseconds (adsb.fi reports ``now`` in ms), stored verbatim
+on SPOTTED_AT.timestamp; readers convert to their API units.
 Neo4j write: MERGE MilitaryAircraft → MERGE Location → MERGE SPOTTED_AT
 """
 
@@ -135,9 +137,11 @@ def build_aircraft_location_statement(
     return {
         "statement": (
             "MERGE (l:Location {loc_key: $loc_key}) "
-            "ON CREATE SET l.name = $name, l.type = 'aircraft_observation', "
-            "              l.lat = $latitude, l.lon = $longitude "
-            "SET l.source_country_code = $source_country_code, "
+            "ON CREATE SET l.type = 'aircraft_observation' "
+            # A repeated poll in the same 15-minute bucket moves the edge, so the
+            # Location follows the latest observation as a whole.
+            "SET l.name = $name, l.lat = $latitude, l.lon = $longitude, "
+            "    l.source_country_code = $source_country_code, "
             "    l.source_country_code_system = $source_country_code_system, "
             "    l.country_iso3 = $country_iso3, "
             "    l.admin1_code = $admin1_code, l.admin2_code = $admin2_code, "
@@ -189,7 +193,7 @@ class MilitaryAircraftCollector(BaseCollector):
         - ground_speed: knots → m/s (rounded to 2 dp)
         """
         aircraft: list[dict] = []
-        now_ts = data.get("now", time.time())
+        now_ms = _epoch_ms(data.get("now", time.time()))
 
         for ac in data.get("ac", []):
             hex_id = ac.get("hex", "")
@@ -220,7 +224,7 @@ class MilitaryAircraftCollector(BaseCollector):
             in_coverage = in_hotspot_coverage(lat, lon) if has_pos else False
 
             # Dedup key: icao24 + 15-minute bucket
-            ts_bucket = _round_to_15min(int(now_ts))
+            ts_bucket = _round_to_15min_ms(now_ms)
 
             aircraft.append({
                 "icao24": icao24,
@@ -234,7 +238,7 @@ class MilitaryAircraftCollector(BaseCollector):
                 "heading": ac.get("track"),
                 "military_branch": branch,
                 "in_coverage": in_coverage,
-                "timestamp": int(now_ts),
+                "timestamp": now_ms,
                 "dedup_key": f"{icao24}|{ts_bucket}",
                 "source": "adsb.fi",
             })
@@ -438,6 +442,14 @@ class MilitaryAircraftCollector(BaseCollector):
 # Utility
 # ---------------------------------------------------------------------------
 
-def _round_to_15min(ts: int) -> int:
-    """Round a Unix timestamp down to the nearest 15-minute boundary."""
-    return (ts // 900) * 900
+_MS_EPOCH_THRESHOLD = 100_000_000_000  # 1973 in ms; year 5138 in seconds
+
+
+def _epoch_ms(value: float | int) -> int:
+    """Epoch milliseconds from adsb.fi ``now`` (ms) or a seconds fallback."""
+    return int(value) if value >= _MS_EPOCH_THRESHOLD else int(value * 1000)
+
+
+def _round_to_15min_ms(ts_ms: int) -> int:
+    """Round an epoch-millisecond timestamp down to the nearest 15-minute boundary."""
+    return (ts_ms // 900_000) * 900_000

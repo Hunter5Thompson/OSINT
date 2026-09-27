@@ -117,3 +117,26 @@ def test_aircraft_tracks_query_filters_null_coordinates() -> None:
     from app.routers.aircraft import _TRACK_QUERY
     assert "r.latitude IS NOT NULL" in _TRACK_QUERY
     assert "r.longitude IS NOT NULL" in _TRACK_QUERY
+
+
+@pytest.mark.asyncio
+async def test_aircraft_tracks_filter_in_stored_epoch_ms_and_return_seconds() -> None:
+    """SPOTTED_AT.timestamp is epoch milliseconds; the API contract is seconds."""
+    from app.routers.aircraft import _TRACK_QUERY
+
+    mock_cache = AsyncMock()
+    mock_cache.get.return_value = None
+    app.state.cache = mock_cache
+    read_mock = AsyncMock(return_value=[])
+    with (
+        patch("app.routers.aircraft.read_query", read_mock),
+        patch("app.routers.aircraft.time.time", return_value=1_790_000_000.5),
+    ):
+        resp = TestClient(app).get("/api/aircraft/tracks?since_hours=2")
+
+    assert resp.status_code == 200
+    query, params = read_mock.await_args.args
+    assert params == {"since_ms": 1_790_000_000_500 - 2 * 3600 * 1000}
+    assert "r.timestamp >= $since_ms" in query
+    assert "timestamp: r.timestamp / 1000" in query
+    assert query == _TRACK_QUERY

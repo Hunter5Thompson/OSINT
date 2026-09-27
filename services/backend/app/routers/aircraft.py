@@ -18,7 +18,7 @@ _CACHE_TTL_S = 30
 
 _TRACK_QUERY = """
 MATCH (a:MilitaryAircraft)-[r:SPOTTED_AT]->()
-WHERE r.timestamp >= $since_epoch
+WHERE r.timestamp >= $since_ms
   AND r.latitude IS NOT NULL
   AND r.longitude IS NOT NULL
 WITH a, r ORDER BY r.timestamp ASC
@@ -29,7 +29,7 @@ WITH a,
        altitude_m: r.altitude_m,
        speed_ms: r.speed_ms,
        heading: r.heading,
-       timestamp: r.timestamp
+       timestamp: r.timestamp / 1000
      }) AS points
 WHERE size(points) >= 1
 RETURN a.icao24          AS icao24,
@@ -72,10 +72,11 @@ async def get_aircraft_tracks(
     if cached is not None:
         return [AircraftTrack(**t) for t in cached]
 
-    since_epoch = int(time.time()) - since_hours * 3600
+    # SPOTTED_AT.timestamp is epoch milliseconds; the API contract is seconds.
+    since_ms = int(time.time() * 1000) - since_hours * 3600 * 1000
 
     try:
-        rows = await read_query(_TRACK_QUERY, {"since_epoch": since_epoch})
+        rows = await read_query(_TRACK_QUERY, {"since_ms": since_ms})
     except Exception as exc:
         log.error("aircraft_neo4j_query_failed", error=str(exc))
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
