@@ -1,4 +1,5 @@
 """Read-only graph-integrity metrics. Baseline for before/after acceptance."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -85,11 +86,18 @@ REPORT_LABELS = [
 
 _LOCATION_WRITER_LANES: tuple[tuple[str, str, bool, str, str], ...] = (
     (
+        "sensor_observation",
+        "services/data-ingestion/source_spatial.py",
+        True,
+        "shared_spatial_normalizer",
+        "source_owned_structured_coordinates",
+    ),
+    (
         "backend_incident",
         "services/backend/app/cypher/incident_write.py",
         True,
-        "unsupported",
-        "cross_service_normalizer_not_integrated",
+        "catalog_point_projection",
+        "incident_store_project_incident_point",
     ),
     (
         "gdelt_raw",
@@ -156,7 +164,7 @@ def location_writer_inventory() -> dict[str, Any]:
                 "normalization": normalization,
                 "reason": reason,
             }
-            for lane, path, active, normalization, reason in _LOCATION_WRITER_LANES
+            for lane, path, active, normalization, reason in sorted(_LOCATION_WRITER_LANES)
         ],
     }
 

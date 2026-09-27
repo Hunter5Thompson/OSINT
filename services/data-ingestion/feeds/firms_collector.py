@@ -39,6 +39,7 @@ def _firms_observed_at(acq_date: str, acq_time: str | int | None) -> str | None:
     hhmm = str(acq_time).zfill(4)
     return f"{acq_date}T{hhmm[:2]}:{hhmm[2:]}:00+00:00"
 
+
 # Fetch areas around geopolitical hotspots: "west,south,east,north". They
 # overlap and are not countries: a pixel's place comes from the spatial catalog.
 FIRMS_BBOXES: dict[str, str] = {
@@ -58,6 +59,7 @@ FIRMS_SATELLITES: list[str] = [
     "VIIRS_NOAA20_NRT",
     "VIIRS_NOAA21_NRT",
 ]
+
 
 class FIRMSCollector(BaseCollector):
     """Fetch NASA FIRMS VIIRS NRT thermal anomalies and ingest into Qdrant + Neo4j."""
@@ -208,6 +210,7 @@ class FIRMSCollector(BaseCollector):
                         f"https://firms.modaps.eosdis.nasa.gov/map/#d:{row['acq_date']};"
                         f"@{row['longitude']:.4f},{row['latitude']:.4f},10z"
                     )
+                    row["url"] = url
                     # Intelligence extraction. Transient/config errors skip Qdrant
                     # upsert so the row is retried on the next source re-fetch
                     # (Hash-Dedup doesn't trip).
@@ -218,6 +221,7 @@ class FIRMSCollector(BaseCollector):
                             text=embed_text,
                             url=url,
                             source="firms",
+                            source_evidence={**row, "source": "firms", "content_hash": chash},
                             settings=self.settings,
                             redis_client=self.redis,
                             observed_at=observed,

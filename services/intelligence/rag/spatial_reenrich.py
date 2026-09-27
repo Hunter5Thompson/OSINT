@@ -29,9 +29,7 @@ from spatial import (
 )
 
 _LANE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
-_PROJECTION_REVISION = re.compile(
-    r"^spatial-projection-v[0-9]+-[a-f0-9]{12,64}$"
-)
+_PROJECTION_REVISION = re.compile(r"^spatial-projection-v[0-9]+-[a-f0-9]{12,64}$")
 _MAX_PROMOTION_STALE_RATE: Final = 0.01
 _RAW_SPATIAL_FIELDS: Final = frozenset(
     {
@@ -392,6 +390,7 @@ class _Report:
     writes_planned: int = 0
     writes_applied: int = 0
     batches_completed: int = 0
+    input_fingerprint: str = ""
     coverage_before: _Coverage = field(default_factory=_Coverage)
     coverage_projected: _Coverage = field(default_factory=_Coverage)
 
@@ -410,6 +409,7 @@ class _Report:
             "writes_planned": self.writes_planned,
             "writes_applied": self.writes_applied,
             "batches_completed": self.batches_completed,
+            "input_fingerprint": self.input_fingerprint,
             "stale_points": self.coverage_before.stale_points,
             "stale_rate": _promotion_stale_rate(self.coverage_before),
             "unprojected_rate": _ratio(
@@ -426,8 +426,7 @@ class _Report:
             ),
             "stale_gate_passed": (
                 self.coverage_before.total_points > 0
-                and _promotion_stale_rate(self.coverage_before)
-                <= _MAX_PROMOTION_STALE_RATE
+                and _promotion_stale_rate(self.coverage_before) <= _MAX_PROMOTION_STALE_RATE
             ),
             "coverage_before": before.model_dump(mode="json"),
             "coverage_projected": projected.model_dump(mode="json"),
@@ -508,6 +507,7 @@ async def _run_spatial_reenrichment(
         return report.to_dict()
 
     cursor = checkpoint.cursor
+    inputs = hashlib.sha256()
     while True:
         page = await store.fetch_page(job.lane, cursor, job.batch_size)
         _validate_page(page, cursor=cursor, limit=job.batch_size)
@@ -535,6 +535,17 @@ async def _run_spatial_reenrichment(
                 job.target_projection_revision,
             )
             projected = _replacement(point, projector.project(point, job), job)
+            inputs.update(
+                _canonical_json(
+                    {
+                        "id": point.point_id,
+                        "payload": point.payload,
+                        "vector": _vector_fingerprint_value(point.vector),
+                        "projection": projected.payload,
+                    }
+                ).encode()
+            )
+            inputs.update(b"\n")
             report.coverage_projected.observe(
                 projected.payload,
                 job.target_projection_revision,
@@ -571,6 +582,7 @@ async def _run_spatial_reenrichment(
         if report.complete:
             break
 
+    report.input_fingerprint = inputs.hexdigest()
     return report.to_dict()
 
 
@@ -910,6 +922,14 @@ def _promotion_stale_rate(coverage: _Coverage) -> float:
         ),
         coverage.total_points,
     )
+
+
+def _vector_fingerprint_value(vector: object) -> object:
+    if isinstance(vector, models.SparseVector):
+        return vector.model_dump(mode="json")
+    if isinstance(vector, dict):
+        return {key: _vector_fingerprint_value(value) for key, value in vector.items()}
+    return vector
 
 
 def _canonical_json(payload: object) -> str:

@@ -339,3 +339,10 @@ Qdrant-Zählung: `count(exact=True)` mit `source == <Tabellenwert>`;
 zweite Zählung mit zusätzlichem `IsEmptyCondition` auf
 `spatial_occurrence_scope_revision_tokens`; Differenz ergibt Punkte mit Tokens.
 Es wurden keine Embeddings oder vollständigen Dokumenttexte abgefragt.
+
+## Implementation follow-up
+
+The later [remediation report](2026-09-27-spatial-audit-remediation.md) records the
+implemented code fixes, corrected compatibility contract and prepared cross-store
+cutover. The measurements and original findings above remain the audit snapshot;
+they do not describe a repaired live database.

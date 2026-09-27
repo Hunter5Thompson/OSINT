@@ -33,6 +33,11 @@ class DerivationInputs(StrictFrozenModel):
     crosswalk_sha256: AssetId
     scope_path: tuple[ScopeKey, ...] = Field(min_length=1, max_length=4)
     assignment_asset_ids: tuple[AssetId, ...] = ()
+    # Omitted on legacy manifests to preserve their immutable canonical bytes.
+    resolution_context_sha256: AssetId | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
 
     @model_validator(mode="after")
     def validate_inputs(self) -> DerivationInputs:
@@ -171,6 +176,8 @@ def derive_derivation_revision(inputs: DerivationInputs) -> str:
         "scope_path": inputs.scope_path,
         "assignment_asset_ids": tuple(sorted(inputs.assignment_asset_ids)),
     }
+    if inputs.resolution_context_sha256 is not None:
+        payload["resolution_context_sha256"] = inputs.resolution_context_sha256
     digest = hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
     return f"spatial-derive-v1-{digest[:12]}"
 
@@ -183,6 +190,7 @@ def build_manifest(
     """Build a canonical manifest without filesystem or clock dependencies."""
 
     _prevalidate_draft_lineage(draft)
+    draft = _bind_resolution_context(draft)
     if previous is not None and _draft_matches_previous(draft, previous):
         return previous
     previous_by_scope = (
@@ -192,9 +200,7 @@ def build_manifest(
         _build_scope_record(
             scope_input,
             previous=previous_by_scope.get(scope_input.scope.key),
-            previous_catalog_revision=(
-                previous.catalog_revision if previous is not None else None
-            ),
+            previous_catalog_revision=(previous.catalog_revision if previous is not None else None),
         )
         for scope_input in sorted(
             draft.scopes,
@@ -224,6 +230,42 @@ def build_manifest(
         attribution_sources_sha256=draft.attribution_sources_sha256,
         scopes=records,
         assets=assets,
+    )
+
+
+def _bind_resolution_context(draft: ManifestDraft) -> ManifestDraft:
+    """Bind all assignments to every input the coordinate resolver can consult.
+
+    Even an unchanged country can gain a conflicting neighbour. Presentation
+    labels and render LODs deliberately do not invalidate materialized evidence.
+    Bump resolver_contract when normalization semantics change.
+    """
+    context = {
+        "resolver_contract": "coordinate-resolution-v2-global-context",
+        "boundary_policy": draft.boundary_policy,
+        "scopes": [
+            {
+                "path": item.path,
+                "crosswalk": item.derivation_inputs.crosswalk_sha256,
+                "assignment_assets": sorted(item.derivation_inputs.assignment_asset_ids),
+            }
+            for item in sorted(draft.scopes, key=lambda item: item.scope.key)
+        ],
+    }
+    digest = hashlib.sha256(canonical_json_bytes(context)).hexdigest()
+    return draft.model_copy(
+        update={
+            "scopes": tuple(
+                item.model_copy(
+                    update={
+                        "derivation_inputs": item.derivation_inputs.model_copy(
+                            update={"resolution_context_sha256": digest},
+                        )
+                    }
+                )
+                for item in draft.scopes
+            )
+        }
     )
 
 
@@ -283,22 +325,6 @@ def validate_manifest(manifest: CatalogManifest) -> None:
     CatalogManifest.model_validate(manifest.model_dump(mode="json"))
 
 
-def _extends_code_only_derivation(previous: DerivationInputs, current: DerivationInputs) -> bool:
-    """A code-only derivation gaining coordinate containment stays compatible.
-
-    Without assignment assets a scope could only be assigned through the
-    crosswalk, so with the same crosswalk and path those assignments are exactly
-    what the extended derivation still produces; containment only adds
-    coordinate-resolved ones. Changed geometry or crosswalk is never compatible.
-    """
-    return (
-        not previous.assignment_asset_ids
-        and bool(current.assignment_asset_ids)
-        and previous.crosswalk_sha256 == current.crosswalk_sha256
-        and previous.scope_path == current.scope_path
-    )
-
-
 def _build_scope_record(
     scope_input: ManifestScopeInput,
     *,
@@ -312,10 +338,7 @@ def _build_scope_record(
 
     compatible = list(reviewed or (current,))
     carry_forward_from = None
-    if previous is not None and (
-        previous.derivation_revision == current
-        or _extends_code_only_derivation(previous.derivation_inputs, scope_input.derivation_inputs)
-    ):
+    if previous is not None and previous.derivation_revision == current:
         if previous_catalog_revision is None:
             raise ValueError("previous manifest revision context is required for carry-forward")
         carry_forward_from = previous_catalog_revision

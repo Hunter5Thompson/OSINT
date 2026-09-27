@@ -1,7 +1,8 @@
 """GDACS — Global Disaster Alert and Coordination System.
 
 Collects disaster events (earthquakes, cyclones, floods, volcanoes, droughts, wildfires).
-Mutable events: first-seen through Pipeline, updates Qdrant-only.
+Mutable events: first-seen through Pipeline. Updates refresh the existing source
+Location and Qdrant projection.
 """
 
 from __future__ import annotations
@@ -157,6 +158,8 @@ class GDACSCollector(BaseCollector):
                         text=description,
                         url=event_url,
                         source="gdacs",
+                        occurred_at=event.get("from_date"),
+                        source_evidence={**event, "source": "gdacs"},
                         settings=self.settings,
                         redis_client=self.redis,
                     )
@@ -178,6 +181,11 @@ class GDACSCollector(BaseCollector):
                     log.warning("gdacs_pipeline_failed", event_id=event["gdacs_id"])
                 new_count += 1
             else:
+                try:
+                    await self._refresh_observation_location({**event, "source": "gdacs"})
+                except Exception:
+                    log.exception("gdacs_location_refresh_failed", event_id=event["gdacs_id"])
+                    continue
                 update_count += 1
 
             try:
@@ -194,6 +202,9 @@ class GDACSCollector(BaseCollector):
             await self._batch_upsert(points)
 
         log.info(
-            "gdacs_complete", total=len(events), new=new_count,
-            updated=update_count, upserted=len(points),
+            "gdacs_complete",
+            total=len(events),
+            new=new_count,
+            updated=update_count,
+            upserted=len(points),
         )

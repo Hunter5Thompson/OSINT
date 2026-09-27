@@ -8,7 +8,6 @@ import pytest
 
 from feeds.correlation_job import (
     CorrelationJob,
-    build_conflict_bbox_filter,
     build_firms_filter,
     correlation_score,
     passes_time_filter,
@@ -20,7 +19,6 @@ def test_score_close_same_day_explosion():
     score = correlation_score(
         distance_km=5.0,
         days_diff=0,
-        possible_explosion=True,
         conflict_codebook_type="military.airstrike",
         firms_confidence="high",
     )
@@ -32,7 +30,6 @@ def test_score_far_next_day():
     score = correlation_score(
         distance_km=45.0,
         days_diff=1,
-        possible_explosion=False,
         conflict_codebook_type="other.unclassified",
         firms_confidence="nominal",
     )
@@ -44,7 +41,6 @@ def test_score_boundary_50km():
     score = correlation_score(
         distance_km=50.0,
         days_diff=0,
-        possible_explosion=False,
         conflict_codebook_type="other.unclassified",
         firms_confidence="nominal",
     )
@@ -56,7 +52,6 @@ def test_score_capped_at_1():
     score = correlation_score(
         distance_km=0.0,
         days_diff=0,
-        possible_explosion=True,
         conflict_codebook_type="military.airstrike",
         firms_confidence="high",
     )
@@ -68,32 +63,10 @@ def test_score_zero_km_same_day_no_bonus():
     score = correlation_score(
         distance_km=0.0,
         days_diff=0,
-        possible_explosion=False,
         conflict_codebook_type="other.unclassified",
         firms_confidence="nominal",
     )
     assert score == 1.0
-
-
-def test_bbox_filter_equator():
-    """At equator, lon_delta ≈ 0.5."""
-    f = build_conflict_bbox_filter(0.0, 30.0)
-    must = f.must
-    lat_cond = next(c for c in must if c.key == "latitude")
-    lon_cond = next(c for c in must if c.key == "longitude")
-    assert lat_cond.range.gte == pytest.approx(-0.5)
-    assert lat_cond.range.lte == pytest.approx(0.5)
-    assert lon_cond.range.gte == pytest.approx(29.5, abs=0.05)
-    assert lon_cond.range.lte == pytest.approx(30.5, abs=0.05)
-
-
-def test_bbox_filter_high_latitude():
-    """At 60°N, lon_delta should be wider (~1.0°)."""
-    f = build_conflict_bbox_filter(60.0, 30.0)
-    must = f.must
-    lon_cond = next(c for c in must if c.key == "longitude")
-    lon_width = lon_cond.range.lte - lon_cond.range.gte
-    assert lon_width > 1.5
 
 
 def test_time_filter_same_day():
@@ -204,3 +177,80 @@ async def test_failed_pairs_blocks_last_run_update(job):
         await job.run()
 
     mock_redis.set.assert_not_called()
+
+
+def test_new_thermal_observations_do_not_require_explosion_label():
+    assert all(c.key != "possible_explosion" for c in build_firms_filter(0).must)
+
+
+@pytest.mark.asyncio
+async def test_current_gdelt_event_is_joined_by_id_without_gkg_coordinates(job):
+    firms = MagicMock(
+        payload={
+            "latitude": 48.0,
+            "longitude": 35.0,
+            "acq_date": "2026-04-01",
+            "url": "https://firms.example/1",
+            "confidence": "nominal",
+        }
+    )
+    job._scroll_all = AsyncMock(side_effect=[[firms], []])
+    job._get_last_run_epoch = AsyncMock(return_value=0)
+    job._set_last_run = AsyncMock()
+    job._event_candidates = AsyncMock(
+        return_value=[
+            {
+                "event_id": "gdelt:event:1",
+                "latitude": 48.01,
+                "longitude": 35.01,
+                "event_date": "2026-04-01",
+                "time_basis": "indexed",
+                "codebook_type": "military.airstrike",
+            }
+        ]
+    )
+    job._write_proximity = AsyncMock(return_value=1)
+    await job.run()
+    job._event_candidates.assert_awaited_once()
+    job._write_proximity.assert_awaited_once()
+    assert job._write_proximity.await_args.kwargs["event_id"] == "gdelt:event:1"
+    assert job._scroll_all.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_proximity_write_rejects_a_zero_edge_acknowledgement(job):
+    client = AsyncMock()
+    response = MagicMock()
+    response.json.return_value = {
+        "errors": [],
+        "results": [
+            {"columns": ["written"], "data": [{"row": [0]}]},
+        ],
+    }
+    client.post.return_value = response
+    with pytest.raises(RuntimeError, match="not linked"):
+        await job._write_proximity(
+            client,
+            firms_url="f",
+            event_id="e",
+            score=0.5,
+            distance_km=1.0,
+            days_diff=0,
+            time_basis="indexed",
+        )
+
+
+@pytest.mark.asyncio
+async def test_candidates_require_current_admitted_derivations(job):
+    from config import Settings
+
+    settings = Settings()
+    job.settings.spatial_catalog_path = settings.spatial_catalog_path
+    job.settings.spatial_country_crosswalk_path = settings.spatial_country_crosswalk_path
+    job._graph_rows = AsyncMock(return_value=[])
+    await job._event_candidates(
+        None, {"acq_date": "2026-04-01", "latitude": 48.0, "longitude": 35.0}
+    )
+    _, statement, parameters = job._graph_rows.await_args.args
+    assert "l.spatial_derivation_revision IN $derivations" in statement
+    assert parameters["derivations"]

@@ -15,7 +15,9 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import Settings
 from feeds.provenance import dataset_provenance
+from graph_integrity.spatial_normalizer import load_active_normalization_index
 from qdrant_doctor.schema import validate_collection_schema
+from source_spatial import observation_refresh_fragment, project_feed_spatial
 
 log = structlog.get_logger(__name__)
 
@@ -100,12 +102,59 @@ class BaseCollector(ABC):
     async def _batch_upsert(self, points: list[PointStruct]) -> None:
         if not points:
             return
+        projected = []
+        for point in points:
+            if isinstance(point, PointStruct) and point.payload is not None:
+                index = load_active_normalization_index(
+                    self.settings.spatial_catalog_path,
+                    crosswalk_path=self.settings.spatial_country_crosswalk_path,
+                )
+                # Replace all projection-owned state, including stale optional
+                # precision/reason/geometry fields; retain source evidence intact.
+                source_payload = {
+                    key: value
+                    for key, value in point.payload.items()
+                    if not key.startswith("spatial_")
+                    and key
+                    not in {
+                        "geo",
+                        "country_iso3",
+                        "admin1_code",
+                        "admin2_code",
+                        "source_country_code",
+                        "source_country_code_system",
+                    }
+                }
+                payload = {**source_payload, **project_feed_spatial(point.payload, index)}
+                point = point.model_copy(update={"payload": payload})
+            projected.append(point)
         await asyncio.to_thread(
             self.qdrant.upsert,
             collection_name=self.settings.qdrant_collection,
-            points=points,
+            points=projected,
         )
         log.info("qdrant_batch_upserted", count=len(points))
+
+    async def _refresh_observation_location(self, payload: dict) -> None:
+        index = load_active_normalization_index(
+            self.settings.spatial_catalog_path,
+            crosswalk_path=self.settings.spatial_country_crosswalk_path,
+        )
+        fragment = observation_refresh_fragment(payload, index)
+        if fragment is None:
+            return
+        response = await self.http.post(
+            f"{self.settings.neo4j_http_url}/db/neo4j/tx/commit",
+            json={
+                "statements": [
+                    {"statement": fragment["cypher"], "parameters": fragment["parameters"]}
+                ]
+            },
+            auth=(self.settings.neo4j_user, self.settings.neo4j_password),
+        )
+        response.raise_for_status()
+        if response.json().get("errors"):
+            raise RuntimeError("mutable observation location refresh failed")
 
     async def _build_point(
         self, text: str, payload: dict, content_hash: str

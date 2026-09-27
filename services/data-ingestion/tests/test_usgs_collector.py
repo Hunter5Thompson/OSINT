@@ -183,3 +183,38 @@ async def test_usgs_config_skips_upsert(collector):
     assert any(
         c.args[0] == "extraction_skipped_config" for c in mock_err.call_args_list
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("written", [0, 1])
+async def test_proximity_uses_current_graph_contract_and_reports_actual_writes(collector, written):
+    event = collector._parse_features(SAMPLE_GEOJSON["features"])[0]
+
+    async def post(url, *, json, auth):
+        query = json["statements"][0]["statement"]
+        assert "[:DESCRIBES]" in query
+        assert "RETURN count(r) AS written" in query
+        response = MagicMock()
+        response.json.return_value = {
+            "errors": [],
+            "results": [
+                {"columns": ["written"], "data": [{"row": [written]}]},
+            ],
+        }
+        return response
+
+    collector.http.post = post
+    assert await collector._write_near_test_site(event) == written
+
+
+@pytest.mark.asyncio
+async def test_existing_qdrant_point_still_retries_proximity_edge(collector):
+    collector._ensure_collection = AsyncMock()
+    collector._dedup_check = AsyncMock(return_value=True)
+    collector._batch_upsert = AsyncMock()
+    collector._write_near_test_site = AsyncMock(return_value=1)
+    response = MagicMock()
+    response.json.return_value = SAMPLE_GEOJSON
+    collector.http.get = AsyncMock(return_value=response)
+    await collector.collect()
+    collector._write_near_test_site.assert_awaited_once()

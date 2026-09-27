@@ -58,57 +58,127 @@ Roll back backend and intelligence together to the previously recorded matching
 image revisions. Rolling back only one side recreates an unverified mixed-version
 pair. After rollback, run `./odin.sh smoke` again before resuming traffic.
 
-## Catalog rotation: PR #119 review, 2026-09-27
+## Catalog rotation and cross-store re-normalization (2026-09-27)
 
-**Not a deployment approval.** The
-[source and graph audit](../reports/2026-09-27-spatial-source-graph-audit.md)
-found stored non-conflicting assignments that the candidate normalizer now
-classifies as conflicts while still accepting their old derivation revisions.
-Resolve that semantic compatibility issue before activating this candidate.
-Passing catalog-loader tests does not close this gate.
+The [audit](../reports/2026-09-27-spatial-source-graph-audit.md) found unsafe
+compatibility in the unpublished `a8e3a4af02d0` candidate. The corrected candidate
+is `spatial-v1-2ff6da288a58`. Keep the actual former live revision served:
 
-The reviewed pointer transition is:
-
-| Role | Before | Candidate |
+| Role | Before | Corrected candidate |
 |---|---|---|
-| Active | `spatial-v1-0180e188358c` | `spatial-v1-a8e3a4af02d0` |
+| Active | `spatial-v1-0180e188358c` | `spatial-v1-2ff6da288a58` |
 | Previous served | `spatial-v1-e76a16bff799` | `spatial-v1-0180e188358c` |
 
-Derivation compatibility and served `SpatialScopeRefV1` revisions are separate
-contracts. Requests pinned to `e76a16bff799` are rejected after this transition,
-even if some materialized derivations remain compatible.
+### Compatibility contract
 
-Once the semantic compatibility gate has been closed:
+1. **Reference resolution:** only the two pointer revisions accept
+   `SpatialScopeRefV1`. The retired `e76…` reference returns an explicit resolution
+   error. Existing frontend history needs **Aktiven Kartenstand laden**; a reload
+   alone is insufficient. Saved external queries must explicitly resolve a served
+   reference; never silently replace the pinned context.
+2. **Assignment admission:** a scope revision binds the complete resolver context
+   (all assignment geometry, scope paths, boundary policy, crosswalk and resolver
+   contract). Adding a neighboring polygon can invalidate an unchanged country's
+   assignments. Automatic compatibility requires the same derivation. Labels and
+   display-only LOD changes do not invalidate it. Explicit reviewed compatibility
+   declarations remain a separate operator assertion, never an inferred property.
+3. **This transition:** all 220 previous scope derivations become incompatible.
+   No promise that the old Neo4j or Qdrant revisions remain admissible is valid.
+   Serving the old catalog supports old pinned queries; it does not grant its
+   assignments admission under the new catalog.
+4. **Qdrant:** projection revision binds the same scope revision map. Rebuild from
+   stored source evidence, not old tokens, display countries or theatre boxes.
+   Missing/malformed raw evidence withdraws admission. GDELT requires an exact
+   `linked_event_ids` join; NotebookLM remains `about` only. Legacy points without
+   raw audits need a separate source replay to recover evidence.
+5. **Readers:** the optional `resolution_context_sha256` manifest field preserves
+   legacy canonical bytes. Old readers reject new manifests. Deploy backend,
+   intelligence, collectors and standalone backfills together; their in-process
+   catalog caches require restarting these consumers.
 
-1. Record the exact catalog, source-lock, crosswalk and image revisions for
-   backend, intelligence and every ingestion/backfill consumer. Coordinate the
-   running GDELT backfill explicitly; a restarted scheduler does not update a
-   separate backfill process. Avoid a period in which unvalidated old assignments
-   are accepted under the new catalog.
-2. Prepare separate, fingerprinted dry-run reports for Neo4j and Qdrant with the
-   agreed candidate inputs. The Neo4j `graph_integrity reenrich-spatial-scope`
-   command does not update Qdrant. Confirm the actual planned work: this candidate
-   currently creates 165 full-lane jobs per selected Neo4j lane, and its summed
-   report totals do not represent unique records across jobs.
-3. Apply only the reviewed reports using each lane's supported checkpoint and
-   approval flow. Recheck source drift before application. Measure newly resolved,
-   newly conflicting, unresolved and remaining stale records separately; do not
-   count a compatible revision token as semantic revalidation.
-4. Treat aircraft `name`/`region` cleanup as a separate migration after spatial
-   normalization. Export exact before-values and property presence keyed by
-   `loc_key`, retain the responsible historical rule revision, and protect
-   rollback from concurrent changes. A country retained on a conflict record
-   must not become an apparently verified display name. The current spatial
-   batch writer does not modify these legacy display fields.
-5. Publish the agreed pointer and refresh all long-lived consumers in the
-   coordinated cutover. Verify their effective revisions and a real scoped query
-   before resuming normal traffic.
-6. For expired browser references, use **Aktiven Kartenstand laden** in the
-   existing recovery banner. Router/history state stores
-   `odinSpatialCatalogRevision`; a browser reload alone is not a guaranteed
-   migration. External saved queries must resolve their scope against a served
-   revision explicitly. Do not silently replace their pinned context.
-7. Verify both served revisions, visible rejection of the retired revision,
-   explicit recovery, and consistent Neo4j/Qdrant filtering. Coordinate rollback
-   of the reader contract, pointer and materialized assignments: rolling back
-   only the pointer does not restore old database property values.
+### Prepare and review
+
+The checked-in [plan](../reports/2026-09-27-spatial-renormalization-plan.json) is
+an **offline job plan, not an approved live dry-run**. It contains five Neo4j lane
+scans and seven explicit Qdrant source filters. Generate a fresh copy from a full
+checkout using the locked ingestion environment (run from `services/data-ingestion`):
+
+```bash
+uv run python ../../scripts/prepare_spatial_renormalization.py \
+  --previous ../backend/data/spatial/catalogs/spatial-v1-0180e188358c \
+  --target ../backend/data/spatial/catalogs/spatial-v1-2ff6da288a58 \
+  --output /data/odin-backups/spatial-cutover-plan.json
+```
+
+Add `--preview` to read both configured stores using Settings/environment credentials.
+The script never applies writes or activates a pointer, uses fresh full-lane scans,
+and refuses to overwrite an existing output. It joins the existing Neo4j batch
+engine and Qdrant preview engine with the same deterministic source projector.
+
+1. Pause affected collectors **and** the independent GDELT backfill, plus incident
+   writers. Drain scoped queries during the materialized cutover. There is no
+   cross-database transaction or compare-and-swap protection against concurrent
+   writers; fingerprints do not replace this maintenance boundary.
+2. Take a durable Neo4j backup and Qdrant snapshot including vectors. Record image,
+   catalog, source-lock and crosswalk hashes. Check fresh free disk space on `/data`
+   before multi-GB snapshots. Verify that the backups can be restored before apply.
+3. Run the joint read-only preview. Review resolved, conflicting, unsupported,
+   missing-evidence and stale coverage separately for each source. A successful
+   job with empty tokens is not evidence of complete source coverage.
+4. Neo4j reports fingerprint ordered raw rows **and** planned updates. Qdrant reports
+   include IDs, payloads, dense/named/sparse vectors and proposed projections.
+   Identical counts with changed input are rejected. Retain the exact reports.
+
+### Apply in the coordinated maintenance window
+
+Use the existing Neo4j CLI with `SPATIAL_CATALOG_PATH` set to the candidate's
+immutable directory. Generate its own dry-run envelope (the nested `neo4j_preview`
+from the joint tool is the same engine, but whole joint output is not an approval):
+
+```bash
+SPATIAL_CATALOG_PATH=../backend/data/spatial/catalogs/spatial-v1-2ff6da288a58 \
+uv run python -m graph_integrity.cli reenrich-spatial-scope \
+  --previous-catalog ../backend/data/spatial/catalogs/spatial-v1-0180e188358c \
+  --checkpoint /data/odin-backups/spatial-neo4j-checkpoint.json \
+  --dry-run --report-out /data/odin-backups/spatial-neo4j-preview.json
+```
+
+After review, use the same command with `--apply`,
+`--approved-report /data/odin-backups/spatial-neo4j-preview.json`, and a separate
+`--report-out`. A fresh run starts with a new checkpoint file. After interruption,
+Neo4j requires a fresh approved dry-run for the remaining checkpoint suffix; retain
+all earlier applied reports. Scope maps are hashed into grouped checkpoint keys,
+so old per-revision jobs cannot accidentally resume this transition.
+
+Qdrant uses `rag.spatial_reenrich.apply_spatial_reenrichment`, explicit lane filters
+from the plan, `spatial_reprojection.reproject_payload` as projector and a durable
+`JsonCheckpointStore`. Supply each lane's reviewed full-lane report, not the joint
+envelope. Its existing approval fingerprint is retained across resumed pages.
+There is deliberately no joint apply switch: this change prepares the cutover;
+both store applies and their verification remain operator steps.
+
+Neo4j conflict/unresolved transitions clear obsolete assignment fields. The aircraft
+lane also derives `name` from a non-conflicting country or `unresolved`, removes
+`region`, and saves `spatial_previous_name`, `spatial_previous_region` and
+`spatial_label_backup_taken` once. In Neo4j, absent properties and null are equivalent;
+these saved values preserve exact label presence. They do not replace the full backup
+needed to restore all spatial properties. Raw coordinates and source codes remain.
+
+Only after both stores are verified publish coverage, activate the coordinated
+release and pointer, restart all consumers, test both served revisions and a real
+scoped query, then resume traffic. Old pinned clients can have incomplete coverage
+while records carry new derivations; do not promise lossless old-session results.
+
+### Rollback and evidence limits
+
+Rollback restores matching images, pointer **and materialized store snapshots**
+while writers remain paused. A pointer rollback alone cannot restore erased fields
+or old token arrays. Label-only rollback may restore the saved label values only
+inside the same protected maintenance boundary; do not overwrite newer observations.
+
+The source lock still uses Natural Earth 1:110m. Complete containment means all
+176 current country scopes, not every small state or survey-grade borders. Finer
+geometry and new GDELT aliases require reviewed source/boundary-policy inputs.
+UCDP records without precise `where_prec=1` remain non-filterable pending source
+replay; GDACS projects its reported centroid, not the complete affected area.
+Military-aircraft observations remain graph-only; this change adds no Qdrant writer.

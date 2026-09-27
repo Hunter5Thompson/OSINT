@@ -2,7 +2,7 @@
 
 Collects natural events (wildfires, volcanoes, storms, floods, etc.)
 and upserts to Qdrant. Mutable events: first-seen goes through Pipeline,
-updates are Qdrant-only to avoid Neo4j duplicates.
+updates refresh the existing source Location without creating duplicate Events.
 """
 
 from __future__ import annotations
@@ -118,15 +118,15 @@ class EONETCollector(BaseCollector):
                     process_item,
                 )
 
-                event_url = (
-                    f"https://eonet.gsfc.nasa.gov/api/v3/events/{event['eonet_id']}"
-                )
+                event_url = f"https://eonet.gsfc.nasa.gov/api/v3/events/{event['eonet_id']}"
                 try:
                     await process_item(
                         title=event["title"],
                         text=description,
                         url=event_url,
                         source="eonet",
+                        observed_at=event.get("event_date"),
+                        source_evidence={**event, "source": "eonet"},
                         settings=self.settings,
                         redis_client=self.redis,
                     )
@@ -148,6 +148,11 @@ class EONETCollector(BaseCollector):
                     log.warning("eonet_pipeline_failed", event_id=event["eonet_id"])
                 new_count += 1
             else:
+                try:
+                    await self._refresh_observation_location({**event, "source": "eonet"})
+                except Exception:
+                    log.exception("eonet_location_refresh_failed", event_id=event["eonet_id"])
+                    continue
                 update_count += 1
 
             # Mutable events use manual PointStruct (can't use _build_point

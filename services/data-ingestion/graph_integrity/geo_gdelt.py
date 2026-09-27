@@ -2,6 +2,7 @@
 landed (2026-06-14) are geoless in Neo4j even though the RAW export carries valid
 action_geo, so re-fetch the RAW export slices, parse action_geo, and write
 OCCURRED_AT for those pre-existing events. Idempotent + resumable (per-slice)."""
+
 from __future__ import annotations
 
 import tempfile
@@ -12,8 +13,16 @@ from typing import Any
 import httpx
 import structlog
 
+from config import Settings
 from gdelt_raw.ids import build_event_id, build_location_id
 from gdelt_raw.parser import parse_events
+from graph_integrity.spatial_normalizer import (
+    CountryCodeSystem,
+    RawLocationIdentity,
+    load_active_normalization_index,
+    normalize_location,
+    spatial_property_parameters,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -33,6 +42,17 @@ WHERE NOT (ev)-[:OCCURRED_AT]->(:Location)
 MERGE (l:Location {loc_key: row.loc_key})
   ON CREATE SET l.name = row.name, l.country = row.country,
                 l.lat = row.lat, l.lon = row.lon, l.geo_basis = 'gdelt_actiongeo'
+SET l.geo = point({latitude: row.lat, longitude: row.lon}),
+    l.source_country_code = row.source_country_code,
+    l.source_country_code_system = row.source_country_code_system,
+    l.country_iso3 = row.country_iso3, l.country_scope_key = row.country_scope_key,
+    l.admin1_code = row.admin1_code, l.admin2_code = row.admin2_code,
+    l.admin1_scope_key = row.admin1_scope_key, l.admin2_scope_key = row.admin2_scope_key,
+    l.spatial_basis = row.spatial_basis, l.spatial_precision = row.spatial_precision,
+    l.spatial_catalog_revision = row.spatial_catalog_revision,
+    l.spatial_derivation_revision = row.spatial_derivation_revision,
+    l.spatial_conflict = row.spatial_conflict,
+    l.spatial_conflict_scope_keys = row.spatial_conflict_scope_keys
 MERGE (ev)-[:OCCURRED_AT]->(l)
 RETURN count(ev) AS count
 """
@@ -112,6 +132,11 @@ async def run(
     Returns the number of matching Neo4j events counted or written, not the
     number of geo-bearing rows in the raw export slice.
     """
+    settings = Settings()
+    index = load_active_normalization_index(
+        settings.spatial_catalog_path,
+        crosswalk_path=settings.spatial_country_crosswalk_path,
+    )
     count = 0
     skipped = 0
     for slice_id in slice_ids_from_parquet(parquet_base):
@@ -124,6 +149,22 @@ async def run(
             log.warning("gdelt_geo_slice_skipped", slice_id=slice_id, error=str(exc))
             continue
         geo_rows = [geo for raw in rows if (geo := build_geo_row(raw)) is not None]
+        normalized_rows = []
+        for row in geo_rows:
+            try:
+                raw = RawLocationIdentity(
+                    country_code=row["country"] or None,
+                    country_code_system=CountryCodeSystem.GDELT_GEC if row["country"] else None,
+                    latitude=row["lat"],
+                    longitude=row["lon"],
+                    source_country_name=row["name"] or None,
+                )
+            except ValueError:
+                continue
+            normalized_rows.append(
+                {**row, **spatial_property_parameters(normalize_location(raw, index))}
+            )
+        geo_rows = normalized_rows
         if not geo_rows:
             continue
         query = COUNT_EXISTING_GEOLESS if dry_run else BACKFILL_OCCURRED_AT

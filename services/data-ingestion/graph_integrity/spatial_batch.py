@@ -29,11 +29,12 @@ SUPPORTED_LOCATION_LANES = (
     "gdelt_raw",
     "military_aircraft",
     "rss_pipeline",
+    "sensor_observation",
 )
 
 _FETCH_PROJECTION = """
 RETURN l.loc_key AS record_id,
-       l.name AS name, l.country AS country,
+       l.name AS name, l.region AS region, l.country AS country,
        l.lat AS lat, l.lon AS lon, l.geo_basis AS geo_basis,
        l.source_country_code AS source_country_code,
        l.source_country_code_system AS source_country_code_system,
@@ -54,6 +55,12 @@ LIMIT $batch_size
 """
 
 FETCH_LOCATION_BATCHES = {
+    "sensor_observation": """
+MATCH (l:Location)
+WHERE l.loc_key STARTS WITH 'sensor-observation:'
+  AND ($cursor IS NULL OR l.loc_key > $cursor)
+"""
+    + _FETCH_PROJECTION,
     "backend_incident": """
 MATCH (l:Location)
 WHERE l.loc_key STARTS WITH 'incident:'
@@ -82,6 +89,11 @@ WHERE (l.loc_key STARTS WITH 'centroid:'
 }
 
 COUNT_UNSTABLE_LOCATION_RECORDS = {
+    "sensor_observation": """
+MATCH (l:Location)
+WHERE l.loc_key IS NULL AND l.geo_basis = 'sensor_coordinate'
+RETURN count(l) AS count
+""",
     "backend_incident": """
 MATCH (l:Location)
 WHERE l.loc_key IS NULL AND l.geo_basis = 'incident_report'
@@ -108,6 +120,15 @@ RETURN count(l) AS count
 APPLY_SPATIAL_BATCH = """
 UNWIND $rows AS row
 MATCH (l:Location {loc_key: row.record_id})
+FOREACH (_ IN CASE WHEN row.aircraft_cleanup = true THEN [1] ELSE [] END |
+  FOREACH (__ IN CASE WHEN l.spatial_label_backup_taken IS NULL THEN [1] ELSE [] END |
+    SET l.spatial_label_backup_taken = true,
+        l.spatial_previous_name = row.previous_name,
+        l.spatial_previous_region = row.previous_region
+  )
+  SET l.name = row.aircraft_name
+  REMOVE l.region
+)
 FOREACH (_ IN CASE WHEN row.action = 'resolved' THEN [1] ELSE [] END |
   SET l.source_country_code = row.source_country_code,
       l.source_country_code_system = row.source_country_code_system,
@@ -128,10 +149,13 @@ FOREACH (_ IN CASE WHEN row.action = 'resolved' THEN [1] ELSE [] END |
         ELSE point({longitude: row.longitude, latitude: row.latitude})
       END
 )
-FOREACH (_ IN CASE WHEN row.action = 'conflict' THEN [1] ELSE [] END |
+FOREACH (_ IN CASE WHEN row.action IN ['conflict', 'unresolved'] THEN [1] ELSE [] END |
   SET l.spatial_catalog_revision = row.spatial_catalog_revision,
       l.spatial_derivation_revision = row.spatial_derivation_revision,
-      l.spatial_conflict = true,
+      l.spatial_conflict = (row.action = 'conflict'),
+      l.country_iso3 = null, l.admin1_code = null, l.admin2_code = null,
+      l.country_scope_key = null, l.admin1_scope_key = null, l.admin2_scope_key = null,
+      l.spatial_basis = null, l.spatial_precision = null,
       l.spatial_conflict_scope_keys = row.spatial_conflict_scope_keys
 )
 RETURN count(l) AS updated
@@ -150,15 +174,20 @@ class SpatialBatchClient(Protocol):
 class BatchJob:
     job_kind: JobKind
     lane: str
-    target_derivation_revision: str
+    target_derivation_revision: str | None
     batch_size: int = 500
     target_scope_keys: tuple[str, ...] = ()
+    target_scope_revisions: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if self.lane not in FETCH_LOCATION_BATCHES:
             raise ValueError(f"unsupported spatial lane: {self.lane}")
-        if not self.target_derivation_revision:
-            raise ValueError("target derivation revision is required")
+        if bool(self.target_derivation_revision) == bool(self.target_scope_revisions):
+            raise ValueError("exactly one revision or scope revision map is required")
+        if tuple(sorted(set(self.target_scope_revisions))) != self.target_scope_revisions:
+            raise ValueError("scope revisions must be unique and sorted")
+        if len(dict(self.target_scope_revisions)) != len(self.target_scope_revisions):
+            raise ValueError("scope revision keys must be unique")
         if not 1 <= self.batch_size <= 10_000:
             raise ValueError("batch size must be between 1 and 10000")
         if tuple(sorted(set(self.target_scope_keys))) != self.target_scope_keys:
@@ -166,7 +195,13 @@ class BatchJob:
 
     @property
     def checkpoint_key(self) -> str:
-        return "|".join((self.job_kind, self.lane, self.target_derivation_revision))
+        target = self.target_derivation_revision
+        if target is None:
+            digest = hashlib.sha256(
+                _canonical_json(self.target_scope_revisions).encode()
+            ).hexdigest()
+            target = f"scope-map-v2-{digest}"
+        return "|".join((self.job_kind, self.lane, target))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -174,6 +209,7 @@ class BatchJob:
             "lane": self.lane,
             "target_derivation_revision": self.target_derivation_revision,
             "target_scope_keys": list(self.target_scope_keys),
+            "target_scope_revisions": dict(self.target_scope_revisions),
             "batch_size": self.batch_size,
         }
 
@@ -276,6 +312,7 @@ class _Report:
     country_addressable: int = 0
     country_scoped: int = 0
     unstable_record_id_count: int = 0
+    input_fingerprint: str = ""
     by_source: Counter[str] = field(default_factory=Counter, init=False)
     by_code_system: Counter[str] = field(default_factory=Counter, init=False)
 
@@ -306,6 +343,7 @@ class _Report:
             "writes_planned": self.writes_planned,
             "writes_applied": self.writes_applied,
             "unstable_record_id_count": self.unstable_record_id_count,
+            "input_fingerprint": self.input_fingerprint,
             "by_source": dict(sorted(self.by_source.items())),
             "by_code_system": dict(sorted(self.by_code_system.items())),
             "country_addressable": self.country_addressable,
@@ -339,6 +377,7 @@ async def run_spatial_batch(
     report.unstable_record_id_count = _single_count(
         await client.run(COUNT_UNSTABLE_LOCATION_RECORDS[job.lane])
     )
+    inputs = hashlib.sha256()
     while True:
         rows = await client.run(
             FETCH_LOCATION_BATCHES[job.lane],
@@ -351,6 +390,8 @@ async def run_spatial_batch(
         for row in rows:
             _account_row(report, row, job.lane)
             update = _plan_update(row, job, spatial_index, report)
+            inputs.update(_canonical_json({"input": row, "update": update}).encode())
+            inputs.update(b"\n")
             if update is not None:
                 updates.append(update)
 
@@ -368,6 +409,7 @@ async def run_spatial_batch(
             checkpoints.save(job, cursor)
         if len(rows) < job.batch_size:
             break
+    report.input_fingerprint = inputs.hexdigest()
     return report.to_dict()
 
 
@@ -404,6 +446,33 @@ def _plan_update(
     spatial_index: SpatialNormalizationIndex,
     report: _Report,
 ) -> dict[str, Any] | None:
+    update = _plan_normalization(row, job, spatial_index, report)
+    if job.lane != "military_aircraft":
+        return update
+    resolved = update is not None and update["action"] == "resolved"
+    country = update.get("country_iso3") if resolved else None
+    if update is None and row.get("spatial_derivation_revision") is not None:
+        country = row.get("country_iso3") if not row.get("spatial_conflict") else None
+    name = country or "unresolved"
+    if row.get("name") == name and row.get("region") is None:
+        return update
+    if update is None:
+        update = {"record_id": row["record_id"], "action": "label_only"}
+    return {
+        **update,
+        "aircraft_cleanup": True,
+        "aircraft_name": name,
+        "previous_name": row.get("name"),
+        "previous_region": row.get("region"),
+    }
+
+
+def _plan_normalization(
+    row: dict[str, Any],
+    job: BatchJob,
+    spatial_index: SpatialNormalizationIndex,
+    report: _Report,
+) -> dict[str, Any] | None:
     try:
         raw = _raw_identity(row, job.lane)
     except (TypeError, ValueError, ValidationError):
@@ -411,7 +480,7 @@ def _plan_update(
             report.invalid_coordinate += 1
         else:
             report.unresolved += 1
-        return None
+        return _revoke_assignment(row, spatial_index)
 
     result = normalize_location(raw, spatial_index)
     if result.country_scope_key is not None:
@@ -434,7 +503,7 @@ def _plan_update(
 
     if result.status == "unresolved":
         report.unresolved += 1
-        return None
+        return _revoke_assignment(row, spatial_index)
     if result.status == "conflict":
         if _conflict_is_current(row, result):
             report.already_normalized += 1
@@ -461,6 +530,32 @@ def _plan_update(
         "latitude": result.latitude,
         "longitude": result.longitude,
         **spatial_property_parameters(result),
+    }
+
+
+def _revoke_assignment(
+    row: dict[str, Any],
+    index: SpatialNormalizationIndex,
+) -> dict[str, Any] | None:
+    if not any(
+        row.get(key) is not None
+        for key in (
+            "country_scope_key",
+            "admin1_scope_key",
+            "admin2_scope_key",
+            "spatial_derivation_revision",
+            "country_iso3",
+            "admin1_code",
+            "admin2_code",
+        )
+    ):
+        return None
+    return {
+        "record_id": row["record_id"],
+        "action": "unresolved",
+        "spatial_catalog_revision": index.catalog_revision,
+        "spatial_derivation_revision": None,
+        "spatial_conflict_scope_keys": [],
     }
 
 
@@ -535,12 +630,15 @@ def _has_invalid_coordinate(row: dict[str, Any], lane: str) -> bool:
 
 
 def _is_source_null_island(row: dict[str, Any], lane: str) -> bool:
-    if lane not in {"gdelt_raw", "military_aircraft", "backend_incident"}:
+    if lane not in {"gdelt_raw", "military_aircraft", "backend_incident", "sensor_observation"}:
         return False
     return row.get("lat") == 0.0 and row.get("lon") == 0.0
 
 
 def _targets_job(result: SpatialNormalizationResult, job: BatchJob) -> bool:
+    if job.target_scope_revisions:
+        finest = result.admin2_scope_key or result.admin1_scope_key or result.country_scope_key
+        return dict(job.target_scope_revisions).get(finest) == result.spatial_derivation_revision
     if result.spatial_derivation_revision != job.target_derivation_revision:
         return False
     if not job.target_scope_keys:
@@ -578,6 +676,19 @@ def _conflict_is_current(
     return (
         row.get("spatial_catalog_revision") == result.spatial_catalog_revision
         and row.get("spatial_derivation_revision") is None
+        and not any(
+            row.get(key) is not None
+            for key in (
+                "country_iso3",
+                "admin1_code",
+                "admin2_code",
+                "country_scope_key",
+                "admin1_scope_key",
+                "admin2_scope_key",
+                "spatial_basis",
+                "spatial_precision",
+            )
+        )
         and row.get("spatial_conflict") is True
         and (row.get("spatial_conflict_scope_keys") or [])
         == list(result.spatial_conflict_scope_keys)

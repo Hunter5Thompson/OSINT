@@ -1989,3 +1989,31 @@ Observation-Producer.
 # - Nächster Schritt: A1 aus dem Bericht mit Regressionen und abgestimmtem
 #   Re-Normalisierungs-/Cutover-Vertrag schließen, erst dann Deploy entscheiden.
 # - Kein Push, Merge, Neustart, Pointerwechsel oder Datenbank-Apply ausgeführt.
+
+# Session-Notes — 2026-09-27: Spatial-Audit-Fixes und Re-Normalisierung
+# - Umsetzung: docs/reports/2026-09-27-spatial-audit-remediation.md
+# - TDD: Regressionen zuerst rot für globalen Resolver-Kontext, Nachbargeometrie,
+#   Quellenadapter, Konfliktentzug, USGS-Kante, FIRMS-Event-Join, Drift-Fingerprints,
+#   Hybrid-Vektoren, Label-Backup und den gemeinsamen Cutover-Plan.
+# - Neuer unveränderlicher Kandidat spatial-v1-2ff6da288a58: 220 Scopes,
+#   176 Country-Containments, 438 geprüfte Assets / 6.833.332 Bytes. Zweiter
+#   Offline-Build aus gesperrtem Cache erzeugt dieselbe Revision.
+# - Alle 220 alten Scope-Derivationen werden entzogen; Pointer im Branch bedient
+#   2ff6… + tatsächlichen Live-Vorgänger 0180…. Alte Katalogdateien unverändert.
+# - Fünf Neo4j-Lane-Scans statt je einem Scan pro Derivation; exakte Input-/Update-
+#   Fingerprints. Qdrant-Fingerprints binden auch Payload und Dense-/Sparse-Vektoren.
+# - Strukturierte Quellen USGS/FIRMS/UCDP/EONET/GDACS über gemeinsame Projektion;
+#   UCDP nur mit explizitem where_prec=1. NLM bleibt about, GDELT exakter Event-Join.
+# - Plan: docs/reports/2026-09-27-spatial-renormalization-plan.json;
+#   scripts/prepare_spatial_renormalization.py bietet Plan + optional nur lesende
+#   Previews beider Stores. Offline-Plan ist keine Live-Dry-Run-Freigabe.
+# - Vollständige Tests: data-ingestion 1573 passed, 1 bestehender Skip,
+#   17 bestehende Deselects; backend 593 passed (bestehende Deprecation-Warnung);
+#   intelligence 488 passed. Ruff, Backend-Mypy (90 Dateien), diff --check grün.
+# - Sechs parametrisierte Cypher-Templates per EXPLAIN am laufenden Neo4j geprüft;
+#   keine Statements ausgeführt. Bestehende Service-venvs mit Worktree-CWD genutzt,
+#   kein frischer CI-/Container-Build und kein Live-Apply behauptet.
+# - Quellgrenzen A6 bleiben explizit: Natural Earth 1:110m, keine geratenen GDELT-
+#   Aliase; fehlende Rohbelege/Präzision benötigen separaten Source-Replay.
+# - Kein Push/Merge/Deploy, Neustart oder Datenbank-Apply; Haupt-Checkout und seine
+#   fremden/untracked Dateien bleiben erhalten. Operator-Ablauf im Runbook aktualisiert.

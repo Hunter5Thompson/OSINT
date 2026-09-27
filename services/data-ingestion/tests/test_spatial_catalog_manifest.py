@@ -318,19 +318,19 @@ def _ukraine(manifest: CatalogManifest):
     return next(s for s in manifest.scopes if s.scope.key == "country:UKR")
 
 
-def test_adding_containment_to_code_only_scope_keeps_prior_revisions_compatible() -> None:
-    """Assignments under a code-only derivation came from the unchanged crosswalk;
-    adding coordinate containment must not orphan them on the read path."""
+def test_adding_containment_invalidates_prior_coordinate_checks() -> None:
+    """A source code may conflict with coordinates only after coverage expands."""
     code_only = build_manifest(_draft_with_ukraine(containment_asset=None))
     extended = build_manifest(
-        _draft_with_ukraine(containment_asset=CONTAINMENT_A), previous=code_only,
+        _draft_with_ukraine(containment_asset=CONTAINMENT_A),
+        previous=code_only,
     )
 
     before, after = _ukraine(code_only), _ukraine(extended)
     assert after.derivation_revision != before.derivation_revision
-    assert before.derivation_revision in after.compatible_derivation_revisions
-    assert after.compatible_derivation_revisions[0] == after.derivation_revision
-    assert after.carry_forward_from == code_only.catalog_revision
+    assert before.derivation_revision not in after.compatible_derivation_revisions
+    assert after.compatible_derivation_revisions == (after.derivation_revision,)
+    assert after.carry_forward_from is None
 
 
 def test_changed_containment_geometry_is_not_silently_compatible() -> None:
@@ -354,3 +354,32 @@ def test_containment_extension_with_changed_crosswalk_is_not_compatible() -> Non
     assert _ukraine(code_only).derivation_revision not in (
         _ukraine(extended).compatible_derivation_revisions
     )
+
+
+def test_neighbor_containment_changes_invalidate_an_unchanged_country() -> None:
+    draft = _draft_with_ukraine(containment_asset=CONTAINMENT_A)
+    poland = _scope_input(
+        _node("country:POL", ScopeKind.COUNTRY, "world", children_available=False),
+        ("world", "country:POL"),
+    )
+    before = build_manifest(draft.model_copy(update={"scopes": (*draft.scopes, poland)}))
+    changed = _draft_with_ukraine(containment_asset=CONTAINMENT_B)
+    after = build_manifest(
+        changed.model_copy(update={"scopes": (*changed.scopes, poland)}),
+        previous=before,
+    )
+    old = next(s for s in before.scopes if s.scope.key == "country:POL")
+    new = next(s for s in after.scopes if s.scope.key == "country:POL")
+    assert old.derivation_revision != new.derivation_revision
+    assert old.derivation_revision not in new.compatible_derivation_revisions
+
+
+def test_legacy_manifest_bytes_are_preserved_when_reading() -> None:
+    from pathlib import Path
+
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "backend/data/spatial/catalogs/spatial-v1-0180e188358c/manifest.json"
+    )
+    raw = path.read_bytes()
+    assert canonical_manifest_bytes(CatalogManifest.model_validate_json(raw)) == raw

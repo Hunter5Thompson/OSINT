@@ -2,7 +2,7 @@
   "contract_version": 1,
   "semantics": {
     "dry_run_writes": 0,
-    "apply_requires": "approved-complete-full-lane-dry-run",
+    "apply_requires": "approved-complete-dry-run",
     "checkpoint_after": "complete-confirmed-batch",
     "report_fingerprint": "sha256-canonical-json-excluding-self"
   },
@@ -17,7 +17,8 @@
       "job_key",
       "last_record_id"
     ],
-    "cursor_semantics": "last-confirmed-record-id"
+    "cursor_semantics": "last-confirmed-record-id",
+    "approval_scan": "full-lane-on-fresh-checkpoint; fresh-approved-suffix-on-resume"
   },
   "qdrant_plan07a": {
     "checkpoint_schema_version": 1,
@@ -65,6 +66,15 @@
       "projected_filterable_rate"
     ],
     "report_schema_version": 1,
-    "report_cursor_range": "start-inclusive-scan-suffix-to-end"
+    "report_cursor_range": "start-inclusive-scan-suffix-to-end",
+    "approval_input": "sha256-ordered-point-id-payload-vector-and-projection",
+    "approval_scan": "full-lane-preview; same-approved-fingerprint-on-resume"
+  },
+  "neo4j_grouped_reenrichment_v2": {
+    "checkpoint_target": "scope-map-v2-sha256-canonical-sorted-scope-revision-pairs",
+    "scan": "one-per-lane",
+    "approval_input": "sha256-ordered-raw-rows-and-proposed-updates",
+    "resume": "review-fresh-suffix-dry-run-with-durable-cursor",
+    "aircraft_labels": "preserve-before-state-once; name=resolved-country-or-unresolved; remove-region"
   }
 }

@@ -16,10 +16,13 @@ def test_new_derivation_revision_schedules_each_affected_lane() -> None:
 
     jobs = plan_reenrichment_jobs(previous, current, batch_size=17)
 
-    assert {(job.lane, job.target_derivation_revision) for job in jobs} == {
+    assert {
+        (job.lane, dict(job.target_scope_revisions)["admin1:iso3166-2:UA-30"]) for job in jobs
+    } == {
         ("gdelt_raw", "derive-admin-b"),
         ("military_aircraft", "derive-admin-b"),
         ("backend_incident", "derive-admin-b"),
+        ("sensor_observation", "derive-admin-b"),
     }
     assert all(job.job_kind == "reenrichment" for job in jobs)
     assert all(job.batch_size == 17 for job in jobs)
@@ -46,6 +49,7 @@ def test_country_revision_schedules_country_only_rss_lane_too() -> None:
         "rss_pipeline",
         "military_aircraft",
         "backend_incident",
+        "sensor_observation",
     }
 
 
@@ -66,3 +70,16 @@ async def test_carry_forward_run_emits_complete_zero_job_report() -> None:
     assert report["job_count"] == 0
     assert report["totals"]["writes_planned"] == 0
     assert report["report_fingerprint"] == report_fingerprint(report)
+
+
+def test_changed_countries_require_only_one_scan_per_lane() -> None:
+    jobs = plan_reenrichment_jobs(
+        {"country:UKR": "old-ua", "country:POL": "old-pl"},
+        {"country:UKR": "new-ua", "country:POL": "new-pl"},
+        lanes=("gdelt_raw",),
+    )
+    assert len(jobs) == 1
+    assert dict(jobs[0].target_scope_revisions) == {
+        "country:UKR": "new-ua",
+        "country:POL": "new-pl",
+    }
