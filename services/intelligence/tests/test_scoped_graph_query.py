@@ -6,7 +6,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agents.tools.graph_query import query_knowledge_graph, set_graph_client
+from agents.tools.graph_query import (
+    execute_scoped_graph_query,
+    query_knowledge_graph,
+    set_graph_client,
+)
 from agents.tools.graph_templates import SCOPED_TEMPLATES
 from spatial import (
     RetrievalSpatialRelation,
@@ -186,4 +190,19 @@ async def test_about_relation_is_unsupported_before_scoped_occurrence_query() ->
     assert marker is not None and marker.status == "unsupported"
     assert marker.detail_code == "spatial-relation-not-allowlisted"
     assert research.startswith("SPATIAL_SCOPE_UNSUPPORTED")
+    client.run_query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_invalid_scoped_template_limit_is_rejected_before_database_access() -> None:
+    client = AsyncMock()
+
+    result = await execute_scoped_graph_query(
+        "event_timeline",
+        {"location": "Kyiv", "limit": True},
+        _token(ScopeKind.COUNTRY),
+        graph_client=client,
+    )
+
+    assert "rejected" in result.lower()
     client.run_query.assert_not_awaited()

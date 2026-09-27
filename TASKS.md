@@ -12,6 +12,16 @@
 # - Enhancement-Tasks (100-111) mit vollen Specs
 # - Jeder Task ist ein self-contained Briefing für Sonnet/Haiku
 
+## Fixplan Herz und Nieren 2026 — laufende Umsetzung
+
+Lokale Paket-IDs aus [dem Fixplan](docs/plans/herz-und-nieren-2026/README.md),
+keine neuen offiziellen TASK-Nummern. **~~HN-S01~~ — DONE (Review abgenommen)**: freies Cypher standardmäßig
+deaktiviert, Template-Limits global und scoped auf 1–100 beschränkt sowie ein
+konfigurierbares Neo4j-Query-Timeout ergänzt. Review-Nachtrag: F-15-Kommentar-/
+Quote-Angriffe (DELETE, LOAD CSV, CALL, MERGE) fail closed; unbekannte Template-IDs
+werden kontrolliert abgewiesen. Verifikation: 122 fokussierte Intelligence-Tests,
+Ruff und `git diff --check` bestanden.
+
 ## Session 2026-09-26 — Neo4j uniqueness repair
 
 Offline-Dumps erstellt und auf isolierter Kopie wiederhergestellt; anschließend
