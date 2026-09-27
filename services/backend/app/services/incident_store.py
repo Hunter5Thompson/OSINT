@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 from uuid import uuid4
 
 import neo4j
+import structlog
+from pydantic import ValidationError
 
 from app.cypher.incident_read import (
     INCIDENT_BY_ID,
@@ -31,6 +34,7 @@ from app.models.incident import (
     Severity,
 )
 from app.services._loc_key import incident_key
+from app.services._persisted_time import parse_persisted_datetime
 from app.services.neo4j_client import read_query, write_query, write_transaction
 from app.services.spatial_catalog import (
     IncidentSpatialProjection,
@@ -39,12 +43,29 @@ from app.services.spatial_catalog import (
 
 _REHYDRATE_LIMIT = 500
 MutationStatus = Literal["applied", "unchanged", "not_found"]
+logger = structlog.get_logger(__name__)
+
+
+class RowDecodeError(ValueError):
+    """A persisted Incident row contains invalid domain data."""
+
+    def __init__(self, incident_id: object, cause: Exception) -> None:
+        self.incident_id = str(incident_id) if incident_id is not None else "unknown"
+        self.cause = cause
+        super().__init__(f"invalid incident row {self.incident_id}: {type(cause).__name__}")
 
 
 @dataclass(frozen=True)
 class MutationResult:
     status: MutationStatus
     incident: Incident | None
+
+
+@dataclass(frozen=True)
+class RehydrationResult:
+    incidents: list[Incident]
+    degraded: bool
+    invalid_rows: int
 
 
 def _ordinal_ms(now: datetime) -> int:
@@ -80,32 +101,48 @@ def _decode_timeline(raw: str | list[Any] | None) -> list[IncidentTimelineEvent]
 
 
 def _row_to_incident(row: dict[str, Any]) -> Incident:
-    return Incident(
-        id=str(row["id"]),
-        kind=str(row.get("kind") or "manual"),
-        title=str(row.get("title") or ""),
-        severity=cast(Severity, str(row.get("severity") or "low")),
-        coords=(float(row.get("lat") or 0.0), float(row.get("lon") or 0.0)),
-        location=str(row.get("location") or ""),
-        status=IncidentStatus(str(row.get("status") or "open")),
-        trigger_ts=_parse_dt(row.get("trigger_ts")),
-        closed_ts=_parse_dt(row.get("closed_ts")) if row.get("closed_ts") else None,
-        sources=[str(v) for v in (row.get("sources") or [])],
-        layer_hints=[str(v) for v in (row.get("layer_hints") or [])],
-        timeline=_decode_timeline(row.get("timeline_json")),
-    )
+    incident_id = row.get("id")
+    try:
+        if incident_id is None:
+            raise ValueError("missing id")
+        if row.get("status") is None:
+            raise ValueError("missing status")
+        if row.get("severity") is None:
+            raise ValueError("missing severity")
+        if "lat" not in row or row["lat"] is None:
+            raise ValueError("missing latitude")
+        if "lon" not in row or row["lon"] is None:
+            raise ValueError("missing longitude")
+        latitude = float(row["lat"])
+        longitude = float(row["lon"])
+        if not math.isfinite(latitude) or not -90 <= latitude <= 90:
+            raise ValueError("invalid latitude")
+        if not math.isfinite(longitude) or not -180 <= longitude <= 180:
+            raise ValueError("invalid longitude")
+        return Incident(
+            id=str(incident_id),
+            kind=str(row.get("kind") or "manual"),
+            title=str(row.get("title") or ""),
+            severity=cast(Severity, str(row["severity"])),
+            coords=(latitude, longitude),
+            location=str(row.get("location") or ""),
+            status=IncidentStatus(str(row["status"])),
+            trigger_ts=_parse_dt(row.get("trigger_ts")),
+            closed_ts=(
+                _parse_dt(row.get("closed_ts"))
+                if row.get("closed_ts") is not None
+                else None
+            ),
+            sources=[str(v) for v in (row.get("sources") or [])],
+            layer_hints=[str(v) for v in (row.get("layer_hints") or [])],
+            timeline=_decode_timeline(row.get("timeline_json")),
+        )
+    except (KeyError, TypeError, ValueError, OverflowError, ValidationError) as exc:
+        raise RowDecodeError(incident_id, exc) from exc
 
 
 def _parse_dt(value: Any) -> datetime:
-    if isinstance(value, datetime):
-        return value.astimezone(UTC)
-    if isinstance(value, str) and value:
-        s = value[:-1] + "+00:00" if value.endswith("Z") else value
-        try:
-            return datetime.fromisoformat(s).astimezone(UTC)
-        except ValueError:
-            pass
-    return datetime.now(UTC)
+    return parse_persisted_datetime(value)
 
 
 def _upsert_params(
@@ -168,7 +205,15 @@ async def _incident_projection(record: Incident) -> IncidentSpatialProjection | 
 
 async def list_open_incidents(limit: int = 50) -> list[Incident]:
     rows = await read_query(INCIDENT_LIST_OPEN, {"limit": limit})
-    return [_row_to_incident(r) for r in rows]
+    incidents: list[Incident] = []
+    decode_errors: list[RowDecodeError] = []
+    for row in rows:
+        try:
+            incidents.append(_row_to_incident(row))
+        except RowDecodeError as exc:
+            decode_errors.append(exc)
+    _log_row_decode_failures(decode_errors)
+    return incidents
 
 
 async def get_incident(incident_id: str) -> Incident | None:
@@ -176,6 +221,22 @@ async def get_incident(incident_id: str) -> Incident | None:
     if not rows:
         return None
     return _row_to_incident(rows[0])
+
+
+def _log_row_decode_failures(errors: list[RowDecodeError]) -> None:
+    if not errors:
+        return
+    logger.warning(
+        "incident_rows_decode_degraded",
+        invalid_count=len(errors),
+        invalid_rows=[
+            {
+                "incident_id": error.incident_id,
+                "error_class": type(error.cause).__name__,
+            }
+            for error in errors[:20]
+        ],
+    )
 
 
 async def create_incident(
@@ -376,20 +437,24 @@ async def delete_incident(incident_id: str) -> bool:
     return True
 
 
-async def list_owned_for_rehydrate() -> list[Incident]:
-    """Return open/promoted incidents owned by the auto-promoter.
-
-    Filters in Python by the ``auto_promoter:v1`` marker in ``layer_hints``.
-    Status filter also admits ``PROMOTED`` so the Promoter can rehydrate
-    clusters that the analyst owned at restart time.
-    """
+async def list_owned_for_rehydrate() -> RehydrationResult:
+    """Decode owned nonterminal candidates, retaining valid neighbors on poison rows."""
     rows = await read_query(
         INCIDENT_LIST_REHYDRATE_CANDIDATES,
         {"limit": _REHYDRATE_LIMIT},
     )
     owned: list[Incident] = []
+    decode_errors: list[RowDecodeError] = []
     for row in rows:
         if "auto_promoter:v1" not in (row.get("layer_hints") or []):
             continue
-        owned.append(_row_to_incident(row))
-    return owned
+        try:
+            owned.append(_row_to_incident(row))
+        except RowDecodeError as exc:
+            decode_errors.append(exc)
+    _log_row_decode_failures(decode_errors)
+    return RehydrationResult(
+        incidents=owned,
+        degraded=bool(decode_errors),
+        invalid_rows=len(decode_errors),
+    )

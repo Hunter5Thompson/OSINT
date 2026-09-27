@@ -45,6 +45,10 @@ class Promoter:
         self._detectors: list[Detector] = list(detectors)
         self._stop_event = asyncio.Event()
         self._subscribed_queue: asyncio.Queue[SignalEnvelope] | None = None
+        self._rehydration_status = "not_started"
+        self._rehydration_error: str | None = None
+        self._rehydration_invalid_rows = 0
+        self._drain_status = "not_started"
 
     # -- lifecycle -------------------------------------------------------
 
@@ -76,11 +80,11 @@ class Promoter:
             self._signal_stream.unsubscribe(self._subscribed_queue)
         self._subscribed_queue = None
 
-    async def _rehydrate(self) -> None:
+    async def _rehydrate(self) -> bool:
         if self._incident_store is None:
-            return
-        owned = await self._incident_store.list_owned_for_rehydrate()
-        for incident in owned:
+            return False
+        result = await self._incident_store.list_owned_for_rehydrate()
+        for incident in result.incidents:
             cluster_key = self._extract_cluster_key(incident.layer_hints)
             if cluster_key is None:
                 logger.info(
@@ -94,6 +98,17 @@ class Promoter:
                 incident, cluster_key, detector_id
             )
             self._cluster_store._by_incident_id[incident.id] = cluster_key  # noqa: SLF001
+        self._rehydration_invalid_rows = result.invalid_rows
+        self._rehydration_status = "degraded" if result.degraded else "healthy"
+        return not result.degraded
+
+    def health_snapshot(self) -> dict[str, str | int | None]:
+        return {
+            "rehydration_status": self._rehydration_status,
+            "rehydration_error": self._rehydration_error,
+            "invalid_rows": self._rehydration_invalid_rows,
+            "drain_status": self._drain_status,
+        }
 
     def _build_rehydrated_state(
         self, incident: Incident, cluster_key: str, detector_id: str
@@ -178,13 +193,37 @@ class Promoter:
             self._cluster_store.add_termination_listener(detector.on_cluster_terminated)
         await self._subscribe()
         try:
-            await self._rehydrate()
+            try:
+                can_drain = await self._rehydrate()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — DB failure must be visible and fail closed
+                self._rehydration_status = "unhealthy"
+                self._rehydration_error = type(exc).__name__
+                self._drain_status = "blocked"
+                logger.exception("promoter_rehydrate_failed")
+                return
+            if not can_drain:
+                self._drain_status = "blocked"
+                logger.error(
+                    "promoter_rehydrate_degraded_drain_blocked",
+                    invalid_rows=self._rehydration_invalid_rows,
+                )
+                return
             logger.info(
                 "promoter_started",
                 detectors_enabled=[d.id for d in self._detectors if d.enabled],
                 rehydrated_count=len(self._cluster_store.active_clusters()),
             )
+            self._drain_status = "running"
             await self._drain_loop()
+            self._drain_status = "stopped"
+        except asyncio.CancelledError:
+            self._drain_status = "cancelled"
+            raise
+        except Exception:
+            self._drain_status = "failed"
+            raise
         finally:
             self._unsubscribe()
 

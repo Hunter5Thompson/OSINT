@@ -172,11 +172,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             clock=_promoter_clock,
             detectors=detectors,
         )
+        app.state.promoter = promoter
         if promoter_cfg.enabled:
             promoter_tasks = (
                 asyncio.create_task(promoter.run(), name="promoter"),
                 asyncio.create_task(promoter.sweeper_loop(), name="promoter-sweeper"),
             )
+        app.state.promoter_tasks = {
+            "drain": promoter_tasks[0],
+            "sweeper": promoter_tasks[1],
+        }
 
         logger.info("backend_started", vllm_url=settings.vllm_url, vllm_model=settings.vllm_model)
         yield

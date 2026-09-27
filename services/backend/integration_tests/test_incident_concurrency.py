@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import neo4j
@@ -39,6 +40,78 @@ async def _open_marked_driver():
         await driver.close()
         pytest.fail(f"Neo4j test marker {_MARKER_ID!r} is missing")
     return driver
+
+
+@pytest.mark.asyncio
+async def test_rehydrate_candidates_include_unknown_status_but_exclude_terminals_and_unowned(
+    monkeypatch,
+):
+    """Exercise the production candidate query against the isolated marked DB."""
+    driver = await _open_marked_driver()
+    test_prefix = f"hn-b01-{uuid4().hex}"
+    incident_ids = [f"{test_prefix}-{name}" for name in (
+        "open", "promoted", "unknown", "null", "closed", "silenced", "unowned"
+    )]
+    statuses = ["open", "promoted", "mystery", None, "closed", "silenced", "open"]
+    rows = [
+        {
+            "id": incident_id,
+            "kind": "test.incident",
+            "title": incident_id,
+            "severity": "high",
+            "lat": 0.0,
+            "lon": 0.0,
+            "location": "",
+            "status": status,
+            "trigger_ts": datetime(2026, 9, 27, tzinfo=UTC),
+            "sources": [],
+            "layer_hints": (
+                ["auto_promoter:v1", f"cluster:test:{test_prefix}"]
+                if name != "unowned" else [f"cluster:test:{test_prefix}"]
+            ),
+            "timeline_json": "[]",
+            "ordinal": 9_000_000_000_000_000 + index,
+        }
+        for index, (incident_id, status, name) in enumerate(
+            zip(
+                incident_ids,
+                statuses,
+                ("open", "promoted", "unknown", "null", "closed", "silenced", "unowned"),
+                strict=True,
+            )
+        )
+    ]
+
+    async def get_test_driver():
+        return driver
+
+    monkeypatch.setattr(neo4j_client, "get_graph_client", get_test_driver)
+    try:
+        async with driver.session() as session:
+            await session.run(
+                "UNWIND $rows AS row CREATE (i:Incident) SET i += row",
+                rows=rows,
+            )
+        result = await incident_store.list_owned_for_rehydrate()
+        assert {incident.id for incident in result.incidents} == {
+            incident_ids[0], incident_ids[1]
+        }
+        assert result.degraded is True
+        assert result.invalid_rows == 2
+        async with driver.session() as session:
+            query_result = await session.run(
+                incident_store.INCIDENT_LIST_REHYDRATE_CANDIDATES,
+                limit=500,
+            )
+            returned_ids = {record["id"] async for record in query_result}
+        assert returned_ids == set(incident_ids[:4])
+    finally:
+        async with driver.session() as session:
+            await session.run(
+                "MATCH (i:Incident) WHERE i.id IN $ids DETACH DELETE i",
+                ids=incident_ids,
+            )
+        await driver.close()
 
 
 def _install_controlled_writer(monkeypatch, driver, original_write_transaction):

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -211,6 +211,130 @@ async def test_get_incident_decodes_timeline() -> None:
         assert record is not None
         assert record.location == "Sinjar ridge"
         assert record.timeline == [IncidentTimelineEvent(t_offset_s=0.0, kind="trigger", text="t0")]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"status": "unknown"},
+        {"status": None},
+        {"severity": "medium"},
+        {"lat": None},
+        {"lat": float("nan")},
+        {"lon": 181.0},
+        {"trigger_ts": "broken"},
+    ],
+)
+def test_incident_row_decode_rejects_poison_fields(overrides) -> None:
+    with pytest.raises(ValueError):
+        incident_store._row_to_incident(_row(**overrides))
+
+
+def test_incident_row_decode_accepts_real_zero_coordinates() -> None:
+    record = incident_store._row_to_incident(_row(lat=0.0, lon=0.0))
+    assert record.coords == (0.0, 0.0)
+
+
+def test_incident_row_decode_rejects_missing_status() -> None:
+    row = _row()
+    row.pop("status")
+    with pytest.raises(ValueError):
+        incident_store._row_to_incident(row)
+
+
+@pytest.mark.asyncio
+async def test_list_open_incidents_isolates_poison_row_and_keeps_valid_neighbor(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        incident_store,
+        "read_query",
+        AsyncMock(
+            return_value=[
+                _row(id="good-before"),
+                _row(id="bad", severity="medium"),
+                _row(id="good-after"),
+            ]
+        ),
+    )
+    diagnostic = Mock()
+    monkeypatch.setattr(incident_store, "logger", Mock(warning=diagnostic), raising=False)
+
+    records = await incident_store.list_open_incidents()
+
+    assert [record.id for record in records] == ["good-before", "good-after"]
+    diagnostic.assert_called_once()
+    assert diagnostic.call_args.args[0] == "incident_rows_decode_degraded"
+    assert diagnostic.call_args.kwargs["invalid_count"] == 1
+    assert diagnostic.call_args.kwargs["invalid_rows"] == [
+        {"incident_id": "bad", "error_class": "ValidationError"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_all_poison_rows_return_no_records_with_degraded_diagnostic(monkeypatch) -> None:
+    monkeypatch.setattr(
+        incident_store,
+        "read_query",
+        AsyncMock(return_value=[_row(id="bad-1", severity="medium"), _row(id="bad-2", lon=181)]),
+    )
+    diagnostic = Mock()
+    monkeypatch.setattr(incident_store, "logger", Mock(warning=diagnostic), raising=False)
+
+    records = await incident_store.list_open_incidents()
+
+    assert records == []
+    diagnostic.assert_called_once()
+    assert diagnostic.call_args.kwargs["invalid_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_rehydrate_keeps_valid_rows_and_reports_degraded_for_poison_neighbor(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        incident_store,
+        "read_query",
+        AsyncMock(
+            return_value=[
+                _row(id="good", layer_hints=["auto_promoter:v1", "cluster:firms:good"]),
+                _row(
+                    id="bad", severity="medium",
+                    layer_hints=["auto_promoter:v1", "cluster:firms:bad"],
+                ),
+            ]
+        ),
+    )
+
+    result = await incident_store.list_owned_for_rehydrate()
+
+    assert [incident.id for incident in result.incidents] == ["good"]
+    assert result.degraded is True
+
+
+@pytest.mark.asyncio
+async def test_rehydrate_query_includes_owned_rows_with_unknown_status(monkeypatch) -> None:
+    read = AsyncMock(return_value=[])
+    monkeypatch.setattr(incident_store, "read_query", read)
+
+    await incident_store.list_owned_for_rehydrate()
+
+    query = read.await_args.args[0]
+    assert "auto_promoter:v1" in query
+    assert "i.status IS NULL" in query
+    assert "closed" in query and "silenced" in query
+
+
+@pytest.mark.asyncio
+async def test_rehydrate_does_not_hide_database_failure(monkeypatch) -> None:
+    monkeypatch.setattr(
+        incident_store,
+        "read_query",
+        AsyncMock(side_effect=ConnectionError("neo4j unavailable")),
+    )
+
+    with pytest.raises(ConnectionError, match="neo4j unavailable"):
+        await incident_store.list_owned_for_rehydrate()
 
 
 @pytest.mark.asyncio
@@ -436,8 +560,10 @@ async def test_list_owned_for_rehydrate_filters_by_auto_promoter_marker() -> Non
     ) as mock_read:
         result = await incident_store.list_owned_for_rehydrate()
 
-    assert len(result) == 2
-    result_ids = {inc.id for inc in result}
+    assert result.degraded is False
+    assert result.invalid_rows == 0
+    assert len(result.incidents) == 2
+    result_ids = {inc.id for inc in result.incidents}
     assert "inc-owned-open" in result_ids
     assert "inc-owned-promoted" in result_ids
     assert "inc-manual" not in result_ids

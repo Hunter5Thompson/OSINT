@@ -164,6 +164,70 @@ async def test_rehydrate_then_subscribe_avoids_double_create(
     assert all(t != "incident.open" for t in fake_incident_event_stream.types())
 
 
+async def test_poison_owned_row_blocks_drain_for_its_cluster(
+    fake_clock, fake_incident_event_stream
+):
+    from types import SimpleNamespace
+
+    from app.models.incident import IncidentTimelineEvent
+    from app.services.incident_promoter.detectors.base import ClusterHit
+
+    class SignalStream:
+        def __init__(self):
+            self.queue = asyncio.Queue()
+
+        def subscribe(self):
+            return self.queue
+
+        def unsubscribe(self, queue):
+            assert queue is self.queue
+
+    class Detector:
+        id = "firms"
+        enabled = True
+
+        def detect(self, _envelope):
+            return ClusterHit(
+                cluster_key="firms:geo:9:9", detector_id="firms",
+                incident_kind="firms.cluster", title="poison", severity="high",
+                coords=(9, 9), location="", sources_to_merge=[],
+                layer_hints_to_merge=["auto_promoter:v1", "cluster:firms:geo:9:9"],
+                timeline_event=IncidentTimelineEvent(t_offset_s=0, kind="trigger"),
+                contributing_signal_ids=["signal-1"],
+            )
+
+        def on_cluster_terminated(self, _cluster_key):
+            pass
+
+    class Store:
+        creates = 0
+
+        async def list_owned_for_rehydrate(self):
+            return SimpleNamespace(incidents=[], degraded=True, invalid_rows=1)
+
+        async def create_incident(self, *_args, **_kwargs):
+            self.creates += 1
+            raise AssertionError("drain must not promote before clean rehydration")
+
+    stream = SignalStream()
+    await stream.queue.put(object())
+    store = Store()
+    promoter = Promoter(
+        signal_stream=stream,
+        cluster_store=ClusterStore(clock=fake_clock),
+        incident_store=store,
+        incident_event_stream=fake_incident_event_stream,
+        config=PromoterConfig.from_env(),
+        clock=fake_clock,
+        detectors=[Detector()],
+    )
+
+    await promoter.run()
+
+    assert stream.queue.qsize() == 1
+    assert store.creates == 0
+
+
 async def test_sweeper_closes_stale_open_and_drops_promoted(
     fake_clock, fake_incident_store, fake_incident_event_stream
 ):

@@ -16,7 +16,8 @@ INCIDENT_LIST_OPEN = (
 
 INCIDENT_LIST_REHYDRATE_CANDIDATES = (
     "MATCH (i:Incident) "
-    "WHERE i.status IN ['open', 'promoted'] "
+    "WHERE 'auto_promoter:v1' IN coalesce(i.layer_hints, []) "
+    "  AND (i.status IS NULL OR NOT (i.status IN ['closed', 'silenced'])) "
     "RETURN i.id AS id, i.kind AS kind, i.title AS title, "
     "       i.severity AS severity, i.lat AS lat, i.lon AS lon, "
     "       i.location AS location, i.status AS status, "

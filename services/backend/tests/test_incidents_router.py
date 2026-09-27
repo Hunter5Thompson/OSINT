@@ -52,6 +52,26 @@ def test_get_incident_404_when_missing() -> None:
             assert resp.status_code == 404
 
 
+def test_get_incident_decode_failure_is_503_not_404() -> None:
+    with patch(
+        "app.routers.incidents.incident_store.get_incident",
+        new=AsyncMock(side_effect=ValueError("invalid persisted incident")),
+    ):
+        with TestClient(app) as client:
+            resp = client.get("/api/incidents/inc-corrupt")
+    assert resp.status_code == 503
+
+
+def test_list_incidents_database_failure_is_503_not_empty_success() -> None:
+    with patch(
+        "app.routers.incidents.incident_store.list_open_incidents",
+        new=AsyncMock(side_effect=ConnectionError("neo4j unavailable")),
+    ):
+        with TestClient(app) as client:
+            resp = client.get("/api/incidents")
+    assert resp.status_code == 503
+
+
 def test_admin_create_publishes_to_stream(monkeypatch) -> None:
     from app.routers import incidents as incidents_router
 

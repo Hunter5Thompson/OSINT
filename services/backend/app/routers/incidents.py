@@ -33,6 +33,16 @@ router = APIRouter(prefix="/incidents", tags=["incidents"])
 _HEARTBEAT_SECONDS = 15.0
 
 
+def _background_task_status(task: Any) -> str:
+    if task is None:
+        return "not_started"
+    if not task.done():
+        return "running"
+    if task.cancelled():
+        return "cancelled"
+    return "failed" if task.exception() is not None else "stopped"
+
+
 def _require_admin(
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> None:
@@ -90,12 +100,30 @@ async def admin_promoter_inspector(request: Request) -> dict[str, Any]:
     """Read-only snapshot of the auto-promoter ClusterStore."""
     cluster_store = getattr(request.app.state, "cluster_store", None)
     cfg = getattr(request.app.state, "promoter_config", None)
+    promoter = getattr(request.app.state, "promoter", None)
+    tasks = getattr(request.app.state, "promoter_tasks", {})
+    task_health = {
+        "drain": _background_task_status(tasks.get("drain")),
+        "sweeper": _background_task_status(tasks.get("sweeper")),
+    }
+    promoter_health = (
+        promoter.health_snapshot()
+        if promoter is not None
+        else {
+            "rehydration_status": "not_started",
+            "rehydration_error": None,
+            "invalid_rows": 0,
+            "drain_status": "not_started",
+        }
+    )
     if cluster_store is None or cfg is None:
         return {
             "enabled_detectors": [],
             "config": {},
             "active_clusters": [],
             "cooldowns": [],
+            "health": promoter_health,
+            "tasks": task_health,
         }
     active = [
         {
@@ -123,6 +151,8 @@ async def admin_promoter_inspector(request: Request) -> dict[str, Any]:
         },
         "active_clusters": active,
         "cooldowns": cooldowns,
+        "health": promoter_health,
+        "tasks": task_health,
     }
 
 
