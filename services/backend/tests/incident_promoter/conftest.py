@@ -38,8 +38,13 @@ class FakeIncidentStore:
     def __init__(self) -> None:
         self._by_id: dict[str, Incident] = {}
 
-    async def create_incident(self, req: IncidentCreateRequest) -> Incident:
-        incident_id = f"inc-{uuid4().hex[:8]}"
+    async def create_incident(
+        self, req: IncidentCreateRequest, *, incident_id: str | None = None
+    ) -> Incident:
+        incident_id = incident_id or f"inc-{uuid4().hex[:8]}"
+        existing = self._by_id.get(incident_id)
+        if existing is not None:
+            return existing
         initial = IncidentTimelineEvent(
             t_offset_s=0.0,
             kind="trigger",

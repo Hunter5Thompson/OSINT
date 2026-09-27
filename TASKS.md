@@ -38,12 +38,27 @@ Senior-Review von `a514db8` ohne offene Findings; unabhängig 94 Tests, Ruff,
 Offline-Lockfile-Check und Diff-Check bestanden. PR #129 wurde als `58843a7` gemergt;
 alle CI-Checks erfolgreich. Kein Live-Zertifikatshandshake.
 
-**~~HN-I01~~ — fachlich abgenommen (PR #131, Merge offen):** FIRMS-Map-URLs verwenden im Produzentenvertrag
+**~~HN-I01~~ — MERGED (PR #131, Commit `a45a13c`):** FIRMS-Map-URLs verwenden im Produzentenvertrag
 `@lon,lat`; der Detektor gibt konsistent `(lat, lon)` zurück und verwirft nicht-endliche
 oder außerhalb der geografischen Grenzen liegende Koordinaten. Backend-Referenzfälle,
 Router→Parser- und Collector-URL-Verträge decken asymmetrische Koordinaten, Nullmeridian
 und Grenzen ab. Senior-Review von `a900604` ohne offene Findings; unabhängig
 50 Backend- und 8 Collector-Tests bestanden. Historische Incidents unverändert.
+
+**HN-I02 — implementiert, unabhängiger Review offen:** Create-Fehler, Requestvalidierung
+und Cancellation lösen die Cluster-Reservierung verlässlich; ein validierter Pending-Create
+behält Request und interne Incident-ID für Wiederholungen innerhalb derselben
+ClusterStore-Lebensdauer. Der Incident-Store verwendet für diese ID ein create-only
+MERGE und gibt bei Wiederholung den aktuellen Record zurück. FIRMS-Beiträge aus dem
+fehlgeschlagenen Create bleiben auch über mehrere Fehlversuche erhalten; neue Retry-
+Signale werden dedupliziert und nach dem Create genau einmal als Updates angewandt.
+Terminale/promoted Records werden nicht als open publiziert oder vom Promoter erneut
+geöffnet. Pending gilt nur für die Lebensdauer des ClusterStore; kein allgemeiner
+Update-Retry, keine dauerhafte Outbox oder Prozesscrash-Garantie. Gezielte Suite:
+107 Incident-Promoter-/Pipeline-/Store-Tests, Ruff, fokussiertes Mypy und Diff-Check
+erfolgreich.
+Der Idempotenzpfad setzt die vorhandene Neo4j-Constraint `incident_id_unique` voraus;
+kein Live-DB-Test, keine dauerhafte Outbox und kein Prozesscrash-/Exactly-once-Nachweis.
 
 ## Session 2026-09-26 — Neo4j uniqueness repair
 

@@ -11,7 +11,11 @@ from app.cypher.incident_read import (
     INCIDENT_LIST_OPEN,
     INCIDENT_LIST_REHYDRATE_CANDIDATES,
 )
-from app.cypher.incident_write import INCIDENT_DELETE, INCIDENT_UPSERT
+from app.cypher.incident_write import (
+    INCIDENT_CREATE_IDEMPOTENT,
+    INCIDENT_DELETE,
+    INCIDENT_UPSERT,
+)
 from app.models.incident import (
     Incident,
     IncidentCreateRequest,
@@ -160,8 +164,16 @@ async def get_incident(incident_id: str) -> Incident | None:
     return _row_to_incident(rows[0])
 
 
-async def create_incident(payload: IncidentCreateRequest) -> Incident:
-    incident_id = f"inc-{uuid4().hex[:8]}"
+async def create_incident(
+    payload: IncidentCreateRequest, *, incident_id: str | None = None
+) -> Incident:
+    """Create an incident; an explicit id selects the promoter's retry-safe path.
+
+    The retry-safe query requires the deployed `incident_id_unique` constraint.
+    It only initializes a newly-created node and returns current state on replay.
+    """
+    retry_safe = incident_id is not None
+    incident_id = incident_id or f"inc-{uuid4().hex[:8]}"
     now = datetime.now(UTC)
     ordinal = _ordinal_ms(now)
     initial = IncidentTimelineEvent(
@@ -183,9 +195,12 @@ async def create_incident(payload: IncidentCreateRequest) -> Incident:
         layer_hints=payload.layer_hints,
         timeline=[initial],
     )
+    params = _upsert_params(record, ordinal, await _incident_projection(record))
+    if retry_safe:
+        params["create_nonce"] = uuid4().hex
     rows = await write_query(
-        INCIDENT_UPSERT,
-        _upsert_params(record, ordinal, await _incident_projection(record)),
+        INCIDENT_CREATE_IDEMPOTENT if retry_safe else INCIDENT_UPSERT,
+        params,
     )
     if not rows:
         raise RuntimeError("failed to persist incident")
