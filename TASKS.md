@@ -45,7 +45,7 @@ Router→Parser- und Collector-URL-Verträge decken asymmetrische Koordinaten, N
 und Grenzen ab. Senior-Review von `a900604` ohne offene Findings; unabhängig
 50 Backend- und 8 Collector-Tests bestanden. Historische Incidents unverändert.
 
-**~~HN-I02~~ — fachlich abgenommen (PR #132, Merge offen):** Create-Fehler, Requestvalidierung
+**~~HN-I02~~ — MERGED (PR #132, Commit `a3fc29c`):** Create-Fehler, Requestvalidierung
 und Cancellation lösen die Cluster-Reservierung verlässlich; ein validierter Pending-Create
 behält Request und interne Incident-ID für Wiederholungen innerhalb derselben
 ClusterStore-Lebensdauer. Der Incident-Store verwendet für diese ID ein create-only
@@ -58,9 +58,23 @@ geöffnet. Pending gilt nur für die Lebensdauer des ClusterStore; kein allgemei
 Update-Retry, keine dauerhafte Outbox oder Prozesscrash-Garantie. Gezielte Suite:
 108 Incident-Promoter-/Pipeline-/Store-Tests, Ruff, fokussiertes Mypy und Diff-Check
 unabhängig auf Implementierungscommit `3528d50` erfolgreich. Senior-Review ohne
-offene Findings; CI und Merge separat prüfen.
+offene Findings; PR #132 wurde am 2026-09-27T17:23:57Z als `a3fc29c` gemergt.
 Der Idempotenzpfad setzt die vorhandene Neo4j-Constraint `incident_id_unique` voraus;
 kein Live-DB-Test, keine dauerhafte Outbox und kein Prozesscrash-/Exactly-once-Nachweis.
+
+**~~HN-I04~~ — fachlich abgenommen (PR #133, Merge offen):** Incident-Mutationen werden in einer Neo4j-
+Managed-Transaktion über eine explizite Schreibsperre serialisiert; Status und Timeline
+werden erst nach dem Lock gelesen und mit deterministischen UPDATEs verändert.
+Persistenz-TDD einschließlich isolierter Zwei-Session-Race-Tests sowie Router- und
+Promoter-Caller sind umgesetzt. Verifikation: vollständiger Lauf mit
+`NEO4J_URL=bolt://127.0.0.1:1` (729 Backend-Tests), Ruff auf `app/`, Mypy auf
+`app/` und `git diff --check` grün; isolierte reale Neo4j-Matrix: 12 passed.
+Unabhängiger Senior-Review von `12b4842` ohne offene Findings; alle genannten
+Checks unabhängig wiederholt. CI und Merge separat prüfen. Keine Produktivdatenänderung
+oder Deployment; keine Prozesscrash-/Exactly-once-Garantie.
+Der freigegebene Vertrag und die Grenzen stehen im
+[Transaktionsentwurf](docs/plans/herz-und-nieren-2026/I04-transaction-design.md),
+Scope im [HN-I04-Fixplan](docs/plans/herz-und-nieren-2026/02-incidents.md#i04-incident-mutationen-in-der-datenbank-serialisieren).
 
 ## Session 2026-09-26 — Neo4j uniqueness repair
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -11,6 +12,7 @@ from app.models.incident import (
     IncidentStatus,
     IncidentTimelineEvent,
 )
+from app.services.incident_store import MutationResult
 from app.services.incident_stream import get_incident_stream
 
 
@@ -93,7 +95,7 @@ def test_silence_publishes_close_event(monkeypatch) -> None:
             update={"status": IncidentStatus.SILENCED, "closed_ts": datetime.now(UTC)}
         )
         with patch("app.routers.incidents.incident_store.close_incident",
-                   new=AsyncMock(return_value=closed)):
+                   new=AsyncMock(return_value=MutationResult("applied", closed))):
             with TestClient(app) as client:
                 resp = client.post(
                     "/api/incidents/inc-001/silence",
@@ -104,6 +106,75 @@ def test_silence_publishes_close_event(monkeypatch) -> None:
                 assert env.type == "incident.silence"
     finally:
         stream.unsubscribe(queue)
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "mutation_status", "existing_status"),
+    [
+        ("silence", "unchanged", IncidentStatus.SILENCED),
+        ("silence", "unchanged", IncidentStatus.CLOSED),
+        ("silence", "unchanged", IncidentStatus.PROMOTED),
+        ("silence", "applied", IncidentStatus.CLOSED),
+        ("promote", "unchanged", IncidentStatus.PROMOTED),
+        ("promote", "unchanged", IncidentStatus.SILENCED),
+        ("promote", "unchanged", IncidentStatus.CLOSED),
+        ("promote", "applied", IncidentStatus.SILENCED),
+    ],
+)
+def test_terminal_mutation_without_matching_transition_does_not_publish_or_mark(
+    monkeypatch, endpoint, mutation_status, existing_status
+) -> None:
+    from app.routers import incidents as incidents_router
+
+    monkeypatch.setattr(incidents_router.settings, "incidents_admin_token", "secret-xyz")
+    stream = Mock()
+    cluster_store = AsyncMock()
+
+    class _Cfg:
+        silence_cooldown_sec = 60
+
+    current = _make_incident().model_copy(update={"status": existing_status})
+    with (
+        patch("app.routers.incidents.get_incident_stream", return_value=stream),
+        patch(
+                "app.routers.incidents.incident_store.close_incident",
+                new=AsyncMock(return_value=MutationResult(mutation_status, current)),
+        ),
+        ):
+        with TestClient(app, raise_server_exceptions=False) as client:
+            app.state.cluster_store = cluster_store
+            app.state.promoter_config = _Cfg()
+            response = client.post(
+                f"/api/incidents/inc-001/{endpoint}",
+                headers={"X-Admin-Token": "secret-xyz"},
+            )
+    assert response.status_code == 200
+    assert response.json()["status"] == existing_status.value
+    stream.publish.assert_not_called()
+    cluster_store.mark_silenced.assert_not_awaited()
+    cluster_store.mark_promoted.assert_not_awaited()
+
+
+@pytest.mark.parametrize("endpoint", ["silence", "promote"])
+def test_not_found_mutation_result_returns_404_without_side_effects(monkeypatch, endpoint) -> None:
+    from app.routers import incidents as incidents_router
+
+    monkeypatch.setattr(incidents_router.settings, "incidents_admin_token", "secret-xyz")
+    stream = Mock()
+    with (
+        patch("app.routers.incidents.get_incident_stream", return_value=stream),
+        patch(
+            "app.routers.incidents.incident_store.close_incident",
+            new=AsyncMock(return_value=MutationResult("not_found", None)),
+        ),
+    ):
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.post(
+                f"/api/incidents/inc-999/{endpoint}",
+                headers={"X-Admin-Token": "secret-xyz"},
+            )
+    assert response.status_code == 404
+    stream.publish.assert_not_called()
 
 
 def test_admin_trigger_rejects_when_token_required(monkeypatch) -> None:

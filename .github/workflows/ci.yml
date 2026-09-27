@@ -66,6 +66,54 @@ jobs:
       - run: uv sync --locked --all-extras
       - run: uv run pytest -q
 
+  test-backend-incident-concurrency:
+    name: tests · backend incident concurrency
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/backend
+    services:
+      neo4j:
+        image: neo4j:5.26.23
+        env:
+          NEO4J_AUTH: neo4j/hn-i04-ci-test-only
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p hn-i04-ci-test-only 'RETURN 1'"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 20
+    env:
+      NEO4J_PASSWORD: ci-test-password
+      HN_TEST_NEO4J_URI: bolt://localhost:7687
+      HN_TEST_NEO4J_PASSWORD: hn-i04-ci-test-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.10.0"
+          enable-cache: true
+      - run: uv sync --locked --all-extras
+      - name: Bootstrap isolated-test marker
+        run: |
+          uv run python - <<'PY'
+          import os
+          from neo4j import GraphDatabase
+
+          driver = GraphDatabase.driver(
+              os.environ["HN_TEST_NEO4J_URI"],
+              auth=("neo4j", os.environ["HN_TEST_NEO4J_PASSWORD"]),
+          )
+          driver.execute_query(
+              "MERGE (:HNTestInstance {id: $marker})",
+              marker="hn-i04-isolated-20260927",
+          )
+          driver.close()
+          PY
+      - name: Run opt-in real Neo4j races
+        run: uv run pytest integration_tests/test_incident_concurrency.py -q
+
   test-ops-contracts:
     name: tests · ops contracts
     runs-on: ubuntu-latest

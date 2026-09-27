@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
+
+import neo4j
 
 from app.cypher.incident_read import (
     INCIDENT_BY_ID,
@@ -14,6 +17,10 @@ from app.cypher.incident_read import (
 from app.cypher.incident_write import (
     INCIDENT_CREATE_IDEMPOTENT,
     INCIDENT_DELETE,
+    INCIDENT_MUTATION_CLOSE,
+    INCIDENT_MUTATION_LOCK,
+    INCIDENT_MUTATION_READ,
+    INCIDENT_MUTATION_UPDATE,
     INCIDENT_UPSERT,
 )
 from app.models.incident import (
@@ -24,13 +31,20 @@ from app.models.incident import (
     Severity,
 )
 from app.services._loc_key import incident_key
-from app.services.neo4j_client import read_query, write_query
+from app.services.neo4j_client import read_query, write_query, write_transaction
 from app.services.spatial_catalog import (
     IncidentSpatialProjection,
     SpatialCatalogLoader,
 )
 
 _REHYDRATE_LIMIT = 500
+MutationStatus = Literal["applied", "unchanged", "not_found"]
+
+
+@dataclass(frozen=True)
+class MutationResult:
+    status: MutationStatus
+    incident: Incident | None
 
 
 def _ordinal_ms(now: datetime) -> int:
@@ -210,20 +224,14 @@ async def create_incident(
 async def append_timeline_event(
     incident_id: str,
     event: IncidentTimelineEvent,
-) -> Incident | None:
-    current = await get_incident(incident_id)
-    if current is None:
-        return None
-    next_timeline = [*current.timeline, event]
-    next_record = current.model_copy(update={"timeline": next_timeline})
-    ordinal = _ordinal_ms(datetime.now(UTC))
-    rows = await write_query(
-        INCIDENT_UPSERT,
-        _upsert_params(next_record, ordinal, await _incident_projection(next_record)),
+) -> MutationResult:
+    return await _mutate_open_incident(
+        incident_id,
+        event=event,
+        severity=None,
+        sources_to_merge=[],
+        layer_hints_to_merge=[],
     )
-    if not rows:
-        return None
-    return _row_to_incident(rows[0])
 
 
 async def apply_signal_update(
@@ -233,58 +241,131 @@ async def apply_signal_update(
     severity: str,
     sources_to_merge: list[str],
     layer_hints_to_merge: list[str],
-) -> Incident | None:
-    """Atomic write: append a timeline event, escalate severity, merge sources/hints.
+) -> MutationResult:
+    """Append one signal while preserving concurrent fields and events."""
+    return await _mutate_open_incident(
+        incident_id,
+        event=timeline_event,
+        severity=severity,
+        sources_to_merge=sources_to_merge,
+        layer_hints_to_merge=layer_hints_to_merge,
+    )
 
-    No-op (returns ``None``) if the incident does not exist. Severity is
-    monotonic in the caller (ClusterStore only escalates); this function
-    simply writes the value provided.
-    """
-    current = await get_incident(incident_id)
-    if current is None:
+
+_SEVERITY_ORDER = {"low": 0, "elevated": 1, "high": 2, "critical": 3}
+
+
+async def _transaction_current(
+    transaction: neo4j.AsyncManagedTransaction,
+    incident_id: str,
+    lock_token: str,
+) -> dict[str, Any] | None:
+    lock_result = await transaction.run(
+        INCIDENT_MUTATION_LOCK,
+        incident_id=incident_id,
+        lock_token=lock_token,
+    )
+    lock_row = await lock_result.single()
+    if lock_row is None:
         return None
-    merged_sources = list(dict.fromkeys([*current.sources, *sources_to_merge]))
-    merged_hints = list(dict.fromkeys([*current.layer_hints, *layer_hints_to_merge]))
-    next_record = current.model_copy(
-        update={
-            "timeline": [*current.timeline, timeline_event],
-            "severity": severity,
+    result = await transaction.run(INCIDENT_MUTATION_READ, incident_id=incident_id)
+    row = await result.single()
+    return dict(row) if row is not None else None
+
+
+async def _mutate_open_incident(
+    incident_id: str,
+    *,
+    event: IncidentTimelineEvent,
+    severity: str | None,
+    sources_to_merge: list[str],
+    layer_hints_to_merge: list[str],
+) -> MutationResult:
+    event_snapshot = event.model_copy(deep=True)
+    source_snapshot = tuple(sources_to_merge)
+    hint_snapshot = tuple(layer_hints_to_merge)
+    operation_id = uuid4().hex
+    lock_token = uuid4().hex
+    now = datetime.now(UTC).isoformat()
+
+    async def mutate(transaction: neo4j.AsyncManagedTransaction) -> MutationResult:
+        row = await _transaction_current(transaction, incident_id, lock_token)
+        if row is None:
+            return MutationResult("not_found", None)
+        current = _row_to_incident(row)
+        applied_ids = list(row.get("applied_mutation_ids") or [])
+        if operation_id in applied_ids:
+            return MutationResult("applied", current)
+        if current.status != IncidentStatus.OPEN:
+            return MutationResult("unchanged", current)
+
+        timeline = [*current.timeline, event_snapshot]
+        merged_sources = list(dict.fromkeys([*current.sources, *source_snapshot]))
+        merged_hints = list(dict.fromkeys([*current.layer_hints, *hint_snapshot]))
+        selected_severity = current.severity
+        if severity is not None and _SEVERITY_ORDER[severity] > _SEVERITY_ORDER[current.severity]:
+            selected_severity = cast(Severity, severity)
+        timeline_json = json.dumps([item.model_dump() for item in timeline], ensure_ascii=True)
+        params = {
+            "incident_id": incident_id,
+            "severity": selected_severity,
             "sources": merged_sources,
             "layer_hints": merged_hints,
+            "timeline_json": timeline_json,
+            "applied_mutation_ids": [*applied_ids, operation_id],
+            "now": now,
         }
+        result = await transaction.run(INCIDENT_MUTATION_UPDATE, params)
+        updated = await result.single()
+        if updated is None:
+            return MutationResult("not_found", None)
+        return MutationResult("applied", _row_to_incident(dict(updated)))
+
+    return await write_transaction(
+        mutate, metadata={"incident_mutation_id": operation_id}
     )
-    ordinal = _ordinal_ms(datetime.now(UTC))
-    rows = await write_query(
-        INCIDENT_UPSERT,
-        _upsert_params(next_record, ordinal, await _incident_projection(next_record)),
-    )
-    if not rows:
-        return None
-    return _row_to_incident(rows[0])
 
 
 async def close_incident(
     incident_id: str,
     status: IncidentStatus,
     when: datetime | None = None,
-) -> Incident | None:
-    current = await get_incident(incident_id)
-    if current is None:
-        return None
-    # Idempotent: any non-open status is terminal and is returned unchanged.
-    if current.status != IncidentStatus.OPEN:
-        return current
-    next_record = current.model_copy(
-        update={"status": status, "closed_ts": when or datetime.now(UTC)}
+) -> MutationResult:
+    if status == IncidentStatus.OPEN:
+        raise ValueError("close_incident target status must be terminal")
+    operation_id = uuid4().hex
+    lock_token = uuid4().hex
+    now = datetime.now(UTC).isoformat()
+    closed_ts = (when or datetime.now(UTC)).isoformat()
+
+    async def close(transaction: neo4j.AsyncManagedTransaction) -> MutationResult:
+        row = await _transaction_current(transaction, incident_id, lock_token)
+        if row is None:
+            return MutationResult("not_found", None)
+        current = _row_to_incident(row)
+        applied_ids = list(row.get("applied_mutation_ids") or [])
+        if operation_id in applied_ids:
+            return MutationResult("applied", current)
+        if current.status != IncidentStatus.OPEN:
+            return MutationResult("unchanged", current)
+        result = await transaction.run(
+            INCIDENT_MUTATION_CLOSE,
+            {
+                "incident_id": incident_id,
+                "status": status.value,
+                "closed_ts": closed_ts,
+                "applied_mutation_ids": [*applied_ids, operation_id],
+                "now": now,
+            },
+        )
+        updated = await result.single()
+        if updated is None:
+            return MutationResult("not_found", None)
+        return MutationResult("applied", _row_to_incident(dict(updated)))
+
+    return await write_transaction(
+        close, metadata={"incident_mutation_id": operation_id}
     )
-    ordinal = _ordinal_ms(datetime.now(UTC))
-    rows = await write_query(
-        INCIDENT_UPSERT,
-        _upsert_params(next_record, ordinal, await _incident_projection(next_record)),
-    )
-    if not rows:
-        return None
-    return _row_to_incident(rows[0])
 
 
 async def delete_incident(incident_id: str) -> bool:

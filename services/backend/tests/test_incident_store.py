@@ -16,6 +16,55 @@ from app.models.incident import (
 from app.services import incident_store
 
 
+class _SingleResult:
+    def __init__(self, row):
+        self.row = row
+
+    async def single(self):
+        return self.row
+
+
+class _MutationTransaction:
+    def __init__(self, row):
+        self.row = row
+        self.writes = []
+
+    async def run(self, query, params=None, **kwargs):
+        params = {**(params or {}), **kwargs}
+        self.writes.append((query, params))
+        if "__mutation_lock" in query:
+            return _SingleResult({"id": params["incident_id"]} if self.row else None)
+        if "applied_mutation_ids AS" in query:
+            return _SingleResult(self.row)
+        if "SET i.status = $status" in query:
+            self.row = {
+                **self.row,
+                "status": params["status"],
+                "closed_ts": params["closed_ts"],
+                "applied_mutation_ids": params["applied_mutation_ids"],
+            }
+        elif "SET i.severity = $severity" in query:
+            self.row = {
+                **self.row,
+                "severity": params["severity"],
+                "sources": params["sources"],
+                "layer_hints": params["layer_hints"],
+                "timeline_json": params["timeline_json"],
+                "applied_mutation_ids": params["applied_mutation_ids"],
+            }
+        return _SingleResult(self.row)
+
+
+def _patch_mutation_transaction(monkeypatch, row):
+    transaction = _MutationTransaction(row)
+
+    async def execute(callback, *, metadata=None):
+        return await callback(transaction)
+
+    monkeypatch.setattr(incident_store, "write_transaction", execute)
+    return transaction
+
+
 def _row(**overrides):
     base = {
         "id": "inc-001",
@@ -165,85 +214,61 @@ async def test_get_incident_decodes_timeline() -> None:
 
 
 @pytest.mark.asyncio
-async def test_close_incident_writes_status_and_closed_ts() -> None:
-    captured: dict = {}
-
-    async def fake_write(query, params):
-        captured.update(params)
-        return [_row(status="closed", closed_ts="2026-04-25T11:00:00Z")]
-
-    with (
-        patch.object(incident_store, "read_query", new=AsyncMock(return_value=[_row()])),
-        patch.object(incident_store, "write_query", new=AsyncMock(side_effect=fake_write)),
-    ):
-        record = await incident_store.close_incident(
-            "inc-001", IncidentStatus.SILENCED, datetime(2026, 4, 25, 11, tzinfo=UTC)
-        )
-        assert record is not None
-        assert captured["status"] == "silenced"
-        assert captured["closed_ts"] == "2026-04-25T11:00:00+00:00"
+async def test_close_incident_writes_status_and_closed_ts(monkeypatch) -> None:
+    transaction = _patch_mutation_transaction(monkeypatch, _row())
+    result = await incident_store.close_incident(
+        "inc-001", IncidentStatus.SILENCED, datetime(2026, 4, 25, 11, tzinfo=UTC)
+    )
+    assert result.status == "applied"
+    assert result.incident is not None
+    assert result.incident.status == IncidentStatus.SILENCED
+    close_query, params = transaction.writes[-1]
+    assert "SET i.status = $status" in close_query
+    assert params["status"] == "silenced"
+    assert params["closed_ts"] == "2026-04-25T11:00:00+00:00"
 
 
 @pytest.mark.asyncio
-async def test_append_timeline_event_grows_timeline() -> None:
-    seed = _row()
-    with (
-        patch.object(incident_store, "read_query", new=AsyncMock(return_value=[seed])),
-        patch.object(
-            incident_store,
-            "write_query",
-            new=AsyncMock(side_effect=lambda q, p: [_row(timeline_json=p["timeline_json"])]),
+async def test_append_timeline_event_grows_timeline(monkeypatch) -> None:
+    _patch_mutation_transaction(monkeypatch, _row())
+    result = await incident_store.append_timeline_event(
+        "inc-001",
+        IncidentTimelineEvent(
+            t_offset_s=92.0, kind="signal", text="GDELT 4 articles", severity="elevated"
         ),
-    ):
-        record = await incident_store.append_timeline_event(
-            "inc-001",
-            IncidentTimelineEvent(
-                t_offset_s=92.0, kind="signal", text="GDELT 4 articles", severity="elevated"
-            ),
-        )
-        assert record is not None
-        assert len(record.timeline) == 2
-        assert record.timeline[-1].text == "GDELT 4 articles"
+    )
+    assert result.status == "applied"
+    assert result.incident is not None
+    assert len(result.incident.timeline) == 2
+    assert result.incident.timeline[-1].text == "GDELT 4 articles"
 
 
 @pytest.mark.asyncio
-async def test_close_incident_is_idempotent_on_terminal_status() -> None:
+async def test_close_incident_is_idempotent_on_terminal_status(monkeypatch) -> None:
     """Calling close_incident on an already-CLOSED incident must be a no-op."""
-    mock_write = AsyncMock()
-    with (
-        patch.object(
-            incident_store,
-            "get_incident",
-            new=AsyncMock(return_value=incident_store._row_to_incident(_row(status="closed"))),
-        ),
-        patch.object(incident_store, "write_query", new=mock_write),
-    ):
-        record = await incident_store.close_incident("inc-001", IncidentStatus.CLOSED)
-        assert record is not None
-        assert record.status == IncidentStatus.CLOSED
-        mock_write.assert_not_called()
+    transaction = _patch_mutation_transaction(monkeypatch, _row(status="closed"))
+    result = await incident_store.close_incident("inc-001", IncidentStatus.CLOSED)
+    assert result.status == "unchanged"
+    assert result.incident is not None
+    assert result.incident.status == IncidentStatus.CLOSED
+    assert len(transaction.writes) == 2
 
 
 @pytest.mark.asyncio
-async def test_close_incident_does_not_overwrite_promoted_status() -> None:
+async def test_close_incident_does_not_overwrite_promoted_status(monkeypatch) -> None:
     """Calling close_incident on a PROMOTED incident must leave status unchanged."""
-    mock_write = AsyncMock()
-    with (
-        patch.object(
-            incident_store,
-            "get_incident",
-            new=AsyncMock(return_value=incident_store._row_to_incident(_row(status="promoted"))),
-        ),
-        patch.object(incident_store, "write_query", new=mock_write),
-    ):
-        record = await incident_store.close_incident("inc-001", IncidentStatus.CLOSED)
-        assert record is not None
-        assert record.status == IncidentStatus.PROMOTED
-        mock_write.assert_not_called()
+    transaction = _patch_mutation_transaction(monkeypatch, _row(status="promoted"))
+    result = await incident_store.close_incident("inc-001", IncidentStatus.CLOSED)
+    assert result.status == "unchanged"
+    assert result.incident is not None
+    assert result.incident.status == IncidentStatus.PROMOTED
+    assert len(transaction.writes) == 2
 
 
 @pytest.mark.asyncio
-async def test_apply_signal_update_appends_timeline_and_merges_severity_and_sources() -> None:
+async def test_apply_signal_update_appends_timeline_and_merges_severity_and_sources(
+    monkeypatch,
+) -> None:
     """apply_signal_update merges sources/hints (dedupe), escalates severity, appends timeline."""
     existing_timeline = json.dumps([
         {"t_offset_s": 0.0, "kind": "trigger", "text": "initial trigger", "severity": "elevated"}
@@ -268,79 +293,119 @@ async def test_apply_signal_update_appends_timeline_and_merges_severity_and_sour
         severity="high",
     )
 
-    updated_timeline = json.dumps([
-        {"t_offset_s": 0.0, "kind": "trigger", "text": "initial trigger", "severity": "elevated"},
-        {
-            "t_offset_s": 120.0,
-            "kind": "signal",
-            "text": "Telegram corroboration",
-            "severity": "high",
-        },
-    ])
-    mock_write = AsyncMock(
-        return_value=[
-            _row(
-                id="inc-042",
-                severity="high",
-                lat=48.0,
-                lon=37.8,
-                sources=["FIRMS · VIIRS_SNPP_NRT", "Telegram · OSINTdefender"],
-                layer_hints=[
-                    "firms",
-                    "events",
-                    "auto_promoter:v1",
-                    "cluster:firms:geo:48.0:37.8",
-                    "telegram",
-                ],
-                timeline_json=updated_timeline,
-            )
-        ]
+    transaction = _patch_mutation_transaction(
+        monkeypatch,
+        _row(
+            id=existing_incident.id,
+            severity=existing_incident.severity,
+            sources=existing_incident.sources,
+            layer_hints=existing_incident.layer_hints,
+            timeline_json=existing_timeline,
+        ),
+    )
+    result = await incident_store.apply_signal_update(
+        "inc-042",
+        timeline_event=new_timeline_event,
+        severity="high",
+        sources_to_merge=["FIRMS · VIIRS_SNPP_NRT", "Telegram · OSINTdefender"],
+        layer_hints_to_merge=["firms", "telegram"],
     )
 
-    with (
-        patch.object(incident_store, "get_incident", new=AsyncMock(return_value=existing_incident)),
-        patch.object(incident_store, "write_query", new=mock_write),
-    ):
-        result = await incident_store.apply_signal_update(
-            "inc-042",
-            timeline_event=new_timeline_event,
-            severity="high",
-            sources_to_merge=["FIRMS · VIIRS_SNPP_NRT", "Telegram · OSINTdefender"],
-            layer_hints_to_merge=["firms", "telegram"],
-        )
-
-    assert result is not None
-    assert result.severity == "high"
-    assert len(result.timeline) == 2
-    assert result.timeline[-1].text == "Telegram corroboration"
+    assert result.status == "applied"
+    assert result.incident is not None
+    assert result.incident.severity == "high"
+    assert len(result.incident.timeline) == 2
+    assert result.incident.timeline[-1].text == "Telegram corroboration"
     # Dedupe: "FIRMS · VIIRS_SNPP_NRT" must appear exactly once
-    assert result.sources.count("FIRMS · VIIRS_SNPP_NRT") == 1
-    assert "Telegram · OSINTdefender" in result.sources
-    assert "telegram" in result.layer_hints
-    mock_write.assert_called_once()
+    assert result.incident.sources.count("FIRMS · VIIRS_SNPP_NRT") == 1
+    assert "Telegram · OSINTdefender" in result.incident.sources
+    assert "telegram" in result.incident.layer_hints
+    update_query, params = transaction.writes[-1]
+    assert "MERGE" not in update_query
+    assert params["sources"][-1] == "Telegram · OSINTdefender"
 
 
 @pytest.mark.asyncio
-async def test_apply_signal_update_missing_incident_returns_none() -> None:
+async def test_apply_signal_update_missing_incident_returns_not_found(monkeypatch) -> None:
     """apply_signal_update is a no-op when the incident does not exist."""
-    mock_write = AsyncMock()
+    transaction = _patch_mutation_transaction(monkeypatch, None)
+    result = await incident_store.apply_signal_update(
+        "inc-does-not-exist",
+        timeline_event=IncidentTimelineEvent(
+            t_offset_s=0.0, kind="signal", text="phantom signal"
+        ),
+        severity="high",
+        sources_to_merge=["some-source"],
+        layer_hints_to_merge=["some-hint"],
+    )
 
-    with (
-        patch.object(incident_store, "get_incident", new=AsyncMock(return_value=None)),
-        patch.object(incident_store, "write_query", new=mock_write),
-    ):
-        result = await incident_store.apply_signal_update(
-            "inc-does-not-exist",
-            timeline_event=IncidentTimelineEvent(
-                t_offset_s=0.0, kind="signal", text="phantom signal"
-            ),
-            severity="high",
-            sources_to_merge=["some-source"],
-            layer_hints_to_merge=["some-hint"],
-        )
+    assert result.status == "not_found"
+    assert result.incident is None
+    assert len(transaction.writes) == 1
 
-    assert result is None
-    mock_write.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_apply_signal_update_does_not_lower_locked_severity(monkeypatch) -> None:
+    transaction = _patch_mutation_transaction(monkeypatch, _row(severity="critical"))
+    result = await incident_store.apply_signal_update(
+        "inc-001",
+        timeline_event=IncidentTimelineEvent(t_offset_s=1, kind="signal", text="late"),
+        severity="low",
+        sources_to_merge=[],
+        layer_hints_to_merge=[],
+    )
+    assert result.status == "applied"
+    assert result.incident is not None
+    assert result.incident.severity == "critical"
+    assert "lat =" not in transaction.writes[-1][0]
+    assert "lon =" not in transaction.writes[-1][0]
+    assert "MERGE" not in transaction.writes[-1][0]
+
+
+@pytest.mark.asyncio
+async def test_apply_signal_update_does_not_mutate_terminal_incident(monkeypatch) -> None:
+    transaction = _patch_mutation_transaction(monkeypatch, _row(status="silenced"))
+    result = await incident_store.apply_signal_update(
+        "inc-001",
+        timeline_event=IncidentTimelineEvent(t_offset_s=1, kind="signal", text="late"),
+        severity="critical",
+        sources_to_merge=["late-source"],
+        layer_hints_to_merge=["late-hint"],
+    )
+    assert result.status == "unchanged"
+    assert result.incident is not None
+    assert result.incident.status == IncidentStatus.SILENCED
+    assert len(transaction.writes) == 2
+
+
+@pytest.mark.asyncio
+async def test_managed_callback_replay_uses_receipt_without_duplicate_append(monkeypatch) -> None:
+    transaction = _patch_mutation_transaction(monkeypatch, _row())
+
+    async def retry_callback(callback, *, metadata=None):
+        first = await callback(transaction)
+        replay = await callback(transaction)
+        assert first.status == "applied"
+        return replay
+
+    monkeypatch.setattr(incident_store, "write_transaction", retry_callback)
+    result = await incident_store.apply_signal_update(
+        "inc-001",
+        timeline_event=IncidentTimelineEvent(t_offset_s=1, kind="signal", text="once"),
+        severity="high",
+        sources_to_merge=["s"],
+        layer_hints_to_merge=["h"],
+    )
+    assert result.status == "applied"
+    assert result.incident is not None
+    assert [event.text for event in result.incident.timeline].count("once") == 1
+    assert len(transaction.writes) == 5  # lock/read/update, then replay lock/read
+
+
+@pytest.mark.asyncio
+async def test_close_incident_rejects_open_target() -> None:
+    with pytest.raises(ValueError, match="must be terminal"):
+        await incident_store.close_incident("inc-001", IncidentStatus.OPEN)
 
 
 @pytest.mark.asyncio

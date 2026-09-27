@@ -92,6 +92,40 @@ INCIDENT_CREATE_IDEMPOTENT = (
 
 INCIDENT_DELETE = "MATCH (i:Incident {id: $incident_id}) DETACH DELETE i"
 
+# Incident mutations take an explicit write lock before reading mutable fields.
+INCIDENT_MUTATION_LOCK = (
+    "MATCH (i:Incident {id: $incident_id}) "
+    "SET i.__mutation_lock = $lock_token REMOVE i.__mutation_lock "
+    "RETURN i.id AS id"
+)
+INCIDENT_MUTATION_READ = (
+    "MATCH (i:Incident {id: $incident_id}) "
+    "RETURN i.id AS id, i.kind AS kind, i.title AS title, i.severity AS severity, "
+    "i.lat AS lat, i.lon AS lon, i.location AS location, i.status AS status, "
+    "toString(i.trigger_ts) AS trigger_ts, toString(i.closed_ts) AS closed_ts, "
+    "i.sources AS sources, i.layer_hints AS layer_hints, "
+    "i.timeline_json AS timeline_json, i.applied_mutation_ids AS applied_mutation_ids"
+)
+INCIDENT_MUTATION_UPDATE = (
+    "MATCH (i:Incident {id: $incident_id}) "
+    "SET i.severity = $severity, i.sources = $sources, i.layer_hints = $layer_hints, "
+    "i.timeline_json = $timeline_json, i.applied_mutation_ids = $applied_mutation_ids, "
+    "i.updated_at = datetime($now) "
+    "RETURN i.id AS id, i.kind AS kind, i.title AS title, i.severity AS severity, "
+    "i.lat AS lat, i.lon AS lon, i.location AS location, i.status AS status, "
+    "toString(i.trigger_ts) AS trigger_ts, toString(i.closed_ts) AS closed_ts, "
+    "i.sources AS sources, i.layer_hints AS layer_hints, i.timeline_json AS timeline_json"
+)
+INCIDENT_MUTATION_CLOSE = (
+    "MATCH (i:Incident {id: $incident_id}) "
+    "SET i.status = $status, i.closed_ts = datetime($closed_ts), "
+    "i.applied_mutation_ids = $applied_mutation_ids, i.updated_at = datetime($now) "
+    "RETURN i.id AS id, i.kind AS kind, i.title AS title, i.severity AS severity, "
+    "i.lat AS lat, i.lon AS lon, i.location AS location, i.status AS status, "
+    "toString(i.trigger_ts) AS trigger_ts, toString(i.closed_ts) AS closed_ts, "
+    "i.sources AS sources, i.layer_hints AS layer_hints, i.timeline_json AS timeline_json"
+)
+
 INCIDENT_ID_UNIQUE_CONSTRAINT = (
     "CREATE CONSTRAINT incident_id_unique IF NOT EXISTS "
     "FOR (i:Incident) REQUIRE i.id IS UNIQUE"

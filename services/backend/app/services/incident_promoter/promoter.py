@@ -211,25 +211,41 @@ class Promoter:
                     error=str(exc),
                 )
                 continue
-            await self._cluster_store.drop_cluster(state.cluster_key)
-            if closed is not None and closed.status == IncidentStatus.CLOSED:
-                self._incident_event_stream.publish("incident.close", closed)
+            incident = closed.incident
+            if closed.status == "not_found" or incident is None:
+                await self._cluster_store.drop_cluster(
+                    state.cluster_key, expected_incident_id=state.incident_id
+                )
+                continue
+            if incident.status == IncidentStatus.CLOSED:
+                await self._cluster_store.drop_cluster(
+                    state.cluster_key, expected_incident_id=state.incident_id
+                )
+                if closed.status == "applied":
+                    self._incident_event_stream.publish("incident.close", incident)
                 logger.info(
-                    "promoter_cluster_closed",
+                    "promoter_cluster_closed" if closed.status == "applied"
+                    else "promoter_cluster_stale_state_cleaned",
                     cluster_key=state.cluster_key,
                     incident_id=state.incident_id,
                     quiet_seconds=int(self._config.quiet_window_sec),
                     final_hit_count=state.hit_count,
                 )
-            elif closed is not None:
+            else:
+                await self._cluster_store.sync_incident_status(
+                    incident_id=state.incident_id,
+                    status=incident.status.value,
+                )
                 logger.info(
                     "promoter_close_skipped_terminal_status",
                     incident_id=state.incident_id,
-                    actual_status=str(closed.status),
+                    actual_status=str(incident.status),
                 )
         # Drop stale promoted — no DB write (analyst already wrote PROMOTED via /promote router)
         for state in snap.stale_promoted:
-            await self._cluster_store.drop_cluster(state.cluster_key)
+            await self._cluster_store.drop_cluster(
+                state.cluster_key, expected_incident_id=state.incident_id
+            )
 
     async def sweeper_loop(self) -> None:
         if not self._config.enabled:

@@ -1,6 +1,6 @@
 """Shared Neo4j async driver + read/write query helpers."""
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 import neo4j
@@ -63,3 +63,23 @@ async def write_query(cypher: str, params: dict[str, Any]) -> list[dict[str, Any
     async with driver.session(default_access_mode=neo4j.WRITE_ACCESS) as session:
         result = await session.run(cypher, params)
         return [dict(record) async for record in result]
+
+
+async def write_transaction[T](
+    callback: Callable[[neo4j.AsyncManagedTransaction], Awaitable[T]],
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> T:
+    """Run a callback in a retryable managed write transaction."""
+    driver = await get_graph_client()
+    async with driver.session(default_access_mode=neo4j.WRITE_ACCESS) as session:
+        if metadata is None:
+            return await session.execute_write(callback)
+
+        async def tagged_callback(
+            transaction: neo4j.AsyncManagedTransaction,
+        ) -> T:
+            return await callback(transaction)
+
+        tagged_callback = neo4j.unit_of_work(metadata=metadata)(tagged_callback)
+        return await session.execute_write(tagged_callback)

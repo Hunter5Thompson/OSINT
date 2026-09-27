@@ -144,10 +144,12 @@ async def get_incident(incident_id: str) -> Incident:
     dependencies=[Depends(_require_admin)],
 )
 async def silence(incident_id: str, request: Request) -> Incident:
-    record = await incident_store.close_incident(incident_id, IncidentStatus.SILENCED)
-    if record is None:
+    mutation = await incident_store.close_incident(incident_id, IncidentStatus.SILENCED)
+    record = mutation.incident
+    if mutation.status == "not_found" or record is None:
         raise HTTPException(status_code=404, detail="incident not found")
-    if record.status == IncidentStatus.SILENCED:
+    applied = mutation.status == "applied" and record.status == IncidentStatus.SILENCED
+    if applied:
         get_incident_stream().publish("incident.silence", record)
     else:
         log.info(
@@ -157,7 +159,7 @@ async def silence(incident_id: str, request: Request) -> Incident:
         )
     cluster_store = getattr(request.app.state, "cluster_store", None)
     cfg = getattr(request.app.state, "promoter_config", None)
-    if cluster_store is not None and cfg is not None:
+    if applied and cluster_store is not None and cfg is not None:
         from datetime import UTC
         from datetime import datetime as _dt
         from datetime import timedelta as _td
@@ -175,12 +177,15 @@ async def silence(incident_id: str, request: Request) -> Incident:
     dependencies=[Depends(_require_admin)],
 )
 async def promote(incident_id: str, request: Request) -> Incident:
-    record = await incident_store.close_incident(incident_id, IncidentStatus.PROMOTED)
-    if record is None:
+    mutation = await incident_store.close_incident(incident_id, IncidentStatus.PROMOTED)
+    record = mutation.incident
+    if mutation.status == "not_found" or record is None:
         raise HTTPException(status_code=404, detail="incident not found")
-    get_incident_stream().publish("incident.promote", record)
+    applied = mutation.status == "applied" and record.status == IncidentStatus.PROMOTED
+    if applied:
+        get_incident_stream().publish("incident.promote", record)
     cluster_store = getattr(request.app.state, "cluster_store", None)
-    if cluster_store is not None:
+    if applied and cluster_store is not None:
         try:
             await cluster_store.mark_promoted(incident_id)
         except Exception as exc:  # noqa: BLE001

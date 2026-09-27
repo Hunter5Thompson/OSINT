@@ -18,7 +18,7 @@ Gemeinsamer Vertrag: [README](README.md). Alle Pfade relativ zu `services/backen
 
 ## ~~I02 — Reservierung und Ignition nach Create-Fehlern wiederholbar machen~~ — FACHLICH ABGENOMMEN
 
-**Review 2026-09-27:** Implementierungscommit `3528d50`, PR #132; keine offenen Findings. Unabhängig 108 Promoter-/Pipeline-/Store-Tests, Ruff, fokussiertes Mypy und Diff-Check bestanden. Stabile Create-ID und ursprünglicher Request bleiben bei Fehlern erhalten; neue Retry-Beiträge werden dedupliziert bis zur erfolgreichen Anlage gesammelt. Der interne create-only-Pfad setzt `incident_id_unique` voraus. Kein Live-DB-Nachweis, keine dauerhafte Outbox, keine Prozesscrash-Garantie oder allgemeine Update-Wiederholung. CI und Merge separat prüfen; der folgende Vertrag bleibt als Abschlussnachweis erhalten.
+**Review 2026-09-27:** Implementierungscommit `3528d50`, PR #132, gemergt als `a3fc29c` um `2026-09-27T17:23:57Z`; keine offenen Findings. Unabhängig 108 Promoter-/Pipeline-/Store-Tests, Ruff, fokussiertes Mypy und Diff-Check bestanden. Stabile Create-ID und ursprünglicher Request bleiben bei Fehlern erhalten; neue Retry-Beiträge werden dedupliziert bis zur erfolgreichen Anlage gesammelt. Der interne create-only-Pfad setzt `incident_id_unique` voraus. Kein Live-DB-Nachweis, keine dauerhafte Outbox, keine Prozesscrash-Garantie oder allgemeine Update-Wiederholung.
 
 **F-01 Recovery · P0 · M · nach I01.**
 
@@ -40,9 +40,18 @@ Gemeinsamer Vertrag: [README](README.md). Alle Pfade relativ zu `services/backen
 
 **GREEN:** einen konsistenten `now`-Wert für Anlage/last_seen nutzen und vor Eviction setzen bzw. erst nach vollständiger Initialisierung evicten. Kein pauschales Erhöhen der Kapazität, keine Änderung der Jaccard-/Ignition-Schwellen. Fake-Clock statt realer Wartezeiten.
 
-## I04 — Incident-Mutationen in der Datenbank serialisieren
+## ~~I04 — Incident-Mutationen in der Datenbank serialisieren~~ — FACHLICH ABGENOMMEN
 
-**F-33 · P0 · L/Senior.** Zunächst konkreten Transaktionspatch entwerfen und reviewen; danach zwei Unterläufe Persistenz, dann Router/Promoter-Reaktionen.
+**Review 2026-09-27:** Implementierungscommit `12b4842`, PR #133; keine offenen Findings.
+Unabhängig 729 Backend-Tests mit `NEO4J_URL=bolt://127.0.0.1:1`, zwölf echte
+Neo4j-Race-/Replay-Tests auf isolierter Neo4j 5.26.23, Ruff, Mypy (90 Quelldateien)
+und Diff-Check bestanden. Die Altcode-Negativkontrolle verlor einen Timeline-Eintrag;
+terminale Router-Noops lösten falsche lokale Aktionen aus. Keine Produktivdatenänderung
+oder Deployment; keine Prozesscrash-/Exactly-once-Garantie. CI und Merge separat prüfen.
+Transaktionsvertrag siehe
+[I04-Transaktionsentwurf](I04-transaction-design.md).
+
+**F-33 · P0 · L/Senior.** Vor Implementierung konkreten Transaktionspatch entwerfen und reviewen (erledigt); danach Unterlauf Persistenz, dann Router-/Promoter-Reaktionen.
 
 **Scope:** `app/services/incident_store.py`, `app/cypher/incident_write.py`, `app/services/neo4j_client.py` nur benötigte Async-Transaktionsschnittstelle, `app/routers/incidents.py`, `app/services/incident_promoter/{cluster_store,promoter}.py`; `tests/test_incident_store.py`, Router-/Promotertests und neuer isolierter Neo4j-Nebenläufigkeitstest.
 

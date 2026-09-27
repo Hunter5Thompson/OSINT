@@ -14,6 +14,7 @@ from app.models.incident import (
     IncidentTimelineEvent,
 )
 from app.models.signals import SignalEnvelope, SignalPayload
+from app.services.incident_store import MutationResult
 
 
 class FakeClock:
@@ -75,10 +76,12 @@ class FakeIncidentStore:
         severity: str,
         sources_to_merge: list[str],
         layer_hints_to_merge: list[str],
-    ) -> Incident | None:
+    ) -> MutationResult:
         current = self._by_id.get(incident_id)
         if current is None:
-            return None
+            return MutationResult("not_found", None)
+        if current.status != IncidentStatus.OPEN:
+            return MutationResult("unchanged", current)
         merged_sources = list(dict.fromkeys([*current.sources, *sources_to_merge]))
         merged_hints = list(dict.fromkeys([*current.layer_hints, *layer_hints_to_merge]))
         next_record = current.model_copy(
@@ -90,24 +93,24 @@ class FakeIncidentStore:
             }
         )
         self._by_id[incident_id] = next_record
-        return next_record
+        return MutationResult("applied", next_record)
 
     async def close_incident(
         self,
         incident_id: str,
         status: IncidentStatus,
         when: datetime | None = None,
-    ) -> Incident | None:
+    ) -> MutationResult:
         current = self._by_id.get(incident_id)
         if current is None:
-            return None
+            return MutationResult("not_found", None)
         if current.status != IncidentStatus.OPEN:
-            return current  # idempotent
+            return MutationResult("unchanged", current)
         next_record = current.model_copy(
             update={"status": status, "closed_ts": when or datetime.now(UTC)}
         )
         self._by_id[incident_id] = next_record
-        return next_record
+        return MutationResult("applied", next_record)
 
     async def list_owned_for_rehydrate(self) -> list[Incident]:
         return [
