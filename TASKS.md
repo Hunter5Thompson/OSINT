@@ -2079,3 +2079,11 @@ Observation-Producer.
 # - Collector: explicit ms normalization incl. time.time() fallback; dedup bucket now
 #   a real 15-minute window (was 900 ms); Location lat/lon/name follow the latest
 #   observation like geo/country do. Takes effect on the next ingestion image deploy.
+
+# 2026-09-27 — GDELT Qdrant: invalid linked event blocked a whole slice
+# - Slice 20260827091500 failed qdrant_recovery every 15 min (44x since the 02:56
+#   restart): 1 of 84 events has a null GoldsteinScale; GDELTEventWrite validation
+#   in the Qdrant spatial-evidence path raised and kept all 542 documents out.
+# - Fix: skip-and-log the invalid linked event (same WP-02 contract as the Neo4j
+#   writer). Verified on the real slice with a mocked client: 542 points, 1 warning.
+#   Clears on the next ingestion image deploy; the pending entry then drains.

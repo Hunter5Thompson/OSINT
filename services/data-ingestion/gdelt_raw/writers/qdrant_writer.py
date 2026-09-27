@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 import polars as pl
 import structlog
+from pydantic import ValidationError
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from feeds.provenance import ingestion_timestamps, provenance_fields
@@ -262,7 +263,19 @@ class QdrantWriter:
                     event_id=event_id,
                 )
                 continue
-            event = GDELTEventWrite.model_validate(event_row)
+            try:
+                event = GDELTEventWrite.model_validate(event_row)
+            except ValidationError as exc:
+                # Same skip-and-log contract as the Neo4j writer (WP-02): the
+                # Neo4j path rejects this event too, so it is no evidence here,
+                # and one malformed row must not keep the whole slice out.
+                log.warning(
+                    "gdelt_spatial_linked_event_invalid",
+                    doc_id=row.get("doc_id"),
+                    event_id=event_id,
+                    error=str(exc).splitlines()[0],
+                )
+                continue
             raw = raw_location_identity_for_event(event)
             if raw is None:
                 continue
