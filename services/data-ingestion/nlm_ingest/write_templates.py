@@ -69,7 +69,7 @@ MERGE (c)-[r:EXTRACTED_FROM {source_kind: $source_kind, source_id: $source_id}]-
 
 LINK_CLAIM_ENTITY = """
 MATCH (c:Claim {statement_hash: $statement_hash})
-MATCH (e:Entity {name: $entity_name})
+MATCH (e:Entity {name: $entity_name, type: $entity_type})
 MERGE (c)-[:INVOLVES]->(e)
 """
 

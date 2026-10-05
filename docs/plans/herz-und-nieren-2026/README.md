@@ -22,7 +22,7 @@ Der bestehende Umsetzungsauftrag deckt Implementierung, scoped Commit/Push und B
 **Bündelbasis: 36 Implementierungstickets → 13 Themen-PRs.** B01 mit drei Tickets
 ist gemergt; B02 mit drei weiteren Tickets ist ebenfalls gemergt.
 B03 mit vier weiteren Tickets ist fachlich abgenommen, Merge offen.
-Nach B03 verbleiben 26 Fix-Tickets in zehn Bündeln. Die Einzel-IDs,
+Nach B03 verblieben 26 Fix-Tickets in zehn Bündeln; B04 (D03, A04) ist implementiert, Review/Merge offen. Die Einzel-IDs,
 Scopes und Abnahmekriterien bleiben erhalten. A02 ist in D07 enthalten und wird nicht
 nochmals gezählt. Die bereits gemergten S01/S02/S03/I01/I02/I04 bleiben abgeschlossen.
 Diese Bündelreihenfolge ersetzt die frühere PR-Reihenfolge nach Wellen.
@@ -32,7 +32,7 @@ Diese Bündelreihenfolge ersetzt die frühere PR-Reihenfolge nach Wellen.
 | ~~B01~~ (gemergt, PR #134) | Incident-Recovery und Zeitwerte | ~~I05~~ → ~~I06~~, ~~I03~~ | Rehydration, Health/Inspector, deterministische Zeitwerte, Telegram-Eviction; Backend-Gesamtchecks |
 | ~~B02~~ (gemergt, PR #135) | Backend-Feeds und Cache-Recovery | ~~D04~~, ~~D05~~, ~~D11~~ | Fehlerhafte Einzelzeilen, Cache-Recovery und Feed-Freshness; Backend-Gesamtchecks |
 | ~~B03~~ (fachlich abgenommen, PR #136; Merge offen) | Ingestion-Parser und Quellidentität | ~~D08~~, ~~A01~~, ~~A05~~, ~~A06~~ | Je Quelle eigener RED/GREEN-Unterlauf; Collector-/Pipeline-Verträge und Ingestion-Gesamtchecks |
-| B04 | Graph-Auswahl und Claim-Kanten | D03, A04 | Isolierte echte Neo4j-Fixtures für Filter und typgebundene Kanten; Backend/Ingestion |
+| B04 (implementiert, Review/PR offen) | Graph-Auswahl und Claim-Kanten | ~~D03~~, ~~A04~~ | Isolierte echte Neo4j-Fixtures für Filter und typgebundene Kanten; Backend/Ingestion |
 | B05 | Schiffs- und Flugmesswerte | D01 → D02, D10 | Producer→API→Anzeige, unbekannte Werte und Rollen; Backend/Ingestion/Frontend samt Browser-Smoke |
 | B06 | Hotspot-Daten und Abdeckung | A03, D06; X01/X02-Entscheidungsvorlagen | Keine Absenkung bei Ausfall, saubere Texte; bestehende Policy erhalten, Abdeckungsgrenzen dokumentieren |
 | B07 | Kanonische Identitäten | A07, A08 | Vor Codeänderungen Legacy-ID-/Key-Konzept prüfen; Hash-/Key-Parität, keine Live-Reingestion oder Migration |

@@ -17,7 +17,7 @@
 Auf Nutzerauftrag werden die 36 offenen Herz-und-Nieren-Fix-Tickets in **13 Themen-PRs**
 gebündelt. Der [Bündelplan](docs/plans/herz-und-nieren-2026/README.md#bündelplan-und-reihenfolge)
 ersetzt die Einzel-PR-Regel; Einzeltests, Senior-Review und Mergefreigabe bleiben erhalten.
-**B01 = I05 → I06 plus I03 ist gemergt (PR #134, Merge `77a98ad`). B02 = D04/D05/D11 ist gemergt (PR #135, Merge `6742481`). B03 = D08/A01/A05/A06 ist fachlich abgenommen (PR #136, Merge offen).** X04-Designvorlage liegt vor; Entscheidung offen;
+**B01 = I05 → I06 plus I03 ist gemergt (PR #134, Merge `77a98ad`). B02 = D04/D05/D11 ist gemergt (PR #135, Merge `6742481`). B03 = D08/A01/A05/A06 ist gemergt (PR #136, Merge `ef0316c`). B04 = D03/A04 ist implementiert (Review/PR offen).** X04-Designvorlage liegt vor; Entscheidung offen;
 vier Designaufträge und R01 sind keine stillschweigend abgeschlossenen Fixes.
 PR #133 / HN-I04 ist seit 2026-09-27T18:34:17Z gemergt (`1eb5fdb`).
 
@@ -53,6 +53,16 @@ und Diff-Check grün. Testumgebung: `NEO4J_PASSWORD=''`, Neo4j-/Qdrant-URLs auf
 unerreichbare lokale Ziele. HAPI-Constraint nur als operator-run Datei vorbereitet;
 vor parallelem HAPI-Deployment separat anwenden. Keine historischen Datenkorrekturen,
 keine Livefeeds oder Produktionsschreibtests. PR-CI und Merge separat prüfen.
+
+**HN-B04 (D03/A04) — IMPLEMENTIERT, unabhängiges Review/PR/Merge offen:**
+D03: Event-`WHERE` am Event-MATCH vor dem `OPTIONAL MATCH`; Koordinatenpaar paarweise
+finit/im Bereich, sonst Event ohne Geometrie, echte 0 erhalten. A04: `LINK_CLAIM_ENTITY`
+matcht Name+Typ aus den deklarierten Extraction-Entities; ohne genau einen Typ wird
+übersprungen (Warnlog), nie name-only. Nachweise gegen isolierte, markierte Neo4j
+(Geo-Datei und Claim-Link-Datei unter `integration_tests/`), Backend 821 / Ingestion
+1671 Tests, Ruff, Mypy grün. Offen: mehrere `OCCURRED_AT`-Zeilen je Event, alte
+name-only-Kanten (R01), name-only `LINK_ENTITY_EVENT` im Intelligence-Dienst,
+Geo-Filter `entity=` nur über Namen. Keine Produktionsdaten, kein Deployment.
 
 ## Fixplan Herz und Nieren 2026 — laufende Umsetzung
 

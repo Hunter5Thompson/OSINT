@@ -24,6 +24,8 @@ Gemeinsamer Vertrag: [README](README.md). Backendpfade relativ zu `services/back
 
 ## D03 — Geo-Events vor Optional-Location filtern
 
+**Stand B04 (implementiert, unabhängiges Review und Merge offen):** Event-`WHERE` sitzt am Event-MATCH; Koordinatenpaar paarweise finit/im Bereich, sonst Event ohne Geometrie, echte 0 erhalten. 14 Tests gegen isolierte Neo4j (`integration_tests/test_graph_geo_events.py`). Mehrfach-Locations bleiben bekannte Zeilenvervielfachung (eine Zeile je Location), kein Redesign.
+
 **F-03 · P1 · M.**
 
 **Scope:** `app/routers/graph.py`, `app/models/events.py`, vorhandene Graph-Routertests, neuer isolierter Neo4j-Fixturetest.

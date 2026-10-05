@@ -144,6 +144,29 @@ class TestEntityCanonicalizationNLM:
         )
         link = self._params_for(_build_statements(ex, "RAND", []), "MERGE (c)-[:INVOLVES]")[0]
         assert link["entity_name"] == "U.S. Navy"
+        assert link["entity_type"] == "MILITARY_UNIT"
+
+    def test_claim_entity_without_typed_extraction_entity_emits_no_link(self):
+        ex = self._extraction(
+            entities=[
+                Entity(name="Other", type="ORGANIZATION", aliases=[], confidence=0.9)
+            ],
+            claims=[
+                Claim(
+                    statement="Mercury noted", type="factual", polarity="neutral",
+                    entities_involved=["Mercury"], confidence=0.9,
+                    temporal_scope="ongoing",
+                )
+            ],
+        )
+        assert self._params_for(
+            _build_statements(ex, "RAND", []), "MERGE (c)-[:INVOLVES]"
+        ) == []
+
+    def test_claim_link_template_binds_entity_type(self):
+        from nlm_ingest.write_templates import LINK_CLAIM_ENTITY
+
+        assert "type: $entity_type" in LINK_CLAIM_ENTITY
 
 
 class TestIngestExtraction:
