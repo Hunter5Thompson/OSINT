@@ -15,6 +15,8 @@ os.environ.setdefault("NEO4J_PASSWORD", "hn-b04-unused-default-client-password")
 from app.routers import graph as graph_router  # noqa: E402
 
 _MARKER_ID = "hn-i04-isolated-20260927"
+# Only the labels this suite seeds; other suites sharing the instance keep theirs.
+_WIPE = "MATCH (n) WHERE n:Event OR n:Location OR n:Entity DETACH DELETE n"
 _RECENT = 2_000_000_000
 _OLD = 1_000_000_000
 
@@ -35,12 +37,10 @@ async def driver():
         if await result.single() is None:
             await drv.close()
             pytest.fail(f"Neo4j test marker {_MARKER_ID!r} is missing")
-        await session.run(
-            "MATCH (n) WHERE NOT n:HNTestInstance DETACH DELETE n"
-        )
+        await session.run(_WIPE)
     yield drv
     async with drv.session() as session:
-        await session.run("MATCH (n) WHERE NOT n:HNTestInstance DETACH DELETE n")
+        await session.run(_WIPE)
     await drv.close()
 
 
@@ -190,3 +190,24 @@ async def test_limit_is_still_applied_and_bound(driver):
     resp = await graph_router.get_geo_events(entity=None, codebook_type=None, limit=2)
 
     assert [e.title for e in resp.events] == ["e4", "e3"]
+
+
+@pytest.mark.asyncio
+async def test_entity_filter_keeps_locationless_event_under_limit_pressure(driver):
+    for i in range(4):
+        await _seed_event(
+            driver, f"civil-{i}", "other.misc", _RECENT + i,
+            loc={"lat": 1.0, "lon": 2.0}, entity="NATO",
+        )
+    await _seed_event(driver, "nato-old-noloc", "military.exercise", _OLD, entity="NATO")
+    await _seed_event(
+        driver, "other-new", "military.exercise", _RECENT + 10,
+        loc={"lat": 1.0, "lon": 2.0}, entity="Other",
+    )
+
+    resp = await graph_router.get_geo_events(
+        entity="NATO", codebook_type="military", limit=3
+    )
+
+    assert [e.title for e in resp.events] == ["nato-old-noloc"]
+    assert resp.events[0].lat is None

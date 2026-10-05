@@ -136,3 +136,26 @@ async def test_canonical_alias_links_to_canonical_name_and_type(driver):
     await _write(driver, ex)
 
     assert await _involves(driver) == [{"name": "U.S. Navy", "type": "MILITARY_UNIT"}]
+
+
+@pytest.mark.asyncio
+async def test_preexisting_name_only_edges_are_left_untouched(driver):
+    """A04 must not remove legacy edges; that cleanup belongs to R01."""
+    await _seed_homonyms(driver)
+    async with driver.session() as session:
+        await session.run(
+            "CREATE (c:Claim {statement_hash: 'legacy'}) "
+            "WITH c MATCH (e:Entity {name: 'Mercury'}) CREATE (c)-[:INVOLVES]->(e)"
+        )
+    ex = _extraction(
+        [Entity(name="Mercury", type="ORGANIZATION", aliases=[], confidence=0.9)],
+        ["Mercury"],
+    )
+
+    await _write(driver, ex)
+
+    assert await _involves(driver) == [
+        {"name": "Mercury", "type": "ORGANIZATION"},
+        {"name": "Mercury", "type": "ORGANIZATION"},
+        {"name": "Mercury", "type": "WEAPON_SYSTEM"},
+    ]

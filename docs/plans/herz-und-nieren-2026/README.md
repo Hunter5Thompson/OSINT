@@ -22,7 +22,7 @@ Der bestehende Umsetzungsauftrag deckt Implementierung, scoped Commit/Push und B
 **Bündelbasis: 36 Implementierungstickets → 13 Themen-PRs.** B01 mit drei Tickets
 ist gemergt; B02 mit drei weiteren Tickets ist ebenfalls gemergt.
 B03 mit vier weiteren Tickets ist fachlich abgenommen, Merge offen.
-Nach B03 verbleiben 26 Fix-Tickets in zehn Bündeln. Die Einzel-IDs,
+Nach B03 verblieben 26 Fix-Tickets in zehn Bündeln; B04 (D03, A04) ist implementiert, Review/Merge offen. Die Einzel-IDs,
 Scopes und Abnahmekriterien bleiben erhalten. A02 ist in D07 enthalten und wird nicht
 nochmals gezählt. Die bereits gemergten S01/S02/S03/I01/I02/I04 bleiben abgeschlossen.
 Diese Bündelreihenfolge ersetzt die frühere PR-Reihenfolge nach Wellen.
