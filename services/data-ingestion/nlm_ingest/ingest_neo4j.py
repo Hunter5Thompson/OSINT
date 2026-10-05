@@ -27,6 +27,15 @@ def _canonical_name(name: str) -> str:
     return canonicalize_entity(name, "").name
 
 
+def _entity_types_by_name(extraction: Extraction) -> dict[str, set[str]]:
+    """Canonical entity name -> canonical types declared by this extraction."""
+    types: dict[str, set[str]] = {}
+    for entity in extraction.entities:
+        canon = canonicalize_entity(entity.name, entity.type)
+        types.setdefault(canon.name, set()).add(canon.type)
+    return types
+
+
 def _build_relation_statements(canonical) -> list[dict]:
     """Statement+params per pre-validated CanonicalRelation (support-set MERGE).
 
@@ -59,6 +68,7 @@ def _build_statements(
     extraction: Extraction, source_name: str, canonical_relations
 ) -> list[dict]:
     statements: list[dict] = []
+    entity_types = _entity_types_by_name(extraction)
 
     # 1. Upsert Source with quality tier
     statements.append({
@@ -143,13 +153,26 @@ def _build_statements(
             },
         })
 
-        # 7. Link Claim → Entities
+        # 7. Link Claim → Entities. The link MATCHes on the canonical name+type
+        #    identity declared by this extraction; a name without exactly one
+        #    declared type is skipped, never linked by name alone (homonyms).
         for entity_name in claim.entities_involved:
+            canonical_name = _canonical_name(entity_name)
+            declared = entity_types.get(canonical_name, set())
+            if len(declared) != 1:
+                log.warning(
+                    "nlm_claim_entity_link_skipped",
+                    entity=canonical_name,
+                    declared_types=sorted(declared),
+                    notebook_id=extraction.notebook_id,
+                )
+                continue
             statements.append({
                 "statement": LINK_CLAIM_ENTITY,
                 "parameters": {
                     "statement_hash": stmt_hash,
-                    "entity_name": _canonical_name(entity_name),
+                    "entity_name": canonical_name,
+                    "entity_type": next(iter(declared)),
                 },
             })
 

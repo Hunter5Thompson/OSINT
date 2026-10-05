@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import structlog
@@ -18,6 +19,25 @@ router = APIRouter(prefix="/graph", tags=["graph"])
 
 def _cap_limit(limit: int) -> int:
     return min(max(limit, 1), 200)
+
+
+def _coordinate_pair(lat: Any, lon: Any) -> tuple[float | None, float | None]:
+    """Return a finite in-range (lat, lon) pair, or (None, None) as a unit.
+
+    A broken or half-present coordinate drops the geometry, never the event; a
+    true 0 is a valid coordinate and is preserved.
+    """
+    values: list[float] = []
+    for value in (lat, lon):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None, None
+        number = float(value)
+        if not math.isfinite(number):
+            return None, None
+        values.append(number)
+    if not (-90.0 <= values[0] <= 90.0 and -180.0 <= values[1] <= 180.0):
+        return None, None
+    return values[0], values[1]
 
 
 @router.get("/entity/{name}", response_model=GraphResponse)
@@ -187,6 +207,10 @@ async def get_geo_events(
         entity_match = "MATCH (ev:Event) "
         params = {"limit": limit}
 
+    # The Event filter must sit directly on the Event MATCH: after an OPTIONAL
+    # MATCH a WHERE only constrains the optional Location, so every Event would
+    # still be returned. Multiple OCCURRED_AT locations stay a known row-
+    # multiplication boundary (one row per location), not redesigned here.
     type_filter = ""
     if codebook_type:
         type_filter = "WHERE ev.codebook_type STARTS WITH $codebook_type "
@@ -194,8 +218,8 @@ async def get_geo_events(
 
     cypher = (
         f"{entity_match}"
-        f"OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location) "
         f"{type_filter}"
+        f"OPTIONAL MATCH (ev)-[:OCCURRED_AT]->(l:Location) "
         f"RETURN elementId(ev) AS id, ev.title AS title, ev.codebook_type AS codebook_type, "
         f"ev.severity AS severity, "
         f"coalesce(ev.timeline_at, ev.timestamp, ev.date_added) AS timestamp, "
@@ -205,20 +229,22 @@ async def get_geo_events(
     )
 
     rows = await _read_query(cypher, params)
-    events = [
-        GeoEvent(
-            id=str(r.get("id") or ""),
-            title=str(r.get("title") or ""),
-            codebook_type=str(r.get("codebook_type") or ""),
-            severity=str(r.get("severity") or ""),
-            timestamp=str(r["timestamp"]) if r.get("timestamp") else None,
-            location_name=str(r["location_name"]) if r.get("location_name") else None,
-            country=str(r["country"]) if r.get("country") else None,
-            lat=float(r["lat"]) if r.get("lat") is not None else None,
-            lon=float(r["lon"]) if r.get("lon") is not None else None,
+    events: list[GeoEvent] = []
+    for r in rows:
+        lat, lon = _coordinate_pair(r.get("lat"), r.get("lon"))
+        events.append(
+            GeoEvent(
+                id=str(r.get("id") or ""),
+                title=str(r.get("title") or ""),
+                codebook_type=str(r.get("codebook_type") or ""),
+                severity=str(r.get("severity") or ""),
+                timestamp=str(r["timestamp"]) if r.get("timestamp") else None,
+                location_name=str(r["location_name"]) if r.get("location_name") else None,
+                country=str(r["country"]) if r.get("country") else None,
+                lat=lat,
+                lon=lon,
+            )
         )
-        for r in rows
-    ]
     return GeoEventsResponse(events=events, total_count=len(events))
 
 

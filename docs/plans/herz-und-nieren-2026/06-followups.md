@@ -29,6 +29,8 @@ Gemeinsame unabhängige Abnahme: 1669 Ingestion-Tests bestanden, ein bestehender
 
 ## A04 — NLM-Claim-Verknüpfung typgebunden
 
+**Stand B04 (implementiert, unabhängiges Review und Merge offen):** `LINK_CLAIM_ENTITY` matcht Name+Typ; Typ stammt aus den deklarierten Extraction-Entities (kanonisiert). Namen ohne genau einen deklarierten Typ werden mit Warnlog übersprungen, nie name-only verknüpft. 4 Tests gegen isolierte Neo4j (`integration_tests/test_nlm_claim_links.py`). Altkanten aus früheren name-only-Läufen bleiben unberührt: Altdatenbedarf gehört zu R01.
+
 **Unnummerierter Hinweis 4 · P1 · M/Senior-Datenreview.** Data-Ingestion `nlm_ingest/write_templates.py::LINK_CLAIM_ENTITY`, konkrete Caller in `nlm_ingest/ingest_neo4j.py`, Schema-/Template-/Ingesttests.
 
 **RED:** zwei Entity-Nodes mit `name='Mercury'`, verschiedenen kanonischen Typen; Claim soll genau eine Kante erzeugen. Payload-Typ muss vom Extraktionsmodell bis zum gebundenen Templateparameter gelangen. Unbekannter Typ darf nicht wieder auf Name-only zurückfallen.
