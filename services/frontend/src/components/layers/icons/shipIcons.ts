@@ -37,10 +37,11 @@ const iconCache = new Map<string, HTMLCanvasElement>();
 
 export function getShipTypeIcon(
   type: ShipIconType,
-  courseDeg: number,
+  courseDeg: number | null,
 ): HTMLCanvasElement {
-  const bucket = ((Math.round((courseDeg || 0) / 5) * 5) % 360 + 360) % 360;
-  const key = `${type}_${bucket}`;
+  const unknownCourse = courseDeg === null;
+  const bucket = unknownCourse ? 0 : ((Math.round(courseDeg / 5) * 5) % 360 + 360) % 360;
+  const key = unknownCourse ? `${type}_unknown` : `${type}_${bucket}`;
 
   const cached = iconCache.get(key);
   if (cached) return cached;
@@ -57,6 +58,18 @@ export function getShipTypeIcon(
   ctx.scale(2, 2);
   ctx.translate(size / 2, size / 2);
   ctx.rotate((bucket * Math.PI) / 180);
+
+  if (unknownCourse) {
+    // No heading known: direction-less ring instead of a bow that points north.
+    ctx.beginPath();
+    ctx.arc(0, 0, 5, 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.9;
+    ctx.stroke();
+    iconCache.set(key, canvas);
+    return canvas;
+  }
 
   switch (type) {
     case "warship":

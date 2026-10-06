@@ -93,10 +93,16 @@ def _finite_degrees(value: object, *, limit: float) -> float | None:
     return number
 
 
-def _number_or_zero(value: object) -> float | None:
+def _measurement(value: object) -> float | None:
+    """A finite number, or None for missing/blank/invalid. Never invents 0."""
     if value is None or value == "":
-        return 0.0
+        return None
     return _finite_number(value)
+
+
+def _is_ground(value: object) -> bool:
+    """The ground sentinel is a string; numbers (including 0) are altitudes."""
+    return isinstance(value, str) and value.strip().lower() == "ground"
 
 
 def _optional_callsign(value: object) -> str | None:
@@ -166,20 +172,18 @@ def _parse_adsb_aircraft(ac: object) -> Aircraft | None:
     icao = ac.get("hex")
     if not isinstance(icao, str) or not icao.strip():
         return None
-    raw_alt = ac.get("alt_baro", 0)
-    on_ground = raw_alt == "ground"
+    raw_alt = ac.get("alt_baro")
+    on_ground = _is_ground(raw_alt)
+    altitude_feet = _measurement(raw_alt) if not on_ground else None
+    if altitude_feet is None and not on_ground:
+        altitude_feet = _measurement(ac.get("alt_geom"))
     if on_ground:
-        altitude_m = 0.0
+        altitude_m: float | None = 0.0
     else:
-        altitude_feet = _number_or_zero(raw_alt)
-        if altitude_feet is None:
-            return None
-        altitude_m = altitude_feet * 0.3048
-    speed_knots = _number_or_zero(ac.get("gs", 0))
-    heading = _number_or_zero(ac.get("track", 0))
-    vertical_fpm = _number_or_zero(ac.get("baro_rate", 0))
-    if speed_knots is None or heading is None or vertical_fpm is None:
-        return None
+        altitude_m = None if altitude_feet is None else altitude_feet * 0.3048
+    speed_knots = _measurement(ac.get("gs"))
+    heading = _measurement(ac.get("track"))
+    vertical_fpm = _measurement(ac.get("baro_rate"))
     raw_flags = ac.get("dbFlags", 0)
     try:
         db_flags = int(raw_flags or 0)
@@ -193,9 +197,9 @@ def _parse_adsb_aircraft(ac: object) -> Aircraft | None:
         latitude=lat,
         longitude=lon,
         altitude_m=altitude_m,
-        velocity_ms=speed_knots * 0.5144,
+        velocity_ms=None if speed_knots is None else speed_knots * 0.5144,
         heading=heading,
-        vertical_rate=vertical_fpm * 0.00508,
+        vertical_rate=None if vertical_fpm is None else vertical_fpm * 0.00508,
         on_ground=on_ground,
         is_military=bool(db_flags & 1) or _is_military_callsign(callsign),
         aircraft_type=aircraft_type if isinstance(aircraft_type, str) else None,
@@ -221,17 +225,20 @@ def _parse_opensky_state(state: object) -> Aircraft | None:
     if lat is None or lon is None or not state[0]:
         return None
     callsign = _optional_callsign(state[1])
-    altitude = _number_or_zero(state[7])
-    speed = _number_or_zero(state[9])
-    heading = _number_or_zero(state[10])
-    vertical = _number_or_zero(state[11])
-    if altitude is None or speed is None or heading is None or vertical is None:
-        return None
-    raw_contact = state[4] or 0
-    try:
-        last_contact = datetime.fromtimestamp(float(raw_contact), tz=UTC)
-    except (TypeError, ValueError, OSError, OverflowError):
-        return None
+    altitude = _measurement(state[7])
+    if altitude is None and len(state) > 13:
+        altitude = _measurement(state[13])
+    speed = _measurement(state[9])
+    heading = _measurement(state[10])
+    vertical = _measurement(state[11])
+    # Field contract: index 4 is last_contact. Never substitute time_position.
+    last_contact: datetime | None = None
+    raw_contact = _measurement(state[4])
+    if raw_contact is not None:
+        try:
+            last_contact = datetime.fromtimestamp(raw_contact, tz=UTC)
+        except (OSError, OverflowError, ValueError):
+            last_contact = None
     return Aircraft(
         icao24=str(state[0]),
         callsign=callsign,
@@ -270,18 +277,14 @@ def _parse_fr24_row(val: object) -> Aircraft | None:
         return None
     callsign_raw = val[16] if len(val) > 16 else val[13]
     callsign = _optional_callsign(callsign_raw)
-    on_ground = val[4] == "ground"
+    on_ground = _is_ground(val[4])
     if on_ground:
-        altitude_m = 0.0
+        altitude_m: float | None = 0.0
     else:
-        altitude_feet = _number_or_zero(val[4])
-        if altitude_feet is None:
-            return None
-        altitude_m = altitude_feet * 0.3048
-    speed_knots = _number_or_zero(val[5])
-    heading = _number_or_zero(val[3])
-    if speed_knots is None or heading is None:
-        return None
+        altitude_feet = _measurement(val[4])
+        altitude_m = None if altitude_feet is None else altitude_feet * 0.3048
+    speed_knots = _measurement(val[5])
+    heading = _measurement(val[3])
     aircraft_type = val[8] if len(val) > 8 and isinstance(val[8], str) and val[8] else None
     return Aircraft(
         icao24=str(val[0]),
@@ -289,9 +292,9 @@ def _parse_fr24_row(val: object) -> Aircraft | None:
         latitude=lat,
         longitude=lon,
         altitude_m=altitude_m,
-        velocity_ms=speed_knots * 0.5144,
+        velocity_ms=None if speed_knots is None else speed_knots * 0.5144,
         heading=heading,
-        vertical_rate=0,
+        vertical_rate=None,
         on_ground=on_ground,
         is_military=_is_military_callsign(callsign),
         aircraft_type=aircraft_type,

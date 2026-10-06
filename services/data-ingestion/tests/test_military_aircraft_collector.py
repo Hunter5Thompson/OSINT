@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import feeds.military_aircraft_collector as mac
 from feeds.military_aircraft_collector import (
     MilitaryAircraftCollector,
     build_aircraft_location_statement,
@@ -57,29 +58,84 @@ def collector(mock_settings):
     return c
 
 
-def test_identify_branch_usaf():
-    assert identify_branch("ADF7C8") == "USAF"
-    assert identify_branch("AFFFFF") == "USAF"
+@pytest.mark.parametrize(
+    "icao24",
+    [
+        "ADF7C8", "AFFFFF", "AD0000",  # US national block
+        "400000", "43C000",            # UK
+        "4D0000",                      # not a verified NATO block
+        "3EA000", "3C0000",            # Germany
+        "3AA000", "388000",            # France
+        "738A00", "738000",            # Israel
+        "a1b2c3", "406123", "3c6444",  # civil addresses inside reported country blocks
+        "000000", "FFFFFF", "zzzzzz",
+    ],
+)
+def test_identify_branch_gives_no_branch_from_national_blocks(icao24):
+    assert identify_branch(icao24) is None
 
-def test_identify_branch_raf():
-    assert identify_branch("400000") == "RAF"
-    assert identify_branch("43C000") == "RAF"
 
-def test_identify_branch_nato():
-    assert identify_branch("4D0000") == "NATO"
+def test_identify_branch_returns_branch_only_for_a_verified_range(monkeypatch):
+    monkeypatch.setattr(
+        mac,
+        "VERIFIED_BRANCH_RANGES",
+        ((0xABC000, 0xABCFFF, "TESTBRANCH", "fixture register entry"),),
+    )
+    assert identify_branch("ABC123") == "TESTBRANCH"
+    assert identify_branch("abc000") == "TESTBRANCH"
+    assert identify_branch("ABCFFF") == "TESTBRANCH"
+    assert identify_branch("ABD000") is None
+    assert identify_branch("ABBFFF") is None
 
-def test_identify_branch_unknown():
-    assert identify_branch("000000") is None
-    assert identify_branch("FFFFFF") is None
 
-def test_identify_branch_gaf():
-    assert identify_branch("3EA000") == "GAF"
+def test_every_verified_range_carries_a_source():
+    for start, end, branch, source in mac.VERIFIED_BRANCH_RANGES:
+        assert start <= end
+        assert branch
+        assert source.strip(), f"{branch} range has no verifiable source"
 
-def test_identify_branch_faf():
-    assert identify_branch("3AA000") == "FAF"
 
-def test_identify_branch_iaf():
-    assert identify_branch("738A00") == "IAF"
+class _Resp:
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return {"errors": []}
+
+
+class _Client:
+    sent: list[dict] = []
+
+    def __init__(self, *a, **k) -> None:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a) -> None:
+        return None
+
+    async def post(self, url, json=None, auth=None):
+        _Client.sent = json["statements"]
+        return _Resp()
+
+
+@pytest.mark.asyncio
+async def test_unknown_branch_does_not_erase_an_existing_label(
+    collector, spatial_index, monkeypatch,
+):
+    collector._spatial_index = spatial_index
+    monkeypatch.setattr(mac.httpx, "AsyncClient", _Client)
+    aircraft = collector._parse_adsb_fi(SAMPLE_ADSB_FI_RESPONSE)[0]
+    assert aircraft["military_branch"] is None
+
+    await collector._write_aircraft_neo4j(aircraft)
+
+    node = _Client.sent[0]
+    assert node["parameters"]["military_branch"] is None
+    # SET x = null would silently delete a stored value; keep it for the data inventory.
+    assert "coalesce($military_branch, a.military_branch)" in node["statement"]
+
 
 def test_hotspot_coverage_is_a_filter_not_a_place():
     assert in_hotspot_coverage(48.0, 35.0) is True
@@ -136,7 +192,7 @@ def test_parse_adsb_fi(collector):
     ac = aircraft[0]
     assert ac["icao24"] == "adf7c8"
     assert ac["callsign"] == "RCH401"
-    assert ac["military_branch"] == "USAF"
+    assert ac["military_branch"] is None
     assert ac["latitude"] == 48.5
     assert ac["altitude_m"] == round(35000 * 0.3048, 1)
 

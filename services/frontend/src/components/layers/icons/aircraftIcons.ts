@@ -2,15 +2,25 @@
  * Aircraft type-specific canvas icon factory with heading-bucketed caching.
  *
  * Classification: callsign prefix + ADS-B category heuristics.
- * Cache key: `{type}_{headingBucket}` — max 72 headings × 6 types = 432 entries.
+ * Cache key: `{type}_{headingBucket}` or `{type}_unknown` for absent heading.
  */
 
-export type AircraftIconType = "fighter" | "bomber" | "transport_mil" | "helicopter" | "uav" | "civilian";
+export type AircraftIconType =
+  | "fighter"
+  | "bomber"
+  | "transport_mil"
+  | "helicopter"
+  | "uav"
+  | "military_unknown"
+  | "civilian";
 
-const MILITARY_CALLSIGN_PREFIXES = [
-  "RCH", "EVAC", "DUKE", "VALOR", "REACH", "FORGE", "COBRA", "HAWK",
-  "VIPER", "RAPTOR", "REAPER", "SIGINT", "FORTE", "NCHO", "TOPCAT",
-];
+// Callsigns are a weak hint, not identity. Only airlift-specific prefixes count as
+// transport evidence; fighter/helicopter names (VIPER, RAPTOR, HAWK, COBRA) do not.
+const TRANSPORT_CALLSIGN_PREFIXES = ["RCH", "REACH", "EVAC"];
+
+// ICAO type designators with an unambiguous role.
+const TRANSPORT_TYPES = /^(C17|C5M?|C130|C30J|C160|A400|KC10|KC135|K35R|KC46|A332|C2|IL76|AN12|AN124)$/;
+const FIGHTER_TYPES = /^(F5|F15|F16|F18|FA18|F22|F35|EUFI|RFAL|GRIP|TORN|SU27|SU30|SU34|SU35|MG29|MG31|M346)$/;
 
 const ICON_COLORS: Record<AircraftIconType, string> = {
   fighter: "#ef4444",
@@ -18,6 +28,7 @@ const ICON_COLORS: Record<AircraftIconType, string> = {
   transport_mil: "#c4813a",
   helicopter: "#ef4444",
   uav: "#a855f7",
+  military_unknown: "#b8a46a",
   civilian: "#d4cdc0",
 };
 
@@ -25,32 +36,39 @@ export function classifyAircraft(
   callsign: string | null,
   isMilitary: boolean,
   aircraftType: string | null,
-  altitudeM: number,
-  velocityMs: number,
+  altitudeM: number | null,
+  velocityMs: number | null,
 ): AircraftIconType {
   const cs = (callsign ?? "").toUpperCase().trim();
-  const at = (aircraftType ?? "").toUpperCase();
+  const at = (aircraftType ?? "").toUpperCase().trim();
 
   // Helicopter: aircraft_type contains H (e.g., H60, H47, EC35)
   if (/^H\d|^EC\d|^AS\d|^AW\d|^R22|^R44|^R66|^B06|^B47/.test(at)) return "helicopter";
 
-  // UAV/drone heuristic: slow + low + specific names
-  if (
-    (cs.includes("REAPER") || cs.includes("FORTE") || cs.includes("SIGINT") || at.includes("RQ") || at.includes("MQ")) &&
-    isMilitary
-  ) return "uav";
+  if (isMilitary && /^(RQ|MQ)\d/.test(at)) return "uav";
 
   // Explicit type evidence takes precedence over speed/callsign heuristics.
   if (isMilitary && /^(B52|B1|B2|TU95|TU160)$/.test(at)) return "bomber";
 
-  // Military transport: known callsign prefixes
-  if (isMilitary && MILITARY_CALLSIGN_PREFIXES.some((p) => cs.startsWith(p))) return "transport_mil";
+  // Known type codes outrank every heuristic below.
+  if (isMilitary && TRANSPORT_TYPES.test(at)) return "transport_mil";
+  if (isMilitary && FIGHTER_TYPES.test(at)) return "fighter";
 
-  // Fighter: military + fast + high
-  if (isMilitary && velocityMs > 200 && altitudeM > 5000) return "fighter";
+  // Callsign hints are considered only after explicit type evidence.
+  if (isMilitary && (cs.includes("REAPER") || cs.includes("FORTE") || cs.includes("SIGINT"))) {
+    return "uav";
+  }
 
-  // Generic military
-  if (isMilitary) return "fighter";
+  // Weak hint: airlift callsign prefixes.
+  if (isMilitary && TRANSPORT_CALLSIGN_PREFIXES.some((p) => cs.startsWith(p))) return "transport_mil";
+
+  // Fast and high without a type code still looks like a fighter profile.
+  if (isMilitary && velocityMs !== null && altitudeM !== null && velocityMs > 200 && altitudeM > 5000) {
+    return "fighter";
+  }
+
+  // Military upstream flag without any role evidence stays neutral.
+  if (isMilitary) return "military_unknown";
 
   return "civilian";
 }
@@ -59,10 +77,11 @@ const iconCache = new Map<string, string>();
 
 export function getAircraftTypeIcon(
   type: AircraftIconType,
-  headingDeg: number,
+  headingDeg: number | null,
 ): string {
-  const bucket = ((Math.round((headingDeg || 0) / 5) * 5) % 360 + 360) % 360;
-  const key = `${type}_${bucket}`;
+  const unknownHeading = headingDeg === null;
+  const bucket = unknownHeading ? 0 : ((Math.round(headingDeg / 5) * 5) % 360 + 360) % 360;
+  const key = unknownHeading ? `${type}_unknown` : `${type}_${bucket}`;
 
   const cached = iconCache.get(key);
   if (cached) return cached;
@@ -80,7 +99,32 @@ export function getAircraftTypeIcon(
   ctx.translate(size / 2, size / 2);
   ctx.rotate((bucket * Math.PI) / 180);
 
+  if (unknownHeading) {
+    // No heading known: direction-less ring instead of a nose that points north.
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    const neutral = canvas.toDataURL();
+    iconCache.set(key, neutral);
+    return neutral;
+  }
+
   switch (type) {
+    case "military_unknown":
+      // Neutral diamond: military flag known, role not.
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(6, 0);
+      ctx.lineTo(0, 7);
+      ctx.lineTo(-6, 0);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+      break;
+
     case "fighter":
       // Delta wings, narrow body
       ctx.beginPath();

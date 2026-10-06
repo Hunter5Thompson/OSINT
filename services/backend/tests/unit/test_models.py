@@ -69,7 +69,7 @@ class TestVesselModel:
     def test_vessel(self) -> None:
         v = Vessel(mmsi=123456789, latitude=51.5, longitude=-0.1)
         assert v.mmsi == 123456789
-        assert v.speed_knots == 0.0
+        assert v.speed_knots is None
 
 
 class TestHotspotModel:

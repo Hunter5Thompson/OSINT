@@ -10,7 +10,7 @@ import structlog
 from pydantic import ValidationError
 
 from app.config import settings
-from app.models.vessel import Vessel
+from app.models.vessel import Vessel, normalize_cog, normalize_sog
 from app.services.cache_service import CacheService
 from app.services.proxy_service import ProxyService
 
@@ -102,16 +102,14 @@ def vessel_from_ais_message(data: object) -> Vessel | None:
     # AIS uses 0,0 as "position unavailable", including the Gulf of Guinea sentinel.
     if latitude == 0 and longitude == 0:
         return None
-    speed = _finite_number(pos.get("Sog"))
-    course = _finite_number(pos.get("Cog"))
     ship_type = _positive_int(meta.get("ShipType")) or 0
     return Vessel(
         mmsi=mmsi,
         name=_optional_text(meta.get("ShipName")),
         latitude=latitude,
         longitude=longitude,
-        speed_knots=0.0 if speed is None else speed,
-        course=0.0 if course is None else course,
+        speed_knots=normalize_sog(pos.get("Sog")),
+        course=normalize_cog(pos.get("Cog")),
         ship_type=ship_type,
         destination=None,
     )
@@ -358,8 +356,6 @@ def _parse_digitraffic_feature(
     if latitude is None or longitude is None:
         return None
     meta = meta_map.get(mmsi, {})
-    speed = _finite_number(props.get("sog"))
-    course = _finite_number(props.get("cog"))
     try:
         ship_type = int(meta.get("shipType") or 0)
     except (TypeError, ValueError):
@@ -369,8 +365,8 @@ def _parse_digitraffic_feature(
         name=_optional_text(meta.get("name")),
         latitude=latitude,
         longitude=longitude,
-        speed_knots=0.0 if speed is None else speed,
-        course=0.0 if course is None else course,
+        speed_knots=props.get("sog"),
+        course=props.get("cog"),
         ship_type=ship_type,
         destination=_optional_text(meta.get("destination")),
     )

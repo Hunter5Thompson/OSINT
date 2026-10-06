@@ -32,23 +32,16 @@ log = structlog.get_logger(__name__)
 ADSB_FI_MIL_URL = "https://opendata.adsb.fi/api/v2/mil"
 
 # ---------------------------------------------------------------------------
-# ICAO hex ranges per military branch
-# Each entry: (start_int, end_int, branch_name)
+# Verified ICAO hex ranges per military branch
+# Each entry: (start_int, end_int, branch_name, source)
+#
+# An ICAO24 block is a *national* allocation. It proves the state of registration,
+# not a branch, and national blocks also hold civil aircraft. An entry belongs here
+# only with a checkable primary source (register / allocation document) naming the
+# branch for exactly that sub-range. Do not add ranges from memory or from
+# third-party tables. Empty means: no branch is derived from the address.
 # ---------------------------------------------------------------------------
-MILITARY_ICAO_RANGES: list[tuple[int, int, str]] = [
-    # USAF — US Military block (AD0000–AFFFFF)
-    (0xAD0000, 0xAFFFFF, "USAF"),
-    # RAF — UK Military (400000–43FFFF)
-    (0x400000, 0x43FFFF, "RAF"),
-    # FAF — French Air & Space Force (388000–3AFFFF)
-    (0x388000, 0x3AFFFF, "FAF"),
-    # GAF — German Air Force (3C0000–3EFFFF)
-    (0x3C0000, 0x3EFFFF, "GAF"),
-    # IAF — Israeli Air Force (738000–73BFFF)
-    (0x738000, 0x73BFFF, "IAF"),
-    # NATO (aggregated / AWACS) (4D0000–4DFFFF)
-    (0x4D0000, 0x4DFFFF, "NATO"),
-]
+VERIFIED_BRANCH_RANGES: tuple[tuple[int, int, str, str], ...] = ()
 
 # ---------------------------------------------------------------------------
 # Region bounding boxes — (lat_min, lat_max, lon_min, lon_max)
@@ -77,19 +70,16 @@ _KNOTS_TO_MS = 0.514444
 
 
 def identify_branch(icao24: str) -> str | None:
-    """Return military branch name for the given ICAO24 hex string, or None.
+    """Return the military branch for an ICAO24 hex string, or None when unproven.
 
-    Args:
-        icao24: 6-character hex string (case-insensitive).
-
-    Returns:
-        Branch name string or None if not in any known military range.
+    Only ranges in ``VERIFIED_BRANCH_RANGES`` count. A national allocation alone
+    never yields a branch.
     """
     try:
         val = int(icao24.upper(), 16)
     except ValueError:
         return None
-    for start, end, branch in MILITARY_ICAO_RANGES:
+    for start, end, branch, _source in VERIFIED_BRANCH_RANGES:
         if start <= val <= end:
             return branch
     return None
@@ -290,7 +280,9 @@ class MilitaryAircraftCollector(BaseCollector):
                     "SET a.callsign = $callsign, "
                     "    a.registration = $registration, "
                     "    a.type_code = $type_code, "
-                    "    a.military_branch = $military_branch, "
+                    # An unknown branch must not erase a stored label: SET x = null deletes it.
+                    # Historic labels are inventoried and repaired separately.
+                    "    a.military_branch = coalesce($military_branch, a.military_branch), "
                     "    a.last_seen = datetime()"
                 ),
                 "parameters": {
@@ -370,7 +362,7 @@ class MilitaryAircraftCollector(BaseCollector):
         1. OAuth2 client-credentials flow using settings.opensky_client_id /
            settings.opensky_client_secret against https://auth.opensky-network.org/...
         2. GET https://opensky-network.org/api/states/all with bbox params
-        3. Filter by military ICAO24 ranges (MILITARY_ICAO_RANGES)
+        3. Keep only aircraft flagged military upstream (no branch from address blocks)
         4. Map OpenSky state vector format to the normalised dict schema used by
            _parse_adsb_fi (fields: icao24, callsign, lat, lon, alt_baro in m,
            velocity in m/s, true_track, on_ground, etc.)

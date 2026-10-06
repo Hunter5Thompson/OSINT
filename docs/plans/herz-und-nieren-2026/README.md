@@ -1,6 +1,6 @@
 # Fixplan: Herz und Nieren 2026 Alpha
 
-**Status: aktiv; HN-S01 und HN-S02 abgeschlossen (PR #128, Merge `732fadc`), HN-S03 gemergt (PR #129, Merge `58843a7`, CI erfolgreich), HN-I01 gemergt (PR #131, `a45a13c`), HN-I02 gemergt (PR #132, `a3fc29c`); HN-I04 gemergt (PR #133, `1eb5fdb`); B01 I05/I06/I03 gemergt (PR #134, Merge `77a98ad`). B02 D04/D05/D11 gemergt (PR #135, Merge `6742481`); B03 D08/A01/A05/A06 fachlich abgenommen (PR #136, Implementierung `f4988aa`, Merge offen).** Baseline: `374c5cc460ebea44ad27f0ddfe09a11fd2d57e83` (2026-09-27). [Senior-Bewertung mit vollständiger Finding-Matrix](../../reports/Herz_und_Nieren_2026_Alpha_Review.md).
+**Status: aktiv; HN-S01 und HN-S02 abgeschlossen (PR #128, Merge `732fadc`), HN-S03 gemergt (PR #129, Merge `58843a7`, CI erfolgreich), HN-I01 gemergt (PR #131, `a45a13c`), HN-I02 gemergt (PR #132, `a3fc29c`); HN-I04 gemergt (PR #133, `1eb5fdb`); B01 I05/I06/I03 gemergt (PR #134, Merge `77a98ad`). B02 D04/D05/D11 gemergt (PR #135, Merge `6742481`); B03 D08/A01/A05/A06 gemergt (PR #136, Merge `ef0316c`); B04 D03/A04 gemergt (PR #137, Merge `1359d14`); B05 D01/D02/D10 fachlich abgenommen, Merge/Deployment offen.** Baseline: `374c5cc460ebea44ad27f0ddfe09a11fd2d57e83` (2026-09-27). [Senior-Bewertung mit vollständiger Finding-Matrix](../../reports/Herz_und_Nieren_2026_Alpha_Review.md).
 
 ## Ausführung mit Senior und GPT-6-Luna
 
@@ -21,8 +21,8 @@ Der bestehende Umsetzungsauftrag deckt Implementierung, scoped Commit/Push und B
 
 **Bündelbasis: 36 Implementierungstickets → 13 Themen-PRs.** B01 mit drei Tickets
 ist gemergt; B02 mit drei weiteren Tickets ist ebenfalls gemergt.
-B03 mit vier weiteren Tickets ist fachlich abgenommen, Merge offen.
-Nach B03 verblieben 26 Fix-Tickets in zehn Bündeln; B04 (D03, A04) ist implementiert, Review/Merge offen. Die Einzel-IDs,
+B03 mit vier weiteren Tickets ist gemergt (PR #136, `ef0316c`).
+Nach B03 verblieben 26 Fix-Tickets in zehn Bündeln; B04 (D03, A04) ist gemergt; B05 (D01, D02, D10) ist fachlich abgenommen, Merge offen. Die Einzel-IDs,
 Scopes und Abnahmekriterien bleiben erhalten. A02 ist in D07 enthalten und wird nicht
 nochmals gezählt. Die bereits gemergten S01/S02/S03/I01/I02/I04 bleiben abgeschlossen.
 Diese Bündelreihenfolge ersetzt die frühere PR-Reihenfolge nach Wellen.
@@ -31,9 +31,9 @@ Diese Bündelreihenfolge ersetzt die frühere PR-Reihenfolge nach Wellen.
 |---|---|---|---|
 | ~~B01~~ (gemergt, PR #134) | Incident-Recovery und Zeitwerte | ~~I05~~ → ~~I06~~, ~~I03~~ | Rehydration, Health/Inspector, deterministische Zeitwerte, Telegram-Eviction; Backend-Gesamtchecks |
 | ~~B02~~ (gemergt, PR #135) | Backend-Feeds und Cache-Recovery | ~~D04~~, ~~D05~~, ~~D11~~ | Fehlerhafte Einzelzeilen, Cache-Recovery und Feed-Freshness; Backend-Gesamtchecks |
-| ~~B03~~ (fachlich abgenommen, PR #136; Merge offen) | Ingestion-Parser und Quellidentität | ~~D08~~, ~~A01~~, ~~A05~~, ~~A06~~ | Je Quelle eigener RED/GREEN-Unterlauf; Collector-/Pipeline-Verträge und Ingestion-Gesamtchecks |
-| B04 (implementiert, Review/PR offen) | Graph-Auswahl und Claim-Kanten | ~~D03~~, ~~A04~~ | Isolierte echte Neo4j-Fixtures für Filter und typgebundene Kanten; Backend/Ingestion |
-| B05 | Schiffs- und Flugmesswerte | D01 → D02, D10 | Producer→API→Anzeige, unbekannte Werte und Rollen; Backend/Ingestion/Frontend samt Browser-Smoke |
+| ~~B03~~ (gemergt, PR #136) | Ingestion-Parser und Quellidentität | ~~D08~~, ~~A01~~, ~~A05~~, ~~A06~~ | Je Quelle eigener RED/GREEN-Unterlauf; Collector-/Pipeline-Verträge und Ingestion-Gesamtchecks |
+| ~~B04~~ (gemergt, PR #137) | Graph-Auswahl und Claim-Kanten | ~~D03~~, ~~A04~~ | Isolierte echte Neo4j-Fixtures für Filter und typgebundene Kanten; Backend/Ingestion |
+| ~~B05~~ (fachlich abgenommen, Merge offen) | Schiffs- und Flugmesswerte | ~~D01~~ → ~~D02~~, ~~D10~~ | Producer→API→Anzeige, unbekannte Werte und Rollen; Backend/Ingestion/Frontend samt Browser-Smoke |
 | B06 | Hotspot-Daten und Abdeckung | A03, D06; X01/X02-Entscheidungsvorlagen | Keine Absenkung bei Ausfall, saubere Texte; bestehende Policy erhalten, Abdeckungsgrenzen dokumentieren |
 | B07 | Kanonische Identitäten | A07, A08 | Vor Codeänderungen Legacy-ID-/Key-Konzept prüfen; Hash-/Key-Parität, keine Live-Reingestion oder Migration |
 | B08 | Agentensteuerung | L01, L02, L03 | Intent, Assessment und tatsächliche Toolstarts gemeinsam prüfen; Intelligence-Gesamtchecks |
@@ -42,6 +42,8 @@ Diese Bündelreihenfolge ersetzt die frühere PR-Reihenfolge nach Wellen.
 | B11 | Globe-Geometrie und Interaktion | U01, U02, U03, U04 | Datumsgrenze, Pol, Zeitraster und Picking; Frontend-Gesamtchecks und Browser-Smoke |
 | B12 | Asynchrone UI-Zustände | U06, U07, U08; X03-Entscheidungsvorlage | Alte Antworten, Eventdetailwechsel und SSE-Resets; Backend/Frontend-Verträge und Browser-Smoke |
 | B13 | Satellitenparser und Cesium-Uhr | D07 (einschließlich A02) → U05 | Gemeinsame Parserfixtures, Propagation/Lifecycle, Browser-Smoke; Backend/Ingestion/Frontend |
+
+**Nutzervorgabe 06.10.2026:** Nach B05 folgt zunächst die Betriebsprüfung von Datenfrische, Analysequalität, Browser-Verhalten und tatsächlich deploytem Code. B06 bleibt der nächste offene Codeblock, wird aber nicht automatisch begonnen. [B05-Abnahme](../../reviews/2026-10-06-hn-b05-acceptance.md), [Live-Befunde](../../reports/2026-10-06-odin-live-status.md).
 
 ### Arbeits- und Mergevertrag
 

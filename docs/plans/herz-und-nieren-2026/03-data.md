@@ -2,7 +2,9 @@
 
 Gemeinsamer Vertrag: [README](README.md). Backendpfade relativ zu `services/backend`; andere Services explizit benannt. M-Pakete mit mehreren Quellen als getrennte Unterläufe ausführen.
 
-## D01 — AIS-Messwerte unbekannt statt Sentinel
+## ~~D01 — AIS-Messwerte unbekannt statt Sentinel~~ — FACHLICH ABGENOMMEN
+
+**Review 06.10.2026, B05:** Code und Browserfälle abgenommen; vollständige Prüfungen und Grenzen im [B05-Abnahmebericht](../../reviews/2026-10-06-hn-b05-acceptance.md). Merge, Deployment und historische Datenkorrekturen sind separate Schritte.
 
 **F-02 · P1 · M.**
 
@@ -12,7 +14,9 @@ Gemeinsamer Vertrag: [README](README.md). Backendpfade relativ zu `services/back
 
 **RED/Abnahme:** `102.3`, `360`, fehlend, 0, 359.9, `NaN`, Infinity, normale Werte aus beiden Quellen und Cache; API-JSON enthält null. UI zeigt unbekannt, keine berechnete Bewegung ohne ausreichende Werte, neutrales Symbol bei unbekanntem Kurs. Nicht einfach `?? 0` in Details oder Dead-Reckoning einfügen. Frontend-Typcheck und Browserfall mit einem unbekannten und einem fahrenden Schiff.
 
-## D02 — Flugmesswerte und Kontaktzeit korrekt behandeln
+## ~~D02 — Flugmesswerte und Kontaktzeit korrekt behandeln~~ — FACHLICH ABGENOMMEN
+
+**Review 06.10.2026, B05:** Code und Browserfälle abgenommen; vollständige Prüfungen und Grenzen im [B05-Abnahmebericht](../../reviews/2026-10-06-hn-b05-acceptance.md). Merge, Deployment und historische Datenkorrekturen sind separate Schritte.
 
 **F-07 · P1 · M · nach D01 integrieren.**
 
@@ -24,7 +28,7 @@ Gemeinsamer Vertrag: [README](README.md). Backendpfade relativ zu `services/back
 
 ## D03 — Geo-Events vor Optional-Location filtern
 
-**Stand B04 (implementiert, unabhängiges Review und Merge offen):** Event-`WHERE` sitzt am Event-MATCH; Koordinatenpaar paarweise finit/im Bereich, sonst Event ohne Geometrie, echte 0 erhalten. 14 Tests gegen isolierte Neo4j (`integration_tests/test_graph_geo_events.py`). Mehrfach-Locations bleiben bekannte Zeilenvervielfachung (eine Zeile je Location), kein Redesign.
+**Stand B04 (gemergt, PR #137, `1359d14`):** Event-`WHERE` sitzt am Event-MATCH; Koordinatenpaar paarweise finit/im Bereich, sonst Event ohne Geometrie, echte 0 erhalten. 14 Tests gegen isolierte Neo4j (`integration_tests/test_graph_geo_events.py`). Mehrfach-Locations bleiben bekannte Zeilenvervielfachung (eine Zeile je Location), kein Redesign.
 
 **F-03 · P1 · M.**
 
@@ -111,7 +115,9 @@ Keine Livefeeds oder Produktionsdatenzugriffe; alle 13 PR-Checks grün, PR #135 
 
 **GREEN:** konfigurierte Kandidaten vor Auswahl strippen; kleinen gemeinsamen Selector nutzen, wenn beide Router denselben Vertrag teilen. Vergleichs-/Fehlersemantik des bestehenden Guards erhalten. Kein neues Authsystem.
 
-## D10 — Militärzugehörigkeit und Iconrolle nur aus tragfähigen Signalen
+## ~~D10 — Militärzugehörigkeit und Iconrolle nur aus tragfähigen Signalen~~ — FACHLICH ABGENOMMEN
+
+**Review 06.10.2026, B05:** Code und Browserfälle abgenommen; vollständige Prüfungen und Grenzen im [B05-Abnahmebericht](../../reviews/2026-10-06-hn-b05-acceptance.md). Merge, Deployment und historische Datenkorrekturen sind separate Schritte.
 
 **F-22/F-30 Klassifikation · P1 · M; Ingestion und Frontend getrennte Unterläufe.**
 
