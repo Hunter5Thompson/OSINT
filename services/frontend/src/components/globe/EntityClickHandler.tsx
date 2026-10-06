@@ -16,6 +16,7 @@ import {
 import { useSpotlight } from "./spotlight/SpotlightContext";
 import { useCountryHitTest, hitTestCountry } from "./hooks/useCountryHitTest";
 import { isPhotorealSurfacePick } from "./isPhotorealSurfacePick";
+import { formatVesselCourse, formatVesselSpeed } from "../layers/vesselMeasurements";
 
 const SHIP_TYPES: Record<number, string> = {
   20: "Wing in ground", 30: "Fishing", 31: "Towing", 32: "Towing (large)",
@@ -304,8 +305,8 @@ export function EntityClickHandler({
         | {
             mmsi: number;
             name: string | null;
-            speed_knots: number;
-            course: number;
+            speed_knots: number | null;
+            course: number | null;
             ship_type: number;
             destination: string | null;
             lat: number;
@@ -317,8 +318,8 @@ export function EntityClickHandler({
         const props: Record<string, string> = {};
         props.mmsi = String(vesselData.mmsi);
         if (vesselData.name) props.name = vesselData.name;
-        props.speed = `${vesselData.speed_knots.toFixed(1)} kts`;
-        props.course = `${Math.round(vesselData.course)}°`;
+        props.speed = formatVesselSpeed(vesselData.speed_knots);
+        props.course = formatVesselCourse(vesselData.course);
         if (vesselData.ship_type) props.type = shipTypeLabel(vesselData.ship_type);
         if (vesselData.destination) props.destination = vesselData.destination;
 

@@ -46,8 +46,8 @@ export interface Vessel {
   name: string | null;
   latitude: number;
   longitude: number;
-  speed_knots: number;
-  course: number;
+  speed_knots: number | null;
+  course: number | null;
   ship_type: number;
   destination: string | null;
 }

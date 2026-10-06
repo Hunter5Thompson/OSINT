@@ -3,6 +3,7 @@ import * as Cesium from "cesium";
 import type { Vessel } from "../../types";
 import { classifyShip, getShipTypeIcon, ICON_COLORS } from "./icons/shipIcons";
 import { glyphColor } from "./glyphTokens";
+import { canProjectVesselMotion } from "./vesselMeasurements";
 import { usePerformance } from "../globe/PerformanceGuard";
 
 interface ShipLayerProps {
@@ -112,10 +113,10 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
       };
       vesselCount++;
 
-      if (showVectors && vectorCount < MAX_COURSE_VECTORS && vessel.speed_knots > 0.5) {
-        const speedMs = vessel.speed_knots * KNOTS_TO_MS;
+      if (showVectors && vectorCount < MAX_COURSE_VECTORS && canProjectVesselMotion(vessel.speed_knots, vessel.course)) {
+        const speedMs = (vessel.speed_knots ?? 0) * KNOTS_TO_MS;
         const distanceM = speedMs * COURSE_VECTOR_MINUTES * 60;
-        const headingRad = Cesium.Math.toRadians(vessel.course);
+        const headingRad = Cesium.Math.toRadians(vessel.course ?? 0);
         const latRad = Cesium.Math.toRadians(vessel.latitude);
         const lonRad = Cesium.Math.toRadians(vessel.longitude);
 
