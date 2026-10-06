@@ -2,7 +2,7 @@
  * Aircraft type-specific canvas icon factory with heading-bucketed caching.
  *
  * Classification: callsign prefix + ADS-B category heuristics.
- * Cache key: `{type}_{headingBucket}` — max 72 headings × 6 types = 432 entries.
+ * Cache key: `{type}_{headingBucket}` or `{type}_unknown` for absent heading.
  */
 
 export type AircraftIconType =
@@ -40,16 +40,12 @@ export function classifyAircraft(
   velocityMs: number | null,
 ): AircraftIconType {
   const cs = (callsign ?? "").toUpperCase().trim();
-  const at = (aircraftType ?? "").toUpperCase();
+  const at = (aircraftType ?? "").toUpperCase().trim();
 
   // Helicopter: aircraft_type contains H (e.g., H60, H47, EC35)
   if (/^H\d|^EC\d|^AS\d|^AW\d|^R22|^R44|^R66|^B06|^B47/.test(at)) return "helicopter";
 
-  // UAV/drone heuristic: slow + low + specific names
-  if (
-    (cs.includes("REAPER") || cs.includes("FORTE") || cs.includes("SIGINT") || at.includes("RQ") || at.includes("MQ")) &&
-    isMilitary
-  ) return "uav";
+  if (isMilitary && /^(RQ|MQ)\d/.test(at)) return "uav";
 
   // Explicit type evidence takes precedence over speed/callsign heuristics.
   if (isMilitary && /^(B52|B1|B2|TU95|TU160)$/.test(at)) return "bomber";
@@ -57,6 +53,11 @@ export function classifyAircraft(
   // Known type codes outrank every heuristic below.
   if (isMilitary && TRANSPORT_TYPES.test(at)) return "transport_mil";
   if (isMilitary && FIGHTER_TYPES.test(at)) return "fighter";
+
+  // Callsign hints are considered only after explicit type evidence.
+  if (isMilitary && (cs.includes("REAPER") || cs.includes("FORTE") || cs.includes("SIGINT"))) {
+    return "uav";
+  }
 
   // Weak hint: airlift callsign prefixes.
   if (isMilitary && TRANSPORT_CALLSIGN_PREFIXES.some((p) => cs.startsWith(p))) return "transport_mil";

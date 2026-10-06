@@ -17,6 +17,14 @@ describe("military aircraft classification (D10)", () => {
     expect(classifyAircraft("RCH123", true, "F16", 9000, 250)).toBe("fighter");
     expect(classifyAircraft("VIPER11", true, "C17", 9000, 220)).toBe("transport_mil");
   });
+  it.each([
+    ["FORTE11", "C17", "transport_mil"],
+    ["SIGINT1", "F16", "fighter"],
+    ["REAPER1", "B52", "bomber"],
+    ["RCH123", "MQ9", "uav"],
+  ] as const)("lets type %s/%s outrank every callsign hint", (callsign, type, role) => {
+    expect(classifyAircraft(callsign, true, type, null, null)).toBe(role);
+  });
   it.each(["VIPER11", "RAPTOR1", "HAWK21", "COBRA3"])(
     "does not take %s alone as transport evidence",
     (callsign) => {
