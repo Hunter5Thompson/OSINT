@@ -3,6 +3,7 @@ import * as Cesium from "cesium";
 import type { Aircraft } from "../../types";
 import { glyphColor } from "./glyphTokens";
 import { classifyAircraft, getAircraftTypeIcon } from "./icons/aircraftIcons";
+import { extrapolateAircraft, placementAltitudeM } from "./aircraftMeasurements";
 import { usePerformance, type DegradationLevel } from "../globe/PerformanceGuard";
 
 interface FlightLayerProps {
@@ -15,16 +16,15 @@ interface FlightVisual {
   billboard: Cesium.Billboard;
   latitude: number;
   longitude: number;
-  altitudeM: number;
-  velocityMs: number;
-  headingDeg: number;
-  verticalRate: number;
+  altitudeM: number | null;
+  velocityMs: number | null;
+  headingDeg: number | null;
+  verticalRate: number | null;
   sampleTimeMs: number;
 }
 
 const INTERPOLATION_INTERVAL_MS = 500;
 const MAX_EXTRAPOLATION_SECONDS = 30;
-const EARTH_RADIUS_M = 6_378_137;
 const TRAIL_MAX_POSITIONS = 60; // 60 seconds at 1s intervals
 const TRAIL_REDUCED_POSITIONS = 20;
 const TRAIL_REBUILD_INTERVAL = 4; // rebuild polylines every Nth interpolation tick
@@ -131,7 +131,7 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
           position: Cesium.Cartesian3.fromDegrees(
             flight.longitude,
             flight.latitude,
-            flight.altitude_m,
+            placementAltitudeM(flight.altitude_m),
           ),
           image: getAircraftTypeIcon(
             classifyAircraft(flight.callsign, flight.is_military, flight.aircraft_type, flight.altitude_m, flight.velocity_ms),
@@ -272,6 +272,7 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
   return null;
 }
 
+// Dead reckoning only: an unknown contact time falls back to receipt time. It is never shown as a contact time.
 function parseUtcMs(value: string | null | undefined, fallback: number): number {
   if (!value) return fallback;
   const ms = Date.parse(value);
@@ -283,34 +284,6 @@ function projectPosition(visual: FlightVisual, nowMs: number): Cesium.Cartesian3
     0,
     Math.min((nowMs - visual.sampleTimeMs) / 1000, MAX_EXTRAPOLATION_SECONDS),
   );
-
-  const distanceM = Math.max(0, visual.velocityMs) * elapsedSeconds;
-  const headingRad = Cesium.Math.toRadians(visual.headingDeg || 0);
-  const latRad = Cesium.Math.toRadians(visual.latitude);
-  const lonRad = Cesium.Math.toRadians(visual.longitude);
-
-  const angularDistance = distanceM / EARTH_RADIUS_M;
-  const sinLat = Math.sin(latRad);
-  const cosLat = Math.cos(latRad);
-  const sinAD = Math.sin(angularDistance);
-  const cosAD = Math.cos(angularDistance);
-
-  const projectedLat = Math.asin(
-    sinLat * cosAD + cosLat * sinAD * Math.cos(headingRad),
-  );
-
-  const projectedLon =
-    lonRad +
-    Math.atan2(
-      Math.sin(headingRad) * sinAD * cosLat,
-      cosAD - sinLat * Math.sin(projectedLat),
-    );
-
-  const altitudeM = Math.max(0, visual.altitudeM + visual.verticalRate * elapsedSeconds);
-
-  return Cesium.Cartesian3.fromDegrees(
-    Cesium.Math.toDegrees(Cesium.Math.negativePiToPi(projectedLon)),
-    Cesium.Math.toDegrees(projectedLat),
-    altitudeM,
-  );
+  const placed = extrapolateAircraft(visual, elapsedSeconds);
+  return Cesium.Cartesian3.fromDegrees(placed.longitude, placed.latitude, placed.altitudeM);
 }

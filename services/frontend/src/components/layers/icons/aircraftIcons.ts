@@ -25,8 +25,8 @@ export function classifyAircraft(
   callsign: string | null,
   isMilitary: boolean,
   aircraftType: string | null,
-  altitudeM: number,
-  velocityMs: number,
+  altitudeM: number | null,
+  velocityMs: number | null,
 ): AircraftIconType {
   const cs = (callsign ?? "").toUpperCase().trim();
   const at = (aircraftType ?? "").toUpperCase();
@@ -47,7 +47,7 @@ export function classifyAircraft(
   if (isMilitary && MILITARY_CALLSIGN_PREFIXES.some((p) => cs.startsWith(p))) return "transport_mil";
 
   // Fighter: military + fast + high
-  if (isMilitary && velocityMs > 200 && altitudeM > 5000) return "fighter";
+  if (isMilitary && velocityMs !== null && altitudeM !== null && velocityMs > 200 && altitudeM > 5000) return "fighter";
 
   // Generic military
   if (isMilitary) return "fighter";
@@ -59,10 +59,11 @@ const iconCache = new Map<string, string>();
 
 export function getAircraftTypeIcon(
   type: AircraftIconType,
-  headingDeg: number,
+  headingDeg: number | null,
 ): string {
-  const bucket = ((Math.round((headingDeg || 0) / 5) * 5) % 360 + 360) % 360;
-  const key = `${type}_${bucket}`;
+  const unknownHeading = headingDeg === null;
+  const bucket = unknownHeading ? 0 : ((Math.round(headingDeg / 5) * 5) % 360 + 360) % 360;
+  const key = unknownHeading ? `${type}_unknown` : `${type}_${bucket}`;
 
   const cached = iconCache.get(key);
   if (cached) return cached;
@@ -79,6 +80,18 @@ export function getAircraftTypeIcon(
   ctx.scale(2, 2);
   ctx.translate(size / 2, size / 2);
   ctx.rotate((bucket * Math.PI) / 180);
+
+  if (unknownHeading) {
+    // No heading known: direction-less ring instead of a nose that points north.
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    const neutral = canvas.toDataURL();
+    iconCache.set(key, neutral);
+    return neutral;
+  }
 
   switch (type) {
     case "fighter":

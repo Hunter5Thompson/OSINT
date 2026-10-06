@@ -7,12 +7,12 @@ export interface Aircraft {
   callsign: string | null;
   latitude: number;
   longitude: number;
-  altitude_m: number;
-  velocity_ms: number;
-  heading: number;
-  vertical_rate: number;
+  altitude_m: number | null;
+  velocity_ms: number | null;
+  heading: number | null;
+  vertical_rate: number | null;
   on_ground: boolean;
-  last_contact: string;
+  last_contact: string | null;
   is_military: boolean;
   aircraft_type: string | null;
 }

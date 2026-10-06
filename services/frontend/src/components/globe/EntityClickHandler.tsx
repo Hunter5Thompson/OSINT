@@ -17,6 +17,13 @@ import { useSpotlight } from "./spotlight/SpotlightContext";
 import { useCountryHitTest, hitTestCountry } from "./hooks/useCountryHitTest";
 import { isPhotorealSurfacePick } from "./isPhotorealSurfacePick";
 import { formatVesselCourse, formatVesselSpeed } from "../layers/vesselMeasurements";
+import {
+  formatAircraftAltitude,
+  formatAircraftHeading,
+  formatAircraftSpeed,
+  formatAircraftVerticalRate,
+  placementAltitudeM,
+} from "../layers/aircraftMeasurements";
 
 const SHIP_TYPES: Record<number, string> = {
   20: "Wing in ground", 30: "Fishing", 31: "Towing", 32: "Towing (large)",
@@ -350,10 +357,10 @@ export function EntityClickHandler({
         | {
             icao24: string;
             callsign: string | null;
-            altitude_m: number;
-            velocity_ms: number;
-            heading: number;
-            vertical_rate: number;
+            altitude_m: number | null;
+            velocity_ms: number | null;
+            heading: number | null;
+            vertical_rate: number | null;
             on_ground: boolean;
             is_military: boolean;
             aircraft_type: string | null;
@@ -367,10 +374,11 @@ export function EntityClickHandler({
         props.icao24 = flightData.icao24;
         if (flightData.callsign) props.callsign = flightData.callsign;
         if (flightData.aircraft_type) props.type = flightData.aircraft_type;
-        props.altitude = `${Math.round(flightData.altitude_m).toLocaleString()} m (FL${Math.round(flightData.altitude_m / 30.48)})`;
-        props.speed = `${Math.round(flightData.velocity_ms * 1.944)} kts (${Math.round(flightData.velocity_ms * 3.6)} km/h)`;
-        props.heading = `${Math.round(flightData.heading)}°`;
-        if (flightData.vertical_rate !== 0) props.vrate = `${flightData.vertical_rate > 0 ? "+" : ""}${Math.round(flightData.vertical_rate)} m/s`;
+        props.altitude = formatAircraftAltitude(flightData.altitude_m, flightData.on_ground);
+        props.speed = formatAircraftSpeed(flightData.velocity_ms);
+        props.heading = formatAircraftHeading(flightData.heading);
+        const vrate = formatAircraftVerticalRate(flightData.vertical_rate);
+        if (vrate) props.vrate = vrate;
         props.status = flightData.on_ground ? "ON GROUND" : flightData.is_military ? "MILITARY" : "AIRBORNE";
 
         setSelected({
@@ -387,7 +395,7 @@ export function EntityClickHandler({
             trigger: "pin",
             center: { lon: flightData.lon, lat: flightData.lat },
             radius: 1,
-            altitude: flightData.altitude_m,
+            altitude: placementAltitudeM(flightData.altitude_m),
             label: flightData.callsign ?? flightData.icao24,
             sourcePin: { layer: "flights", entityId: flightData.icao24 },
           },
