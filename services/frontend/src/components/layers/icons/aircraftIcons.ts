@@ -5,12 +5,22 @@
  * Cache key: `{type}_{headingBucket}` — max 72 headings × 6 types = 432 entries.
  */
 
-export type AircraftIconType = "fighter" | "bomber" | "transport_mil" | "helicopter" | "uav" | "civilian";
+export type AircraftIconType =
+  | "fighter"
+  | "bomber"
+  | "transport_mil"
+  | "helicopter"
+  | "uav"
+  | "military_unknown"
+  | "civilian";
 
-const MILITARY_CALLSIGN_PREFIXES = [
-  "RCH", "EVAC", "DUKE", "VALOR", "REACH", "FORGE", "COBRA", "HAWK",
-  "VIPER", "RAPTOR", "REAPER", "SIGINT", "FORTE", "NCHO", "TOPCAT",
-];
+// Callsigns are a weak hint, not identity. Only airlift-specific prefixes count as
+// transport evidence; fighter/helicopter names (VIPER, RAPTOR, HAWK, COBRA) do not.
+const TRANSPORT_CALLSIGN_PREFIXES = ["RCH", "REACH", "EVAC"];
+
+// ICAO type designators with an unambiguous role.
+const TRANSPORT_TYPES = /^(C17|C5M?|C130|C30J|C160|A400|KC10|KC135|K35R|KC46|A332|C2|IL76|AN12|AN124)$/;
+const FIGHTER_TYPES = /^(F5|F15|F16|F18|FA18|F22|F35|EUFI|RFAL|GRIP|TORN|SU27|SU30|SU34|SU35|MG29|MG31|M346)$/;
 
 const ICON_COLORS: Record<AircraftIconType, string> = {
   fighter: "#ef4444",
@@ -18,6 +28,7 @@ const ICON_COLORS: Record<AircraftIconType, string> = {
   transport_mil: "#c4813a",
   helicopter: "#ef4444",
   uav: "#a855f7",
+  military_unknown: "#b8a46a",
   civilian: "#d4cdc0",
 };
 
@@ -43,14 +54,20 @@ export function classifyAircraft(
   // Explicit type evidence takes precedence over speed/callsign heuristics.
   if (isMilitary && /^(B52|B1|B2|TU95|TU160)$/.test(at)) return "bomber";
 
-  // Military transport: known callsign prefixes
-  if (isMilitary && MILITARY_CALLSIGN_PREFIXES.some((p) => cs.startsWith(p))) return "transport_mil";
+  // Known type codes outrank every heuristic below.
+  if (isMilitary && TRANSPORT_TYPES.test(at)) return "transport_mil";
+  if (isMilitary && FIGHTER_TYPES.test(at)) return "fighter";
 
-  // Fighter: military + fast + high
-  if (isMilitary && velocityMs !== null && altitudeM !== null && velocityMs > 200 && altitudeM > 5000) return "fighter";
+  // Weak hint: airlift callsign prefixes.
+  if (isMilitary && TRANSPORT_CALLSIGN_PREFIXES.some((p) => cs.startsWith(p))) return "transport_mil";
 
-  // Generic military
-  if (isMilitary) return "fighter";
+  // Fast and high without a type code still looks like a fighter profile.
+  if (isMilitary && velocityMs !== null && altitudeM !== null && velocityMs > 200 && altitudeM > 5000) {
+    return "fighter";
+  }
+
+  // Military upstream flag without any role evidence stays neutral.
+  if (isMilitary) return "military_unknown";
 
   return "civilian";
 }
@@ -94,6 +111,19 @@ export function getAircraftTypeIcon(
   }
 
   switch (type) {
+    case "military_unknown":
+      // Neutral diamond: military flag known, role not.
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(6, 0);
+      ctx.lineTo(0, 7);
+      ctx.lineTo(-6, 0);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+      break;
+
     case "fighter":
       // Delta wings, narrow body
       ctx.beginPath();

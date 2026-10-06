@@ -64,6 +64,11 @@ matcht Name+Typ aus den deklarierten Extraction-Entities; ohne genau einen Typ w
 name-only-Kanten (R01), name-only `LINK_ENTITY_EVENT` im Intelligence-Dienst,
 Geo-Filter `entity=` nur über Namen. Keine Produktionsdaten, kein Deployment.
 
+**HN-B05 (D01/D02/D10) — IMPLEMENTIERT, Review/PR/Merge offen:**
+D01: AIS-SOG 102.3/COG 360 und ungültige Werte → null (Modell-Validator, gilt für AISStream, Digitraffic und Cache-Rows); UI zeigt „unknown“, keine Bewegungsvektoren ohne Speed+Kurs, neutrales Ring-Icon bei unbekanntem Kurs.
+D02: Flugmesswerte und `last_contact` nullable (keine 1970-/jetzt-Erfindung); Ground-Sentinel case-insensitive nur für Strings; `alt_baro`=null → `alt_geom`; OpenSky-Kontakt nur aus Feld 4. UI: „unknown“, Extrapolation nur über gemessene Werte.
+D10: `identify_branch` liefert ohne belegten Bereich None (`VERIFIED_BRANCH_RANGES` leer, jede Eintragung braucht Quelle); bestehendes Branch-Label wird bei None nicht gelöscht (`coalesce`), historische Falschlabels = separates Inventar. Frontend: Typcodes vor Callsign, neues `military_unknown`-Icon. Offen: Browser-Smoke, Falschlabel-Inventar (R01).
+
 ## Fixplan Herz und Nieren 2026 — laufende Umsetzung
 
 Lokale Paket-IDs aus [dem Fixplan](docs/plans/herz-und-nieren-2026/README.md),

@@ -62,7 +62,7 @@ describe("aircraft rendering placement (D02)", () => {
 describe("aircraft icons with unknown values (D02)", () => {
   it("derives no role from missing speed or altitude", () => {
     expect(classifyAircraft("TEST", false, null, null, null)).toBe("civilian");
-    expect(classifyAircraft("TEST", true, null, null, null)).toBe("fighter");
+    expect(classifyAircraft("TEST", true, null, null, null)).toBe("military_unknown");
   });
   it("renders a neutral icon for unknown heading, distinct from heading 0", () => {
     let n = 0;
