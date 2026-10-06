@@ -1,6 +1,6 @@
 # ODIN/WorldView — Task Registry (Single Source of Truth)
 #
-# Letzte Aktualisierung: 2026-04-01
+# Letzte Aktualisierung: 2026-10-06
 # Dieses Dokument ersetzt:
 #   - tasks/backlog/TASK-001..015 (archiviert)
 #   - TASKS_final.md (ersetzt)
@@ -17,7 +17,7 @@
 Auf Nutzerauftrag werden die 36 offenen Herz-und-Nieren-Fix-Tickets in **13 Themen-PRs**
 gebündelt. Der [Bündelplan](docs/plans/herz-und-nieren-2026/README.md#bündelplan-und-reihenfolge)
 ersetzt die Einzel-PR-Regel; Einzeltests, Senior-Review und Mergefreigabe bleiben erhalten.
-**B01 = I05 → I06 plus I03 ist gemergt (PR #134, Merge `77a98ad`). B02 = D04/D05/D11 ist gemergt (PR #135, Merge `6742481`). B03 = D08/A01/A05/A06 ist gemergt (PR #136, Merge `ef0316c`). B04 = D03/A04 ist implementiert (Review/PR offen).** X04-Designvorlage liegt vor; Entscheidung offen;
+**B01 = I05 → I06 plus I03 ist gemergt (PR #134, Merge `77a98ad`). B02 = D04/D05/D11 ist gemergt (PR #135, Merge `6742481`). B03 = D08/A01/A05/A06 ist gemergt (PR #136, Merge `ef0316c`). B04 = D03/A04 ist gemergt (PR #137, Merge `1359d14`).** X04-Designvorlage liegt vor; Entscheidung offen;
 vier Designaufträge und R01 sind keine stillschweigend abgeschlossenen Fixes.
 PR #133 / HN-I04 ist seit 2026-09-27T18:34:17Z gemergt (`1eb5fdb`).
 
@@ -54,7 +54,7 @@ unerreichbare lokale Ziele. HAPI-Constraint nur als operator-run Datei vorbereit
 vor parallelem HAPI-Deployment separat anwenden. Keine historischen Datenkorrekturen,
 keine Livefeeds oder Produktionsschreibtests. PR-CI und Merge separat prüfen.
 
-**HN-B04 (D03/A04) — IMPLEMENTIERT, unabhängiges Review/PR/Merge offen:**
+**~~HN-B04 (D03/A04)~~ — GEMERGT (PR #137, Merge `1359d14`):**
 D03: Event-`WHERE` am Event-MATCH vor dem `OPTIONAL MATCH`; Koordinatenpaar paarweise
 finit/im Bereich, sonst Event ohne Geometrie, echte 0 erhalten. A04: `LINK_CLAIM_ENTITY`
 matcht Name+Typ aus den deklarierten Extraction-Entities; ohne genau einen Typ wird
@@ -64,10 +64,13 @@ matcht Name+Typ aus den deklarierten Extraction-Entities; ohne genau einen Typ w
 name-only-Kanten (R01), name-only `LINK_ENTITY_EVENT` im Intelligence-Dienst,
 Geo-Filter `entity=` nur über Namen. Keine Produktionsdaten, kein Deployment.
 
-**HN-B05 (D01/D02/D10) — IMPLEMENTIERT, Review/PR/Merge offen:**
+**~~HN-B05 (D01/D02/D10)~~ — FACHLICH ABGENOMMEN, Merge/Deployment offen:**
 D01: AIS-SOG 102.3/COG 360 und ungültige Werte → null (Modell-Validator, gilt für AISStream, Digitraffic und Cache-Rows); UI zeigt „unknown“, keine Bewegungsvektoren ohne Speed+Kurs, neutrales Ring-Icon bei unbekanntem Kurs.
 D02: Flugmesswerte und `last_contact` nullable (keine 1970-/jetzt-Erfindung); Ground-Sentinel case-insensitive nur für Strings; `alt_baro`=null → `alt_geom`; OpenSky-Kontakt nur aus Feld 4. UI: „unknown“, Extrapolation nur über gemessene Werte.
-D10: `identify_branch` liefert ohne belegten Bereich None (`VERIFIED_BRANCH_RANGES` leer, jede Eintragung braucht Quelle); bestehendes Branch-Label wird bei None nicht gelöscht (`coalesce`), historische Falschlabels = separates Inventar. Frontend: Typcodes vor Callsign, neues `military_unknown`-Icon. Offen: Browser-Smoke, Falschlabel-Inventar (R01).
+D10: `identify_branch` liefert ohne belegten Bereich None (`VERIFIED_BRANCH_RANGES` leer, jede Eintragung braucht Quelle); bestehendes Branch-Label wird bei None nicht gelöscht (`coalesce`), historische Falschlabels = separates Inventar. Frontend: Typcodes vor sämtlichen Callsign-Heuristiken, neues `military_unknown`-Icon. Historisches Falschlabel-Inventar bleibt R01.
+Abnahme 06.10.: Backend 891 / Ingestion 1685 / Frontend 684 Tests, Ruff/Mypy/ESLint/TypeScript/Build grün; echte Chromium-Abnahme samt Datumsgrenze/Pol, unbekannten Messwerten und Route-Lifecycle. Ingestion: ein bestehender Dev-Compose-Fall ausgelassen, 23 Live-Fälle ausgeschlossen. [Abnahmebericht](docs/reviews/2026-10-06-hn-b05-acceptance.md).
+
+**Aktueller Folgeauftrag: Betriebsprüfung vor weiteren Features.** Datenfrische, Analysequalität, Browser-Verhalten und tatsächlich deployten Code prüfen. Erste ausgeführte Nachweise und offene DEP-01/ANA-01/UI-01/UI-02 stehen im [Live-Bericht](docs/reports/2026-10-06-odin-live-status.md). B06 ist weiter offen; kein impliziter Deployment-/Datenreparaturauftrag.
 
 ## Fixplan Herz und Nieren 2026 — laufende Umsetzung
 
