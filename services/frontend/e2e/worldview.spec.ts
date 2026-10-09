@@ -1,0 +1,134 @@
+import type { Page } from "@playwright/test";
+import { test, expect } from "./fixtures";
+
+async function openWorldview(page: Page): Promise<void> {
+  await page.goto("/worldview?layer=recon");
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "recon", exact: true })).toBeVisible();
+  await expect(page.getByTestId("chronik-spatial-status")).toHaveText("global · complete");
+  await expect(page.locator(".cesium-widget-errorPanel")).toHaveCount(0);
+}
+
+test("inactive optional Recon is off while the delivered globe remains usable", async ({ page, state }, testInfo) => {
+  await openWorldview(page);
+  const toggle = page.getByRole("button", { name: "recon", exact: true });
+  await expect(toggle).toBeDisabled();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByTestId("layer-toggle-recon")).toContainText("No Recon scenes configured");
+  const before = state.reconRequests;
+  await page.getByRole("button", { name: "Check Recon availability", exact: true }).click();
+  await expect.poll(() => state.reconRequests).toBe(before + 1);
+  await expect(toggle).toBeDisabled();
+  const response = await page.request.get("/build-info.json");
+  expect(response.status()).toBe(200);
+  const build: unknown = await response.json();
+  expect(build).toMatchObject({ revision: process.env.ODIN_BUILD_REVISION });
+  await page.screenshot({ path: testInfo.outputPath("recon-inactive.png") });
+});
+
+for (const initial of ["error", "malformed"] as const) {
+  test(`Recon ${initial} is observable and retry enables the recovered layer`, async ({ page, state }, testInfo) => {
+    state.recon = initial;
+    await openWorldview(page);
+    const row = page.getByTestId("layer-toggle-recon");
+    const toggle = page.getByRole("button", { name: "recon", exact: true });
+    await expect(row).toContainText("Recon scene data unavailable");
+    await expect(toggle).toBeDisabled();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    const before = state.reconRequests;
+    state.recon = "available";
+    await page.getByRole("button", { name: "Retry Recon", exact: true }).click();
+    await expect.poll(() => state.reconRequests).toBe(before + 1);
+    await expect(toggle).toBeEnabled();
+    await expect(row).not.toContainText("Recon scene data unavailable");
+    // The deep link requested Recon on; recovery restores that requested state.
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await page.screenshot({ path: testInfo.outputPath(`recon-${initial}-recovered.png`) });
+  });
+}
+
+test("scope, time and layer controls work across a WorldView route remount", async ({ page, state }, testInfo) => {
+  await openWorldview(page);
+  await page.getByRole("combobox", { name: "Explore spatial scope" }).selectOption("country:UKR");
+  await expect(page).toHaveURL(/scope=country%3AUKR/);
+  await expect(page.getByRole("navigation", { name: "Spatial scope" })
+    .getByRole("button", { name: "Ukraine", exact: true })).toHaveAttribute("aria-current", "location");
+  await expect(page.getByRole("navigation", { name: "Spatial scope" })).not.toContainText("Boundary unavailable");
+  await expect(page.getByTestId("chronik-spatial-status")).toHaveText("occurs-in · bbox approx · partial");
+  await expect.poll(() => state.requests.some(url => url.startsWith("/api/timeline/histogram?")
+    && new URL("http://fixture.test" + url).searchParams.get("scope_key") === "country:UKR")).toBe(true);
+  await page.getByRole("button", { name: "7d", exact: true }).click();
+  await expect(page.getByRole("button", { name: "7d", exact: true })).toHaveClass(/chronik__btn--on/);
+  const initialCursor = await page.locator(".chronik__cursor").textContent();
+  await page.getByRole("button", { name: "step back", exact: true }).click();
+  await expect(page.locator(".chronik__cursor")).not.toHaveText(initialCursor ?? "");
+  // A single step pauses the live window; reverse playback enters replay.
+  await page.getByRole("button", { name: "reverse play", exact: true }).click();
+  await expect(page.locator(".chronik__badge--replay")).toHaveText("▶ REPLAY");
+  await page.getByRole("button", { name: "now", exact: true }).click();
+  await expect(page.locator(".chronik__badge--live")).toHaveText("● LIVE");
+  const flights = page.getByRole("button", { name: "flights", exact: true });
+  await flights.click();
+  await expect(flights).toHaveAttribute("aria-pressed", "true");
+  await flights.click();
+  await expect(flights).toHaveAttribute("aria-pressed", "false");
+  await page.screenshot({ path: testInfo.outputPath("scope-time-layers.png") });
+  await page.getByRole("link", { name: "BRIEFING", exact: true }).click();
+  await expect(page).toHaveURL(/\/briefing/);
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(0);
+  await page.getByRole("link", { name: "WORLDVIEW", exact: true }).click();
+  await expect(page).toHaveURL(/\/worldview/);
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await expect(page.locator(".cesium-widget-errorPanel")).toHaveCount(0);
+  // The top-level navigation links to /worldview without the old scope query.
+  // Assert the current breadcrumb, not text in hidden <option> elements.
+  await expect(page.getByRole("navigation", { name: "Spatial scope" })
+    .getByRole("button", { name: "World", exact: true })).toHaveAttribute("aria-current", "location");
+  await expect(page.getByRole("navigation", { name: "Spatial scope" })
+    .getByRole("button", { name: "Ukraine", exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("chronik-spatial-status")).toHaveText("global · complete");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.screenshot({ path: testInfo.outputPath("route-return-1280.png") });
+});
+
+for (const contact of ["aircraft", "vessel"] as const) {
+  test(`unknown ${contact} measurements stay unknown through a real globe pick`, async ({ page, state }, testInfo) => {
+    state.contact = contact;
+    await openWorldview(page);
+    await expect(page.getByRole("button", {
+      name: contact === "aircraft" ? "flights" : "vessels", exact: true,
+    })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "close Layers", exact: true }).click();
+    await page.getByRole("button", { name: "expand Search", exact: true }).click();
+    await page.getByRole("textbox", { name: "Search entities" }).fill("Fixture location");
+    await page.getByRole("button", { name: "§ Location Fixture location" }).click();
+    await page.getByRole("button", { name: "close Search", exact: true }).click();
+    const canvas = page.locator(".cesium-widget canvas");
+    const box = await canvas.boundingBox();
+    if (box === null) throw new Error("Globe canvas has no visible bounds");
+    const label = contact === "aircraft" ? "UNKNOWN AIRCRAFT" : "UNKNOWN SHIP";
+    // Unknown heading/course uses a hollow ring, so its transparent center
+    // cannot be picked. Use its visible edge, and poll while the existing
+    // search flight and Cesium texture upload finish. No Viewer exposure,
+    // source rewrite or dispatched app event is used.
+    await expect(async () => {
+      for (const [dx, dy] of [[6, 0], [0, -6], [-6, 0], [0, 6]] as const) {
+        await canvas.click({ position: { x: box.width / 2 + dx, y: box.height / 2 + dy } });
+        if (await page.getByText(label, { exact: true }).first().isVisible()) return;
+      }
+      await expect(page.getByText(label, { exact: true }).first()).toBeVisible({ timeout: 250 });
+    }).toPass({ timeout: 15_000, intervals: [500, 1000] });
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+    const fields = contact === "aircraft" ? ["altitude", "speed", "heading"] : ["speed", "course"];
+    for (const field of fields) {
+      await expect(page.getByText(`${field}: unknown`, { exact: true })).toBeVisible();
+    }
+    await page.screenshot({ path: testInfo.outputPath(`unknown-${contact}-picked.png`) });
+  });
+}

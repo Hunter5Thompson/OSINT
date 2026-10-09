@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "node scripts/write-build-info.mjs && tsc -b && vite build",
     "test:build-info": "node --test scripts/test-build-info.mjs",
+    "test:browser": "playwright test",
+    "type-check:browser": "tsc --project tsconfig.browser.json --noEmit",
     "preview": "vite preview",
     "lint": "eslint src/",
     "type-check": "tsc --noEmit",
@@ -32,6 +34,7 @@
     "@cesium/widgets": "16.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.0",
     "@tailwindcss/vite": "^4.3.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
