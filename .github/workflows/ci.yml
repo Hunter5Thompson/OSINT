@@ -15,6 +15,38 @@ permissions:
   contents: read
 
 jobs:
+  smoke-app-images:
+    name: image · ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            context: services/backend
+            dockerfile: services/backend/Dockerfile
+          - service: intelligence
+            context: services/intelligence
+            dockerfile: services/intelligence/Dockerfile
+          - service: data-ingestion
+            context: .
+            dockerfile: services/data-ingestion/Dockerfile
+          - service: frontend
+            context: services/frontend
+            dockerfile: services/frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build actual application image from checkout
+        run: |
+          docker build --tag odin-image-ci:${{ matrix.service }} \
+            --file ${{ matrix.dockerfile }} \
+            --build-arg ODIN_BUILD_REVISION=${{ github.sha }} \
+            --build-arg VITE_SPATIAL_SCOPE_ENABLED=true \
+            ${{ matrix.context }}
+      - name: Smoke image startup and loaded revision on an internal network
+        run: python3 scripts/ops/smoke_image.py ${{ matrix.service }} odin-image-ci:${{ matrix.service }} ${{ github.sha }}
+
   test-intelligence:
     name: tests · intelligence
     runs-on: ubuntu-latest
@@ -65,6 +97,7 @@ jobs:
           enable-cache: true
       - run: uv sync --locked --all-extras
       - run: uv run pytest -q
+      - run: uv run mypy app/
 
   test-backend-incident-concurrency:
     name: tests · backend incident concurrency
@@ -201,6 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_SPATIAL_SCOPE_ENABLED: "true"
+      ODIN_BUILD_REVISION: ${{ github.sha }}
     defaults:
       run:
         working-directory: services/frontend
@@ -215,6 +249,7 @@ jobs:
       - run: npm run lint
       - run: npm run type-check
       - run: npm run test
+      - run: npm run test:build-info
       - run: npm run build
 
   lint-python:
@@ -238,7 +273,8 @@ jobs:
             ../intelligence \
             ../data-ingestion \
             . \
-            ../vision-enrichment
+            ../vision-enrichment \
+            ../../scripts/ops
 
   guard-read-templates:
     name: guard · read templates

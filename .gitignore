@@ -19,6 +19,8 @@ node_modules
 dist/
 coverage/
 *.tsbuildinfo
+.build-revision
+/services/frontend/public/build-info.json
 
 # Deployment lockfiles are source artifacts; other service/training locks stay local.
 services/**/uv.lock

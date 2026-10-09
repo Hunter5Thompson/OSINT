@@ -47,6 +47,11 @@ Services are opt-in via profiles: `ingestion`, `interactive`, `interactive-spark
 ./odin.sh smoke                   # health checks for running services
 ```
 
+Reviewed app releases use `./odin.sh --env-file PATH --release ...` with
+digest-pinned images and data outside the checkout. See
+`docs/operations/release.md` for the manifest contract and remaining rollout
+gates; the development default does not itself identify a deployed revision.
+
 ## GPU constraint (single RTX 5090, 32 GB)
 
 **Only one LLM at a time on the local RTX 5090.** Swap local modes with

@@ -1,0 +1,59 @@
+# Apply after docker-compose.yml AND docker-compose.override.yml (Compose >=2.24.4).
+# Explicit digests come from the reviewed release manifest, never from local builds.
+services:
+  backend:
+    build: !reset null
+    image: ${ODIN_BACKEND_IMAGE:?Set ODIN_BACKEND_IMAGE to a reviewed image digest}
+    volumes: !override
+      - type: bind
+        source: ${ODIN_RELEASE_DATA_DIR:?Set ODIN_RELEASE_DATA_DIR}/backend
+        target: /app/data
+        read_only: true
+        bind:
+          create_host_path: false
+
+  frontend:
+    build: !reset null
+    image: ${ODIN_FRONTEND_IMAGE:?Set ODIN_FRONTEND_IMAGE to a reviewed image digest}
+    volumes: !reset []
+
+  intelligence:
+    build: !reset null
+    image: ${ODIN_INTELLIGENCE_IMAGE:?Set ODIN_INTELLIGENCE_IMAGE to a reviewed image digest}
+    volumes: !override
+      - type: bind
+        source: ${ODIN_RELEASE_DATA_DIR:?Set ODIN_RELEASE_DATA_DIR}/backend/spatial
+        target: /app/data/spatial
+        read_only: true
+        bind:
+          create_host_path: false
+
+  data-ingestion:
+    build: !reset null
+    image: ${ODIN_INGESTION_IMAGE:?Set ODIN_INGESTION_IMAGE to a reviewed image digest}
+    volumes:
+      - type: bind
+        source: ${ODIN_RELEASE_DATA_DIR:?Set ODIN_RELEASE_DATA_DIR}/backend/spatial
+        target: /app/data/spatial
+        read_only: true
+        bind:
+          create_host_path: false
+
+  data-ingestion-spark:
+    build: !reset null
+    image: ${ODIN_INGESTION_IMAGE:?Set ODIN_INGESTION_IMAGE to a reviewed image digest}
+    volumes:
+      - type: bind
+        source: ${ODIN_RELEASE_DATA_DIR:?Set ODIN_RELEASE_DATA_DIR}/backend/spatial
+        target: /app/data/spatial
+        read_only: true
+        bind:
+          create_host_path: false
+
+  vision-enrichment:
+    build: !reset null
+    image: ${ODIN_VISION_IMAGE:?Set ODIN_VISION_IMAGE to a reviewed image digest}
+
+  tei-rerank:
+    build: !reset null
+    image: ${ODIN_RERANK_IMAGE:?Set ODIN_RERANK_IMAGE to a reviewed image digest}
