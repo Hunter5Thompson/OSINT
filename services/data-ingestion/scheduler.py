@@ -16,6 +16,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from build_revision import BUILD_REVISION
 from config import settings
 from feeds.correlation_job import CorrelationJob
 from feeds.eonet_collector import EONETCollector
@@ -589,7 +590,7 @@ def initial_collection_jobs() -> list[Callable[[], Awaitable[None]]]:
 
 async def main() -> None:
     """Start the scheduler and run until interrupted."""
-    log.info("scheduler_starting")
+    log.info("scheduler_starting", revision=BUILD_REVISION)
     scheduler = create_scheduler()
 
     # Register graceful shutdown
@@ -606,6 +607,7 @@ async def main() -> None:
     scheduler.start()
     log.info(
         "scheduler_running",
+        revision=BUILD_REVISION,
         jobs=[j.name for j in scheduler.get_jobs()],
     )
 

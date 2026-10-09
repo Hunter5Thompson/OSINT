@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.build_revision import BUILD_REVISION
 from app.config import settings
 from app.routers import (
     aircraft,
@@ -272,6 +273,7 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: datetime
     version: str
+    revision: str | None
 
 
 class ClientConfig(BaseModel):
@@ -285,6 +287,7 @@ async def health() -> HealthResponse:
         status="ok",
         timestamp=datetime.now(UTC),
         version="0.1.0",
+        revision=BUILD_REVISION,
     )
 
 

@@ -120,6 +120,7 @@ async def test_health_returns_503_when_configured_model_is_missing(
 
     assert response.status_code == 503
     assert response.json() == {
+        "revision": None,
         "status": "not_ready",
         "reason": "missing_models",
         "required_models": ["qwen3.5", "munin"],
@@ -147,6 +148,7 @@ async def test_health_returns_200_when_all_configured_models_are_present(
 
     assert response.status_code == 200
     assert response.json() == {
+        "revision": None,
         "status": "ok",
         "reason": "ready",
         "required_models": ["qwen3.5", "munin"],
