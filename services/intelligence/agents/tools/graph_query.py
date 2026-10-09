@@ -438,9 +438,11 @@ async def _free_cypher_fallback(question: str) -> str:
         from openai import AsyncOpenAI
 
         from config import settings
+        from tracing import trace_completion
 
         client = AsyncOpenAI(base_url=settings.llm_base_url, api_key="not-needed")
-        response = await client.chat.completions.create(
+        response = await trace_completion(
+            client.chat.completions.create,
             model=settings.llm_model,
             messages=[
                 {"role": "system", "content": (

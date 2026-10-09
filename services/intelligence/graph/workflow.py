@@ -43,6 +43,7 @@ from spatial import (
     aggregate_spatial_application,
     parse_spatial_application_marker,
 )
+from tracing import trace_kwargs, traced_query
 
 logger = structlog.get_logger()
 
@@ -481,6 +482,7 @@ async def shutdown_graph_client() -> None:
         logger.info("graph_client_closed")
 
 
+@traced_query
 async def run_intelligence_query(
     query: str,
     region: str | None = None,
@@ -544,10 +546,10 @@ async def run_intelligence_query(
 
     try:
         if use_legacy:
-            result = await legacy_graph.ainvoke(initial_state)
+            result = await legacy_graph.ainvoke(initial_state, **trace_kwargs())
         else:
             result = await asyncio.wait_for(
-                react_graph.ainvoke(initial_state),
+                react_graph.ainvoke(initial_state, **trace_kwargs()),
                 timeout=settings.react_total_timeout_s,
             )
     except (TimeoutError, Exception) as e:

@@ -23,11 +23,16 @@ resolve_env_file() {
 ENV_FILE_REQUESTED="${ODIN_ENV_FILE:-.env}"
 ENV_FILE_OPTION_USED=0
 RELEASE_MODE=0
+TRACING_MODE=0
 COMPOSE_FILES=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --release)
     RELEASE_MODE=1
+    shift
+    ;;
+  --tracing)
+    TRACING_MODE=1
     shift
     ;;
   --env-file)
@@ -57,6 +62,13 @@ done
 if [[ "$RELEASE_MODE" == "1" ]]; then
   COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.override.yml -f docker-compose.release.yml)
 fi
+if [[ "$TRACING_MODE" == "1" ]]; then
+  if [[ "$RELEASE_MODE" != "1" ]]; then
+    echo "ERROR --tracing requires --release"
+    exit 2
+  fi
+  COMPOSE_FILES+=(-f docker-compose.tracing.release.yml)
+fi
 
 MODE="${2:-}"
 COMMAND="${1:-help}"
@@ -83,10 +95,12 @@ export SPARK_VLLM_URL="${SPARK_VLLM_URL:-http://192.168.178.39:8000}"
 usage() {
   cat <<'USAGE'
 Usage:
-  ./odin.sh [--env-file PATH] [--release] COMMAND [ARGS]
+  ./odin.sh [--env-file PATH] [--release] [--tracing] COMMAND [ARGS]
 
   --release                   # Reviewed digest images; no application code mounts
                               # Requires the release env/data manifest (docs/operations/release.md)
+  --tracing                   # Optional baked reporter with reviewed socket/token runtime inputs
+                              # Requires --release (docs/operations/tracing.md)
 
   ./odin.sh up ingestion       # Start background ingestion stack (27B + embed)
   ./odin.sh up interactive     # Start interactive stack (9B + reranker + UI)

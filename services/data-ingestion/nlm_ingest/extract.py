@@ -19,6 +19,7 @@ from nlm_ingest.schemas import (
     ExtractionSource,
     Relation,
 )
+from tracing import record_request, record_response, traced_extraction
 
 log = structlog.get_logger()
 
@@ -152,6 +153,7 @@ def extract_context(full_text: str, target: str, radius: int = 500) -> str:
     return full_text[start:end]
 
 
+@traced_extraction("notebook-extraction")
 async def extract_with_qwen(
     source: ExtractionSource,
     metadata: dict,
@@ -214,6 +216,7 @@ async def extract_with_qwen(
         "chat_template_kwargs": {"enable_thinking": False},
     }
 
+    record_request(payload)
     response = await client.post(
         f"{vllm_url}/v1/chat/completions",
         json=payload,
@@ -221,7 +224,9 @@ async def extract_with_qwen(
     )
     response.raise_for_status()
 
-    content = response.json()["choices"][0]["message"]["content"]
+    data = response.json()
+    record_response(data)
+    content = data["choices"][0]["message"]["content"]
     if content.startswith("```"):
         content = content.split("\n", 1)[1].rsplit("```", 1)[0]
     data = json.loads(content)

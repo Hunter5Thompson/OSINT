@@ -84,6 +84,10 @@ def test_data_ingestion_dockerfile_packages_runtime_contract():
     ) in dockerfile
     assert "COPY services/data-ingestion/pyproject.toml ." in dockerfile
     assert "COPY services/data-ingestion/uv.lock ." in dockerfile
+    assert (
+        "COPY services/data-ingestion/tracing.py "
+        "services/data-ingestion/spark_trace_reporter.py ./"
+    ) in dockerfile
     assert "COPY services/data-ingestion/canonicalize.py ." in dockerfile
     assert "COPY services/data-ingestion/qdrant_spatial.py ." in dockerfile
     assert "COPY services/data-ingestion/graph_integrity/ graph_integrity/" in dockerfile

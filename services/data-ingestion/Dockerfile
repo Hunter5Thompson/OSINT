@@ -22,6 +22,7 @@ COPY services/data-ingestion/source_spatial.py .
 COPY services/data-ingestion/pipeline.py .
 COPY services/data-ingestion/scheduler.py .
 COPY services/data-ingestion/build_revision.py .
+COPY services/data-ingestion/tracing.py services/data-ingestion/spark_trace_reporter.py ./
 COPY services/data-ingestion/feeds/ feeds/
 COPY services/data-ingestion/gdelt_raw/ gdelt_raw/
 COPY services/data-ingestion/graph_integrity/ graph_integrity/
