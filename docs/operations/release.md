@@ -7,6 +7,12 @@ ist nötig, weil `!override` die bisherigen Code-Mounts vollständig ersetzt.
 Referenz: [Docker Merge-Regeln](https://docs.docker.com/reference/compose-file/merge/).
 Ohne `--release` bleibt die bisherige Entwicklungskonfiguration aktiv.
 
+Das zusätzliche `--tracing` wählt als vierte Datei das explizite
+`docker-compose.tracing.release.yml` mit Socket-/Token-Laufzeitinputs und
+Reporter im Image. Konfiguration, Nachweise und Abnahmegrenzen stehen in
+[tracing.md](tracing.md). Ohne dieses Flag gibt es keinen zusätzlichen
+Tracing-Mount; bestehende produktive Tracing-Konfiguration separat erhalten.
+
 Der Release-Modus startet selbst keine Builds. Er verlangt sechs ausdrücklich
 gewählte Image-Referenzen mit vollständigem `@sha256:<64 hex>`-Digest, auch für
 inaktive Profile: `ODIN_BACKEND_IMAGE`, `ODIN_FRONTEND_IMAGE`,
@@ -40,10 +46,10 @@ Vor einer tatsächlichen Betriebsumstellung:
 3. Den bestehenden Datenbestand sicher unter `/data` bereitstellen und
    vergleichen; vorhandene Originale und eingefrorene Validierungen erhalten.
    Dieser Modus kopiert oder migriert keine Daten.
-4. Den aktuellen zusätzlichen Tracing-Stack separat integrieren. Dessen
-   Python-Code-Mounts sind im Release-Modus unzulässig: Instrumentierung muss
-   mit der freizugebenden Revision im Image liegen; Trace-Ausgaben und Tokens
-   bleiben Laufzeitinputs. Ein Start über diese drei Dateien allein übernimmt
+4. Den Tracing-Vertrag mit `--tracing` und geprüften Images erhalten. Dessen
+   bisherige Python-Code-Mounts sind im Release-Modus unzulässig: Die
+   Instrumentierung liegt im Image; Socket und Token bleiben Laufzeitinputs.
+   Ein Start über diese drei Dateien allein übernimmt
    den außerhalb des Repos liegenden Tracing-Stack **noch nicht**. Kein
    produktiver Rollout ohne belegte Erhaltung dieser Funktion.
 5. `doctor` mit der vorgesehenen Release-Datei ausführen. Für zusätzlich

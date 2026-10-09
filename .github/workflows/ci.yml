@@ -46,6 +46,9 @@ jobs:
             ${{ matrix.context }}
       - name: Smoke image startup and loaded revision on an internal network
         run: python3 scripts/ops/smoke_image.py ${{ matrix.service }} odin-image-ci:${{ matrix.service }} ${{ github.sha }}
+      - name: Probe baked trace transport, collector loss and socket replacement
+        if: matrix.service == 'intelligence' || matrix.service == 'data-ingestion'
+        run: python3 scripts/ops/smoke_trace_image.py ${{ matrix.service }} odin-image-ci:${{ matrix.service }} ${{ github.sha }}
 
   test-intelligence:
     name: tests · intelligence

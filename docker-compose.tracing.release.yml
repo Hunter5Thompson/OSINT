@@ -1,0 +1,44 @@
+# Optional final overlay, selected only by ./odin.sh --release --tracing.
+# Reporter code is baked into reviewed images; mounts are runtime inputs only.
+services:
+  intelligence:
+    environment:
+      SPARK_TRACE_ENDPOINT: unix:/run/spark-tracing/ingest.sock
+      SPARK_TRACE_TOKEN_FILE: /run/spark-tracing-token
+      SPARK_TRACE_CAPTURE: ${ODIN_TRACE_CAPTURE:-metadata}
+      SPARK_TRACE_TARGET_ID: ${ODIN_TRACE_INTELLIGENCE_TARGET_ID:-workstation-5090}
+      SPARK_TRACE_SPARK_ID: ""
+    volumes:
+      - type: bind
+        source: ${ODIN_TRACE_RUN_DIR:?Set ODIN_TRACE_RUN_DIR to the collector socket directory}
+        target: /run/spark-tracing
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ODIN_TRACE_TOKEN_FILE:?Set ODIN_TRACE_TOKEN_FILE to the reviewed token file}
+        target: /run/spark-tracing-token
+        read_only: true
+        bind:
+          create_host_path: false
+
+  data-ingestion-spark:
+    environment:
+      SPARK_TRACE_ENDPOINT: unix:/run/spark-tracing/ingest.sock
+      SPARK_TRACE_TOKEN_FILE: /run/spark-tracing-token
+      SPARK_TRACE_CAPTURE: ${ODIN_TRACE_CAPTURE:-metadata}
+      SPARK_TRACE_TARGET_ID: ${ODIN_TRACE_INGESTION_TARGET_ID:-spark}
+      SPARK_TRACE_SPARK_ID: ${ODIN_TRACE_INGESTION_SPARK_ID:-spark}
+    volumes:
+      - type: bind
+        source: ${ODIN_TRACE_RUN_DIR:?Set ODIN_TRACE_RUN_DIR to the collector socket directory}
+        target: /run/spark-tracing
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ODIN_TRACE_TOKEN_FILE:?Set ODIN_TRACE_TOKEN_FILE to the reviewed token file}
+        target: /run/spark-tracing-token
+        read_only: true
+        bind:
+          create_host_path: false

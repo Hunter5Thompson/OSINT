@@ -34,6 +34,7 @@ from feeds.telegram_collector import TelegramCollector
 from feeds.tle_updater import TLEUpdater
 from feeds.ucdp_collector import UCDPCollector
 from feeds.usgs_collector import USGSCollector
+from tracing import close_reporter
 
 # Shared async Redis client for stream publishing
 _redis_client: aioredis.Redis | None = None
@@ -626,9 +627,12 @@ async def main() -> None:
     await shutdown_event.wait()
 
     log.info("scheduler_shutting_down")
-    scheduler.shutdown(wait=True)
-    if _redis_client is not None:
-        await _redis_client.aclose()
+    try:
+        scheduler.shutdown(wait=True)
+        if _redis_client is not None:
+            await _redis_client.aclose()
+    finally:
+        await asyncio.to_thread(close_reporter)
     log.info("scheduler_stopped")
 
 

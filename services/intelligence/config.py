@@ -7,6 +7,13 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    # Optional local trace transport; disabled until an endpoint is configured.
+    spark_trace_endpoint: str = ""
+    spark_trace_token_file: str = ""
+    spark_trace_target_id: str = "unmapped"
+    spark_trace_spark_id: str = ""
+    spark_trace_capture: str = "metadata"
+
     inference_provider: str = "vllm"
     vllm_url: str = "http://localhost:8000"
     vllm_model: str = "qwen3.5"

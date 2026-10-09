@@ -31,6 +31,7 @@ from graph_integrity.spatial_normalizer import (
 )
 from nlm_ingest.schemas import normalize_entity_type
 from source_spatial import observation_geo_fragment
+from tracing import record_request, record_response, traced_extraction
 
 log = structlog.get_logger(__name__)
 
@@ -476,6 +477,7 @@ async def process_item(
     }
 
 
+@traced_extraction("rss-extraction")
 async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dict:
     """Call vLLM for intelligence extraction.
 
@@ -502,6 +504,7 @@ async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dic
         "chat_template_kwargs": {"enable_thinking": False},
     }
 
+    record_request(payload)
     try:
         async with httpx.AsyncClient(timeout=settings.ingestion_vllm_timeout) as client:
             resp = await client.post(
@@ -526,6 +529,7 @@ async def _call_vllm(title: str, text: str, url: str, settings: Settings) -> dic
 
     try:
         data = resp.json()
+        record_response(data)
         choice = data["choices"][0]
         # Rev-5 (Codex-Review): truncation must surface as an explicit transient error,
         # otherwise the JSON-decode failure below hides the root cause ("llm_truncated"
