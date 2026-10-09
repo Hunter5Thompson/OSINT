@@ -806,7 +806,8 @@ function WorldviewContent({
   const { refineries: refineryData } = useRefineries(effectiveLayers.refineries);
   const { events: eonetEvents } = useEONETEvents(effectiveLayers.eonet);
   const { events: gdacsEvents } = useGDACSEvents(effectiveLayers.gdacs);
-  const { scenes: reconScenes } = useReconManifest();
+  const reconManifest = useReconManifest();
+  const reconScenes = reconManifest.scenes;
   const { openScene } = useRecon();
 
   const hasViewer = useMemo(() => viewer != null && !viewer.isDestroyed(), [viewer]);
@@ -955,7 +956,7 @@ function WorldviewContent({
         <ReconLayer
           viewer={viewer}
           scenes={reconScenes}
-          visible={effectiveLayers.recon}
+          visible={effectiveLayers.recon && reconManifest.status === "available"}
           onSelect={(s) => openScene(s.scene_id)}
         />
         <GlobeChildren
@@ -1048,6 +1049,7 @@ function WorldviewContent({
                 onShaderChange={setActiveShader}
                 spatialProvenance={spatialEnabled ? spatialProvenance : undefined}
                 spatialStatuses={spatialEnabled ? runtimeSpatialStatuses : undefined}
+                recon={reconManifest}
               />
             </OverlayPanel>
           ) : (

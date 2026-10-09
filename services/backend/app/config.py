@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
@@ -67,6 +68,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     # Reviewed local spatial catalog (never a remote URL)
+    # Recon is optional; auto preserves existing valid local deployments.
+    recon_mode: Literal["auto", "enabled", "disabled"] = "auto"
     spatial_catalog_path: Path = Path("/app/data/spatial")
     spatial_asset_max_concurrency: int = Field(default=8, ge=1, le=64)
     spatial_asset_acquire_timeout_s: float = Field(default=0.05, gt=0, le=5.0)

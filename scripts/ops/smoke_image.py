@@ -65,6 +65,24 @@ print(json.dumps(body))
     raise RuntimeError(f"{name}: HTTP smoke timed out: {last[-1000:]}")
 
 
+def json_response(name: str, path: str, status: int) -> dict:
+    probe = f"""
+import json
+import urllib.request
+from urllib.error import HTTPError
+try:
+    response = urllib.request.urlopen('http://127.0.0.1:8000{path}', timeout=2)
+except HTTPError as error:
+    response = error
+assert response.status == {status}, response.status
+print(response.read().decode())
+"""
+    response = docker("exec", name, "python", "-c", probe, check=False)
+    if response.returncode != 0:
+        raise RuntimeError(f"{name}: {path} expected HTTP {status}: {response.stderr}")
+    return json.loads(response.stdout)
+
+
 def smoke(service: str, image: str, revision: str) -> dict:
     config = json.loads(docker("image", "inspect", image).stdout)[0]
     image_revision = (config["Config"]["Labels"] or {}).get("org.opencontainers.image.revision")
@@ -85,6 +103,7 @@ def smoke(service: str, image: str, revision: str) -> dict:
             "QDRANT_URL=http://127.0.0.1:1",
             "TEI_EMBED_URL=http://127.0.0.1:1",
             "TEI_RERANK_URL=http://127.0.0.1:1",
+            "ODIN_PROMOTER_ENABLED=false",
         ]
         if service == "intelligence":
             fixture = prefix + "-models"
@@ -117,6 +136,22 @@ def smoke(service: str, image: str, revision: str) -> dict:
         result: dict = {"service": service, "image_id": image_id, "revision": revision}
         if service == "backend":
             result["health"] = wait_for_http(name, 8000, "/api/health", 200, revision)
+            result["optional_recon"] = json_response(name, "/api/recon/scenes", 200)
+            assert result["optional_recon"] == {
+                "scenes": [], "availability": "disabled", "reason": "not_configured",
+            }
+            configured_name = prefix + "-required-recon"
+            configured_arguments = ["run", "-d", "--name", configured_name, "--network", network]
+            for value in environment + ["RECON_MODE=enabled"]:
+                configured_arguments += ["-e", value]
+            docker(*configured_arguments, image_id)
+            names.append(configured_name)
+            result["required_recon_core"] = wait_for_http(
+                configured_name, 8000, "/api/health", 200, revision,
+            )
+            result["required_recon_error"] = json_response(
+                configured_name, "/api/recon/scenes", 503,
+            )
         elif service == "intelligence":
             result["ready"] = wait_for_http(name, 80, "/health", 200, revision)
             assert result["ready"]["required_models"] == ["smoke-base", "smoke-synthesis"]

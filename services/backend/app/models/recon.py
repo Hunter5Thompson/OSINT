@@ -51,3 +51,14 @@ class ReconManifest(BaseModel):
 
 class ReconScenesResponse(BaseModel):
     scenes: list[ReconScene]
+    availability: Literal["available", "disabled"] = "available"
+    reason: Literal["not_configured", "operator_disabled"] | None = None
+
+    @model_validator(mode="after")
+    def consistent_availability(self) -> "ReconScenesResponse":
+        if self.availability == "disabled":
+            if self.scenes or self.reason is None:
+                raise ValueError("inactive Recon requires a reason and no scenes")
+        elif self.reason is not None:
+            raise ValueError("available Recon cannot have an inactive reason")
+        return self

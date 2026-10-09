@@ -6,6 +6,10 @@
 Manual smoke for the Skyfall Recon MVP. Run this before merging the feature branch
 to `main` and after any change touching the recon stack.
 
+Optional/inactive and configured/error states are defined in
+[recon-availability.md](recon-availability.md). The 12-scene renderer smoke
+below applies only after reviewed licensed assets have been provided.
+
 The Phase-0 renderer-parity gate is at `recon-phase-0-smoke.md` and already PASSED
 on 2026-05-18 with **mkk** as the chosen renderer. Spark was eliminated
 (`THREE.Matrix2 is not a constructor` on the pinned three@0.165.0).

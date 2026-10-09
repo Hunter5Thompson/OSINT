@@ -61,6 +61,25 @@ def test_list_scenes_returns_manifest_shape(tmp_path):
     assert body["scenes"][0]["scene_id"] == "jax_068"
 
 
+def test_loaded_manifest_reports_available(tmp_path):
+    client = TestClient(_build_app(_seed_manifest(tmp_path)))
+    response = client.get("/api/recon/scenes")
+    assert response.json()["availability"] == "available"
+    assert response.json()["reason"] is None
+
+
+def test_optional_inactive_recon_is_not_a_service_outage(tmp_path):
+    loader = ReconManifestLoader(tmp_path / "absent.json")
+    loader.disabled_reason = "not_configured"
+    client = TestClient(_build_app(loader))
+    response = client.get("/api/recon/scenes")
+    assert response.status_code == 200
+    assert response.json() == {
+        "scenes": [], "availability": "disabled", "reason": "not_configured",
+    }
+    assert client.get("/api/recon/scenes/jax_068").status_code == 404
+
+
 def test_get_scene_by_id(tmp_path):
     client = TestClient(_build_app(_seed_manifest(tmp_path)))
     r = client.get("/api/recon/scenes/jax_068")

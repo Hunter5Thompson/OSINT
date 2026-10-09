@@ -1,4 +1,5 @@
 """Integration smoke for the real app wiring (router + static mount)."""
+import hashlib
 import json
 
 import pytest
@@ -6,7 +7,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture()
-def app_with_seeded_manifest(tmp_path, monkeypatch):
+def app_with_seeded_manifest(tmp_path, monkeypatch, request):
     static_dir = tmp_path / "static" / "recon"
     static_dir.mkdir(parents=True)
     ply = static_dir / "JAX_TEST_final.ply"
@@ -14,7 +15,7 @@ def app_with_seeded_manifest(tmp_path, monkeypatch):
 
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True)
-    sha = "b" * 64
+    sha = hashlib.sha256(ply.read_bytes()).hexdigest()
     manifest = {
         "version": 2, "generated_at": "2026-05-17T00:00:00Z", "source_commit": "x",
         "scenes": [{
@@ -29,6 +30,16 @@ def app_with_seeded_manifest(tmp_path, monkeypatch):
         }],
     }
     (data_dir / "recon_manifest.json").write_text(json.dumps(manifest))
+    defect = getattr(request, "param", None)
+    if defect == "missing":
+        ply.unlink()
+    elif defect == "hash_mismatch":
+        ply.write_bytes(b"BADPLY!" * 10)
+    elif defect == "size_mismatch":
+        ply.write_bytes(b"short")
+    elif defect == "wrong_url":
+        manifest["scenes"][0]["ply_url"] = f"/static/recon/absent.ply?sha={sha}"
+        (data_dir / "recon_manifest.json").write_text(json.dumps(manifest))
 
     monkeypatch.setenv("RECON_MANIFEST_PATH", str(data_dir / "recon_manifest.json"))
     monkeypatch.setenv("RECON_STATIC_DIR", str(static_dir))
@@ -63,3 +74,34 @@ def test_recon_ply_range_returns_206(app_with_seeded_manifest):
     )
     assert r.status_code == 206
     assert r.content == b"PLY"
+
+
+@pytest.mark.parametrize(
+    "app_with_seeded_manifest", ["missing", "hash_mismatch", "size_mismatch", "wrong_url"],
+    indirect=True,
+)
+def test_manifest_with_undelivered_assets_is_unavailable(app_with_seeded_manifest):
+    assert app_with_seeded_manifest.get("/api/recon/scenes").status_code == 503
+    assert app_with_seeded_manifest.get("/api/health").status_code == 200
+
+
+def test_invalid_optional_static_directory_does_not_prevent_core_startup(tmp_path, monkeypatch):
+    import importlib
+    from unittest.mock import AsyncMock, patch
+
+    import app.main as main_mod
+
+    blocker = tmp_path / "file"
+    blocker.write_text("not a directory")
+    monkeypatch.setenv("RECON_STATIC_DIR", str(blocker / "recon"))
+    monkeypatch.setenv("RECON_MANIFEST_PATH", str(tmp_path / "missing.json"))
+    try:
+        importlib.reload(main_mod)
+        with patch("app.services.report_store.bootstrap_report_schema", new=AsyncMock()):
+            with TestClient(main_mod.app) as client:
+                assert client.get("/api/health").status_code == 200
+                assert client.get("/api/recon/scenes").status_code == 503
+                assert client.get("/static/recon/absent.ply").status_code == 404
+    finally:
+        monkeypatch.delenv("RECON_STATIC_DIR")
+        importlib.reload(main_mod)

@@ -28,4 +28,6 @@ export interface ReconScene {
 
 export interface ReconScenesResponse {
   scenes: ReconScene[];
+  availability: "available" | "disabled";
+  reason: "not_configured" | "operator_disabled" | null;
 }
