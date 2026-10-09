@@ -6,6 +6,7 @@ import type { SpatialBoundaryProvenanceState } from "../../hooks/useSpatialBound
 import type { SpatialBoundaryProvenance } from "../../spatial/catalog";
 import { parseCatalogRevision } from "../../spatial/contracts";
 import type { LayerSpatialStatus } from "../../spatial/layerScopePolicy";
+import type { UseReconManifestResult } from "../../lib/recon/manifest";
 
 const allOff: LayerVisibility = {
   flights: false, satellites: false, earthquakes: false, vessels: false,
@@ -43,6 +44,38 @@ const readyProvenance: SpatialBoundaryProvenanceState = {
 };
 
 describe("LayersPanel", () => {
+  it.each([
+    ["loading", null, "Checking scene availability…"],
+    ["disabled", "not_configured", "No Recon scenes configured"],
+    ["disabled", "operator_disabled", "Recon disabled by operator"],
+    ["error", null, "Recon scene data unavailable"],
+    ["available", null, "No Recon scenes available"],
+  ] as const)("shows %s Recon availability without enabling an empty layer", (status, reason, label) => {
+    const onToggle = vi.fn();
+    const recon: UseReconManifestResult = {
+      scenes: [], status, reason, loading: status === "loading",
+      error: status === "error" ? new Error("delivery failed") : null, retry: vi.fn(),
+    };
+    render(<LayersPanel layers={{ ...allOff, recon: true, flights: true }}
+      onToggle={onToggle} activeShader="none" onShaderChange={vi.fn()} recon={recon} />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "recon" });
+    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(toggle);
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "flights" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("offers a retry for a failed Recon delivery", () => {
+    const retry = vi.fn();
+    render(<LayersPanel layers={allOff} onToggle={vi.fn()} activeShader="none"
+      onShaderChange={vi.fn()} recon={{ scenes: [], status: "error", reason: null,
+        loading: false, error: new Error("unavailable"), retry }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry Recon" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
   it("exposes the three strategic reference layers", () => {
     render(<LayersPanel layers={allOff} onToggle={() => {}} activeShader="none" onShaderChange={() => {}} />);
     for (const name of ["Nuclear Power Plants", "ICBM Bases", "Major Military Bases"]) {
