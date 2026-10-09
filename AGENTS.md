@@ -35,6 +35,11 @@ Compose/Docker build argument, defaulting to `true`; CI and the nightly build us
 the same value. `.env`, `.env.*`, `node_modules` and build caches remain excluded
 from the frontend Docker context.
 
+The browser CI gate tests the built SPA with explicit API fixtures and software
+WebGL. Local reproduction and evidence limits are in
+`docs/operations/browser-smokes.md`; native GPU and human acceptance remain
+separate checks.
+
 ## Docker Compose: profiles, not monolithic
 
 Services are opt-in via profiles: `ingestion`, `interactive`, `interactive-spark`, `notebooklm`, `vision`. Core services (redis, qdrant, neo4j, tei-embed) have no profile — always start. Use `odin.sh`:

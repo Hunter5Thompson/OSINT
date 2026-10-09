@@ -255,6 +255,35 @@ jobs:
       - run: npm run test:build-info
       - run: npm run build
 
+  test-frontend-browser:
+    name: browser · built frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_SPATIAL_SCOPE_ENABLED: "true"
+      ODIN_BUILD_REVISION: ${{ github.sha }}
+    defaults:
+      run:
+        working-directory: services/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: services/frontend/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run type-check:browser
+      - run: npm run build
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: frontend-browser-evidence
+          path: services/frontend/test-results
+          retention-days: 7
+
   lint-python:
     name: ruff · all services
     runs-on: ubuntu-latest
