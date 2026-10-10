@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/write-build-info.mjs && tsc -b && vite build",
+    "build": "node scripts/write-build-info.mjs && tsc -b tsconfig.build.json && vite build",
     "test:build-info": "node --test scripts/test-build-info.mjs",
     "test:browser": "playwright test",
     "type-check:browser": "tsc --project tsconfig.browser.json --noEmit",

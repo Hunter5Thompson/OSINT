@@ -72,12 +72,23 @@ WASM-Barrelzeile aus dem geladenen 7.1.0-Einstieg. Er ändert keine Dateien in
 ab. Dev/Test/Build verwenden denselben JavaScript-Einstieg; der reguläre Build
 ist damit grün. Nach qualifiziertem öffentlichen Upstream-JS-Einstieg entfernen.
 
+## Unabhängiger Frontend-Imagekontext
+
+Der echte Frontend-Imagebuild am Reader-Commit scheiterte zusätzlich, weil das
+bisherige `tsc -b` auch Unit-Tests mit gemeinsamen Repo-Fixtures außerhalb des
+Frontendkontexts kompilierte. `tsconfig.build.json` grenzt nun ausschließlich
+Produktionsinputs ab, mit denselben strikten Regeln aus der Basiskonfiguration.
+`npm run type-check` prüft weiterhin den vollständigen Repo-/Testgraph; Vitest-
+Fixtures und Sollwerte bleiben erhalten. CI erzwingt beide Prüfungen getrennt.
+Der echte Imagebuild ist der RED-/GREEN-Nachweis dieser Buildgrenze; sie ist
+keine Umgehung einer fehlgeschlagenen Typprüfung oder eines Tests.
+
 ## Nachweise und Grenzen
 
 Artefakte: `/data/odin-goals/2026-10-09-repo-hardening/evidence/G05`. RED/GREEN-
 Logs, Quellenhashes, eingefrorene Pakete, Referenzskripte, Lockdelta und sämtliche
 Probeversuche bleiben erhalten. Falscher erster Fixture-Importpfad, ESM-Spy-
-Konfiguration, Test-URL-Schema und ein fehlendes Host-`python` sind Harness-/
+Konfiguration, Test-URL-Schema, CLI-Argumente und ein fehlendes Host-`python` sind Harness-/
 Aufruffehler; sie zählen nicht als fachliche REDs. Korrigierte Verhaltens-REDs
 stehen in eigenen Logs. Kein Testskip oder gelockerter Sollwert dafür.
 

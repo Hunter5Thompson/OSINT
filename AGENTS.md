@@ -35,6 +35,11 @@ Compose/Docker build argument, defaulting to `true`; CI and the nightly build us
 the same value. `.env`, `.env.*`, `node_modules` and build caches remain excluded
 from the frontend Docker context.
 
+Frontend production builds use `tsconfig.build.json` for application sources.
+`npm run type-check` still checks the full source/test graph in the repo; CI runs
+it independently before Vitest. Shared test fixtures outside the frontend image
+context must not become production compilation dependencies.
+
 The browser CI gate tests the built SPA with explicit API fixtures and software
 WebGL. Local reproduction and evidence limits are in
 `docs/operations/browser-smokes.md`; native GPU and human acceptance remain
