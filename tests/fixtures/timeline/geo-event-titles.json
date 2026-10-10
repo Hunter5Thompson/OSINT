@@ -1,0 +1,5 @@
+[
+  {"id":"title-a","time":"2026-06-01T01:00:00Z","title":"Original source headline","codebook_type":"military.airstrike","severity":"high","lat":50.4,"lon":30.5,"is_incident":false},
+  {"id":"title-b","time":"2026-06-01T02:00:00Z","title":null,"codebook_type":"civil.protest","severity":"medium","lat":10,"lon":20,"is_incident":false},
+  {"id":"title-c","time":"2026-06-01T03:00:00Z","codebook_type":null,"severity":"low","lat":89,"lon":179.9,"is_incident":false}
+]
