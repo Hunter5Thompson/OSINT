@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from app.cypher.incident_write import INCIDENT_UPSERT
 from app.models.incident import Incident, IncidentStatus
 from app.services._loc_key import incident_key
@@ -37,9 +39,17 @@ def test_incident_upsert_location_is_conditional_on_coords():
 
 def test_upsert_params_sets_loc_key():
     rec = Incident(
-        id="inc1", kind="manual", title="t", severity="low",
-        coords=(48.0, 37.8), location="Donetsk", status=IncidentStatus.OPEN,
-        trigger_ts=datetime.now(UTC), sources=[], layer_hints=[], timeline=[],
+        id="inc1",
+        kind="manual",
+        title="t",
+        severity="low",
+        coords=(48.0, 37.8),
+        location="Donetsk",
+        status=IncidentStatus.OPEN,
+        trigger_ts=datetime.now(UTC),
+        sources=[],
+        layer_hints=[],
+        timeline=[],
     )
     params = _upsert_params(rec, 0)
     assert params["loc_key"] == "incident:donetsk@48.000,37.800"
@@ -48,9 +58,17 @@ def test_upsert_params_sets_loc_key():
 
 def test_upsert_params_carries_incident_spatial_projection():
     rec = Incident(
-        id="inc1", kind="manual", title="t", severity="low",
-        coords=(48.0, 37.8), location="Donetsk", status=IncidentStatus.OPEN,
-        trigger_ts=datetime.now(UTC), sources=[], layer_hints=[], timeline=[],
+        id="inc1",
+        kind="manual",
+        title="t",
+        severity="low",
+        coords=(48.0, 37.8),
+        location="Donetsk",
+        status=IncidentStatus.OPEN,
+        trigger_ts=datetime.now(UTC),
+        sources=[],
+        layer_hints=[],
+        timeline=[],
     )
     projection = IncidentSpatialProjection(
         spatial_catalog_revision="spatial-v1-e76a16bff799",
@@ -83,6 +101,35 @@ def test_vendored_loc_key_matches_canonical():
     assert incident_key("", 48.0, 37.8) == "geo:48.000,37.800"
 
 
+@pytest.mark.parametrize("zero", [-0.0, -0.0001, 0.0001, -0.000499])
+def test_vendored_key_canonicalizes_rounded_zero(zero):
+    assert incident_key("Place", zero, 20) == "incident:place@0.000,20.000"
+
+
 def test_incident_upsert_skips_null_island():
     # (0,0) is the non-spatial sentinel (ClusterStore map:no_pin) -> no Location
     assert "($lat = 0.0 AND $lon = 0.0)" in INCIDENT_UPSERT
+
+
+def test_upsert_params_include_bounded_legacy_keys_without_rounding_position():
+    rec = Incident(
+        id="inc-near-zero",
+        kind="manual",
+        title="t",
+        severity="low",
+        coords=(-0.0001, 20),
+        location="Place",
+        status=IncidentStatus.OPEN,
+        trigger_ts=datetime.now(UTC),
+        sources=[],
+        layer_hints=[],
+        timeline=[],
+    )
+
+    params = _upsert_params(rec, 0)
+
+    assert params.get("loc_key_candidates") == [
+        "incident:place@0.000,20.000",
+        "incident:place@-0.000,20.000",
+    ]
+    assert params["lat"] == -0.0001

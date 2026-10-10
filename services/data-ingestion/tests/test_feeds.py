@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from feeds.gdelt_collector import GDELT_QUERIES, GDELTCollector
 from feeds.hotspot_updater import HOTSPOTS, HotspotUpdater
 from feeds.rss_collector import RSS_FEEDS, RSSCollector, _point_id_from_hash
 from feeds.tle_updater import TLE_GROUPS, TLEUpdater, parse_tle_text
+from orbit_elements import OrbitElementError
 from pipeline import content_hash as _content_hash
 
 
@@ -52,14 +56,13 @@ class TestPointIdFromHash:
 # TLE parser tests
 # ---------------------------------------------------------------------------
 class TestTLEParser:
-    SAMPLE_TLE = """\
-ISS (ZARYA)
-1 25544U 98067A   24045.52631944  .00016717  00000+0  30153-3 0  9998
-2 25544  51.6413 247.4627 0006703  32.6918  70.0291 15.49560539439567
-NOAA 15
-1 25338U 98030A   24045.49135538  .00000251  00000+0  12345-3 0  9999
-2 25338  98.7320 105.4280 0010234 245.1234 114.8766 14.25978123345678
-"""
+    # The old synthetic ISS text had invalid checksums and remains unchanged
+    # in the frontend legacy fixture. Use the published parser reference here;
+    # a second name tests layout only and makes no identity assertion.
+    _ISS = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/satellites/iss-valid.tle"
+    ).read_text()
+    SAMPLE_TLE = _ISS + _ISS.replace("ISS (ZARYA)", "PARSER NEIGHBOR")
 
     def test_parse_two_satellites(self) -> None:
         sats = parse_tle_text(self.SAMPLE_TLE)
@@ -77,8 +80,8 @@ NOAA 15
         assert parse_tle_text("") == []
 
     def test_malformed_input(self) -> None:
-        result = parse_tle_text("just some random text\nnothing to see here\n")
-        assert result == []
+        with pytest.raises(OrbitElementError):
+            parse_tle_text("just some random text\nnothing to see here\n")
 
 
 # ---------------------------------------------------------------------------

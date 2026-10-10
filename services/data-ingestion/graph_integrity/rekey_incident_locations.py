@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 import structlog
 
-from graph_integrity.loc_key import incident_key
+from graph_integrity.loc_key import legacy_incident_key
 
 log = structlog.get_logger(__name__)
 
@@ -65,7 +65,8 @@ class IncidentLoc:
     current_loc_key: str
 
     def desired_loc_key(self) -> str:
-        return incident_key(self.location, self.lat, self.lon)
+        # Preserve previously reviewed repair targets; A08 migration is separate.
+        return legacy_incident_key(self.location, self.lat, self.lon)
 
 
 @dataclass

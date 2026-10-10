@@ -260,7 +260,7 @@ ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
 WITH ev, collect(l)[0] AS l
 RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
        toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
-       ev.severity AS severity, l.lat AS lat, l.lon AS lon
+       ev.title AS title, ev.severity AS severity, l.lat AS lat, l.lon AS lon
 ORDER BY ev.timeline_at ASC,
          coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
 """
@@ -435,7 +435,7 @@ ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
 WITH ev, collect(l)[0] AS l
 RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
        toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
-       ev.severity AS severity, l.lat AS lat, l.lon AS lon
+       ev.title AS title, ev.severity AS severity, l.lat AS lat, l.lon AS lon
 ORDER BY ev.timeline_at ASC,
          coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
 """
@@ -610,7 +610,7 @@ ORDER BY coalesce(l.id, l.location_id, l.name, elementId(l)) ASC
 WITH ev, collect(l)[0] AS l
 RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
        toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
-       ev.severity AS severity, l.lat AS lat, l.lon AS lon
+       ev.title AS title, ev.severity AS severity, l.lat AS lat, l.lon AS lon
 ORDER BY ev.timeline_at ASC,
          coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
 """

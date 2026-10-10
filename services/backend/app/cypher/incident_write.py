@@ -1,6 +1,13 @@
 """Write Cypher templates for Incident persistence. Parametrised — no LLM."""
 
 INCIDENT_UPSERT = (
+    # Resolve aliases before *any* mutation. Multiple physical nodes are an
+    # identity conflict, including duplicate nodes with the same key.
+    "OPTIONAL MATCH (existing_location:Location) "
+    "WHERE existing_location.loc_key IN $loc_key_candidates "
+    "WITH collect(existing_location.loc_key) AS existing_loc_keys "
+    "WHERE size(existing_loc_keys) <= 1 OR $lat IS NULL OR $lon IS NULL "
+    "OR ($lat = 0.0 AND $lon = 0.0) "
     "MERGE (i:Incident {id: $incident_id}) "
     "ON CREATE SET "
     "  i.created_at = datetime($now), "
@@ -22,7 +29,7 @@ INCIDENT_UPSERT = (
     # --- geo wiring: only when coordinates are present and not null-island ---
     "FOREACH (_ IN CASE WHEN $lat IS NULL OR $lon IS NULL "
     "OR ($lat = 0.0 AND $lon = 0.0) THEN [] ELSE [1] END | "
-    "  MERGE (l:Location {loc_key: $loc_key}) "
+    "  MERGE (l:Location {loc_key: coalesce(head(existing_loc_keys), $loc_key)}) "
     "    ON CREATE SET l.lat = $lat, l.lon = $lon, l.name = $location, "
     "                  l.geo_basis = 'incident_report' "
     "  FOREACH (__ IN CASE WHEN $spatial_write THEN [1] ELSE [] END | "
@@ -53,9 +60,16 @@ INCIDENT_UPSERT = (
 # Replaying the same incident id therefore returns current persisted state
 # without rewriting terminal status, timeline, or spatial relationships.
 INCIDENT_CREATE_IDEMPOTENT = (
+    "OPTIONAL MATCH (prior_incident:Incident {id: $incident_id}) "
+    "OPTIONAL MATCH (existing_location:Location) "
+    "WHERE existing_location.loc_key IN $loc_key_candidates "
+    "WITH prior_incident, collect(existing_location.loc_key) AS existing_loc_keys "
+    # A replay reads current state without attempting any location write.
+    "WHERE prior_incident IS NOT NULL OR size(existing_loc_keys) <= 1 "
+    "OR $lat IS NULL OR $lon IS NULL OR ($lat = 0.0 AND $lon = 0.0) "
     "MERGE (i:Incident {id: $incident_id}) "
     "ON CREATE SET i._promoter_create_nonce = $create_nonce "
-    "WITH i, i._promoter_create_nonce = $create_nonce AS created "
+    "WITH i, existing_loc_keys, i._promoter_create_nonce = $create_nonce AS created "
     "FOREACH (_ IN CASE WHEN created THEN [1] ELSE [] END | "
     "  SET i.created_at = datetime($now), i.ordinal = $ordinal, "
     "      i.trigger_ts = datetime($trigger_ts), i.kind = $kind, i.title = $title, "
@@ -66,7 +80,7 @@ INCIDENT_CREATE_IDEMPOTENT = (
     "      i.timeline_json = $timeline_json, i.updated_at = datetime($now) "
     "  FOREACH (__ IN CASE WHEN $lat IS NULL OR $lon IS NULL "
     "    OR ($lat = 0.0 AND $lon = 0.0) THEN [] ELSE [1] END | "
-    "    MERGE (l:Location {loc_key: $loc_key}) "
+    "    MERGE (l:Location {loc_key: coalesce(head(existing_loc_keys), $loc_key)}) "
     "      ON CREATE SET l.lat = $lat, l.lon = $lon, l.name = $location, "
     "                    l.geo_basis = 'incident_report' "
     "    FOREACH (___ IN CASE WHEN $spatial_write THEN [1] ELSE [] END | "

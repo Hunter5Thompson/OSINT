@@ -1,3 +1,5 @@
+import pytest
+
 from graph_integrity.country_centroids import _CENTROIDS, _NAME_TO_ISO2, centroid_for, resolve_iso2
 from graph_integrity.loc_key import centroid_key, incident_key, slug
 
@@ -20,6 +22,19 @@ def test_incident_key_is_coordinate_bearing():
     # no name -> coord key (unchanged)
     assert incident_key("", 48.0159, 37.8028) == "geo:48.016,37.803"
     assert incident_key(None, 48.0159, 37.8028) == "geo:48.016,37.803"
+
+
+@pytest.mark.parametrize("name", [None, "", "Place"])
+@pytest.mark.parametrize("zero", [0.0, -0.0, 0.0001, -0.0001, 0.000499, -0.000499])
+def test_rounded_zero_has_one_coordinate_identity(name, zero):
+    prefix = "incident:place@" if name else "geo:"
+    assert incident_key(name, zero, 20) == prefix + "0.000,20.000"
+    assert incident_key(name, 20, zero) == prefix + "20.000,0.000"
+
+
+def test_nonzero_coordinate_formatting_is_unchanged():
+    assert incident_key(None, -0.0006, 0.0006) == "geo:-0.001,0.001"
+    assert incident_key("Place", -12.3456, 179.9999) == "incident:place@-12.346,180.000"
 
 
 def test_centroid_for_known_country():

@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import structlog
 from neo4j.exceptions import ConstraintError
+from pydantic import TypeAdapter
 
 from app.cypher.report_read import (
     REPORT_BY_ID,
@@ -28,7 +29,12 @@ from app.cypher.report_write import (
     REPORT_SCOPE_UNIQUE_CONSTRAINT,
     REPORT_UPSERT,
 )
-from app.models.intel import IntelAnalysis, SpatialRunApplicationV1
+from app.models.intel import (
+    AssessmentStatus,
+    EvidenceSummary,
+    IntelAnalysis,
+    SpatialRunApplicationV1,
+)
 from app.models.report import (
     AccentTone,
     DossierMetric,
@@ -144,6 +150,33 @@ def _decode_spatial_application(
     return None
 
 
+def _decode_assessment_status(raw: object) -> AssessmentStatus | None:
+    try:
+        if isinstance(raw, str) and raw.strip():
+            return AssessmentStatus.model_validate_json(raw)
+        if isinstance(raw, dict):
+            return AssessmentStatus.model_validate(raw)
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
+def _decode_evidence_summary(raw: object) -> list[EvidenceSummary] | None:
+    try:
+        value = json.loads(raw) if isinstance(raw, str) else raw
+        if isinstance(value, list):
+            return TypeAdapter(list[EvidenceSummary]).validate_python(value)
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def _encode_evidence_summary(value: list[EvidenceSummary] | None) -> str | None:
+    if value is None:
+        return None
+    return json.dumps([item.model_dump(mode="json") for item in value])
+
+
 def _coerce_report_status(value: object) -> ReportStatus:
     raw = str(value or "Draft")
     if raw in ("Draft", "Published", "Archived"):
@@ -169,6 +202,11 @@ def _row_to_report(row: dict[str, Any]) -> ReportRecord:
         scope_key=row.get("scope_key"),
         status=_coerce_report_status(row.get("status")),
         confidence=float(row.get("confidence") or 0.0),
+        assessment_status=_decode_assessment_status(row.get("assessment_status_json")),
+        evidence_summary=_decode_evidence_summary(row.get("evidence_summary_json")),
+        verification_status=(
+            "unverified" if row.get("verification_status") == "unverified" else None
+        ),
         location=str(row.get("location") or ""),
         coords=str(row.get("coords") or ""),
         findings=[str(v) for v in (row.get("findings") or [])],
@@ -193,6 +231,11 @@ def _row_to_message(row: dict[str, Any]) -> ReportMessage:
         text=str(row.get("text") or ""),
         ts=_decode_row_datetime(row, "ts"),
         refs=[str(v) for v in (row.get("refs") or [])],
+        assessment_status=_decode_assessment_status(row.get("assessment_status_json")),
+        verification_status=(
+            "unverified" if row.get("verification_status") == "unverified" else None
+        ),
+        evidence_summary=_decode_evidence_summary(row.get("evidence_summary_json")),
     )
 
 
@@ -237,6 +280,12 @@ def _report_params(
         "title": payload.title,
         "status": payload.status,
         "confidence": float(payload.confidence),
+        "assessment_status_json": (
+            payload.assessment_status.model_dump_json()
+            if payload.assessment_status is not None else None
+        ),
+        "verification_status": payload.verification_status,
+        "evidence_summary_json": _encode_evidence_summary(payload.evidence_summary),
         "location": payload.location,
         "coords": payload.coords,
         "findings": payload.findings,
@@ -344,8 +393,11 @@ async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRec
     # run snapshot has a deliberate clear operation: a later global run must be able to remove
     # the previous scoped run's application. Zero/empty values are still applied normally.
     patch_values = patch.model_dump(exclude_unset=True, exclude_none=True)
-    if "spatial_application" in patch.model_fields_set:
-        patch_values["spatial_application"] = patch.spatial_application
+    for field in (
+        "spatial_application", "assessment_status", "verification_status", "evidence_summary",
+    ):
+        if field in patch.model_fields_set:
+            patch_values[field] = getattr(patch, field)
     merged = ReportRecord.model_validate(
         {**current.model_dump(), **patch_values}
     )
@@ -377,20 +429,35 @@ def build_hydration_patch(
     """Map analysis content, accepting run attribution only through an explicit trust seam."""
     parsed = parse_munin_report(analysis.analysis)
     threat = analysis.threat_assessment or "MODERATE"
+    threat_default = analysis.assessment_status is not None and (
+        analysis.assessment_status.threat == "default"
+    )
+    confidence_default = analysis.assessment_status is not None and (
+        analysis.assessment_status.confidence == "default"
+    )
     metrics = [
         DossierMetric(
-            label="Threat", value=threat, sub="assessment",
-            tone=_THREAT_TONE.get(threat, _DEFAULT_TONE),
+            label="Threat", value="—" if threat_default else threat,
+            sub="nicht gelesen" if threat_default else "Modellbewertung",
+            tone=_DEFAULT_TONE if threat_default else _THREAT_TONE.get(threat, _DEFAULT_TONE),
         ),
         DossierMetric(
-            label="Confidence", value=f"{analysis.confidence:.0%}", sub="munin", tone="sage",
+            label="Confidence", value="—" if confidence_default else f"{analysis.confidence:.0%}",
+            sub="nicht gelesen" if confidence_default else "Modellbewertung", tone="sage",
         ),
         DossierMetric(
-            label="Sources", value=str(len(analysis.sources_used)), sub="evidence", tone="sentinel",
+            label="Sources", value=("—" if analysis.evidence_summary is None else
+                str(len({ref.source_ref_id for ref in analysis.evidence_summary}))),
+            sub=("Quellenbelege unbekannt" if analysis.evidence_summary is None
+                 else "konsumierte Beleg-IDs"),
+            tone="sentinel",
         ),
     ]
     return ReportUpdateRequest(
         confidence=analysis.confidence,
+        assessment_status=analysis.assessment_status,
+        verification_status=analysis.verification_status,
+        evidence_summary=analysis.evidence_summary,
         context=parsed.context,
         findings=parsed.findings,
         body_title=f"{country_name} — Munin Lagebriefing",
@@ -502,6 +569,12 @@ async def append_report_message(
             "text": payload.text,
             "ts": ts.isoformat(),
             "refs": payload.refs,
+            "assessment_status_json": (
+                payload.assessment_status.model_dump_json()
+                if payload.assessment_status is not None else None
+            ),
+            "verification_status": payload.verification_status,
+            "evidence_summary_json": _encode_evidence_summary(payload.evidence_summary),
             "ordering": time.time_ns(),
             "now": datetime.now(UTC).isoformat(),
         },

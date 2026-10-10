@@ -23,6 +23,7 @@ from feeds.eonet_collector import EONETCollector
 from feeds.firms_collector import FIRMSCollector
 from feeds.fulltext_collector import FulltextCollector, unavailable_dependencies
 from feeds.gdacs_collector import GDACSCollector
+from feeds.gp_updater import GPUpdater
 from feeds.hapi_collector import HAPICollector
 from feeds.hotspot_updater import HotspotUpdater
 from feeds.military_aircraft_collector import MilitaryAircraftCollector
@@ -158,8 +159,8 @@ async def run_rss_collector() -> None:
 
 
 async def run_tle_updater() -> None:
-    """Update TLE satellite data."""
-    updater = TLEUpdater()
+    """Update the explicitly selected satellite cache generation."""
+    updater = GPUpdater() if settings.satellite_orbit_format == "omm" else TLEUpdater()
     try:
         await updater.update()
     except Exception:

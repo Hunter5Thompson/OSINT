@@ -8,6 +8,11 @@ from fastapi import HTTPException
 log = structlog.get_logger(__name__)
 
 
+def select_admin_token(*candidates: str) -> str:
+    """Use the first configured candidate after whitespace normalization."""
+    return next((token for candidate in candidates if (token := candidate.strip())), "")
+
+
 def require_admin_token(
     *,
     expected_token: str,

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -111,21 +112,16 @@ class HotspotUpdater:
         Uses a simple scroll with payload filter rather than vector search,
         because we want a count of recently ingested items matching the name.
         """
-        try:
-            query_text = hotspot_name.replace("/", " ").replace("-", " ")
-            results, _ = await asyncio.to_thread(
-                self.qdrant.scroll,
-                collection_name=settings.qdrant_collection,
-                scroll_filter=Filter(
-                    should=[
-                        FieldCondition(key="title", match=MatchText(text=query_text)),
-                    ]
-                ),
-                limit=100,
-            )
-            return len(results)
-        except Exception:
-            return 0
+        query_text = hotspot_name.replace("/", " ").replace("-", " ")
+        results, _ = await asyncio.to_thread(
+            self.qdrant.scroll,
+            collection_name=settings.qdrant_collection,
+            scroll_filter=Filter(
+                should=[FieldCondition(key="title", match=MatchText(text=query_text))]
+            ),
+            limit=100,
+        )
+        return len(results)
 
     @staticmethod
     def _normalize_backend_threat(level: str) -> str:
@@ -155,50 +151,135 @@ class HotspotUpdater:
 
         return level_order[idx]
 
+    @staticmethod
+    def _valid_previous(value: object, identifier: str, *, backend: bool = False) -> bool:
+        try:
+            if not isinstance(value, dict) or value.get("id") != identifier:
+                return False
+            if not isinstance(value.get("name"), str) or not value["name"].strip():
+                return False
+            coordinates = (
+                (("latitude", 90), ("longitude", 180)) if backend else (("lat", 90), ("lon", 180))
+            )
+            for field, limit in coordinates:
+                coordinate = value.get(field)
+                if isinstance(coordinate, bool) or not isinstance(coordinate, (int, float)):
+                    return False
+                if not math.isfinite(coordinate) or not -limit <= coordinate <= limit:
+                    return False
+            levels = (
+                ("CRITICAL", "HIGH", "ELEVATED", "MODERATE")
+                if backend
+                else ("low", "moderate", "elevated", "high", "critical")
+            )
+            if value.get("threat_level") not in levels:
+                return False
+            timestamp = "last_updated" if backend else "updated_at"
+            if any(
+                not isinstance(value.get(field), str)
+                for field in ("region", "description", timestamp)
+            ):
+                return False
+            datetime.fromisoformat(value[timestamp])
+            sources = value.get("sources")
+            if not isinstance(sources, list) or any(
+                not isinstance(source, str) for source in sources
+            ):
+                return False
+            if not backend:
+                count = value.get("recent_mentions")
+                if count is None:
+                    if value.get("measurement_status") != "unavailable":
+                        return False
+                elif type(count) is not int or count < 0:
+                    return False
+            return True
+        except (ValueError, TypeError, OverflowError):
+            return False
+
+    def _retained_record(self, raw: str | None, identifier: str) -> dict[str, Any] | None:
+        """Retain a valid previous individual record, never an unvalidated cache row."""
+        try:
+            value = json.loads(raw) if raw is not None else None
+        except (ValueError, TypeError):
+            return None
+        return value if self._valid_previous(value, identifier) else None
+
+    def _retained_snapshot(self, raw: str | None) -> dict[str, dict[str, Any]]:
+        try:
+            rows = json.loads(raw) if raw is not None else []
+        except (ValueError, TypeError):
+            return {}
+        if not isinstance(rows, list):
+            return {}
+        return {
+            row["id"]: row
+            for row in rows
+            if isinstance(row, dict)
+            and isinstance(row.get("id"), str)
+            and row["id"].strip()
+            and self._valid_previous(row, row["id"], backend=True)
+        }
+
+    def _backend_record(self, record: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": record["id"],
+            "name": record["name"],
+            "latitude": record["lat"],
+            "longitude": record["lon"],
+            "region": record["region"],
+            "threat_level": self._normalize_backend_threat(record["threat_level"]),
+            "description": record["description"],
+            "sources": record["sources"],
+            "last_updated": record["updated_at"],
+        }
+
     async def update(self) -> None:
         """Update all hotspots in Redis."""
         log.info("hotspot_update_started", hotspot_count=len(HOTSPOTS))
         start = time.monotonic()
         r = await self._get_redis()
+        previous_snapshot = self._retained_snapshot(await r.get("hotspots:all"))
         backend_hotspots: list[dict[str, Any]] = []
 
+        unavailable = 0
         for hotspot in HOTSPOTS:
+            now_iso = datetime.now(UTC).isoformat()
             try:
-                # Attempt to adjust threat level based on recent articles
                 mention_count = await self._count_recent_mentions(hotspot["name"])
-                adjusted_level = self._adjust_threat_level(
-                    hotspot["threat_level"], mention_count
-                )
-                now_iso = datetime.now(UTC).isoformat()
-
-                record = {
-                    **hotspot,
-                    "threat_level": adjusted_level,
-                    "base_threat_level": hotspot["threat_level"],
-                    "recent_mentions": mention_count,
-                    "updated_at": now_iso,
-                }
-                backend_record = {
-                    "id": hotspot["id"],
-                    "name": hotspot["name"],
-                    "latitude": hotspot["lat"],
-                    "longitude": hotspot["lon"],
-                    "region": hotspot["region"],
-                    "threat_level": self._normalize_backend_threat(adjusted_level),
-                    "description": hotspot["description"],
-                    "sources": hotspot["sources"],
-                    "last_updated": now_iso,
-                }
-                backend_hotspots.append(backend_record)
-
-                # Store individual hotspot
-                await r.set(
-                    f"hotspot:{hotspot['id']}",
-                    json.dumps(record),
-                    ex=settings.hotspot_cache_ttl,
-                )
             except Exception:
-                log.exception("hotspot_update_error", hotspot=hotspot["id"])
+                unavailable += 1
+                log.warning("hotspot_measurement_unavailable", hotspot=hotspot["id"])
+                prior = self._retained_record(
+                    await r.get(f"hotspot:{hotspot['id']}"), hotspot["id"]
+                )
+                if prior is not None:
+                    backend_hotspots.append(self._backend_record(prior))
+                    continue
+                previous = previous_snapshot.get(hotspot["id"])
+                if previous is not None:
+                    backend_hotspots.append(previous)
+                    continue
+                mention_count = None
+            adjusted_level = (
+                hotspot["threat_level"]
+                if mention_count is None
+                else self._adjust_threat_level(hotspot["threat_level"], mention_count)
+            )
+            record = {
+                **hotspot,
+                "threat_level": adjusted_level,
+                "base_threat_level": hotspot["threat_level"],
+                "recent_mentions": mention_count,
+                # Cache construction time is distinct from a successful measurement.
+                "updated_at": now_iso,
+                "measurement_at": now_iso if mention_count is not None else None,
+                "measurement_status": "available" if mention_count is not None else "unavailable",
+            }
+            await r.set(
+                f"hotspot:{hotspot['id']}", json.dumps(record), ex=settings.hotspot_cache_ttl
+            )
+            backend_hotspots.append(self._backend_record(record))
 
         # Store full list of hotspot IDs for enumeration
         hotspot_ids = [h["id"] for h in HOTSPOTS]
@@ -206,7 +287,12 @@ class HotspotUpdater:
         await r.set("hotspots:all", json.dumps(backend_hotspots), ex=settings.hotspot_cache_ttl)
 
         elapsed = round(time.monotonic() - start, 2)
-        log.info("hotspot_update_finished", hotspot_count=len(HOTSPOTS), elapsed_seconds=elapsed)
+        log.info(
+            "hotspot_update_finished",
+            hotspot_count=len(HOTSPOTS),
+            unavailable_measurements=unavailable,
+            elapsed_seconds=elapsed,
+        )
 
     async def close(self) -> None:
         try:

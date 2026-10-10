@@ -33,7 +33,7 @@ from app.models.incident import (
     IncidentTimelineEvent,
     Severity,
 )
-from app.services._loc_key import incident_key
+from app.services._loc_key import incident_key, incident_key_candidates
 from app.services._persisted_time import parse_persisted_datetime
 from app.services.neo4j_client import read_query, write_query, write_transaction
 from app.services.spatial_catalog import (
@@ -169,6 +169,9 @@ def _upsert_params(
             ensure_ascii=True,
         ),
         "loc_key": incident_key(record.location, record.coords[0], record.coords[1]),
+        "loc_key_candidates": list(
+            incident_key_candidates(record.location, record.coords[0], record.coords[1])
+        ),
         "spatial_write": projection is not None,
         "country_scope_key": projection.country_scope_key if projection else None,
         "admin1_scope_key": projection.admin1_scope_key if projection else None,
