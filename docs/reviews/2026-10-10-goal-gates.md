@@ -3,7 +3,8 @@
 Stand10.10.2026, Integration durch Writer01a12412-a9fe-7052-93e0-ba88db75c740.
 Alle212 übernommenen Sourcepfade sind nach unabhängiger Bundleprüfung in fünf
 scoped Commits bis9ddf099 gesichert; begrenzte Integrationskorrekturen folgen
-bis2b7de93. Der ganze Auftrag bleibt aktiv und unvollständig.
+bis86e68d2. Nach dem tatsächlichen Imageaudit folgen gezielte Python-Lockupdates
+auf c9c44c3; der ganze Auftrag bleibt aktiv und unvollständig.
 Hauptcheckout813594a/3 und fremdes Worktree7c190c0/18 sind frisch unverändert.
 Kein Push/PR/Merge/Deploy. Ein unbeabsichtigter produktiver Redis-Testzugriff
 ist unten ausdrücklich dokumentiert; keine historische Reparatur ausgeführt.
@@ -122,3 +123,58 @@ sauberer gemeinsamer Head mit CI/Fullservice/isolierteDB/Built-Browser; alle fin
 Images aus exakt dem Commit und Manifestdigests; separate Modell-/Retrieval-/
 Original-/nativeGPU-/Menschspuren. Geschützte Worktrees, produktive Dienste,
 vorhandener lokaler LLM und eingefrorene Daten bleiben erhalten.
+
+## Tatsächlich ausgeführte Integration und Wartungsfolge
+
+Writer01a12412-a9fe-7052-93e0-ba88db75c740 hat den sauberen86e68d2 vollständig
+geprüft: Backend1104/Mypy95, Intelligence732 mit echtem Fünfturn-LangGraph,
+Ingestion1843/24bestehende Live-Opt-ins abgewählt, Vision44, Frontend870 mit
+Lint/Repo-/Browsertypen/Build, Ops115 und CI-Gesamt-Ruff PASS. Echte disposable
+Storegates Backend44/Ingestion8/GDELTforward1 PASS. Built-Browser10/10 PASS,
+ohneRetries/Skips: tatsächlicher GP100651-Canvaspick/Orbit/Remount,
+10k-Dichte/Recovery und Recon normal/inaktiv/Fehler. Das ist SwiftShader,
+keine native GPU- oder menschliche Abnahme.
+
+Fünf Appimages wurden durch build_release.py aus genau diesem sauberen Commit
+mit Gitarchive gebaut. OCI-Labels und tatsächliche normale CMD-Smokes PASS.
+Vision-Storefälle7/7 auch im gebauten Python3.12-Image mit unverändertem
+Consumer-SHA PASS. Tracing in beiden Images besteht online→Socketabwesend→
+Socketneu gegen die Canonical-Collector-API auf Wegwerfdaten; Collectorcode
+bleibt unverändert. Fünf tatsächliche Registry-Manifeste sind per BodySHA,
+Header, Config und Digestpull gebunden. Zusätzlich wurde das vorhandene
+Rerankerimage nur read-only exportiert und anhand der Plattform-Rootfs geprüft;
+OCI-Index und Configdigest sind unterschiedliche Identitäten. Auch dessen
+eigene lokale Registryreferenz ist per Digestpull geprüft. Loopbackrefs sind
+Testartefakte, keine externe Veröffentlichung oder produktive Freigabe.
+
+Isolierter Rückwechsel PASS: vier frühere saubere099037f-Images → fünf
+86e68d2-Images → vier099037f-Images mit inaktivem Visionprofil, tatsächliche
+Prozessrevisionen und normale Startbefehle. Kein produktiver Rollback.
+Die exakte bestehende produktive Compose-/Image-/Mount-/Envkonfiguration
+liegt als private600-Backup außerhalb des Repos.32.4MB bestehende Backenddaten
+sind SHA-geprüft kopiert; Backend-/Intelligence-Imageloader akzeptieren dieselben
+zwei served Catalogrevisions. Der vollständige Release-Render einschließlich
+Tracing/Coverage-Inputs besteht den Pfad-/Digest-/Mountguard, ohne Lifecycle.
+
+G06:36 tatsächliche Produktionsgraph-/Modellfälle am86e68d2 technisch PASS,
+0Runtimeerrors,108 abgeschlossene Clientcalls und108 erfolgreiche lokale
+Servergenerierungen. Rohmedian17.7s/p9521.2s; unabhängige Lastzuordnung noch
+eigenes Gate, menschliche36Ratings PENDING. Der eingefrorene Korpus/Rubrik
+ist unverändert. Provider ist die vorhandene lokale9B/Munin-Runtime, Retrieval
+bleibt synthetisch. Originalretrieval, Fakten, Live, nativeGPU/Human offen.
+
+G08: Audit der tatsächlichen gebakten Pythonpakete fand weitere Advisories.
+Nur betroffene Pakete wurden auf upstream genannte korrigierte Versionen
+aktualisiert: urllib3 in vier Locks; langgraph-sdk/multidict in Intelligence;
+anyio/h2/hpack/pyasn1/pydantic-settings/setuptools in Ingestion. Das sind neun
+einzigartige Pakete und zwölf Service-Paketknoten. Andere Paketrecords und
+Lockmetadaten bleiben byte-/strukturgleich; keine Manifestanforderung geändert,
+kein Ignore/auditfix/Librarypatch. Duplicate Advisory-IDs nicht mehrfach zählen.
+Die allerkleinste upstream Fixversion für setuptools erfordert83.0.0.
+
+Primary Advisories/Inventare/RED-Audit/selektive Lockdelta liegen unter dem
+externen Integrationsverzeichnis. Dieser Wartungsnachtrag verlangt erneut
+Servicechecks, tatsächliche Appbuilds/Smokes und Imageaudit auf dem folgenden
+sauberen Head. Die86e68d2-Belege bleiben historische Einzelbelege, kein
+Abschlussclaim für den neuen Head. Ein finaler Receipt führt Source/Tests/Images/
+Live/Fakten/nativeGPU/Human separat; unveränderte Datenreparaturen nicht wiederholen.
