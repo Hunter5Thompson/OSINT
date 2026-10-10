@@ -1,7 +1,9 @@
 # G06/G07 — Abnahmeunterlagen
 
 Der Sourcecheckpoint ist seit Writer01a12412-a9fe-7052-93e0-ba88db75c740
-scoped committet; finale Fullservice-/Image-/Livegates bleiben separat offen.
+scoped committet; Fullservice/Build/Built-Browser/Storegates auf86e68d2 sind
+ausgeführt. Selektive weitere Python-Lockwartung verlangt einen neuen finalen
+Headbeleg; Live-/Fakten-/nativeGPU-/Humangates bleiben separat offen.
 Aktuelle ausgeführte Integrationsbelege und ihr Headbezug stehen in
 [goal-gates.md](../reviews/2026-10-10-goal-gates.md) sowie den externen Goalreceipts.
 Die folgenden Formulare sind unbewertet. Ein Mensch bewertet die
@@ -88,3 +90,14 @@ Je Bildschirmbeleg dokumentiert der Mensch beobachtet/bestanden/offen:
 Reviewdatum/-person, Screenshot- und Source-/Image-/Rohmessungsbindung sind
 Pflichtfelder. Keine Ersatzwertung aus Unitcounts, Symbolzahlen oder generierten
 Screenshots. Die abschließende menschliche Produktbewertung bleibt PENDING.
+
+## Tatsächlicher erster Modelllauf
+
+Der einzige Writer führte auf86e68d2 alle36 unveränderten Fälle mit dem
+vorhandenen lokalen9B/Munin-Modell aus. Technical PASS mit0Runtimeerrors;
+Rohmedian17.7s/p9521.2s.108 abgeschlossene Clientcalls und108 erfolgreiche
+Servergenerierungen,626 Lastproben sowie Modell-/Image-/Dateihashes gesichert.
+Lastzuordnung ist gesondert auszuwerten; alle36 menschlichen Plätze bleiben
+leer. Pfad: Goal/evidence/integration-20261010/model-86e68d26de79.
+Das ist die synthetische Graphspur, keine reale Retrieval-/Faktenfreigabe.
+Der anschließende Python-Lockwartungshead erhält eigene aktualisierte Prüfbelege.
