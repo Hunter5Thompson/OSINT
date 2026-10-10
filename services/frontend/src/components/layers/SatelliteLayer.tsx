@@ -114,7 +114,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     for (let i = 0; i <= ORBIT_ARC_POINTS; i++) {
       const futureDate = new Date(startDate.getTime() + i * 60_000);
       const posVel = satellite.propagate(satrec, futureDate);
-      if (typeof posVel.position === "boolean" || !posVel.position) continue;
+      if (!posVel?.position) continue;
       const gmst = satellite.gstime(futureDate);
       const geo = satellite.eciToGeodetic(posVel.position, gmst);
       positions.push(
@@ -159,7 +159,7 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
       }
 
       const posVel = satellite.propagate(satrec, now);
-      if (typeof posVel.position === "boolean" || !posVel.position) continue;
+      if (!posVel?.position) continue;
 
       const gmst = satellite.gstime(now);
       const geo = satellite.eciToGeodetic(posVel.position, gmst);

@@ -3,9 +3,12 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import cesium from "vite-plugin-cesium";
 import tailwindcss from "@tailwindcss/vite";
+import { satelliteJavascriptEntry } from "./scripts/satellite-javascript-entry";
 
 export default defineConfig({
-  plugins: [react(), cesium(), tailwindcss()],
+  plugins: [satelliteJavascriptEntry(), react(), cesium(), tailwindcss()],
+  // Keep dev/test/build on the same qualified pure-JavaScript entry.
+  optimizeDeps: { exclude: ["satellite.js"] },
   server: {
     port: 5173,
     host: true,

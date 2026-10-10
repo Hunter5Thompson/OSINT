@@ -52,6 +52,8 @@ import type {
   SpatialCountryAlmanac,
 } from "../types/almanac";
 import type { SpatialQueryRef } from "../spatial/contracts";
+import type { OrbitSnapshot } from "../types/satelliteOrbit";
+import { decodeOrbitSnapshot } from "../lib/satelliteOrbit";
 
 export const SIGNAL_STREAM_URL = "/api/signals/stream";
 
@@ -184,6 +186,10 @@ export async function getMilitaryFlights(): Promise<Aircraft[]> {
 
 export async function getSatellites(): Promise<Satellite[]> {
   return fetchJSON<Satellite[]>("/satellites");
+}
+
+export async function getSatelliteOrbitSnapshot(signal?: AbortSignal): Promise<OrbitSnapshot> {
+  return decodeOrbitSnapshot(await fetchJSON<unknown>("/satellites/orbits", { signal }));
 }
 
 export async function getEarthquakes(): Promise<Earthquake[]> {
