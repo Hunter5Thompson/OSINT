@@ -154,17 +154,37 @@ class TestVisionConsumerPreflight:
         # Flag must NOT be set — the check failed
         assert consumer._qdrant_schema_validated is False
 
-    def test_absent_collection_skips_validation(self) -> None:
-        """If the collection doesn't exist, preflight skips and marks as validated."""
+    def test_absent_collection_does_not_validate(self) -> None:
+        """Missing collection is a failed preflight, never schema evidence."""
+        from qdrant_schema import QdrantSchemaMismatch
+
         consumer = _make_consumer()
 
         mock_qdrant = MagicMock()
         mock_qdrant.get_collections.return_value.collections = []
 
-        consumer._validate_qdrant_schema(mock_qdrant)
+        with pytest.raises(QdrantSchemaMismatch, match="(?i)missing|absent"):
+            consumer._validate_qdrant_schema(mock_qdrant)
 
-        assert consumer._qdrant_schema_validated is True
+        assert consumer._qdrant_schema_validated is False
         mock_qdrant.get_collection.assert_not_called()
+
+    def test_timeout_does_not_validate_and_next_attempt_rechecks(self) -> None:
+        consumer = _make_consumer()
+        qdrant = MagicMock()
+        collection = MagicMock(name="collection")
+        collection.name = "odin_intel"
+        qdrant.get_collections.side_effect = [
+            TimeoutError("synthetic timeout"),
+            MagicMock(collections=[collection]),
+        ]
+        qdrant.get_collection.return_value = _dense_only()
+        with pytest.raises(TimeoutError):
+            consumer._validate_qdrant_schema(qdrant)
+        assert consumer._qdrant_schema_validated is False
+        consumer._validate_qdrant_schema(qdrant)
+        assert consumer._qdrant_schema_validated is True
+        assert qdrant.get_collections.call_count == 2
 
     def test_validation_not_repeated_on_subsequent_calls(self) -> None:
         """With _qdrant_schema_validated=True, _validate_qdrant_schema is not called again."""

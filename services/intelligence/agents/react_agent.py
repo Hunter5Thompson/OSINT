@@ -213,7 +213,10 @@ def should_continue(state: AgentState) -> str:
     """Decide whether to execute tools or go to synthesis.
     Returns 'tools' or 'synthesis'.
     """
-    if guard_check(state) == "stop":
+    # The final decision's pending calls must receive correlated results. The
+    # ToolNode boundary enforces slots; guard_check gates the *next* decision.
+    if (state.get("iteration", 0) > settings.react_max_iterations
+            or state.get("tool_calls_count", 0) > settings.react_max_tool_calls):
         return "synthesis"
 
     messages = state.get("messages", [])

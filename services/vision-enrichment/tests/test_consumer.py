@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from qdrant_client.models import (
+    CollectionConfig,
+    CollectionInfo,
+    CollectionParams,
+    Distance,
+    VectorParams,
+)
+
 from consumer import VisionConsumer
 
 
@@ -15,6 +23,20 @@ def _make_consumer(**overrides):
     s = Settings(**defaults)
     mock_redis = AsyncMock()
     return VisionConsumer(redis_client=mock_redis, settings_override=s), mock_redis
+
+
+def _valid_qdrant():
+    client = MagicMock()
+    collection = MagicMock()
+    collection.name = "odin_intel"
+    client.get_collections.return_value.collections = [collection]
+    params = CollectionParams.model_construct(
+        vectors=VectorParams(size=1024, distance=Distance.COSINE), sparse_vectors=None
+    )
+    client.get_collection.return_value = CollectionInfo.model_construct(
+        config=CollectionConfig.model_construct(params=params)
+    )
+    return client
 
 
 class TestConsumerSetup:
@@ -78,11 +100,14 @@ class TestProcessMessage:
 
             mock_http.post.return_value = httpx.Response(
                 200,
-                json={"results": [], "errors": []},
+                json={
+                    "results": [{"columns": ["updated_count"], "data": [{"row": [1]}]}],
+                    "errors": [],
+                },
                 request=httpx.Request("POST", "http://neo4j"),
             )
 
-            mock_qdrant_instance = MagicMock()
+            mock_qdrant_instance = _valid_qdrant()
             mock_qdrant_cls.return_value = mock_qdrant_instance
             mock_qdrant_instance.scroll.return_value = ([mock_point], None)
 
@@ -127,6 +152,7 @@ class TestProcessMessage:
         with (
             patch("consumer.analyze_image", return_value={"scene_description": "test"}),
             patch("consumer.httpx.AsyncClient") as mock_client_cls,
+            patch("consumer.QdrantClient", return_value=_valid_qdrant()),
         ):
             mock_http = AsyncMock()
             mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
@@ -163,7 +189,10 @@ class TestPoisonMessages:
         # Simulate exceeded max retries
         mock_redis.hincrby.return_value = 4
 
-        with patch("consumer.analyze_image", side_effect=Exception("GPU OOM")):
+        with (
+            patch("consumer.analyze_image", side_effect=Exception("GPU OOM")),
+            patch("consumer.QdrantClient", return_value=_valid_qdrant()),
+        ):
             await consumer._process_message(b"msg-id-1", msg_data)
 
         # Should XADD to dead letter queue and XACK

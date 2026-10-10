@@ -9,12 +9,13 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 
 import structlog
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from agents.react_agent import (
     create_react_agent,
+    guard_check,
     should_continue,
     system_prompt_for_state,
 )
@@ -24,6 +25,7 @@ from agents.tools import blocked_tool_names, tools_for_state
 from agents.tools.graph_query import set_graph_client
 from config import settings
 from distill_capture import capture_synthesis_input
+from graph.assessment import ASSESSMENT_FORMAT, annotate_assessment, parse_assessment
 from graph.client import GraphClient
 from graph.nodes import analyst_node, osint_node, router_node
 from graph.nodes import synthesis_node as legacy_synthesis_node
@@ -31,6 +33,7 @@ from graph.state import AgentState
 from rag.evidence import (
     evidence_artifact,
     evidence_items_from_artifact,
+    evidence_time_summary,
     pack_with_lineage,
     source_refs_from_artifact,
     to_evidence_item,
@@ -193,6 +196,8 @@ def derive_sources_used(artifacts: Sequence[dict]) -> list[str]:
 async def react_agent_node(state: AgentState) -> dict:
     """ReAct agent node — invokes LLM with tools bound."""
     logger.info("react_agent_node", iteration=state.get("iteration", 0))
+    if guard_check(state) == "stop":
+        return {}
 
     try:
         llm = create_react_agent(tools_for_state(state))
@@ -230,19 +235,9 @@ async def react_agent_node(state: AgentState) -> dict:
 
         response = await llm.ainvoke(messages)
 
-        # Count tool calls in this response
+        # These are proposals. Only the execution boundary accounts for starts.
         tool_calls = getattr(response, "tool_calls", None) or []
         new_tool_calls = len(tool_calls)
-
-        # Populate tool_trace for transparency in the final analysis
-        new_trace_entries = [
-            {
-                "iteration": state.get("iteration", 0),
-                "tool": tc.get("name", "?"),
-                "args": tc.get("args", {}),
-            }
-            for tc in tool_calls
-        ]
 
         logger.info(
             "react_agent_invoked",
@@ -254,9 +249,7 @@ async def react_agent_node(state: AgentState) -> dict:
         return {
             "messages": [response],
             "iteration": state.get("iteration", 0) + 1,
-            "tool_calls_count": state.get("tool_calls_count", 0) + new_tool_calls,
             "agent_chain": state.get("agent_chain", []) + ["react_agent"],
-            "tool_trace": state.get("tool_trace", []) + new_trace_entries,
         }
 
     except Exception as e:
@@ -346,7 +339,8 @@ async def react_synthesis_node(state: AgentState) -> dict:
                     "4. Confidence Level — genau einer der Strings "
                     "\"high confidence\", \"moderate confidence\" oder "
                     "\"low confidence\" im Text (Begründung deutsch)\n"
-                    "5. Recommended Actions"
+                    "5. Recommended Actions\n\n"
+                    f"{ASSESSMENT_FORMAT}"
                 ),
             ),
         ]
@@ -354,27 +348,20 @@ async def react_synthesis_node(state: AgentState) -> dict:
         response = await llm.ainvoke(messages)
         content = response.content if isinstance(response.content, str) else str(response.content)
 
-        # Extract threat level
-        threat = "MODERATE"
-        for level in ["CRITICAL", "HIGH", "ELEVATED"]:
-            if level in content.upper():
-                threat = level
-                break
-
-        # Extract confidence
-        confidence = 0.5
-        if "high confidence" in content.lower():
-            confidence = 0.8
-        elif "moderate confidence" in content.lower():
-            confidence = 0.6
-        elif "low confidence" in content.lower():
-            confidence = 0.3
+        assessment = parse_assessment(content)
+        if assessment.issues:
+            logger.warning(
+                "assessment_parse_failed", stage="react_synthesis", issues=assessment.issues
+            )
+        content = annotate_assessment(content, assessment)
 
         return {
             "synthesis": content,
-            "threat_assessment": threat,
-            "confidence": confidence,
+            "threat_assessment": assessment.threat,
+            "confidence": assessment.confidence,
+            "assessment_status": assessment.status,
             "sources_used": derived_sources,
+            "evidence_summary": evidence_time_summary(evidence_artifacts),
             "agent_chain": state.get("agent_chain", []) + ["synthesis"],
             "messages": [response],
             "spatial_application": spatial_application,
@@ -395,10 +382,46 @@ async def react_synthesis_node(state: AgentState) -> dict:
 # ── Graph Builders ────────────────────────────────────────────────────────────
 
 async def tool_node_for_state(state: AgentState) -> dict:
-    """Execute only the same closed capability set exposed to the model."""
+    """Reserve each slot before dispatch; blocked proposals carry no artifact."""
+    remaining = max(0, settings.react_max_tool_calls - state.get("tool_calls_count", 0))
+    started: list[dict] = []
 
-    result = await ToolNode(tools_for_state(state)).ainvoke(state)
-    return dict(result)
+    async def execute_budgeted(request, execute):
+        nonlocal remaining
+        if request.tool is None:
+            return await execute(request)
+        if remaining == 0:
+            return ToolMessage(
+                content="BUDGET_BLOCKED: tool-call budget exhausted; this tool was not started.",
+                name=request.tool_call["name"],
+                tool_call_id=request.tool_call["id"],
+                status="error",
+            )
+        # No await between checking and reserving. Parallel siblings cannot
+        # observe the same remaining slot; a started failure still consumes it.
+        remaining -= 1
+        started.append({
+            "iteration": max(0, state.get("iteration", 1) - 1),
+            "tool": request.tool_call["name"],
+            "args": request.tool_call.get("args", {}),
+        })
+        return await execute(request)
+
+    try:
+        result = dict(await ToolNode(
+            tools_for_state(state), awrap_tool_call=execute_budgeted, handle_tool_errors=True,
+        ).ainvoke(state))
+    except asyncio.CancelledError:
+        logger.warning("tool_batch_cancelled", started_count=len(started))
+        raise
+    result["tool_calls_count"] = state.get("tool_calls_count", 0) + len(started)
+    result["tool_trace"] = state.get("tool_trace", []) + started
+    return result
+
+
+def route_after_tools(state: AgentState) -> str:
+    """After the fifth decision or final slot, synthesize without a sixth turn."""
+    return "synthesis" if guard_check(state) == "stop" else "react_agent"
 
 
 def build_react_graph() -> StateGraph:
@@ -418,7 +441,9 @@ def build_react_graph() -> StateGraph:
             "synthesis": "synthesis",
         },
     )
-    graph.add_edge("tools", "react_agent")
+    graph.add_conditional_edges(
+        "tools", route_after_tools, {"react_agent": "react_agent", "synthesis": "synthesis"},
+    )
     graph.add_edge("synthesis", END)
 
     return graph
@@ -537,6 +562,8 @@ async def run_intelligence_query(
         "key_findings": [],
         "threat_assessment": "",
         "confidence": 0.0,
+        "assessment_status": None,
+        "evidence_summary": None,
         "sources_used": [],
         "agent_chain": [],
         "tool_trace": [],
@@ -572,6 +599,8 @@ async def run_intelligence_query(
             "tool_trace": [],
             "timestamp": datetime.now(UTC).isoformat(),
             "mode": "error",
+            "assessment_status": None,
+            "verification_status": "unverified",
             "spatial_scope": (
                 pinned_scope.model_dump(mode="json") if pinned_scope is not None else None
             ),
@@ -592,6 +621,9 @@ async def run_intelligence_query(
         "analysis": result.get("synthesis", result.get("analysis", "")),
         "confidence": result.get("confidence", 0.0),
         "threat_assessment": result.get("threat_assessment", "MODERATE"),
+        "assessment_status": result.get("assessment_status"),
+        "evidence_summary": result.get("evidence_summary"),
+        "verification_status": "unverified",
         "tool_trace": result.get("tool_trace", []),
         "timestamp": datetime.now(UTC).isoformat(),
         "mode": mode,
