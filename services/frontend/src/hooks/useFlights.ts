@@ -8,11 +8,13 @@ export function useFlights(enabled: boolean) {
   const [flights, setFlights] = useState<Aircraft[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [error, setError] = useState<"unavailable" | null>(null);
 
   useEffect(() => {
     if (!enabled) {
       setFlights([]);
       setLoading(false);
+      setError(null);
       return;
     }
 
@@ -27,8 +29,9 @@ export function useFlights(enabled: boolean) {
         if (cancelled || requestId !== sequence) return;
         setFlights(data);
         setLastUpdate(new Date());
+        setError(null);
       } catch {
-        // keep stale data on error
+        if (!cancelled && requestId === sequence) setError("unavailable");
       } finally {
         if (!cancelled && requestId === sequence) setLoading(false);
       }
@@ -42,5 +45,5 @@ export function useFlights(enabled: boolean) {
     };
   }, [enabled]);
 
-  return { flights, loading, lastUpdate };
+  return { flights, loading, lastUpdate, error };
 }

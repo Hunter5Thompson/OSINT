@@ -116,6 +116,7 @@ describe("RefineryLayer", () => {
       />,
     );
     expect(mocks.bbAddSpy).toHaveBeenCalledTimes(2);
+    expect(mocks.bbAddSpy.mock.calls[0]![0].id).toEqual({ odinKind: "operational" });
     expect(mocks.lcAddSpy).toHaveBeenCalledTimes(2);
   });
 

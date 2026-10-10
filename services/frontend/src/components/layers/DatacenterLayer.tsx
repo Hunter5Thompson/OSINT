@@ -134,6 +134,7 @@ export function DatacenterLayer({ viewer, datacenters, visible, onSelect }: Data
       const position = Cesium.Cartesian3.fromDegrees(lon, lat);
 
       const bb = bc.add({
+        id: { odinKind: "operational" },
         position,
         image: iconRef.current,
         scale: 0.8,

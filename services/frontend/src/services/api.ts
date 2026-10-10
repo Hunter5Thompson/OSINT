@@ -192,16 +192,16 @@ export async function getSatelliteOrbitSnapshot(signal?: AbortSignal): Promise<O
   return decodeOrbitSnapshot(await fetchJSON<unknown>("/satellites/orbits", { signal }));
 }
 
-export async function getEarthquakes(): Promise<Earthquake[]> {
-  return fetchJSON<Earthquake[]>("/earthquakes");
+export async function getEarthquakes(signal?: AbortSignal): Promise<Earthquake[]> {
+  return fetchJSON<Earthquake[]>("/earthquakes", { signal });
 }
 
 export async function getVessels(): Promise<Vessel[]> {
   return fetchJSON<Vessel[]>("/vessels");
 }
 
-export async function getCables(): Promise<CableDataset> {
-  return fetchJSON<CableDataset>("/cables");
+export async function getCables(signal?: AbortSignal): Promise<CableDataset> {
+  return fetchJSON<CableDataset>("/cables", { signal });
 }
 
 export async function getHotspots(): Promise<Hotspot[]> {
@@ -468,20 +468,20 @@ export async function saveSpatialCountryBriefing(
   return (await res.json()) as ReportRecord;
 }
 
-export async function getFIRMSHotspots(sinceHours = 24): Promise<FIRMSHotspot[]> {
-  return fetchJSON<FIRMSHotspot[]>(`/firms/hotspots?since_hours=${sinceHours}`);
+export async function getFIRMSHotspots(sinceHours = 24, signal?: AbortSignal): Promise<FIRMSHotspot[]> {
+  return fetchJSON<FIRMSHotspot[]>(`/firms/hotspots?since_hours=${sinceHours}`, { signal });
 }
 
-export async function getAircraftTracks(sinceHours = 24): Promise<AircraftTrack[]> {
-  return fetchJSON<AircraftTrack[]>(`/aircraft/tracks?since_hours=${sinceHours}`);
+export async function getAircraftTracks(sinceHours = 24, signal?: AbortSignal): Promise<AircraftTrack[]> {
+  return fetchJSON<AircraftTrack[]>(`/aircraft/tracks?since_hours=${sinceHours}`, { signal });
 }
 
-export async function getEONETEvents(sinceHours = 168): Promise<EONETEvent[]> {
-  return fetchJSON<EONETEvent[]>(`/eonet/events?since_hours=${sinceHours}`);
+export async function getEONETEvents(sinceHours = 168, signal?: AbortSignal): Promise<EONETEvent[]> {
+  return fetchJSON<EONETEvent[]>(`/eonet/events?since_hours=${sinceHours}`, { signal });
 }
 
-export async function getGDACSEvents(sinceHours = 168): Promise<GDACSEvent[]> {
-  return fetchJSON<GDACSEvent[]>(`/gdacs/events?since_hours=${sinceHours}`);
+export async function getGDACSEvents(sinceHours = 168, signal?: AbortSignal): Promise<GDACSEvent[]> {
+  return fetchJSON<GDACSEvent[]>(`/gdacs/events?since_hours=${sinceHours}`, { signal });
 }
 
 // ── S3 Reports (Briefing Room) ──────────────────────────────────────────────

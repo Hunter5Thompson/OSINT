@@ -95,7 +95,6 @@ export function ScrubberMount({
 
   const coarseStartMs = Date.parse(coarse.tStart);
   const coarseEndMs = Date.parse(coarse.tEnd);
-  const bucketCount = data?.buckets?.length ?? 120;
   const magnitude = Math.abs(speed) || 1;
 
   const ensureReplay = () => {
@@ -109,7 +108,7 @@ export function ScrubberMount({
   const stepBy = (dir: Direction) => {
     const win = stepWindow(mode === "replay", brush, coarseStartMs, coarseEndMs);
     pause();
-    seek(stepTargetMs(cursorMs, win.startMs, win.endMs, bucketCount, dir));
+    seek(stepTargetMs(cursorMs, win.startMs, win.endMs, histogramQuery.buckets ?? 120, dir, coarseEndMs - coarseStartMs));
   };
 
   return (

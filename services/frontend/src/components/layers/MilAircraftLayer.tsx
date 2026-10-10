@@ -135,6 +135,7 @@ export function MilAircraftLayer({
         const arr: number[] = [];
         for (const p of t.points) arr.push(p.lon, p.lat, p.altitude_m ?? 0);
         const poly = pc.add({
+          id: { odinKind: "operational" },
           positions: Cesium.Cartesian3.fromDegreesArrayHeights(arr),
           // softened per declutter P0 (#43): thin + translucent track polylines
           width: 1.0,
@@ -146,6 +147,7 @@ export function MilAircraftLayer({
       // Rotation from the last known heading preserves live-mode parity (in live
       // the cursor clamps to the last point, so this renders identically to before).
       const bb = bc.add({
+        id: { odinKind: "operational" },
         position: Cesium.Cartesian3.fromDegrees(last.lon, last.lat, last.altitude_m ?? 0),
         image: createJetIcon(color, 24),
         width: 28,

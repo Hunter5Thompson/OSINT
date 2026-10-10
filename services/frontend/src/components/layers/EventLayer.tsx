@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { IntelEvent } from "../../types";
 import { usePerformance } from "../globe/PerformanceGuard";
+import { getViewBounds } from "../../lib/lod";
+import { selectEventRenderSet, type EventDensity } from "./eventDensity";
 
 interface EventLayerProps {
   viewer: Cesium.Viewer | null;
@@ -11,6 +13,8 @@ interface EventLayerProps {
   // within the active window; absent -> behaves exactly as before (full opacity).
   getTimeMs?: () => number;
   window?: { startMs: number; endMs: number } | null;
+  pinnedId?: string;
+  onDensity?: (density: EventDensity) => void;
 }
 
 // §7 fade: outside the window -> hidden; inside -> linear from full at the cursor
@@ -66,6 +70,7 @@ export interface EventPlacement {
   renderLon: number;
   stackIndex: number;
   stackSize: number;
+  pixelOffset: readonly [number, number];
 }
 
 function bucketKey(lat: number, lon: number): string {
@@ -109,13 +114,24 @@ export function buildPlacements(events: IntelEvent[]): EventPlacement[] {
     const stackSize = groupedEvents.length;
     for (let i = 0; i < groupedEvents.length; i += 1) {
       const event = groupedEvents[i]!;
-      const [renderLat, renderLon] = offsetPosition(event.lat as number, event.lon as number, i, stackSize);
+      const polar = Math.abs(event.lat as number) > 85;
+      const [renderLat, renderLon] = polar
+        ? [event.lat as number, event.lon as number]
+        : offsetPosition(event.lat as number, event.lon as number, i, stackSize);
+      const ring = Math.floor(i / 8);
+      const slots = Math.min(8, stackSize - ring * 8);
+      const angle = 2 * Math.PI * (i % 8) / slots;
+      // Distinct rings approach a bounded screen radius; no longitude/cos(latitude) near poles.
+      const radius = 18 + 78 * ring / (ring + 3);
+      const pixelOffset: readonly [number, number] = polar && stackSize > 1
+        ? [radius * Math.cos(angle), radius * Math.sin(angle)] : [0, 0];
       result.push({
         event,
         renderLat,
         renderLon,
         stackIndex: i,
         stackSize,
+        pixelOffset,
       });
     }
   }
@@ -129,11 +145,11 @@ export function buildPlacements(events: IntelEvent[]): EventPlacement[] {
  * - high: slow pulse (0.5 Hz)
  * - medium/low: static marker
  */
-export function EventLayer({ viewer, events, visible, getTimeMs, window }: EventLayerProps) {
+export function EventLayer({ viewer, events, visible, getTimeMs, window, pinnedId, onDensity }: EventLayerProps) {
   const collectionRef = useRef<Cesium.BillboardCollection | null>(null);
   const labelCollectionRef = useRef<Cesium.LabelCollection | null>(null);
   const pulsesRef = useRef<EventPulse[]>([]);
-  const fadeListRef = useRef<{ billboard: Cesium.Billboard; eventMs: number }[]>([]);
+  const fadeListRef = useRef<{ billboard: Cesium.Billboard; eventTimes: number[] }[]>([]);
   const animFrameRef = useRef<number | null>(null);
   const labelsVisibleRef = useRef(false);
   const { degradation } = usePerformance();
@@ -144,6 +160,8 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
   getTimeMsRef.current = getTimeMs;
   const windowRef = useRef(window);
   windowRef.current = window;
+  const inputRef = useRef({ events, visible, pinnedId, onDensity });
+  inputRef.current = { events, visible, pinnedId, onDensity };
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -166,6 +184,7 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
       collectionRef.current = null;
       labelCollectionRef.current = null;
       pulsesRef.current = [];
+      fadeListRef.current = [];
     };
   }, [viewer]);
 
@@ -181,14 +200,9 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
     }
   }, [viewer, visible]);
 
-  useEffect(() => {
+  const renderVisible = useCallback(() => {
     if (!viewer || viewer.isDestroyed()) return;
-    const removeListener = viewer.camera.moveEnd.addEventListener(updateLabelVisibility);
     updateLabelVisibility();
-    return () => removeListener();
-  }, [viewer, updateLabelVisibility]);
-
-  useEffect(() => {
     const bc = collectionRef.current;
     const lc = labelCollectionRef.current;
     if (!bc || !lc) return;
@@ -198,9 +212,15 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
     pulsesRef.current = [];
     fadeListRef.current = [];
 
-    if (!visible) return;
+    const input = inputRef.current;
+    bc.show = input.visible;
+    lc.show = input.visible && labelsVisibleRef.current;
+    if (!input.visible) return;
 
-    const placements = buildPlacements(events);
+    const selection = selectEventRenderSet(input.events, viewer.camera.positionCartographic.height,
+      getViewBounds(viewer), getTimeMsRef.current ? windowRef.current ?? null : null, input.pinnedId);
+    input.onDensity?.(selection.density);
+    const placements = buildPlacements(selection.events);
 
     for (const placement of placements) {
       const event = placement.event;
@@ -208,7 +228,9 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
       const color = getCategoryColor(event.codebook_type);
 
       const billboard = bc.add({
+        id: { odinKind: "operational" },
         position,
+        pixelOffset: new Cesium.Cartesian2(...placement.pixelOffset),
         image: createEventCanvas(color),
         scale: placement.stackSize > 1 ? 0.9 : 1.0,
         eyeOffset: new Cesium.Cartesian3(0, 0, -100),
@@ -227,7 +249,7 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
         lon: event.lon,
         time: event.timestamp,  // EntityClickHandler reads this to seek on click (§7)
       };
-      fadeListRef.current.push({ billboard, eventMs: Date.parse(event.timestamp ?? "") });
+      fadeListRef.current.push({ billboard, eventTimes: [Date.parse(event.timestamp ?? "")] });
 
       // In time-aware (timeline) mode the §7 fade only governs billboard alpha; labels
       // can't be alpha-faded per-event cheaply, and out-of-window labels would re-introduce
@@ -246,7 +268,7 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          pixelOffset: new Cesium.Cartesian2(0, -18),
+          pixelOffset: new Cesium.Cartesian2(placement.pixelOffset[0], placement.pixelOffset[1] - 18),
           eyeOffset: new Cesium.Cartesian3(0, 0, -100),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
           distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, LABEL_ALTITUDE_THRESHOLD),
@@ -259,18 +281,40 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
       }
     }
 
-    bc.show = visible;
-    lc.show = visible && labelsVisibleRef.current;
-  }, [events, visible]);
+    for (const cluster of selection.clusters) {
+      const billboard = bc.add({
+        id: { odinKind: "operational" },
+        position: Cesium.Cartesian3.fromDegrees(cluster.lon, cluster.lat, EVENT_ALTITUDE_M),
+        image: createEventCanvas(getCategoryColor(cluster.codebook_type), cluster.count),
+        scale: 1, eyeOffset: new Cesium.Cartesian3(0, 0, -100),
+        scaleByDistance: new Cesium.NearFarScalar(100_000, 1, 12_000_000, .45),
+        translucencyByDistance: new Cesium.NearFarScalar(100_000, 1, 14_000_000, .35),
+      });
+      (billboard as unknown as Record<string, unknown>)._eventClusterData = {
+        count: cluster.count, lat: cluster.lat, lon: cluster.lon,
+      };
+      fadeListRef.current.push({ billboard, eventTimes: cluster.eventTimes });
+      if (cluster.severity === "critical" || cluster.severity === "high") {
+        pulsesRef.current.push({ billboard, severity: cluster.severity });
+      }
+    }
+  }, [viewer, updateLabelVisibility]);
+
+  useEffect(() => { renderVisible(); }, [events, visible, pinnedId, window, getTimeMs, renderVisible]);
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    return viewer.camera.moveEnd.addEventListener(renderVisible);
+  }, [viewer, renderVisible]);
 
   // Pulse animation loop
   useEffect(() => {
-    if (!visible) {
+    if (!visible || !viewer || viewer.isDestroyed()) {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       return;
     }
 
     const animate = () => {
+      if (viewer.isDestroyed()) return;
       const now = Date.now();
       const deg = degradationRef.current;
 
@@ -297,8 +341,8 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
       if (win && getT) {
         const cursor = getT();
         const falloff = (win.endMs - win.startMs) * 0.05;
-        for (const { billboard, eventMs } of fadeListRef.current) {
-          billboard.color = Cesium.Color.WHITE.withAlpha(fadeAlpha(eventMs, cursor, win, falloff));
+        for (const { billboard, eventTimes } of fadeListRef.current) {
+          billboard.color = Cesium.Color.WHITE.withAlpha(fadeTimesAlpha(eventTimes, cursor, win, falloff));
         }
       }
 
@@ -310,13 +354,24 @@ export function EventLayer({ viewer, events, visible, getTimeMs, window }: Event
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [visible]);
+  }, [visible, viewer]);
 
   return null;
 }
 
-function createEventCanvas(color: string): HTMLCanvasElement {
-  const size = 24;
+export function fadeTimesAlpha(times: readonly number[], cursor: number,
+  window: { startMs: number; endMs: number }, falloff: number): number {
+  let lo = 0, hi = times.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (times[mid]! < cursor) lo = mid + 1; else hi = mid;
+  }
+  return Math.max(fadeAlpha(times[lo] ?? NaN, cursor, window, falloff),
+    fadeAlpha(times[lo - 1] ?? NaN, cursor, window, falloff));
+}
+
+function createEventCanvas(color: string, count?: number): HTMLCanvasElement {
+  const size = count === undefined ? 24 : 48;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -325,7 +380,7 @@ function createEventCanvas(color: string): HTMLCanvasElement {
 
   const cx = size / 2;
   const cy = size / 2;
-  const r = 8;
+  const r = count === undefined ? 8 : 22;
 
   ctx.beginPath();
   ctx.moveTo(cx, cy - r);
@@ -340,6 +395,13 @@ function createEventCanvas(color: string): HTMLCanvasElement {
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.5;
   ctx.stroke();
+  if (count !== undefined) {
+    ctx.fillStyle = "white";
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(count), cx, cy);
+  }
 
   return canvas;
 }

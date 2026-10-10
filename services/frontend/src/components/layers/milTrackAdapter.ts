@@ -65,9 +65,11 @@ export function positionAtTime(points: MilTrackPoint[], tMs: number): InterpPos 
     if (tMs >= a.ts_ms && tMs <= b.ts_ms) {
       const span = b.ts_ms - a.ts_ms || 1;
       const f = (tMs - a.ts_ms) / span;
+      const lonDelta = ((b.lon - a.lon + 540) % 360) - 180;
+      const lon = f === 0 ? a.lon : f === 1 ? b.lon : ((a.lon + lonDelta * f + 540) % 360) - 180;
       return {
         lat: a.lat + (b.lat - a.lat) * f,
-        lon: a.lon + (b.lon - a.lon) * f,
+        lon,
         alt: (a.altitude_m ?? 0) + ((b.altitude_m ?? 0) - (a.altitude_m ?? 0)) * f,
       };
     }

@@ -1,6 +1,9 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
-import * as satellite from "satellite.js";
+import type { SatRec } from "satellite.js";
+import { SatelliteRecordCache, propagateSatellite } from "../../lib/satelliteOrbit";
+import type { OrbitSatellite } from "../../types/satelliteOrbit";
+import { useTime } from "../../state/TimeContext";
 import { glyphColor } from "./glyphTokens";
 import type { Satellite } from "../../types";
 import { usePerformance } from "../globe/PerformanceGuard";
@@ -18,8 +21,9 @@ export function shouldRenderCone(sat: {
 
 interface SatelliteLayerProps {
   viewer: Cesium.Viewer | null;
-  satellites: Satellite[];
+  satellites: (Satellite | OrbitSatellite)[];
   visible: boolean;
+  discontinuityEpoch?: number;
 }
 
 const CATEGORY_COLORS: Record<string, Cesium.Color> = {
@@ -39,21 +43,19 @@ const COUNTRY_TINT: Record<string, Cesium.Color> = {
 };
 
 const ORBIT_ARC_POINTS = 50;
+const MAX_ORBIT_ARCS = 64;
+const POINT_IMAGE = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><circle cx="5" cy="5" r="5" fill="white"/></svg>');
 const ORBIT_LOD_ALTITUDE = ORBIT_LOD_ALTITUDE_M; // keep orbits visible across LEO..GEO globe-scale zoom
 const RECON_PREFIXES = ["USA ", "NROL", "COSMOS 25", "YAOGAN"];
 const MIN_ELEVATION_DEG = 5;
-/** Only render orbit arcs for high-interest categories (not all 15K active sats) */
+/** Prioritize high-interest groups within the single bounded orbit budget. */
 const ORBIT_ELIGIBLE_CATEGORIES = new Set(["military", "station", "gps", "weather"]);
 
 /**
  * Decide whether orbit arcs should be visible.
  *
- * Orbit arcs are drawn only for a few hundred high-interest satellites (military / station /
- * gps / weather), so they are NOT the FPS cost driver — the ~12K point primitives are.
- * Earlier this was gated on `degradation < 3`, which meant the PerformanceGuard ratcheting up
- * under the heavy point cloud would disable the (cheap) orbits first, so they "always vanished".
- * We now only suppress orbits at the most extreme degradation (level 4) and keep them visible
- * across globe-scale zoom (LEO..GEO).
+ * At most 64 arcs are sampled, with high-interest satellites taking priority.
+ * Hide them at the most extreme degradation level and beyond the orbit altitude limit.
  */
 export function shouldShowOrbits(degradation: number, cameraAltitudeM: number): boolean {
   return degradation < 4 && cameraAltitudeM < ORBIT_LOD_ALTITUDE;
@@ -71,19 +73,26 @@ function computeFootprintRadiusKm(altitudeKm: number): number {
   return Math.max(0, earthR * centralAngle);
 }
 
-export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerProps) {
-  const pointsRef = useRef<Cesium.PointPrimitiveCollection | null>(null);
+export function SatelliteLayerBridge(props: Omit<SatelliteLayerProps, "discontinuityEpoch">) {
+  const { discontinuityEpoch } = useTime();
+  return <SatelliteLayer {...props} discontinuityEpoch={discontinuityEpoch} />;
+}
+
+export function SatelliteLayer({ viewer, satellites, visible, discontinuityEpoch = 0 }: SatelliteLayerProps) {
+  const pointsRef = useRef<Cesium.BillboardCollection | null>(null);
   const orbitCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
   const footprintEntityRef = useRef<Cesium.Entity | null>(null);
   const coneCollectionRef = useRef<Cesium.PolylineCollection | null>(null);
   const { degradation } = usePerformance();
-  const lastShowOrbitsRef = useRef(false);
+  const recordsRef = useRef(new SatelliteRecordCache());
+  const refreshRef = useRef<(() => void) | null>(null);
+  const epochRef = useRef(discontinuityEpoch);
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
 
     if (!pointsRef.current) {
-      pointsRef.current = new Cesium.PointPrimitiveCollection();
+      pointsRef.current = new Cesium.BillboardCollection();
       viewer.scene.primitives.add(pointsRef.current);
     }
     if (!orbitCollectionRef.current) {
@@ -109,162 +118,130 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     };
   }, [viewer]);
 
-  const propagateOrbitArc = useCallback((satrec: satellite.SatRec, startDate: Date): Cesium.Cartesian3[] => {
-    const positions: Cesium.Cartesian3[] = [];
-    for (let i = 0; i <= ORBIT_ARC_POINTS; i++) {
-      const futureDate = new Date(startDate.getTime() + i * 60_000);
-      const posVel = satellite.propagate(satrec, futureDate);
-      if (!posVel?.position) continue;
-      const gmst = satellite.gstime(futureDate);
-      const geo = satellite.eciToGeodetic(posVel.position, gmst);
-      positions.push(
-        Cesium.Cartesian3.fromDegrees(
-          satellite.degreesLong(geo.longitude),
-          satellite.degreesLat(geo.latitude),
-          geo.height * 1000,
-        ),
-      );
-    }
-    return positions;
-  }, []);
-
   useEffect(() => {
     const pc = pointsRef.current;
     const oc = orbitCollectionRef.current;
     if (!pc || !oc || !viewer || viewer.isDestroyed()) return;
-
     pc.removeAll();
     oc.removeAll();
+    recordsRef.current.retain(satellites);
     if (!visible || satellites.length === 0) return;
 
-    const now = new Date();
+    let disposed = false;
+    const entries: { sat: Satellite | OrbitSatellite; record: SatRec; point: Cesium.Billboard }[] = [];
     const cameraAlt = viewer.camera.positionCartographic.height;
-    const showOrbits = shouldShowOrbits(degradation, cameraAlt);
-    lastShowOrbitsRef.current = showOrbits;
-
-    // At global zoom, skip mega-constellations (Starlink=10K, OneWeb=651)
-    // They render as an indistinguishable green mass anyway
-    const showMegaConstellations = cameraAlt < GLOBE_ALTITUDE_M;
-
     for (const sat of satellites) {
-      if (!showMegaConstellations && sat.category === "active") {
-        const upper = sat.name.toUpperCase();
-        if (upper.startsWith("STARLINK") || upper.startsWith("ONEWEB")) continue;
-      }
-      let satrec: satellite.SatRec;
-      try {
-        satrec = satellite.twoline2satrec(sat.tle_line1, sat.tle_line2);
-      } catch {
-        continue;
-      }
-
-      const posVel = satellite.propagate(satrec, now);
-      if (!posVel?.position) continue;
-
-      const gmst = satellite.gstime(now);
-      const geo = satellite.eciToGeodetic(posVel.position, gmst);
-      const lon = satellite.degreesLong(geo.longitude);
-      const lat = satellite.degreesLat(geo.latitude);
-      const alt = geo.height * 1000;
-
+      if (cameraAlt >= GLOBE_ALTITUDE_M && sat.category === "active" &&
+          /^(STARLINK|ONEWEB)/i.test(sat.name)) continue;
+      const record = recordsRef.current.get(sat);
+      if (!record) continue;
       const color = CATEGORY_COLORS[sat.category] ?? CATEGORY_COLORS["active"]!;
-      const isRecon = isReconSatellite(sat.name);
-
+      const recon = isReconSatellite(sat.name);
+      const size = recon ? 10 : sat.category === "station" ? 8 : 3;
       const point = pc.add({
-        position: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
-        pixelSize: isRecon ? 10 : sat.category === "station" ? 8 : 3,
-        color: isRecon ? Cesium.Color.RED : color,
+        position: Cesium.Cartesian3.ZERO, image: POINT_IMAGE, width: size, height: size,
+        color: recon ? Cesium.Color.RED : color, show: false,
       });
+      entries.push({ sat, record, point });
+    }
 
-      (point as unknown as Record<string, unknown>)._satelliteData = {
-        norad_id: sat.norad_id,
-        name: sat.name,
-        category: sat.category,
-        inclination_deg: sat.inclination_deg,
-        period_min: sat.period_min,
-        altitude_km: geo.height,
-        operator_country: sat.operator_country,
-        satellite_type: sat.satellite_type,
-        footprint_radius_km: Math.round(computeFootprintRadiusKm(geo.height)),
-        lat,
-        lon,
-      };
-
-      if (showOrbits && ORBIT_ELIGIBLE_CATEGORIES.has(sat.category)) {
-        const orbitPositions = propagateOrbitArc(satrec, now);
-        if (orbitPositions.length >= 2) {
+    let lastTime: number | null = null;
+    let lastWall = -Infinity;
+    let orbitWall = -Infinity;
+    let lastMultiplier = viewer.clock.multiplier;
+    const update = (force = false) => {
+      if (disposed || viewer.isDestroyed()) return;
+      const date = Cesium.JulianDate.toDate(viewer.clock.currentTime);
+      const time = date.getTime();
+      const wall = performance.now();
+      const delta = lastTime === null ? Infinity : time - lastTime;
+      const discontinuity = lastTime === null ||
+        (delta < 0 && viewer.clock.multiplier >= 0) || viewer.clock.multiplier !== lastMultiplier ||
+        (!viewer.clock.shouldAnimate && delta !== 0) ||
+        Math.abs(delta - (wall - lastWall) * viewer.clock.multiplier) > 1000;
+      if (!force && (delta === 0 || (!discontinuity && wall - lastWall < 1000))) return;
+      lastMultiplier = viewer.clock.multiplier;
+      lastTime = time;
+      lastWall = wall;
+      for (const { sat, record, point } of entries) {
+        const position = propagateSatellite(record, date);
+        point.show = position !== null;
+        if (!position) continue;
+        point.position = Cesium.Cartesian3.fromDegrees(position.longitude_deg, position.latitude_deg, position.altitude_m);
+        (point as unknown as Record<string, unknown>)._satelliteData = {
+          norad_id: sat.norad_id, name: sat.name, category: sat.category,
+          inclination_deg: sat.inclination_deg, period_min: sat.period_min,
+          altitude_km: position.altitude_m / 1000,
+          operator_country: sat.operator_country, satellite_type: sat.satellite_type,
+          footprint_radius_km: Math.round(computeFootprintRadiusKm(position.altitude_m / 1000)),
+          lat: position.latitude_deg, lon: position.longitude_deg,
+        };
+      }
+      const showOrbits = shouldShowOrbits(degradation, viewer.camera.positionCartographic.height);
+      oc.show = showOrbits;
+      if (showOrbits && (force || discontinuity || wall - orbitWall >= 30_000)) {
+        orbitWall = wall;
+        oc.removeAll();
+        const candidates = [
+          ...entries.filter(entry => ORBIT_ELIGIBLE_CATEGORIES.has(entry.sat.category)),
+          ...entries.filter(entry => !ORBIT_ELIGIBLE_CATEGORIES.has(entry.sat.category)),
+        ];
+        for (const { sat, record, point } of candidates) {
+          if (!point.show) continue;
+          if (oc.length >= MAX_ORBIT_ARCS) break;
+          const positions: Cesium.Cartesian3[] = [];
+          for (let i = 0; i <= ORBIT_ARC_POINTS; i++) {
+            const position = propagateSatellite(record, new Date(time + i * 60_000));
+            if (position) positions.push(Cesium.Cartesian3.fromDegrees(
+              position.longitude_deg, position.latitude_deg, position.altitude_m,
+            ));
+          }
+          if (positions.length < 2) continue;
+          const color = CATEGORY_COLORS[sat.category] ?? CATEGORY_COLORS["active"]!;
           const orbitColor = sat.operator_country
-            ? (COUNTRY_TINT[sat.operator_country] ?? color.withAlpha(0.3))
-            : color.withAlpha(0.3);
-
-          oc.add({
-            positions: orbitPositions,
-            width: 1.0,
-            material: Cesium.Material.fromType("Color", { color: orbitColor }),
-          });
+            ? (COUNTRY_TINT[sat.operator_country] ?? color.withAlpha(0.3)) : color.withAlpha(0.3);
+          oc.add({ positions, width: 1.0, material: Cesium.Material.fromType("Color", { color: orbitColor }) });
         }
       }
-    }
-  }, [satellites, visible, viewer, degradation, propagateOrbitArc]);
+      viewer.scene.requestRender();
+    };
+    refreshRef.current = () => update(true);
+    update(true);
+    const onTick = () => update();
+    const onMoveEnd = () => update(true);
+    const removeTick = viewer.clock.onTick.addEventListener(onTick);
+    const removeMove = viewer.camera.moveEnd.addEventListener(onMoveEnd);
+    return () => {
+      disposed = true;
+      refreshRef.current = null;
+      removeTick();
+      removeMove();
+    };
+  }, [satellites, visible, viewer, degradation]);
 
   useEffect(() => {
-    if (!viewer || viewer.isDestroyed()) return;
-
-    const onMoveEnd = () => {
-      if (!viewer || viewer.isDestroyed() || !visible) return;
-      const cameraAlt = viewer.camera.positionCartographic.height;
-      const shouldShow = shouldShowOrbits(degradation, cameraAlt);
-
-      if (shouldShow !== lastShowOrbitsRef.current) {
-        lastShowOrbitsRef.current = shouldShow;
-        const oc = orbitCollectionRef.current;
-        if (!oc) return;
-
-        if (shouldShow && oc.length === 0) {
-          const now = new Date();
-          for (const sat of satellites) {
-            if (!ORBIT_ELIGIBLE_CATEGORIES.has(sat.category)) continue;
-            let satrec: satellite.SatRec;
-            try { satrec = satellite.twoline2satrec(sat.tle_line1, sat.tle_line2); } catch { continue; }
-            const orbitPositions = propagateOrbitArc(satrec, now);
-            if (orbitPositions.length < 2) continue;
-            const color = CATEGORY_COLORS[sat.category] ?? CATEGORY_COLORS["active"]!;
-            const orbitColor = sat.operator_country
-              ? (COUNTRY_TINT[sat.operator_country] ?? color.withAlpha(0.3))
-              : color.withAlpha(0.3);
-            oc.add({
-              positions: orbitPositions,
-              width: 1.0,
-              material: Cesium.Material.fromType("Color", { color: orbitColor }),
-            });
-          }
-        }
-        oc.show = shouldShow;
-      }
-    };
-
-    viewer.camera.moveEnd.addEventListener(onMoveEnd);
-    return () => {
-      if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(onMoveEnd);
-    };
-  }, [viewer, visible, degradation, satellites, propagateOrbitArc]);
+    if (epochRef.current !== discontinuityEpoch) refreshRef.current?.();
+    epochRef.current = discontinuityEpoch;
+  }, [discontinuityEpoch]);
 
   // 3D observation cone on hover
   useEffect(() => {
-    if (!viewer || viewer.isDestroyed()) return;
+    if (!viewer || viewer.isDestroyed() || !visible) return;
+    let disposed = false;
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     const CONE_SEGMENTS = 24;
 
     const clearCone = () => {
-      if (coneCollectionRef.current) coneCollectionRef.current.removeAll();
+      if (coneCollectionRef.current && !coneCollectionRef.current.isDestroyed()) coneCollectionRef.current.removeAll();
       if (footprintEntityRef.current) {
-        viewer.entities.remove(footprintEntityRef.current);
+        if (!viewer.isDestroyed()) viewer.entities.remove(footprintEntityRef.current);
         footprintEntityRef.current = null;
       }
     };
 
     handler.setInputAction((movement: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
+      if (disposed || viewer.isDestroyed()) return;
       const picked = viewer.scene.pick(movement.endPosition);
       const satData = (picked?.primitive as Record<string, unknown>)?._satelliteData as
         | { footprint_radius_km?: number; altitude_km?: number; lat: number; lon: number; category?: string }
@@ -333,10 +310,11 @@ export function SatelliteLayer({ viewer, satellites, visible }: SatelliteLayerPr
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
     return () => {
+      disposed = true;
       clearCone();
-      handler.destroy();
+      if (!handler.isDestroyed()) handler.destroy();
     };
-  }, [viewer]);
+  }, [viewer, visible]);
 
   return null;
 }

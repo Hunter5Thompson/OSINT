@@ -18,6 +18,7 @@ import {
   silenceIncident,
 } from "../services/api";
 import type { Incident } from "../types/incident";
+import { formatEvidenceSummary } from "../lib/evidenceSummary";
 
 import "../components/warroom/warRoomLayout.css";
 
@@ -120,8 +121,12 @@ export function WarRoomPage() {
         (analysis) => {
           if (streamSeqRef.current !== streamSeq) return;
           const body = analysis.analysis?.trim() ?? "";
-          const label = analysis.threat_assessment?.trim() ?? "";
-          const composed = label ? `[${label}] ${body}` : body;
+          const label = analysis.assessment_status?.threat === "default"
+            ? "Bewertung nicht verfügbar" : analysis.threat_assessment?.trim() ?? "";
+          const verification = analysis.verification_status === "unverified"
+            ? "Modellbewertung · Quellenbelege sind nicht unabhängig verifiziert."
+            : "Bewertungs- und Verifikationsstatus unbekannt.";
+          const composed = `${label ? `[${label}] ${body}` : body}\n\n${verification}\n\n${formatEvidenceSummary(analysis.evidence_summary)}`;
           setHypothesis(composed || "Munin returned no synthesis.");
         },
         (error) => {

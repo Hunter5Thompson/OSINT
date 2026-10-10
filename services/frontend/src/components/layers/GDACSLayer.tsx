@@ -149,6 +149,7 @@ export function GDACSLayer({ viewer, events, visible, onSelect }: GDACSLayerProp
       const position = Cesium.Cartesian3.fromDegrees(ev.longitude, ev.latitude, 0);
       const icon = createGDACSIcon(ev.alert_level, 24);
       const bb = bc.add({
+        id: { odinKind: "operational" },
         position,
         image: icon,
         scale: 0.8,

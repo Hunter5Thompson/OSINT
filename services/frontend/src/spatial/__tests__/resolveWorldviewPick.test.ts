@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { classifyWorldviewHit } from "../../components/globe/EntityClickHandler";
 
 import {
   isSpatialChildPickId,
@@ -16,6 +17,29 @@ function tagged(odinKind: string, extra: Record<string, unknown> = {}): unknown 
 
 describe("resolveWorldviewPick", () => {
   const position = { x: 12, y: 34 };
+
+  it.each(["orbit", "flight-trail", "graticule"])("ignores an unmarked %s before a current spatial surface", (name) => {
+    const decoration = { primitive: { name, positions: [] } };
+    const child = tagged("spatial-child", { scopeKey: "country:UKR", stateRevision: 7 });
+    expect(resolveWorldviewPick(sceneWith([decoration, child]), position, {
+      stateRevision: 7, spatialEnabled: true, classify: hit => classifyWorldviewHit(hit, null),
+    }).kind).toBe("spatial-child");
+  });
+
+  it.each(["_eventData", "_flightData", "_vesselData", "_satelliteData", "_cableData", "_pipelineData"])("keeps a known %s primitive operational", (field) => {
+    const hit = { primitive: { [field]: { id: "test" } } };
+    expect(classifyWorldviewHit(hit, null)).toBe("operational");
+  });
+
+  it("ignores unknown hits before terrain and reports saturation without changing priority", () => {
+    const hits = Array.from({ length: 15 }, () => ({ primitive: {} }));
+    hits.push({ primitive: { odinKind: "terrain" } });
+    const saturated = vi.fn();
+    expect(resolveWorldviewPick(sceneWith(hits), position, {
+      stateRevision: 7, spatialEnabled: true, classify: hit => classifyWorldviewHit(hit, null), onSaturated: saturated,
+    }).kind).toBe("terrain");
+    expect(saturated).toHaveBeenCalledOnce();
+  });
 
   it("prioritizes an operational primitive over a spatial child surface", () => {
     const scene = sceneWith([

@@ -47,4 +47,18 @@ describe("milTrackAdapter", () => {
     const pos = positionAtTime(r.points, 9_000_000)!;
     expect(pos.lat).toBe(10);
   });
+
+  it.each([[179, -179], [-179, 179]])("crosses the date line on the short arc (%s to %s)", (a, b) => {
+    const points = fromLiveTrack(live).points.map((p, i) => ({ ...p, lon: i === 0 ? a : b }));
+    expect(Math.abs(positionAtTime(points, 1_500_000)!.lon)).toBe(180);
+    expect(Math.abs(positionAtTime(points, 1_250_000)!.lon)).toBeCloseTo(179.5);
+    expect(positionAtTime(points, 1_000_000)!.lon).toBe(a);
+    expect(positionAtTime(points, 2_000_000)!.lon).toBe(b);
+  });
+
+  it("preserves ordinary longitude interpolation and exact +180 endpoints", () => {
+    const points = fromLiveTrack(live).points.map((p, i) => ({ ...p, lon: i === 0 ? 180 : 179 }));
+    expect(positionAtTime(points, 1_000_000)!.lon).toBe(180);
+    expect(positionAtTime(points, 1_500_000)!.lon).toBe(179.5);
+  });
 });

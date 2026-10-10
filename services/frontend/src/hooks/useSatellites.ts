@@ -1,36 +1,55 @@
-import { useState, useEffect, useCallback } from "react";
-import type { Satellite } from "../types";
-import { getSatellites } from "../services/api";
+import { useState, useEffect, useMemo } from "react";
+import type { OrbitSnapshot, OrbitSatellite } from "../types/satelliteOrbit";
+import { getSatelliteOrbitSnapshot } from "../services/api";
+
+const EMPTY: OrbitSatellite[] = [];
+const POLL_INTERVAL = 3_600_000;
 
 export function useSatellites(enabled: boolean) {
-  const [satellites, setSatellites] = useState<Satellite[]>([]);
+  const [snapshot, setSnapshot] = useState<OrbitSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-
-  const fetchData = useCallback(async () => {
-    if (!enabled) return;
-    setLoading(true);
-    try {
-      const data = await getSatellites();
-      setSatellites(data);
-      setLastUpdate(new Date());
-    } catch {
-      // keep stale data
-    } finally {
-      setLoading(false);
-    }
-  }, [enabled]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled) {
-      setSatellites([]);
+      setSnapshot(null);
+      setLoading(false);
+      setError(null);
       return;
     }
+    let disposed = false;
+    let sequence = 0;
+    let controller: AbortController | null = null;
+    const fetchData = async () => {
+      const request = ++sequence;
+      controller?.abort();
+      const currentController = new AbortController();
+      controller = currentController;
+      setLoading(true);
+      try {
+        const data = await getSatelliteOrbitSnapshot(currentController.signal);
+        if (!disposed && request === sequence) {
+          setSnapshot(data);
+          setError(null);
+        }
+      } catch (failure: unknown) {
+        if (!disposed && request === sequence) {
+          setError(failure instanceof Error ? failure.message : "Satellite snapshot unavailable");
+        }
+      } finally {
+        if (!disposed && request === sequence) setLoading(false);
+      }
+    };
     void fetchData();
-    // TLE data refreshes hourly
-    const timer = setInterval(() => void fetchData(), 3_600_000);
-    return () => clearInterval(timer);
-  }, [enabled, fetchData]);
+    const timer = setInterval(() => void fetchData(), POLL_INTERVAL);
+    return () => {
+      disposed = true;
+      ++sequence;
+      controller?.abort();
+      clearInterval(timer);
+    };
+  }, [enabled]);
 
-  return { satellites, loading, lastUpdate };
+  const lastUpdate = useMemo(() => snapshot ? new Date(snapshot.fetched_at) : null, [snapshot]);
+  return { satellites: snapshot?.satellites ?? EMPTY, snapshot, loading, error, lastUpdate };
 }

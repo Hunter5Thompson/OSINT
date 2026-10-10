@@ -1,15 +1,17 @@
 import { render } from "@testing-library/react";
-import type * as Cesium from "cesium";
-import { describe, expect, it, vi } from "vitest";
+import * as Cesium from "cesium";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   EntityClickHandler,
   type CountryClickInteraction,
 } from "../EntityClickHandler";
 import { SpotlightProvider } from "../spotlight/SpotlightContext";
+afterEach(() => vi.restoreAllMocks());
 
 describe("EntityClickHandler lifecycle", () => {
   it("releases canvas listeners after the Cesium viewer is destroyed during route unmount", () => {
+    const inputs = vi.spyOn(Cesium.ScreenSpaceEventHandler.prototype, "setInputAction");
     const canvas = document.createElement("canvas");
     let destroyed = false;
     const viewer = {
@@ -38,6 +40,11 @@ describe("EntityClickHandler lifecycle", () => {
     );
 
     destroyed = true;
+
+    const click = inputs.mock.calls.find(([, type]) => type === Cesium.ScreenSpaceEventType.LEFT_CLICK)![0] as
+      (event: Cesium.ScreenSpaceEventHandler.PositionedEvent) => void;
+    expect(() => click({ position: new Cesium.Cartesian2(1, 2) })).not.toThrow();
+    expect(countryInteraction.onBlank).not.toHaveBeenCalled();
 
     expect(() => view.unmount()).not.toThrow();
   });
