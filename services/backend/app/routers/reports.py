@@ -5,7 +5,7 @@ from __future__ import annotations
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
-from app.admin_auth import require_admin_token
+from app.admin_auth import require_admin_token, select_admin_token
 from app.config import settings
 from app.models.report import (
     ReportCreateRequest,
@@ -25,7 +25,9 @@ def _require_report_admin(
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> None:
     require_admin_token(
-        expected_token=settings.reports_admin_token or settings.incidents_admin_token,
+        expected_token=select_admin_token(
+            settings.reports_admin_token, settings.incidents_admin_token
+        ),
         supplied_token=x_admin_token,
         area="reports",
     )

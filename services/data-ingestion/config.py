@@ -1,6 +1,7 @@
 """Configuration loaded from environment variables via pydantic-settings."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings
 
@@ -42,6 +43,8 @@ class Settings(BaseSettings):
 
     # Redis TTLs (seconds)
     tle_cache_ttl: int = 86400  # 24 hours
+    celestrak_gp_url: str = "https://celestrak.org/NORAD/elements/gp.php"
+    satellite_orbit_format: Literal["tle", "omm"] = "tle"
     hotspot_cache_ttl: int = 21600  # 6 hours
 
     # vLLM (intelligence extraction)

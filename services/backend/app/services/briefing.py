@@ -190,6 +190,7 @@ def truncate_message(text: str, limit: int = 8000) -> str:
 # so there is no ambiguous overlap between the \s quantifiers and the heading text on
 # untrusted (LLM/grounding-derived) report lines. Trailing whitespace is stripped by the caller.
 _HEADING_RE = re.compile(r"^[ \t]{0,8}#{1,4}[ \t]{0,8}(\S.*)$")
+_BULLET_RE = re.compile(r"^(?:[-*•]|\d+[.)])[ \t]+(.*)$")
 _CONTEXT_MAX = 1200
 _SUMMARY_NAMES = ("executive summary", "summary", "zusammenfassung")
 _FINDING_NAMES = ("key findings", "findings", "erkenntnisse")
@@ -203,13 +204,19 @@ class ParsedReport:
     body_paragraphs: list[str] = field(default_factory=list)
 
 
+def _heading_name(text: str) -> str:
+    title = re.sub(r"[ \t]+#{1,4}$", "", text).replace("**", "").replace("__", "")
+    title = re.sub(r"^\d+[.)][ \t]+", "", title)
+    return " ".join(title.strip().removesuffix(":").casefold().split())
+
+
 def _split_sections(text: str) -> dict[str, list[str]]:
     sections: dict[str, list[str]] = {}
     current: str | None = None
     for line in text.splitlines():
         m = _HEADING_RE.match(line)
         if m:
-            current = m.group(1).strip().lower()
+            current = _heading_name(m.group(1))
             sections[current] = []
         elif current is not None:
             sections[current].append(line)
@@ -220,29 +227,29 @@ def _bullets(lines: list[str]) -> list[str]:
     out = []
     for ln in lines:
         s = ln.strip()
-        if s.startswith(("-", "*", "•")):
-            out.append(s.lstrip("-*• ").strip())
+        match = _BULLET_RE.fullmatch(s)
+        if match:
+            out.append(match[1].strip())
     return [b for b in out if b]
 
 
 def parse_munin_report(text: str) -> ParsedReport:
     sections = _split_sections(text)
-    if not sections:
-        # No headings → deterministic fallback (no scaffold defaults).
+    if not sections or not any(name in sections for name in _SKIP_NAMES):
+        # Unknown layout → preserve the original report (no scaffold defaults).
         return ParsedReport(context=text[:_CONTEXT_MAX], findings=[], body_paragraphs=[text])
 
     def find(*names: str) -> list[str]:
         for n in names:
-            for key, lines in sections.items():
-                if n in key:
-                    return lines
+            if n in sections:
+                return sections[n]
         return []
 
     summary = "\n".join(find(*_SUMMARY_NAMES)).strip()
     findings = _bullets(find(*_FINDING_NAMES))
     body: list[str] = []
     for key, lines in sections.items():
-        if any(n in key for n in _SKIP_NAMES):
+        if key in _SKIP_NAMES:
             continue
         para = "\n".join(lines).strip()
         if para:

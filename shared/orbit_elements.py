@@ -56,6 +56,81 @@ class TLEElements:
     epoch: str
 
 
+@dataclass(frozen=True)
+class TLERecord:
+    name: str
+    line1: str
+    line2: str
+    elements: TLEElements
+
+
+@dataclass(frozen=True)
+class TLEDiagnostic:
+    line: int
+    code: Literal["invalid", "unsupported"]
+
+
+@dataclass(frozen=True)
+class TLEScan:
+    records: tuple[TLERecord, ...]
+    diagnostics: tuple[TLEDiagnostic, ...]
+
+
+def scan_tle_text(text: str) -> TLEScan:
+    """Scan named or bare pairs, keeping fixed columns and isolating bad pairs."""
+    lines = [
+        (number, line.rstrip())
+        for number, line in enumerate(text.splitlines(), 1)
+        if line.strip() and not _tle_comment(line)
+    ]
+    records: list[TLERecord] = []
+    diagnostics: list[TLEDiagnostic] = []
+    name: tuple[int, str] | None = None
+    index = 0
+    while index < len(lines):
+        number, line = lines[index]
+        if line.startswith("1 "):
+            if index + 1 < len(lines) and lines[index + 1][1].startswith("2 "):
+                line2 = lines[index + 1][1]
+                try:
+                    elements = parse_tle_pair(line, line2)
+                    records.append(TLERecord(
+                        name[1] if name else f"NORAD {elements.norad_id}",
+                        line, line2, elements,
+                    ))
+                except OrbitElementError as exc:
+                    diagnostics.append(TLEDiagnostic(number, exc.code))
+                index += 2
+            else:
+                diagnostics.append(TLEDiagnostic(number, "invalid"))
+                index += 1
+            name = None
+        elif line.startswith("2 "):
+            diagnostics.append(TLEDiagnostic(number, "invalid"))
+            name = None
+            index += 1
+        else:
+            if name:
+                diagnostics.append(TLEDiagnostic(name[0], "invalid"))
+            name = (number, line.strip().removeprefix("0 "))
+            index += 1
+    if name:
+        diagnostics.append(TLEDiagnostic(name[0], "invalid"))
+    if not records and text.strip():
+        code: Literal["invalid", "unsupported"] = (
+            "unsupported"
+            if diagnostics and all(item.code == "unsupported" for item in diagnostics)
+            else "invalid"
+        )
+        raise OrbitElementError(code, "TLE source has no usable orbital pairs")
+    return TLEScan(tuple(records), tuple(diagnostics))
+
+
+def _tle_comment(line: str) -> bool:
+    stripped = line.strip().lower()
+    return stripped.startswith(("#", ";", "//", "gp data has not updated"))
+
+
 def parse_tle_pair(line1: str, line2: str) -> TLEElements:
     """Validate fixed columns, checksums, paired IDs and SGP4 ranges.
 

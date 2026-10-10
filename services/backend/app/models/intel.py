@@ -164,6 +164,40 @@ class IntelDocument(BaseModel):
     ingested_at: datetime = Field(default_factory=_utc_now)
 
 
+class AssessmentStatus(BaseModel):
+    threat: Literal["declared", "default"]
+    confidence: Literal["declared", "default"]
+    issues: list[str] = Field(default_factory=list)
+
+
+class EvidenceSummary(BaseModel):
+    source_ref_id: str
+    source_type: Literal["rss", "telegram", "gdelt", "notebooklm", "dataset", "unknown"]
+    provider: str
+    published_at: datetime | None = None
+    observed_at: datetime | None = None
+    ingested_at: datetime | None = None
+    verification_status: Literal["unverified"]
+
+    @field_validator("published_at", "observed_at", "ingested_at", mode="before")
+    @classmethod
+    def explicit_time_axis(cls, value: object) -> str | datetime | None:
+        if value is None or isinstance(value, (str, datetime)):
+            return value
+        raise ValueError("time axes require explicit ISO timestamps")
+
+    @field_validator("published_at", "observed_at", "ingested_at")
+    @classmethod
+    def normalize_time_axis(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        try:
+            aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+            return aware.astimezone(UTC)
+        except OverflowError as exc:
+            raise ValueError("time axis cannot be represented in UTC") from exc
+
+
 class IntelAnalysis(BaseModel):
     query: str
     agent_chain: list[str] = Field(default_factory=list)
@@ -171,6 +205,9 @@ class IntelAnalysis(BaseModel):
     analysis: str
     confidence: float = 0.0
     threat_assessment: str | None = None
+    assessment_status: AssessmentStatus | None = None
+    verification_status: Literal["unverified"] | None = None
+    evidence_summary: list[EvidenceSummary] | None = None
     tool_trace: list[dict[str, Any]] = Field(default_factory=list)
     mode: str = "react"
     timestamp: datetime = Field(default_factory=_utc_now)

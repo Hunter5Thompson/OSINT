@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.models.intel import SpatialRunApplicationV1
+from app.models.intel import AssessmentStatus, EvidenceSummary, SpatialRunApplicationV1
 
 _utc_now = partial(datetime.now, UTC)
 
@@ -37,6 +37,9 @@ class ReportRecord(BaseModel):
     scope_key: str | None = None
     status: ReportStatus = "Draft"
     confidence: float = Field(default=0.62, ge=0.0, le=1.0)
+    assessment_status: AssessmentStatus | None = None
+    verification_status: Literal["unverified"] | None = None
+    evidence_summary: list[EvidenceSummary] | None = None
     location: str = "unspecified theatre"
     coords: str = "--"
     findings: list[str] = Field(default_factory=list)
@@ -56,6 +59,9 @@ class ReportCreateRequest(BaseModel):
     scope_key: str | None = None
     status: ReportStatus = "Draft"
     confidence: float = Field(default=0.62, ge=0.0, le=1.0)
+    assessment_status: AssessmentStatus | None = None
+    verification_status: Literal["unverified"] | None = None
+    evidence_summary: list[EvidenceSummary] | None = None
     location: str = "unspecified theatre"
     coords: str = "--"
     findings: list[str] = Field(default_factory=list)
@@ -72,6 +78,9 @@ class ReportUpdateRequest(BaseModel):
     title: str | None = None
     status: ReportStatus | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    assessment_status: AssessmentStatus | None = None
+    verification_status: Literal["unverified"] | None = None
+    evidence_summary: list[EvidenceSummary] | None = None
     location: str | None = None
     coords: str | None = None
     findings: list[str] | None = None
@@ -90,6 +99,9 @@ class ReportMessage(BaseModel):
     text: str
     ts: datetime = Field(default_factory=_utc_now)
     refs: list[str] = Field(default_factory=list)
+    assessment_status: AssessmentStatus | None = None
+    verification_status: Literal["unverified"] | None = None
+    evidence_summary: list[EvidenceSummary] | None = None
 
 
 class ReportMessageCreate(BaseModel):
@@ -97,3 +109,6 @@ class ReportMessageCreate(BaseModel):
     text: str = Field(..., min_length=1, max_length=8000)
     ts: datetime | None = None
     refs: list[str] = Field(default_factory=list)
+    assessment_status: AssessmentStatus | None = None
+    verification_status: Literal["unverified"] | None = None
+    evidence_summary: list[EvidenceSummary] | None = None

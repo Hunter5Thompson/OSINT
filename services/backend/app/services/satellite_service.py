@@ -7,6 +7,7 @@ import structlog
 from pydantic import ValidationError
 
 from app.models.satellite import Satellite
+from app.orbit_elements import OrbitElementError, scan_tle_text
 from app.services.cache_service import CacheService
 from app.services.proxy_service import ProxyService
 
@@ -14,15 +15,38 @@ logger = structlog.get_logger()
 
 # Name prefix → ISO 3166-1 alpha-2 country code (no trailing spaces!)
 _COUNTRY_PREFIXES: dict[str, str] = {
-    "USA": "US", "NROL": "US", "NOSS": "US", "GPS": "US", "NAVSTAR": "US",
-    "DSP": "US", "SBIRS": "US", "WGS": "US", "GOES": "US", "NOAA": "US",
-    "MILSTAR": "US", "AEHF": "US", "MUOS": "US", "TDRS": "US",
-    "COSMOS": "RU", "GLONASS": "RU", "MOLNIYA": "RU",
-    "YAOGAN": "CN", "CZ-": "CN", "BEIDOU": "CN", "FENGYUN": "CN", "TIANGONG": "CN",
-    "GALILEO": "EU", "METEOSAT": "EU",
-    "HIMAWARI": "JP", "QZS": "JP",
+    "USA": "US",
+    "NROL": "US",
+    "NOSS": "US",
+    "GPS": "US",
+    "NAVSTAR": "US",
+    "DSP": "US",
+    "SBIRS": "US",
+    "WGS": "US",
+    "GOES": "US",
+    "NOAA": "US",
+    "MILSTAR": "US",
+    "AEHF": "US",
+    "MUOS": "US",
+    "TDRS": "US",
+    "COSMOS": "RU",
+    "GLONASS": "RU",
+    "MOLNIYA": "RU",
+    "YAOGAN": "CN",
+    "CZ-": "CN",
+    "BEIDOU": "CN",
+    "FENGYUN": "CN",
+    "TIANGONG": "CN",
+    "GALILEO": "EU",
+    "METEOSAT": "EU",
+    "HIMAWARI": "JP",
+    "QZS": "JP",
+    "QZSS": "JP",
     "ASTRA": "LU",
-    "INTELSAT": "INT", "IRIDIUM": "US", "STARLINK": "US", "ONEWEB": "GB",
+    "INTELSAT": "INT",
+    "IRIDIUM": "US",
+    "STARLINK": "US",
+    "ONEWEB": "GB",
 }
 
 
@@ -39,6 +63,8 @@ _MILITARY_PREFIXES = (
     "USA",
     "DSP",
     "WGS",
+    "AEHF",
+    "MUOS",
 )
 _RECON_PREFIXES = ("YAOGAN", "COSMOS", "NROL", "NOSS", "USA")
 
@@ -57,6 +83,11 @@ def _has_word(name: str, word: str) -> bool:
     return word.upper() in re.split(r"[^A-Z0-9]+", name.upper())
 
 
+def _has_family_token(name: str, family: str) -> bool:
+    """Allow numeric family suffixes and separators, never embedded letter matches."""
+    return any(_has_prefix_token(token, family) for token in re.split(r"[^A-Z0-9]+", name.upper()))
+
+
 def _detect_country(name: str) -> str | None:
     """Detect operator country from a name prefix or a whole token.
 
@@ -72,13 +103,14 @@ def _detect_country(name: str) -> str | None:
 
 def _detect_type(name: str, category: str) -> str:
     """Detect satellite type from name + existing category."""
-    upper = name.upper()
     if category == "military":
         if any(_has_prefix_token(name, prefix) for prefix in _RECON_PREFIXES):
             return "recon"
-        if any(token in upper for token in ("MILSTAR", "AEHF", "MUOS", "WGS", "DSCS")):
+        if any(
+            _has_family_token(name, token) for token in ("MILSTAR", "AEHF", "MUOS", "WGS", "DSCS")
+        ):
             return "comms"
-        return "recon"
+        return "unknown"
     if category == "gps":
         return "gps"
     if category == "weather":
@@ -86,7 +118,7 @@ def _detect_type(name: str, category: str) -> str:
     if category == "station":
         return "station"
     if any(
-        k in upper
+        _has_family_token(name, k)
         for k in ("INTELSAT", "ASTRA", "SES", "VIASAT", "STARLINK", "ONEWEB", "IRIDIUM", "TDRS")
     ):
         return "comms"
@@ -99,10 +131,20 @@ CACHE_TTL = 7200  # 2 hours — CelesTrak updates every 2h
 # Targeted groups first. ``active`` is always merged afterwards and deduped by
 # NORAD id; a failure on that large group does not discard the targeted sets.
 _CELESTRAK_GROUPS = [
-    "stations", "military", "weather", "science",
-    "gps-ops", "galileo", "beidou", "glonass-operational",
-    "starlink", "oneweb", "iridium-NEXT",
-    "geo", "intelsat", "ses",
+    "stations",
+    "military",
+    "weather",
+    "science",
+    "gps-ops",
+    "galileo",
+    "beidou",
+    "glonass-operational",
+    "starlink",
+    "oneweb",
+    "iridium-NEXT",
+    "geo",
+    "intelsat",
+    "ses",
     "active",
 ]
 
@@ -110,8 +152,10 @@ _CELESTRAK_BASE = "https://celestrak.org/NORAD/elements/gp.php"
 
 
 def _satellites_from_cache(cached: object) -> list[Satellite] | None:
-    if not isinstance(cached, list) or not cached:
+    if not isinstance(cached, list):
         return None
+    if not cached:
+        return []
     satellites: list[Satellite] = []
     for item in cached:
         if not isinstance(item, dict):
@@ -133,24 +177,9 @@ async def get_satellites(
         return fresh
 
     satellites = await _fetch_celestrak_groups(proxy)
-    if satellites:
-        await cache.set(
-            CACHE_KEY, [s.model_dump(mode="json") for s in satellites], CACHE_TTL
-        )
+    await cache.set(CACHE_KEY, [s.model_dump(mode="json") for s in satellites], CACHE_TTL)
 
     return satellites
-
-
-def _celestrak_text_unusable(text: str) -> bool:
-    """Skip error pages. A real TLE set is kept even if a name contains ``error``."""
-    if "not updated" in text.lower():
-        return True
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("1 ") or stripped.startswith("2 "):
-            return False
-    lowered = text.lower()
-    return "error" in lowered or "invalid" in lowered or not text.strip()
 
 
 async def _fetch_celestrak_groups(proxy: ProxyService) -> list[Satellite]:
@@ -163,80 +192,61 @@ async def _fetch_celestrak_groups(proxy: ProxyService) -> list[Satellite]:
         url = f"{_CELESTRAK_BASE}?GROUP={group}&FORMAT=tle"
         try:
             text = await proxy.get_text(url)
+            parsed = _parse_tle_text(text)
         except Exception as exc:
             failures += 1
             last_error = exc
-            logger.debug("celestrak_group_failed", group=group)
+            logger.warning(
+                "celestrak_group_failed",
+                group=group,
+                reason=exc.code if isinstance(exc, OrbitElementError) else "transport",
+            )
             continue
 
-        if _celestrak_text_unusable(text):
-            logger.debug("celestrak_group_unavailable", group=group)
-            continue
-
-        parsed = _parse_tle_text(text)
         for sat in parsed:
             if sat.norad_id not in all_sats:
                 all_sats[sat.norad_id] = sat
         logger.info("celestrak_group_fetched", group=group, count=len(parsed))
 
-    if not all_sats and failures == len(_CELESTRAK_GROUPS) and last_error is not None:
+    if not all_sats and failures and last_error is not None:
         raise last_error
 
     satellites = list(all_sats.values())
-    logger.info("celestrak_total", count=len(satellites), groups_tried=len(_CELESTRAK_GROUPS))
+    logger.info(
+        "celestrak_total",
+        count=len(satellites),
+        groups_tried=len(_CELESTRAK_GROUPS),
+        failed_groups=failures,
+    )
     return satellites
 
 
 def _parse_tle_text(text: str) -> list[Satellite]:
     """Parse TLE text into Satellite objects."""
-    lines = text.strip().split("\n")
+    scan = scan_tle_text(text)
+    if scan.diagnostics:
+        logger.warning(
+            "celestrak_tle_rows_rejected",
+            invalid=sum(item.code == "invalid" for item in scan.diagnostics),
+            unsupported=sum(item.code == "unsupported" for item in scan.diagnostics),
+        )
     satellites: list[Satellite] = []
-
-    i = 0
-    while i + 2 < len(lines):
-        name = lines[i].strip()
-        line1 = lines[i + 1].strip()
-        line2 = lines[i + 2].strip()
-
-        if not line1.startswith("1 ") or not line2.startswith("2 "):
-            i += 1
-            continue
-
-        norad_match = re.match(r"2\s+(\d+)", line2)
-        if norad_match is None:
-            i += 3
-            continue
-        norad_id = int(norad_match.group(1))
-        if norad_id <= 0:
-            i += 3
-            continue
-
-        incl_match = re.search(r"^\d\s+\d+\s+([\d.]+)", line2)
-        inclination = float(incl_match.group(1)) if incl_match else 0.0
-
-        mean_motion_match = re.search(r"([\d.]+)\s*\d*$", line2)
-        mean_motion = float(mean_motion_match.group(1)) if mean_motion_match else 0.0
-        period = (1440.0 / mean_motion) if mean_motion > 0 else 0.0
-
-        category = _categorize(name, inclination)
-        operator_country = _detect_country(name)
-        sat_type = _detect_type(name, category)
-
+    for record in scan.records:
+        inclination = record.elements.inclination_deg
+        category = _categorize(record.name, inclination)
         satellites.append(
             Satellite(
-                norad_id=norad_id,
-                name=name,
-                tle_line1=line1,
-                tle_line2=line2,
+                norad_id=record.elements.norad_id,
+                name=record.name,
+                tle_line1=record.line1,
+                tle_line2=record.line2,
                 category=category,
                 inclination_deg=round(inclination, 2),
-                period_min=round(period, 2),
-                operator_country=operator_country,
-                satellite_type=sat_type,
+                period_min=round(1440.0 / record.elements.mean_motion, 2),
+                operator_country=_detect_country(record.name),
+                satellite_type=_detect_type(record.name, category),
             )
         )
-        i += 3
-
     return satellites
 
 
@@ -244,10 +254,15 @@ def _categorize(name: str, inclination: float) -> str:
     """Categorize satellite based on name and orbit parameters."""
     if any(_has_prefix_token(name, prefix) for prefix in _MILITARY_PREFIXES):
         return "military"
-    name_upper = name.upper()
-    if any(token in name_upper for token in ("NOAA", "METEO", "GOES", "HIMAWARI", "FENGYUN")):
+    if any(
+        _has_family_token(name, token)
+        for token in ("NOAA", "METEOSAT", "METEOR", "GOES", "HIMAWARI", "FENGYUN")
+    ):
         return "weather"
-    if any(token in name_upper for token in ("GPS", "NAVSTAR", "GLONASS", "GALILEO", "BEIDOU")):
+    if any(
+        _has_family_token(name, token)
+        for token in ("GPS", "NAVSTAR", "GLONASS", "GALILEO", "BEIDOU", "QZS", "QZSS")
+    ):
         return "gps"
     if any(_has_word(name, word) for word in ("ISS", "TIANGONG", "CSS")):
         return "station"

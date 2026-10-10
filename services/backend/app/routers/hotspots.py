@@ -75,8 +75,11 @@ def _sources(value: object) -> list[str]:
 
 
 def _normalize_hotspot(raw: dict[str, Any]) -> Hotspot:
-    hotspot_id = str(raw.get("id", "")).strip()
-    name = str(raw.get("name", "")).strip()
+    hotspot_id = raw.get("id")
+    name = raw.get("name")
+    if not isinstance(hotspot_id, str) or not isinstance(name, str):
+        raise ValueError("hotspot identity must contain text")
+    hotspot_id, name = hotspot_id.strip(), name.strip()
     if not hotspot_id or not name:
         raise ValueError("hotspot identity is incomplete")
     normalized: dict[str, Any] = {
@@ -84,9 +87,9 @@ def _normalize_hotspot(raw: dict[str, Any]) -> Hotspot:
         "name": name,
         "latitude": _required_coord(raw, ("latitude", "lat"), limit=90),
         "longitude": _required_coord(raw, ("longitude", "lon"), limit=180),
-        "region": str(raw.get("region", "")),
+        "region": raw["region"] if isinstance(raw.get("region"), str) else "",
         "threat_level": _normalize_threat_level(raw.get("threat_level")),
-        "description": str(raw.get("description", "")),
+        "description": raw["description"] if isinstance(raw.get("description"), str) else "",
         "sources": _sources(raw.get("sources", [])),
     }
     updated = raw.get("last_updated", raw.get("updated_at"))
