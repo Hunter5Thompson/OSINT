@@ -52,9 +52,12 @@ Kontakte lesbar und auswählbar; Auswahl bleibt sichtbar; Aggregate sind als
 Aggregate erkennbar; Labelüberlagerungen behindern keine Kernbedienung; Scope,
 Zeit und veraltete/fehlende Daten werden richtig verstanden. Keine AI-Ratings.
 
-Aktuelle Ausführungsgrenze: Preview-Listen und TCP sind durch EPERM blockiert.
-Kein Browser-/Docker-/Netzwerkbypass. Keine produktiven Dienste oder lokalen
-LLMs für diese Sourceprüfung ändern. Release-/GPU-/Human-Gates bleiben offen.
+Historische Ausführungsgrenze des beendeten Vorgängers: Preview-Listen und TCP
+waren durch EPERM blockiert. Der neue reguläre Writer kann Built-Browsertests
+ausführen, ohne Konfiguration/Hooktrust oder Sicherheitsregeln zu ändern.
+Produktive Dienste und lokale LLMs bleiben erhalten.
+Release-/nativeGPU-/Human-Gates bleiben separat offen; obige Kriterien gelten
+unverändert vor den tatsächlichen Messungen.
 
 Der nächste Source-Slice begrenzt Graph-Events auf 250/600/1.500 Symbole in
 GLOBE/REGIONAL/LOCAL. Auf Globehöhe werden gleichartige Events in 10-Grad-Zellen

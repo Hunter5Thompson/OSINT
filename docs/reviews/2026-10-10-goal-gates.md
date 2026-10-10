@@ -60,6 +60,16 @@ Sourcecommit, Testhead und laufende Image-/Produktivrevisionen getrennt halten.
   richtung und Öffnen des nach Remount geschlossenen Layerspanels korrigieren
   nur den realen Bedienablauf; Auswahl-/Dichteassertions bleiben unverändert.
   Gesamter Built-Browserlauf am finalen Head bleibt offen, nativeGPU/Human separat.
+- Gemeinsamer Integrationsheadbc1020d: Intelligence732, Ingestion1843,
+  Vision44 und disposable Backend44/Ingestion8/GDELTforward1 PASS. Built-Browser
+  9PASS/1FAIL: der erste Aircraftklick unterbrach den1.6sSuchkameraflug und
+  wählte die darunterliegende Länderfläche. Screenshotbeleg zeigt den Ring
+  am vollständigen Ziel. Die Fixture wartet jetzt auf tatsächlich gerenderte
+  Ringpixel und klickt diese; Aircraft/Vesselproben beide PASS. Keine geheimen
+  Viewerhooks oder injizierten Picks; Unknown- und Requestassertions erhalten.
+  Backend1102PASS/2DefaulttestFAIL wurde durch getrennte Testenvinstanziierung
+  korrigiert,17Konfigurationstests mit sicheren Endpointoverrides PASS.
+  Diese zusätzlichen Sourceänderungen verlangen noch den finalen Gesamtheadlauf.
 - Gezieltes npm-Lockupdate verändert acht transitive Knoten in fünf Paketen;
   frischer Audit5→0. npmci/Lint/Repo-/Browsertypen und870Tests mit diesen
   Dependencies PASS. Keine pauschale auditfix-/Majoraktualisierung.
