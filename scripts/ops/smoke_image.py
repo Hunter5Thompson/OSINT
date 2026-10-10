@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 
 SERVICES = ("backend", "frontend", "intelligence", "data-ingestion")
 MODEL_FIXTURE = """
@@ -31,6 +32,53 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 HTTPServer(('0.0.0.0', 8000), Handler).serve_forever()
 """
+
+ORBIT_FIXTURE = """
+import json
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import parse_qs, urlparse
+mode = 'healthy'
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        group = parse_qs(urlparse(self.path).query).get('GROUP', [''])[0]
+        if mode == 'empty':
+            payload = []
+        elif mode == 'invalid':
+            payload = {'error': 'deliberately invalid fixture'}
+        elif mode == 'partial' and group == 'science':
+            payload = [dict(record, REF_FRAME='J2000')]
+        else:
+            payload = [record]
+        body = json.dumps(payload).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(body)
+    def do_POST(self):
+        global mode
+        mode = self.rfile.read(int(self.headers['Content-Length'])).decode()
+        assert mode in ('healthy', 'partial', 'invalid', 'empty')
+        self.send_response(204)
+        self.end_headers()
+HTTPServer(('0.0.0.0', 8000), Handler).serve_forever()
+"""
+
+
+def orbit_fixture_program() -> str:
+    path = Path(__file__).resolve().parents[2] / "tests/fixtures/satellites/celestrak-100651.json"
+    raw = path.read_text(encoding="utf-8")
+    return "record = __import__('json').loads(" + repr(raw) + ")\n" + ORBIT_FIXTURE
+
+
+def orbit_fixture_mode(name: str, mode: str) -> None:
+    docker(
+        "exec",
+        name,
+        "python",
+        "-c",
+        "import urllib.request; urllib.request.urlopen(urllib.request.Request("
+        "'http://127.0.0.1:8000/mode', data=" + repr(mode.encode()) + ", method='POST'))",
+    )
 
 
 def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -128,6 +176,25 @@ def smoke(service: str, image: str, revision: str) -> dict:
                 "VLLM_MODEL=smoke-base",
                 "SYNTHESIS_MODEL=smoke-synthesis",
             ]
+        elif service == "backend":
+            orbit_fixture = prefix + "-orbits"
+            docker(
+                "run",
+                "-d",
+                "--name",
+                orbit_fixture,
+                "--network",
+                network,
+                "--network-alias",
+                "smoke-orbits",
+                "--entrypoint",
+                "python",
+                image_id,
+                "-c",
+                orbit_fixture_program(),
+            )
+            names.append(orbit_fixture)
+            environment.append("CELESTRAK_GP_URL=http://smoke-orbits:8000/gp.php")
         arguments = ["run", "-d", "--name", name, "--network", network]
         for value in environment:
             arguments += ["-e", value]
@@ -138,8 +205,38 @@ def smoke(service: str, image: str, revision: str) -> dict:
             result["health"] = wait_for_http(name, 8000, "/api/health", 200, revision)
             result["optional_recon"] = json_response(name, "/api/recon/scenes", 200)
             assert result["optional_recon"] == {
-                "scenes": [], "availability": "disabled", "reason": "not_configured",
+                "scenes": [],
+                "availability": "disabled",
+                "reason": "not_configured",
             }
+            snapshot = json_response(name, "/api/satellites/orbits", 200)
+            assert snapshot["schema_version"] == 1
+            assert snapshot["coverage"]["completeness"] == "complete"
+            assert len(snapshot["satellites"]) == 1
+            row = snapshot["satellites"][0]
+            assert row["norad_id"] == 100651
+            assert row["orbit"]["elements"]["NORAD_CAT_ID"] == 100651
+            assert row["orbit"]["elements"]["EPOCH"] == "2026-10-09T05:27:38.151360Z"
+            assert row["orbit"]["elements"]["REF_FRAME"] == "TEME"
+            result["orbit_healthy"] = snapshot
+            orbit_fixture_mode(orbit_fixture, "partial")
+            partial = json_response(name, "/api/satellites/orbits", 200)
+            assert partial["coverage"]["completeness"] == "partial"
+            assert len(partial["satellites"]) == 1
+            bad_group = next(
+                row for row in partial["coverage"]["groups"] if row["group"] == "science"
+            )
+            assert bad_group["rejected_unsupported"] == 1
+            result["orbit_partial"] = partial
+            orbit_fixture_mode(orbit_fixture, "invalid")
+            invalid = json_response(name, "/api/satellites/orbits", 502)
+            assert invalid["code"] == "UPSTREAM_INVALID_DATA"
+            result["orbit_invalid"] = invalid
+            orbit_fixture_mode(orbit_fixture, "empty")
+            empty = json_response(name, "/api/satellites/orbits", 200)
+            assert empty["satellites"] == []
+            assert empty["coverage"]["completeness"] == "complete"
+            result["orbit_empty"] = empty
             configured_name = prefix + "-required-recon"
             configured_arguments = ["run", "-d", "--name", configured_name, "--network", network]
             for value in environment + ["RECON_MODE=enabled"]:
@@ -147,10 +244,16 @@ def smoke(service: str, image: str, revision: str) -> dict:
             docker(*configured_arguments, image_id)
             names.append(configured_name)
             result["required_recon_core"] = wait_for_http(
-                configured_name, 8000, "/api/health", 200, revision,
+                configured_name,
+                8000,
+                "/api/health",
+                200,
+                revision,
             )
             result["required_recon_error"] = json_response(
-                configured_name, "/api/recon/scenes", 503,
+                configured_name,
+                "/api/recon/scenes",
+                503,
             )
         elif service == "intelligence":
             result["ready"] = wait_for_http(name, 80, "/health", 200, revision)

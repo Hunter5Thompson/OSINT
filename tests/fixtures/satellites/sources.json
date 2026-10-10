@@ -1,0 +1,28 @@
+{
+  "generated_at_utc": "2026-10-09T23:44:04.016918+00:00",
+  "reference_package": "sgp4==2.27",
+  "accelerated_cpp": true,
+  "reference_source_url": "https://pypi.org/project/sgp4/2.27/",
+  "reference_sdist_sha256": "06d37247c6985739b707b8b39b6b83e06e8af783b2531e31965501ba983985f9",
+  "iss_input": "Exact TLE pair from the published 2.27 package description; checksums verified, unchanged",
+  "gp_input": {
+    "url": "https://celestrak.org/NORAD/elements/gp.php?GROUP=last-30-days&FORMAT=JSON",
+    "checked_at_utc": "2026-10-09T23:06:11.823566+00:00",
+    "status": 200,
+    "content_type": "application/json; charset=UTF-8",
+    "sha256": "a373a2460a868d0ce3c5bfc21d45085cf2808e67f18fc2fa70adaf116bf6a7ea",
+    "bytes": 96325,
+    "artifact": "primary-gp-last-30-days.json",
+    "root_type": "list",
+    "records": 227,
+    "six_digit_records": 227,
+    "six_digit_sample": [
+      100651,
+      100652,
+      100653,
+      100654,
+      100655
+    ]
+  },
+  "limits": "Mathematical regression fixtures, not current ISS/physical location verification. GP epoch microseconds retained; evaluation instants use exact UTC milliseconds."
+}

@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     celestrak_api_url: str = (
         "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
     )
+    celestrak_gp_url: str = "https://celestrak.org/NORAD/elements/gp.php"
     aisstream_ws_url: str = "wss://stream.aisstream.io/v0/stream"
     cable_geo_url: str = "https://www.submarinecablemap.com/api/v3/cable/cable-geo.json"
     landing_point_geo_url: str = "https://www.submarinecablemap.com/api/v3/landing-point/landing-point-geo.json"
