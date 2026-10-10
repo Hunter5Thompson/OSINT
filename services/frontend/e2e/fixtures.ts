@@ -233,7 +233,20 @@ export const test = base.extend<{ state: FixtureState }>({
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     await fixtures(page, state, baseURL);
+    const profiler = process.env.ODIN_BROWSER_PROFILE === "1"
+      ? await page.context().newCDPSession(page) : null;
+    if (profiler) {
+      await profiler.send("Profiler.enable");
+      await profiler.send("Profiler.start");
+    }
     await use(state);
+    if (profiler) {
+      const profile = await profiler.send("Profiler.stop");
+      await testInfo.attach("cpu-profile", {
+        contentType: "application/json", body: JSON.stringify(profile),
+      });
+      await profiler.detach();
+    }
     const rendering = await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>(".cesium-widget canvas");
       const gl = canvas?.getContext("webgl2") ?? canvas?.getContext("webgl");
