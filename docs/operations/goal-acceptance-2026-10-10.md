@@ -1,7 +1,10 @@
 # G06/G07 — Abnahmeunterlagen
 
-Dieser Prüfstand ist Source vorbereitet, weiterhin ohne finalen Commit-/Image-/
-Livebeleg. Die folgenden Formulare sind unbewertet. Ein Mensch bewertet die
+Der Sourcecheckpoint ist seit Writer01a12412-a9fe-7052-93e0-ba88db75c740
+scoped committet; finale Fullservice-/Image-/Livegates bleiben separat offen.
+Aktuelle ausgeführte Integrationsbelege und ihr Headbezug stehen in
+[goal-gates.md](../reviews/2026-10-10-goal-gates.md) sowie den externen Goalreceipts.
+Die folgenden Formulare sind unbewertet. Ein Mensch bewertet die
 wirklich beobachtete Antwort/Anzeige; AI-Ratings schließen kein Gate. Fehlende
 Lauf- und Originalbelege sind UNKNOWN/BLOCKED, niemals eine Nullmessung.
 
@@ -13,7 +16,7 @@ verbindlich. Der zwölfteilige Fixturekorpus ist eingefroren; sein SHA lautet
 b1963dafbb622a1590561f5da7d1d677abe3145d225870a0f216903c1c80dd3f.
 Drei sequenzielle Wiederholungen im regulär zugänglichen Kontext, vorhandenes
 lokales Modell erhalten. Lastbeobachtung, Modell-/Prozessrevision, Prompt-SHA
-und konsumierte Beleg-IDs gesondert sichern. Hier kein weiterer Modelllauf.
+und konsumierte Beleg-IDs gesondert sichern. Dieses Formular bewertet keinen Lauf.
 
 Je tatsächlicher Antwort bewertet der Reviewer sechs Dimensionen mit 0/1/2:
 
@@ -61,8 +64,9 @@ historischen NRT-Originale. R01 behält seinen eigenen Dry-run-/Freigabevertrag.
 ## Globe-Bedienung und native GPU
 
 [Globe-Protokoll](../plans/globe-quality-2026-10-10.md) bestimmt die Gates.
-Natives Vorher/Nachher ist hier ungemessen: kein Preview-/Listenbypass und kein
-Zugriff auf produktive Browser-/Dienste als Umgehung. Vorherlauf, identischer
+Natives Vorher/Nachher ist hier ungemessen. Die neue regulär erlaubte Integration
+liefert echte Built-Browser-Fixtures mit SwiftShader, keinen nativen GPUbeleg.
+Produktive Browser-/Dienste bleiben erhalten. Vorherlauf, identischer
 Quell-Snapshot/Kamerapfad,1920×1080, Browser/Treiber/GPUrevision und Fremdlast
 müssen tatsächlich belegt sein.10s Warmup,3×30s; RAF und Cesiumframes getrennt,
 p95<=33.3ms, Median>=30FPS, höchstens10%Verschlechterung. SwiftShader ist ein

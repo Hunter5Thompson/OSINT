@@ -1,9 +1,12 @@
 # ODIN G01–G08 — aktueller Finding- und Abnahmestand
 
-Stand10.10.2026, eigener Basishead e8603c6, neue Sourceänderungen dirty.
-Der ganze Auftrag bleibt aktiv und unvollständig. Hauptcheckout813594a/3 und
-fremdes Worktree7c190c0/18 sind frisch unverändert, nicht beschrieben.
-Kein neuer Commit/Push/PR/Merge/Deploy, keine historischen/produktiven Writes.
+Stand10.10.2026, Integration durch Writer01a12412-a9fe-7052-93e0-ba88db75c740.
+Alle212 übernommenen Sourcepfade sind nach unabhängiger Bundleprüfung in fünf
+scoped Commits bis9ddf099 gesichert; begrenzte Integrationskorrekturen folgen
+bis2b7de93. Der ganze Auftrag bleibt aktiv und unvollständig.
+Hauptcheckout813594a/3 und fremdes Worktree7c190c0/18 sind frisch unverändert.
+Kein Push/PR/Merge/Deploy. Ein unbeabsichtigter produktiver Redis-Testzugriff
+ist unten ausdrücklich dokumentiert; keine historische Reparatur ausgeführt.
 
 ## Gesamtmatrix
 
@@ -24,13 +27,44 @@ Kein neuer Commit/Push/PR/Merge/Deploy, keine historischen/produktiven Writes.
 | G06 ANA-01 |12 eingefrorene Fälle, Produktionsseams/Evaluator/Runner; Assessment-/Zeitachsen bis gespeicherter Nachricht und UI | echter Graph-/Modell-/Retrieval-/Lastlauf, Originalversionen, menschliche Antwortabnahme |
 | G06 Originale/R01 | drei offene FIRMS-IDs/6 Referenz-SHA,0Originale/0geschlossen; GrayFlaglokal identifiziert, Primär403; Dry-runvertrag | Originalversion/Einzel-ID-Status bleibt offen, keine globale Faktenfreigabe; R01Apply/Backup/Restore nur gesondert freigegeben |
 | G07 TASK-114/UI-01 | Flightcaps250/600/1500; Eventaggregate mit exakter Mitgliederzahl/Detailpicks;10k Produktionsselektorbeleg | repräsentative Live-Dichte, echter Browser/Canvas, identischer nativer Vorher-/Nachherlauf und Mensch |
-| G08 Registry/Architektur/Module | kompakteRegistry/24Briefings und vollständige Dokumentkörper erhalten;116 Katalog-/25 WorldViewdeklarationen getrennt;18 Worktrees inventarisiert | Remote-/Live-Mount-/Eigentümerabgleich;5 Dependencyfindings ohne neu gecachte Fixpakete weiterhin offen |
+| G08 Registry/Architektur/Module | kompakteRegistry/24Briefings und vollständige Dokumentkörper erhalten;116 Katalog-/25 WorldViewdeklarationen getrennt;18 Worktrees/15 laufende Container frisch read-only inventarisiert; RemoteMaina47da45; gezielte transitive Updates mit frischem npm-Audit0 | finaler Head/Kompatibilität; Eigentümerabnahme vor jeder fremden Bereinigung; keine Worktrees gelöscht |
 
 Jedes HN-Bündel hat einen eigenen Source-Review2026-10-10; ein Review ist kein
 Bündel-PR. Diese Matrix ersetzt keine Einzel-REDs, Gates oder Autorisierungen.
 Alle Detailverträge stehen weiterhin in Goal.md/HN-Plänen und TASKS.md.
 
-## Letzte lokale Prüfungen
+## Integrationsbelege und verbleibende finale Prüfungen
+
+Artefakte stehen unter
+`/data/odin-goals/2026-10-09-repo-hardening/evidence/integration-20261010`.
+Sourcecommit, Testhead und laufende Image-/Produktivrevisionen getrennt halten.
+
+- Erste Vollsuites auf9ddf099: Backend1102PASS/2FAIL, Intelligence731PASS/1FAIL,
+  Ingestion1831PASS/1FAIL/23 opt-inLive deselected, Vision44PASS. Import-/Runtime-
+  Fixturefehler und unsichere Storeautodiscovery wurden begrenzt korrigiert;
+  keine fachlichen Assertions gelockert. Alle betroffenen Fullsuites müssen
+  auf dem folgenden sauberen gemeinsamen Head erneut bestehen.
+- Echte disposable Neo4j-Verträge: Backend44PASS einschließlich12A08- und
+  vierReportfällen; Ingestion8PASS einschließlich3A08-Fällen. Zusätzlich der
+  vollständige GDELT-Forwardvertrag gegen eigene Neo4j/Redis/Qdrant1PASS.
+  Diese Läufe waren noch auf dirty Source; finale Wiederholung bleibt Pflicht.
+- Neuer GDELT-Schutz: sechs explizite Inputs, lokale eigene Storeports, feste
+  Testcollection und alle drei Instance-Marker vor jedem Write.12Guardtests
+  fachlich RED/GREEN; bestehender Live-Opt-in ersetzt produktive Autodiscovery.
+  Der echte Forwardtest bleibt ausdrücklich ausführbar und wurde ausgeführt.
+- Built-Browser9ddf099:7PASS/3FAIL. Trace/CDPprofiling belegte synchronen
+  GPU-Canvasreadback bei Flugzeugicons sowie eine Quellenanzeige über dem
+  Suchknopf. CPU-Readback und pointerdurchlässiger Status korrigieren diese
+  Ursachen. Recovery mit unverändertem20sGate und GP100651 mit echtem
+  Canvaspick/Orbit/Sourceabdeckung/Remount danach einzeln PASS. Kamerazoom-
+  richtung und Öffnen des nach Remount geschlossenen Layerspanels korrigieren
+  nur den realen Bedienablauf; Auswahl-/Dichteassertions bleiben unverändert.
+  Gesamter Built-Browserlauf am finalen Head bleibt offen, nativeGPU/Human separat.
+- Gezieltes npm-Lockupdate verändert acht transitive Knoten in fünf Paketen;
+  frischer Audit5→0. npmci/Lint/Repo-/Browsertypen und870Tests mit diesen
+  Dependencies PASS. Keine pauschale auditfix-/Majoraktualisierung.
+
+## Belegter Stand vor Integration (historisch)
 
 - Frontend137Dateien/870Tests, ESLint, Repo-/Browsertypen und Vitebuild grün.
 - G06 Intelligencefokus72 und Ruff; Backendfokus28/Ruff/Mypy95 grün.
@@ -45,15 +79,26 @@ Quelle/Test/Commit/Image/Live/Fakten/nativeGPU/Human bleiben getrennt. Gebaute
 Vorgängerimages und sechs alte Browser-Smokes gehören zu ihren früheren Heads;
 sie qualifizieren den heutigen dirty Sourcebaum nicht.
 
-## Ausführungsgrenzen und Fortsetzung
+## Historische Ausführungsgrenzen und aktuelle Fortsetzung
 
-Gitindex/index.lock read-only verhindert den autorisierten scoped Commit;
+Im beendeten Vorgänger verhinderte Gitindex/index.lock read-only den scoped Commit;
 kein Index-/Repositorywechsel als Umgehung. Remote-DNS/Dockerzugriff blockieren
 neue Remote-/Image-/Livebelege. Listen und socketpair.send EPERM blockieren
 Preview/Browser sowie Executor-/Threadwakeup in Fullservice/LangGraphtests.
 Diese Ursachen wurden begrenzt reproduziert; keine unveränderten Reproläufe,
 Librarypatches/Skips, Alternativdaemon-/Browser-/Netzwerkumgehung. Der exklusive
-Servicewriter bleibt unverändert, kein weiterer tatsächlicher Hook/Writer.
+Servicewriter wurde tatsächlich beendet. Seine Fehler sind historische
+Umgebungsbelege. Der aktuelle reguläre danger-full-access/never-Writer kann
+Index, Remote, Docker und Listen nutzen; keine Konfiguration/Hooktrust geändert,
+keine aktuelle Toolrejection umgangen, keine weitere Session gestartet.
+
+Beim ersten Ingestion-Volltest aktivierte der vorhandene Test reale Stores
+automatisch. Vor Neo4j-Authabbruch schrieb er drei produktive Redis-Testschlüssel
+`gdelt:slice:99999425120000:{events,mentions,gkg}:parquet` auf `done` ohne TTL.
+Vorwerte sind unbekannt; Read-only-DUMP/PTTL-Belege sind gesichert. Keine
+erfolgreiche Neo4j-Transaktion/Qdrantmutation in diesem Fehlerpfad. Die gezielte
+Entfernung wurde ausdrücklich gefragt und bleibt ohne Antwort unerlaubt;
+keine automatische Löschung/Rücksetzung. Neue Guards verhindern den Defaultpfad.
 
 X01/X03 konkret vorbereitet und bereits gefragt, Antworten fehlen. Kein
 stillschweigender Beschluss durch Zeitablauf. Deployment/Data-/Main-Merge-
@@ -62,8 +107,8 @@ mit konkret belegtem Rollback gefragt; dieser Kandidat fehlt noch.
 Die [Abnahmeunterlagen](../operations/goal-acceptance-2026-10-10.md) sind
 unbewertet. Gesamtabnahme darf deshalb nicht complete heißen.
 
-Nächster ausführbarer Integrationsschritt im regulär erlaubten Kontext:
-scoped Sourcecommit; CI/Fullservice/isolierteDB/Built-Browser; alle finalen
+Nächster Integrationsschritt:
+sauberer gemeinsamer Head mit CI/Fullservice/isolierteDB/Built-Browser; alle finalen
 Images aus exakt dem Commit und Manifestdigests; separate Modell-/Retrieval-/
 Original-/nativeGPU-/Menschspuren. Geschützte Worktrees, produktive Dienste,
 vorhandener lokaler LLM und eingefrorene Daten bleiben erhalten.
