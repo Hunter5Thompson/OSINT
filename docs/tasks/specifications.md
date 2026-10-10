@@ -1,0 +1,1987 @@
+# Technische Task-Briefings
+
+Status und kanonischer Betriebsstack: [TASKS.md](../../TASKS.md). Die folgenden Spezifikationen bewahren den ursprünglichen Auftrag; alte Beispielversionen, DONE-Meldungen und historische Livebelege sind keine aktuelle Laufzeitfreigabe. Codepfade beziehen sich auf die Repositorywurzel.
+
+# ══════════════════════════════════════════
+# MVP TASKS (001–015) — Referenz
+# ══════════════════════════════════════════
+# Ursprünglich mit Ollama/nomic-embed/768dim spezifiziert.
+# Stack wurde auf vLLM/TEI/1024dim migriert (siehe TASK-100).
+# Volle Specs archiviert in tasks/backlog/.
+
+| Task | Titel | Status | Anmerkungen |
+|------|-------|--------|-------------|
+| 001 | Repo Setup + Docker Compose | DONE | uv workspaces, Redis+Qdrant, GPU-Passthrough |
+| 002 | FastAPI Backend Skeleton | DONE | Health, ProxyService, CORS, structlog |
+| 003 | Flight Data Proxy (OpenSky+adsb.fi) | DONE | Fallback, Cache, Military-Filter |
+| 004 | Earthquake Proxy (USGS) | DONE | M4.5+ Feed, 5min Cache |
+| 005 | Satellite TLE Proxy (CelesTrak) | DONE | SGP4, 1h Cache, Kategorisierung |
+| 006 | RAG System (Qdrant+Embedding) | DONE | Chunker, Embedder, Retriever, Batch |
+| 007 | LangGraph Multi-Agent Pipeline | DONE | OSINT+Analyst+Synthesis, SSE Streaming |
+| 008 | Intel API Endpoint (SSE) | DONE | POST /intel/query, History |
+| 009 | CesiumJS Globe + Layers | DONE | Flight, Satellite, Earthquake, Dead-Reckoning + Black Marble Night Imagery |
+| 010 | GLSL Post-Processing | DONE | CRT, Night Vision, FLIR Shaders |
+| 011 | Tactical C2 UI | DONE | OperationsPanel, IntelPanel, ClockBar |
+| 012 | Data Ingestion (RSS+GDELT) | DONE | 50+ Feeds, APScheduler, Hotspot Updater |
+| 013 | Docker Compose Integration Test | DONE | Full stack health, E2E |
+| 014 | Intelligence Pipeline Hardening | PARTIAL | A: Tool Sandboxing ❌, B: Write/Read Sep ❌, C: Lineage ❌ |
+| 015 | Hugin — Sentinel-2 Collector | TESTED | Live-Test OK (Element84 STAC), Code nicht implementiert |
+
+### TASK-014 Offene Teile
+
+**Teil A — Agent Tool Sandboxing:**
+- Jeder Agent bekommt explizite Tool-List (osint: web_search/rss/gdelt, analyst: qdrant_search, synthesis: read-only)
+- LangGraph Interrupt vor nicht-lesbaren Actions
+- Tests beweisen Tool-Isolation
+
+**Teil B — Write/Read Separation:**
+- `intelligence/rag/indexer.py` → `data-ingestion/` verschieben
+- Intelligence-Service verliert Qdrant-Write-Zugriff
+- Interner Endpoint `POST /internal/ingest`
+
+**Teil C — Data Lineage:**
+- `SourceRef` Pydantic-Model (doc_id, source, title, relevance_score)
+- `IntelAnalysis.sources_used`: `list[str]` → `list[SourceRef]`
+- Propagation durch Retriever → Synthesis → API → Frontend
+
+### TASK-015 Status
+
+Element84 STAC live getestet (2026-03-29), Endpoint funktioniert.
+CDSE degraded (Timeout). Implementierung der `sentinel_collector.py` steht noch aus.
+Phasen: 1 (Catalog+Thumbnail), 2 (Download+Cache+API), 3 (S-1 SAR, Phase Next).
+
+---
+
+# ══════════════════════════════════════════
+# TASK-100: vLLM Migration + Embedding Upgrade
+# ══════════════════════════════════════════
+# Aufwand: 0.5 Tage | Blocked by: nichts | Blocks: alles
+# Status: DONE ✅
+
+## Kontext
+WorldView nutzt aktuell Ollama mit Qwen3-32B (Port 11434).
+Die gesamte LLM-Kommunikation läuft bereits über OpenAI-kompatible API.
+Migration ist eine Config-Änderung, kein Code-Refactor.
+
+## Deliverables
+1. vLLM installiert und Qwen3.5-27B-AWQ served auf Port 8000
+2. `.env.example` und `services/backend/app/config.py` aktualisiert
+3. Embedding-Server: Qwen3-Embedding-0.6B via TEI-kompatiblem Interface auf Port 8001
+4. Smoke-Test: bestehender Intel-Endpoint funktioniert mit neuem Model
+
+## Spezifikation
+
+**vLLM starten (Shell, nicht Docker):**
+```bash
+pip install vllm
+vllm serve Qwen/Qwen3.5-27B-AWQ \
+  --quantization awq \
+  --max-model-len 32768 \
+  --gpu-memory-utilization 0.55 \
+  --port 8000 \
+  --served-model-name qwen3.5-27b
+```
+`gpu-memory-utilization 0.55` = ~17.6 GB, lässt Headroom für Embedding + Vision.
+
+**Embedding-Server (separater Prozess):**
+```python
+# scripts/embedding_server.py
+from sentence_transformers import SentenceTransformer
+from fastapi import FastAPI
+import uvicorn
+
+app = FastAPI()
+model = SentenceTransformer("Qwen/Qwen3-Embedding-0.6B", device="cuda")
+
+@app.post("/embed")
+async def embed(request: dict):
+    """TEI-kompatibles Interface: {"inputs": "text"} oder {"inputs": ["text1", "text2"]}"""
+    inputs = request["inputs"]
+    if isinstance(inputs, str):
+        inputs = [inputs]
+    vectors = model.encode(inputs, normalize_embeddings=True)
+    return vectors.tolist()  # list[list[float]]
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8001)
+```
+
+**Config-Änderungen:**
+```python
+# services/backend/app/config.py
+class Settings(BaseSettings):
+    LLM_BASE_URL: str = "http://localhost:8000/v1"       # war: OLLAMA_BASE_URL
+    LLM_MODEL: str = "qwen3.5-27b"                       # war: qwen3-32b
+    EMBEDDING_URL: str = "http://localhost:8001/embed"     # NEU
+    EMBEDDING_MODEL: str = "Qwen/Qwen3-Embedding-0.6B"   # war: nomic-embed-text
+    EMBEDDING_DIM: int = 1024                              # TEI: Qwen3-Embedding-0.6B (1024 dim)
+```
+
+**Qdrant Collection (Phase 1):**
+Aktuelle Runtime-Collection ist `odin_intel` mit 1024-dim dense vectors (Cosine distance).
+Diese wird weiterhin für RAG verwendet.
+Neue Collection `odin_v2` mit Hybrid Vectors ist eine **Phase 2 Target** (nicht Phase 1).
+Siehe `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` für die
+Qdrant Collection Lifecycle und Migration Path.
+
+## Tests
+- Bestehender `POST /api/intel/query` funktioniert mit vLLM
+- Embedding-Server returned Vektoren mit korrekter Dimension (1024)
+- Response-Qualität Spot-Check (3 Fragen manuell vergleichen)
+
+## Dependencies
+```
+vllm                      # System-Level
+sentence-transformers>=3.0 # für Embedding-Server
+```
+
+---
+
+# ══════════════════════════════════════════
+# TASK-101: Neo4j + Two-Loop Graph Architecture
+# ══════════════════════════════════════════
+# Aufwand: 3-4 Tage | Blocked by: TASK-100 | Blocks: TASK-103, TASK-104
+# Status: DONE ✅ (committed 2026-03-30, 69 tests)
+
+## Kontext
+WorldView hat keinen Knowledge Graph. Wir fügen Neo4j hinzu mit zwei
+klar getrennten Pfaden: WRITE (deterministische Templates) und READ (LLM-generiertes Cypher).
+
+## Deliverables
+1. Neo4j in `docker-compose.yml`
+2. `graph/` Package: client, models, write_templates, read_queries, migrations
+3. Two-Loop Architektur implementiert
+4. Tests gegen Testcontainer
+
+## Spezifikation
+
+### docker-compose.yml Ergänzung
+```yaml
+neo4j:
+  image: neo4j:5-community
+  ports:
+    - "7474:7474"
+    - "7687:7687"
+  environment:
+    NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+    NEO4J_PLUGINS: '["apoc"]'
+    NEO4J_dbms_memory_heap_max__size: 1G
+  volumes:
+    - neo4j_data:/data
+```
+
+### graph/models.py — Pydantic Models
+```python
+from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import Literal
+from uuid import uuid4
+
+class Entity(BaseModel):
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    name: str
+    type: Literal["person", "organization", "location", "weapon_system",
+                  "satellite", "vessel", "aircraft", "military_unit"]
+    aliases: list[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0, le=1, default=0.5)
+
+class Event(BaseModel):
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    title: str
+    summary: str = ""
+    timestamp: datetime
+    codebook_type: str
+    severity: Literal["low", "medium", "high", "critical"]
+    confidence: float = Field(ge=0, le=1, default=0.5)
+
+class Source(BaseModel):
+    url: str
+    name: str
+    credibility_score: float = Field(ge=0, le=1, default=0.5)
+
+class ExtractionResult(BaseModel):
+    """LLM Structured Output für Entity/Event Extraction."""
+    entities: list[Entity]
+    events: list[Event]
+    locations: list[dict]  # {"name": "Jiuquan", "country": "China"}
+```
+
+### graph/write_templates.py — WRITE PATH (deterministisch, kein LLM-Cypher!)
+```python
+"""
+Deterministische Cypher Templates für Graph-Writes.
+Das LLM extrahiert DATEN (JSON) → Pydantic validiert → Templates schreiben.
+KEIN LLM-generiertes Cypher auf dem Write-Path.
+"""
+
+UPSERT_ENTITY = """
+MERGE (e:Entity {name: $name, type: $type})
+SET e.aliases = $aliases,
+    e.confidence = $confidence,
+    e.last_seen = datetime()
+ON CREATE SET e.id = $id, e.first_seen = datetime()
+RETURN e.id
+"""
+
+CREATE_EVENT = """
+CREATE (ev:Event {
+  id: $id, title: $title, summary: $summary,
+  timestamp: datetime($timestamp),
+  codebook_type: $codebook_type,
+  severity: $severity, confidence: $confidence
+})
+RETURN ev.id
+"""
+
+LINK_ENTITY_EVENT = """
+MATCH (e:Entity {name: $entity_name})
+MATCH (ev:Event {id: $event_id})
+MERGE (ev)-[:INVOLVES]->(e)
+"""
+
+LINK_EVENT_SOURCE = """
+MERGE (s:Source {url: $url})
+SET s.name = $source_name, s.last_fetched = datetime()
+WITH s
+MATCH (ev:Event {id: $event_id})
+MERGE (ev)-[:REPORTED_BY]->(s)
+"""
+
+LINK_EVENT_LOCATION = """
+MERGE (l:Location {name: $location_name})
+SET l.country = $country, l.lat = $lat, l.lon = $lon
+WITH l
+MATCH (ev:Event {id: $event_id})
+MERGE (ev)-[:OCCURRED_AT]->(l)
+"""
+```
+
+### graph/read_queries.py — READ PATH (LLM-generiertes Cypher mit Safety Net)
+```python
+"""
+LLM generiert Cypher für Read-Queries.
+Safety: Schema-Kontext + Few-Shot + Syntax-Validation + Self-Healing + READ-ONLY.
+"""
+
+SCHEMA_CONTEXT = """
+Graph Schema:
+- (:Entity {id, name, type, aliases, confidence, first_seen, last_seen})
+- (:Event {id, title, summary, timestamp, codebook_type, severity, confidence})
+- (:Source {url, name, credibility_score, last_fetched})
+- (:Location {name, country, lat, lon})
+
+Relationships:
+- (Event)-[:INVOLVES]->(Entity)
+- (Event)-[:REPORTED_BY]->(Source)
+- (Event)-[:OCCURRED_AT]->(Location)
+- (Event)-[:CLASSIFIED_AS]->(EventType)
+- (Entity)-[:ASSOCIATED_WITH]->(Entity)
+"""
+
+FEW_SHOT_EXAMPLES = [
+    ("Which entities are involved in drone attacks?",
+     "MATCH (e:Entity)<-[:INVOLVES]-(ev:Event) WHERE ev.codebook_type = 'military.drone_attack' RETURN DISTINCT e.name, e.type, count(ev) AS events ORDER BY events DESC"),
+    ("Show me events in Ukraine in the last 7 days",
+     "MATCH (ev:Event)-[:OCCURRED_AT]->(l:Location) WHERE l.country = 'Ukraine' AND ev.timestamp > datetime() - duration('P7D') RETURN ev.title, ev.codebook_type, ev.severity, l.name ORDER BY ev.timestamp DESC"),
+    ("What sources reported about satellite launches?",
+     "MATCH (s:Source)<-[:REPORTED_BY]-(ev:Event) WHERE ev.codebook_type STARTS WITH 'space.satellite' RETURN s.name, s.url, count(ev) AS reports ORDER BY reports DESC"),
+    ("How are Entity X and Entity Y connected?",
+     "MATCH path = shortestPath((a:Entity {name: $entity_a})-[*..4]-(b:Entity {name: $entity_b})) RETURN path"),
+    ("What happened at Jiuquan?",
+     "MATCH (ev:Event)-[:OCCURRED_AT]->(l:Location {name: 'Jiuquan'}) RETURN ev.title, ev.timestamp, ev.codebook_type ORDER BY ev.timestamp DESC LIMIT 10"),
+]
+
+import re
+
+def validate_cypher_readonly(cypher: str) -> bool:
+    """Reject write operations. Only MATCH/RETURN/WITH/WHERE/ORDER/LIMIT allowed."""
+    # Block all known write/admin keywords including CALL, LOAD CSV, FOREACH
+    write_keywords = r'\b(CREATE|MERGE|DELETE|DETACH|SET|REMOVE|DROP|CALL|LOAD\s+CSV|FOREACH)\b'
+    if re.search(write_keywords, cypher, re.IGNORECASE):
+        return False
+    # Block multi-statement injection via semicolons
+    if ';' in cypher:
+        return False
+    return True
+
+async def query_graph_nl(question: str, llm_client, graph_client, max_retries: int = 3) -> dict:
+    """
+    Natural Language → Cypher → Execute → Summarize.
+    Self-healing loop: bei Syntax-Fehler wird Cypher regeneriert.
+    """
+    cypher = await llm_client.generate_cypher(question, SCHEMA_CONTEXT, FEW_SHOT_EXAMPLES)
+
+    if not validate_cypher_readonly(cypher):
+        return {"error": "Write operations not allowed in read queries"}
+
+    for attempt in range(max_retries):
+        try:
+            results = await graph_client.run_query(cypher, read_only=True)
+            summary = await llm_client.summarize_graph_results(question, results)
+            return {"answer": summary, "cypher": cypher, "raw_results": results}
+        except Exception as e:
+            if attempt < max_retries - 1:
+                cypher = await llm_client.fix_cypher(cypher, str(e), SCHEMA_CONTEXT)
+            else:
+                return {"error": f"Failed after {max_retries} attempts: {e}", "last_cypher": cypher}
+```
+
+### graph/client.py — Async Neo4j Wrapper
+```python
+from neo4j import AsyncGraphDatabase
+import neo4j
+
+class GraphClient:
+    def __init__(self, uri: str, user: str, password: str):
+        self._driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+
+    async def close(self):
+        await self._driver.close()
+
+    async def run_query(self, cypher: str, params: dict = None, read_only: bool = False) -> list[dict]:
+        if read_only:
+            # Enforce read-only via Neo4j session access_mode
+            async with self._driver.session(
+                default_access_mode=neo4j.READ_ACCESS,
+            ) as session:
+                result = await session.run(cypher, params or {})
+                return [dict(record) async for record in result]
+        else:
+            async with self._driver.session() as session:
+                result = await session.run(cypher, params or {})
+                return [dict(record) async for record in result]
+
+    async def write_entity(self, entity: Entity) -> str:
+        result = await self.run_query(UPSERT_ENTITY, entity.model_dump())
+        return result[0]["e.id"]
+
+    async def write_event(self, event: Event, entities: list[Entity],
+                          source_url: str, source_name: str) -> str:
+        event_id = (await self.run_query(CREATE_EVENT, event.model_dump()))[0]["ev.id"]
+        for entity in entities:
+            await self.run_query(LINK_ENTITY_EVENT,
+                {"entity_name": entity.name, "event_id": event_id})
+        await self.run_query(LINK_EVENT_SOURCE,
+            {"url": source_url, "source_name": source_name, "event_id": event_id})
+        return event_id
+```
+
+## Tests
+```
+test_neo4j_connection
+test_write_entity_via_template
+test_write_event_with_linked_entities
+test_upsert_idempotent
+test_read_query_nl_generates_valid_cypher (mocked LLM)
+test_read_query_rejects_write_operations
+  → MUSS testen: CREATE, MERGE, DELETE, SET, CALL apoc.*,
+    LOAD CSV, FOREACH, Semicolon-Injection, DETACH DELETE
+test_self_healing_retries_on_syntax_error (mocked LLM)
+test_few_shot_examples_execute_against_test_data
+```
+
+## Dependencies
+```
+neo4j>=5.23
+```
+
+---
+
+# ══════════════════════════════════════════
+# TASK-102: Event Codebook + LLM Classifier + Entity Extractor
+# ══════════════════════════════════════════
+# Aufwand: 2-3 Tage | Blocked by: TASK-100 | Blocks: TASK-103
+# Parallel zu: TASK-101
+# Status: DONE ✅ (committed 2026-03-30, 81 tests)
+
+## Kontext
+OSINT_MCP hat 5 Keyword-Listen für Topic-Classification. Wir bauen:
+1. Professionelles Event Codebook (YAML, 50+ Typen)
+2. LLM Zero-Shot Classifier (via vLLM, JSON Structured Output)
+3. LLM Entity Extractor (ersetzt spaCy NER — besser für OSINT-Entities wie
+   Waffensysteme, Satelliten, Militäreinheiten die nicht in spaCy's Trainingsdaten sind)
+
+## Deliverables
+1. `codebook/event_codebook.yaml`
+2. `codebook/classifier.py` — Event Classification via Structured Output
+3. `codebook/extractor.py` — Entity + Location Extraction via Structured Output
+4. Tests mit gemocktem vLLM Response
+
+## Spezifikation
+
+### Classifier + Extractor in EINEM LLM-Call
+Statt zwei separate Calls (classify + extract) machen wir EINEN Call
+mit Structured Output. Das spart Latenz und Tokens.
+
+```python
+from openai import AsyncOpenAI
+
+class IntelligenceExtractor:
+    """Kombinierter Classifier + Entity Extractor.
+    Ein LLM-Call, ein JSON-Output, Pydantic-validiert."""
+
+    def __init__(self, base_url: str = "http://localhost:8000/v1", model: str = "qwen3.5-27b"):
+        self.client = AsyncOpenAI(base_url=base_url, api_key="not-needed")
+        self.model = model
+        self.codebook = load_codebook("codebook/event_codebook.yaml")
+
+    async def extract(self, text: str, source_url: str = "") -> ExtractionResult:
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": self._build_system_prompt()},
+                {"role": "user", "content": f"Source: {source_url}\n\nText: {text}"}
+            ],
+            temperature=0.1,
+        )
+        raw = json.loads(response.choices[0].message.content)
+        return ExtractionResult.model_validate(raw)
+```
+
+### Warum LLM-Extraktion statt spaCy NER:
+spaCy's `xx_ent_wiki_sm` erkennt "Berlin" und "NATO", aber NICHT:
+- "Yaogan-44" (chinesischer Aufklärungssatellit)
+- "PLA Strategic Support Force" (Militäreinheit)
+- "DF-27" (Hyperschallrakete)
+- "Admiral Kuznetsov" (Flugzeugträger)
+
+## Tests
+```
+test_codebook_loads_all_categories
+test_extract_military_event (mocked: "Russian forces launched drone attack on Odessa")
+test_extract_space_event (mocked: "China launched Yaogan-44 from Jiuquan")
+test_extract_returns_valid_pydantic_model
+test_extract_unknown_event_defaults_to_other
+test_confidence_below_threshold
+test_batch_extract_concurrent
+```
+
+## Dependencies
+```
+openai>=1.40         # AsyncOpenAI Client für vLLM
+pyyaml>=6.0
+```
+
+---
+
+# ══════════════════════════════════════════
+# TASK-103: Ingestion Pipeline — Extract → Graph Write
+# ══════════════════════════════════════════
+# Aufwand: 3-4 Tage | Blocked by: TASK-101, TASK-102 | Blocks: TASK-104
+# Status: DONE ✅ (committed 2026-03-30, 43 tests)
+
+## Kontext
+WorldView hat 27 RSS Feeds + GDELT + TLE via APScheduler.
+Nach dem Fetch passiert aktuell: Redis Cache + Qdrant Embed.
+Wir schalten DAZWISCHEN: LLM Extract → Neo4j Write.
+Plus: 10 Think-Tank-Feeds aus OSINT_MCP absorbieren.
+
+## Deliverables
+1. `services/data-ingestion/pipeline.py` — Post-Fetch Orchestrator
+2. `services/data-ingestion/feeds/thinktank_feeds.py` — 10 Feeds migriert
+3. Integration in bestehenden `scheduler.py`
+4. Redis Stream Publishing für Frontend-Updates
+
+## Spezifikation
+
+### pipeline.py — Orchestrator
+```python
+async def process_item(
+    item: FeedItem,
+    extractor: IntelligenceExtractor,   # aus TASK-102
+    graph: GraphClient,                  # aus TASK-101
+    qdrant: QdrantClient,                # bestehend
+    redis: Redis,                        # bestehend
+):
+    """
+    1. extractor.extract(item.title + " " + item.summary, item.url)
+       → ExtractionResult (Entities, Events, Locations)
+    2. Für jeden Event:
+       graph.write_event(event, entities, source_url, source_name)
+       → Deterministische Templates, kein LLM-Cypher
+    3. Embed in Qdrant (dense + BM25 sparse) für RAG
+    4. Publish to Redis Stream "events:new" für Frontend Live-Update
+    """
+```
+
+### Qdrant Hybrid Collection Setup (PHASE 2 TARGET)
+⚠️ **WARNING:** This code is for Phase 2 only. Do not activate in Phase 1.
+The current runtime collection is `odin_intel` (dense-only).
+Phase 2 will migrate to `odin_v2` with the schema below after backfill and retriever updates.
+Aktivierung läuft über `settings.enable_hybrid` (default `False`) — niemals stiller Default-Switch.
+This warning applies to BOTH the create_collection block below AND the Ingest block that follows.
+
+```python
+from qdrant_client import models
+
+qdrant.create_collection(
+    collection_name="odin_v2",  # PHASE 2 ONLY
+    vectors_config={
+        "dense": models.VectorParams(size=1024, distance=models.Distance.COSINE),
+    },
+    sparse_vectors_config={
+        "bm25": models.SparseVectorParams(modifier=models.Modifier.IDF),
+    },
+)
+```
+
+See `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` §6 for the
+Phase 2 migration requirements before enabling this in production.
+
+### Ingest: Dense-Vektor vorberechnen, BM25 serverseitig
+```python
+from qdrant_client.http.models import PointStruct, SparseVector
+import httpx
+
+# Dense vector: vorberechnet via Embedding-Server (TEI auf Port 8001)
+async def get_dense_vector(text: str) -> list[float]:
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(settings.EMBEDDING_URL, json={"inputs": text})
+        return resp.json()[0]  # TEI returns list[list[float]]
+
+dense_vec = await get_dense_vector(chunk_text)
+
+point = PointStruct(
+    id=uuid4().hex,
+    vector={
+        "dense": dense_vec,
+        # BM25 sparse: Qdrant berechnet IDF serverseitig bei Query,
+        # für Ingest muss tokenisiert werden oder Fastembed genutzt werden.
+        # Variante A: Qdrant Server-Side Inference (requires Fastembed integration)
+        # Variante B: Eigene BM25 Tokenisierung → SparseVector(indices=..., values=...)
+    },
+    payload={"text": chunk_text, "source": url, "event_type": event.codebook_type, ...}
+)
+```
+
+### Kontext-Dateien die der Agent lesen MUSS:
+- `services/data-ingestion/scheduler.py`
+- `services/data-ingestion/feeds/rss_collector.py`
+- `graph/client.py` + `graph/write_templates.py` (aus TASK-101)
+- `codebook/extractor.py` (aus TASK-102)
+
+## Tests
+```
+test_process_item_writes_event_to_neo4j
+test_process_item_writes_entities_linked
+test_process_item_embeds_in_qdrant_with_dense_and_sparse_phase2
+test_process_item_publishes_redis_stream
+test_thinktank_feeds_integrated_in_scheduler
+test_deduplication_no_double_events
+```
+
+## Dependencies
+Keine neuen — alles aus TASK-100, TASK-101, TASK-102.
+
+---
+
+# ══════════════════════════════════════════
+# TASK-104: Hybrid Search + Docling + Reranker
+# ══════════════════════════════════════════
+# Aufwand: 3-4 Tage | Blocked by: TASK-103 | Blocks: TASK-105
+# VEREINFACHUNG: Qdrant native BM25 statt rank_bm25 Library!
+# Status: DONE ✅ Phase 1 (committed 2026-03-30, 99 tests). Phase 2 (hybrid sparse) offen.
+
+## Kontext
+WorldView hat einen RAG-Stack in `services/intelligence/rag/`.
+Wir erweitern um: Docling Document Parsing, Qdrant native Hybrid Search,
+und Qwen3-Reranker.
+
+## Deliverables
+1. `services/intelligence/rag/docling_ingest.py` — Docling Integration
+2. `services/intelligence/rag/retriever.py` — ERWEITERT: Qdrant native Hybrid Search
+3. `services/intelligence/rag/reranker.py` — Qwen3-Reranker-0.6B
+4. `services/backend/app/routers/rag.py` — ERWEITERT: `/ingest` mit Docling
+5. Tests
+
+## Spezifikation
+
+### Hybrid Search — Qdrant-native (PHASE 2 TARGET)
+⚠️ **WARNING:** This code is for Phase 2 only. Phase 1 uses dense-only search on `odin_intel`.
+Do not activate before backfill and retriever migration are complete.
+Aktivierung läuft über `settings.enable_hybrid` (default `False`) — niemals stiller Default-Switch.
+See `docs/superpowers/specs/2026-04-30-qdrant-collection-sot-design.md` for migration timeline.
+
+```python
+async def hybrid_search(query: str, k: int = 10) -> list[SearchResult]:
+    """
+    PHASE 2: Qdrant Query API macht Dense + Sparse + RRF serverseitig.
+    Wir müssen nur die Prefetch-Config definieren.
+    PHASE 1: Falls enable_hybrid=False, fällt auf dense-only zurück.
+    """
+    results = await qdrant.query_points(
+        collection_name="odin_v2",  # PHASE 2 ONLY
+        prefetch=[
+            models.Prefetch(
+                query=models.Document(text=query, model="Qwen/Qwen3-Embedding-0.6B"),
+                using="dense",
+                limit=k * 2,
+            ),
+            models.Prefetch(
+                query=models.Document(text=query, model="Qdrant/bm25"),
+                using="bm25",
+                limit=k * 2,
+            ),
+        ],
+        query=models.FusionQuery(fusion=models.Fusion.RRF),
+        limit=k * 2,  # Overfetch für Reranker
+    )
+    # Rerank
+    reranked = await reranker.rerank(query, results.points, top_k=k)
+    return reranked
+```
+
+### Docling Ingest
+```python
+from docling.document_converter import DocumentConverter
+
+class DoclingIngester:
+    def __init__(self):
+        self.converter = DocumentConverter()
+
+    async def ingest(self, file_path: str) -> list[dict]:
+        result = self.converter.convert(file_path)
+        chunks = []
+        for item in result.document.iterate_items():
+            if item.label in ("table", "figure"):
+                chunks.append({"text": item.export_to_markdown(), "type": item.label})
+            else:
+                chunks.append({"text": item.text, "type": "text"})
+        return chunks
+```
+
+### Reranker
+```python
+from sentence_transformers import CrossEncoder
+
+class OdinReranker:
+    def __init__(self, model_name="Qwen/Qwen3-Reranker-0.6B"):
+        self.model = CrossEncoder(model_name, device="cuda")
+
+    async def rerank(self, query: str, points: list, top_k: int = 10) -> list:
+        pairs = [(query, p.payload["text"]) for p in points]
+        scores = self.model.predict(pairs)
+        ranked = sorted(zip(points, scores), key=lambda x: x[1], reverse=True)
+        return [p for p, s in ranked[:top_k]]
+```
+
+## Tests
+```
+test_hybrid_search_returns_results_from_both_vectors
+test_docling_parses_pdf_with_tables
+test_docling_parses_html
+test_reranker_reorders_results
+test_full_pipeline_ingest_then_search
+```
+
+## Dependencies
+```
+docling[vlm,easyocr]>=2.80
+sentence-transformers>=3.0   # für Reranker (CrossEncoder)
+# KEIN rank_bm25 nötig!
+```
+
+---
+
+# ══════════════════════════════════════════
+# TASK-105: Agent Tools + Graph Explorer + Vision
+# ══════════════════════════════════════════
+# Aufwand: 4-5 Tage | Blocked by: TASK-101, TASK-104 | Blocks: TASK-106, TASK-107
+# Status: DONE ✅ (committed 2026-03-30, 155 intelligence + 17 backend tests)
+
+## Kontext
+WorldView hat LangGraph mit 3 Agents und 4 Tools.
+Wir erweitern um: graph_query, classify, und vision Tool.
+Plus Frontend: Graph Explorer Komponente.
+
+VEREINFACHUNG für Vision: Qwen3.5 ist nativ multimodal —
+es kann Bilder direkt verarbeiten. Für Basis-Vision (Captioning, OCR, VQA)
+brauchen wir KEIN separates Florence-2. Nur YOLOv8 für spezialisierte
+Military Equipment Detection (TASK-107).
+
+## Deliverables
+1. `services/intelligence/agents/tools/graph_query.py` — Neo4j Read-Path als Tool
+2. `services/intelligence/agents/tools/classify.py` — On-Demand Classification
+3. `services/intelligence/agents/tools/vision.py` — Bild-Analyse via Qwen3.5 multimodal
+4. `services/backend/app/routers/graph.py` — Graph Query Endpoints
+5. `services/frontend/src/components/graph/EntityExplorer.tsx`
+6. Tests
+
+## Spezifikation
+
+### graph_query Tool für LangGraph
+```python
+@tool
+async def query_knowledge_graph(question: str) -> str:
+    """Query the Neo4j knowledge graph with a natural language question.
+    Use this when you need to find relationships between entities,
+    track event timelines, or explore connections."""
+    result = await query_graph_nl(question, llm_client, graph_client)
+    if "error" in result:
+        return f"Graph query failed: {result['error']}"
+    return result["answer"]
+```
+
+### Vision Tool — Qwen3.5 multimodal (kein Florence-2 nötig für Basics!)
+```python
+@tool
+async def analyze_image(image_path: str, question: str = "Describe this image in detail") -> str:
+    """Analyze an image using Qwen3.5 multimodal capabilities.
+    Can answer questions about image content, identify objects, read text."""
+    import base64
+    with open(image_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+
+    response = await llm_client.chat.completions.create(
+        model="qwen3.5-27b",
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                {"type": "text", "text": question}
+            ]
+        }]
+    )
+    return response.choices[0].message.content
+```
+
+### EntityExplorer.tsx
+- `react-force-graph-2d` für Netzwerk-Visualisierung
+- API: `GET /api/graph/network/{name}?limit=50`
+- Click auf Node → Detail Panel + Timeline
+- Neuer Tab in bestehendem UI neben Intel/Threats
+
+### Backend Endpoints
+```python
+# services/backend/app/routers/graph.py
+@router.get("/entity/{name}/neighborhood")
+async def get_entity_neighborhood(name: str, depth: int = 2):
+    """Returns entity + connected nodes within N hops."""
+
+@router.post("/query")
+async def query_graph(body: GraphQueryRequest):
+    """Natural language → Cypher → Results."""
+
+@router.get("/events/recent")
+async def recent_events(hours: int = 24, event_type: str = None):
+    """Recent events, optional filter by codebook type."""
+```
+
+## Tests
+```
+test_graph_query_tool_returns_answer
+test_vision_tool_describes_image (mocked vLLM)
+test_entity_neighborhood_api_returns_graph
+test_graph_query_api_rejects_write_operations
+```
+
+## Dependencies
+```
+react-force-graph-2d: "^1.25"   # Frontend
+# Vision: kein neues Backend-Package, nutzt bestehenden vLLM + openai Client
+```
+
+---
+
+# ══════════════════════════════════════════
+# TASK-106: Demo-Szenario + Polish
+# ══════════════════════════════════════════
+# Aufwand: 2-3 Tage | Blocked by: TASK-105 | Blocks: nichts
+# Status: DONE ✅ (committed 2026-03-30, scope C+ demo UI integration)
+
+## Kontext
+Alle Kernkomponenten stehen. Jetzt: End-to-End Demo mit echten Daten,
+README Update, und Cleanup.
+
+## Deliverables
+1. Demo-Szenario: "Chinese Space Intelligence" End-to-End
+2. README.md komplett überarbeitet
+3. Langfuse Tracing verifiziert
+4. Screenshot/GIF für Portfolio
+
+## Demo-Szenario
+```
+1. System startet: vLLM + Neo4j + Qdrant + Redis + FastAPI + Frontend
+2. Scheduler crawlt Think-Tank-Feeds + bestehende 27 RSS Feeds
+3. IntelligenceExtractor klassifiziert: "space.satellite_launch" Event
+   und extrahiert Entities: "Yaogan-44", "Jiuquan", "PLA SSF"
+4. Neo4j Write via Templates: Event → Entities → Location → Source
+5. Qdrant erhält Dense + BM25 Vektoren für RAG
+6. CesiumJS Globe zeigt Jiuquan mit Event-Marker (bestehende Layer erweitert)
+7. Agent Query: "What Chinese military satellites were launched recently?"
+   → graph_query Tool → Cypher → Neo4j → Results
+   → semantic_search Tool → Qdrant Hybrid → Context
+   → Synthesis → Antwort mit Quellen
+8. Graph Explorer zeigt Entity-Netzwerk: Yaogan-44 ↔ PLA SSF ↔ Jiuquan
+```
+
+## README.md Struktur
+- Project Vision (2 Sätze)
+- Architecture Diagram (ASCII)
+- Screenshot/GIF
+- Quick Start (5 Schritte)
+- Tech Stack Tabelle
+- API Endpoints
+- Demo Use Case
+- Roadmap (Phase Next)
+
+---
+
+# ══════════════════════════════════════════
+# TASK-107: Hybrid Vision — YOLOv8 Detector + Qwen3.5 Reasoner
+# ══════════════════════════════════════════
+# Aufwand: 5-7 Tage | Blocked by: TASK-105 | Blocks: nichts
+# Parallel zu: TASK-106
+# Status: OFFEN
+
+## Kontext
+Qwen3.5 Vision (aus TASK-105) kann Bilder beschreiben und Fragen beantworten,
+aber es kann KEINE militärischen Fahrzeuge in Satellitenbildern zuverlässig
+erkennen — die Trainingsdaten fehlen. YOLOv8 erreicht nach Fine-Tuning auf
+Aerial/Satellite-Datensätzen mAP@0.5 von 0.79+ für Militärfahrzeuge und
+F1=0.958 auf SAR-Daten. Die Hybrid-Pipeline kombiniert beides:
+YOLOv8 detektiert → Qwen3.5 reasoned.
+
+## Deliverables
+1. `vision/detector.py` — YOLOv8 Military Object Detection
+2. `vision/hybrid_pipeline.py` — Orchestrator: Detect → Crop → Reason
+3. `vision/training/` — Fine-Tuning Script + Datensatz-Download
+4. `services/backend/app/routers/vision.py` — Vision API Endpoints
+5. `services/intelligence/agents/tools/vision.py` — ERWEITERT um Detector
+6. Integration: Detektierte Objekte → Neo4j als :MilitaryAsset Entities
+7. Tests
+
+## Spezifikation
+
+### Hybrid-Pipeline Architektur
+```
+Satellitenbild / Aerial Image
+    ↓
+┌─────────────────────────────────────────────┐
+│  YOLOv8m (fine-tuned)  — ~2 GB VRAM        │
+│  Erkennt: Bounding Boxes + Klasse + Conf    │
+│  z.B. "tank (0.87)", "SAM_system (0.72)"   │
+└────────────────┬────────────────────────────┘
+                 ↓
+    Für jede Detection mit confidence > 0.5:
+                 ↓
+┌─────────────────────────────────────────────┐
+│  Crop + Context Window (2x BBox)            │
+│  → Qwen3.5 Vision (already loaded, 0 GB)   │
+│  Prompt: "This cropped satellite image      │
+│  shows a detected [class]. Identify the     │
+│  specific type, assess operational status,  │
+│  and note any tactical context."            │
+└────────────────┬────────────────────────────┘
+                 ↓
+    Structured Output → Neo4j + Qdrant + Frontend
+```
+
+### VRAM-Budget
+```
+Qwen3.5-27B AWQ:          ~17.6 GB (bereits geladen)
+Qwen3-Embedding-0.6B:      ~1.2 GB
+YOLOv8m:                    ~2 GB
+──────────────────────────────────
+Total:                     ~20.8 GB / 32 GB ✅
+Headroom:                  ~11.2 GB
+```
+
+### vision/detector.py
+```python
+from ultralytics import YOLO
+from PIL import Image
+from pydantic import BaseModel
+
+class Detection(BaseModel):
+    class_name: str
+    confidence: float
+    bbox: list[float]  # [x1, y1, x2, y2] normalized
+    crop_path: str | None = None
+
+class MilitaryDetector:
+    def __init__(self, model_path: str = "models/yolov8m-military.pt"):
+        self.model = YOLO(model_path)
+
+    async def detect(self, image_path: str, conf_threshold: float = 0.5) -> list[Detection]:
+        results = self.model(image_path, conf=conf_threshold)
+        detections = []
+        for r in results:
+            for box in r.boxes:
+                detections.append(Detection(
+                    class_name=r.names[int(box.cls)],
+                    confidence=float(box.conf),
+                    bbox=box.xyxyn.tolist()[0],
+                ))
+        return detections
+
+    async def detect_and_crop(self, image_path: str, output_dir: str = "/tmp/crops") -> list[Detection]:
+        """Detect + save cropped regions for Qwen3.5 reasoning."""
+        img = Image.open(image_path)
+        detections = await self.detect(image_path)
+        for i, det in enumerate(detections):
+            x1, y1, x2, y2 = det.bbox
+            w, h = img.size
+            pad_x, pad_y = (x2-x1) * 0.5, (y2-y1) * 0.5
+            crop = img.crop((
+                max(0, int((x1-pad_x)*w)), max(0, int((y1-pad_y)*h)),
+                min(w, int((x2+pad_x)*w)), min(h, int((y2+pad_y)*h))
+            ))
+            crop_path = f"{output_dir}/det_{i}_{det.class_name}.jpg"
+            crop.save(crop_path)
+            det.crop_path = crop_path
+        return detections
+```
+
+### vision/hybrid_pipeline.py
+```python
+class HybridVisionPipeline:
+    def __init__(self, detector: MilitaryDetector, llm_client, graph_client):
+        self.detector = detector
+        self.llm = llm_client
+        self.graph = graph_client
+
+    async def analyze_satellite_image(
+        self, image_path: str, source_url: str = "", location_name: str = ""
+    ) -> list[dict]:
+        """Full pipeline: Detect → Crop → Reason → Graph Write"""
+        detections = await self.detector.detect_and_crop(image_path)
+
+        results = []
+        for det in detections:
+            reasoning = await self.llm.chat.completions.create(
+                model="qwen3.5-27b",
+                response_format={"type": "json_object"},
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"file://{det.crop_path}"}},
+                        {"type": "text", "text": f"""This cropped satellite/aerial image shows a detected {det.class_name} (confidence: {det.confidence:.2f}).
+Analyze and respond in JSON:
+{{"vehicle_type": "specific type e.g. T-72B3, S-400, Type 055",
+  "category": "armor|artillery|air_defense|naval|aircraft|logistics|infrastructure",
+  "operational_status": "operational|damaged|destroyed|unknown",
+  "tactical_context": "brief description of surroundings and tactical significance",
+  "count": 1}}"""}
+                    ]
+                }],
+                temperature=0.1,
+            )
+            analysis = json.loads(reasoning.choices[0].message.content)
+            analysis["detection"] = det.model_dump()
+
+            await self.graph.run_query(
+                """
+                MERGE (a:MilitaryAsset {vehicle_type: $vehicle_type})
+                SET a.category = $category, a.last_seen = datetime()
+                WITH a
+                CREATE (d:Detection {
+                    timestamp: datetime(),
+                    confidence: $confidence,
+                    status: $status,
+                    context: $context,
+                    image_source: $source,
+                    location: $location
+                })
+                CREATE (d)-[:IDENTIFIED]->(a)
+                """,
+                {
+                    "vehicle_type": analysis["vehicle_type"],
+                    "category": analysis["category"],
+                    "confidence": det.confidence,
+                    "status": analysis["operational_status"],
+                    "context": analysis["tactical_context"],
+                    "source": source_url,
+                    "location": location_name,
+                }
+            )
+            results.append(analysis)
+
+        return results
+```
+
+### Fine-Tuning Setup
+```python
+# vision/training/finetune_yolo.py
+from ultralytics import YOLO
+
+# Datensätze (frei verfügbar):
+# - xView: 60 Klassen, ~1M Objekte, Satellitenperspektive
+# - DOTA v2: Aerial Object Detection, 18 Klassen inkl. Fahrzeuge
+# - FAIR1M: Militärfahrzeuge, Flugzeuge, Schiffe aus Satelliten
+
+model = YOLO("yolov8m.pt")
+results = model.train(
+    data="military_dataset.yaml",
+    epochs=100,
+    imgsz=1024,
+    batch=8,
+    device=0,
+    name="yolov8m-military",
+    patience=20,
+    augment=True,
+)
+# Output: runs/detect/yolov8m-military/weights/best.pt
+# → Kopieren nach models/yolov8m-military.pt
+```
+
+### Neo4j Schema-Erweiterung
+```cypher
+(:MilitaryAsset {vehicle_type, category, last_seen})
+(:Detection {timestamp, confidence, status, context, image_source, location})
+
+(:Detection)-[:IDENTIFIED]->(:MilitaryAsset)
+(:Detection)-[:DETECTED_AT]->(:Location)
+(:Event)-[:VISUAL_EVIDENCE]->(:Detection)
+
+CREATE CONSTRAINT military_asset IF NOT EXISTS
+  FOR (a:MilitaryAsset) REQUIRE a.vehicle_type IS UNIQUE;
+```
+
+## Tests
+```
+test_yolo_loads_model
+test_detect_returns_bboxes (auf Testbild mit bekannten Objekten)
+test_detect_and_crop_saves_files
+test_hybrid_pipeline_full (mocked LLM + mocked Neo4j)
+test_hybrid_writes_military_asset_to_neo4j
+test_api_endpoint_detect_military
+test_agent_tool_detect_military_objects
+test_vram_budget_yolo_plus_qwen (assert total < 22 GB)
+```
+
+## Dependencies
+```
+ultralytics>=8.2   # YOLOv8 (AGPL-3.0 — für MVP/PoC ok, bei Kommerzialisierung evaluieren)
+Pillow>=10.0       # Image Processing (wahrscheinlich schon vorhanden)
+```
+
+---
+
+# ══════════════════════════════════════════
+# PHASE NEXT (nach Enhancement-Tasks)
+# ══════════════════════════════════════════
+
+| Feature | Warum später | Aufwand |
+|---------|-------------|---------|
+| Crawl4AI Deep Crawler | RSS Feeds reichen für MVP, Deep Crawl braucht Proxy-Infra | 1 Woche |
+| Telegram Adapter | Braucht API-Credentials, rechtliche Prüfung | 3 Tage |
+| EasyOCR multilingual | Qwen3.5 kann OCR nativ für Hauptsprachen | 2 Tage |
+| CLIP Semantic Image Search | Braucht eigene Qdrant Collection für Bild-Embeddings | 1 Woche |
+| MCP Server (überarbeitet) | Nice-to-have für Claude Code Integration | 3 Tage |
+| Obsidian Bridge (aus Sentinel) | Persönliches Feature, nicht Demo-relevant | 2 Tage |
+| Geocoding (Nominatim self-hosted) | LLM extrahiert Location-Namen, Frontend plottet auf Globe | 1 Woche |
+| Auth (JWT + RBAC) | Single-User MVP braucht kein Auth | 3 Tage |
+| Anomaly Detection (Prophet) | Braucht erstmal genug historische Daten | 2 Wochen |
+| Sentinel-1 SAR | Komplexe Prozessierung, Auth nötig (CDSE S3) | 2 Wochen |
+
+---
+
+# ══════════════════════════════════════════
+# ZUSAMMENFASSUNG + DEPENDENCY GRAPH
+# ══════════════════════════════════════════
+
+```
+MVP (001-013): ████████████████████ DONE
+TASK-014:      ██░░░░░░░░░░░░░░░░░░ PARTIAL (A/B/C offen)
+TASK-015:      █░░░░░░░░░░░░░░░░░░░ TESTED (Code fehlt)
+
+Enhancement Pipeline:
+
+TASK-100: vLLM + Embedding Upgrade           0.5 Tage   → Blocks: alles     [DONE ✅]
+    ↓
+TASK-101: Neo4j + Two-Loop Graph             3-4 Tage   ┐                   [DONE ✅]
+TASK-102: Event Codebook + Extractor         2-3 Tage   ┘ parallel          [DONE ✅]
+    ↓
+TASK-103: Ingestion Pipeline → Graph         3-4 Tage                       [DONE ✅]
+    ↓
+TASK-104: Hybrid Search + Docling            3-4 Tage                       [DONE ✅ Phase 1]
+    ↓
+TASK-105: Agent Tools + Graph Explorer       4-5 Tage                       [DONE ✅]
+    ↓
+TASK-106: Demo + Polish                      2-3 Tage   ┐                   [DONE ✅]
+TASK-107: Hybrid Vision (YOLOv8)             5-7 Tage   ┘ parallel          [OFFEN]
+    ↓
+TASK-108: Submarine Cable Layer              1-2 Tage                       [OFFEN]
+TASK-109: Flights Performance (Caching)      1-2 Tage                       [PARTIAL ✅]
+TASK-110: Dual-Model (9B Interactive + 27B Ingestion) 3-4 Tage              [PARTIAL ✅]
+TASK-111: Voxtral TTS                        2-3 Tage                       [OFFEN ❌]
+TASK-112: Fusion Core                        8-12 Tage                      [SPEC ✅]
+```
+
+## Gesamte neue Dependencies (über MVP hinaus)
+```
+# Python
+vllm                        # LLM Serving
+sentence-transformers>=3.0  # Embedding + Reranker
+neo4j>=5.23                 # Graph DB Driver
+openai>=1.40                # vLLM Client (OpenAI-kompatibel)
+docling[vlm,easyocr]>=2.80  # Document Parsing
+pyyaml>=6.0                 # Event Codebook
+ultralytics>=8.2            # YOLOv8 (TASK-107, AGPL-3.0)
+Pillow>=10.0                # Image Processing
+
+# Frontend
+react-force-graph-2d ^1.25  # Graph Viz
+```
+8 Python + 1 Frontend Dependencies.
+
+---
+
+# ══════════════════════════════════════════
+# TASK-108: Submarine Cable Layer
+# ══════════════════════════════════════════
+# Aufwand: 1-2 Tage | Blocked by: nichts | Blocks: nichts
+# Status: OFFEN
+
+## Kontext
+Unterwasser-Glasfaserkabel sind kritische OSINT-Infrastruktur.
+TeleGeography stellt einen öffentlichen GeoJSON-Datensatz zur Verfügung.
+
+## Deliverables
+1. `services/frontend/src/components/layers/CableLayer.tsx` — CesiumJS Polyline-Rendering
+2. `services/frontend/src/hooks/useCables.ts` — Datenlader (statisch oder API)
+3. Toggle im OperationsPanel ("CABLES")
+4. Kabel-Klick zeigt Name, Eigentümer, Kapazität, Landing Points
+
+## Datenquelle
+- TeleGeography Submarine Cable Map: https://github.com/telegeography/www.submarinecablemap.com
+- Format: GeoJSON (cables.json + landing-points.json)
+- Lizenz: Public domain für die Geodaten
+
+---
+
+# ══════════════════════════════════════════
+# TASK-109: Flights Performance — Redis Caching + Smooth Rendering
+# ══════════════════════════════════════════
+# Aufwand: 1-2 Tage | Blocked by: nichts | Blocks: nichts
+# Status: PARTIAL ✅ (Update 2026-03-31, Commit: f73a19b)
+
+## Kontext
+Flights-Layer hatte spürbare Stotterer bei größeren Datenmengen.
+Aktueller Stand: Cache + Dead-Reckoning sind umgesetzt, BBox-Filter noch offen.
+
+## Deliverables
+1. Backend: Redis-Cache für Flight-Daten — **DONE ✅**
+   Umsetzung: TTL jetzt konfigurierbar via `flight_cache_ttl_s` (Default 30s)
+2. Backend: Server-Side Bounding-Box Filter (nur sichtbare Region) — **OFFEN ❌**
+3. Frontend: Interpolation zwischen Polling-Updates (dead reckoning via heading+speed) — **DONE ✅**
+4. Optional: WebSocket statt Polling für Push-basierte Updates — **TEILWEISE ✅**
+   WS-Endpoint existiert bereits (`/ws/flights`), Frontend nutzt aktuell Polling (15s)
+
+## Implementiert (2026-03-31)
+- `services/backend/app/config.py`: `flight_cache_ttl_s = 30`
+- `services/backend/app/services/flight_service.py`: Cache-TTL aus Settings statt Hardcode
+- `services/frontend/src/components/layers/FlightLayer.tsx`: dead-reckoning + icon cache
+- `services/frontend/src/hooks/useFlights.ts`: Polling auf 15s angepasst
+
+## Optionen für Datenquellen
+- OpenSky Network (aktuell, 10s Rate-Limit, optional Auth)
+- adsb.fi (schneller, kein Auth, aggressives Caching)
+- ADS-B Exchange (kommerziell, sehr schnell, API-Key nötig)
+
+---
+
+# ══════════════════════════════════════════
+# TASK-110: Dual-Model Architecture — 9B Interactive + 27B Ingestion
+# ══════════════════════════════════════════
+# Aufwand: 3-4 Tage | Blocked by: nichts | Blocks: nichts
+# Status: PARTIAL ✅ (Update 2026-03-31, Commit: f73a19b)
+# Priorität: KRITISCH — ReAct-Latenz reduziert, weiterer Ausbau offen
+
+## Kontext
+Das ursprüngliche Ziel war ein separates ReAct-Modell plus starkes Ingestion/Synthesis-Modell.
+Umgesetzt wurde Phase 1 als **profilbasiertes Model-Swap-Design**:
+- Ingestion-Modus: 27B + Embedding + Data-Ingestion
+- Interactive-Modus: 9B + Reranker + API + Frontend
+
+## Umgesetzte Lösung (Phase 1)
+- `docker-compose.yml`: zwei vLLM Services mit Profiles (`vllm-27b`, `vllm-9b`)
+- Gemeinsamer Service-Alias `vllm` für stabile interne URLs
+- `odin.sh`: `up`, `swap`, `doctor`, `pull 9b-awq`
+- `swap` stoppt aktiv beide vLLM-Container vor Umschalten (GPU/Port-Sicherheit)
+- `served-model-name` vereinheitlicht auf `qwen3.5`
+
+## VRAM-Budget (Ist-Stand)
+```
+Interactive: Qwen3.5-9B AWQ      ~6.0 GB
+             TEI Embed           ~1.7 GB
+             TEI Rerank          ~2.6 GB
+             ───────────────────────────
+             Summe              ~10.3 GB
+
+Ingestion:   Qwen3.5-27B AWQ    ~17.6 GB
+             TEI Embed           ~1.7 GB
+             ───────────────────────────
+             Summe              ~19.3 GB
+```
+
+## Deliverables
+1. vLLM Multi-Model Config oder zweite Instanz — **DONE ✅** (zweite Instanz via Profile)
+2. `config.py` — separates `react_model` / `react_url` Setting — **OFFEN ❌**
+3. `react_agent.py` — dediziertes kleines Modell unabhängig vom Modus — **OFFEN ❌**
+4. `workflow.py` — dedizierte Modelltrennung je Node — **OFFEN ❌**
+5. docker-compose.yml — zweiter vLLM-Service oder multi-model — **DONE ✅**
+6. Tests + Latenz-Benchmarks (Ziel: <15s pro Tool-Call) — **PARTIAL ✅**
+
+## Phase 2: Fine-Tuning (optional)
+- Dataset: Tool-Call Traces aus dem System sammeln
+- Fine-Tune Qwen3.5-9B auf OSINT-spezifische Tool-Auswahl
+- Ziel: bessere Tool-Selektion + kürzere Generierung
+- Framework: TRL (SFT) oder eigenes Training-Script
+
+---
+
+# ══════════════════════════════════════════
+# TASK-111: Voxtral TTS — Audio-Briefings aus Intelligence Pipeline
+# ══════════════════════════════════════════
+# Aufwand: 2-3 Tage | Blocked by: nichts | Blocks: nichts
+# Status: OFFEN ❌
+# Priorität: MEDIUM — Mehrwert für Briefing-Consumption, kein Blocker
+
+## Kontext
+ODIN generiert textuelle Intelligence-Briefings (z.B. tägliche Lageberichte, Event-Summaries).
+Ziel: Diese Briefings als gesprochenes Audio bereitstellen — mit Voxtral TTS von Mistral AI.
+Das Modell unterstützt Deutsch nativ, läuft auf vLLM (passt in den bestehenden Stack),
+und erlaubt Voice Cloning mit <5s Referenz-Audio für eine konsistente "ODIN Analyst"-Stimme.
+
+## Modell-Spezifikation
+
+```
+Modell:        mistralai/Voxtral-4B-TTS-2603
+Architektur:   3.4B Transformer Decoder + 390M Flow-Matching + 300M Neural Codec
+Basis:         Ministral-3-3B-Base-2512 (finetuned)
+Sprachen:      DE, EN, FR, ES, PT, IT, NL, AR, HI (9 Sprachen)
+Lizenz:        CC-BY-NC-4.0 (⚠️ non-commercial)
+Runtime:       vLLM-Omni >= 0.18.0 (vllm serve --omni)
+Docker Image:  vllm/vllm-omni:v0.18.0
+VRAM (BF16):   ~16 GB
+Audio Output:  24 kHz, Codecs: wav/pcm/flac/mp3/aac/opus
+API Endpoint:  POST /v1/audio/speech
+Latenz:        70ms TTFA, RTF ≈ 0.103 (single request)
+Voices:        20 Presets (in voice_embedding/), Custom via <5s Reference
+```
+
+## VRAM-Analyse (RTX 5090, ~31 GB)
+
+```
+Option A — Gleichzeitig mit Interactive (BF16):
+  Interactive (10.3 GB) + Voxtral (16 GB) = 26.3 GB — KNAPP, riskant
+
+Option B — Swap-basiert (empfohlen Phase 1):
+  odin.sh swap tts → Stoppt Interactive, startet Voxtral = 16 GB — SICHER
+  Konsistent mit bestehendem swap-Pattern
+
+Option C — GGUF Quantisiert (Phase 2, experimentell):
+  Community: TrevorJS/voxtral-tts-q4-gguf (~2.5 GB)
+  Interactive + Voxtral-Q4 = ~12.8 GB — LOCKER
+  ⚠️ Braucht llama.cpp oder andere GGUF-Runtime, NICHT vLLM
+  ⚠️ Audio-Qualität muss evaluiert werden
+```
+
+## Deliverables
+
+### Phase 1 — Swap-basiertes TTS (Hauptziel)
+1. docker-compose.yml: Neuer Service `vllm-tts` mit Profil `tts`
+   - Image: `vllm/vllm-omni:v0.18.0`
+   - `runtime: nvidia` + `NVIDIA_VISIBLE_DEVICES=all`
+   - Port: 8000 (shared via Network-Alias `vllm`) ODER 8003 (dediziert)
+   - `gpu-memory-utilization: 0.50` (~16 GB)
+   - Volume: `~/.cache/huggingface:/root/.cache/huggingface`
+   - Deps im Image: espeak-ng, ffmpeg, sox (vorinstalliert)
+2. odin.sh: `swap tts` und `up tts` Kommandos
+   - Swap stoppt vllm-9b/vllm-27b vor TTS-Start (kein VRAM-Konflikt)
+3. Backend: Neuer Endpoint `POST /api/briefings/{id}/audio`
+   - Nimmt Briefing-Text aus bestehender Pipeline
+   - Ruft Voxtral via `POST http://vllm:8000/v1/audio/speech` auf
+   - Parameter: `voice` (Preset oder Custom), `response_format` (default: mp3)
+   - Returned Audio als Streaming-Response
+4. Backend: `config.py` — neue Settings:
+   - `tts_model: str = "mistralai/Voxtral-4B-TTS-2603"`
+   - `tts_voice: str = "casual_male"` (Default-Preset)
+   - `tts_format: str = "mp3"`
+   - `tts_base_url: str = "http://vllm:8000/v1"`
+5. Frontend: Audio-Player im RightPanel (Briefing-Tab)
+   - Play/Pause/Download Button neben jedem Briefing
+   - HTML5 `<audio>` Element, lazy-loaded on click
+6. Tests:
+   - Backend: Mock-basierte Tests für Audio-Endpoint
+   - Integration: vLLM-Omni Health-Check in `odin.sh doctor`
+
+### Phase 2 — Erweiterungen (optional)
+7. Custom Voice: "ODIN Analyst" Stimme via 5-10s Referenz-Audio
+   - Voice Embedding in `voice_embedding/` speichern
+   - Konfigurierbar via .env (`TTS_CUSTOM_VOICE_PATH`)
+8. Batch-TTS: Cronjob generiert Audio für neue Briefings automatisch
+   - Audio-Files in Object Storage / lokales Volume
+   - Frontend zeigt verfügbare Audio-Briefings
+9. GGUF-Evaluation: Voxtral-Q4 Qualitätsvergleich
+   - MOS-Score Vergleich BF16 vs Q4 (subjektiv, 10 Samples)
+   - Falls akzeptabel: llama.cpp Container als leichtgewichtige Alternative
+
+## Architektur-Entscheidungen
+
+- **Swap statt parallel:** VRAM-Sicherheit geht vor Convenience. TTS ist kein Echtzeit-Feature,
+  sondern Batch/On-Demand. User swappt zu TTS, generiert Audio, swappt zurück.
+- **Port 8000 shared:** Gleicher Network-Alias `vllm` wie 9B/27B — Backend-Code braucht keine
+  URL-Änderung, nur der Endpunkt wechselt (/v1/audio/speech statt /v1/chat/completions).
+  ALTERNATIV: Port 8003 dediziert, falls gleichzeitiger Betrieb in Phase 2 gewünscht.
+- **MP3 als Default:** Gute Kompression, universelle Browser-Kompatibilität.
+- **CC-BY-NC-4.0:** Akzeptabel für persönliches OSINT-Tool. Bei Monetarisierung: Mistral API nutzen.
+
+## Referenzen
+- HF Model Card: https://huggingface.co/mistralai/Voxtral-4B-TTS-2603
+- Mistral Blog: https://mistral.ai/news/voxtral-tts
+- Paper: https://arxiv.org/abs/2603.25551
+- vLLM-Omni Docker: https://github.com/vllm-project/vllm-omni
+- GGUF Quant: https://huggingface.co/TrevorJS/voxtral-tts-q4-gguf
+
+---
+
+# ══════════════════════════════════════════
+# TASK-112: Fusion Core — Observations, WorldObjects, Lineage, Review
+# ══════════════════════════════════════════
+# Aufwand: 8-12 Tage | Blocked by: TASK-014 lineage hardening | Blocks: TASK-107 production integration
+# Status: SPEC ✅ (Design: docs/superpowers/specs/2026-05-03-fusion-core-design.md)
+# Priorität: HOCH — Strategischer Sprung von Layer-Karte zu Fusion-System
+
+## Kontext
+WorldView hat Karte, Feed-Collector, Neo4j, Qdrant, LangGraph und mehrere
+OSINT-Layer. Der nächste Architektur-Sprung ist nicht ein weiterer Layer, sondern
+eine Fusion-Schicht:
+
+```
+Raw Source → SourceRef → Observation → WorldObject / IncidentCandidate
+→ FusionLink → ReviewItem → approved graph/timeline/globe surface
+```
+
+Vision/Yolo bleibt downstream: Detektionen werden später nur ein weiterer
+Observation-Producer.
+
+## Design-Spec
+- `docs/superpowers/specs/2026-05-03-fusion-core-design.md`
+
+## Kernentscheidungen
+1. `packages/odin-fusion-models/` wird gemeinsamer Modell-/ID-/Normalisierungs-Owner.
+2. Backend besitzt deterministische Fusion-Write-Templates und Review-Decision-Writes.
+3. Internal Fusion Writes benötigen HMAC (`FUSION_INTERNAL_HMAC_SECRET`).
+4. Review-Akteure werden serverseitig aus `FUSION_REVIEW_TOKEN` + `FUSION_REVIEW_ACTOR` gebunden.
+5. Phase 1 speichert keine Full-Rate AIS/ADS-B-Tracks in Neo4j; 5-Minuten-Cadence pro Objekt.
+6. Accepted Fusion Nodes werden atomar in bestehende `:Entity`/`:Event`/`:Source` Projektionen gespiegelt.
+
+## Deliverables
+1. Shared package: `SourceRef`, `Observation`, `WorldObject`, `IncidentCandidate`,
+   `FusionLink`, `ReviewItem`, ID Builder, Normalisierung, Confidence-Helfer.
+2. Backend: `/api/fusion/*` und HMAC-geschützte `/internal/fusion/*` Endpoints.
+3. Backend: deterministische, parametergebundene Neo4j Fusion-Write-Templates.
+4. Data-Ingestion: AIS/ADS-B/TLE/FIRMS/GDELT/RSS/NLM Observation Producer in Phase-1-Cadence.
+5. Intelligence: Fusion Read Tools für Timeline, Lineage und Review-Evidence.
+6. Frontend: Review Panel, Inspector-Lineage, Fusion Object/Incident Details.
+7. Tests: Idempotenz, deterministic identity, HMAC, actor binding, projection transaction,
+   review-state transitions, cadence caps.
+
+
+# ══════════════════════════════════════════
+# TASK-113: Container-native Think-Tank Full-Text Scheduler (Host-Bridge ablösen)
+# ══════════════════════════════════════════
+# Status: ERLEDIGT (2026-09-27) | Aufwand: 0.5–1 Tag | Priorität: mittel
+#
+# Umsetzung: statt fremder Netze (Startabhängigkeit!) erreicht data-ingestion(-spark)
+# crawl4ai/docling über extra_hosts host.docker.internal:host-gateway (2026-09-27 vom
+# osint_default aus verifiziert routbar). FULLTEXT_ENABLED=true, Batch 10 per Compose
+# (ODIN_FULLTEXT_* überschreibbar). Der Health-Gate der Bridge lebt jetzt im Job
+# (unavailable_dependencies: crawl4ai/docling/TEI) — sonst verbrennt ein Ausfall die
+# Retry-Versuche des Backlogs. ops/fulltext-enrich/ entfernt, User-Timer deaktiviert.
+#
+# Kontext: P2 Slice A (rss_fulltext) ist live (PR #38, main 874d6db). Einmaliger Backfill
+# 2026-06-05 (1.053 Artikel → 8.297 Chunks) durch, Read-Path nutzt rss_fulltext. Laufende
+# Anreicherung NEUER Think-Tank-Artikel fährt aktuell als HOST-BRIDGE:
+#   ops/fulltext-enrich/  (systemd --user Timer, stündlich, health-gated, flock, kleine Batch).
+#
+# Warum Bridge statt Container-Scheduler: der gated Job (FULLTEXT_ENABLED) lebt im
+# data-ingestion-spark-Container (osint_default), erreicht crawl4ai (:11235)/docling (:5001)
+# aber NICHT — die liegen in fremden Compose-Netzen (crawl4ai_default/docling_default),
+# nur über Host-Ports publiziert. host.docker.internal/docker0/osint-Gateway alle nicht routbar.
+#
+# Ziel (sauber als Branch/PR, getestet — nicht ad-hoc am laufenden Container):
+# 1. data-ingestion(-spark) zusätzlich an externe Netze crawl4ai_default + docling_default
+#    hängen (compose networks: external) — ODER crawl4ai/docling persistent an osint_default.
+# 2. CRAWL4AI_URL / DOCLING_URL auf die Container-Servicenamen setzen.
+# 3. data-ingestion-spark aus main neu bauen (#38-Code) + FULLTEXT_ENABLED=true.
+# 4. Verifizieren: Scheduler registriert fulltext_collector-Job (stündlich); Fetch erreicht
+#    crawl4ai/docling; Zugriff auf qdrant/tei/DGX bleibt intakt (Netz-Umstellung = Risiko!).
+# 5. Host-Bridge ablösen: systemctl --user disable --now odin-fulltext-enrich.timer
+#
+# Invariante: qdrant nofile-ulimit (65536, commit c1e2330) MUSS bleiben — Bulk-Writes brauchen es.
+
+
+# ══════════════════════════════════════════
+# TASK-114: WorldView Globe Declutter — Lesbarkeit & Performance (LOD/Clustering/Density/Color)
+# ══════════════════════════════════════════
+# Status: OFFEN | Aufwand: 4–6 Tage (phasiert P0→P3) | Priorität: hoch (UX-Kern: Globe ist unlesbar)
+#
+# Kontext: Screenshot 2026-06-06 (WorldView, Schwarzes Meer/Kaukasus) zeigt den Globe als
+# unlesbaren Matsch — hunderte gelbe Punkte, orange Thermal-Blobs, weiß/cyan Linien-Gewirr,
+# Basemap kaum sichtbar. Diagnose via Deep-Dive-Workflow (Code-Scan ALLER Layer + Cesium-/
+# Dataviz-Best-Practice-Recherche mit Quell-URLs). Ein dedizierter "Dataviz-Agent-Skill" wurde
+# erwogen und 2026-06-06 bewusst VERWORFEN (User-Entscheid) — die Findings leben hier im Backlog.
+# Volle Recherche + Quell-URLs: Workflow wf_e0ad1f86-5a0 dieser Session; Memory project_viz_declutter.md.
+#
+# WAS IST WAS (aus Code verifiziert):
+#   gelbe Punkte    = FIRMS-Hotspots (dominant) + GPS-Sats (gelb) + M5–6 Erdbeben
+#   orange Blobs    = FIRMS-Hi-FRP + GDACS-Orange-Alerts + GEO-Sats + M6–7 Beben
+#   weiß/cyan Linien= Mil-air Polylines (USAF #66e6ff / USN #4d9fff / unknown weiß), 1.5px @ α0.6
+#
+# ROOT CAUSES (Architektur, nicht Geschmack):
+#   1. KEIN Clustering nirgends — jeder Datenpunkt einzeln gezeichnet.
+#   2. Kein konsistentes Distanz-LOD — nur ad-hoc Schwellen pro Layer (z.B. SatelliteLayer 8M Cutoff).
+#   3. Keine Max-Count-Caps auf FIRMS/Earthquakes/GDACS/Events/EONET/Cables/Pipelines
+#      (nur FlightLayer=500 Trails + ShipLayer=3000 Vessels haben Caps).
+#   4. Gesättigte Palette (gelb/orange/rot/cyan) mehrfach über Layer → verschmilzt zu Farbmatsch.
+#   5. Polyline-Overdraw (Mil-air + Cables + Pipelines + Trails bei 1.5–2px) → Linien-Matte.
+#   6. Kein Viewport-Culling auf GDACS/EONET/FIRMS/Earthquakes/Events (global verteilt gezeichnet).
+#
+# FIX-PLAN (Prinzip → Cesium-Hebel), phasiert:
+#   P0 (größter Win, billig, rein GPU-seitig):
+#     - translucencyByDistance + scaleByDistance (Cesium.NearFarScalar) auf ALLE Bulk-Layer.
+#     - EIN shared LOD-Modul: services/frontend/src/lib/lod.ts + useCameraAltitudeBand-Hook
+#       (3 Bänder GLOBE/REGIONAL/LOCAL, getrieben von camera.moveEnd + positionCartographic.height).
+#       Ersetzt die verstreuten ad-hoc Schwellen (SatelliteLayer 8M/45M, *Layer LABEL/VECTOR-Konstanten).
+#     - Viewport-Frustum-Culling auf GDACS/EONET/Earthquakes/Events (Vorlage: ShipLayer viewRect).
+#   P0/P1: Spatial Clustering für Flights/Events/Sats. ⚠ CLAUDE.md: KEINE Entity-API für Bulk!
+#       → entweder EntityCluster nur auf dediziertem CustomDataSource (kleine Layer), ODER
+#         app-side grid/supercluster auf der imperativen Primitive-Path (rebuild on moveEnd).
+#   P1: FIRMS-Dichteoberfläche statt Einzel-Ring-Billboards bei GLOBE/REGIONAL
+#       (heatmap.js → Cesium.SingleTileImageryProvider; Swap zu Billboards beim Reinzoomen)
+#       → killt die "Thermal-Blobs". + EIN Hlíðskjalf-Noir Cesium-Color-Token-Modul:
+#       ≤6–8 qualitative Hues für Kategorien, Sättigung NUR für Alerts, Viridis-Ramp für Magnitude,
+#       Lightness-differenziert (colorblind-safe). Ersetzt rohe Cesium.Color.RED/CYAN/YELLOW/LIME.
+#   P2: Salience-Encoding (size/alpha/luminance) als shared helper; PerformanceGuard so umbauen,
+#       dass er PRIORISIERT sheddet (on-demand/conditional Tiers VOR always-show/Alert-Tier).
+#   P3 (später, größerer Aufwand): Edge-Bundling (FDEB im Worker) für Cables/Pipelines/Trails;
+#       Temporal-Windowing (recency→alpha fade) — koppelt an temporal-tracking Slice 0
+#       (Spec/Plan via PR #34, Gate via PR #33 jetzt offen → siehe project_temporal_tracking).
+#
+# ZUSATZ-CLUTTER (eigene Entscheidung): EONET + GDACS + FIRMS + USGS überlappen — Vulkane/Brände/
+#   Beben werden bis zu 4× gezeichnet. Beide EONET+GDACS sind LIVE verdrahtet (Collector →
+#   /api/{eonet,gdacs}/events → Layer, nur default OFF). Dedup-/Layer-Konsolidierungs-Entscheidung
+#   offen: welche Quelle ist kanonisch pro Event-Typ (Brand→FIRMS? Beben→USGS? Naturereignis→EONET?).
+#
+# INVARIANTEN/CONSTRAINTS:
+#   - CLAUDE.md: NUR imperative Primitives (Billboard/PointPrimitive/PolylineCollection),
+#     KEINE Entity-API für Bulk-Rendering.
+#   - Hlíðskjalf-Noir ist das committed Design-System (project_hlidskjalf_aesthetic) —
+#     Color-Tokens daraus ableiten, kein paralleles Tactical-Dark erfinden.
+#   - PerformanceGuard (components/globe/PerformanceGuard.tsx, DegradationLevel) existiert schon —
+#     drauf aufbauen, nicht ersetzen.
+#   - LOD-Rebuilds auf camera.moveEnd (debounced), NICHT per-frame / nicht auf camera.changed.
+
+
+# ══════════════════════════════════════════
+# TASK-115: Local Sovereign Agent Sidecar (ds4 + DeepSeek V4 neben Claude Code)
+# ══════════════════════════════════════════
+# Status: IDEE / Exploration (kein Code) | Aufwand: 0.5 Tag erster Beweis, offen danach | Priorität: niedrig (when-time-allows)
+#
+# Voller Spec: docs/superpowers/specs/2026-06-18-local-sovereign-agent-sidecar-design.md
+# Memory: reference_ds4_dwarfstar, project_local_agent_sidecar, project_spark_ingestion_offload
+#
+# Idee: Ein ZWEITER, vollständig LOKALER Agent neben Claude Code — DeepSeek V4 Flash über die
+# ds4/DwarfStar4-Engine auf der DGX Spark. NICHT als Ingestion-Tool (Write-Path bleibt deterministisch!),
+# sondern als souveräner, offline, kostenloser Sidekick für privacy-sensible/Massen-/Hintergrund-Arbeit.
+# Cloud (ich) vs. Lokal (DeepSeek) als bewusste Arbeitsteilung, nicht Ersatz.
+#
+# Drei Schichten: ds4 (Engine) / DeepSeek V4 q2 (Modell, 80.8GB, passt in Spark-128GB) / Harness.
+# Harness-Optionen: (a) ds4-agent nativ · (b) Claude Code → lokales Hirn via Anthropic-Wrapper
+# (EMPFOHLEN für ersten Beweis) · (c) Hermes Agent (self-improving, Telegram). Spätere Koordination = Omnigent.
+#
+# ⚠ KRITISCHER KONFLIKT: 80.8GB resident auf der Spark kollidiert mit dem Spark-Ingestion-Offload-Plan
+# (project_spark_ingestion_offload). Swap wäre nur verschoben, nicht eliminiert. Auswege: on-demand /
+# Spark=Agent-Box / mehr HW. MUSS zusammen mit Ingestion-Offload entschieden werden.
+#
+# Throughput-Realität: ~13.75 t/s gen (GB10 q2) → agentic Loops sind zäh. Spark = Batch-/Hintergrund-Agent,
+# nicht schnelles Live-Coding. q2-only (q4=153GB passt nicht in 128GB). 5090 (32GB) ist KEIN Target.
+#
+# Erster Schritt (wenn Zeit): make cuda-spark → download_model.sh q2-imatrix → ds4-server →
+# Claude-Code-Wrapper auf die Spark zeigen → fühlen + t/s messen. Details + offene Entscheidungen im Spec.
+
+
+# ══════════════════════════════════════════
+# TASK-116: Country Indicators Enrichment Layer (World Bank / OWID / SIPRI / V-Dem / Comtrade)
+# ══════════════════════════════════════════
+# Status: OFFEN | Aufwand: 2–4 Tage P0, deutlich mehr für Comtrade/SDMX | Priorität: hoch
+#
+# Voller Spec: docs/superpowers/specs/2026-06-23-country-indicators-enrichment-design.md
+#
+# Ziel: Ein normalisierter `country-indicators` Layer für harte Country-Year-Fakten:
+# Ökonomie, Demografie, Handel, Fiskal/Makro-Finanz, Demokratie-/Regime-Indizes,
+# Militärausgaben und später bilaterale Handelsabhängigkeiten.
+#
+# Warum wichtig:
+#   - WorldReport/Country Inspector bekommt belastbare Zahlen statt statischer Platzhalter.
+#   - Intelligence-Agenten können harte numerische Evidenz zitieren.
+#   - Neo4j kann Country->IndicatorObservation Beziehungen und später Trade-Dependency-Kanten
+#     deterministisch aufbauen.
+#   - Geopolitische Analyse gewinnt Basislinien: Macht, Verwundbarkeit, Abhängigkeit,
+#     Belastbarkeit, Militarisierung.
+#
+# Quellenpriorität:
+#   P0:
+#     1. World Bank Open Data — REST/JSON, kein Key, globale Zeitreihen.
+#     2. Our World in Data — kuratierte CSV/metadata JSON via Grapher API.
+#   P1:
+#     3. SIPRI — Militärausgaben strukturiert, Batch/Excel.
+#     4. V-Dem — Demokratie-/Regime-Indizes, jährlicher Batch-Dataset-Import.
+#   P2:
+#     5. UN Comtrade — bilaterale Handelsströme, API-Key/Limits, großer Backfill.
+#     6. IMF SDMX — BoP/Fiskal/Wechselkurse, technisch härter.
+#     7. OECD/Eurostat — SDMX/JSON-stat, EU/OECD/NATO-nah.
+#
+# P0-Scope bewusst klein:
+#   - Shared CountryIndicatorObservation Schema + deterministic IDs.
+#   - World Bank Collector für kuratierte Indikatorliste (GDP, Bevölkerung, Inflation,
+#     Arbeitslosigkeit, Trade%GDP, Militärausgaben, Energie/CO2).
+#   - OWID Collector für kuratierte Grapher-Charts.
+#   - Raw artifacts + normalized JSONL/Parquet lokal.
+#   - Tests first: Parser, Schema, IDs, null/missing values, pagination, country mapping.
+#
+# Invarianten:
+#   - Keine Live-Calls in Backend/Frontend Request Paths.
+#   - Keine API Keys in Code; Comtrade später nur via `.env`/Settings.
+#   - Neo4j Write Path später nur mit deterministischen Cypher-Templates und Parameterbindung.
+#   - Nicht alle World-Bank-Indikatoren blind ziehen; erst kleiner sauber getesteter Seed.
+
+
+# ══════════════════════════════════════════
+# TASK-117: Tree-Aware Longform Retrieval
+# ══════════════════════════════════════════
+# Status: DESIGN REVISED / IMPLEMENTIERUNGSPLAN OFFEN | Priorität: mittel
+#
+# Voller Spec: docs/superpowers/specs/2026-05-17-tree-search-retrieval-design.md
+#
+# Ziel: Lange Reports hierarchisch nach Dokumentabschnitt durchsuchen, ohne PageIndex als
+# Runtime-Abhängigkeit einzuführen. Phase 1 bleibt default-off und nutzt den bestehenden
+# Qdrant/TEI/Neo4j-Stack.
+#
+# Vor Implementierung zwingend:
+#   - deterministische Qdrant-Point-IDs + Replace-Set-Semantik gegen stale Chunks,
+#   - kein rekursiver Fallback zwischen tree_search und enhanced_search,
+#   - separater Longform-Pfad; NLM-Claim-Index bleibt unverändert,
+#   - Section-Metadaten durch den strukturierten [EVIDENCE]-Codec führen,
+#   - Analysis/Realtime-Lanes, Tier-Boost und Tool-Budgets erhalten.
+
+
+# ══════════════════════════════════════════
+# TASK-118: Verified Bug-Hunt Follow-ups
+# ══════════════════════════════════════════
+# Status: OFFEN / LOW | Priorität: niedrig
+#
+# Quelle: verifizierter Restbestand aus dem lokalen Bug-Hunt vom 2026-06-14.
+# Der rohe Bericht bleibt wegen widerlegter und inzwischen behobener Findings
+# bewusst außerhalb des Repositories.
+#
+# Verbleibende Arbeit:
+#   1. Intelligence-Toolfehler mit einem strukturierten [TOOL_ERROR]-Sentinel markieren und
+#      vor der Synthese aus dem Evidence-Kontext entfernen; Sources bleiben weiterhin nur
+#      aus gültigen [EVIDENCE]-Zeilen ableitbar.
+#   2. Den live-server-abhängigen Root-Contract-Test durch einen import-/OpenAPI-basierten
+#      Schema-Contract ersetzen und erst danach als eigenen CI-Job aktivieren.
+#
+# Bereits erledigt:
+#   - Live-Ingestion-Dual-Write/Retry-Verlust durch den T1-Slice behoben.
+#   - GraphCanvas `any`-Boundary bereinigt.
+#   - Falsche TEI-Reranker-sm_80-Vermutung in `feat/spark-nvfp4-ops` korrigiert.
+
+
+# ══════════════════════════════════════════
+# TASK-119: Operational Trust Chain Hardening
+# ══════════════════════════════════════════
+# Status: IN PROGRESS — S01-S02 DONE ✅; S03 REVIEW-FIXES VERIFIED,
+#         HOST APPLY + RE-REVIEW PENDING | Priorität: P0 → P2
+#
+# Design-Spec:
+#   docs/superpowers/specs/2026-07-11-operational-trust-chain-hardening-design.md
+# Work Orders:
+#   docs/superpowers/plans/2026-07-11-operational-trust-chain-hardening-slices.md
+#
+# Ziel: Die Kette Git → Build → Compose → Runtime → Retrieval → Synthese wird
+# durch explizite Invarianten und ausführbare Contract-Tests überprüfbar. Kein
+# neues Feature und kein neuer Orchestrator.
+#
+# Verbindlicher Workflow je Slice:
+#   SPEC → RED → GREEN → REFACTOR → VERIFY → RECORD
+#
+# Slices:
+#   S01 [P0] [DONE ✅] Kanonischer Munin Runtime Model Contract
+#   S02 [P0] [DONE ✅ 2026-08-22] Hermetischer Quality-Loop
+#   S03 [P0] [REVIEW COMPLETE 2026-08-22; CI/MERGE + RECREATE PENDING]
+#       Local Exposure Floor
+#   S04 [P1] [DONE ✅ 2026-08-22] Locked Dependency Contract
+#   S05 [P1] [REVIEW BACKLOG REFINED 2026-08-22] Runtime Provenance, Deploy und Drift
+#   S06 [P1] Evidence Hygiene am Codec-Seam
+#   S07 [P1] Graph Write/Read Contract und Integritätsvokabular
+#   S08 [P2] Ehrliche Publication Metadata
+#   S09 [P2] Directional Retrieval Gate und kleinste Korrektur
+#   S10 [P2] ReAct Research Trace, Injection-Gate und Entscheidung
+#
+# S05 Review-Backlog aus S04:
+#   - Ruff-Version und gelockte Toolchain über alle vier Python-Services und CI
+#     vereinheitlichen; CI darf nicht implizit vom aktuellen Backend-Lock abhängen.
+#   - tests/ops in denselben Ruff-/CI-Scope aufnehmen, bestehende Findings regulär
+#     beheben und den Scope per Contract gegen erneutes Herausfallen schützen.
+#   - VITE_ADMIN_TOKEN als browseröffentlichen Wert behandeln und den produktiven
+#     Admin-Auth-Vertrag so schließen, dass kein wiederverwendbares Credential im
+#     Frontend-Bundle landet.
+#   - lokalen Spatial-Dev-Default an Image/CI/Nightly angleichen; ein Clean-Clone-
+#     Dev-Start muss ohne ungetrackte Host-.env ebenfalls explizit default-on sein.
+#   - Verbindliche Abnahmekriterien stehen im S05-Work-Order.
+#
+# Harte Guardrails:
+#   - ein Slice pro PR; keine benachbarte Modernisierung
+#   - kein Produktionscode vor dokumentiert rotem Test
+#   - tests/ops laufen ab S02 im Quality-Loop und ab S04 in CI
+#   - Compose-Contracts lesen nur tests/fixtures/compose.env, nie die Host-.env
+#   - die getrackte Quality-Unit läuft explizit als deadpool-ultra, niemals als Root
+#   - Production-Compose ist image-basiert; ein separater Dev-Adapter erhält den Bind-Mount
+#   - keine Graph-Reparatur oder Datenlöschung in TASK-119
+#   - kein ReAct-Controller und keine Budgeterhöhung vor S10-Messung
+#   - bestehender Quality-Loop bleibt einziger Nightly-Eigentümer
+
+
+# ══════════════════════════════════════════
+# TASK-120: Versionierter Spatial-Attribution-Release-Vertrag
+# ══════════════════════════════════════════
+# Status: DONE ✅ (2026-08-06) | Priorität: P1
+# Owner: Spatial Slice 00B (Data Ingestion) + Backend Catalog
+# Freigabe: Schema-/Katalogmigration vom Nutzer am 2026-08-06 bestätigt
+# Blocks: revisionsgenaue Attribution bei zukünftigen Catalog-Rollovers
+#
+# Kontext:
+#   Plan 02 projiziert releases für manifestgebundene Drittquellen inzwischen aus
+#   `ManifestScope.provenance.source_release`. Für Attribution-only-Sources enthält
+#   `attribution.json` jedoch kein `release`: `mapshaper` und
+#   `odin-country-crosswalk` übernehmen deshalb auch für die vorherige Revision blind
+#   den Wert aus dem aktuellen globalen `source-lock.json`. Ein reiner Release-Bump ist
+#   strukturell unsichtbar; nur license_id-/Attribution-Text-Abweichungen sind erkennbar.
+#
+# Ziel:
+#   Jede bediente Katalogrevision besitzt für jede Attribution-Source einen eigenen,
+#   validierten Release-Wert. Historische Revisionen leihen niemals den Release der
+#   aktiven Revision aus.
+#
+# Vertragsentscheidung:
+#   - bevorzugt `release` als Pflichtfeld in jeder Source von `attribution.json`, oder
+#   - alternativ ein vollständiger, revisionsgebundener Source-Lock je Katalogrevision;
+#   - Referenzartefakt 00B nicht still verändern: Migration und neue Referenzrevision
+#     müssen explizit reviewt und über `spatial_catalog verify` veröffentlicht werden.
+#
+# Akzeptanzkriterien / RED-Gates:
+#   1. Active+Previous mit reinem Release-Bump liefern im Bootstrap je Revision den
+#      korrekten Wert, einschließlich `mapshaper` und `odin-country-crosswalk`.
+#   2. Die aktive Revision wird vollständig gegen den aktuellen Source-Lock geprüft;
+#      die vorherige Revision bleibt von späteren Lock-Änderungen unbeeinflusst.
+#   3. Fehlende, zusätzliche, doppelte, übergroße oder nicht kanonische Release-Daten
+#      führen fail-closed zu `503 CATALOG_UNAVAILABLE`, ohne andere Routen zu stören.
+#   4. License-ID, Attribution-Text und Release werden als ein revisionsgebundener
+#      Datensatz validiert; es entsteht keine gemischte Projektion aus zwei Revisionen.
+#   5. Compiler, Verify-Gate, Backend-Loader und Bootstrap-Tests teilen dieselben
+#      Contract-Fixtures. Falls Packaging betroffen ist, wird ein gebautes Artefakt
+#      statt ausschließlich Source-Tree-Imports getestet.
+#
+# Abschluss:
+#   - `release` ist Pflichtfeld jeder revisionsgebundenen Attribution-Source.
+#   - Der SHA-256 der kanonischen Source-Projektion ist im Manifest gebunden und Teil
+#     der Katalogrevisionsableitung; Attribution-only-Release-Bumps sind sichtbar.
+#   - Nur die aktive Revision wird exakt gegen den aktuellen vollständigen Source-Lock
+#     geprüft; vorherige Revisionen validieren sich selbst aus Manifest+Attribution.
+#   - Shared Contract-Fixture deckt Compiler/Emitter und Backend-Loader ab; Missing,
+#     Extra, Duplicate, Oversize, falsche Reihenfolge und Hash-Mismatch failen closed.
+#   - Referenzkatalog zweimal offline byteidentisch gebaut, verifiziert und auditiert;
+#     veröffentlichte Revision: `spatial-v1-fe9828dcda05` (41 unveränderte Assets).
+
+
+# ══════════════════════════════════════════
+# TASK-121: Gebundene HttpSpatialCatalog-Metadaten-Caches
+# ══════════════════════════════════════════
+# Status: DONE ✅ (2026-08-07) | Priorität: P1
+# Owner: Spatial Slice 05 (Admin1/Admin2) + Frontend Catalog Adapter
+# Blocked by: nichts
+# Blocks: belastbare Aktivierung großer Admin1-/Admin2-Kataloge
+#
+# Kontext:
+#   `BoundaryAssetStore` ist bereits gebunden und lease-sicher. Die Maps `scopes` und
+#   `negativeScopes` im `HttpSpatialCatalog` besitzen dagegen noch kein Größenbudget;
+#   außerdem bleibt der initiale Alias `active\0<scope>` nach Revision-Pinning stale.
+#   Country-Level ist praktisch klein, Admin1/Admin2 vergrößert den Zustandsraum.
+#
+# Ziel:
+#   Metadaten- und Negative-Caches bleiben unter beliebigen gültigen Resolve-/404-
+#   Sequenzen deterministisch begrenzt, ohne ETag-Revalidation, 30-s-Negative-Cache,
+#   Revisions-Pinning oder Abort-/Race-Semantik zu schwächen.
+#
+# Akzeptanzkriterien / RED-Gates:
+#   1. Ein injizierter Clock und viele eindeutige Scope-/404-Keys beweisen ein festes,
+#      dokumentiertes Entry-/Byte-Budget und deterministische Eviction.
+#   2. Abgelaufene Negativeinträge werden aktiv bereinigt; 404 bleibt exakt 30 Sekunden
+#      gecacht, während 409/5xx/Korruptionsfehler nie negativ gecacht werden.
+#   3. Nach erfolgreichem Pinning existiert kein stale `active\0<scope>`-Alias mehr.
+#   4. Committed/current-revision Reads, laufende Requests und 304-Revalidation werden
+#      durch Eviction nicht beschädigt; Superseded/Abort bleibt still und leak-frei.
+#   5. `dispose()` leert alle Metadatenzustände deterministisch. Spatial-Suite,
+#      TypeScript, ESLint und Produktionsbuild bleiben grün.
+#
+# Abschluss:
+#   - Scope-Metadaten besitzen ein deterministisches LRU mit 256 Einträgen und
+#     128 MiB Aggregatbudget; einzelne Responses bleiben auf 512 KiB begrenzt.
+#   - Freshness/ETag/304 bleiben bei 60 Sekunden erhalten. Negative 404-Einträge
+#     leben exakt 30 Sekunden und werden aktiv bereinigt; andere Fehler werden nicht
+#     negativ gecacht.
+#   - Erfolgreiches Revision-Pinning entfernt den aktiven Alias. Ref-counted
+#     In-flight-Loads lassen Hover und Click dieselbe Metadaten-/Asset-Anfrage teilen,
+#     ohne dass der Abort eines Consumers die verbleibende Lease vergiftet.
+#   - Cache-, In-flight- und High-Water-Diagnosen sind im Dev-Canary sichtbar;
+#     `dispose()` leert und abortet alle Zustände. 551 Frontend-Tests liefen flag-off
+#     und flag-on grün; TypeScript, ESLint und beide Produktionsbuilds sind grün.
+
+
+# ══════════════════════════════════════════
+# TASK-122: Expliziter Spatial-409-Rehydrate-Vertrag
+# ══════════════════════════════════════════
+# Status: DONE ✅ (2026-08-06) | Priorität: P1
+# Owner: Spatial Plan 01 Contracts/Controller + Plan 02 HTTP Adapter
+# Vertragsentscheidung: parameterloser Rehydrate-Command auf den committed Scope
+# Unblocks: Recovery ohne Page-Reload nach Auslaufen einer gepinnten Katalogrevision
+#
+# Kontext:
+#   Das Backend liefert bei `409 CATALOG_REVISION_UNAVAILABLE` die aktive Revision
+#   strukturiert. Der aktuelle Plan-01-Port besitzt jedoch keinen expliziten Rehydrate-
+#   Command. Stilles Umpinnen oder automatisches Wiederholen bleibt verboten; heute ist
+#   deshalb ein Page-Reload der einzige Weg aus einer ausgelaufenen Revision.
+#
+# Ziel:
+#   Die UI bietet eine sichtbare, explizite Rehydrate-Entscheidung. Bis zur Bestätigung
+#   bleiben committed Scope, Query-Token und URL unverändert. Die aktive Revision wird
+#   typisiert transportiert und niemals aus freiem Meldungstext geparst.
+#
+# Akzeptanzkriterien / RED-Gates:
+#   1. Der gemeinsame Plan-01-Port transportiert `active_catalog_revision` strukturiert;
+#      Memory- und HTTP-Adapter erfüllen denselben Vertrag.
+#   2. Ein 409 committet keinen neuen Scope, ändert URL/History nicht und löst keinen
+#      stillen Retry aus; die UI zeigt genau eine explizite Rehydrate-Aktion.
+#   3. Erst bestätigtes Rehydrate löst gegen die aktive Revision auf. 404, zweiter 409,
+#      Network/5xx und Superseded Intent bleiben sichtbar beziehungsweise race-sicher.
+#   4. Foreground-Generation und AbortSignal werden vor und nach jedem Await geprüft;
+#      eine ältere Rehydrate-Antwort kann keinen neueren Intent überschreiben.
+#   5. Controller-, Navigation-, React- und Router-Tests beweisen Back/Forward-Semantik
+#      sowie den unveränderten Fail-closed-Grundsatz: kein globaler Datenfallback für
+#      einen nicht-globalen Scope.
+#
+# Abschluss:
+#   - `ScopeProblem.activeCatalogRevision` ist branded, strikt decodiert und wird vom
+#     HTTP- sowie Memory-Adapter transportiert; Meldungstext ist nie Datenquelle.
+#   - Genau ein sichtbarer UI-Command rehydriert den committed Scope per Replace und
+#     pinnt den HTTP-Adapter erst nach erfolgreichem Resolve auf die aktive Revision.
+#   - 409 selbst schreibt weder Store noch URL und retryt nicht; 404, wiederholter 409
+#     und Network/5xx bleiben sichtbar, ohne World-/Global-Fallback.
+#   - Foreground-/Abort-Gates laufen vor und nach jedem Await. Pre-Abort ruft den
+#     Adapter nicht auf; verspätete Antworten verlieren Commit- und URL-Rechte.
+#   - Spatial/Router: 82 Tests grün; ESLint, TypeScript und Produktionsbuild grün.
+
+
+# ══════════════════════════════════════════
+# TASK-123: Spatial Plan-03 Review-Follow-ups vor Legacy-Cleanup
+# ══════════════════════════════════════════
+# Status: DONE ✅ (2026-08-10) | Priorität: P1
+# Owner: Spatial Plans 05/05D + Frontend WorldView
+# Blocked by: nichts
+# Abschluss: docs/reports/2026-08-10-spatial-task123-verification.md
+# TASK-123-Gate für Plan 05D: erfüllt; Plan 05D selbst bleibt durch Default-on-
+#   Release, Soak, Artefakt-Rollback und explizite Phase-D-Entscheidung blockiert.
+#
+# Kontext:
+#   Der Plan-03-Review vom 2026-08-06 bestätigte die semantischen und Lifecycle-
+#   Exit-Gates, fand aber verbleibende Paritäts-, Accessibility- und LOD-Schulden.
+#   Flag-on-Harness, Canary-Reproduktion, Legacy-Klickkosten/Fail-closed und das
+#   ungemountete Cesium-Collection-Leak wurden direkt auf dem Plan-03-Branch behoben.
+#   Plan 06A schloss am 2026-08-07 ausschließlich den Neo4j-Datenpfad hermetisch ab
+#   (Implementierungs-HEAD `51f15f9`, 18/20 Plan-Gates). Er erfüllt keines der neun
+#   untenstehenden Frontend-/Legacy-Cleanup-Kriterien; TASK-123 bleibt deshalb OFFEN.
+#   Plan 06B implementierte am 2026-08-09 die statischen Exact-Reads, reconciliertes
+#   CHRONIK-Accounting und die serverseitige Lane/Kind/Derivations-Aktivierung. Die
+#   Registry ist bewusst default-leer; offene Backup-/Backfill-/Coverage-Gates
+#   verhindern jede
+#   operative Exact-Promotion. Auch 06B erfüllt keines der neun folgenden Frontend-
+#   Kriterien und ändert den Status von TASK-123 daher nicht.
+#   Spatial Plan 08 verdrahtet am 2026-08-10 `spatial/geometry.ts` über den festen
+#   Containment-Index produktiv und macht die geschlossene Layer-Matrix zum Runtime-
+#   Gate sowie Badge-Consumer. Damit sind ausschließlich Kriterien 6 und 9 erfüllt;
+#   Kriterien 1–5, 7 und 8 sowie der Plan-05D-Blocker bleiben offen.
+#   Das Plan-08-Abschluss-Handoff vom 2026-08-10 führt deshalb nicht unmittelbar in
+#   die Legacy-Löschung. Die nächste Session inventarisiert und schließt zuerst genau
+#   die Kriterien 1–5, 7 und 8 und erstellt danach einen Plan-05D-Readiness-Record.
+#   Das dedizierte Handoff
+#   `docs/superpowers/HANDOFF-spatial-scope-task123-2026-08-10.md` ist dafür die
+#   verbindliche Detailquelle: ein begrenzter Implementierungsplan mit vier
+#   Code-Work-Orders, kein Plan 09 und keine Folge mehrerer neuer Pläne.
+#   Default-on-Release, vereinbarter Soak, Artefakt-Rollback und explizite Phase-D-
+#   Entscheidung bleiben zusätzliche externe Freigabegates.
+#
+# Abgeschlossene Akzeptanzkriterien / Regression-Gates:
+#   1. Der Spatial-Country-Inspector erhält Signal-Liste und Munin-Briefing über
+#      kanonisch aufgelöste `scope_key + catalog_revision`-Adapter. Almanac-Felder
+#      oder Displaynamen dürfen dabei niemals wieder Identitätsquelle werden.
+#   2. Vor Plan 05D beweist ein Paritätstest, dass der Flag-on-Inspector keine
+#      freigegebene Legacy-Funktion still verliert; bewusst nicht migrierte Funktionen
+#      benötigen eine explizite Produktentscheidung.
+#   3. Breadcrumb-Status ist sprachlich konsistent, zeigt kein rohes Scope-Key als
+#      sichtbares Opening-Label und verwendet eine vorab gemountete Live-Region mit
+#      getestetem Screenreader-/Focus-Verhalten.
+#   4. Die Cartography-Disclosure verwendet Button-Semantik; `aria-expanded` und
+#      `aria-controls` referenzieren einen stabil vorhandenen Disclosure-Container.
+#   5. Gemeinsame Koordinatenformatierung rendert negative Breite/Länge als S/W statt
+#      als negative N/E-Werte und wird von Legacy- und Spatial-Header geteilt.
+#   6. Das inzwischen vollständig produktionsimportfreie Modul `spatial/geometry.ts`
+#      einschließlich `BoundaryGeometryIndex`/`createSpatialChildGeometryIndex` wird
+#      entweder im vorgesehenen Plan-08-Containment-Adapter produktiv verdrahtet oder
+#      vor 05D als ungenutzte Vorleistung entfernt. Die im Legacy-Hit-Test temporär
+#      geforkten Segment-, Containment- und Dateline-Primitiven machen 05D zu einer
+#      harten Abhängigkeit statt optionaler Aufräumarbeit: danach bleibt genau eine
+#      produktive Implementierung oder keine tote Kopie zurück. Cesium-Pick-Identität
+#      bleibt ausschließlich der getaggte Katalog-Primitive-Pfad.
+#   7. Scope-Primitive-Farben liegen in einer zentralen Cesium-kompatiblen
+#      Hlíðskjalf-Palette. Child-Outlines folgen dem Kamera-LOD, während allein die
+#      Pick-Surface unverändert auf `childrenLods[preferredLod]` gepinnt bleibt; ein
+#      100-Swap-Test belegt stabile Pick-Identität und gebundene Leases.
+#   8. Solange der Legacy-Pfad produktiv bleibt, protokolliert sein Indexbau jedes
+#      wegen ungültiger Koordinaten fail-closed verworfene Feature einmalig und
+#      begrenzt, statt es diagnoselos unklickbar zu machen. Dateline-Features werden
+#      über minimale geteilte Longitude-Spans in RBush eingetragen statt mit einer
+#      globalen `[-180, 180]`-BBox; Tests belegen Diagnose, beidseitige Treffer und
+#      Pruning außerhalb der tatsächlichen Spans.
+#   9. Die in Plan 04 vorgezogene `LAYER_SPATIAL_CAPABILITIES`-Matrix erhält in Plan
+#      05/08 einen Produktions-Consumer für Layer-Badges und Scope-Verhalten oder wird
+#      vor 05D entfernt. Bis dahin bleibt sie explizit Vorleistung und darf nicht
+#      still als unverdrahtete zweite Wahrheitsquelle weiterwachsen.
+#
+# Review-Nachtrag (2026-08-13):
+#   - Nicht-globale Qdrant-Runs unterdrücken den ungefilterten Neo4j-Graph-Kontext und
+#     melden die ausgelassene Capability höchstens als partial.
+#   - Cesium behält die letzte gute Präsentation bis zum erfolgreichen Swap und stellt
+#     sie nach Fehler/Abort samt Kamera-Listener wieder her.
+#   - Semantic-only-Commits leeren die alte Boundary über den Presentation-Port.
+#   - Recon ist als world-only/unsupported registriert und wird in Scopes fail-closed
+#     über `effectiveLayers` verborgen.
+#   - Regression: Frontend 616, Intelligence 450 und Backend 579 Tests grün; ESLint,
+#     TypeScript, Ruff und Mypy ebenfalls grün.
+
+# Session-Notes — 2026-09-27: Spatial-/Quellen-/Graph-Audit zu PR #119
+# - Basis: main 245d3d4, PR-Head 5e47d8f; Live-DBs ausschließlich lesend geprüft.
+# - Bericht: docs/reports/2026-09-27-spatial-source-graph-audit.md
+# - Evidenz: docs/reports/2026-09-27-spatial-source-graph-audit-evidence.json
+# - Lokale Testkorrekturen: services/backend/tests/unit/test_spatial_catalog.py
+#   und services/intelligence/tests/test_spatial_catalog.py lesen active/served
+#   aus dem Pointer; Intelligence prüft beide served Revisionen.
+# - docs/runbooks/spatial-intelligence-contract-deploy.md ergänzt: getrennte
+#   Catalog-/Derivation-Verträge, explizite UI-Recovery, koordinierter Cutover,
+#   getrennte Neo4j-/Qdrant-Reparatur und exakter Before-State für Namenscleanup.
+# - Vorher beide CI-Fehler lokal reproduziert. Danach vollständige Backend-Suite
+#   593 passed (eine bestehende Starlette-Deprecation-Warnung), Intelligence
+#   486 passed; Ruff für die geänderten Tests grün. Vorhandene Haupt-Checkout-venvs
+#   mit PR-Worktree-CWD verwendet; kein frisches Lockfile-/CI-Environment.
+# - Deploy-Blocker: 62 gespeicherte konfliktfreie GDELT-Zuordnungen behalten eine
+#   kompatible Revision, obwohl der neue Normalizer für dieselbe Quelle conflict
+#   ergibt. 106/10.057 exportierte Locations wechseln resolved -> conflict.
+# - Weitere offene Maßnahmen: USGS MENTIONS/DESCRIBES-Mismatch, FIRMS/GDELT-
+#   Korrelationsvertrag, Spatial-Adapter für weitere Feeds, Backfills und feinere
+#   Containment-/Crosswalk-Abdeckung. Diese Produktionsfixes sind nicht umgesetzt.
+# - Nächster Schritt: A1 aus dem Bericht mit Regressionen und abgestimmtem
+#   Re-Normalisierungs-/Cutover-Vertrag schließen, erst dann Deploy entscheiden.
+# - Kein Push, Merge, Neustart, Pointerwechsel oder Datenbank-Apply ausgeführt.
+
+# Session-Notes — 2026-09-27: Spatial-Audit-Fixes und Re-Normalisierung
+# - Umsetzung: docs/reports/2026-09-27-spatial-audit-remediation.md
+# - TDD: Regressionen zuerst rot für globalen Resolver-Kontext, Nachbargeometrie,
+#   Quellenadapter, Konfliktentzug, USGS-Kante, FIRMS-Event-Join, Drift-Fingerprints,
+#   Hybrid-Vektoren, Label-Backup und den gemeinsamen Cutover-Plan.
+# - Neuer unveränderlicher Kandidat spatial-v1-2ff6da288a58: 220 Scopes,
+#   176 Country-Containments, 438 geprüfte Assets / 6.833.332 Bytes. Zweiter
+#   Offline-Build aus gesperrtem Cache erzeugt dieselbe Revision.
+# - Alle 220 alten Scope-Derivationen werden entzogen; Pointer im Branch bedient
+#   2ff6… + tatsächlichen Live-Vorgänger 0180…. Alte Katalogdateien unverändert.
+# - Fünf Neo4j-Lane-Scans statt je einem Scan pro Derivation; exakte Input-/Update-
+#   Fingerprints. Qdrant-Fingerprints binden auch Payload und Dense-/Sparse-Vektoren.
+# - Strukturierte Quellen USGS/FIRMS/UCDP/EONET/GDACS über gemeinsame Projektion;
+#   UCDP nur mit explizitem where_prec=1. NLM bleibt about, GDELT exakter Event-Join.
+# - Plan: docs/reports/2026-09-27-spatial-renormalization-plan.json;
+#   scripts/prepare_spatial_renormalization.py bietet Plan + optional nur lesende
+#   Previews beider Stores. Offline-Plan ist keine Live-Dry-Run-Freigabe.
+# - Vollständige Tests: data-ingestion 1573 passed, 1 bestehender Skip,
+#   17 bestehende Deselects; backend 593 passed (bestehende Deprecation-Warnung);
+#   intelligence 488 passed. Ruff, Backend-Mypy (90 Dateien), diff --check grün.
+# - Sechs parametrisierte Cypher-Templates per EXPLAIN am laufenden Neo4j geprüft;
+#   keine Statements ausgeführt. Bestehende Service-venvs mit Worktree-CWD genutzt,
+#   kein frischer CI-/Container-Build und kein Live-Apply behauptet.
+# - Quellgrenzen A6 bleiben explizit: Natural Earth 1:110m, keine geratenen GDELT-
+#   Aliase; fehlende Rohbelege/Präzision benötigen separaten Source-Replay.
+# - Kein Push/Merge/Deploy, Neustart oder Datenbank-Apply; Haupt-Checkout und seine
+#   fremden/untracked Dateien bleiben erhalten. Operator-Ablauf im Runbook aktualisiert.
+
+# Session-Notes — 2026-09-27: PR #119 Cutover, Token-Reihenfolge
+# - PR #119 nach zwölf grünen Checks gemergt (fe7a1e0); Haupt-Checkout vor
+#   Runtime-Wechsel fast-forward aktualisiert, fremde untracked Dateien erhalten.
+# - Writer/Reader pausiert. Neo4j-Dumps und Qdrant-Snapshots unter
+#   /data/odin-backups/spatial-cutover-20260927T003349Z erstellt und separat
+#   wiederhergestellt: 2.627.173 Knoten, 67.019.865 Kanten, 1.967.003 odin_intel-
+#   Punkte und 6 Smoke-Punkte exakt bestätigt. Noch kein Re-Normalisierungs-Apply.
+# - Live-Preview findet parent-first versus lexikalische Token-Sortierung:
+#   Regression rot reproduziert, Validator auf bestehenden Projektor-/Payload-
+#   Vertrag korrigiert. Integrationstest nutzt jetzt eine Land+Admin1-Position.
+# - Kleiner Folge-PR vor Apply; keine Aufweichung der Einzigartigkeitsprüfung.
+
+# 2026-09-27 — Live spatial cutover: aircraft lane cursor gate
+# - Read-only live preview exposed nine historical theatre aggregate Locations
+#   without point geometry. These must remain outside observation-label repair.
+# - Neo4j predicate regression: two red cases (theatre falsely blocks; modern
+#   observation without cursor missed), then six green in-memory map cases on
+#   Neo4j, without fixture writes. 25 batch/scheduler unit tests and Ruff pass.
+# - Keep point-bearing legacy observations fail-closed, including partial
+#   coordinates. Historical SPOTTED_AT edges retain their original evidence.
+
+# 2026-09-27 — Spatial live cutover completed
+# - PRs #119, #121 and #122 merged after all twelve checks passed.
+# - Restored and verified full backups before apply. Applied 17,155 Neo4j
+#   location updates and 1,923,721 Qdrant point projections. Full verification
+#   found zero remaining writes; frozen node/edge/point totals were unchanged.
+# - 4,170 aircraft labels repaired with exact before-values retained; 700 sampled
+#   vectors and non-spatial payloads preserved exactly. Coverage gaps remain explicit.
+# - Backend/intelligence real scoped query passed; both served references resolve,
+#   retired revision returns 409. Collector/backfill resumed; final smoke 24/0/1.
+# - Evidence and remaining provenance limits: docs/reports/2026-09-27-spatial-live-cutover.md.
+
+# 2026-09-27 — Historical aircraft theatre edges → observation Locations
+# - New graph-integrity job materialize-aircraft-theatre-edges (+ revert). TDD: 28
+#   unit tests, 2 CLI tests; apply/revert/drift/collision verified end-to-end on a
+#   throwaway Neo4j (revert restores the exact prior edge set).
+# - Read-only prod dry-run: 14,654 edges across 9 theatres, all planned, 0 skipped,
+#   0 key collisions; 2,041 honest `unresolved` (coast/sea at Natural Earth 1:110m).
+# - Found, not fixed here: adsb.fi `now` is milliseconds; collector stores ms and
+#   buckets dedup keys by 900 ms, while /aircraft and timeline readers filter by
+#   epoch seconds. The job copies timestamps verbatim.
+
+# 2026-09-27 — Aircraft timestamp units
+# - Contract: SPOTTED_AT.timestamp = epoch ms (all 19,010 stored edges are ms; adsb.fi
+#   `now` is ms). /api/aircraft/tracks keeps its seconds contract; timeline ts_ms is
+#   the stored value. Before: since-filter never excluded anything and the timeline
+#   military window was always empty. Verified read-only on prod: 1h → 8 tracks
+#   (was 500 from April), 2026-09-26 → 83 tracks / 285 points (was 0).
+# - Collector: explicit ms normalization incl. time.time() fallback; dedup bucket now
+#   a real 15-minute window (was 900 ms); Location lat/lon/name follow the latest
+#   observation like geo/country do. Takes effect on the next ingestion image deploy.
+
+# 2026-09-27 — GDELT Qdrant: invalid linked event blocked a whole slice
+# - Slice 20260827091500 failed qdrant_recovery every 15 min (44x since the 02:56
+#   restart): 1 of 84 events has a null GoldsteinScale; GDELTEventWrite validation
+#   in the Qdrant spatial-evidence path raised and kept all 542 documents out.
+# - Fix: skip-and-log the invalid linked event (same WP-02 contract as the Neo4j
+#   writer). Verified on the real slice with a mocked client: 542 points, 1 warning.
+#   Clears on the next ingestion image deploy; the pending entry then drains.
