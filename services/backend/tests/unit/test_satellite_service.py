@@ -223,11 +223,16 @@ async def test_cached_empty_is_a_snapshot() -> None:
 async def test_legacy_http_distinguishes_invalid_and_empty(
     payload: str, expected_status: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from app.main import app
+    from fastapi import FastAPI
 
-    monkeypatch.setattr(satellite_service, "_CELESTRAK_GROUPS", ["stations"])
+    from app.routers.satellites import router
+
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    app.state.cache = AsyncMock()
     app.state.cache.get.return_value = None
-    app.state.proxy.get_text = AsyncMock(return_value=payload)
+    app.state.proxy = _Proxy({"GROUP=stations": payload})
+    monkeypatch.setattr(satellite_service, "_CELESTRAK_GROUPS", ["stations"])
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
