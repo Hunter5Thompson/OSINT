@@ -1,21 +1,8 @@
-"""Integration test: run full forward tick against local dev-compose.
+"""Opt-in full forward fixture against explicitly marked disposable stores.
 
-Skip if services are not running. Uses fixture slice — no live GDELT.
-Bypasses download by feeding parsed DataFrames directly via
-_filter_and_write_parquet + writers.write_from_parquet.
-
-Required environment when services are up:
-    NEO4J_PASSWORD     password for the local Neo4j (required to actually run)
-    REDIS_URL          default: redis://localhost:6379/0
-    NEO4J_URL          default: bolt://localhost:7687
-    NEO4J_USER         default: neo4j
-    QDRANT_URL         default: http://localhost:6333
-    QDRANT_COLLECTION  default: odin_intel
-    TEI_EMBED_URL      default: http://localhost:8001
-
-If NEO4J_PASSWORD is not set we still want pytest *collection* to succeed —
-hence ``os.getenv("NEO4J_PASSWORD", "")``. The test only runs when the
-``_dev_services_up()`` health-check passes; otherwise it is skipped cleanly.
+No application defaults or production store discovery. Missing isolation
+configuration/markers is a failure, before any fixture write. The TEI input
+is explicit and inference-only; it is not a data store mutation.
 """
 
 from __future__ import annotations
@@ -23,37 +10,23 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import httpx
 import polars as pl
 import pytest
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.live]
 
 FIXTURES = Path(__file__).parent / "fixtures" / "gdelt"
 
 
-def _dev_services_up() -> bool:
-    """True only when Qdrant + TEI are reachable AND a Neo4j password is set.
-
-    Neo4j auth errors (missing credentials) would surface as a hard failure
-    inside the test, but Task 23 mandates the test must *never* fail when the
-    dev environment isn't fully wired up — only skip cleanly. So we also
-    require ``NEO4J_PASSWORD`` to be present before declaring services up.
-    """
-    if not os.getenv("NEO4J_PASSWORD"):
-        return False
-    try:
-        httpx.get("http://localhost:6333/", timeout=2.0).raise_for_status()
-        httpx.get("http://localhost:8001/health", timeout=2.0).raise_for_status()
-    except Exception:
-        return False
-    return True
-
-
-@pytest.mark.skipif(not _dev_services_up(), reason="dev-compose services not running")
 @pytest.mark.asyncio
 async def test_full_forward_tick_against_real_stores(tmp_path):
-    """Run forward with fixture slice + real Neo4j/Qdrant/Redis."""
+    """Run every existing assertion against disposable Neo4j/Qdrant/Redis."""
+    from integration_tests.disposable_stores import (
+        require_disposable_config,
+        verify_disposable_markers,
+    )
+
+    inputs = require_disposable_config(os.environ)
     import redis.asyncio as aioredis
     from qdrant_client import AsyncQdrantClient
 
@@ -67,28 +40,30 @@ async def test_full_forward_tick_against_real_stores(tmp_path):
     date = "9999-04-25"
 
     r = aioredis.from_url(
-        os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+        inputs["HN_TEST_REDIS_URL"],
         decode_responses=True,
     )
     state = GDELTState(r)
 
     neo4j = Neo4jWriter(
-        uri=os.getenv("NEO4J_URL", "bolt://localhost:7687"),
-        user=os.getenv("NEO4J_USER", "neo4j"),
-        password=os.getenv("NEO4J_PASSWORD", ""),
+        uri=inputs["HN_TEST_NEO4J_URI"],
+        user="neo4j",
+        password=inputs["HN_TEST_NEO4J_PASSWORD"],
     )
-    qclient = AsyncQdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
+    qclient = AsyncQdrantClient(url=inputs["HN_TEST_QDRANT_URL"])
 
     async def embed(text: str):
         return await default_tei_embed(
-            text, tei_url=os.getenv("TEI_EMBED_URL", "http://localhost:8001")
+            text, tei_url=inputs["HN_TEST_TEI_EMBED_URL"]
         )
 
     qdrant = QdrantWriter(
         client=qclient,
         embed=embed,
-        collection=os.getenv("QDRANT_COLLECTION", "odin_intel"),
+        collection=inputs["HN_TEST_QDRANT_COLLECTION"],
     )
+
+    await verify_disposable_markers(neo4j, r, qclient)
 
     # 1. Parse
     ev_res = parse_events(
@@ -216,7 +191,7 @@ async def test_full_forward_tick_against_real_stores(tmp_path):
     from qdrant_client.http.models import FieldCondition, Filter, MatchText
 
     await qclient.delete(
-        collection_name=os.getenv("QDRANT_COLLECTION", "odin_intel"),
+        collection_name=inputs["HN_TEST_QDRANT_COLLECTION"],
         points_selector=Filter(
             must=[
                 FieldCondition(key="doc_id", match=MatchText(text=sentinel_prefix_doc)),
