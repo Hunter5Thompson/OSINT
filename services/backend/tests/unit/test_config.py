@@ -25,18 +25,20 @@ class TestQdrantCollectionDefault:
 
 class TestSettings:
     def test_vllm_defaults(self) -> None:
-        s = Settings(
-            _env_file=None,
-            neo4j_password="test-secret",
-        )
+        with patch.dict(os.environ, {}, clear=True):
+            s = Settings(
+                _env_file=None,
+                neo4j_password="test-secret",
+            )
         assert s.vllm_url == "http://localhost:8000"
         assert s.vllm_model == "qwen3.5"
 
     def test_tei_defaults(self) -> None:
-        s = Settings(
-            _env_file=None,
-            neo4j_password="test-secret",
-        )
+        with patch.dict(os.environ, {}, clear=True):
+            s = Settings(
+                _env_file=None,
+                neo4j_password="test-secret",
+            )
         assert s.tei_embed_url == "http://localhost:8001"
         assert s.tei_rerank_url == "http://localhost:8002"
 
