@@ -30,6 +30,7 @@ test("dense synthetic flights expose rendering limits after camera and route cha
   await page.getByRole("link", { name: /Briefing/i }).click();
   await page.getByRole("link", { name: /WorldView/i }).click();
   await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await page.getByRole("button", { name: "expand Layers", exact: true }).click();
   await expect(page.getByRole("status", { name: "Flight source and rendering" })).toContainText("Clientabruf UTC:");
 });
 
@@ -188,7 +189,8 @@ test("six-digit GP satellite is selectable in the built globe with source covera
   // Wait for the normal camera flight, then zoom above it using real controls.
   await expect(page.getByText("Fixture location", { exact: true }).first()).toBeVisible();
   await canvas.hover();
-  await page.mouse.wheel(0, -1800);
+  await page.mouse.wheel(0, 1800);
+  await page.screenshot({ path: testInfo.outputPath("gp-100651-camera.png") });
   await expect(async () => {
     await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
     await expect(page.getByText("norad: 100651", { exact: true })).toBeVisible({ timeout: 250 });

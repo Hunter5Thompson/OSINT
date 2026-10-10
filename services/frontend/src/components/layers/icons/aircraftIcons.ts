@@ -90,7 +90,7 @@ export function getAircraftTypeIcon(
   const canvas = document.createElement("canvas");
   canvas.width = size * 2;
   canvas.height = size * 2;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return canvas.toDataURL();
 
   const color = ICON_COLORS[type];

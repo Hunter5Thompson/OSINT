@@ -12,7 +12,7 @@ export function SatelliteSourceStatus({ snapshot, loading, error }: Props) {
   const rejected = groups.reduce((sum, group) => sum + group.rejected_invalid + group.rejected_unsupported, 0);
   const stale = snapshot && Date.now() - Date.parse(snapshot.fetched_at) > 7_200_000;
   return (
-    <div role="status" aria-live="polite" className="absolute top-24 right-4 z-20 max-w-xs rounded border border-white/15 bg-black/80 p-2 text-xs text-white/75">
+    <div role="status" aria-live="polite" className="pointer-events-none absolute top-24 right-4 z-20 max-w-xs rounded border border-white/15 bg-black/80 p-2 text-xs text-white/75">
       <div>Satelliten{loading ? " · laden…" : ""}</div>
       {error && <div className="text-amber-300">Abruf fehlgeschlagen · {snapshot ? "Vorheriger Quellstand" : "Nicht verfügbar"}</div>}
       {snapshot && <>
