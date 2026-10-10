@@ -17,8 +17,9 @@ export function stepTargetMs(
   rangeEndMs: number,
   bucketCount: number,
   direction: Direction,
+  gridSpanMs = rangeEndMs - rangeStartMs,
 ): number {
-  const span = Math.max(rangeEndMs - rangeStartMs, 1);
+  const span = Math.max(gridSpanMs, 1);
   const bucketMs = span / Math.max(bucketCount, 1);
   const next = currentMs + bucketMs * direction;
   return Math.min(rangeEndMs, Math.max(rangeStartMs, next));

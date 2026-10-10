@@ -11,15 +11,17 @@ interface EventCalloutProps {
 export function EventCallout({ eventId, onClose, onInspect }: EventCalloutProps) {
   const [detail, setDetail] = useState<TimelineEventDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
   const seqRef = useRef(0);
 
   useEffect(() => {
+    const seq = ++seqRef.current;
+    setDetail(null);
+    setFailed(false);
     if (!eventId) {
-      setDetail(null);
       setLoading(false);
       return;
     }
-    const seq = ++seqRef.current;
     const ctrl = new AbortController();
     setLoading(true);
     void getEventDetail(eventId, ctrl.signal)
@@ -30,14 +32,18 @@ export function EventCallout({ eventId, onClose, onInspect }: EventCalloutProps)
         }
       })
       .catch(() => {
-        if (seq === seqRef.current) setLoading(false);
+        if (seq === seqRef.current) {
+          setLoading(false);
+          setFailed(true);
+        }
       });
-    return () => ctrl.abort();
+    return () => { ++seqRef.current; ctrl.abort(); };
   }, [eventId]);
 
   if (!eventId) return null;
 
-  const label = detail?.title || detail?.codebook_type || eventId;
+  const currentDetail = detail?.id === eventId ? detail : null;
+  const label = currentDetail?.title || currentDetail?.codebook_type || eventId;
   const mono = '"Martian Mono", ui-monospace, "SFMono-Regular", Consolas, monospace';
   const btn: React.CSSProperties = {
     background: "transparent",
@@ -78,14 +84,15 @@ export function EventCallout({ eventId, onClose, onInspect }: EventCalloutProps)
           ×
         </button>
       </div>
-      {detail ? (
+      {failed ? <div role="status">Detail nicht verfügbar.</div> : null}
+      {currentDetail ? (
         <>
           <div style={{ color: "var(--ash, #6b6358)", marginTop: 6, letterSpacing: "0.02em" }}>
-            {detail.time.replace("T", " ").slice(0, 19)}Z · {detail.time_basis}
-            {detail.source ? ` · ${detail.source}` : ""}
-            {detail.severity ? ` · ${detail.severity}` : ""}
+            {currentDetail.time.replace("T", " ").slice(0, 19)}Z · {currentDetail.time_basis}
+            {currentDetail.source ? ` · ${currentDetail.source}` : ""}
+            {currentDetail.severity ? ` · ${currentDetail.severity}` : ""}
           </div>
-          <button type="button" style={{ ...btn, marginTop: 8 }} onClick={() => onInspect(detail)}>
+          <button type="button" style={{ ...btn, marginTop: 8 }} onClick={() => onInspect(currentDetail)}>
             → Inspector
           </button>
         </>

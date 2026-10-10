@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { EvidenceTimeAxes } from "../../worldview/EvidenceTimeAxes";
 
 import { useCountryAlmanac } from "../../../hooks/useCountryAlmanac";
 import { useCountryBriefing } from "../../../hooks/useCountryBriefing";
@@ -149,10 +150,18 @@ function CountryBriefingContent({
       {briefing.result && (
         <details className="country-almanac__report">
           <summary>
-            {briefing.result.threat_assessment ?? "REPORT"} ·{" "}
-            {(briefing.result.confidence * 100).toFixed(0)}%
+            {briefing.result.assessment_status?.threat === "default"
+              ? "Bewertung nicht verfügbar" : briefing.result.threat_assessment ?? "REPORT"} ·{" "}
+            {briefing.result.assessment_status?.confidence === "default"
+              ? "Konfidenz nicht verfügbar" : `${(briefing.result.confidence * 100).toFixed(0)}%`}
           </summary>
+          <div className="country-almanac__muted">
+            {briefing.result.verification_status === "unverified"
+              ? "Modellbewertung · Quellenbelege sind nicht unabhängig verifiziert."
+              : "Bewertungs- und Verifikationsstatus unbekannt."}
+          </div>
           <pre className="country-almanac__report-body">{briefing.result.analysis}</pre>
+          <EvidenceTimeAxes summary={briefing.result.evidence_summary} />
           <button
             type="button"
             className="country-almanac__tab"

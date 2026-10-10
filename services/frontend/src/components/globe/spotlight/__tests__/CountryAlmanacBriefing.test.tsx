@@ -45,6 +45,57 @@ describe("CountryAlmanacPanel briefing block", () => {
     };
   }
 
+  it("shows explicit source time axes without substituting recent ingestion for observation", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
+    const briefing = await import("../../../../hooks/useCountryBriefing");
+    const mock = _resultMock();
+    vi.spyOn(briefing, "useCountryBriefing").mockReturnValue({ ...mock, result: { ...mock.result,
+      evidence_summary: [{ source_ref_id: "synthetic-ref", provider: "fixture.example.invalid", source_type: "dataset",
+        published_at: null, observed_at: "2020-01-01T00:00:00Z", ingested_at: "2026-10-10T00:00:00Z",
+        verification_status: "unverified" }] } } as never);
+    const { CountryAlmanacPanel } = await import("../CountryAlmanacPanel");
+    render(<CountryAlmanacPanel iso3="DEU" m49="276" />);
+    expect(screen.getByText(/Publiziert UTC: unbekannt/)).toBeInTheDocument();
+    expect(screen.getByText(/Beobachtet UTC: 2020-01-01T00:00:00.000Z/)).toBeInTheDocument();
+    expect(screen.getByText(/Ingest UTC: 2026-10-10T00:00:00.000Z/)).toBeInTheDocument();
+    expect(screen.getByText(/synthetic-ref · unverifiziert/)).toBeInTheDocument();
+  });
+
+  it("shows field defaults as unavailable and keeps declared confidence separate", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
+    const briefing = await import("../../../../hooks/useCountryBriefing");
+    const mock = _resultMock();
+    vi.spyOn(briefing, "useCountryBriefing").mockReturnValue({
+      ...mock,
+      result: {
+        ...mock.result, confidence: 0.3, threat_assessment: "MODERATE",
+        assessment_status: { threat: "default", confidence: "declared", issues: ["threat-invalid"] },
+        verification_status: "unverified",
+      },
+    } as never);
+    const { CountryAlmanacPanel } = await import("../CountryAlmanacPanel");
+    render(<CountryAlmanacPanel iso3="DEU" m49="276" />);
+    expect(screen.getByText(/Bewertung nicht verfügbar · 30%/)).toBeInTheDocument();
+    expect(screen.queryByText(/MODERATE · 30%/)).toBeNull();
+    expect(screen.getByText(/Quellenbelege sind nicht unabhängig verifiziert/)).toBeInTheDocument();
+  });
+
+  it("does not display a confidence default as a measured percentage", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
+    const briefing = await import("../../../../hooks/useCountryBriefing");
+    const mock = _resultMock();
+    vi.spyOn(briefing, "useCountryBriefing").mockReturnValue({
+      ...mock,
+      result: { ...mock.result, confidence: 0.5,
+        assessment_status: { threat: "declared", confidence: "default", issues: ["confidence-missing"] },
+        verification_status: "unverified" },
+    } as never);
+    const { CountryAlmanacPanel } = await import("../CountryAlmanacPanel");
+    render(<CountryAlmanacPanel iso3="DEU" m49="276" />);
+    expect(screen.getByText(/HIGH · Konfidenz nicht verfügbar/)).toBeInTheDocument();
+    expect(screen.queryByText(/HIGH · 50%/)).toBeNull();
+  });
+
   it("renders the report, saves it, and links to the dossier", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
     const briefing = await import("../../../../hooks/useCountryBriefing");

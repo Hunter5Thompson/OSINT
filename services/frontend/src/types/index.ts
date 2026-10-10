@@ -182,6 +182,16 @@ export interface TimeHistogramQuery {
   bbox?: readonly [number, number, number, number];
 }
 
+export interface EvidenceSummary {
+  source_ref_id: string;
+  source_type: "rss" | "telegram" | "gdelt" | "notebooklm" | "dataset" | "unknown";
+  provider: string;
+  published_at: string | null;
+  observed_at: string | null;
+  ingested_at: string | null;
+  verification_status: "unverified";
+}
+
 export interface IntelAnalysis {
   query: string;
   agent_chain: string[];
@@ -189,6 +199,13 @@ export interface IntelAnalysis {
   analysis: string;
   confidence: number;
   threat_assessment: string | null;
+  assessment_status?: {
+    threat: "declared" | "default";
+    confidence: "declared" | "default";
+    issues: string[];
+  } | null;
+  verification_status?: "unverified" | null;
+  evidence_summary?: EvidenceSummary[] | null;
   timestamp: string;
   tool_trace?: Array<{ tool_name: string; duration_ms?: number; success?: boolean }>;
   mode?: "react" | "legacy" | "error";
@@ -256,6 +273,9 @@ export interface ReportRecord {
   scope_key?: string | null;
   status: ReportStatus;
   confidence: number;
+  assessment_status?: IntelAnalysis["assessment_status"];
+  verification_status?: IntelAnalysis["verification_status"];
+  evidence_summary?: IntelAnalysis["evidence_summary"];
   location: string;
   coords: string;
   findings: string[];
@@ -274,6 +294,9 @@ export interface ReportCreateRequest {
   title?: string;
   status?: ReportStatus;
   confidence?: number;
+  assessment_status?: IntelAnalysis["assessment_status"];
+  verification_status?: IntelAnalysis["verification_status"];
+  evidence_summary?: IntelAnalysis["evidence_summary"];
   location?: string;
   coords?: string;
   findings?: string[];
@@ -294,6 +317,9 @@ export interface ReportMessage {
   text: string;
   ts: string;
   refs: string[];
+  assessment_status?: IntelAnalysis["assessment_status"];
+  verification_status?: IntelAnalysis["verification_status"];
+  evidence_summary?: IntelAnalysis["evidence_summary"];
 }
 
 export interface ReportMessageCreate {
@@ -301,6 +327,9 @@ export interface ReportMessageCreate {
   text: string;
   ts?: string;
   refs?: string[];
+  assessment_status?: IntelAnalysis["assessment_status"];
+  verification_status?: IntelAnalysis["verification_status"];
+  evidence_summary?: IntelAnalysis["evidence_summary"];
 }
 
 export interface IntelEvent {
@@ -451,6 +480,7 @@ export interface TimelineNotable {
 export interface TimelineGeoEvent {
   id: string;
   time: string;
+  title?: string | null;
   codebook_type?: string | null;
   severity: string;
   lat: number;

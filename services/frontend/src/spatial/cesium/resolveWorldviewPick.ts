@@ -51,7 +51,7 @@ function asRecord(value: unknown): JsonRecord | null {
 function taggedValues(hit: unknown): readonly unknown[] {
   const record = asRecord(hit);
   if (record === null) return [hit];
-  return [record.id, record.primitive, hit];
+  return [record.id, asRecord(record.primitive)?.id, record.primitive, hit];
 }
 
 export function isSpatialChildPickId(value: unknown): value is SpatialChildPickId {
@@ -78,7 +78,9 @@ function spatialChildId(hit: unknown): SpatialChildPickId | null {
   return null;
 }
 
-function defaultCategory(hit: unknown): WorldviewPickCategory | null {
+const OPERATIONAL_DATA_FIELDS = ["_eventData", "_flightData", "_vesselData", "_satelliteData", "_cableData", "_pipelineData"] as const;
+
+export function classifyTaggedWorldviewHit(hit: unknown): WorldviewPickCategory | null {
   for (const value of taggedValues(hit)) {
     const record = asRecord(value);
     if (
@@ -89,6 +91,7 @@ function defaultCategory(hit: unknown): WorldviewPickCategory | null {
     ) {
       return record.odinKind;
     }
+    if (record && OPERATIONAL_DATA_FIELDS.some(field => asRecord(record[field]) !== null)) return "operational";
   }
   return null;
 }
@@ -108,7 +111,7 @@ export function resolveWorldviewPick<TPosition>(
 ): ResolvedWorldviewPick {
   const hits = scene.drillPick(position, DRILL_PICK_LIMIT);
   if (hits.length === DRILL_PICK_LIMIT) options.onSaturated?.();
-  const classify = options.classify ?? defaultCategory;
+  const classify = options.classify ?? classifyTaggedWorldviewHit;
 
   const ui = firstCategory(hits, "ui", classify);
   if (ui !== null) return { kind: "ui", hit: ui };

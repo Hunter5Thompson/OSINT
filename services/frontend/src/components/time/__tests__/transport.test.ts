@@ -19,6 +19,13 @@ describe("transport helpers", () => {
     expect(stepTargetMs(950, 0, 1000, 10, 1)).toBe(1000); // would be 1050 -> clamp
     expect(stepTargetMs(50, 0, 1000, 10, -1)).toBe(0); // would be -50 -> clamp
   });
+
+  it("uses the coarse grid before clamping to a narrower replay window", () => {
+    const minute = 60_000;
+    expect(stepTargetMs(100 * minute, 100 * minute, 118 * minute, 120, 1, 24 * 3600_000)).toBe(112 * minute);
+    expect(stepTargetMs(117 * minute, 100 * minute, 118 * minute, 120, 1, 24 * 3600_000)).toBe(118 * minute);
+    expect(stepTargetMs(101 * minute, 100 * minute, 118 * minute, 120, -1, 24 * 3600_000)).toBe(100 * minute);
+  });
 });
 
 describe("stepWindow", () => {

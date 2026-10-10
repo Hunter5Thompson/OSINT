@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+import type { OrbitSnapshot } from "../../types/satelliteOrbit";
 
 const scope = {
   phase: "ready" as const,
@@ -91,7 +92,7 @@ vi.mock("../../components/layers/FlightLayer", () => ({
 }));
 
 vi.mock("../../components/layers/SatelliteLayer", () => ({
-  SatelliteLayer: ({ visible }: { visible: boolean }) => (
+  SatelliteLayerBridge: ({ visible }: { visible: boolean }) => (
     <div data-testid="satellite-policy">{String(visible)}</div>
   ),
 }));
@@ -127,7 +128,13 @@ vi.mock("../../services/api", () => ({
     api_version: "v1",
   }),
   getFlights: vi.fn().mockResolvedValue([]),
-  getSatellites: vi.fn().mockResolvedValue([]),
+  getSatelliteOrbitSnapshot: vi.fn().mockResolvedValue({
+    schema_version: 1,
+    fetched_at: "2026-10-10T00:00:00Z",
+    satellites: [],
+    coverage: { completeness: "complete", groups: [] },
+    client_rejections: [],
+  } satisfies OrbitSnapshot),
   getEarthquakes: vi.fn().mockResolvedValue([]),
   getCables: vi.fn().mockResolvedValue({ cables: [], landing_points: [] }),
   getVessels: vi.fn().mockResolvedValue([]),

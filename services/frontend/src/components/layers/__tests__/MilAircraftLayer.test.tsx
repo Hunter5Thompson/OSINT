@@ -64,6 +64,8 @@ describe("MilAircraftLayer component (time-aware)", () => {
   });
 
   it("renders mixed-length render-model tracks and registers a clock tick loop", () => {
+    const billboards = vi.spyOn(Cesium.BillboardCollection.prototype, "add");
+    const polylines = vi.spyOn(Cesium.PolylineCollection.prototype, "add");
     const { viewer, ticks } = fakeViewer();
     render(
       <MilAircraftLayer
@@ -77,6 +79,8 @@ describe("MilAircraftLayer component (time-aware)", () => {
     );
     // the tick effect subscribed to clock.onTick
     expect(ticks.length).toBe(1);
+    expect(billboards.mock.calls[0]![0]!.id).toEqual({ odinKind: "operational" });
+    expect(polylines.mock.calls[0]![0]!.id).toEqual({ odinKind: "operational" });
     // invoking the tick loop drives interpolation without throwing
     expect(() => ticks[0]!()).not.toThrow();
   });

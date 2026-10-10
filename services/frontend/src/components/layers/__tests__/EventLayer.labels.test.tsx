@@ -14,9 +14,11 @@ function fakeViewer(): Cesium.Viewer {
       requestRender: vi.fn(),
       frameState: { mode: Cesium.SceneMode.SCENE3D },
       pick: vi.fn(() => undefined),
+      globe: { ellipsoid: Cesium.Ellipsoid.WGS84 },
     },
     camera: {
       positionCartographic: { height: 1_000 }, // low altitude → labels would otherwise show
+      computeViewRectangle: () => undefined,
       moveEnd: { addEventListener: vi.fn(() => vi.fn()) },
     },
     isDestroyed: () => false,
@@ -32,6 +34,18 @@ const EVENTS: IntelEvent[] = [
 ];
 
 describe("EventLayer labels (#2)", () => {
+  it("applies only a pixel offset to polar billboards and retains original pick coordinates", () => {
+    const billboards = vi.spyOn(Cesium.BillboardCollection.prototype, "add");
+    const labels = vi.spyOn(Cesium.LabelCollection.prototype, "add");
+    const events = [0, 1].map(i => ({ ...EVENTS[0]!, id: `polar-${i}`, lat: 89, lon: 179.9 }));
+    render(<EventLayer viewer={fakeViewer()} events={events} visible />);
+    const options = billboards.mock.calls[0]![0]!;
+    const point = Cesium.Cartographic.fromCartesian(options.position!);
+    expect(Cesium.Math.toDegrees(point.latitude)).toBeCloseTo(89);
+    expect(options.pixelOffset).toEqual(new Cesium.Cartesian2(18, 0));
+    expect(labels.mock.calls[0]![0]!.pixelOffset).toEqual(new Cesium.Cartesian2(18, -18));
+    expect((billboards.mock.results[0]!.value as unknown as Record<string, unknown>)._eventData).toMatchObject({ lat: 89, lon: 179.9 });
+  });
   it("creates labels in legacy (non-time-aware) mode", () => {
     const addSpy = vi.spyOn(Cesium.LabelCollection.prototype, "add").mockReturnValue(
       {} as never,

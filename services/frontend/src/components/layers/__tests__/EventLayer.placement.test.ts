@@ -17,6 +17,20 @@ function mkEvent(id: string, lat: number | null, lon: number | null): IntelEvent
 }
 
 describe("buildPlacements", () => {
+  it.each([89, -89, 90, -90])("keeps polar stacks at their real latitude %s", (lat) => {
+    for (const count of [2, 1, 160]) {
+      const placements = buildPlacements(Array.from({ length: count }, (_, i) => mkEvent(String(i), lat, 179.9)));
+      for (const p of placements) {
+        expect(p.renderLat).toBe(lat);
+        expect(p.renderLon).toBe(179.9);
+        expect(p.event.lat).toBe(lat);
+        expect(p.event.lon).toBe(179.9);
+        expect(Math.hypot(...p.pixelOffset)).toBeLessThanOrEqual(96);
+      }
+      if (count > 1) expect(new Set(placements.map(p => p.pixelOffset.join(":"))).size).toBe(count);
+    }
+  });
+
   it("keeps single events at original coordinates", () => {
     const placements = buildPlacements([
       mkEvent("a", 52.5, 13.4),

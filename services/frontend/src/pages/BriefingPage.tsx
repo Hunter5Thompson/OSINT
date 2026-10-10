@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MuninLoader } from "../components/worldview/MuninLoader";
+import { EvidenceTimeAxes } from "../components/worldview/EvidenceTimeAxes";
 import { useIntel } from "../hooks/useIntel";
 import {
   createReport,
@@ -32,8 +33,15 @@ function statusToken(status: ReportRecord["status"]): string {
   return "draft";
 }
 
-function confidence(conf: number): string {
-  return conf.toFixed(2);
+function confidence(report: ReportRecord): string {
+  return report.assessment_status?.confidence === "default"
+    ? "unbekannt" : report.confidence.toFixed(2);
+}
+
+function metricIsDefault(metric: DossierMetric, report: ReportRecord): boolean {
+  const field = metric.label.trim().toLowerCase();
+  return (field === "confidence" && report.assessment_status?.confidence === "default")
+    || (field === "threat" && report.assessment_status?.threat === "default");
 }
 
 function displayTs(ts: string): string {
@@ -223,6 +231,9 @@ export function BriefingPage() {
       ts: new Date().toISOString(),
       text: result.analysis,
       refs: result.sources_used.slice(0, 6),
+      assessment_status: result.assessment_status,
+      verification_status: result.verification_status,
+      evidence_summary: result.evidence_summary,
     });
   }, [result, selectedReport?.id]);
 
@@ -391,7 +402,7 @@ export function BriefingPage() {
               >
                 <div className="mono briefing-report-meta">{`§ ${String(report.paragraph_num).padStart(3, "0")} · ${report.stamp}`}</div>
                 <div className="serif briefing-report-title">{report.title}</div>
-                <div className="mono briefing-report-sub">{`${statusToken(report.status)} · conf ${confidence(report.confidence)}`}</div>
+                <div className="mono briefing-report-sub">{`${statusToken(report.status)} · conf ${confidence(report)}`}</div>
               </button>
             ))
           )}
@@ -405,9 +416,15 @@ export function BriefingPage() {
           <div className="briefing-dossier-scroll custom-scrollbar">
             <header className="briefing-dossier-header">
               <div className="briefing-dossier-headline mono">
-                {`§ ${String(selectedReport.paragraph_num).padStart(3, "0")} · ${statusToken(selectedReport.status)} · conf ${confidence(selectedReport.confidence)}`}
+                {`§ ${String(selectedReport.paragraph_num).padStart(3, "0")} · ${statusToken(selectedReport.status)} · conf ${confidence(selectedReport)}`}
               </div>
               <h1 className="serif briefing-dossier-title">{selectedReport.title}</h1>
+              <EvidenceTimeAxes summary={selectedReport.evidence_summary} />
+              <div className="mono briefing-dossier-submeta">
+                {selectedReport.verification_status === "unverified"
+                  ? "Modellbewertung · Quellenbelege sind nicht unabhängig verifiziert."
+                  : "Bewertungs- und Verifikationsstatus unbekannt."}
+              </div>
               <div className="mono briefing-dossier-submeta">
                 {`${selectedReport.stamp} · ${selectedReport.location} · ${selectedReport.coords}`}
               </div>
@@ -433,8 +450,10 @@ export function BriefingPage() {
               {selectedReport.metrics.map((metric) => (
                 <article key={`${selectedReport.id}-m-${metric.label}`} className="briefing-metric-card">
                   <div className="mono briefing-metric-label">{metric.label}</div>
-                  <div className={`serif briefing-metric-value ${toneClass(metric.tone)}`}>{metric.value}</div>
-                  <div className="mono briefing-metric-sub">{metric.sub}</div>
+                  <div className={`serif briefing-metric-value ${toneClass(metric.tone)}`}
+                    style={metricIsDefault(metric, selectedReport) ? { color: "var(--ash)" } : undefined}>
+                    {metricIsDefault(metric, selectedReport) ? "—" : metric.value}</div>
+                  <div className="mono briefing-metric-sub">{metricIsDefault(metric, selectedReport) ? "nicht gelesen" : metric.sub}</div>
                 </article>
               ))}
             </section>
@@ -553,6 +572,11 @@ export function BriefingPage() {
                   <span>{displayTs(msg.ts)}</span>
                 </div>
                 <p className={msg.role === "munin" ? "serif" : undefined}>{msg.text}</p>
+                {msg.role === "munin" && <>
+                  <div className="mono briefing-chat-meta">{msg.verification_status === "unverified"
+                    ? "Modellantwort · unverifiziert" : "Bewertungs- und Verifikationsstatus unbekannt"}</div>
+                  <EvidenceTimeAxes summary={msg.evidence_summary} />
+                </>}
                 {msg.refs && msg.refs.length > 0 ? (
                   <div className="mono briefing-chat-refs">
                     {msg.refs.map((ref) => (

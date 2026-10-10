@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { test, expect } from "./fixtures";
+import { test, expect, gpTime } from "./fixtures";
 
 async function openWorldview(page: Page): Promise<void> {
   await page.goto("/worldview?layer=recon");
@@ -8,6 +8,42 @@ async function openWorldview(page: Page): Promise<void> {
   await expect(page.getByTestId("chronik-spatial-status")).toHaveText("global · complete");
   await expect(page.locator(".cesium-widget-errorPanel")).toHaveCount(0);
 }
+
+test("dense synthetic flights expose rendering limits after camera and route changes", async ({ page, state }, testInfo) => {
+  state.flightDensity = "dense";
+  await openWorldview(page);
+  await page.getByRole("button", { name: "close Layers", exact: true }).click();
+  await page.getByRole("button", { name: "expand Search", exact: true }).click();
+  await page.getByRole("textbox", { name: "Search entities" }).fill("Fixture location");
+  await page.getByRole("button", { name: "§ Location Fixture location" }).click();
+  await page.getByRole("button", { name: "close Search", exact: true }).click();
+  await page.getByRole("button", { name: "expand Layers", exact: true }).click();
+  const source = page.getByRole("status", { name: "Flight source and rendering" });
+  await expect(source).toContainText(/(250|600|1500)\/10000 im Ausschnitt/);
+  await expect(source).toContainText("durch Darstellungslimit ausgeblendet");
+  await expect(source).toContainText("Keine globale Vollständigkeit");
+  await page.screenshot({ path: testInfo.outputPath("synthetic-flight-density.png") });
+  await page.getByRole("button", { name: "flights", exact: true }).click();
+  await expect(source).toHaveCount(0);
+  await page.getByRole("button", { name: "flights", exact: true }).click();
+  await expect(source).toContainText(/(250|600|1500)\/10000 im Ausschnitt/);
+  await page.getByRole("link", { name: /Briefing/i }).click();
+  await page.getByRole("link", { name: /WorldView/i }).click();
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await expect(page.getByRole("status", { name: "Flight source and rendering" })).toContainText("Clientabruf UTC:");
+});
+
+test("flight provider failure stays unavailable until a successful client snapshot", async ({ page, state }, testInfo) => {
+  state.flightDensity = "error";
+  await openWorldview(page);
+  const source = page.getByRole("status", { name: "Flight source and rendering" });
+  await expect(source).toContainText("Abruf fehlgeschlagen · Nicht verfügbar");
+  await expect(source).not.toContainText("Keine Kontakte");
+  state.flightDensity = "dense";
+  await expect(source).toContainText("Clientabruf UTC:", { timeout: 20_000 });
+  await expect(source).not.toContainText("Abruf fehlgeschlagen");
+  await page.screenshot({ path: testInfo.outputPath("flight-provider-recovered.png") });
+});
 
 test("inactive optional Recon is off while the delivered globe remains usable", async ({ page, state }, testInfo) => {
   await openWorldview(page);
@@ -132,3 +168,52 @@ for (const contact of ["aircraft", "vessel"] as const) {
     await page.screenshot({ path: testInfo.outputPath(`unknown-${contact}-picked.png`) });
   });
 }
+
+test("six-digit GP satellite is selectable in the built globe with source coverage", async ({ page, state }, testInfo) => {
+  state.gp = "partial";
+  await page.clock.setFixedTime(new Date(gpTime));
+  await openWorldview(page);
+  const source = page.getByRole("status").filter({ hasText: "Satelliten" });
+  await expect(source).toContainText("1 Satelliten · 1/2 Gruppen · Teilabdeckung");
+  await expect(source).toContainText(`Quellabruf UTC: ${gpTime}`);
+  await page.getByRole("button", { name: "close Layers", exact: true }).click();
+  await page.getByRole("button", { name: "expand Search", exact: true }).click();
+  await page.getByRole("textbox", { name: "Search entities" }).fill("Fixture location");
+  await page.getByRole("button", { name: "§ Location Fixture location" }).click();
+  await page.getByRole("button", { name: "close Search", exact: true }).click();
+  const canvas = page.locator(".cesium-widget canvas");
+  const box = await canvas.boundingBox();
+  if (box === null) throw new Error("Globe canvas has no visible bounds");
+  // Search targets 400 km altitude; this LEO is at approximately 517.5 km.
+  // Wait for the normal camera flight, then zoom above it using real controls.
+  await expect(page.getByText("Fixture location", { exact: true }).first()).toBeVisible();
+  await canvas.hover();
+  await page.mouse.wheel(0, -1800);
+  await expect(async () => {
+    await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
+    await expect(page.getByText("norad: 100651", { exact: true })).toBeVisible({ timeout: 250 });
+  }).toPass({ timeout: 15_000, intervals: [500, 1000] });
+  await expect(page.getByText("2026-205A", { exact: true }).first()).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("gp-100651-point-orbit.png") });
+  await page.getByRole("link", { name: "BRIEFING", exact: true }).click();
+  await expect(canvas).toHaveCount(0);
+  await page.getByRole("link", { name: "WORLDVIEW", exact: true }).click();
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await expect(source).toContainText("1 Satelliten");
+});
+
+test("GP source failure is visible and a layer retry restores source data", async ({ page, state }) => {
+  state.gp = "failed";
+  await page.clock.setFixedTime(new Date(gpTime));
+  await openWorldview(page);
+  const source = page.getByRole("status").filter({ hasText: "Satelliten" });
+  await expect(source).toContainText("Abruf fehlgeschlagen · Nicht verfügbar");
+  const satellites = page.getByRole("button", { name: "satellites", exact: true });
+  await satellites.click();
+  await expect(source).toHaveCount(0);
+  state.gp = "complete";
+  await satellites.click();
+  await expect(source).toContainText("1 Satelliten · 1/1 Gruppen");
+  await expect(source).not.toContainText("Abruf fehlgeschlagen");
+  expect(state.gpRequests).toBe(2);
+});

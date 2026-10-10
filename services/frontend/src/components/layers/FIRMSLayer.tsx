@@ -117,6 +117,7 @@ export function FIRMSLayer({ viewer, hotspots, visible, onSelect }: FIRMSLayerPr
       const size = frpToSize(h.frp);
       const color = frpToColor(h.frp);
       const dot = bc.add({
+        id: { odinKind: "operational" },
         position,
         image: createFIRMSDot(size, color),
         scale: 0.7,

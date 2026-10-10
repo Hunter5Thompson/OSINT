@@ -1,15 +1,19 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import type { Aircraft } from "../../types";
 import { glyphColor } from "./glyphTokens";
 import { classifyAircraft, getAircraftTypeIcon } from "./icons/aircraftIcons";
 import { extrapolateAircraft, placementAltitudeM } from "./aircraftMeasurements";
 import { usePerformance, type DegradationLevel } from "../globe/PerformanceGuard";
+import { getViewBounds, inViewBounds, bulkScaleByDistance, bulkTranslucencyByDistance } from "../../lib/lod";
+import { selectFlightRenderSet, type FlightDensity } from "./flightDensity";
 
 interface FlightLayerProps {
   viewer: Cesium.Viewer | null;
   flights: Aircraft[];
   visible: boolean;
+  pinnedId?: string;
+  onDensity?: (density: FlightDensity) => void;
 }
 
 interface FlightVisual {
@@ -33,7 +37,7 @@ const TRAIL_REBUILD_INTERVAL = 4; // rebuild polylines every Nth interpolation t
  * Renders aircraft using imperative BillboardCollection for performance.
  * Includes dead-reckoning interpolation so movement stays smooth between API polls.
  */
-export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
+export function FlightLayer({ viewer, flights, visible, pinnedId, onDensity }: FlightLayerProps) {
   const collectionRef = useRef<Cesium.BillboardCollection | null>(null);
   const flightMapRef = useRef<Map<string, FlightVisual>>(new Map());
   const interpolationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -42,6 +46,10 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
   const trailTickRef = useRef(0);
   const viewerRef = useRef<Cesium.Viewer | null>(viewer);
   viewerRef.current = viewer;
+  const inputRef = useRef({ flights, visible, pinnedId, onDensity });
+  inputRef.current = { flights, visible, pinnedId, onDensity };
+  const receiptRef = useRef({ flights, time: Date.now() });
+  if (receiptRef.current.flights !== flights) receiptRef.current = { flights, time: Date.now() };
 
   const { degradation } = usePerformance();
   const degradationRef = useRef<DegradationLevel>(degradation);
@@ -79,24 +87,33 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
     };
   }, [viewer]);
 
-  useEffect(() => {
+  const renderVisible = useCallback(() => {
+    if (!viewer || viewer.isDestroyed()) return;
     const bc = collectionRef.current;
     if (!bc) return;
-
-    bc.show = visible;
-    if (trailCollectionRef.current) trailCollectionRef.current.show = visible;
-    if (!visible) return;
+    const input = inputRef.current;
+    bc.show = input.visible;
+    if (trailCollectionRef.current) {
+      trailCollectionRef.current.show = input.visible;
+      trailCollectionRef.current.removeAll();
+    }
+    if (!input.visible) return;
+    const selection = selectFlightRenderSet(input.flights, viewer.camera.positionCartographic.height,
+      getViewBounds(viewer), input.pinnedId);
+    input.onDensity?.(selection.density);
 
     const now = Date.now();
     const activeIds = new Set<string>();
+    const scaleByDistance = bulkScaleByDistance();
+    const translucencyByDistance = bulkTranslucencyByDistance();
 
-    for (const flight of flights) {
+    for (const flight of selection.flights) {
       const id = flight.icao24?.trim();
       if (!id) continue;
 
       activeIds.add(id);
 
-      const sampleTimeMs = parseUtcMs(flight.last_contact, now);
+      const sampleTimeMs = parseUtcMs(flight.last_contact, receiptRef.current.time);
 
       const flightClickData = {
         icao24: flight.icao24,
@@ -128,6 +145,7 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         (existing.billboard as unknown as Record<string, unknown>)._flightData = flightClickData;
       } else {
         const billboard = bc.add({
+          id: { odinKind: "operational" },
           position: Cesium.Cartesian3.fromDegrees(
             flight.longitude,
             flight.latitude,
@@ -141,6 +159,8 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
           height: 28,
           scale: 0.85,
           eyeOffset: new Cesium.Cartesian3(0, 0, -100),
+          scaleByDistance,
+          translucencyByDistance,
         });
         (billboard as unknown as Record<string, unknown>)._flightData = flightClickData;
 
@@ -173,7 +193,14 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         trailBuffersRef.current.delete(id);
       }
     }
-  }, [flights, visible]);
+  }, [viewer]);
+
+  useEffect(() => { renderVisible(); }, [flights, visible, pinnedId, renderVisible]);
+
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    return viewer.camera.moveEnd.addEventListener(renderVisible);
+  }, [viewer, renderVisible]);
 
   useEffect(() => {
     if (interpolationTimerRef.current) {
@@ -181,12 +208,18 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
       interpolationTimerRef.current = null;
     }
 
-    if (!visible) return;
+    if (!visible || !viewer || viewer.isDestroyed()) return;
 
     interpolationTimerRef.current = setInterval(() => {
+      if (viewer.isDestroyed()) return;
       const now = Date.now();
       const deg = degradationRef.current;
       const tc = trailCollectionRef.current;
+      if (deg >= 4) {
+        tc?.removeAll();
+        trailBuffersRef.current.clear();
+        return;
+      }
       const tick = ++trailTickRef.current;
       const isTrailTick = tick % 2 === 0; // buffer positions every 2nd tick (1s)
       const isRebuildTick = tick % TRAIL_REBUILD_INTERVAL === 0; // rebuild polylines every 4th tick (2s)
@@ -222,8 +255,8 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
 
         // Get current camera view rectangle for frustum culling
         const v = viewerRef.current;
-        const viewRect = v && !v.isDestroyed()
-          ? v.camera.computeViewRectangle(v.scene.globe.ellipsoid)
+        const viewBounds = v && !v.isDestroyed()
+          ? getViewBounds(v)
           : null;
 
         const MAX_TRAIL_POLYLINES = 500;
@@ -235,14 +268,7 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
 
           // Frustum cull: only render trails for flights in current view
           const visual = flightMapRef.current.get(id);
-          if (visual && viewRect) {
-            const latRad = Cesium.Math.toRadians(visual.latitude);
-            const lonRad = Cesium.Math.toRadians(visual.longitude);
-            if (
-              latRad < viewRect.south || latRad > viewRect.north ||
-              lonRad < viewRect.west || lonRad > viewRect.east
-            ) continue;
-          }
+          if (visual && !inViewBounds(visual.longitude, visual.latitude, viewBounds)) continue;
 
           const fd = (visual?.billboard as unknown as Record<string, unknown>)?._flightData as { is_military?: boolean } | undefined;
           const isMil = fd?.is_military ?? false;
@@ -267,7 +293,7 @@ export function FlightLayer({ viewer, flights, visible }: FlightLayerProps) {
         interpolationTimerRef.current = null;
       }
     };
-  }, [visible]);
+  }, [visible, viewer]);
 
   return null;
 }

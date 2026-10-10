@@ -4,6 +4,7 @@ import type { Selected } from "../worldview/InspectorPanel";
 import type { ScopeKey } from "../../spatial/contracts";
 import {
   isSpatialChildPickId,
+  classifyTaggedWorldviewHit,
   resolveWorldviewPick,
   type WorldviewPickCategory,
 } from "../../spatial/cesium/resolveWorldviewPick";
@@ -82,19 +83,10 @@ export function classifyWorldviewHit(
   const record = pickRecord(hit);
   const values = [record?.id, record?.primitive, hit];
   if (values.some(isSpatialChildPickId)) return null;
-  for (const value of values) {
-    const candidate = pickRecord(value);
-    if (
-      candidate?.odinKind === "ui"
-      || candidate?.odinKind === "operational"
-      || candidate?.odinKind === "legacy-country"
-      || candidate?.odinKind === "terrain"
-    ) {
-      return candidate.odinKind;
-    }
-  }
+  const category = classifyTaggedWorldviewHit(hit);
+  if (category) return category;
   if (isPhotorealSurfacePick(hit, photorealTileset)) return "terrain";
-  return record === null ? null : "operational";
+  return null;
 }
 
 interface SelectedEntity {
@@ -136,6 +128,7 @@ export function EntityClickHandler({
     )
       ? new SpatialHoverPrefetchController<Cesium.Cartesian2>({
           resolveTarget: (position) => {
+            if (viewer.isDestroyed()) return null;
             const interaction = countryInteractionRef.current;
             if (interaction.mode !== "spatial") return null;
             const resolved = resolveWorldviewPick(viewer.scene, position, {
@@ -156,6 +149,7 @@ export function EntityClickHandler({
     if (hoverPrefetch !== null) {
       handler.setInputAction(
         (movement: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
+          if (viewer.isDestroyed()) return;
           hoverPrefetch.move(movement.endPosition);
         },
         Cesium.ScreenSpaceEventType.MOUSE_MOVE,
@@ -164,6 +158,7 @@ export function EntityClickHandler({
     }
 
     handler.setInputAction((movement: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
+      if (viewer.isDestroyed()) return;
       const interaction = countryInteractionRef.current;
       const resolvedPick = resolveWorldviewPick(viewer.scene, movement.position, {
         stateRevision: interaction.mode === "spatial" ? interaction.stateRevision : 0,
@@ -185,6 +180,21 @@ export function EntityClickHandler({
       )
         ? resolvedPick.hit as { readonly id?: Cesium.Entity; readonly primitive?: unknown }
         : undefined;
+
+      const eventCluster = (picked?.primitive as Record<string, unknown>)?._eventClusterData as
+        { count: number; lat: number; lon: number } | undefined;
+      if (eventCluster && Number.isSafeInteger(eventCluster.count) && eventCluster.count > 1
+        && Number.isFinite(eventCluster.lat) && Math.abs(eventCluster.lat) <= 90
+        && Number.isFinite(eventCluster.lon) && Math.abs(eventCluster.lon) <= 180) {
+        const name = `${eventCluster.count} Ereignisse · Aggregat`;
+        setSelected({ id: `event-cluster:${eventCluster.lat}:${eventCluster.lon}`, name,
+          type: "event aggregate", position: { lat: eventCluster.lat, lon: eventCluster.lon },
+          properties: { Darstellung: "Zusammenfassung · Details nach Hineinzoomen" } });
+        dispatchSpotlight({ type: "set", target: { kind: "circle", trigger: "pin",
+          center: { lon: eventCluster.lon, lat: eventCluster.lat }, radius: 5, altitude: 0, label: name } });
+        viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(eventCluster.lon, eventCluster.lat, 800_000), duration: .8 });
+        return;
+      }
 
       // Guard 1: Event billboard (custom _eventData property)
       const eventData = (picked?.primitive as Record<string, unknown>)?._eventData as

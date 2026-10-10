@@ -78,6 +78,7 @@ describe("FIRMSLayer component", () => {
     render(<FIRMSLayer viewer={viewer} hotspots={manyHotspots(600, 37, 48)} visible={true} />);
     expect(addSpy.mock.calls.length).toBe(400);
     const opts = addSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(opts.id).toEqual({ odinKind: "operational" });
     expect(opts.scaleByDistance).toBeInstanceOf(Cesium.NearFarScalar);
     expect(opts.translucencyByDistance).toBeInstanceOf(Cesium.NearFarScalar);
   });

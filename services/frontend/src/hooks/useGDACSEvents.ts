@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type { GDACSEvent } from "../types";
 import { getGDACSEvents } from "../services/api";
 
@@ -9,30 +9,42 @@ export function useGDACSEvents(enabled: boolean, sinceHours = 168) {
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  const fetchData = useCallback(async () => {
-    if (!enabled) return;
-    if (typeof document !== "undefined" && document.hidden) return;
-    setLoading(true);
-    try {
-      const data = await getGDACSEvents(sinceHours);
-      setEvents(data);
-      setLastUpdate(new Date());
-    } catch {
-      // keep stale data
-    } finally {
-      setLoading(false);
-    }
-  }, [enabled, sinceHours]);
-
   useEffect(() => {
     if (!enabled) {
       setEvents([]);
+      setLoading(false);
       return;
     }
-    void fetchData();
-    const timer = setInterval(() => void fetchData(), POLL_INTERVAL);
-    return () => clearInterval(timer);
-  }, [enabled, fetchData]);
+    let disposed = false;
+    let sequence = 0;
+    let controller: AbortController | null = null;
+    const run = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      const request = ++sequence;
+      controller?.abort();
+      const currentController = new AbortController();
+      controller = currentController;
+      setLoading(true);
+      try {
+        const data = await getGDACSEvents(sinceHours, currentController.signal);
+        if (disposed || request !== sequence) return;
+        setEvents(data);
+        setLastUpdate(new Date());
+      } catch {
+        // Keep the last successful data; only the current request owns loading.
+      } finally {
+        if (!disposed && request === sequence) setLoading(false);
+      }
+    };
+    void run();
+    const timer = setInterval(() => { void run(); }, POLL_INTERVAL);
+    return () => {
+      disposed = true;
+      ++sequence;
+      controller?.abort();
+      clearInterval(timer);
+    };
+  }, [enabled, sinceHours]);
 
   return { events, loading, lastUpdate };
 }

@@ -1,6 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import geoEvents from "../../../../../tests/fixtures/timeline/geo-event-titles.json";
+import type { IntelEvent } from "../../types";
+
+vi.mock("../../components/layers/EventLayer", () => ({
+  EventLayer: ({ events }: { events: IntelEvent[] }) => <div data-testid="timeline-pins">
+    {events.map(e => <span key={e.id}>{e.title}</span>)}
+  </div>,
+}));
 
 vi.mock("../../components/globe/GlobeViewer", () => ({
   GlobeViewer: ({ onViewerReady }: { onViewerReady: (v: unknown) => void }) => {
@@ -58,7 +66,7 @@ vi.mock("../../spatial/react", () => ({
 
 import { WorldviewPage } from "../../pages/WorldviewPage";
 import { ReconProvider } from "../../state/ReconContext";
-import { getConfig } from "../../services/api";
+import { getConfig, getTimeHistogram } from "../../services/api";
 
 function renderWorldview(path = "/worldview") {
   return render(
@@ -71,6 +79,16 @@ function renderWorldview(path = "/worldview") {
 }
 
 describe("WorldviewPage", () => {
+  it("transports source titles to timeline pins with neutral legacy fallbacks", async () => {
+    const empty = await getTimeHistogram({ tStart: "a", tEnd: "b" });
+    vi.mocked(getTimeHistogram).mockResolvedValue({ ...empty, geo_events: geoEvents,
+      geo_located_count: 3, total_count: 3 });
+    renderWorldview();
+    await waitFor(() => expect(screen.getByTestId("timeline-pins")).toHaveTextContent("Original source headline"));
+    expect(screen.getByTestId("timeline-pins")).toHaveTextContent("civil.protest");
+    expect(screen.getByTestId("timeline-pins")).toHaveTextContent("title-c");
+    vi.mocked(getTimeHistogram).mockResolvedValue(empty);
+  });
   it("uses the headline query instead of reducing a signal deep-link to its source", async () => {
     renderWorldview("/worldview?entity=gdelt%3A123-1&q=Black%20Sea");
     expect(await screen.findByRole("textbox", { name: /Search entities/i })).toHaveValue("Black Sea");

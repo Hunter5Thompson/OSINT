@@ -44,6 +44,18 @@ const readyProvenance: SpatialBoundaryProvenanceState = {
 };
 
 describe("LayersPanel", () => {
+  it("makes regional FIRMS coverage visible without changing the toggle contract", () => {
+    const onToggle = vi.fn();
+    render(<LayersPanel layers={allOff} onToggle={onToggle} activeShader="none" onShaderChange={vi.fn()} />);
+    expect(screen.getByTestId("layer-toggle-firmsHotspots")).toHaveTextContent("Selected regions · no global completeness");
+    fireEvent.click(screen.getByRole("button", { name: "firmsHotspots" }));
+    expect(onToggle).toHaveBeenCalledWith("firmsHotspots");
+  });
+
+  it("does not describe military collection areas as country coverage", () => {
+    render(<LayersPanel layers={allOff} onToggle={vi.fn()} activeShader="none" onShaderChange={vi.fn()} />);
+    expect(screen.getByTestId("layer-toggle-milAircraft")).toHaveTextContent("Selected operations areas · partial coverage");
+  });
   it.each([
     ["loading", null, "Checking scene availability…"],
     ["disabled", "not_configured", "No Recon scenes configured"],

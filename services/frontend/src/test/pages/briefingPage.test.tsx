@@ -2,7 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { BriefingPage } from "../../pages/BriefingPage";
-import type { ReportRecord } from "../../types";
+import type { IntelAnalysis, ReportRecord } from "../../types";
+
+const intelState = vi.hoisted(() => ({ result: null as IntelAnalysis | null }));
 
 const {
   getReportsMock,
@@ -30,7 +32,7 @@ vi.mock("../../hooks/useIntel", () => ({
   useIntel: () => ({
     loading: false,
     currentAgent: null,
-    result: null,
+    result: intelState.result,
     error: null,
     runQuery: vi.fn(() => vi.fn()),
   }),
@@ -61,6 +63,7 @@ const sampleReport: ReportRecord = {
 };
 
 beforeEach(() => {
+  intelState.result = null;
   vi.clearAllMocks();
   getReportsMock.mockResolvedValue([sampleReport]);
   getReportMessagesMock.mockResolvedValue([]);
@@ -93,6 +96,51 @@ function renderBriefing() {
 }
 
 describe("BriefingPage", () => {
+  it("keeps live chat source metadata attached to that answer", async () => {
+    const view = renderBriefing();
+    await screen.findAllByText(/Sinjar Ridge/);
+    intelState.result = { query: "synthetic", agent_chain: [], sources_used: [], analysis: "Synthetic answer",
+      confidence: .3, threat_assessment: "MODERATE", timestamp: "2026-10-10T00:00:00Z",
+      verification_status: "unverified", evidence_summary: [{ source_ref_id: "synthetic-chat-ref",
+        source_type: "dataset", provider: "fixture.example.invalid", published_at: null,
+        observed_at: "2020-01-01T00:00:00Z", ingested_at: "2026-10-10T00:00:00Z", verification_status: "unverified" }] };
+    view.rerender(<MemoryRouter initialEntries={["/briefing"]}><BriefingPage /></MemoryRouter>);
+    expect(screen.getByText(/synthetic-chat-ref · unverifiziert/)).toBeInTheDocument();
+    expect(screen.getByText(/Beobachtet UTC: 2020-01-01T00:00:00.000Z/)).toBeInTheDocument();
+    expect(screen.getByText("Modellantwort · unverifiziert")).toBeInTheDocument();
+  });
+
+  it("does not display an old confidence metric when the saved assessment declares a default", async () => {
+    getReportsMock.mockResolvedValue([{ ...sampleReport,
+      assessment_status: { threat: "default", confidence: "default", issues: ["confidence-missing"] } }]);
+    renderBriefing();
+    await screen.findAllByText(/Sinjar Ridge/);
+    expect(screen.queryAllByText("0.87", { exact: true })).toHaveLength(0);
+    expect(screen.getByText("nicht gelesen")).toBeInTheDocument();
+  });
+  it("retains saved source time axes and explicit unknown publication", async () => {
+    getReportsMock.mockResolvedValue([{ ...sampleReport, evidence_summary: [{
+      source_ref_id: "synthetic-ref", source_type: "dataset", provider: "fixture.example.invalid",
+      published_at: null, observed_at: "2020-01-01T00:00:00Z", ingested_at: "2026-10-10T00:00:00Z",
+      verification_status: "unverified" }] }]);
+    renderBriefing();
+    await screen.findAllByText(/Sinjar Ridge/);
+    expect(screen.getByText(/Publiziert UTC: unbekannt/)).toBeInTheDocument();
+    expect(screen.getByText(/Beobachtet UTC: 2020-01-01T00:00:00.000Z/)).toBeInTheDocument();
+    expect(screen.getByText(/Ingest UTC: 2026-10-10T00:00:00.000Z/)).toBeInTheDocument();
+  });
+  it("keeps saved assessment defaults unavailable in archive and dossier headers", async () => {
+    getReportsMock.mockResolvedValue([{ ...sampleReport, title: "Synthetic default report",
+      confidence: 0.5,
+      assessment_status: { threat: "default", confidence: "default", issues: ["confidence-missing"] },
+      verification_status: "unverified" }]);
+    renderBriefing();
+    await screen.findAllByText(/Synthetic default report/);
+    expect(screen.queryAllByText(/conf 0\.50/)).toHaveLength(0);
+    expect(screen.getAllByText(/conf unbekannt/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Quellenbelege sind nicht unabhängig verifiziert/)).toBeInTheDocument();
+  });
+
   it("renders archive/index and dossier shell from API", async () => {
     renderBriefing();
 
