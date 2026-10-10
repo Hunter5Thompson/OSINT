@@ -2,6 +2,8 @@
 
 This module is internal to the intelligence service. SourceRef objects are NEVER
 serialized across the /query API boundary (Slice 1 keeps sources_used: list[str]).
+G06 adds a separate minimal metadata projection; excerpts, URLs, titles and
+credibility scores remain internal to the evidence/prompt contract.
 
 TRUST SEAM: provenance is carried by the structured artifact (`evidence_artifact`),
 never by the rendered text. The [EVIDENCE] codec is prompt formatting for the LLM —
@@ -40,6 +42,10 @@ class EvidenceItem(BaseModel):
     relevance_score: float
     content_hash: str | None = None     # for dedup only, not public provenance
     source_class: str | None = None     # "realtime" marks an unverified lead
+    observed_at: datetime | None = None
+    ingested_at: datetime | None = None
+    # Read-side lineage is not an independent factual verification certificate.
+    verification_status: Literal["unverified"] = "unverified"
 
 
 EXCERPT_MAX_CHARS = 700
@@ -62,17 +68,16 @@ def _excerpt(payload: dict) -> str:
 
 
 def _parse_dt(value):
-    if not value:
+    if not isinstance(value, (str, datetime)) or not value:
         return None
     try:
         dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except (ValueError, TypeError):
+        # Naive feed timestamps use UTC, without substituting a different time axis.
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
+    except (ValueError, TypeError, OverflowError):
         return None
-    # Naive timestamps in OSINT feeds mean UTC; make them explicit so downstream
-    # comparisons (recency, Slice 2) never mix naive and aware datetimes.
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    return dt
 
 
 def _canonical_provenance(payload: dict) -> tuple[str, str, str | None, bool] | None:
@@ -98,7 +103,10 @@ def _legacy_provenance(payload: dict) -> tuple[str, str, str | None]:
     if src == "rss":
         # legacy rss: published carries publication time
         prov = str(payload.get("feed_name") or payload.get("provider") or "rss").lower()
-        return "rss", prov, payload.get("published")
+        # The independent legacy indexer writes this explicit publication field;
+        # old collectors used published. Neither may fall back to ingestion time.
+        published = payload.get("published_at")
+        return "rss", prov, published if published is not None else payload.get("published")
     if src in ("gdelt", "gdelt_gkg"):
         return "gdelt", str(payload.get("source_name") or "gdelt").lower(), None
     return "unknown", "?", None
@@ -157,6 +165,8 @@ def to_evidence_item(result: dict) -> EvidenceItem:
         relevance_score=float(result.get("score", 0.0)),
         content_hash=str(content_hash) if content_hash else None,
         source_class=result.get("source_class"),
+        observed_at=_parse_dt(result.get("observed_at")),
+        ingested_at=_parse_dt(result.get("ingested_at")),
     )
 
 
@@ -175,7 +185,12 @@ def _block(item: EvidenceItem) -> str:
         "source_ref_id": s.source_ref_id,
         "source_type": s.source_type,
         "url": s.url,
+        "verification_status": item.verification_status,
     }
+    if item.observed_at is not None:
+        meta["observed_at"] = item.observed_at.isoformat()
+    if item.ingested_at is not None:
+        meta["ingested_at"] = item.ingested_at.isoformat()
     if item.source_class:
         meta["source_class"] = item.source_class
     header = _EVIDENCE_PREFIX + json.dumps(meta, sort_keys=True, separators=(",", ":"))
@@ -286,6 +301,28 @@ def source_refs_from_artifact(artifact: object) -> list[SourceRef]:
     """Validate an artifact into SourceRefs. Fail-closed: anything that is not a
     well-formed EvidenceItem payload is dropped, never guessed at."""
     return [item.source for item in evidence_items_from_artifact(artifact)]
+
+
+def evidence_time_summary(artifact: object) -> list[dict]:
+    """Public time metadata for the consumed structural lineage, never parsed text."""
+    seen: set[str] = set()
+    result: list[dict] = []
+    for item in evidence_items_from_artifact(artifact):
+        def utc_value(value: datetime | None) -> str | None:
+            parsed = _parse_dt(value)
+            return parsed.isoformat() if parsed is not None else None
+
+        row = {"source_ref_id": item.source.source_ref_id, "provider": item.source.provider,
+               "source_type": item.source.source_type,
+               "published_at": utc_value(item.source.published_at),
+               "observed_at": utc_value(item.observed_at),
+               "ingested_at": utc_value(item.ingested_at),
+               "verification_status": "unverified"}
+        key = json.dumps(row, sort_keys=True)
+        if key not in seen:
+            seen.add(key)
+            result.append(row)
+    return result
 
 
 def neutralize_evidence_markers(text: str) -> str:

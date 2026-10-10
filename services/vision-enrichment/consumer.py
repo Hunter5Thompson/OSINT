@@ -33,22 +33,18 @@ class VisionConsumer:
     def _validate_qdrant_schema(self, qdrant_client: QdrantClient) -> None:
         """Validate the Qdrant collection schema before the first write.
 
-        Raises QdrantSchemaMismatch if the collection exists but has the wrong schema.
+        Raises QdrantSchemaMismatch for a missing collection or the wrong schema.
+        Transport errors propagate to the bounded retry/dead-letter path.
         Sets _qdrant_schema_validated=True on success so subsequent writes skip the check.
         """
-        try:
-            collections = qdrant_client.get_collections().collections
-            names = {c.name for c in collections}
-            if self._settings.qdrant_collection in names:
-                info = qdrant_client.get_collection(self._settings.qdrant_collection)
-                enable_hybrid: bool = getattr(self._settings, "enable_hybrid", False)
-                validate_collection_schema(info, enable_hybrid=enable_hybrid)
-            self._qdrant_schema_validated = True
-        except QdrantSchemaMismatch:
-            raise
-        except Exception:
-            # Network errors — don't block; let the Qdrant operation surface them
-            self._qdrant_schema_validated = True
+        collections = qdrant_client.get_collections().collections
+        names = {c.name for c in collections}
+        if self._settings.qdrant_collection not in names:
+            raise QdrantSchemaMismatch("Required Qdrant collection is missing")
+        info = qdrant_client.get_collection(self._settings.qdrant_collection)
+        enable_hybrid: bool = getattr(self._settings, "enable_hybrid", False)
+        validate_collection_schema(info, enable_hybrid=enable_hybrid)
+        self._qdrant_schema_validated = True
 
     async def ensure_consumer_group(self) -> None:
         """Create the consumer group if it doesn't exist."""
@@ -113,6 +109,10 @@ class VisionConsumer:
         channel = msg_data.get(b"channel", b"").decode()
 
         try:
+            qdrant = QdrantClient(url=self._settings.qdrant_url)
+            if not self._qdrant_schema_validated:
+                self._validate_qdrant_schema(qdrant)
+
             async with httpx.AsyncClient() as http_client:
                 result = await analyze_image(
                     client=http_client,
@@ -138,7 +138,8 @@ class VisionConsumer:
                                 "statement": (
                                     "MATCH (d:Document {url: $url}) "
                                     "SET d.vision_description = $desc, "
-                                    "d.vision_status = 'completed'"
+                                    "d.vision_status = 'completed' "
+                                    "RETURN count(d) AS updated_count"
                                 ),
                                 "parameters": {"url": url, "desc": vision_description},
                             }
@@ -150,12 +151,14 @@ class VisionConsumer:
                 neo4j_errors = resp.json().get("errors", [])
                 if neo4j_errors:
                     raise Exception(f"Neo4j write errors: {neo4j_errors}")
+                try:
+                    count = resp.json()["results"][0]["data"][0]["row"][0]
+                except (KeyError, IndexError, TypeError) as exc:
+                    raise RuntimeError("Neo4j did not confirm the Document update") from exc
+                if type(count) is not int or count != 1:
+                    raise RuntimeError("Neo4j did not update exactly one Document")
 
             # Update Qdrant: set vision_description + vision_status on payload
-            qdrant = QdrantClient(url=self._settings.qdrant_url)
-            # Preflight: validate schema before first Qdrant write
-            if not self._qdrant_schema_validated:
-                self._validate_qdrant_schema(qdrant)
             hits = qdrant.scroll(
                 collection_name=self._settings.qdrant_collection,
                 scroll_filter=Filter(
@@ -163,16 +166,17 @@ class VisionConsumer:
                 ),
                 limit=1,
             )
-            if hits and hits[0]:
-                point = hits[0][0]
-                qdrant.set_payload(
-                    collection_name=self._settings.qdrant_collection,
-                    payload={
-                        "vision_description": vision_description,
-                        "vision_status": "completed",
-                    },
-                    points=[point.id],
-                )
+            if not hits or not hits[0]:
+                raise RuntimeError("Qdrant enrichment target is missing")
+            point = hits[0][0]
+            qdrant.set_payload(
+                collection_name=self._settings.qdrant_collection,
+                payload={
+                    "vision_description": vision_description,
+                    "vision_status": "completed",
+                },
+                points=[point.id],
+            )
 
             # Publish enriched event
             await self._redis.xadd(

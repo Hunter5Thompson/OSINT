@@ -9,6 +9,7 @@ import signal
 import redis.asyncio as aioredis
 import structlog
 
+from build_revision import BUILD_REVISION
 from config import settings
 from consumer import VisionConsumer
 
@@ -32,7 +33,7 @@ log = structlog.get_logger("vision-enrichment")
 
 async def main() -> None:
     """Start the vision enrichment consumer."""
-    log.info("vision_service_starting")
+    log.info("vision_service_starting", revision=BUILD_REVISION)
 
     redis_client = aioredis.from_url(settings.redis_url)
     consumer = VisionConsumer(redis_client=redis_client)

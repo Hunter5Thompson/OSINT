@@ -128,6 +128,14 @@ async def qdrant_search(
         by Title/Excerpt lines, optionally followed by a deduplicated [Graph Context]
         block. Sorted by relevance; bounded by an internal character budget.
     """
+    rejected_hits = 0
+
+    def boost_valid_hits(hits: list[dict]) -> list[dict]:
+        nonlocal rejected_hits
+        boosted = apply_tier_boost(hits)
+        rejected_hits += len(hits) - len(boosted)
+        return boosted
+
     scope = runtime.state["spatial_scope"]
     relation = runtime.state["spatial_relation"]
     scoped = scope is not None and scope.kind is not ScopeKind.WORLD
@@ -140,7 +148,7 @@ async def qdrant_search(
         analysis = await enhanced_search(
             query, limit=FINAL_K, pool=ANALYSIS_POOL,
             query_filter=combine_filters(analysis_filter(), spatial_filter),
-            post_rerank=apply_tier_boost,
+            post_rerank=boost_valid_hits,
             raise_on_failure=True,
             enable_graph_context=False if scoped else None,
             coverage_snapshot=coverage_snapshot,
@@ -149,7 +157,7 @@ async def qdrant_search(
             realtime = await enhanced_search(
                 query, limit=TELEGRAM_MAX, pool=REALTIME_POOL,
                 query_filter=combine_filters(realtime_filter(), spatial_filter),
-                post_rerank=apply_tier_boost, score_threshold=RT_SCORE_THRESHOLD,
+                post_rerank=boost_valid_hits, score_threshold=RT_SCORE_THRESHOLD,
                 raise_on_failure=True,
                 enable_graph_context=False if scoped else None,
                 coverage_snapshot=coverage_snapshot,
@@ -159,21 +167,37 @@ async def qdrant_search(
             realtime = []
             realtime_failed = True
 
+        received_hits = len(analysis) + len(realtime)
         analysis = validate_lane(analysis, "analysis")
         realtime = validate_lane(realtime, "realtime")
+        rejected_hits += received_hits - len(analysis) - len(realtime)
         results = merge_lanes(analysis, realtime)
+        items = []
+        retained = []
+        for hit in results:
+            try:
+                item = to_evidence_item(hit)
+            except (ValueError, TypeError, OverflowError):
+                rejected_hits += 1
+                continue
+            items.append(item)
+            retained.append(hit)
+        results = retained
 
         logger.info(
             "qdrant_search_executed",
             analysis_count=len(analysis),
             realtime_count=len(realtime),
             result_count=len(results),
+            rejected_hits=rejected_hits,
         )
 
-        completeness = "partial" if scoped or realtime_failed else "complete"
+        completeness = "partial" if scoped or realtime_failed or rejected_hits else "complete"
         detail_code = (
             "realtime-lane-failed"
             if realtime_failed
+            else "invalid-retrieval-hits"
+            if rejected_hits
             else "coverage-snapshot-unavailable"
             if scoped and coverage_snapshot is None
             else "graph-context-omitted-for-scope" if scoped else None
@@ -197,7 +221,9 @@ async def qdrant_search(
                     sort_keys=True,
                 )
             )
-            if not scoped:
+            if rejected_hits:
+                empty_code = "NO_VALID_RETRIEVAL_HITS"
+            elif not scoped:
                 empty_code = "NO_SEMANTIC_MATCHES"
             elif coverage_snapshot is None:
                 empty_code = "SPATIAL_SCOPE_COVERAGE_UNAVAILABLE"
@@ -215,15 +241,13 @@ async def qdrant_search(
                 f"Coverage-Snapshot: {coverage_text}",
             ), []
 
-        items = [to_evidence_item(r) for r in results]
-
         # Graph context is deduped and appended AFTER evidence within remaining budget.
         graph_blocks: list[str] = []
         seen_graph: set[str] = set()
         if not scoped:
             for r in results:
                 gctx = r.get("graph_context", "")
-                if gctx and gctx not in seen_graph:
+                if isinstance(gctx, str) and gctx and gctx not in seen_graph:
                     seen_graph.add(gctx)
                     graph_blocks.append(
                         neutralize_evidence_markers(
@@ -241,6 +265,10 @@ async def qdrant_search(
             "[Knowledge Base Evidence for: "
             f"{neutralize_evidence_markers(query)}]\n"
         )
+        if rejected_hits:
+            header += (
+                "Ein Teil der Suchtreffer konnte wegen ungültiger Daten nicht verwendet werden.\n"
+            )
         evidence_budget = body_budget - len(graph_text) - len(header)
         pack, lineage = pack_with_lineage(
             items, budget=max(evidence_budget, 0), preserve_order=True)

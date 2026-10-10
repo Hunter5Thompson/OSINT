@@ -16,7 +16,13 @@ def chunk_text(
     Returns:
         List of text chunks.
     """
+    if type(chunk_size) is not int or chunk_size <= 0:
+        raise ValueError("chunk_size must be a positive integer")
+    if type(overlap) is not int or not 0 <= overlap < chunk_size:
+        raise ValueError("overlap must be an integer in [0, chunk_size)")
     words = text.split()
+    if not words:
+        return []
     if len(words) <= chunk_size:
         return [text]
 

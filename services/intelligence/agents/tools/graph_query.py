@@ -362,69 +362,77 @@ async def query_knowledge_graph(
     return _with_graph_application(runtime.state, output)
 
 
+def _intent_phrase(text: str, phrases: tuple[str, ...]) -> re.Match[str] | None:
+    alternatives = "|".join(re.escape(phrase).replace(r"\ ", r"\s+") for phrase in phrases)
+    return re.search(r"(?<!\w)(?:" + alternatives + r")(?!\w)", text, re.IGNORECASE)
+
+
 def _match_intent(question: str) -> tuple[str | None, dict]:
-    """Simple keyword-based intent matching. Returns (template_id, params) or (None, {})."""
-    q = question.lower().strip()
-
-    # Extract quoted entity names
+    """Route complete reviewed phrases; entity text cannot introduce an intent."""
     quoted = re.findall(r'"([^"]+)"', question)
-    entity = quoted[0] if quoted else ""
+    entity = quoted[0].strip() if quoted else ""
+    # Preserve offsets when masking quoted names, for unquoted phrase tails.
+    intent_text = re.sub(r'"[^"]*"', lambda match: " " * len(match.group()), question)
 
-    # If no quoted entity, try to find proper nouns (capitalized words not at start)
-    if not entity:
-        words = question.split()
-        proper_nouns = [w for w in words[1:] if w and w[0].isupper()] if len(words) > 1 else []
-        entity = " ".join(proper_nouns) if proper_nouns else ""
-
-    if any(
-        kw in q for kw in ("most connected", "top entities", "most important", "highest degree")
+    if _intent_phrase(
+        intent_text, ("most connected", "top entities", "most important", "highest degree")
     ):
         return "top_connected", {}
 
-    # Match the longer entity intent before the "events in" location prefix.
-    if entity and any(kw in q for kw in ("events involving", "events about", "events for")):
-        return "events_by_entity", {"name": entity}
+    entity_events = _intent_phrase(intent_text, ("events involving", "events about", "events for"))
+    if entity_events:
+        name = entity or question[entity_events.end() :].strip(" \t\r\n?.,!")
+        return ("events_by_entity", {"name": name}) if name else (None, {})
 
-    if any(kw in q for kw in ("timeline", "events in", "events at")):
-        location = entity or question.split("in ")[-1].split("at ")[-1].strip(" ?.")
-        return "event_timeline", {"location": location}
+    location_events = _intent_phrase(
+        intent_text, ("timeline of", "timeline", "events in", "events at")
+    )
+    if location_events:
+        location = entity or question[location_events.end() :].strip(" \t\r\n?.,!")
+        return ("event_timeline", {"location": location}) if location else (None, {})
 
-    if entity and any(
-        kw in q for kw in ("co-occur", "appear together", "related entities", "co-occurring")
-    ):
-        return "co_occurring", {"name": entity}
+    if not entity:
+        words = question.split()
+        proper_nouns = [word.strip("?,.!") for word in words[1:] if word and word[0].isupper()]
+        entity = " ".join(proper_nouns)
+    if not entity:
+        return None, {}
 
-    if entity and any(kw in q for kw in ("sources for", "evidence", "reported by", "source")):
-        return "source_backed", {"name": entity}
-
-    if entity and any(kw in q for kw in ("network", "2-hop", "connections around")):
-        return "two_hop_network", {"name": entity}
-
-    if entity and any(kw in q for kw in (
-        "operates", "operate", "betreibt", "in dienst", "im bestand",
-        "fielded", "in service",
-    )):
-        return "one_hop", {"name": entity}
-
-    if entity and any(kw in q for kw in (
-        "beschafft", "procures", "procurement", "modernisierung", "vorhaben",
-        "contractor", "auftragnehmer",
-    )):
-        return "one_hop", {"name": entity}
-
-    if entity and any(
-        kw in q for kw in ("connected to", "related to", "neighbors of", "linked to")
-    ):
-        return "one_hop", {"name": entity}
-
-    if entity and any(kw in q for kw in ("who is", "what is", "find entity", "look up")):
-        return "entity_lookup", {"name": entity}
-
-    # Generic entity query — if we have an entity name, try entity_lookup
-    if entity:
-        return "entity_lookup", {"name": entity}
-
-    return None, {}
+    routes = (
+        (
+            "co_occurring",
+            ("co-occur", "co-occurs", "appear together", "related entities", "co-occurring"),
+        ),
+        ("source_backed", ("sources for", "evidence", "reported by", "source", "sources")),
+        ("two_hop_network", ("network", "2-hop", "connections around")),
+        (
+            "one_hop",
+            (
+                "operates",
+                "operate",
+                "betreibt",
+                "in dienst",
+                "im bestand",
+                "fielded",
+                "in service",
+                "beschafft",
+                "procures",
+                "procurement",
+                "modernisierung",
+                "vorhaben",
+                "contractor",
+                "auftragnehmer",
+                "connected to",
+                "related to",
+                "neighbors of",
+                "linked to",
+            ),
+        ),
+    )
+    for template, phrases in routes:
+        if _intent_phrase(intent_text, phrases):
+            return template, {"name": entity}
+    return "entity_lookup", {"name": entity}
 
 
 async def _free_cypher_fallback(question: str) -> str:
