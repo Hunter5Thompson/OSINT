@@ -151,11 +151,14 @@ for (const contact of ["aircraft", "vessel"] as const) {
     const box = await canvas.boundingBox();
     if (box === null) throw new Error("Globe canvas has no visible bounds");
     const label = contact === "aircraft" ? "UNKNOWN AIRCRAFT" : "UNKNOWN SHIP";
+    const identity = page.getByText(contact === "aircraft" ? "icao24: e2e001" : "mmsi: 205000001", { exact: true });
+    const visibleLabel = page.getByText(label, { exact: true }).filter({ visible: true }).first();
     // A click during the 1.6s camera flight cancels it and can select the
     // country below. Wait for the hollow contact to reach the canvas center,
     // then click an actually painted ring pixel. This reads a real screenshot,
     // without a Viewer hook, source rewrite or dispatched app event.
     await expect(async () => {
+      if (await identity.isVisible()) return;
       const png = (await canvas.screenshot()).toString("base64");
       const pixel = await page.evaluate(async png => {
         const image = new Image();
@@ -188,9 +191,10 @@ for (const contact of ["aircraft", "vessel"] as const) {
       expect(pixel, "Contact ring must be painted at the search destination").not.toBeNull();
       if (pixel === null) return;
       await canvas.click({ position: { x: pixel.x * box.width, y: pixel.y * box.height } });
-      await expect(page.getByText(label, { exact: true }).first()).toBeVisible({ timeout: 250 });
+      await expect(identity).toBeVisible({ timeout: 1000 });
     }).toPass({ timeout: 15_000, intervals: [500, 1000] });
-    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+    await expect(identity).toBeVisible();
+    await expect(visibleLabel).toBeVisible();
     const fields = contact === "aircraft" ? ["altitude", "speed", "heading"] : ["speed", "course"];
     for (const field of fields) {
       await expect(page.getByText(`${field}: unknown`, { exact: true })).toBeVisible();
