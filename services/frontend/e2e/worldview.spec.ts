@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect, gpTime } from "./fixtures";
+import { setFixedOrbitDate, resumeBrowserDate } from "./scenarioClock";
 
 async function openWorldview(page: Page): Promise<void> {
   await page.goto("/worldview?layer=recon");
@@ -200,8 +201,17 @@ for (const contact of ["aircraft", "vessel"] as const) {
 
 test("six-digit GP satellite is selectable in the built globe with source coverage", async ({ page, state }, testInfo) => {
   state.gp = "partial";
-  await page.clock.setFixedTime(new Date(gpTime));
+  await setFixedOrbitDate(page, gpTime);
   await openWorldview(page);
+  await page.getByRole("button", { name: "toggle play", exact: true }).click();
+  await expect(page.getByRole("button", { name: "toggle play", exact: true })).toHaveText("▶");
+  const cursor = page.locator(".chronik__cursor");
+  const frozenCursor = await cursor.textContent();
+  // Hold simulation time through the public control; camera inertia uses Date.
+  await resumeBrowserDate(page);
+  // Camera input inertia needs advancing wall time even for a fixed orbit epoch.
+  await expect.poll(() => page.evaluate(() => Date.now()), { timeout: 1000 })
+    .toBeGreaterThan(Date.parse(gpTime));
   const source = page.getByRole("status").filter({ hasText: "Satelliten" });
   await expect(source).toContainText("1 Satelliten · 1/2 Gruppen · Teilabdeckung");
   await expect(source).toContainText(`Quellabruf UTC: ${gpTime}`);
@@ -216,6 +226,8 @@ test("six-digit GP satellite is selectable in the built globe with source covera
   // Search targets 400 km altitude; this LEO is at approximately 517.5 km.
   // Wait for the normal camera flight, then zoom above it using real controls.
   await expect(page.getByText("Fixture location", { exact: true }).first()).toBeVisible();
+  // The public search flight lasts 1.6 s; let it finish before wheel input.
+  await new Promise(resolve => setTimeout(resolve, 2000));
   await canvas.hover();
   await page.mouse.wheel(0, 1800);
   await page.screenshot({ path: testInfo.outputPath("gp-100651-camera.png") });
@@ -223,6 +235,8 @@ test("six-digit GP satellite is selectable in the built globe with source covera
     await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
     await expect(page.getByText("norad: 100651", { exact: true })).toBeVisible({ timeout: 250 });
   }).toPass({ timeout: 15_000, intervals: [500, 1000] });
+  await expect(cursor).toHaveText(frozenCursor ?? "");
+  await expect(page.locator(".cesium-widget-errorPanel")).toHaveCount(0);
   await expect(page.getByText("2026-205A", { exact: true }).first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("gp-100651-point-orbit.png") });
   await page.getByRole("link", { name: "BRIEFING", exact: true }).click();
@@ -234,8 +248,9 @@ test("six-digit GP satellite is selectable in the built globe with source covera
 
 test("GP source failure is visible and a layer retry restores source data", async ({ page, state }) => {
   state.gp = "failed";
-  await page.clock.setFixedTime(new Date(gpTime));
+  await setFixedOrbitDate(page, gpTime);
   await openWorldview(page);
+  await resumeBrowserDate(page);
   const source = page.getByRole("status").filter({ hasText: "Satelliten" });
   await expect(source).toContainText("Abruf fehlgeschlagen · Nicht verfügbar");
   const satellites = page.getByRole("button", { name: "satellites", exact: true });
