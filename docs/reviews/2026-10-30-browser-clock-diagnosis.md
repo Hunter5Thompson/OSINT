@@ -39,3 +39,14 @@ RangeError impossible or provide deployment/live-source/native-performance/
 human acceptance. An initial final-run wrapper used incorrect relative Git/doc
 paths from the service directory; it was stopped and is retained as an invocation
 failure. Only the clean committed-head rerun may qualify the final suite.
+
+## Separate contact-pick assertion race
+
+The first complete run on8e4ce5f passed10/11, including GP, but the Aircraft
+name-first probe timed out. Its final screenshot/DOM already contains the
+correct ICAO and unknown measurement fields. The probe now waits for the unique
+ICAO/MMSI identity, avoids clicking again after successful selection, and checks
+a visible name rather than an ambiguous first text match. All unknown fields
+remain asserted. Per-click identity wait is1s rather than250ms; the15s overall
+pick bound and60s test bound remain unchanged. Five fresh Aircraft runs passed
+without retries/skips. The final complete committed-head rerun is separate.
