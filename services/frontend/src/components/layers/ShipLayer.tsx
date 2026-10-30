@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import * as Cesium from "cesium";
 import type { Vessel } from "../../types";
-import { classifyShip, getShipTypeIcon, ICON_COLORS } from "./icons/shipIcons";
+import { classifyShip, getShipTypeIcon, shipIconId, ICON_COLORS } from "./icons/shipIcons";
 import { glyphColor } from "./glyphTokens";
 import { canProjectVesselMotion } from "./vesselMeasurements";
 import { usePerformance } from "../globe/PerformanceGuard";
@@ -95,12 +95,14 @@ export function ShipLayer({ viewer, vessels, visible }: ShipLayerProps) {
 
       const billboard = bc.add({
         position,
-        image: getShipTypeIcon(shipType, vessel.course),
         width: 28,
         height: 28,
         scale: 0.9,
         eyeOffset: new Cesium.Cartesian3(0, 0, -50),
       });
+      // A canvas alone receives a fresh Cesium GUID on each rebuild. Keep the
+      // icon's atlas identity stable when the viewport/degradation changes.
+      billboard.setImage(shipIconId(shipType, vessel.course), getShipTypeIcon(shipType, vessel.course));
       (billboard as unknown as Record<string, unknown>)._vesselData = {
         mmsi: vessel.mmsi,
         name: vessel.name,
