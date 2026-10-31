@@ -22,7 +22,7 @@ IMAGE_VARIABLES = {
 }
 
 
-def render_release() -> dict:
+def render_release(*, tracing: bool = False) -> dict:
     # Use explicit files: an ambient Compose override must not change the test.
     env = {"PATH": os.environ["PATH"], "HOME": "/tmp/odin-release-test-home"}
     env.update(
@@ -32,6 +32,9 @@ def render_release() -> dict:
         }
     )
     env["ODIN_RELEASE_DATA_DIR"] = "/tmp/odin-release-test-data"
+    env["ODIN_TRACE_RUN_DIR"] = "/tmp/odin-release-test-tracing"
+    env["ODIN_TRACE_TOKEN_FILE"] = "/tmp/odin-release-test-token"
+    extra_files = ["-f", "docker-compose.tracing.release.yml"] if tracing else []
     result = subprocess.run(
         [
             "docker",
@@ -44,6 +47,7 @@ def render_release() -> dict:
             "docker-compose.override.yml",
             "-f",
             "docker-compose.release.yml",
+            *extra_files,
             "--profile",
             "*",
             "config",
@@ -170,12 +174,63 @@ def test_release_guard_rejects_data_from_application_checkout():
     assert "backend" in result.stderr
 
 
-def run_release_start(tmp_path: Path, *, valid_images: bool, flag_first: bool = True):
+def test_tracing_release_preserves_identity_with_runtime_inputs_and_no_code_binds():
+    config = render_release(tracing=True)
+    assert validate(config).returncode == 0
+    for name, target, spark in (
+        ("intelligence", "workstation-5090", ""), ("data-ingestion-spark", "spark", "spark"),
+    ):
+        service = config["services"][name]
+        environment = service["environment"]
+        assert environment.get("SPARK_TRACE_ENDPOINT") == "unix:/run/spark-tracing/ingest.sock"
+        assert environment["SPARK_TRACE_TARGET_ID"] == target
+        assert environment["SPARK_TRACE_SPARK_ID"] == spark
+        assert environment["SPARK_TRACE_CAPTURE"] == "metadata"
+        mounts = {mount["target"]: mount for mount in service["volumes"]}
+        for destination in ("/run/spark-tracing", "/run/spark-tracing-token"):
+            assert mounts[destination]["read_only"] is True
+            assert mounts[destination]["bind"]["create_host_path"] is False
+        assert not any("spark_trace_reporter.py" in mount["target"] for mount in mounts.values())
+
+
+@pytest.mark.parametrize("defect", ["socket_missing", "writable_token", "capture", "endpoint"])
+def test_trace_configuration_is_rejected_before_release_start(defect):
+    config = render_release()
+    service = config["services"]["intelligence"]
+    service["environment"].update({
+        "SPARK_TRACE_ENDPOINT": "unix:/run/spark-tracing/ingest.sock",
+        "SPARK_TRACE_TOKEN_FILE": "/run/spark-tracing-token",
+        "SPARK_TRACE_CAPTURE": "metadata",
+    })
+    mounts = [
+        {"type": "bind", "source": "/tmp/trace-run", "target": "/run/spark-tracing",
+         "read_only": True, "bind": {"create_host_path": False}},
+        {"type": "bind", "source": "/tmp/trace-token", "target": "/run/spark-tracing-token",
+         "read_only": True, "bind": {"create_host_path": False}},
+    ]
+    if defect == "socket_missing":
+        mounts.pop(0)
+    elif defect == "writable_token":
+        mounts[1]["read_only"] = False
+    elif defect == "capture":
+        service["environment"]["SPARK_TRACE_CAPTURE"] = "unknown"
+    else:
+        service["environment"]["SPARK_TRACE_ENDPOINT"] = "http://remote.invalid"
+    service["volumes"] += mounts
+    result = validate(config)
+    assert result.returncode != 0
+    assert "intelligence" in result.stderr
+
+
+def run_release_start(
+    tmp_path: Path, *, valid_images: bool, flag_first: bool = True, tracing: bool = False,
+):
     repository = tmp_path / "repo"
     repository.mkdir()
     for name in ("odin.sh", "docker-compose.yml", "docker-compose.override.yml"):
         shutil.copy2(ROOT / name, repository / name)
-    for name in ("docker-compose.release.yml", "scripts/ops/validate_release.py"):
+    for name in ("docker-compose.release.yml", "docker-compose.tracing.release.yml",
+                 "scripts/ops/validate_release.py"):
         source = ROOT / name
         if source.exists():
             target = repository / name
@@ -184,9 +239,14 @@ def run_release_start(tmp_path: Path, *, valid_images: bool, flag_first: bool = 
     fixture = repository / "release.env"
     release_data = tmp_path / "release-data"
     (release_data / "backend/spatial").mkdir(parents=True)
+    trace_run = tmp_path / "trace-run"
+    trace_run.mkdir()
+    trace_token = tmp_path / "trace-token"
+    trace_token.write_text("fixture-only")
     fixture.write_text(
         (ROOT / "tests/fixtures/compose.env").read_text()
         + f"\nODIN_RELEASE_DATA_DIR={release_data}\n"
+        + f"ODIN_TRACE_RUN_DIR={trace_run}\nODIN_TRACE_TOKEN_FILE={trace_token}\n"
         + "\n".join(
             f"{variable}=odin/app@sha256:{'a' * 64}"
             if valid_images
@@ -226,6 +286,8 @@ def run_release_start(tmp_path: Path, *, valid_images: bool, flag_first: bool = 
         if flag_first
         else ["--env-file", str(fixture), "--release"]
     )
+    if tracing:
+        options.append("--tracing")
     result = subprocess.run(
         [str(repository / "odin.sh"), *options, "up", "interactive-spark"],
         env=env,
@@ -255,3 +317,10 @@ def test_invalid_release_is_rejected_before_any_stop_or_start(tmp_path):
     assert result.returncode != 0
     assert "digest" in result.stderr + result.stdout
     assert not operations
+
+
+def test_release_tracing_flag_is_preserved_for_every_lifecycle_operation(tmp_path):
+    result, operations = run_release_start(tmp_path, valid_images=True, tracing=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert operations
+    assert all("docker-compose.tracing.release.yml" in args for args in operations)

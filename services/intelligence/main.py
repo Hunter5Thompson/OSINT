@@ -23,6 +23,7 @@ from spatial_catalog import (
     SpatialCatalogResolutionError,
     SpatialScopeRefV1,
 )
+from tracing import close_reporter
 
 _spatial_catalog = IntelligenceSpatialCatalog(settings.spatial_catalog_path)
 
@@ -37,7 +38,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     try:
         await retriever.close()
     finally:
-        await shutdown_graph_client()
+        try:
+            await shutdown_graph_client()
+        finally:
+            await asyncio.to_thread(close_reporter)
 
 
 app = FastAPI(title="WorldView Intelligence Service", version="0.2.0", lifespan=lifespan)

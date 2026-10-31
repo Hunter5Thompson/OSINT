@@ -17,6 +17,13 @@ _DEFAULT_SPATIAL_CATALOG_PATH = (
 class Settings(BaseSettings):
     """Application settings — all values come from env vars or .env file."""
 
+    # Optional local trace transport; disabled until an endpoint is configured.
+    spark_trace_endpoint: str = ""
+    spark_trace_token_file: str = ""
+    spark_trace_target_id: str = "unmapped"
+    spark_trace_spark_id: str = ""
+    spark_trace_capture: str = "metadata"
+
     # Internal service URLs
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"

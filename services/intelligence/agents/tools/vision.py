@@ -119,12 +119,15 @@ async def analyze_image(
     try:
         from openai import AsyncOpenAI
 
+        from tracing import trace_completion
+
         client = AsyncOpenAI(
             base_url=settings.llm_base_url,
             api_key="not-needed",
         )
 
-        response = await client.chat.completions.create(
+        response = await trace_completion(
+            client.chat.completions.create,
             model=settings.llm_model,
             messages=[{
                 "role": "user",
