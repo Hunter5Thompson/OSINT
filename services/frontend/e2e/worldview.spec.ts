@@ -3,7 +3,7 @@ import { test, expect } from "./fixtures";
 
 async function openWorldview(page: Page): Promise<void> {
   await page.goto("/worldview?layer=recon");
-  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1, { timeout: 45_000 });
   await expect(page.getByRole("button", { name: "recon", exact: true })).toBeVisible();
   await expect(page.getByTestId("chronik-spatial-status")).toHaveText("global · complete");
   await expect(page.locator(".cesium-widget-errorPanel")).toHaveCount(0);
@@ -84,7 +84,7 @@ test("scope, time and layer controls work across a WorldView route remount", asy
   await expect(page.locator(".cesium-widget canvas")).toHaveCount(0);
   await page.getByRole("link", { name: "WORLDVIEW", exact: true }).click();
   await expect(page).toHaveURL(/\/worldview/);
-  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1, { timeout: 45_000 });
   await expect(page.locator(".cesium-widget-errorPanel")).toHaveCount(0);
   // The top-level navigation links to /worldview without the old scope query.
   // Assert the current breadcrumb, not text in hidden <option> elements.
@@ -113,18 +113,50 @@ for (const contact of ["aircraft", "vessel"] as const) {
     const box = await canvas.boundingBox();
     if (box === null) throw new Error("Globe canvas has no visible bounds");
     const label = contact === "aircraft" ? "UNKNOWN AIRCRAFT" : "UNKNOWN SHIP";
-    // Unknown heading/course uses a hollow ring, so its transparent center
-    // cannot be picked. Use its visible edge, and poll while the existing
-    // search flight and Cesium texture upload finish. No Viewer exposure,
-    // source rewrite or dispatched app event is used.
+    const identity = page.getByText(contact === "aircraft" ? "icao24: e2e001" : "mmsi: 205000001", { exact: true });
+    const visibleLabel = page.getByText(label, { exact: true }).filter({ visible: true }).first();
+    // A click during the 1.6s camera flight cancels it and can select the
+    // country below. Wait for the hollow contact to reach the canvas center,
+    // then click an actually painted ring pixel. This reads a real screenshot,
+    // without a Viewer hook, source rewrite or dispatched app event.
     await expect(async () => {
-      for (const [dx, dy] of [[6, 0], [0, -6], [-6, 0], [0, 6]] as const) {
-        await canvas.click({ position: { x: box.width / 2 + dx, y: box.height / 2 + dy } });
-        if (await page.getByText(label, { exact: true }).first().isVisible()) return;
-      }
-      await expect(page.getByText(label, { exact: true }).first()).toBeVisible({ timeout: 250 });
+      if (await identity.isVisible()) return;
+      const png = (await canvas.screenshot()).toString("base64");
+      const pixel = await page.evaluate(async png => {
+        const image = new Image();
+        image.src = "data:image/png;base64," + png;
+        await image.decode();
+        const surface = document.createElement("canvas");
+        surface.width = image.naturalWidth;
+        surface.height = image.naturalHeight;
+        const context = surface.getContext("2d", { willReadFrequently: true });
+        if (!context) throw new Error("Screenshot pixel reader unavailable");
+        context.drawImage(image, 0, 0);
+        const pixels = context.getImageData(0, 0, surface.width, surface.height).data;
+        const centerX = Math.floor(surface.width / 2);
+        const centerY = Math.floor(surface.height / 2);
+        const center = 4 * (centerY * surface.width + centerX);
+        let best: { x: number; y: number; contrast: number } | null = null;
+        for (let dy = -12; dy <= 12; dy++) for (let dx = -12; dx <= 12; dx++) {
+          if (Math.hypot(dx, dy) < 3) continue; // Transparent ring center.
+          const x = centerX + dx;
+          const y = centerY + dy;
+          const index = 4 * (y * surface.width + x);
+          const contrast = Math.max(...[0, 1, 2].map(i => Math.abs(pixels[center + i]! - pixels[index + i]!)));
+          if (contrast >= 70 && (!best || contrast > best.contrast)) best = { x, y, contrast };
+        }
+        return best && { x: best.x / surface.width, y: best.y / surface.height };
+      }, png);
+      if (pixel === null) await testInfo.attach("contact-camera", {
+        contentType: "image/png", body: Buffer.from(png, "base64"),
+      });
+      expect(pixel, "Contact ring must be painted at the search destination").not.toBeNull();
+      if (pixel === null) return;
+      await canvas.click({ position: { x: pixel.x * box.width, y: pixel.y * box.height } });
+      await expect(identity).toBeVisible({ timeout: 1000 });
     }).toPass({ timeout: 45_000, intervals: [500, 1000] });
-    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+    await expect(identity).toBeVisible();
+    await expect(visibleLabel).toBeVisible();
     const fields = contact === "aircraft" ? ["altitude", "speed", "heading"] : ["speed", "course"];
     for (const field of fields) {
       await expect(page.getByText(`${field}: unknown`, { exact: true })).toBeVisible();

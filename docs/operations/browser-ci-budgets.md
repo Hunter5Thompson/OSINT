@@ -17,6 +17,7 @@ The corrected budget hierarchy is:
 | Scope | Budget | Purpose |
 |---|---:|---|
 | Ordinary DOM assertion | 15 s | Unchanged visible-state assertions |
+| Viewer initialization after navigation | 45 s | Software WebGL context creation and remount |
 | Contact or satellite pick attempt loop | 45 s | Screenshot/readback, real input and identity assertion |
 | Complete test, including context setup | 120 s | Browser setup and the entire interaction sequence |
 | Complete suite | 20 min | All tests must execute and pass |
@@ -35,3 +36,7 @@ taskset -c 0,1 npm run test:browser
 
 Record the build revision and preserve the JSON report, screenshots and traces.
 Do not reuse a result for a different frontend tree or silently skip slow cases.
+
+Earlier slices also used fixed-offset clicks during the camera flight. Backport
+the final slice's painted-pixel and exact source-identity picking assertions so
+the test waits for its real target instead of cancelling the moving camera.
