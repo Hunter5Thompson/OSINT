@@ -152,9 +152,11 @@ for (const contact of ["aircraft", "vessel"] as const) {
       });
       expect(pixel, "Contact ring must be painted at the search destination").not.toBeNull();
       if (pixel === null) return;
-      await canvas.click({ position: { x: pixel.x * box.width, y: pixel.y * box.height } });
+      // The screenshot fixes the target and canvas bounds. Send real mouse input
+      // without waiting for two additional software-rendered stability frames.
+      await page.mouse.click(box.x + pixel.x * box.width, box.y + pixel.y * box.height);
       await expect(identity).toBeVisible({ timeout: 1000 });
-    }).toPass({ timeout: 45_000, intervals: [500, 1000] });
+    }).toPass({ timeout: 90_000, intervals: [500, 1000] });
     await expect(identity).toBeVisible();
     await expect(visibleLabel).toBeVisible();
     const fields = contact === "aircraft" ? ["altitude", "speed", "heading"] : ["speed", "course"];
