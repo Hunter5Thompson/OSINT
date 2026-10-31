@@ -9,6 +9,7 @@ from agents.osint_agent import create_osint_llm
 from agents.osint_agent import get_system_message as osint_sys
 from agents.synthesis_agent import create_synthesis_llm
 from agents.synthesis_agent import get_system_message as synthesis_sys
+from graph.assessment import ASSESSMENT_FORMAT, annotate_assessment, parse_assessment
 from graph.state import AgentState
 
 logger = structlog.get_logger()
@@ -67,22 +68,22 @@ async def analyst_node(state: AgentState) -> dict:
                 content=f"Analyze the following OSINT findings about: {state['query']}\n\n"
                 f"OSINT Data:\n{osint_text}\n\n"
                 "Provide a threat assessment (CRITICAL/HIGH/ELEVATED/MODERATE) "
-                "and detailed analysis."
+                "and detailed analysis. Use exactly one Threat Assessment: field."
             ),
         ]
         response = await llm.ainvoke(messages)
         content = response.content if isinstance(response.content, str) else str(response.content)
 
-        # Extract threat level from response
-        threat = "MODERATE"
-        for level in ["CRITICAL", "HIGH", "ELEVATED"]:
-            if level in content.upper():
-                threat = level
-                break
+        assessment = parse_assessment(content, required=("threat",))
+        if assessment.issues:
+            logger.warning(
+                "assessment_parse_failed", stage="legacy_analyst", issues=assessment.issues
+            )
+        content = annotate_assessment(content, assessment)
 
         return {
             "analysis": content,
-            "threat_assessment": threat,
+            "threat_assessment": assessment.threat,
             "agent_chain": state.get("agent_chain", []) + ["analyst_agent"],
             "messages": [response],
         }
@@ -109,24 +110,25 @@ async def synthesis_node(state: AgentState) -> dict:
                 f"Query: {state['query']}\n\n"
                 f"Analysis:\n{state.get('analysis', 'No analysis available')}\n\n"
                 f"Threat Assessment: {state.get('threat_assessment', 'MODERATE')}\n\n"
-                "Produce a concise, actionable intelligence report."
+                "Produce a concise, actionable intelligence report.\n"
+                f"{ASSESSMENT_FORMAT}"
             ),
         ]
         response = await llm.ainvoke(messages)
         content = response.content if isinstance(response.content, str) else str(response.content)
 
-        # Extract confidence from content or default
-        confidence = 0.5
-        if "high confidence" in content.lower():
-            confidence = 0.8
-        elif "moderate confidence" in content.lower():
-            confidence = 0.6
-        elif "low confidence" in content.lower():
-            confidence = 0.3
+        assessment = parse_assessment(content)
+        if assessment.issues:
+            logger.warning(
+                "assessment_parse_failed", stage="legacy_synthesis", issues=assessment.issues
+            )
+        content = annotate_assessment(content, assessment)
 
         return {
             "synthesis": content,
-            "confidence": confidence,
+            "confidence": assessment.confidence,
+            "threat_assessment": assessment.threat,
+            "assessment_status": assessment.status,
             "agent_chain": state.get("agent_chain", []) + ["synthesis_agent"],
             "messages": [response],
         }

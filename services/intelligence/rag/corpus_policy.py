@@ -8,6 +8,7 @@ Two lanes:
 """
 from __future__ import annotations
 
+import math
 from collections import Counter
 
 import structlog
@@ -85,34 +86,62 @@ def credibility_of(payload: dict) -> float:
     return to_evidence_item(payload).source.credibility_score
 
 
-def apply_tier_boost(results: list[dict], *, lam: float = TIER_BOOST_LAMBDA) -> list[dict]:
-    """final = (1-lam)*rerank_norm + lam*credibility, stable-sorted desc.
+def _invalid_hit_reason(result: object) -> str | None:
+    if not isinstance(result, dict):
+        return "invalid-root"
+    if "content" in result and not isinstance(result["content"], str):
+        return "invalid-content-type"
+    for key in ("score", "rerank_score", "tier_score"):
+        if key not in result:
+            continue
+        value = result[key]
+        try:
+            if type(value) not in (int, float) or not math.isfinite(value):
+                return "invalid-score"
+        except OverflowError:
+            return "invalid-score"
+    source = result.get("source")
+    if source is not None and not isinstance(source, str):
+        return "invalid-source-type"
+    return None
 
-    rerank_norm is the min-max normalized rerank_score (dense `score` if no
-    rerank_score). When max==min (ties / pool size 1) rerank_norm=1.0 for all,
-    so reputation decides. Suitable as enhanced_search's post_rerank callback.
-    """
-    if not results:
-        return results
-    raws = [float(r.get("rerank_score", r.get("score", 0.0))) for r in results]
-    lo, hi = min(raws), max(raws)
-    span = hi - lo
+
+def apply_tier_boost(results: list[dict], *, lam: float = TIER_BOOST_LAMBDA) -> list[dict]:
+    """Normalize valid scores, blend credibility, then exclude invalid final scores."""
+    valid: list[tuple[dict, float, float]] = []
+    reasons: Counter[str] = Counter()
+    for result in results:
+        reason = _invalid_hit_reason(result)
+        if reason is not None:
+            reasons[reason] += 1
+            continue
+        raw = result.get("rerank_score", result.get("score"))
+        if raw is None:
+            reasons["missing-score"] += 1
+            continue
+        try:
+            credibility = credibility_of(result)
+        except (ValueError, TypeError, OverflowError):
+            reasons["invalid-evidence"] += 1
+            continue
+        valid.append((result, float(raw), credibility))
     out: list[dict] = []
-    for r, raw in zip(results, raws, strict=True):
-        r_norm = 1.0 if span == 0 else (raw - lo) / span
-        cred = credibility_of(r)
-        final = (1.0 - lam) * r_norm + lam * cred
-        out.append({**r, "tier_raw": raw, "tier_norm": r_norm,
-                    "tier_cred": cred, "tier_score": final})
-    out.sort(key=lambda x: x["tier_score"], reverse=True)
-    log.info(
-        "tier_boost_applied",
-        lam=lam,
-        ranked=[{"provider": x.get("feed_name") or x.get("source"),
-                 "source": x.get("source"), "raw": round(x["tier_raw"], 4),
-                 "norm": round(x["tier_norm"], 4), "cred": x["tier_cred"],
-                 "final": round(x["tier_score"], 4)} for x in out],
-    )
+    if valid:
+        raws = [raw for _result, raw, _credibility in valid]
+        lo, hi = min(raws), max(raws)
+        span = hi - lo
+        for result, raw, credibility in valid:
+            normalized = 1.0 if span == 0 else (raw - lo) / span
+            final = (1.0 - lam) * normalized + lam * credibility
+            if not math.isfinite(final):
+                reasons["invalid-final-score"] += 1
+                continue
+            out.append({**result, "tier_raw": raw, "tier_norm": normalized,
+                        "tier_cred": credibility, "tier_score": final})
+    out.sort(key=lambda result: result["tier_score"], reverse=True)
+    if reasons:
+        log.warning("retrieval_hits_rejected", count=sum(reasons.values()), reasons=dict(reasons))
+    log.info("tier_boost_applied", lam=lam, result_count=len(out))
     return out
 
 
@@ -139,6 +168,10 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
     source="rss" but source_type="gdelt") is rejected too. Dropped are logged."""
     kept, dropped, content_dropped = [], [], []
     for r in results:
+        reason = _invalid_hit_reason(r)
+        if reason is not None:
+            content_dropped.append((reason, r))
+            continue
         if r.get("superseded_by_fulltext") is True:
             # normal supersede (fulltext chunks already replace it); logged separately
             # so corpus_guard_dropped stays a true anomaly signal (filter bug / leakage)
@@ -165,12 +198,15 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
                 # key), so checking only `content` would wrongly drop ~24 wire/gov feeds.
                 text = (r.get("content") or r.get("summary")
                         or r.get("description") or r.get("title") or "")
-                reason = content_junk_reason(text)
+                reason = (
+                    content_junk_reason(text) if isinstance(text, str) else "invalid-content-type"
+                )
                 if reason is not None:
                     content_dropped.append((reason, r))
                     continue
         elif lane == "realtime":
             identity = (r.get("source") == "telegram"
+                        and isinstance(r.get("telegram_channel"), str)
                         and r.get("telegram_channel") in TELEGRAM_ALLOWLIST)
             type_ok = st is None or st == "telegram"
             ok = identity and type_ok

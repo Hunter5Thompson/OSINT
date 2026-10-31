@@ -7,6 +7,7 @@ from collections.abc import Sequence
 import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
+from langgraph.graph import END, StateGraph
 
 from agents.tools import blocked_tool_names, tools_for_state
 from graph.state import AgentState
@@ -113,17 +114,24 @@ async def test_tool_node_is_built_from_the_same_state_capabilities(monkeypatch) 
 
     captured: dict[str, list[str]] = {}
 
-    class FakeToolNode:
-        def __init__(self, tools: list[BaseTool]) -> None:
-            captured["tools"] = _names(tools)
+    real_tool_node = workflow.ToolNode
 
-        async def ainvoke(self, state: AgentState) -> dict[str, object]:
-            return {"messages": state["messages"]}
+    def recording_tool_node(tools: list[BaseTool], *, awrap_tool_call, handle_tool_errors):
+        captured["tools"] = _names(tools)
+        return real_tool_node(
+            tools, awrap_tool_call=awrap_tool_call, handle_tool_errors=handle_tool_errors,
+        )
 
-    monkeypatch.setattr(workflow, "ToolNode", FakeToolNode)
-    state = agent_state(spatial_scope=_scope_token())
+    monkeypatch.setattr(workflow, "ToolNode", recording_tool_node)
+    state = agent_state(
+        spatial_scope=_scope_token(), messages=[AIMessage(content="No tool calls")],
+    )
 
-    await workflow.tool_node_for_state(state)
+    graph = StateGraph(AgentState)
+    graph.add_node("tools", workflow.tool_node_for_state)
+    graph.set_entry_point("tools")
+    graph.add_edge("tools", END)
+    await graph.compile().ainvoke(state)
 
     assert captured["tools"] == [
         "qdrant_search",

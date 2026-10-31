@@ -5,6 +5,7 @@ from typing import Annotated, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
+from graph.assessment import AssessmentStatus
 from spatial import (
     RetrievalSpatialRelation,
     SpatialRunApplicationV1,
@@ -42,7 +43,9 @@ class AgentState(TypedDict):
     key_findings: list[str]
     threat_assessment: str
     confidence: float
+    assessment_status: AssessmentStatus | None
     sources_used: list[str]
+    evidence_summary: list[dict] | None
     agent_chain: list[str]
     tool_trace: list[dict]
     error: str | None

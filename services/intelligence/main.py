@@ -55,6 +55,9 @@ class GroundingEvidenceItem(BaseModel):
     content: str = Field(max_length=2000)
     url: str | None = Field(default=None, max_length=500)
     score: float = 0.0
+    published_at: str | None = Field(default=None, max_length=64)
+    observed_at: str | None = Field(default=None, max_length=64)
+    ingested_at: str | None = Field(default=None, max_length=64)
 
 
 class QueryRequest(BaseModel):

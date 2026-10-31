@@ -1,6 +1,7 @@
 """Qdrant indexing pipeline for document ingestion."""
 
 import uuid
+from datetime import UTC, datetime
 
 import httpx
 import structlog
@@ -72,9 +73,10 @@ async def ingest_document(
     Returns:
         Number of chunks indexed.
     """
-    await ensure_collection()
-
     chunks = chunk_text(content)
+    if not chunks:
+        return 0
+    await ensure_collection()
     points: list[dict] = []
 
     for i, chunk in enumerate(chunks):
@@ -100,6 +102,11 @@ async def ingest_document(
 
     if not points:
         return 0
+
+    write_time = datetime.now(UTC)
+    for point in points:
+        point["payload"]["ingested_at"] = write_time.isoformat()
+        point["payload"]["ingested_epoch"] = write_time.timestamp()
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.put(
