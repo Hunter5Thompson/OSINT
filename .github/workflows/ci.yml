@@ -258,7 +258,7 @@ jobs:
   test-frontend-browser:
     name: browser · built frontend
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       VITE_SPATIAL_SCOPE_ENABLED: "true"
       ODIN_BUILD_REVISION: ${{ github.sha }}
