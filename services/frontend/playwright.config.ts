@@ -14,8 +14,10 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   forbidOnly: Boolean(process.env.CI),
-  timeout: 60_000,
-  globalTimeout: 600_000,
+  // SwiftShader readbacks and context setup take tens of seconds on a two-core
+  // runner. Keep the DOM assertions strict while budgeting the complete case.
+  timeout: 120_000,
+  globalTimeout: 1_200_000,
   expect: { timeout: 15_000 },
   reporter: [["list"], ["json", { outputFile: resolve(artifacts, "results.json") }]],
   use: {

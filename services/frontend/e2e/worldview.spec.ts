@@ -4,7 +4,7 @@ import { setFixedOrbitDate, resumeBrowserDate } from "./scenarioClock";
 
 async function openWorldview(page: Page): Promise<void> {
   await page.goto("/worldview?layer=recon");
-  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1, { timeout: 45_000 });
   await expect(page.getByRole("button", { name: "recon", exact: true })).toBeVisible();
   await expect(page.getByTestId("chronik-spatial-status")).toHaveText("global · complete");
   await expect(page.locator(".cesium-widget-errorPanel")).toHaveCount(0);
@@ -30,7 +30,7 @@ test("dense synthetic flights expose rendering limits after camera and route cha
   await expect(source).toContainText(/(250|600|1500)\/10000 im Ausschnitt/);
   await page.getByRole("link", { name: /Briefing/i }).click();
   await page.getByRole("link", { name: /WorldView/i }).click();
-  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1, { timeout: 45_000 });
   await page.getByRole("button", { name: "expand Layers", exact: true }).click();
   await expect(page.getByRole("status", { name: "Flight source and rendering" })).toContainText("Clientabruf UTC:");
 });
@@ -122,7 +122,7 @@ test("scope, time and layer controls work across a WorldView route remount", asy
   await expect(page.locator(".cesium-widget canvas")).toHaveCount(0);
   await page.getByRole("link", { name: "WORLDVIEW", exact: true }).click();
   await expect(page).toHaveURL(/\/worldview/);
-  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1, { timeout: 45_000 });
   await expect(page.locator(".cesium-widget-errorPanel")).toHaveCount(0);
   // The top-level navigation links to /worldview without the old scope query.
   // Assert the current breadcrumb, not text in hidden <option> elements.
@@ -192,7 +192,7 @@ for (const contact of ["aircraft", "vessel"] as const) {
       if (pixel === null) return;
       await canvas.click({ position: { x: pixel.x * box.width, y: pixel.y * box.height } });
       await expect(identity).toBeVisible({ timeout: 1000 });
-    }).toPass({ timeout: 15_000, intervals: [500, 1000] });
+    }).toPass({ timeout: 45_000, intervals: [500, 1000] });
     await expect(identity).toBeVisible();
     await expect(visibleLabel).toBeVisible();
     const fields = contact === "aircraft" ? ["altitude", "speed", "heading"] : ["speed", "course"];
@@ -238,7 +238,7 @@ test("six-digit GP satellite is selectable in the built globe with source covera
   await expect(async () => {
     await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
     await expect(page.getByText("norad: 100651", { exact: true })).toBeVisible({ timeout: 250 });
-  }).toPass({ timeout: 15_000, intervals: [500, 1000] });
+  }).toPass({ timeout: 45_000, intervals: [500, 1000] });
   await expect(cursor).toHaveText(frozenCursor ?? "");
   await expect(page.locator(".cesium-widget-errorPanel")).toHaveCount(0);
   await expect(page.getByText("2026-205A", { exact: true }).first()).toBeVisible();
@@ -246,7 +246,7 @@ test("six-digit GP satellite is selectable in the built globe with source covera
   await page.getByRole("link", { name: "BRIEFING", exact: true }).click();
   await expect(canvas).toHaveCount(0);
   await page.getByRole("link", { name: "WORLDVIEW", exact: true }).click();
-  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  await expect(page.locator(".cesium-widget canvas")).toHaveCount(1, { timeout: 45_000 });
   await expect(source).toContainText("1 Satelliten");
 });
 
