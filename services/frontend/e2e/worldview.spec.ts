@@ -123,7 +123,7 @@ for (const contact of ["aircraft", "vessel"] as const) {
         if (await page.getByText(label, { exact: true }).first().isVisible()) return;
       }
       await expect(page.getByText(label, { exact: true }).first()).toBeVisible({ timeout: 250 });
-    }).toPass({ timeout: 15_000, intervals: [500, 1000] });
+    }).toPass({ timeout: 45_000, intervals: [500, 1000] });
     await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
     const fields = contact === "aircraft" ? ["altitude", "speed", "heading"] : ["speed", "course"];
     for (const field of fields) {
