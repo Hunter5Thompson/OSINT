@@ -1,6 +1,13 @@
-<!-- manifest: project=WorldView | doc_version=1.0 | updated=2026-03-05 -->
+<!-- manifest: project=WorldView | doc_version=1.1 | updated=2026-10-10 -->
 
 # Entscheidungslog
+
+Maßgeblicher Entscheidungslog; `docs/decisions.md` verweist hierher.
+Historische Entscheidungen behalten ihren Zeitpunkt. Der aktuelle Betriebs-
+vertrag in [TASKS.md](TASKS.md) und [AGENTS.md](AGENTS.md) ersetzt insbesondere
+den früheren Ollama-Default aus DEC-003 und die früher pauschal angenommene
+Python-Workspace-Kopplung aus DEC-002: Services werden unabhängig gebaut;
+kleine gemeinsame Parser werden mit Driftprüfung bytegleich vendort.
 
 ## DEC-001: 2026-03-05 — Single-User statt Multi-User-System
 **Kontext**: Soll WorldView ein Multi-User-System mit Auth werden?
@@ -74,6 +81,14 @@ decken sie nicht ab. Die frühere X04-Notiz war nur eine Entscheidungsvorlage.
 - Neuer Cache `satellites:orbits:v1`, TTL 7200 Sekunden, getrennt von
   `satellites:tle` und `tle:group`/`tle:norad`. Abrufzeit wird beim Cachelesen
   erhalten. Kein globales Löschen, keine automatische historische Migration.
+- Der unabhängige Ingestionproduzent schreibt `orbits:v1:group:<group>` und
+  `orbits:v1:norad:<id>` mit bisheriger Ingestion-TTL 86400 Sekunden. Er prüft
+  den Quellabrufzyklus von 7200 Sekunden, erhält originale UTC-Abrufzeiten bei
+  unchanged und isoliert Teilfehler. WATCH/MULTI schützt Gruppen-/Einzelwrites
+  vor Konflikten und ältere Einzel-Epochen vor Überschreiben. Drei Konflikt-
+  versuche sind die Grenze; danach Fehler statt ungesicherter Cachewrites.
+  Der Scheduler aktiviert dies ausschließlich mit `SATELLITE_ORBIT_FORMAT=omm`;
+  der kompatible Standard bleibt `tle`. Das aktiviert keine Produktivumstellung.
 - Der unterstützte GP-JSON-Vertrag ist EARTH/TEME/UTC/SGP4. CelesTraks fehlende
   redundante Metadaten werden nach seinem ausdrücklichen Vertrag normalisiert;
   andere explizite Frames/Zeitmodelle/Theorien werden abgelehnt. Zahlen bleiben

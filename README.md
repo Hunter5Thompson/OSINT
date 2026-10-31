@@ -53,7 +53,7 @@ Palantir-like tactical intelligence platform running locally. CesiumJS 3D Globe 
 
 - **3D Globe** — CesiumJS + Google Photorealistic 3D Tiles
 - **Flight Tracking** — OpenSky Network + adsb.fi (27K+ aircraft via BillboardCollection)
-- **Satellite Tracking** — CelesTrak TLE + SGP4 propagation (satellite.js)
+- **Satellite Tracking** — versioned CelesTrak GP/OMM + compatible TLE, SGP4 on the Cesium clock (satellite.js)
 - **Earthquake Monitor** — USGS M4.5+ feed with magnitude-proportional markers
 - **Ship Tracking** — AISStream.io WebSocket with burst pattern
 - **GLSL Post-Processing** — CRT scanlines, Night Vision, FLIR/Thermal shaders
@@ -182,6 +182,7 @@ services/
 | GET | `/api/flights` | Aircraft positions (cache configurable, default 30s) |
 | GET | `/api/flights/military` | Military aircraft filter |
 | GET | `/api/satellites` | Satellite TLE data (cached 1h) |
+| GET | `/api/satellites/orbits` | Versioned GP/OMM snapshot, source UTC and group coverage (cached2h) |
 | GET | `/api/earthquakes` | M4.5+ earthquakes (cached 5min) |
 | GET | `/api/vessels` | Ship positions (cached 60s) |
 | GET | `/api/hotspots` | Geopolitical hotspots |
@@ -216,10 +217,15 @@ npm run build                    # Production build
 |--------|------|------------|
 | [OpenSky Network](https://opensky-network.org) | Flight positions | 10s (auth optional) |
 | [adsb.fi](https://api.adsb.fi) | Flight positions (fallback) | No auth |
-| [CelesTrak](https://celestrak.org) | Satellite TLE data | Daily refresh |
+| [CelesTrak](https://celestrak.org) | GP/OMM with legacy TLE compatibility | [Format/cache contract](decisions.md#dec-005-2026-10-10--versionierte-gp-orbitdaten-mit-tle-kompatibilität) |
 | [USGS](https://earthquake.usgs.gov) | Earthquakes M4.5+ | 5min |
 | [AISStream](https://aisstream.io) | Ship AIS data | API key required |
 | [GDELT Raw Files](https://data.gdeltproject.org/gdeltv2/) | Global event data, mentions, and GKG themes | 15min |
+
+FIRMS and military-aircraft collection use selected operations areas, not global
+country coverage. See [source coverage](docs/operations/source-coverage.md) for
+the configured rectangles and source/display limits; this describes source
+configuration, not a freshly verified deployed revision.
 
 ### GDELT Ingestion Mode
 

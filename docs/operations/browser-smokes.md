@@ -7,6 +7,13 @@ It does not use a Vite development server or transform application source to
 expose the Cesium Viewer. Traces, screenshots and a JSON result report are
 uploaded for seven days, including failed runs.
 
+Two additional G07 source cases prepare a 10,000-contact synthetic density,
+camera/layer/route transitions and unavailable-to-recovered provider status.
+They remain unexecuted under the current preview `listen EPERM` restriction;
+their type checking does not establish canvas readability, live density or FPS.
+Native GPU and human gates are fixed in
+`docs/plans/globe-quality-2026-10-10.md` and stay independent of SwiftShader.
+
 ## Local reproduction
 
 Run from `services/frontend`. Put the browser cache and evidence under `/data`.
@@ -46,6 +53,13 @@ must not be treated as implicit authorization to change workstation packages.
   existing Search UI positions the camera. Nullable measurements must appear
   as `unknown` in specific selected-contact fields.
 - The actual served `build-info.json` must contain `ODIN_BUILD_REVISION`.
+
+Two GP cases are additionally prepared for the frozen public100651 source:
+source coverage and failure/retry, a real satellite canvas pick, and route remount.
+Their current-source execution is still open: the follow-up sandbox rejects
+the loopback preview with `listen EPERM`. Type checking and unit tests do not
+qualify these browser cases. Their fixture fixes wall-clock time and uses the
+already qualified propagator's subpoint solely as a camera target.
 
 Each scenario records API request paths, unhandled requests, blocked external
 origins, uncaught page errors, catalog revision and the renderer observed from

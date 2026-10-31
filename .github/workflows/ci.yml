@@ -32,6 +32,9 @@ jobs:
           - service: data-ingestion
             context: .
             dockerfile: services/data-ingestion/Dockerfile
+          - service: vision-enrichment
+            context: services/vision-enrichment
+            dockerfile: services/vision-enrichment/Dockerfile
           - service: frontend
             context: services/frontend
             dockerfile: services/frontend/Dockerfile
@@ -142,13 +145,21 @@ jobs:
               auth=("neo4j", os.environ["HN_TEST_NEO4J_PASSWORD"]),
           )
           driver.execute_query(
-              "MERGE (:HNTestInstance {id: $marker})",
-              marker="hn-i04-isolated-20260927",
+              "UNWIND $markers AS id MERGE (:HNTestInstance {id: id})",
+              markers=["hn-i04-isolated-20260927", "hn-b07-isolated-20261010",
+                       "hn-g06-isolated-20261010"],
           )
+          for cypher in (
+              "CREATE CONSTRAINT incident_id_unique IF NOT EXISTS "
+              "FOR (i:Incident) REQUIRE i.id IS UNIQUE",
+              "CREATE CONSTRAINT location_loc_key_unique IF NOT EXISTS "
+              "FOR (l:Location) REQUIRE l.loc_key IS UNIQUE",
+          ):
+              driver.execute_query(cypher)
           driver.close()
           PY
       - name: Run opt-in real Neo4j races
-        run: uv run pytest integration_tests/test_incident_concurrency.py integration_tests/test_graph_geo_events.py -q
+        run: uv run pytest integration_tests/test_incident_concurrency.py integration_tests/test_graph_geo_events.py integration_tests/test_location_identity.py integration_tests/test_report_analysis_metadata.py -q
 
   test-ingestion-neo4j-fixtures:
     name: tests · ingestion neo4j fixtures
@@ -189,13 +200,21 @@ jobs:
               auth=("neo4j", os.environ["HN_TEST_NEO4J_PASSWORD"]),
           )
           driver.execute_query(
-              "MERGE (:HNTestInstance {id: $marker})",
-              marker="hn-i04-isolated-20260927",
+              "UNWIND $markers AS id MERGE (:HNTestInstance {id: id})",
+              markers=["hn-i04-isolated-20260927", "hn-b07-isolated-20261010",
+                       "hn-g06-isolated-20261010"],
           )
+          for cypher in (
+              "CREATE CONSTRAINT incident_id_unique IF NOT EXISTS "
+              "FOR (i:Incident) REQUIRE i.id IS UNIQUE",
+              "CREATE CONSTRAINT location_loc_key_unique IF NOT EXISTS "
+              "FOR (l:Location) REQUIRE l.loc_key IS UNIQUE",
+          ):
+              driver.execute_query(cypher)
           driver.close()
           PY
       - name: Run opt-in real Neo4j fixtures
-        run: uv run pytest integration_tests/test_nlm_claim_links.py -q
+        run: uv run pytest integration_tests/test_nlm_claim_links.py integration_tests/test_location_identity.py -q
 
   test-ops-contracts:
     name: tests · ops contracts

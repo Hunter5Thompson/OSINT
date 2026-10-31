@@ -67,7 +67,7 @@ Dienst gestoppt wird. `vision up` und `nlm up` nutzen denselben Vorabcheck.
 Diese Konfigurationsprüfung ist keine Attestation aller geladenen Module und
 kein Funktions-/Qualitätsnachweis gegen produktive Modelle oder Daten.
 
-Die vier aktiven App-Images haben in CI jeweils einen Build und einen isolierten
+Die fünf App-Images einschließlich optionalem Vision haben in CI jeweils einen Build und einen isolierten
 Artefakt-Smoke. Lokal lässt sich derselbe Smoke mit
 `python3 scripts/ops/smoke_image.py <service> <image> <full-git-sha>` ausführen;
 `DOCKER_HOST` kann dafür einen separaten Daemon wählen. Der Smoke nutzt nur
@@ -83,3 +83,29 @@ Kommandos ohne `--release` bleiben erhalten; vor einer Umstellung insbesondere
 Compose-Projektname, ursprüngliche Config-Dateien und tatsächliche Volumes im
 Releasebericht festhalten. Nie ein neues Projekt über vorhandene Daten starten,
 um fehlende Provenienz zu umgehen.
+
+Für die fünf Appimages einschließlich optionalem Vision gibt es einen lokalen Build-Einstieg ohne
+manuell eingetragenen SHA:
+
+```bash
+python3 scripts/ops/build_release.py
+python3 scripts/ops/build_release.py --build --artifacts /data/odin-releases/<new-build>/contexts
+```
+
+Der erste Befehl erstellt nur einen Plan. Beide verlangen einen vollständig
+sauberen Gitstand einschließlich untracked Dateien. Der Build exportiert den
+gewählten vollständigen Commit mit `git archive`; Docker erhält ausschließlich
+diesen TAR-Kontext. Servicekontexte und Spatial-Buildflag entsprechen CI.
+Git-/Sourceänderungen stoppen den Lauf. Das neue Artefaktverzeichnis erhält
+Kontextdateien/-Hashes und nach übereinstimmendem OCI-Label einen Receipt mit
+lokalen Image-IDs. Vorhandene Dateien werden nicht überschrieben. Diese IDs
+sind keine Registry-Manifestdigests; die nachfolgenden Image-Smokes, finalen
+CI-/Release-/Rollbackgates bleiben erforderlich. Rerank und Kernimages
+behalten ihren gesonderten Versions-/Digestnachweis.
+
+Der beendete Vorgänger prüfte nur den Vertrag und wies den dirty Plan
+ordnungsgemäß ab. Der exklusive Nachfolger baute tatsächlich fünf saubere
+86e68d2-Commitimages; normale Smokes, lokale Manifestdigests und isolierter
+Rückwechsel sind belegt. Anschließende selektive Python-Lockwartung verlangt
+einen neuen finalen Head-/Buildbeleg; kein Produktivrollout ist erfolgt. Der ältere falsch
+beschriftete SHA3234993-Build bleibt verworfen.

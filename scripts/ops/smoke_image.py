@@ -11,7 +11,7 @@ import time
 import uuid
 from pathlib import Path
 
-SERVICES = ("backend", "frontend", "intelligence", "data-ingestion")
+SERVICES = ("backend", "frontend", "intelligence", "data-ingestion", "vision-enrichment")
 MODEL_FIXTURE = """
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -305,6 +305,32 @@ def smoke(service: str, image: str, revision: str) -> dict:
             assert missing.returncode != 0 and "404 Not Found" in missing.stderr
             result["metadata_http"] = 200
             result["missing_metadata_http"] = 404
+        elif service == "vision-enrichment":
+            deadline = time.monotonic() + 30
+            starting = None
+            while time.monotonic() < deadline:
+                for line in docker("logs", name).stdout.splitlines():
+                    try:
+                        entry = json.loads(line)
+                    except ValueError:
+                        continue
+                    if (
+                        isinstance(entry, dict)
+                        and entry.get("event") == "vision_service_starting"
+                    ):
+                        starting = entry
+                        break
+                if starting is not None:
+                    break
+                time.sleep(0.5)
+            assert starting is not None and starting["revision"] == revision
+            state = json.loads(docker("inspect", name).stdout)[0]["State"]
+            assert state["Running"] is True, (
+                "vision entrypoint exited before startup proof"
+            )
+            result["process_start_revision"] = starting["revision"]
+            # No queue, model or stores exist in this isolated smoke network.
+            result["consumer_readiness"] = "not_assessed"
         else:
             deadline = time.monotonic() + 30
             starting = running = None

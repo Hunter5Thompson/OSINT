@@ -1,7 +1,54 @@
-<!-- manifest: project=WorldView | doc_version=2.0 | compatible_with=PRD:1.0 | updated=2026-03-30 -->
+<!-- manifest: project=WorldView | doc_version=2.1 | compatible_with=PRD:1.0 | updated=2026-10-10 -->
 <!-- CANONICAL TECH VALUES: see TASKS.md "TECH STACK — CANONICAL VALUES" block -->
 
 # WorldView — Architektur
+
+Maßgebliche Architekturdatei; `docs/architecture.md` verweist hierher.
+Der [kanonische Stack](TASKS.md#tech-stack--canonical-values) und die fünf
+Deployment-Lockfiles bestimmen aktuelle Sourceversionen. Die weiter unten
+bewahrten ursprünglichen Skizzen, Modellbeispiele und VRAM-Schätzungen sind
+keine vollständige Beschreibung des heutigen Codes oder laufender Prozesse.
+
+## Aktueller Betriebs- und Verantwortungsvertrag
+
+Frontend → Backend-Proxy/Redis → eigenständiger Intelligence-Service. Der
+Intelligence-Service besitzt ReAct-/Legacy-Orchestrierung und Evidence-Lineage;
+Ingestion besitzt Collector/Scheduler und deterministische Graph-Writes.
+Vision-Enrichment prüft Schema und Stores vor einer erfolgreichen Freigabe.
+Backend-HTTP bleibt async; kein LLM erzeugt Graph-Writes.
+
+`interactive` verwendet ein lokales 9B-Modell; `interactive-spark` ergänzt
+Ingestion auf der separaten DGX Spark. Nur ein lokales LLM gleichzeitig.
+Compose-vLLM27B ist laut [Betriebsstatus](docs/CONTAINER-STATUS.md) gebrochen;
+der dokumentierte lokale 27B-Pfad nutzt llama.cpp/GGUF. Backend Host 8080 ist
+nicht der lokale LLM-Port 8000. Profile und reale Modellbereitschaft sind
+unterschiedliche Verträge.
+
+Entwicklungsmodus mit Source-Mounts und geprüfter Releasebetrieb sind getrennt.
+[Releaseimages](docs/operations/release.md) tragen baked Revisionen und Digests;
+Daten liegen außerhalb des Checkouts. Dateistand, Image-Revision, laufender
+Prozess und dessen Abhängigkeiten werden jeweils geprüft. Optional inaktiver
+Recon ist sichtbar deaktiviert; ein erreichbarer API-Prozess beweist keine
+Modell-/Datenbereitschaft.
+
+Satelliten: LegacyTLE bleibt kompatibel; versionierte GP/OMM-v1-Daten bewahren
+volle NORAD-IDs, Quellabrufzeit und konfigurierte Gruppenabdeckung. Decoder und
+Cachegenerationen sind getrennt. Position und begrenzte Orbitbögen nutzen die
+Cesium-Uhr und gecachte SatRec; [DEC-005](decisions.md) enthält die Formatgrenze.
+Ein lokaler Wire-/Propagatorpass ist kein sichtbarer Browser-/GPU-/Faktenpass.
+
+Frontendgrenzen: `spatial/catalog.ts` bleibt die öffentliche Katalogfacade;
+Validierung, Geometrie, Assets, Memory und HTTP/Cache haben interne Module.
+`WorldviewPage.tsx` hält den Seitenzustand; `WorldviewLayers.tsx` und
+`WorldviewInteractions.tsx` besitzen vorhandene Layer-/Callbackbrücken.
+Cesium-Bulk bleibt imperative Collections. Auswahl, Scope und Zeitverträge
+bleiben auf ihren vorhandenen öffentlichen Grenzen.
+
+Fusion Core ist TASK-112; TASK-108 ist Submarine Cables. Historische Task-
+Briefings stehen in [docs/tasks/specifications.md](docs/tasks/specifications.md).
+Quellenverlässlichkeit, technische Datenvalidität und Faktenverifikation
+werden getrennt geführt; der eingefrorene Reviewbestand ist kein freigegebener
+Faktenkorpus. Historische Datenkorrekturen brauchen einen eigenen R01-Vertrag.
 
 ## Summary (max. 500 Token)
 
