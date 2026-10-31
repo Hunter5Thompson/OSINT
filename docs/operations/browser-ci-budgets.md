@@ -18,10 +18,10 @@ The corrected budget hierarchy is:
 |---|---:|---|
 | Ordinary DOM assertion | 15 s | Unchanged visible-state assertions |
 | Viewer initialization after navigation | 45 s | Software WebGL context creation and remount |
-| Contact or satellite pick attempt loop | 45 s | Screenshot/readback, real input and identity assertion |
-| Complete test, including context setup | 120 s | Browser setup and the entire interaction sequence |
-| Complete suite | 20 min | All tests must execute and pass |
-| GitHub browser job | 25 min | Installation, build, suite and evidence upload |
+| Contact or satellite pick attempt loop | 90 s | Screenshot/readback, real input and identity assertion |
+| Complete test, including context setup | 180 s | Browser setup and the entire interaction sequence |
+| Complete suite | 30 min | All tests must execute and pass |
+| GitHub browser job | 35 min | Installation, build, suite and evidence upload |
 
 These are functional-test deadlines, not product latency or FPS acceptance
 thresholds. Native G07 frame-rate, regression and human-review requirements remain
@@ -40,3 +40,10 @@ Do not reuse a result for a different frontend tree or silently skip slow cases.
 Earlier slices also used fixed-offset clicks during the camera flight. Backport
 the final slice's painted-pixel and exact source-identity picking assertions so
 the test waits for its real target instead of cancelling the moving camera.
+
+The first corrected remote run measured a 32.1 s canvas screenshot followed by
+a 31.3 s locator click. Locator actionability waits for additional stable frames;
+a measured fixed canvas and painted pixel can instead receive real mouse input
+directly. The loop still verifies the exact source identity. Its 90 s allowance
+permits a second slow screenshot when the first precedes the camera landing.
+Remote scope navigation also reached 120 s, hence the 180 s complete-case budget.
