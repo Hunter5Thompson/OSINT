@@ -15,24 +15,32 @@ export function useEarthquakes(enabled: boolean) {
       setLoading(false);
       return;
     }
-    let cancelled = false;
+    let disposed = false;
+    let sequence = 0;
+    let controller: AbortController | null = null;
     const run = async () => {
+      const request = ++sequence;
+      controller?.abort();
+      const currentController = new AbortController();
+      controller = currentController;
       setLoading(true);
       try {
-        const data = await getEarthquakes();
-        if (cancelled) return;
+        const data = await getEarthquakes(currentController.signal);
+        if (disposed || request !== sequence) return;
         setEarthquakes(data);
         setLastUpdate(new Date());
       } catch {
-        // keep stale data
+        // Keep the last successful data; only the current request owns loading.
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!disposed && request === sequence) setLoading(false);
       }
     };
     void run();
     const timer = setInterval(() => { void run(); }, POLL_INTERVAL);
     return () => {
-      cancelled = true;
+      disposed = true;
+      ++sequence;
+      controller?.abort();
       clearInterval(timer);
     };
   }, [enabled]);

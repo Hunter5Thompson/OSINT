@@ -1,7 +1,8 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import * as api from "../../../services/api";
 import { EventCallout } from "../EventCallout";
+import type { TimelineEventDetail } from "../../../types";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -12,6 +13,46 @@ const DETAIL = {
 } as const;
 
 describe("EventCallout", () => {
+  it("clears A immediately when B starts and B fails", async () => {
+    const fetch = vi.spyOn(api, "getEventDetail").mockResolvedValueOnce(DETAIL as never);
+    const props = { onClose: vi.fn(), onInspect: vi.fn() };
+    const view = render(<EventCallout {...props} eventId="e1" />);
+    await waitFor(() => expect(screen.getByText("Strike")).toBeInTheDocument());
+    let reject!: (e: Error) => void;
+    fetch.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    view.rerender(<EventCallout {...props} eventId="e2" />);
+    expect(screen.queryByText("Strike")).not.toBeInTheDocument();
+    expect(screen.queryByText("→ Inspector")).not.toBeInTheDocument();
+    await act(async () => reject(new Error("unavailable")));
+    expect(screen.getByText("e2")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Detail nicht verfügbar");
+  });
+
+  it("keeps B when A returns later", async () => {
+    const resolves: ((d: TimelineEventDetail) => void)[] = [];
+    vi.spyOn(api, "getEventDetail").mockImplementation(() => new Promise(resolve => resolves.push(resolve)));
+    const props = { onClose: vi.fn(), onInspect: vi.fn() };
+    const view = render(<EventCallout {...props} eventId="e1" />);
+    view.rerender(<EventCallout {...props} eventId="e2" />);
+    await act(async () => resolves[1]!({ ...DETAIL, id: "e2", title: "B" }));
+    await act(async () => resolves[0]!(DETAIL));
+    expect(screen.getByText("B")).toBeInTheDocument();
+    expect(screen.queryByText("Strike")).not.toBeInTheDocument();
+  });
+
+  it("invalidates deselected responses even if the fetch ignores abort", async () => {
+    let resolve!: (d: TimelineEventDetail) => void;
+    vi.spyOn(api, "getEventDetail").mockReturnValueOnce(new Promise(done => { resolve = done; }))
+      .mockRejectedValueOnce(new Error("B unavailable"));
+    const props = { onClose: vi.fn(), onInspect: vi.fn() };
+    const view = render(<EventCallout {...props} eventId="e1" />);
+    view.rerender(<EventCallout {...props} eventId={null} />);
+    await act(async () => resolve(DETAIL));
+    view.rerender(<EventCallout {...props} eventId="e2" />);
+    await waitFor(() => expect(screen.getByText("e2")).toBeInTheDocument());
+    expect(screen.queryByText("Strike")).not.toBeInTheDocument();
+  });
+
   it("renders nothing when eventId is null", () => {
     const { container } = render(
       <EventCallout eventId={null} onClose={vi.fn()} onInspect={vi.fn()} />,

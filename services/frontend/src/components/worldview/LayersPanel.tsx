@@ -3,6 +3,8 @@ import type { SpatialBoundaryProvenanceState } from "../../hooks/useSpatialBound
 import type { LayerVisibility, ShaderType } from "../../types";
 import type { LayerSpatialStatus } from "../../spatial/layerScopePolicy";
 import type { UseReconManifestResult } from "../../lib/recon/manifest";
+import { FlightSourceStatus, type FlightStatus } from "../layers/FlightSourceStatus";
+import type { EventDensity } from "../layers/eventDensity";
 
 export interface LayersPanelProps {
   layers: LayerVisibility;
@@ -12,6 +14,8 @@ export interface LayersPanelProps {
   spatialProvenance?: SpatialBoundaryProvenanceState;
   spatialStatuses?: Partial<Record<keyof LayerVisibility, LayerSpatialStatus>>;
   recon?: UseReconManifestResult;
+  flightStatus?: FlightStatus;
+  eventDensity?: EventDensity | null;
 }
 
 type AlwaysOnKey = "void" | "atmosphere" | "spotlight";
@@ -274,6 +278,8 @@ export function LayersPanel({
   spatialProvenance,
   spatialStatuses,
   recon,
+  flightStatus,
+  eventDensity,
 }: LayersPanelProps) {
   return (
     <div style={{ display: "grid", gap: "0.8rem" }}>
@@ -310,6 +316,14 @@ export function LayersPanel({
                     {toggleKey === "nuclearPlants" && <div style={spatialStatusStyle}>195 historical WRI records · not live</div>}
                     {toggleKey === "icbmBases" && <div style={spatialStatusStyle}>3 US wing HQs · curated reference</div>}
                     {toggleKey === "militaryBases" && <div style={spatialStatusStyle}>4 major bases · starter coverage</div>}
+                    {toggleKey === "firmsHotspots" && <div style={spatialStatusStyle}>Selected regions · no global completeness</div>}
+                    {toggleKey === "milAircraft" && <div style={spatialStatusStyle}>Selected operations areas · partial coverage</div>}
+                    {toggleKey === "flights" && enabled && flightStatus && <FlightSourceStatus {...flightStatus} />}
+                    {toggleKey === "events" && enabled && eventDensity && <div role="status" aria-label="Event rendering" style={spatialStatusStyle}>
+                      <div>{eventDensity.symbols} Symbole · {eventDensity.aggregates} Aggregate · {eventDensity.represented}/{eventDensity.inView} Ereignisse im Ausschnitt</div>
+                      <div>{eventDensity.omitted} durch Darstellungslimit ausgeblendet</div>
+                      <div>{eventDensity.outsideView} außerhalb · {eventDensity.outsideWindow} Zeitfenster/Datum · {eventDensity.unlocated} ohne Ort · {eventDensity.invalid} ungültig · {eventDensity.duplicates} doppelt</div>
+                    </div>}
                     {toggleKey === "recon" && recon !== undefined && reconBlocked ? (
                       <div style={spatialStatusStyle} role="status">
                         {recon.status === "loading" ? "Checking scene availability…"

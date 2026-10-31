@@ -150,6 +150,7 @@ export function EONETLayer({ viewer, events, visible, onSelect }: EONETLayerProp
       const position = Cesium.Cartesian3.fromDegrees(ev.longitude, ev.latitude, 0);
       const icon = createEONETIcon(ev.category, 24);
       const bb = bc.add({
+        id: { odinKind: "operational" },
         position,
         image: icon,
         scale: 0.8,

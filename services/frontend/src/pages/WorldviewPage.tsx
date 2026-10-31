@@ -1,134 +1,213 @@
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
-import { useLocation } from "react-router-dom";
-import * as Cesium from "cesium";
+  type LayerVisibility,
+  type Earthquake,
+  type ClientConfig,
+  type ShaderType,
+  type TimelineGeoEvent,
+  type IntelEvent,
+  type TimelineEventDetail,
+} from "../types";
 import {
-  SPATIAL_SCOPE_ENABLED,
-  SpatialScopeProvider,
-  useOptionalSpatialScope,
-  useSpatialScope,
-} from "../spatial/react";
+  CesiumSpatialPresentationBridge,
+} from "../spatial/cesium/SpatialPresentationBridge";
 import {
+  type SpatialBoundaryProvenanceLoader,
   BoundaryAssetStore,
   HttpSpatialCatalog,
-  type SpatialBoundaryProvenanceLoader,
 } from "../spatial/catalog";
-import { WORLD_SCOPE_KEY, type SpatialQueryRef } from "../spatial/contracts";
-import type {
-  ContainmentSnapshot,
-  SpatialContainmentPort,
+import {
+  type SpatialContainmentPort,
+  type ContainmentSnapshot,
+  WORLD_SCOPE_KEY,
 } from "../spatial/contracts";
 import {
-  createSpatialContainmentController,
-  type OwnedSpatialContainmentPort,
-} from "../spatial/containment";
-import {
-  createStrictPointLayerAdapter,
   type StrictPointLayerAdapter,
+  createStrictPointLayerAdapter,
 } from "../spatial/pointLayerSpatialAdapter";
 import {
-  applyLayerSpatialPolicy,
+  useCallback,
+  useSyncExternalStore,
+  useState,
+  useMemo,
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useRef,
+} from "react";
+import {
+  useLocation,
+} from "react-router-dom";
+import {
+  useOptionalSpatialScope,
+  useSpatialScope,
+  SPATIAL_SCOPE_ENABLED,
+  SpatialScopeProvider,
+} from "../spatial/react";
+import * as Cesium from "cesium";
+import {
   layerSpatialStatuses,
+  applyLayerSpatialPolicy,
 } from "../spatial/layerScopePolicy";
-import { SpatialScopeBreadcrumb } from "../spatial/SpatialScopeBreadcrumb";
-import { RegionalAtlas } from "../spatial/RegionalAtlas";
-import { WorldviewKeyboardCoordinator } from "../spatial/WorldviewKeyboardCoordinator";
-import { MutuallyExclusiveCountryPath } from "../spatial/WorldviewCountryPath";
 import {
-  createSelectionEnvelope,
-  openSpatialChild,
-  selectionForScopeRevision,
   type SelectionEnvelope,
+  selectionForScopeRevision,
+  createSelectionEnvelope,
 } from "../spatial/selection";
-import { CesiumSpatialPresentationBridge } from "../spatial/cesium/SpatialPresentationBridge";
-import { SpatialScopeViewerBridge } from "../spatial/cesium/SpatialScopeViewerBridge";
-import { PerformanceGuard } from "../components/globe/PerformanceGuard";
-import { GlobeViewer } from "../components/globe/GlobeViewer";
-import { EntityClickHandler } from "../components/globe/EntityClickHandler";
-import { FlightLayer } from "../components/layers/FlightLayer";
-import { SatelliteLayer } from "../components/layers/SatelliteLayer";
-import { EarthquakeLayer } from "../components/layers/EarthquakeLayer";
-import { ShipLayer } from "../components/layers/ShipLayer";
-import { CCTVLayer } from "../components/layers/CCTVLayer";
-import { EventLayer } from "../components/layers/EventLayer";
-import { EventCallout } from "../components/time/EventCallout";
-import { CableLayer } from "../components/layers/CableLayer";
-import { PipelineLayer } from "../components/layers/PipelineLayer";
-import { FIRMSLayer } from "../components/layers/FIRMSLayer";
-import { MilAircraftLayer } from "../components/layers/MilAircraftLayer";
-import { DatacenterLayer } from "../components/layers/DatacenterLayer";
-import { RefineryLayer } from "../components/layers/RefineryLayer";
-import { StrategicReferenceLayer } from "../components/layers/StrategicReferenceLayer";
-import { EONETLayer } from "../components/layers/EONETLayer";
-import { GDACSLayer } from "../components/layers/GDACSLayer";
-import { ReconLayer } from "../components/layers/ReconLayer";
-import { useReconManifest } from "../lib/recon/manifest";
-import { useRecon } from "../state/ReconContext";
-import { OverlayPanel } from "../components/hlidskjalf/OverlayPanel";
-import { LayersPanel } from "../components/worldview/LayersPanel";
-import { SearchPanel } from "../components/worldview/SearchPanel";
-import { InspectorPanel, type Selected } from "../components/worldview/InspectorPanel";
-import { TickerPanel } from "../components/worldview/TickerPanel";
-import { WorkspaceBar } from "../components/worldview/WorkspaceBar";
-import { layersForMode, WORKSPACE_MODES } from "../components/worldview/workspaceModes";
-import { WorldviewHudLoader } from "../components/worldview/WorldviewHudLoader";
-import { SpotlightProvider, useSpotlight } from "../components/globe/spotlight/SpotlightContext";
 import {
-  CircleSpotlightOverlay,
+  type Selected,
+  InspectorPanel,
+} from "../components/worldview/InspectorPanel";
+import {
+  useSpatialBoundaryProvenance,
+} from "../hooks/useSpatialBoundaryProvenance";
+import {
+  toTimelineLayerEvents,
+} from "../components/time/timelineEvents";
+import {
+  useFlights,
+} from "../hooks/useFlights";
+import {
+  useSatellites,
+} from "../hooks/useSatellites";
+import {
+  useEarthquakes,
+} from "../hooks/useEarthquakes";
+import {
+  useCables,
+} from "../hooks/useCables";
+import {
+  useVessels,
+} from "../hooks/useVessels";
+import {
+  usePipelines,
+} from "../hooks/usePipelines";
+import {
+  useFIRMSHotspots,
+} from "../hooks/useFIRMSHotspots";
+import {
+  useDatacenters,
+} from "../hooks/useDatacenters";
+import {
+  useRefineries,
+} from "../hooks/useRefineries";
+import {
+  useEONETEvents,
+} from "../hooks/useEONETEvents";
+import {
+  useGDACSEvents,
+} from "../hooks/useGDACSEvents";
+import {
+  useReconManifest,
+} from "../lib/recon/manifest";
+import {
+  useRecon,
+} from "../state/ReconContext";
+import {
+  getConfig,
+} from "../services/api";
+import {
+  WORKSPACE_MODES,
+  layersForMode,
+} from "../components/worldview/workspaceModes";
+import {
+  WorldviewHudLoader,
+} from "../components/worldview/WorldviewHudLoader";
+import {
+  SpotlightProvider,
+} from "../components/globe/spotlight/SpotlightContext";
+import {
+  PerformanceGuard,
+} from "../components/globe/PerformanceGuard";
+import {
+  TimeProvider,
+} from "../state/TimeContext";
+import {
+  GlobeViewer,
+} from "../components/globe/GlobeViewer";
+import type { FlightDensity } from "../components/layers/flightDensity";
+import type { EventDensity } from "../components/layers/eventDensity";
+import {
+  SatelliteLayerBridge,
+} from "../components/layers/SatelliteLayer";
+import {
+  SatelliteSourceStatus,
+} from "../components/layers/SatelliteSourceStatus";
+import {
+  EarthquakeLayer,
+} from "../components/layers/EarthquakeLayer";
+import {
+  ShipLayer,
+} from "../components/layers/ShipLayer";
+import {
+  StrategicReferenceLayer,
+} from "../components/layers/StrategicReferenceLayer";
+import {
+  CCTVLayer,
+} from "../components/layers/CCTVLayer";
+import {
+  CableLayer,
+} from "../components/layers/CableLayer";
+import {
+  PipelineLayer,
+} from "../components/layers/PipelineLayer";
+import {
+  ReconLayer,
+} from "../components/layers/ReconLayer";
+import {
+  MutuallyExclusiveCountryPath,
+} from "../spatial/WorldviewCountryPath";
+import {
+  CountryBorders,
+} from "../components/globe/visual-layers/CountryBorders";
+import {
   LegacyCountrySpotlightOverlay,
+  CircleSpotlightOverlay,
 } from "../components/globe/spotlight/SpotlightOverlay";
-import { HudFrame } from "../components/globe/spotlight/HudFrame";
-import { SpotlightCartouche } from "../components/globe/spotlight/SpotlightCartouche";
-import { CapitalPulse } from "../components/globe/spotlight/CapitalPulse";
-import { useSpotlightTrigger } from "../components/globe/hooks/useSpotlightTrigger";
-import { Graticule } from "../components/globe/visual-layers/Graticule";
-import { CountryBorders } from "../components/globe/visual-layers/CountryBorders";
-import { useFlights } from "../hooks/useFlights";
-import { useSatellites } from "../hooks/useSatellites";
-import { useEarthquakes } from "../hooks/useEarthquakes";
-import { useCables } from "../hooks/useCables";
-import { useVessels } from "../hooks/useVessels";
-import { usePipelines } from "../hooks/usePipelines";
-import { useFIRMSHotspots } from "../hooks/useFIRMSHotspots";
-import { useAircraftTracks } from "../hooks/useAircraftTracks";
-import { useTimeWindow } from "../hooks/useTimeWindow";
-import { TimeProvider, useTime } from "../state/TimeContext";
-import { ScrubberMount } from "../components/time/ScrubberMount";
 import {
-  fromLiveTrack,
-  fromWindowTrack,
-  type MilTrackRender,
-} from "../components/layers/milTrackAdapter";
-import { useDatacenters } from "../hooks/useDatacenters";
-import { useRefineries } from "../hooks/useRefineries";
-import { useEONETEvents } from "../hooks/useEONETEvents";
-import { useGDACSEvents } from "../hooks/useGDACSEvents";
-import { getConfig } from "../services/api";
-import { useSpatialBoundaryProvenance } from "../hooks/useSpatialBoundaryProvenance";
-import type {
-  ClientConfig,
-  LayerVisibility,
-  ShaderType,
-  FIRMSHotspot,
-  DatacenterGeoJSON,
-  RefineryGeoJSON,
-  EONETEvent,
-  GDACSEvent,
-  IntelEvent,
-  TimeWindowQuery,
-  TimelineEventDetail,
-  TimelineGeoEvent,
-  WindowTrackSample,
-  Earthquake,
-} from "../types";
+  CapitalPulse,
+} from "../components/globe/spotlight/CapitalPulse";
+import {
+  SpatialScopeViewerBridge,
+} from "../spatial/cesium/SpatialScopeViewerBridge";
+import {
+  RegionalAtlas,
+} from "../spatial/RegionalAtlas";
+import {
+  SpatialScopeBreadcrumb,
+} from "../spatial/SpatialScopeBreadcrumb";
+import {
+  WorldviewKeyboardCoordinator,
+} from "../spatial/WorldviewKeyboardCoordinator";
+import {
+  HudFrame,
+} from "../components/globe/spotlight/HudFrame";
+import {
+  SpotlightCartouche,
+} from "../components/globe/spotlight/SpotlightCartouche";
+import {
+  WorkspaceBar,
+} from "../components/worldview/WorkspaceBar";
+import {
+  OverlayPanel,
+} from "../components/hlidskjalf/OverlayPanel";
+import {
+  LayersPanel,
+} from "../components/worldview/LayersPanel";
+import {
+  TickerPanel,
+} from "../components/worldview/TickerPanel";
+import {
+  EventCallout,
+} from "../components/time/EventCallout";
+import {
+  ScrubberMount,
+} from "../components/time/ScrubberMount";
+import {
+  type OwnedSpatialContainmentPort,
+  createSpatialContainmentController,
+} from "../spatial/containment";
+import { EventLayerBridge, FlightLayerBridge, GlobeChildren } from "../components/worldview/WorldviewLayers";
+import { LegacyEventClickBridge, SpatialEventClickBridge, ZoomTriggerHook, SearchAcceptHook } from "../components/worldview/WorldviewInteractions";
 
 type PanelId = "layers" | "search" | "ticker";
 
@@ -185,418 +264,6 @@ const FILTER_LAYER_PRESETS: Record<LandingFilter, Partial<LayerVisibility>> = {
 
 function isLayerKey(value: string): value is keyof LayerVisibility {
   return value in DEFAULT_LAYERS;
-}
-
-// ── GlobeChildren ─────────────────────────────────────────────────────────────
-// Inner component that lives inside <SpotlightProvider> so it can call
-// useSpotlight(). Mounts the 6 onSelect-prop layers and EntityClickHandler.
-// The other layers (tag-pick) dispatch Spotlight via EntityClickHandler already.
-
-interface GlobeChildrenProps {
-  viewer: Cesium.Viewer | null;
-  layers: LayerVisibility;
-  setSelected: Dispatch<SetStateAction<Selected | null>>;
-  firmsHotspots: FIRMSHotspot[];
-  selectedWindow: { tStart: string; tEnd: string };
-  datacenterData: DatacenterGeoJSON | null;
-  refineryData: RefineryGeoJSON | null;
-  eonetEvents: EONETEvent[];
-  gdacsEvents: GDACSEvent[];
-  chronikSpatialScope: SpatialQueryRef | null | undefined;
-  scopeGeneration: number;
-}
-
-function GlobeChildren({
-  viewer,
-  layers,
-  setSelected,
-  firmsHotspots,
-  selectedWindow,
-  datacenterData,
-  refineryData,
-  eonetEvents,
-  gdacsEvents,
-  chronikSpatialScope,
-  scopeGeneration,
-}: GlobeChildrenProps) {
-  const { dispatch: dispatchSpotlight } = useSpotlight();
-
-  return (
-    <>
-      <Graticule viewer={viewer} />
-      <FIRMSLayer
-        viewer={viewer}
-        hotspots={firmsHotspots}
-        visible={layers.firmsHotspots}
-        onSelect={(hotspot) => {
-          setSelected({ type: "firms", data: hotspot });
-          dispatchSpotlight({
-            type: "set",
-            target: {
-              kind: "circle",
-              trigger: "pin",
-              center: { lon: hotspot.longitude, lat: hotspot.latitude },
-              radius: 1,
-              altitude: 0,
-              label: `FIRMS hotspot ${hotspot.id}`.trim(),
-              sourcePin: { layer: "firmsHotspots", entityId: String(hotspot.id) },
-            },
-          });
-        }}
-      />
-      <MilTrackSource
-        viewer={viewer}
-        layers={layers}
-        selectedWindow={selectedWindow}
-        setSelected={setSelected}
-        spatialScope={chronikSpatialScope}
-        scopeGeneration={scopeGeneration}
-      />
-      <DatacenterLayer
-        viewer={viewer}
-        datacenters={datacenterData}
-        visible={layers.datacenters}
-        onSelect={(datacenter) => {
-          setSelected({ type: "datacenter", data: datacenter });
-          if (datacenter.latitude != null && datacenter.longitude != null) {
-            dispatchSpotlight({
-              type: "set",
-              target: {
-                kind: "circle",
-                trigger: "pin",
-                center: { lon: datacenter.longitude, lat: datacenter.latitude },
-                radius: 1,
-                altitude: 0,
-                label: datacenter.name,
-                sourcePin: { layer: "datacenters", entityId: datacenter.name },
-              },
-            });
-          }
-        }}
-      />
-      <RefineryLayer
-        viewer={viewer}
-        refineries={refineryData}
-        visible={layers.refineries}
-        onSelect={(refinery) => {
-          setSelected({ type: "refinery", data: refinery });
-          if (refinery.latitude != null && refinery.longitude != null) {
-            dispatchSpotlight({
-              type: "set",
-              target: {
-                kind: "circle",
-                trigger: "pin",
-                center: { lon: refinery.longitude, lat: refinery.latitude },
-                radius: 1,
-                altitude: 0,
-                label: refinery.name,
-                sourcePin: { layer: "refineries", entityId: refinery.name },
-              },
-            });
-          }
-        }}
-      />
-      <EONETLayer
-        viewer={viewer}
-        events={eonetEvents}
-        visible={layers.eonet}
-        onSelect={(event) => {
-          setSelected({ type: "eonet", data: event });
-          dispatchSpotlight({
-            type: "set",
-            target: {
-              kind: "circle",
-              trigger: "pin",
-              center: { lon: event.longitude, lat: event.latitude },
-              radius: 1,
-              altitude: 0,
-              label: event.title ?? event.id,
-              sourcePin: { layer: "eonet", entityId: event.id },
-            },
-          });
-        }}
-      />
-      <GDACSLayer
-        viewer={viewer}
-        events={gdacsEvents}
-        visible={layers.gdacs}
-        onSelect={(event) => {
-          setSelected({ type: "gdacs", data: event });
-          dispatchSpotlight({
-            type: "set",
-            target: {
-              kind: "circle",
-              trigger: "pin",
-              center: { lon: event.longitude, lat: event.latitude },
-              radius: 1,
-              altitude: 0,
-              label: event.event_name ?? event.id,
-              sourcePin: { layer: "gdacs", entityId: event.id },
-            },
-          });
-        }}
-      />
-    </>
-  );
-}
-
-// ── MilTrackSource ─────────────────────────────────────────────────────────────
-// Isolated useTime() consumer so only this tiny node re-renders at the throttled
-// (~4 Hz) cursor cadence — not the whole GlobeChildren subtree. Selects the mil
-// track source by mode (live = useAircraftTracks; replay = windowed contract) and
-// normalizes both shapes through the canonical adapter before the layer/inspector.
-
-function MilTrackSource({
-  viewer,
-  layers,
-  selectedWindow,
-  setSelected,
-  spatialScope,
-  scopeGeneration,
-}: {
-  viewer: Cesium.Viewer | null;
-  layers: LayerVisibility;
-  selectedWindow: { tStart: string; tEnd: string };
-  setSelected: Dispatch<SetStateAction<Selected | null>>;
-  spatialScope: SpatialQueryRef | null | undefined;
-  scopeGeneration: number;
-}) {
-  const { dispatch: dispatchSpotlight } = useSpotlight();
-  const { mode, getTimeMs, discontinuityEpoch } = useTime();
-
-  const { tracks: liveTracks } = useAircraftTracks(layers.milAircraft && mode === "live");
-
-  const replayQuery = useMemo<TimeWindowQuery>(
-    () => ({
-      tStart: selectedWindow.tStart,
-      tEnd: selectedWindow.tEnd,
-      domain: "movements",
-      tier: "fine",
-      movementKind: "mil_aircraft",
-      ...(spatialScope === undefined || spatialScope === null ? {} : { spatialScope }),
-    }),
-    [selectedWindow.tStart, selectedWindow.tEnd, spatialScope],
-  );
-  const { data: replayData } = useTimeWindow(
-    layers.milAircraft && mode === "replay" && spatialScope !== null,
-    replayQuery,
-    0,
-    scopeGeneration,
-  );
-
-  const milRender = useMemo<MilTrackRender[]>(
-    () =>
-      mode === "live"
-        ? liveTracks.map(fromLiveTrack)
-        : (replayData?.samples ?? [])
-            .filter((s): s is WindowTrackSample => s.kind === "track")
-            .map(fromWindowTrack),
-    [mode, liveTracks, replayData],
-  );
-
-  return (
-    <MilAircraftLayer
-      viewer={viewer}
-      tracks={milRender}
-      visible={layers.milAircraft}
-      getTimeMs={getTimeMs}
-      discontinuityEpoch={discontinuityEpoch}
-      onSelect={(track) => {
-        setSelected({ type: "aircraft", data: track });
-        const lastPoint = track.points[track.points.length - 1];
-        if (lastPoint) {
-          dispatchSpotlight({
-            type: "set",
-            target: {
-              kind: "circle",
-              trigger: "pin",
-              center: { lon: lastPoint.lon, lat: lastPoint.lat },
-              radius: 1,
-              altitude: 0,
-              label: track.callsign ?? track.icao24,
-              sourcePin: { layer: "milAircraft", entityId: track.icao24 },
-            },
-          });
-        }
-      }}
-    />
-  );
-}
-
-// ── EventLayerBridge ────────────────────────────────────────────────────────────
-// Tiny useTime() consumer so EventLayer gets the live clock (getTimeMs) for the §7
-// temporal fade without making WorldviewPage a 4Hz consumer.
-function EventLayerBridge({
-  viewer,
-  events,
-  visible,
-  window,
-}: {
-  viewer: Cesium.Viewer | null;
-  events: IntelEvent[];
-  visible: boolean;
-  window: { startMs: number; endMs: number } | null;
-}) {
-  const { getTimeMs } = useTime();
-  return (
-    <EventLayer
-      viewer={viewer}
-      events={events}
-      visible={visible}
-      getTimeMs={getTimeMs}
-      window={window}
-    />
-  );
-}
-
-interface EventClickBridgeProps {
-  viewer: Cesium.Viewer | null;
-  photorealTileset: Cesium.Cesium3DTileset | null;
-  onCountrySelect: Dispatch<SetStateAction<Selected | null>>;
-  onSelectEvent: (id: string) => void;
-  onClearEvent: () => void;
-}
-
-function useEventClickCallback(onSelectEvent: (id: string) => void) {
-  const { pause, seek } = useTime();
-  return useCallback(
-    (id: string, timeIso?: string) => {
-      onSelectEvent(id);
-      if (timeIso) {
-        const t = Date.parse(timeIso);
-        if (Number.isFinite(t)) {
-          pause();
-          seek(t);
-        }
-      }
-    },
-    [onSelectEvent, pause, seek],
-  );
-}
-
-// The build-time migration switch mounts this legacy country capability or the
-// Spatial capability below. Operational entity handling remains available in both.
-function LegacyEventClickBridge({
-  viewer,
-  photorealTileset,
-  onCountrySelect,
-  onSelectEvent,
-  onClearEvent,
-}: EventClickBridgeProps) {
-  const handleEventSelect = useEventClickCallback(onSelectEvent);
-  return (
-    <EntityClickHandler
-      viewer={viewer}
-      photorealTileset={photorealTileset}
-      countryInteraction={{
-        mode: "legacy",
-        onCountrySelect: (selection) => {
-          onCountrySelect(selection);
-          onClearEvent();
-        },
-      }}
-      onEventSelect={handleEventSelect}
-    />
-  );
-}
-
-function SpatialEventClickBridge({
-  viewer,
-  photorealTileset,
-  onCountrySelect,
-  onSelectEvent,
-  onClearEvent,
-}: EventClickBridgeProps) {
-  const scope = useSpatialScope();
-  const { dispatch: dispatchSpotlight } = useSpotlight();
-  const handleEventSelect = useEventClickCallback(onSelectEvent);
-  const handleSpatialChild = useCallback(
-    async (target: Parameters<typeof scope.enter>[0]) => {
-      const cause = scope.phase !== "hydrating" && scope.current.kind === "world"
-        ? "country-click"
-        : "child-click";
-      await openSpatialChild(
-        target,
-        () => scope.enter(target, cause),
-        (selection) => {
-          onCountrySelect(selection === null
-            ? null
-            : { type: "spatial-country", data: selection });
-          onClearEvent();
-        },
-        () => dispatchSpotlight({ type: "reset" }),
-      );
-    },
-    [dispatchSpotlight, onClearEvent, onCountrySelect, scope],
-  );
-
-  return (
-    <EntityClickHandler
-      viewer={viewer}
-      photorealTileset={photorealTileset}
-      countryInteraction={{
-        mode: "spatial",
-        stateRevision: scope.stateRevision,
-        onSpatialChild: handleSpatialChild,
-        onSpatialPrefetch: (target, signal) => scope.prefetch(target, signal),
-        onBlank: () => {
-          onCountrySelect(null);
-          onClearEvent();
-        },
-      }}
-      onEventSelect={handleEventSelect}
-    />
-  );
-}
-
-// ── SearchAcceptHook ───────────────────────────────────────────────────────────
-// Inner component that lives inside <SpotlightProvider> so it can call
-// useSpotlight(). Mounts SearchPanel and wires onAccept → camera flyTo + Spotlight.
-
-function SearchAcceptHook({
-  viewer,
-  initialQuery,
-}: {
-  viewer: Cesium.Viewer | null;
-  initialQuery: string;
-}) {
-  const { dispatch } = useSpotlight();
-  return (
-    <SearchPanel
-      viewer={viewer}
-      initialQuery={initialQuery}
-      onAccept={(node) => {
-        const lat = node.properties?.lat;
-        const lon = node.properties?.lon;
-        if (typeof lat !== "number" || typeof lon !== "number") return;
-        viewer?.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(lon, lat, 400_000),
-          duration: 1.6,
-        });
-        dispatch({
-          type: "set",
-          target: {
-            kind: "circle",
-            trigger: "search",
-            center: { lon, lat },
-            radius: 1,
-            altitude: 400_000,
-            label: node.name,
-            ref: `§ ${node.type}`,
-          },
-        });
-      }}
-    />
-  );
-}
-
-// ── ZoomTriggerHook ────────────────────────────────────────────────────────────
-// Inner component that lives inside <SpotlightProvider> so it can call
-// useSpotlightTrigger(). Handles camera zoom events and updates Spotlight state.
-
-function ZoomTriggerHook({ viewer }: { viewer: Cesium.Viewer | null }) {
-  useSpotlightTrigger(viewer);
-  return null;
 }
 
 function decodeEntityQuery(value: string | null): string {
@@ -777,26 +444,16 @@ function WorldviewContent({
     },
     [],
   );
-  // geo_events -> IntelEvent shape (EventLayer requires a non-empty title; title drives
-  // _eventData + the label). title = codebook_type ?? id keeps it non-empty (review #2).
   const eventLayerEvents = useMemo<IntelEvent[]>(
-    () =>
-      timelineGeo.map((g) => ({
-        id: g.id,
-        title: g.codebook_type ?? g.id,
-        codebook_type: g.codebook_type ?? "other",
-        severity: g.severity,
-        timestamp: g.time,
-        location_name: null,
-        country: null,
-        lat: g.lat,
-        lon: g.lon,
-      })),
+    () => toTimelineLayerEvents(timelineGeo),
     [timelineGeo],
   );
 
-  const { flights } = useFlights(effectiveLayers.flights);
-  const { satellites } = useSatellites(effectiveLayers.satellites);
+  const { flights, loading: flightsLoading, lastUpdate: flightsUpdated, error: flightsError } = useFlights(effectiveLayers.flights);
+  const [flightDensity, setFlightDensity] = useState<FlightDensity | null>(null);
+  const [eventDensity, setEventDensity] = useState<EventDensity | null>(null);
+  const satelliteSource = useSatellites(effectiveLayers.satellites);
+  const { satellites } = satelliteSource;
   const { earthquakes } = useEarthquakes(layers.earthquakes);
   const { cables, landingPoints } = useCables(effectiveLayers.cables);
   const { vessels } = useVessels(effectiveLayers.vessels);
@@ -934,8 +591,9 @@ function WorldviewContent({
           />
         </div>
 
-        <FlightLayer viewer={viewer} flights={flights} visible={effectiveLayers.flights} />
-        <SatelliteLayer viewer={viewer} satellites={satellites} visible={effectiveLayers.satellites} />
+        <FlightLayerBridge viewer={viewer} flights={flights} visible={effectiveLayers.flights} onDensity={setFlightDensity} />
+        <SatelliteLayerBridge viewer={viewer} satellites={satellites} visible={effectiveLayers.satellites} />
+        {effectiveLayers.satellites && <SatelliteSourceStatus snapshot={satelliteSource.snapshot} loading={satelliteSource.loading} error={satelliteSource.error} />}
         <EarthquakeLayer
           viewer={viewer}
           earthquakes={earthquakes}
@@ -950,6 +608,7 @@ function WorldviewContent({
           events={eventLayerEvents}
           visible={effectiveLayers.events}
           window={timelineWindow}
+          onDensity={setEventDensity}
         />
         <CableLayer viewer={viewer} cables={cables} landingPoints={landingPoints} visible={effectiveLayers.cables} />
         <PipelineLayer viewer={viewer} pipelines={pipelineData} visible={effectiveLayers.pipelines} />
@@ -1050,6 +709,8 @@ function WorldviewContent({
                 spatialProvenance={spatialEnabled ? spatialProvenance : undefined}
                 spatialStatuses={spatialEnabled ? runtimeSpatialStatuses : undefined}
                 recon={reconManifest}
+                flightStatus={{ density: flightDensity, loading: flightsLoading, lastUpdate: flightsUpdated, error: flightsError }}
+                eventDensity={eventDensity}
               />
             </OverlayPanel>
           ) : (

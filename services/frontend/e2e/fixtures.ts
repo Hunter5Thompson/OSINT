@@ -36,6 +36,11 @@ const pointer = JSON.parse(readFileSync(resolve(spatialRoot, "catalog-pointer.js
 const catalogRoot = resolve(spatialRoot, "catalogs", pointer.active_catalog_revision);
 const manifest = JSON.parse(readFileSync(resolve(catalogRoot, "manifest.json"), "utf8")) as Manifest;
 const scopes = new Map(manifest.scopes.map(record => [record.scope.key, record]));
+const gp = JSON.parse(readFileSync(resolve("../../tests/fixtures/satellites/celestrak-100651.json"), "utf8")) as Record<string, unknown>;
+export const gpTime = "2026-10-09T05:27:38.151Z";
+// Subpoint at gpTime, derived from the already qualified installed propagator.
+// This is a camera target for a frozen source fixture, not a live location claim.
+const gpSubpoint = { lat: 0.000040846049070022813, lon: -146.14305117812648 };
 
 function renderLods(values: Record<string, Record<string, unknown>>) {
   // The public API omits feature_count on an individual boundary; manifest
@@ -58,6 +63,9 @@ type ReconFixture = "inactive" | "error" | "available" | "malformed";
 export interface FixtureState {
   recon: ReconFixture;
   contact: "none" | "aircraft" | "vessel";
+  flightDensity: "off" | "dense" | "error";
+  gp: "off" | "complete" | "partial" | "failed";
+  gpRequests: number;
   reconRequests: number;
   requests: string[];
   unexpected: string[];
@@ -106,7 +114,8 @@ async function fixtures(page: Page, state: FixtureState, baseURL: string): Promi
     let status = 200;
     if (path === "/api/config") {
       data = { cesium_ion_token: "", api_version: "v1", default_layers: {
-        ...disabledLayers, flights: state.contact === "aircraft", vessels: state.contact === "vessel",
+        ...disabledLayers, flights: state.contact === "aircraft" || state.flightDensity !== "off", vessels: state.contact === "vessel",
+        satellites: state.gp !== "off",
       } };
     } else if (path === "/api/recon/scenes") {
       state.reconRequests++;
@@ -161,9 +170,34 @@ async function fixtures(page: Page, state: FixtureState, baseURL: string): Promi
         samples: [], total_count: 0, truncated: false, spatial_application: application(url) };
     } else if (path === "/api/graph/search") {
       data = { nodes: [{ id: "browser-location", name: "Fixture location", type: "Location",
-        properties: { lat: 45, lon: 15 } }] };
+        properties: state.gp === "off" ? { lat: 45, lon: 15 } : gpSubpoint }] };
+    } else if (path === "/api/satellites/orbits") {
+      state.gpRequests++;
+      status = state.gp === "failed" ? 502 : 200;
+      data = status === 502 ? { detail: "No usable orbit source" } : {
+        schema_version: 1, fetched_at: gpTime,
+        satellites: state.gp === "off" ? [] : [{
+          norad_id: 100651, name: gp.OBJECT_NAME, category: "active", operator_country: null,
+          satellite_type: "unknown", inclination_deg: gp.INCLINATION,
+          period_min: 1440 / Number(gp.MEAN_MOTION),
+          orbit: { format: "omm", elements: { ...gp, EPOCH: String(gp.EPOCH) + "Z",
+            CENTER_NAME: "EARTH", REF_FRAME: "TEME", TIME_SYSTEM: "UTC", MEAN_ELEMENT_THEORY: "SGP4" } },
+        }],
+        coverage: { completeness: state.gp === "partial" ? "partial" : "complete", groups: [
+          { group: "active", status: "ok", accepted_records: state.gp === "off" ? 0 : 1,
+            rejected_invalid: 0, rejected_unsupported: 0, rejections: [], failure_code: null },
+          ...(state.gp === "partial" ? [{ group: "military", status: "failed", accepted_records: 0,
+            rejected_invalid: 0, rejected_unsupported: 0, rejections: [], failure_code: "transport" }] : []),
+        ] },
+      };
     } else if (path === "/api/flights") {
-      data = state.contact === "aircraft" ? [{ icao24: "e2e001", callsign: "UNKNOWN AIRCRAFT",
+      status = state.flightDensity === "error" ? 503 : 200;
+      data = status !== 200 ? { detail: "Synthetic unavailable provider" }
+        : state.flightDensity === "dense" ? Array.from({ length: 10_000 }, (_, i) => ({
+          icao24: `density-${i}`, callsign: `SYNTHETIC ${i}`, latitude: 45, longitude: 15,
+          altitude_m: 10_000, velocity_ms: null, heading: null, vertical_rate: null,
+          last_contact: null, on_ground: false, is_military: i === 9999, aircraft_type: null,
+        })) : state.contact === "aircraft" ? [{ icao24: "e2e001", callsign: "UNKNOWN AIRCRAFT",
         latitude: 45, longitude: 15, altitude_m: null, velocity_ms: null, heading: null,
         vertical_rate: null, last_contact: null, on_ground: false, is_military: false,
         aircraft_type: null }] : [];
@@ -194,12 +228,25 @@ export const test = base.extend<{ state: FixtureState }>({
     if (baseURL === undefined || new URL(baseURL).hostname !== "127.0.0.1") {
       throw new Error("Browser fixture requires the runner's own loopback preview");
     }
-    const state: FixtureState = { recon: "inactive", contact: "none", reconRequests: 0,
+    const state: FixtureState = { recon: "inactive", contact: "none", flightDensity: "off", gp: "off", gpRequests: 0, reconRequests: 0,
       requests: [], unexpected: [], blockedExternal: [] };
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     await fixtures(page, state, baseURL);
+    const profiler = process.env.ODIN_BROWSER_PROFILE === "1"
+      ? await page.context().newCDPSession(page) : null;
+    if (profiler) {
+      await profiler.send("Profiler.enable");
+      await profiler.send("Profiler.start");
+    }
     await use(state);
+    if (profiler) {
+      const profile = await profiler.send("Profiler.stop");
+      await testInfo.attach("cpu-profile", {
+        contentType: "application/json", body: JSON.stringify(profile),
+      });
+      await profiler.detach();
+    }
     const rendering = await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>(".cesium-widget canvas");
       const gl = canvas?.getContext("webgl2") ?? canvas?.getContext("webgl");

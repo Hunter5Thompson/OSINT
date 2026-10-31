@@ -13,8 +13,8 @@
  *    we don't manage that header ourselves. As a belt-and-suspenders fallback
  *    we also append `?last_event_id=<id>` on explicit reconnect attempts.
  *  - Dedupe via a `Set<event_id>` capped at `DEDUPE_CAP` (oldest evicted).
- *  - `event: reset` frames clear the dedupe set, re-fetch the latest window,
- *    and replace `items` with the fresh snapshot.
+ *  - `event: reset` starts a snapshot generation; live arrivals are buffered,
+ *    merged by server ID and committed with dedupe and a monotonic cursor.
  *  - Reconnect is explicit (we close on error and schedule a new EventSource)
  *    with exponential backoff 1s → 2s → 4s → 8s → 16s → 30s (cap).
  *  - Unmount always closes the active EventSource and cancels any timer.
@@ -66,17 +66,15 @@ export function useSignalFeed(): UseSignalFeedResult {
   const attemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
-
-  // Keep the ref in sync with the state so reconnect handlers see the latest.
-  useEffect(() => {
-    lastEventIdRef.current = lastEventId;
-  }, [lastEventId]);
+  const itemsRef = useRef<SignalEnvelope[]>([]);
 
   useEffect(() => {
     // Per-effect local flag — survives Strict-Mode double-invocation because
     // each invocation captures its own `cancelled`. The cleanup of the first
     // mount flips its copy to `true`; the remount starts fresh.
     let cancelled = false;
+    let resetGeneration = 0;
+    let resetBuffer: Map<string, SignalEnvelope> | null = null;
     attemptRef.current = 0;
     setStatus("idle");
 
@@ -86,8 +84,9 @@ export function useSignalFeed(): UseSignalFeedResult {
     const registerNamed = (type: string) => {
       if (seenTypes.has(type)) return;
       seenTypes.add(type);
-      esRef.current?.addEventListener(type, ((ev: Event) => {
-        if (cancelled) return;
+      const owner = esRef.current;
+      owner?.addEventListener(type, ((ev: Event) => {
+        if (cancelled || esRef.current !== owner) return;
         const msg = ev as MessageEvent<string>;
         handleEnvelope(msg.data, (msg.lastEventId ?? "") as string);
       }) as EventListener);
@@ -109,18 +108,28 @@ export function useSignalFeed(): UseSignalFeedResult {
       return true;
     }
 
-    function seedFromLatest(envelopes: SignalEnvelope[]) {
-      // Assume server returns newest-first; take up to FEED_CAP.
-      const trimmed = envelopes.slice(0, FEED_CAP);
-      dedupeRef.current = new Set();
-      dedupeOrderRef.current = [];
-      for (const env of trimmed) rememberSeen(env.event_id);
-      setItems(trimmed);
-      const first = trimmed[0];
-      if (first) {
-        setLastEventId(first.event_id);
-        lastEventIdRef.current = first.event_id;
+    function publish(envelopes: SignalEnvelope[], rebuildDedupe: boolean) {
+      const unique = new Map<string, SignalEnvelope>();
+      for (const env of envelopes) if (!unique.has(env.event_id)) unique.set(env.event_id, env);
+      // Backend IDs are fixed-width Redis IDs; their string order is server order.
+      const ordered = [...unique.values()].sort((a, b) => a.event_id < b.event_id ? 1 : a.event_id > b.event_id ? -1 : 0);
+      const trimmed = ordered.slice(0, FEED_CAP);
+      if (rebuildDedupe) {
+        dedupeRef.current = new Set();
+        dedupeOrderRef.current = [];
+        for (const env of trimmed) rememberSeen(env.event_id);
       }
+      const newest = ordered[0]?.event_id;
+      if (newest && (lastEventIdRef.current === null || newest > lastEventIdRef.current)) {
+        lastEventIdRef.current = newest;
+      }
+      itemsRef.current = trimmed;
+      setItems(trimmed);
+      setLastEventId(lastEventIdRef.current);
+    }
+
+    function seedFromLatest(envelopes: SignalEnvelope[]) {
+      publish(envelopes, true);
     }
 
     function handleEnvelope(raw: string, fallbackId: string) {
@@ -132,28 +141,30 @@ export function useSignalFeed(): UseSignalFeedResult {
       }
       const id = env.event_id || fallbackId;
       if (!id) return;
+      const canonical = env.event_id === id ? env : { ...env, event_id: id };
+      if (resetBuffer !== null) {
+        resetBuffer.set(id, canonical);
+        if (resetBuffer.size > DEDUPE_CAP) {
+          const oldest = [...resetBuffer.keys()].sort()[0];
+          if (oldest !== undefined) resetBuffer.delete(oldest);
+        }
+      }
       if (!rememberSeen(id)) return;
-      setItems((prev) => {
-        const next = [env, ...prev];
-        if (next.length > FEED_CAP) next.length = FEED_CAP;
-        return next;
-      });
-      setLastEventId((prev) => {
-        const nextId = prev === null || id > prev ? id : prev;
-        lastEventIdRef.current = nextId;
-        return nextId;
-      });
+      publish([canonical, ...itemsRef.current], false);
     }
 
     async function handleReset() {
-      dedupeRef.current = new Set();
-      dedupeOrderRef.current = [];
+      const generation = ++resetGeneration;
+      const buffer = new Map<string, SignalEnvelope>();
+      resetBuffer = buffer;
       try {
         const fresh = await getLatestSignals(FEED_CAP);
-        if (cancelled) return;
-        seedFromLatest(fresh);
+        if (cancelled || generation !== resetGeneration) return;
+        publish([...buffer.values(), ...fresh], true);
       } catch {
-        // Keep items as-is on refetch failure.
+        // Keep the last usable display and all live arrivals on refetch failure.
+      } finally {
+        if (!cancelled && generation === resetGeneration) resetBuffer = null;
       }
     }
 
@@ -168,13 +179,13 @@ export function useSignalFeed(): UseSignalFeedResult {
       esRef.current = es;
 
       es.onopen = () => {
-        if (cancelled) return;
+        if (cancelled || esRef.current !== es) return;
         attemptRef.current = 0;
         setStatus("live");
       };
 
       es.onmessage = (ev: MessageEvent) => {
-        if (cancelled) return;
+        if (cancelled || esRef.current !== es) return;
         handleEnvelope(ev.data, ev.lastEventId ?? "");
       };
 
@@ -191,9 +202,9 @@ export function useSignalFeed(): UseSignalFeedResult {
         "signal.gdacs",
         "signal.unknown",
       ];
-      for (const type of SIGNAL_EVENT_TYPES) {
+      for (const type of new Set([...SIGNAL_EVENT_TYPES, ...seenTypes])) {
         es.addEventListener(type, ((ev: Event) => {
-          if (cancelled) return;
+          if (cancelled || esRef.current !== es) return;
           const msg = ev as MessageEvent<string>;
           handleEnvelope(msg.data, (msg.lastEventId ?? "") as string);
         }) as EventListener);
@@ -201,12 +212,12 @@ export function useSignalFeed(): UseSignalFeedResult {
       }
 
       es.addEventListener("reset", (() => {
-        if (cancelled) return;
+        if (cancelled || esRef.current !== es) return;
         void handleReset();
       }) as EventListener);
 
       es.onerror = () => {
-        if (cancelled) return;
+        if (cancelled || esRef.current !== es) return;
         // Close the broken connection and schedule a reconnect.
         try {
           es.close();
@@ -250,6 +261,8 @@ export function useSignalFeed(): UseSignalFeedResult {
 
     return () => {
       cancelled = true;
+      ++resetGeneration;
+      resetBuffer = null;
       if (reconnectTimerRef.current !== null) {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
