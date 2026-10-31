@@ -58,7 +58,7 @@ WorldView folgt einer klassischen 3-Tier-Architektur: React/CesiumJS Frontend, F
 | **Frontend** | React + TypeScript + Vite | React 19, Vite 6 | Type-Safety für komplexe State-Logik, Vite für HMR |
 | **3D Engine** | CesiumJS | 1.132+ | Einzige production-grade WebGL Globe-Engine mit 3D Tiles Support |
 | **3D Tiles** | Google Photorealistic 3D Tiles | - | Globale photorealistische Abdeckung, $200/mo Free-Tier |
-| **Satellite Math** | satellite.js | 5.x | SGP4/SDP4 Orbit-Propagation aus TLE-Daten |
+| **Satellite Math** | satellite.js | 7.1.0 (exact) | Qualifizierter JavaScript-SGP4/SDP4-Pfad für TLE und GP-JSON/OMM; DEC-005, keine optionale WASM-Runtime |
 | **Styling** | Tailwind CSS v4 | 4.x | Utility-First, schnelles taktisches UI-Prototyping |
 | **Backend** | FastAPI + Pydantic v2 | 0.128+ | Async-First, WebSocket-Support, auto-generierte OpenAPI Docs |
 | **Cache** | Redis | 7.x | In-Memory Cache für API-Responses, TTL-basiert |
@@ -179,7 +179,8 @@ GET  /api/config                    → ClientConfig (Cesium token, layer defaul
 # ── Data Layers ──
 GET  /api/flights                   → list[Aircraft]       (cached 10s)
 GET  /api/flights/military          → list[Aircraft]       (adsb.fi military filter)
-GET  /api/satellites                → list[Satellite]      (cached 1h, TLE data)
+GET  /api/satellites                → list[Satellite]      (cached 2h, legacy TLE data)
+GET  /api/satellites/orbits         → OrbitSnapshot v1     (cached 2h, GP-JSON/OMM, group coverage)
 GET  /api/earthquakes               → list[Earthquake]     (cached 5min)
 GET  /api/vessels                   → list[Vessel]         (cached 60s)
 GET  /api/hotspots                  → list[Hotspot]

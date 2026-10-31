@@ -7,6 +7,15 @@ describe("api BASE", () => {
     vi.resetModules();
   });
 
+  it("uses the explicit versioned orbit endpoint and rejects a malformed response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    vi.stubGlobal("fetch", fetchMock);
+    const { getSatelliteOrbitSnapshot } = await import("../../services/api");
+    const controller = new AbortController();
+    await expect(getSatelliteOrbitSnapshot(controller.signal)).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith("/api/satellites/orbits", { signal: controller.signal });
+  });
+
   it("uses /api (not /api/v1) for getFlights", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
     vi.stubGlobal("fetch", fetchMock);

@@ -1,6 +1,6 @@
 # ODIN/WorldView — Task Registry (Single Source of Truth)
 #
-# Letzte Aktualisierung: 2026-10-06
+# Letzte Aktualisierung: 2026-10-10
 # Dieses Dokument ersetzt:
 #   - tasks/backlog/TASK-001..015 (archiviert)
 #   - TASKS_final.md (ersetzt)
@@ -17,8 +17,16 @@
 Auf Nutzerauftrag werden die 36 offenen Herz-und-Nieren-Fix-Tickets in **13 Themen-PRs**
 gebündelt. Der [Bündelplan](docs/plans/herz-und-nieren-2026/README.md#bündelplan-und-reihenfolge)
 ersetzt die Einzel-PR-Regel; Einzeltests, Senior-Review und Mergefreigabe bleiben erhalten.
-**B01 = I05 → I06 plus I03 ist gemergt (PR #134, Merge `77a98ad`). B02 = D04/D05/D11 ist gemergt (PR #135, Merge `6742481`). B03 = D08/A01/A05/A06 ist gemergt (PR #136, Merge `ef0316c`). B04 = D03/A04 ist gemergt (PR #137, Merge `1359d14`).** X04-Designvorlage liegt vor; Entscheidung offen;
+**B01 = I05 → I06 plus I03 ist gemergt (PR #134, Merge `77a98ad`). B02 = D04/D05/D11 ist gemergt (PR #135, Merge `6742481`). B03 = D08/A01/A05/A06 ist gemergt (PR #136, Merge `ef0316c`). B04 = D03/A04 ist gemergt (PR #137, Merge `1359d14`).** X04 hat jetzt den lokalen Übergangsvertrag DEC-005; Ende-zu-Ende-Abnahme offen;
 vier Designaufträge und R01 sind keine stillschweigend abgeschlossenen Fixes.
+
+**X04/G05/B13 — lokale Umsetzung begonnen (10.10.2026):** Der aktuelle Goal-
+Auftrag autorisiert den kompatiblen GP-JSON/OMM-Pfad; [DEC-005](decisions.md#dec-005-2026-10-10--versionierte-gp-orbitdaten-mit-tle-kompatibilität)
+legt den additiven `/api/satellites/orbits`-Vertrag, die getrennte Cachegeneration,
+Quellen-/Abdeckungsgrenzen und numerischen Abnahmegates fest. Der Legacy-TLE-
+Endpunkt bleibt verfügbar. Decoder-/API-/Propagatornachweise werden lokal unter
+`/data/odin-goals/2026-10-09-repo-hardening/evidence/G05` geführt; dies ist noch
+kein Abschluss von D07/U05/X04 und keine produktive Format-/Deploymentfreigabe.
 PR #133 / HN-I04 ist seit 2026-09-27T18:34:17Z gemergt (`1eb5fdb`).
 
 **~~HN-B01 (I05/I06/I03)~~ — MERGED (PR #134, Merge `77a98ad`):** I05 isoliert fehlerhafte
