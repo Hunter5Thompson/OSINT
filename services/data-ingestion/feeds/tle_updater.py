@@ -12,6 +12,7 @@ import redis.asyncio as aioredis
 import structlog
 
 from config import settings
+from orbit_elements import scan_tle_text
 
 log = structlog.get_logger(__name__)
 
@@ -45,40 +46,23 @@ TLE_GROUPS: list[dict[str, str]] = [
 
 
 def parse_tle_text(raw: str) -> list[dict[str, str]]:
-    """Parse raw TLE text into structured satellite records.
-
-    TLE format is 3 lines per satellite:
-        Line 0: Satellite name
-        Line 1: TLE line 1
-        Line 2: TLE line 2
-    """
-    lines = [ln.rstrip() for ln in raw.strip().splitlines() if ln.strip()]
-    satellites: list[dict[str, str]] = []
-
-    i = 0
-    while i + 2 < len(lines):
-        # Heuristic: TLE line 1 starts with "1 ", TLE line 2 starts with "2 "
-        # The name line does NOT start with "1 " or "2 "
-        name_line = lines[i]
-        line1 = lines[i + 1]
-        line2 = lines[i + 2]
-
-        if line1.startswith("1 ") and line2.startswith("2 "):
-            norad_id = line1[2:7].strip()
-            satellites.append(
-                {
-                    "name": name_line.strip(),
-                    "norad_id": norad_id,
-                    "tle_line1": line1,
-                    "tle_line2": line2,
-                }
-            )
-            i += 3
-        else:
-            # Malformed — skip one line and retry
-            i += 1
-
-    return satellites
+    """Read independently validated named and bare TLE pairs."""
+    scan = scan_tle_text(raw)
+    if scan.diagnostics:
+        log.warning(
+            "tle_rows_rejected",
+            invalid=sum(item.code == "invalid" for item in scan.diagnostics),
+            unsupported=sum(item.code == "unsupported" for item in scan.diagnostics),
+        )
+    return [
+        {
+            "name": record.name,
+            "norad_id": str(record.elements.norad_id),
+            "tle_line1": record.line1,
+            "tle_line2": record.line2,
+        }
+        for record in scan.records
+    ]
 
 
 class TLEUpdater:
@@ -111,7 +95,7 @@ class TLEUpdater:
                 return resp.text
         except httpx.HTTPError as exc:
             log.warning("tle_fetch_failed", group=group["name"], error=str(exc))
-            return None
+            raise
 
     async def _cached_within_update_cycle(self, group_name: str) -> bool:
         """True if the group was stored less than one CelesTrak cycle ago
@@ -141,22 +125,25 @@ class TLEUpdater:
         """Fetch all TLE groups and cache in Redis."""
         log.info("tle_update_started", group_count=len(TLE_GROUPS))
         total_sats = 0
+        failures = 0
+        retained_groups = 0
         start = time.monotonic()
 
         for group in TLE_GROUPS:
             try:
                 if await self._cached_within_update_cycle(group["name"]):
+                    retained_groups += 1
                     log.info("tle_group_fresh_skip", group=group["name"])
                     continue
                 raw = await self._fetch_group(group)
                 if raw is None:
+                    r = await self._get_redis()
+                    if not await r.exists(f"tle:group:{group['name']}"):
+                        raise ValueError("Unchanged TLE source has no retained cache")
+                    retained_groups += 1
                     continue
 
                 satellites = parse_tle_text(raw)
-                if not satellites:
-                    log.warning("tle_empty_group", group=group["name"])
-                    continue
-
                 await self._store_group(group["name"], satellites)
                 log.info(
                     "tle_group_cached",
@@ -165,10 +152,19 @@ class TLEUpdater:
                 )
                 total_sats += len(satellites)
             except Exception:
+                failures += 1
                 log.exception("tle_group_error", group=group["name"])
 
         elapsed = round(time.monotonic() - start, 2)
-        log.info("tle_update_finished", total_satellites=total_sats, elapsed_seconds=elapsed)
+        log.info(
+            "tle_update_finished",
+            total_satellites=total_sats,
+            failed_groups=failures,
+            retained_groups=retained_groups,
+            elapsed_seconds=elapsed,
+        )
+        if failures and not total_sats and not retained_groups:
+            raise ValueError("No usable TLE groups; previous cache preserved")
 
     async def close(self) -> None:
         """Close Redis connection."""

@@ -30,6 +30,12 @@ def test_plan_rekey_noop_when_already_coordinate_bearing():
     assert plan_rekey(rows).rewire_count == 0
 
 
+def test_existing_repair_executor_keeps_its_legacy_target_algorithm():
+    row = _row("old", "Place", -0.0001, 20, "incident:place@-0.000,20.000")
+    assert row.desired_loc_key() == "incident:place@-0.000,20.000"
+    assert plan_rekey([row]).rewire_count == 0
+
+
 class _FakeClient:
     def __init__(self, fetch_rows):
         self._fetch_rows = fetch_rows

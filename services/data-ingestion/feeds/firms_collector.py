@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import re
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -28,16 +30,18 @@ FIRMS_DAYS = 1  # last N days of data per request
 
 
 def _firms_observed_at(acq_date: str, acq_time: str | int | None) -> str | None:
-    """ISO acquisition instant from FIRMS acq_date + HHMM acq_time (UTC).
-
-    Returns None when either part is missing so an absent acq_time falls back to
-    ingested_at downstream — rather than fabricating a midnight 'observed' instant.
-    An out-of-range HHMM yields a string that _normalize_iso later rejects (-> None).
-    """
-    if not acq_date or acq_time in (None, ""):
+    """Validated UTC minute; unknown/invalid source time has no observation identity."""
+    if not isinstance(acq_date, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", acq_date):
+        return None
+    if type(acq_time) not in (str, int) or not re.fullmatch(r"[0-9]{1,4}", str(acq_time)):
         return None
     hhmm = str(acq_time).zfill(4)
-    return f"{acq_date}T{hhmm[:2]}:{hhmm[2:]}:00+00:00"
+    try:
+        return (
+            datetime.strptime(f"{acq_date}T{hhmm}", "%Y-%m-%dT%H%M").replace(tzinfo=UTC).isoformat()
+        )
+    except ValueError:
+        return None
 
 
 # Fetch areas around geopolitical hotspots: "west,south,east,north". They
@@ -81,7 +85,8 @@ class FIRMSCollector(BaseCollector):
                 crosswalk_path=self.settings.spatial_country_crosswalk_path,
             )
         return normalize_location(
-            RawLocationIdentity(latitude=lat, longitude=lon), self._spatial_index,
+            RawLocationIdentity(latitude=lat, longitude=lon),
+            self._spatial_index,
         ).country_iso3
 
     # ------------------------------------------------------------------
@@ -93,11 +98,36 @@ class FIRMSCollector(BaseCollector):
         lat: float,
         lon: float,
         acq_date: str,
-        acq_time: str,
+        acq_time: str | int | None,
     ) -> str:
         """Deterministic dedup key: location + time, satellite-agnostic."""
-        key = f"{lat:.4f}|{lon:.4f}|{acq_date}|{acq_time}"
+        observed = _firms_observed_at(acq_date, acq_time)
+        if observed is None:
+            raise ValueError("FIRMS identity requires a valid acquisition minute")
+        hhmm = observed[11:13] + observed[14:16]
+        key = f"{lat:.4f}|{lon:.4f}|{observed[:10]}|{hhmm}"
         return self._content_hash(key)
+
+    def _identity_hashes(
+        self, lat: float, lon: float, acq_date: str, acq_time: str | int | None
+    ) -> tuple[str, ...]:
+        """Canonical first, then at most three older valid zero-padding aliases."""
+        canonical = self._firms_content_hash(lat, lon, acq_date, acq_time)
+        unpadded = str(int(str(acq_time)))  # canonical validation has already succeeded
+        aliases = [
+            self._content_hash(f"{lat:.4f}|{lon:.4f}|{acq_date}|{unpadded.zfill(width)}")
+            for width in range(1, 5)
+        ]
+        return tuple(dict.fromkeys([canonical, *aliases]))
+
+    async def _dedup_check(self, point_id: int, legacy_ids: tuple[int, ...] = ()) -> bool:
+        """One database lookup covers canonical and retained legacy identities."""
+        existing = await asyncio.to_thread(
+            self.qdrant.retrieve,
+            collection_name=self.settings.qdrant_collection,
+            ids=list(dict.fromkeys((point_id, *legacy_ids))),
+        )
+        return len(existing) > 0
 
     def _parse_csv(self, text: str, fetch_area: str) -> list[dict]:
         """Parse FIRMS CSV response into a list of normalised event dicts."""
@@ -105,6 +135,8 @@ class FIRMSCollector(BaseCollector):
         rows: list[dict] = []
         for row in reader:
             try:
+                if _firms_observed_at(row.get("acq_date", ""), row.get("acq_time")) is None:
+                    raise ValueError("FIRMS acquisition minute is invalid or missing")
                 lat = float(row["latitude"])
                 lon = float(row["longitude"])
                 frp = float(row.get("frp") or 0)
@@ -169,6 +201,7 @@ class FIRMSCollector(BaseCollector):
 
         total_new = 0
         first_request = True
+        seen_ids: set[int] = set()
 
         for satellite in FIRMS_SATELLITES:
             for bbox_name, bbox in FIRMS_BBOXES.items():
@@ -187,13 +220,17 @@ class FIRMSCollector(BaseCollector):
 
                 points: list[PointStruct] = []
                 for row in rows:
-                    chash = self._firms_content_hash(
+                    hashes = self._identity_hashes(
                         row["latitude"], row["longitude"], row["acq_date"], row["acq_time"]
                     )
+                    chash = hashes[0]
                     pid = self._point_id(chash)
-
-                    if await self._dedup_check(pid):
+                    if pid in seen_ids or await self._dedup_check(
+                        pid, tuple(self._point_id(value) for value in hashes[1:])
+                    ):
                         continue
+
+                    row["identity_schema"] = "firms-location-hhmm-v2"
 
                     row["country_iso3"] = self._country_iso3(row["latitude"], row["longitude"])
                     title = (
@@ -215,6 +252,7 @@ class FIRMSCollector(BaseCollector):
                     # upsert so the row is retried on the next source re-fetch
                     # (Hash-Dedup doesn't trip).
                     observed = _firms_observed_at(row.get("acq_date", ""), row.get("acq_time"))
+                    row["observed_at"] = observed
                     try:
                         await process_item(
                             title=title,
@@ -236,6 +274,7 @@ class FIRMSCollector(BaseCollector):
                     try:
                         point = await self._build_point(embed_text, row, chash)
                         points.append(point)
+                        seen_ids.add(pid)
                     except Exception as exc:
                         log.warning(
                             "firms_embed_failed",

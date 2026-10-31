@@ -165,6 +165,7 @@ class Notable(BaseModel):
 class GeoEvent(BaseModel):
     id: str
     time: str
+    title: str | None = None
     codebook_type: str | None = None
     severity: str
     lat: float

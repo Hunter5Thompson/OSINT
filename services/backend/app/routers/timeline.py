@@ -990,7 +990,7 @@ WHERE ev.timeline_at >= datetime($t_start) AND ev.timeline_at <= datetime($t_end
               OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) )))
 RETURN coalesce(ev.id, ev.event_id, toString(elementId(ev))) AS id,
        toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
-       ev.severity AS severity, l.lat AS lat, l.lon AS lon
+       ev.title AS title, ev.severity AS severity, l.lat AS lat, l.lon AS lon
 """
 
 _GEO_CAP = 200
@@ -1028,6 +1028,7 @@ def _geo_events_from_rows(
     out = [
         GeoEvent(
             id=str(r["id"]), time=str(r.get("time") or ""),
+            title=r.get("title") if isinstance(r.get("title"), str) else None,
             codebook_type=r.get("codebook_type"),
             severity=normalize_severity(r.get("severity")),
             lat=float(r["lat"]), lon=float(r["lon"]),

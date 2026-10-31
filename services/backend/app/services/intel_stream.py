@@ -119,6 +119,9 @@ async def stream_intel_query(
             analysis=data.get("analysis", ""),
             confidence=data.get("confidence", 0.0),
             threat_assessment=data.get("threat_assessment", "MODERATE"),
+            assessment_status=data.get("assessment_status"),
+            verification_status=data.get("verification_status"),
+            evidence_summary=data.get("evidence_summary"),
             tool_trace=data.get("tool_trace", []),
             mode=data.get("mode", "react"),
             timestamp=datetime.fromisoformat(data["timestamp"])
@@ -147,6 +150,9 @@ async def stream_intel_query(
                         text=truncate_message(persisted_text),
                         ts=analysis.timestamp,
                         refs=analysis.sources_used[:6],
+                        assessment_status=analysis.assessment_status,
+                        verification_status=analysis.verification_status,
+                        evidence_summary=analysis.evidence_summary,
                     ),
                 )
             except Exception as persist_exc:  # noqa: BLE001

@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
 from starlette.responses import Response
 
-from app.admin_auth import require_admin_token
+from app.admin_auth import require_admin_token, select_admin_token
 from app.config import settings
 from app.models.almanac import (
     AlmanacSignalResponse,
@@ -144,7 +144,9 @@ def _require_report_admin(
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> None:
     require_admin_token(
-        expected_token=settings.reports_admin_token or settings.incidents_admin_token,
+        expected_token=select_admin_token(
+            settings.reports_admin_token, settings.incidents_admin_token
+        ),
         supplied_token=x_admin_token,
         area="reports",
     )
