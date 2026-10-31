@@ -1,0 +1,14 @@
+# Explicit opt-in after the release overlay. The token is never a build input.
+services:
+  frontend:
+    ports: !override
+      - "127.0.0.1:5173:5173"
+    environment:
+      ODIN_OPERATOR_GATEWAY_ENABLED: "true"
+      ODIN_OPERATOR_TOKEN_FILE: /run/secrets/odin_operator_token
+    secrets:
+      - odin_operator_token
+
+secrets:
+  odin_operator_token:
+    file: ${ODIN_OPERATOR_TOKEN_FILE:?Set ODIN_OPERATOR_TOKEN_FILE to the matching server token file}

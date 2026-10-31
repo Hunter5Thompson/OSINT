@@ -15,6 +15,8 @@ from app.models.spatial import SpatialScopeTokenV1
 from app.routers import almanac, intel
 from app.services.spatial_catalog import CatalogReadyState, SpatialCatalogLoader
 
+pytestmark = pytest.mark.usefixtures("operator_headers")
+
 REFERENCE_SPATIAL_ROOT = Path(__file__).parents[2] / "data" / "spatial"
 
 
@@ -44,7 +46,9 @@ async def _post(application: FastAPI, path: str, payload: dict[str, Any] | None 
         transport=ASGITransport(app=application),
         base_url="http://test",
     ) as client:
-        return await client.post(path, json=payload)
+        return await client.post(
+            path, json=payload, headers={"X-Admin-Token": "test-only-operator"}
+        )
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,11 @@ ist nötig, weil `!override` die bisherigen Code-Mounts vollständig ersetzt.
 Referenz: [Docker Merge-Regeln](https://docs.docker.com/reference/compose-file/merge/).
 Ohne `--release` bleibt die bisherige Entwicklungskonfiguration aktiv.
 
+Das zusätzliche Flag `--operator-gateway` aktiviert das gebackene
+[Loopback-Operator-Gateway](operator-gateway.md) mit einem Runtime-Secret für
+Dossieränderungen und alle Backend-Modellaufrufe. Backend und Frontend müssen
+dafür gemeinsam als Paket vorbereitet werden.
+
 Das zusätzliche `--tracing` wählt als vierte Datei das explizite
 `docker-compose.tracing.release.yml` mit Socket-/Token-Laufzeitinputs und
 Reporter im Image. Konfiguration, Nachweise und Abnahmegrenzen stehen in

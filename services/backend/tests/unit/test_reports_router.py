@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
 from app.models.report import (
     DossierMetric,
@@ -60,9 +61,7 @@ class TestReportsRouter:
         assert body[0]["id"] == "r-044"
 
     def test_create_report(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-        from app.routers import reports as reports_router
-
-        monkeypatch.setattr(reports_router.settings, "reports_admin_token", "reports-secret")
+        monkeypatch.setattr(settings, "reports_admin_token", "reports-secret")
         report = _sample_report("r-045")
         with patch(
             "app.routers.reports.report_store.create_report", AsyncMock(return_value=report)
@@ -84,9 +83,7 @@ class TestReportsRouter:
         assert resp.status_code == 404
 
     def test_patch_report(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-        from app.routers import reports as reports_router
-
-        monkeypatch.setattr(reports_router.settings, "reports_admin_token", "reports-secret")
+        monkeypatch.setattr(settings, "reports_admin_token", "reports-secret")
         patched = _sample_report("r-044").model_copy(update={"title": "Updated title"})
         with patch(
             "app.routers.reports.report_store.update_report", AsyncMock(return_value=patched)
@@ -101,9 +98,7 @@ class TestReportsRouter:
         assert resp.json()["title"] == "Updated title"
 
     def test_delete_report_204(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-        from app.routers import reports as reports_router
-
-        monkeypatch.setattr(reports_router.settings, "reports_admin_token", "reports-secret")
+        monkeypatch.setattr(settings, "reports_admin_token", "reports-secret")
         with patch("app.routers.reports.report_store.delete_report", AsyncMock(return_value=True)):
             resp = client.delete("/api/reports/r-044", headers=ADMIN_HEADERS)
 
@@ -140,9 +135,7 @@ class TestReportsRouter:
         client: TestClient,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from app.routers import reports as reports_router
-
-        monkeypatch.setattr(reports_router.settings, "reports_admin_token", "reports-secret")
+        monkeypatch.setattr(settings, "reports_admin_token", "reports-secret")
         msg = ReportMessage(
             id="msg-2",
             role="user",
@@ -181,9 +174,7 @@ class TestReportsRouter:
         client: TestClient,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from app.routers import reports as reports_router
-
-        monkeypatch.setattr(reports_router.settings, "reports_admin_token", "reports-secret")
+        monkeypatch.setattr(settings, "reports_admin_token", "reports-secret")
         resp = client.patch(
             "/api/reports/r-044",
             headers={"X-Admin-Token": "wrong"},

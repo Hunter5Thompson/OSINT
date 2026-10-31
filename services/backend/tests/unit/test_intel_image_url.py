@@ -30,7 +30,7 @@ def test_query_image_url_contract_accepts_https(url):
 
 
 @pytest.mark.parametrize("url", URL_REJECT_CASES)
-def test_http_query_rejects_image_url_before_stream(monkeypatch, url):
+def test_http_query_rejects_image_url_before_stream(monkeypatch, url, operator_headers):
     from fastapi.testclient import TestClient
 
     from app.main import app
@@ -40,5 +40,7 @@ def test_http_query_rejects_image_url_before_stream(monkeypatch, url):
         raise AssertionError("stream pipeline must not run")
 
     monkeypatch.setattr(intel, "stream_intel_query", fail_stream)
-    response = TestClient(app).post("/api/intel/query", json={"query": "inspect", "image_url": url})
+    response = TestClient(app, headers=operator_headers).post(
+        "/api/intel/query", json={"query": "inspect", "image_url": url}
+    )
     assert response.status_code == 422

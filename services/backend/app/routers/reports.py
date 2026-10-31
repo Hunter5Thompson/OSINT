@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.admin_auth import require_admin_token, select_admin_token
-from app.config import settings
+from app.admin_auth import require_operator_access
 from app.models.report import (
     ReportCreateRequest,
     ReportMessage,
@@ -19,18 +18,6 @@ from app.services import report_store
 log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
-
-
-def _require_report_admin(
-    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-) -> None:
-    require_admin_token(
-        expected_token=select_admin_token(
-            settings.reports_admin_token, settings.incidents_admin_token
-        ),
-        supplied_token=x_admin_token,
-        area="reports",
-    )
 
 
 @router.get("", response_model=list[ReportRecord])
@@ -48,7 +35,7 @@ async def list_reports(
     "",
     response_model=ReportRecord,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(_require_report_admin)],
+    dependencies=[Depends(require_operator_access)],
 )
 async def create_report(payload: ReportCreateRequest) -> ReportRecord:
     try:
@@ -74,7 +61,7 @@ async def get_report(report_id: str) -> ReportRecord:
 @router.patch(
     "/{report_id}",
     response_model=ReportRecord,
-    dependencies=[Depends(_require_report_admin)],
+    dependencies=[Depends(require_operator_access)],
 )
 async def patch_report(report_id: str, patch: ReportUpdateRequest) -> ReportRecord:
     try:
@@ -91,7 +78,7 @@ async def patch_report(report_id: str, patch: ReportUpdateRequest) -> ReportReco
 @router.delete(
     "/{report_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(_require_report_admin)],
+    dependencies=[Depends(require_operator_access)],
 )
 async def delete_report(report_id: str) -> None:
     try:
@@ -125,7 +112,7 @@ async def list_report_messages(
     "/{report_id}/messages",
     response_model=ReportMessage,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(_require_report_admin)],
+    dependencies=[Depends(require_operator_access)],
 )
 async def create_report_message(report_id: str, payload: ReportMessageCreate) -> ReportMessage:
     try:

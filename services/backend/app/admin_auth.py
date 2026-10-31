@@ -1,9 +1,11 @@
-"""Shared admin-token enforcement for mutating internal endpoints."""
+"""Shared token enforcement for internal mutations and operator model triggers."""
 
 from __future__ import annotations
 
 import structlog
-from fastapi import HTTPException
+from fastapi import Header, HTTPException
+
+from app.config import settings
 
 log = structlog.get_logger(__name__)
 
@@ -29,3 +31,16 @@ def require_admin_token(
         )
     if supplied != expected:
         raise HTTPException(status_code=401, detail="invalid admin token")
+
+
+def require_operator_access(
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> None:
+    """Authorize model use and dossier mutations with the same operator credential."""
+    require_admin_token(
+        expected_token=select_admin_token(
+            settings.reports_admin_token, settings.incidents_admin_token
+        ),
+        supplied_token=x_admin_token,
+        area="reports",
+    )

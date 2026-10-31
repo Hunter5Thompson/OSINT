@@ -1,0 +1,17 @@
+# Existing dossier CRUD/messages and briefing saves share the operator credential.
+location ~ "^/api/(reports(?:/[A-Za-z0-9_-]+(?:/messages)?)?|almanac/(?:countries/[A-Za-z0-9_-]+|country)/briefing/save)$" {
+    if ($odin_operator_csrf_blocked) { return 403; }
+    set $api_upstream http://backend:8000;
+    proxy_set_header X-Admin-Token $odin_reports_credential;
+    proxy_pass $api_upstream$request_uri;
+}
+
+# Only POST acquires a credential on these four LLM triggers.
+location ~ "^/api/(intel/(?:query|hotspot/[A-Za-z0-9._:-]+)|almanac/(?:countries/[A-Za-z0-9_-]+|country)/briefing)$" {
+    if ($odin_operator_csrf_blocked) { return 403; }
+    set $api_upstream http://backend:8000;
+    proxy_set_header X-Admin-Token $odin_llm_credential;
+    proxy_buffering off;
+    proxy_read_timeout 310s;
+    proxy_pass $api_upstream$request_uri;
+}

@@ -7,13 +7,12 @@ from dataclasses import dataclass
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
 from starlette.responses import Response
 
-from app.admin_auth import require_admin_token, select_admin_token
-from app.config import settings
+from app.admin_auth import require_operator_access
 from app.models.almanac import (
     AlmanacSignalResponse,
     BriefingSaveRequest,
@@ -140,18 +139,6 @@ def _resolve_committed_country_scope(
     )
 
 
-def _require_report_admin(
-    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-) -> None:
-    require_admin_token(
-        expected_token=select_admin_token(
-            settings.reports_admin_token, settings.incidents_admin_token
-        ),
-        supplied_token=x_admin_token,
-        area="reports",
-    )
-
-
 @router.get("/countries/{country_id}", response_model=CountryAlmanac)
 async def get_country_almanac(country_id: str) -> CountryAlmanac:
     store = get_country_almanac_store()
@@ -249,7 +236,11 @@ async def get_spatial_country_signals(
     return _spatial_country_signal_response(context, limit)
 
 
-@router.post("/country/briefing", response_model=None)
+@router.post(
+    "/country/briefing",
+    response_model=None,
+    dependencies=[Depends(require_operator_access)],
+)
 async def generate_spatial_country_briefing(
     request: Request,
     scope_key: str = Query(),
@@ -273,7 +264,11 @@ async def get_country_signals(
     return _country_signal_response(country, limit)
 
 
-@router.post("/countries/{country_id}/briefing", response_model=None)
+@router.post(
+    "/countries/{country_id}/briefing",
+    response_model=None,
+    dependencies=[Depends(require_operator_access)],
+)
 async def generate_country_briefing(
     country_id: str,
     request: Request,
@@ -341,7 +336,7 @@ async def _save_resolved_country_briefing(
 @router.post(
     "/country/briefing/save",
     response_model=ReportRecord,
-    dependencies=[Depends(_require_report_admin)],
+    dependencies=[Depends(require_operator_access)],
 )
 async def save_spatial_country_briefing(
     body: BriefingSaveRequest,
@@ -363,7 +358,7 @@ async def save_spatial_country_briefing(
 @router.post(
     "/countries/{country_id}/briefing/save",
     response_model=ReportRecord,
-    dependencies=[Depends(_require_report_admin)],
+    dependencies=[Depends(require_operator_access)],
 )
 async def save_country_briefing(
     country_id: str, body: BriefingSaveRequest, request: Request

@@ -40,6 +40,13 @@ unbeabsichtigten Redis-Testzugriff; keine produktive Rücksetzung ohne Freigabe.
 
 ## TECH STACK — CANONICAL VALUES
 
+Lokale Folgearbeit zu HN-B10/D09 vom 31.10.2026:
+[BP-01 Operatorzugriff](docs/reviews/2026-10-31-bp01-operator-access.md) schützt
+alle Backend-LLM-Auslöser und bereitet das opt-in Release-Gateway vor.
+Backend-, Frontend-, Betriebs- und isolierte nginx-/Browserprüfungen bestanden;
+Veröffentlichung, Imagebuild und Deployment bleiben separat offen. BP-02–09
+sind damit nicht umgesetzt.
+
 Versionsquelle sind die fünf tracked Deployment-Lockfiles und die gewählten
 Compose-/Releaseinputs. Diese Tabelle beschreibt Sourceverträge, keinen heute
 gemessenen laufenden Stack. [AGENTS.md](AGENTS.md), [Betriebsstatus](docs/CONTAINER-STATUS.md)

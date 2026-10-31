@@ -16,6 +16,8 @@ from app.services.spatial_catalog import (
     SpatialCatalogLoader,
 )
 
+pytestmark = pytest.mark.usefixtures("operator_headers")
+
 REFERENCE_SPATIAL_ROOT = Path(__file__).parents[1] / "data" / "spatial"
 
 
@@ -40,7 +42,8 @@ async def _request(
         transport=ASGITransport(app=app),
         base_url="http://test",
     ) as client:
-        return await client.request(method, url, **kwargs)
+        headers = {"X-Admin-Token": "test-only-operator"} if method == "POST" else {}
+        return await client.request(method, url, headers=headers, **kwargs)
 
 
 async def _get(loader: SpatialCatalogLoader, url: str) -> Response:
@@ -97,8 +100,7 @@ async def test_reviewed_catalog_identity_maps_to_existing_almanac_aliases(
 
     response = await _get(
         loader,
-        "/api/almanac/country"
-        f"?scope_key={scope_key}&catalog_revision={revision}",
+        f"/api/almanac/country?scope_key={scope_key}&catalog_revision={revision}",
     )
 
     assert response.status_code == 200
@@ -172,8 +174,7 @@ async def test_spatial_signals_resolve_the_exact_committed_query(
     response = await _request(
         loader,
         "GET",
-        "/api/almanac/country/signals"
-        f"?scope_key=country%3AUKR&catalog_revision={revision}&limit=5",
+        f"/api/almanac/country/signals?scope_key=country%3AUKR&catalog_revision={revision}&limit=5",
     )
 
     assert response.status_code == 200
@@ -200,8 +201,7 @@ async def test_spatial_briefing_stream_uses_the_exact_resolved_scope_token(
     response = await _request(
         loader,
         "POST",
-        "/api/almanac/country/briefing"
-        f"?scope_key=country%3AUKR&catalog_revision={revision}",
+        f"/api/almanac/country/briefing?scope_key=country%3AUKR&catalog_revision={revision}",
     )
 
     assert response.status_code == 200

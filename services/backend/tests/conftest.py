@@ -30,3 +30,10 @@ def set_app_state() -> None:
     app.state.proxy = MagicMock()
     app.state.cache = AsyncMock()
     app.state.cluster_store = None  # router code uses getattr(..., None); explicit for clarity
+
+
+@pytest.fixture
+def operator_headers(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """Opt in existing functional tests to the operator HTTP contract."""
+    monkeypatch.setattr(settings, "reports_admin_token", "test-only-operator")
+    return {"X-Admin-Token": "test-only-operator"}
