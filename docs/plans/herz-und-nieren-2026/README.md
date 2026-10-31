@@ -3,8 +3,10 @@
 **Status: aktiver Vertrag.** Historisch gemergt: S01–S03, I01/I02/I04 und B01–B05.
 Der letzte Remote-Beleg für B05/PR #138 ist Main `a47da45`; aktueller Remote-
 und Deploymentstand bleiben separat zu prüfen. B06–B13 sind am 10.10.2026 im
-einzigen Goal-Worktree lokal als dirty Sourcecheckpoint vorbereitet. Keine
-neuen Bündel-PRs oder Vollabnahmen daraus ableiten. Aktuelle Ticketmatrix und
+einzigen Goal-Worktree scoped committet; der neue exklusive Writer führt echte
+Fullservice-/Store-/Built-Browsergates aus. Kein Bündel-PR oder Produktivrelease
+ist damit bereits nachgewiesen. GitHub bestätigt frisch PR138/Maina47da45.
+Aktuelle Ticketmatrix und
 Einzelreviews: [TASKS.md](../../../TASKS.md). Baseline:
 `374c5cc460ebea44ad27f0ddfe09a11fd2d57e83` (2026-09-27).
 [Senior-Bewertung](../../reports/Herz_und_Nieren_2026_Alpha_Review.md).

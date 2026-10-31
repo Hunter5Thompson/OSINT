@@ -103,6 +103,9 @@ sind keine Registry-Manifestdigests; die nachfolgenden Image-Smokes, finalen
 CI-/Release-/Rollbackgates bleiben erforderlich. Rerank und Kernimages
 behalten ihren gesonderten Versions-/Digestnachweis.
 
-In der Folgeinstanz10.10 wurde nur der Vertrag geprüft und der dirty Plan
-ordnungsgemäß abgewiesen; kein Dockerbuild ausgeführt. Der ältere falsch
+Der beendete Vorgänger prüfte nur den Vertrag und wies den dirty Plan
+ordnungsgemäß ab. Der exklusive Nachfolger baute tatsächlich fünf saubere
+86e68d2-Commitimages; normale Smokes, lokale Manifestdigests und isolierter
+Rückwechsel sind belegt. Anschließende selektive Python-Lockwartung verlangt
+einen neuen finalen Head-/Buildbeleg; kein Produktivrollout ist erfolgt. Der ältere falsch
 beschriftete SHA3234993-Build bleibt verworfen.
