@@ -1,6 +1,19 @@
 # Fixplan: Herz und Nieren 2026 Alpha
 
-**Status: aktiv; HN-S01 und HN-S02 abgeschlossen (PR #128, Merge `732fadc`), HN-S03 gemergt (PR #129, Merge `58843a7`, CI erfolgreich), HN-I01 gemergt (PR #131, `a45a13c`), HN-I02 gemergt (PR #132, `a3fc29c`); HN-I04 gemergt (PR #133, `1eb5fdb`); B01 I05/I06/I03 gemergt (PR #134, Merge `77a98ad`). B02 D04/D05/D11 gemergt (PR #135, Merge `6742481`); B03 D08/A01/A05/A06 gemergt (PR #136, Merge `ef0316c`); B04 D03/A04 gemergt (PR #137, Merge `1359d14`); B05 D01/D02/D10 fachlich abgenommen, Merge/Deployment offen.** Baseline: `374c5cc460ebea44ad27f0ddfe09a11fd2d57e83` (2026-09-27). [Senior-Bewertung mit vollständiger Finding-Matrix](../../reports/Herz_und_Nieren_2026_Alpha_Review.md).
+**Status: aktiver Vertrag.** Historisch gemergt: S01–S03, I01/I02/I04 und B01–B05.
+Der letzte Remote-Beleg für B05/PR #138 ist Main `a47da45`; aktueller Remote-
+und Deploymentstand bleiben separat zu prüfen. B06–B13 sind am 10.10.2026 im
+einzigen Goal-Worktree lokal als dirty Sourcecheckpoint vorbereitet. Keine
+neuen Bündel-PRs oder Vollabnahmen daraus ableiten. Aktuelle Ticketmatrix und
+Einzelreviews: [TASKS.md](../../../TASKS.md). Baseline:
+`374c5cc460ebea44ad27f0ddfe09a11fd2d57e83` (2026-09-27).
+[Senior-Bewertung](../../reports/Herz_und_Nieren_2026_Alpha_Review.md).
+
+Der ausdrückliche Gesamtauftrag vom 09.10.2026 und seine einzige Folgeinstanz
+haben Vorrang vor den historischen Modell-/Agenten- und Mergepausevorgaben
+unten: ein exklusiver Writer in `/data/odin-worktrees/goal-release`, unabhängige
+Sourcearbeit autonom, keine weiteren Writer oder pauschale Main-/Produktiv-
+freigabe. Die Unterkriterien und getrennten Abnahmen bleiben verbindlich.
 
 ## Ausführung mit Senior und GPT-6-Luna
 
@@ -22,7 +35,7 @@ Der bestehende Umsetzungsauftrag deckt Implementierung, scoped Commit/Push und B
 **Bündelbasis: 36 Implementierungstickets → 13 Themen-PRs.** B01 mit drei Tickets
 ist gemergt; B02 mit drei weiteren Tickets ist ebenfalls gemergt.
 B03 mit vier weiteren Tickets ist gemergt (PR #136, `ef0316c`).
-Nach B03 verblieben 26 Fix-Tickets in zehn Bündeln; B04 (D03, A04) ist gemergt; B05 (D01, D02, D10) ist fachlich abgenommen, Merge offen. Die Einzel-IDs,
+Nach B03 verblieben 26 Fix-Tickets in zehn Bündeln; B04 (D03, A04) und B05 (D01, D02, D10) sind historisch gemergt. Die Einzel-IDs,
 Scopes und Abnahmekriterien bleiben erhalten. A02 ist in D07 enthalten und wird nicht
 nochmals gezählt. Die bereits gemergten S01/S02/S03/I01/I02/I04 bleiben abgeschlossen.
 Diese Bündelreihenfolge ersetzt die frühere PR-Reihenfolge nach Wellen.
@@ -33,7 +46,7 @@ Diese Bündelreihenfolge ersetzt die frühere PR-Reihenfolge nach Wellen.
 | ~~B02~~ (gemergt, PR #135) | Backend-Feeds und Cache-Recovery | ~~D04~~, ~~D05~~, ~~D11~~ | Fehlerhafte Einzelzeilen, Cache-Recovery und Feed-Freshness; Backend-Gesamtchecks |
 | ~~B03~~ (gemergt, PR #136) | Ingestion-Parser und Quellidentität | ~~D08~~, ~~A01~~, ~~A05~~, ~~A06~~ | Je Quelle eigener RED/GREEN-Unterlauf; Collector-/Pipeline-Verträge und Ingestion-Gesamtchecks |
 | ~~B04~~ (gemergt, PR #137) | Graph-Auswahl und Claim-Kanten | ~~D03~~, ~~A04~~ | Isolierte echte Neo4j-Fixtures für Filter und typgebundene Kanten; Backend/Ingestion |
-| ~~B05~~ (fachlich abgenommen, Merge offen) | Schiffs- und Flugmesswerte | ~~D01~~ → ~~D02~~, ~~D10~~ | Producer→API→Anzeige, unbekannte Werte und Rollen; Backend/Ingestion/Frontend samt Browser-Smoke |
+| ~~B05~~ (historisch gemergt, PR #138) | Schiffs- und Flugmesswerte | ~~D01~~ → ~~D02~~, ~~D10~~ | Producer→API→Anzeige, unbekannte Werte und Rollen; aktuelle Deploymentprovenienz separat offen |
 | B06 | Hotspot-Daten und Abdeckung | A03, D06; X01/X02-Entscheidungsvorlagen | Keine Absenkung bei Ausfall, saubere Texte; bestehende Policy erhalten, Abdeckungsgrenzen dokumentieren |
 | B07 | Kanonische Identitäten | A07, A08 | Vor Codeänderungen Legacy-ID-/Key-Konzept prüfen; Hash-/Key-Parität, keine Live-Reingestion oder Migration |
 | B08 | Agentensteuerung | L01, L02, L03 | Intent, Assessment und tatsächliche Toolstarts gemeinsam prüfen; Intelligence-Gesamtchecks |
@@ -72,8 +85,10 @@ X01–X04 bleiben vier **offene Designaufträge**, keine implizite Autorisierung
 Produktpolitik. X01/X02 werden in B06 und X03 in B12 mitgeführt; ihre unabhängigen
 Fixes können vorher abgeschlossen werden. X04 beginnt **früh neben B01** als
 read-only Designarbeit und wird vor B13 entschieden, nicht erst am Ende entdeckt.
-Die [frühe X04-Entscheidungsvorlage](X04-design-notes.md) liegt vor; Formatfreigabe
-und Umsetzung bleiben offen.
+Die [frühe X04-Entscheidungsvorlage](X04-design-notes.md) wurde durch
+[DEC-005](../../../decisions.md) für die ausdrücklich autorisierte lokale
+GP/OMM-Umsetzung konkretisiert. Sourcekette 100651 vorbereitet; durchgängige
+Built-Browser-/Releaseabnahme und produktive Formataktivierung bleiben offen.
 Die Designnotizen werden in die ohnehin anstehenden Bündel-PRs aufgenommen.
 
 Die 13 PRs decken die 36 schon konkretisierten Fix-Tickets ab. Eine nach X04
