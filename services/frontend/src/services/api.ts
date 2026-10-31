@@ -149,10 +149,26 @@ export async function getCountryAlmanacSignals(
   return (await res.json()) as AlmanacSignalResponse;
 }
 
+async function apiError(response: Response): Promise<Error> {
+  const summary = `API error: ${response.status} ${response.statusText}`;
+  try {
+    const body: unknown = await response.json();
+    if (typeof body === "object" && body !== null && "detail" in body) {
+      const detail = body.detail;
+      if (typeof detail === "string" && detail.trim()) {
+        return new Error(`${summary}: ${detail.trim()}`);
+      }
+    }
+  } catch {
+    // Proxies may return HTML or an empty body; retain the HTTP status.
+  }
+  return new Error(summary);
+}
+
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+    throw await apiError(res);
   }
   return res.json() as Promise<T>;
 }
@@ -521,7 +537,7 @@ export async function deleteReport(reportId: string): Promise<void> {
     headers: adminHeaders(),
   });
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+    throw await apiError(res);
   }
 }
 
