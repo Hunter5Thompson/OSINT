@@ -58,3 +58,7 @@ training/**/artifacts/*
 
 # archify visual-check sidecars (screenshots, regenerable)
 *.visual-check.*
+
+# Disposable browser evidence; local runs select an output directory under /data.
+/services/frontend/test-results/
+/services/frontend/playwright-report/

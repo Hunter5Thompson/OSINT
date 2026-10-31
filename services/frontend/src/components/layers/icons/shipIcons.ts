@@ -35,13 +35,19 @@ export function classifyShip(shipType: number, name: string | null): ShipIconTyp
 
 const iconCache = new Map<string, HTMLCanvasElement>();
 
+/** Match the canvas cache key so viewport refreshes share one atlas texture. */
+export function shipIconId(type: ShipIconType, courseDeg: number | null): string {
+  const bucket = courseDeg === null ? "unknown" : ((Math.round(courseDeg / 5) * 5) % 360 + 360) % 360;
+  return `odin-ship:${type}:${bucket}`;
+}
+
 export function getShipTypeIcon(
   type: ShipIconType,
   courseDeg: number | null,
 ): HTMLCanvasElement {
   const unknownCourse = courseDeg === null;
   const bucket = unknownCourse ? 0 : ((Math.round(courseDeg / 5) * 5) % 360 + 360) % 360;
-  const key = unknownCourse ? `${type}_unknown` : `${type}_${bucket}`;
+  const key = shipIconId(type, courseDeg);
 
   const cached = iconCache.get(key);
   if (cached) return cached;

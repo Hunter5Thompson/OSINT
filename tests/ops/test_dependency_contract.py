@@ -181,6 +181,26 @@ def test_frontend_ci_uses_node_22_and_npm_ci() -> None:
     assert "run: npm install" not in block
 
 
+def test_ci_runs_browser_smokes_against_the_built_spa_and_keeps_evidence() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    block = _job_block(workflow, "test-frontend-browser")
+
+    assert 'node-version: "22"' in block
+    assert 'VITE_SPATIAL_SCOPE_ENABLED: "true"' in block
+    assert "ODIN_BUILD_REVISION: ${{ github.sha }}" in block
+    for command in ("npm ci", "npx playwright install --with-deps chromium",
+                    "npm run type-check:browser", "npm run build", "npm run test:browser"):
+        assert f"run: {command}" in block
+    assert block.index("run: npm ci") < block.index("run: npm run build")
+    assert block.index("run: npm run build") < block.index("run: npm run test:browser")
+    assert "uses: actions/upload-artifact@" in block
+    assert "if: ${{ !cancelled() }}" in block
+    assert "services/frontend/test-results" in block
+    package = json.loads((ROOT / "services/frontend/package.json").read_text())
+    assert package["scripts"]["test:browser"] == "playwright test"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", package["devDependencies"]["@playwright/test"])
+
+
 def test_ops_contracts_have_a_hermetic_ci_job() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
         encoding="utf-8"
