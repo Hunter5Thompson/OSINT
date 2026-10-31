@@ -44,6 +44,7 @@ def _render_frontend_build_config(
     environment = os.environ.copy()
     environment.pop("ODIN_ENV_FILE", None)
     environment.pop("VITE_SPATIAL_SCOPE_ENABLED", None)
+    environment.pop("ODIN_BUILD_REVISION", None)
     if spatial_scope_enabled is not None:
         environment["VITE_SPATIAL_SCOPE_ENABLED"] = spatial_scope_enabled
 
@@ -133,6 +134,39 @@ def test_python_lint_ci_uses_the_locked_backend_toolchain() -> None:
     assert "uv run --locked ruff check" in block
     assert "uvx" not in block
     assert "RUFF_VERSION" not in block
+
+
+def test_backend_ci_checks_strict_application_types() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    block = _job_block(workflow, "test-backend")
+
+    assert "run: uv run mypy app/" in block
+    config = (ROOT / "services/backend/pyproject.toml").read_text(encoding="utf-8")
+    assert "strict = true" in config
+
+
+def test_ci_builds_and_smokes_the_four_active_application_artifacts() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    block = _job_block(workflow, "smoke-app-images")
+
+    for service in ("backend", "frontend", "intelligence", "data-ingestion"):
+        assert f"- service: {service}" in block
+    assert "docker build" in block
+    assert "ODIN_BUILD_REVISION=${{ github.sha }}" in block
+    assert "VITE_SPATIAL_SCOPE_ENABLED=true" in block
+    assert "scripts/ops/smoke_image.py" in block
+    assert "${{ github.sha }}" in block
+    assert "push: true" not in block
+
+
+@pytest.mark.parametrize("service", ("backend", "intelligence", "data-ingestion", "frontend"))
+def test_active_app_build_inputs_are_pinned_to_manifest_digests(service: str) -> None:
+    dockerfile = (ROOT / "services" / service / "Dockerfile").read_text(encoding="utf-8")
+    external_inputs = re.findall(r"^(?:FROM |COPY --from=)(\S+)", dockerfile, re.MULTILINE)
+    for image in external_inputs:
+        if image == "builder":
+            continue
+        assert re.fullmatch(r"\S+@sha256:[0-9a-f]{64}", image), image
 
 
 def test_frontend_ci_uses_node_22_and_npm_ci() -> None:
@@ -227,10 +261,12 @@ def test_frontend_spatial_image_build_is_explicit_and_overridable() -> None:
     assert dockerfile.index(argument) < dockerfile.index("RUN npm run build")
     assert dockerfile.index(environment) < dockerfile.index("RUN npm run build")
     assert _render_frontend_build_config()["args"] == {
-        "VITE_SPATIAL_SCOPE_ENABLED": "true"
+        "VITE_SPATIAL_SCOPE_ENABLED": "true",
+        "ODIN_BUILD_REVISION": "unknown",
     }
     assert _render_frontend_build_config(spatial_scope_enabled="false")["args"] == {
-        "VITE_SPATIAL_SCOPE_ENABLED": "false"
+        "VITE_SPATIAL_SCOPE_ENABLED": "false",
+        "ODIN_BUILD_REVISION": "unknown",
     }
 
 

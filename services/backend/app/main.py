@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.build_revision import BUILD_REVISION
 from app.config import settings
 from app.routers import (
     aircraft,
@@ -127,15 +128,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             str(Path(__file__).resolve().parent.parent / "data" / "recon_manifest.json"),
         ))
         recon_loader = ReconManifestLoader(recon_manifest_path)
-        try:
-            recon_loader.load()
-            logger.info("recon_manifest_loaded",
-                        path=str(recon_manifest_path),
-                        scenes=len(recon_loader.list_scenes()))
-        except ReconManifestMissingError:
-            logger.warning("recon_manifest_missing",
-                           path=str(recon_manifest_path),
-                           hint="run ./odin.sh recon bootstrap")
+        if settings.recon_mode == "disabled":
+            recon_loader.disabled_reason = "operator_disabled"
+        elif (settings.recon_mode == "auto"
+              and "RECON_MANIFEST_PATH" not in os.environ
+              and not recon_manifest_path.exists()):
+            recon_loader.disabled_reason = "not_configured"
+        else:
+            try:
+                # Hashing large local assets must not block the event loop.
+                await asyncio.to_thread(recon_loader.load, _recon_static_dir)
+                logger.info("recon_manifest_loaded",
+                            path=str(recon_manifest_path),
+                            scenes=len(recon_loader.list_scenes()))
+            except ReconManifestMissingError:
+                logger.warning("recon_manifest_missing", path=str(recon_manifest_path))
+            except (OSError, ValueError) as exc:
+                # Optional delivery failure does not prevent core API startup.
+                logger.warning("recon_manifest_invalid", error=str(exc))
+        if recon_loader.disabled_reason is not None:
+            logger.info("recon_inactive", reason=recon_loader.disabled_reason)
         app.state.recon_manifest = recon_loader
 
         # --- Auto-promoter (full wiring) ---
@@ -249,12 +261,12 @@ _recon_static_dir = Path(os.environ.get(
     "RECON_STATIC_DIR",
     str(Path(__file__).resolve().parent.parent / "static" / "recon"),
 ))
-_recon_static_dir.mkdir(parents=True, exist_ok=True)
-app.mount(
-    "/static/recon",
-    CachedStaticFiles(directory=str(_recon_static_dir)),
-    name="recon_static",
-)
+if _recon_static_dir.is_dir():
+    app.mount(
+        "/static/recon",
+        CachedStaticFiles(directory=str(_recon_static_dir)),
+        name="recon_static",
+    )
 
 # S1 Hlidskjalf routers (already at /api, no alias needed)
 app.include_router(signals.router, prefix="/api")
@@ -272,6 +284,7 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: datetime
     version: str
+    revision: str | None
 
 
 class ClientConfig(BaseModel):
@@ -285,6 +298,7 @@ async def health() -> HealthResponse:
         status="ok",
         timestamp=datetime.now(UTC),
         version="0.1.0",
+        revision=BUILD_REVISION,
     )
 
 

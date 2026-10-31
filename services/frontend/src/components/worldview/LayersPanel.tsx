@@ -2,6 +2,7 @@ import { useId, useState, type CSSProperties } from "react";
 import type { SpatialBoundaryProvenanceState } from "../../hooks/useSpatialBoundaryProvenance";
 import type { LayerVisibility, ShaderType } from "../../types";
 import type { LayerSpatialStatus } from "../../spatial/layerScopePolicy";
+import type { UseReconManifestResult } from "../../lib/recon/manifest";
 
 export interface LayersPanelProps {
   layers: LayerVisibility;
@@ -10,6 +11,7 @@ export interface LayersPanelProps {
   onShaderChange: (shader: ShaderType) => void;
   spatialProvenance?: SpatialBoundaryProvenanceState;
   spatialStatuses?: Partial<Record<keyof LayerVisibility, LayerSpatialStatus>>;
+  recon?: UseReconManifestResult;
 }
 
 type AlwaysOnKey = "void" | "atmosphere" | "spotlight";
@@ -271,6 +273,7 @@ export function LayersPanel({
   onShaderChange,
   spatialProvenance,
   spatialStatuses,
+  recon,
 }: LayersPanelProps) {
   return (
     <div style={{ display: "grid", gap: "0.8rem" }}>
@@ -294,7 +297,9 @@ export function LayersPanel({
 
               // Regular toggle item — key is guaranteed to be a LayerVisibility key
               const toggleKey = item.key as ToggleKey;
-              const enabled = layers[toggleKey];
+              const reconBlocked = toggleKey === "recon" && recon !== undefined
+                && (recon.status !== "available" || recon.scenes.length === 0);
+              const enabled = layers[toggleKey] && !reconBlocked;
               const spatialStatus = spatialStatuses?.[toggleKey];
               return (
                 <div key={item.key} style={row} data-testid={`layer-toggle-${item.key}`}>
@@ -305,6 +310,24 @@ export function LayersPanel({
                     {toggleKey === "nuclearPlants" && <div style={spatialStatusStyle}>195 historical WRI records · not live</div>}
                     {toggleKey === "icbmBases" && <div style={spatialStatusStyle}>3 US wing HQs · curated reference</div>}
                     {toggleKey === "militaryBases" && <div style={spatialStatusStyle}>4 major bases · starter coverage</div>}
+                    {toggleKey === "recon" && recon !== undefined && reconBlocked ? (
+                      <div style={spatialStatusStyle} role="status">
+                        {recon.status === "loading" ? "Checking scene availability…"
+                          : recon.status === "error" ? "Recon scene data unavailable"
+                          : recon.status === "disabled"
+                            ? recon.reason === "operator_disabled"
+                              ? "Recon disabled by operator" : "No Recon scenes configured"
+                            : "No Recon scenes available"}
+                        {recon.status === "loading" ? null : (
+                          <button type="button" onClick={recon.retry}
+                            aria-label={recon.status === "error" ? "Retry Recon" : "Check Recon availability"}
+                            style={{ display: "block", padding: "0.2rem 0", border: "none",
+                              background: "transparent", color: "var(--amber)", cursor: "pointer" }}>
+                            {recon.status === "error" ? "Retry" : "Check again"}
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
                     {spatialStatus === undefined ? null : (
                       <div
                         data-testid={`layer-scope-${toggleKey}`}
@@ -322,11 +345,13 @@ export function LayersPanel({
                     type="button"
                     aria-label={toggleKey}
                     aria-pressed={enabled}
+                    disabled={reconBlocked}
                     onClick={() => onToggle(toggleKey)}
                     style={{
                       ...toggleBtn,
                       borderColor: enabled ? "var(--amber)" : "var(--granite)",
                       color: enabled ? "var(--amber)" : "var(--stone)",
+                      cursor: reconBlocked ? "default" : "pointer",
                     }}
                   >
                     {enabled ? "ON" : "OFF"}

@@ -22,7 +22,14 @@ resolve_env_file() {
 
 ENV_FILE_REQUESTED="${ODIN_ENV_FILE:-.env}"
 ENV_FILE_OPTION_USED=0
-case "${1:-}" in
+RELEASE_MODE=0
+COMPOSE_FILES=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --release)
+    RELEASE_MODE=1
+    shift
+    ;;
   --env-file)
     if [[ -z "${2:-}" ]]; then
       echo "ERROR --env-file requires a path"
@@ -41,7 +48,15 @@ case "${1:-}" in
     ENV_FILE_OPTION_USED=1
     shift
     ;;
-esac
+  *)
+    break
+    ;;
+  esac
+done
+
+if [[ "$RELEASE_MODE" == "1" ]]; then
+  COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.override.yml -f docker-compose.release.yml)
+fi
 
 MODE="${2:-}"
 COMMAND="${1:-help}"
@@ -68,7 +83,10 @@ export SPARK_VLLM_URL="${SPARK_VLLM_URL:-http://192.168.178.39:8000}"
 usage() {
   cat <<'USAGE'
 Usage:
-  ./odin.sh [--env-file PATH] COMMAND [ARGS]
+  ./odin.sh [--env-file PATH] [--release] COMMAND [ARGS]
+
+  --release                   # Reviewed digest images; no application code mounts
+                              # Requires the release env/data manifest (docs/operations/release.md)
 
   ./odin.sh up ingestion       # Start background ingestion stack (27B + embed)
   ./odin.sh up interactive     # Start interactive stack (9B + reranker + UI)
@@ -97,7 +115,7 @@ require_docker() {
 }
 
 compose_run() {
-  ODIN_ENV_FILE="$ENV_FILE" "${COMPOSE[@]}" --env-file "$ENV_FILE" "$@"
+  ODIN_ENV_FILE="$ENV_FILE" "${COMPOSE[@]}" --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" "$@"
 }
 
 compose_recovery() {
@@ -129,7 +147,7 @@ compose_recovery() {
   # explicitly allow-listed actions above and can never reach a start action.
   NEO4J_PASSWORD="__ODIN_RECOVERY_ONLY__" \
     ODIN_ENV_FILE="$compose_env_file" \
-    "${COMPOSE[@]}" --env-file "$compose_env_file" "$@"
+    "${COMPOSE[@]}" --env-file "$compose_env_file" "${COMPOSE_FILES[@]}" "$@"
 }
 
 render_preflight_config() {
@@ -297,6 +315,17 @@ require_start_configuration() {
     echo "Refusing to start or swap services until the selected environment is valid."
     return 1
   fi
+  if ! check_release_configuration; then
+    echo "Refusing to start or swap services until the release manifest is valid."
+    return 1
+  fi
+}
+
+check_release_configuration() {
+  if [[ "$RELEASE_MODE" == "1" ]]; then
+    compose_run --profile '*' config --format json \
+      | python3 "$ROOT_DIR/scripts/ops/validate_release.py" --check-paths
+  fi
 }
 
 check_secret_file_mode() {
@@ -363,6 +392,9 @@ doctor() {
     echo "OK"
   else
     echo "ERROR Compose syntax check failed"
+    failed=1
+  fi
+  if ! check_release_configuration; then
     failed=1
   fi
 

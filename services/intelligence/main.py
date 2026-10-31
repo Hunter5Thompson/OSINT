@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from build_revision import BUILD_REVISION
 from config import settings
 from graph.workflow import run_intelligence_query, shutdown_graph_client
 from model_readiness import check_model_readiness
@@ -102,6 +103,7 @@ async def health() -> JSONResponse:
         synthesis_model=settings.synthesis_model,
     )
     content = {
+        "revision": BUILD_REVISION,
         "status": "ok" if readiness.ready else "not_ready",
         "reason": readiness.reason.value,
         "required_models": list(readiness.required_models),

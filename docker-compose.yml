@@ -200,6 +200,8 @@ services:
     build:
       context: ./services/backend
       dockerfile: Dockerfile
+      args:
+        ODIN_BUILD_REVISION: ${ODIN_BUILD_REVISION:-unknown}
     ports:
       - "${ODIN_BIND_HOST:-127.0.0.1}:8080:8000"
     env_file: ${ODIN_ENV_FILE:-.env}
@@ -232,6 +234,8 @@ services:
     build:
       context: ./services/intelligence
       dockerfile: Dockerfile
+      args:
+        ODIN_BUILD_REVISION: ${ODIN_BUILD_REVISION:-unknown}
     ports:
       - "${ODIN_BIND_HOST:-127.0.0.1}:8003:80"
     env_file: ${ODIN_ENV_FILE:-.env}
@@ -268,6 +272,8 @@ services:
     build:
       context: .
       dockerfile: services/data-ingestion/Dockerfile
+      args:
+        ODIN_BUILD_REVISION: ${ODIN_BUILD_REVISION:-unknown}
     env_file: ${ODIN_ENV_FILE:-.env}
     environment:
       - REDIS_URL=redis://redis:6379/0
@@ -333,6 +339,8 @@ services:
     build:
       context: .
       dockerfile: services/data-ingestion/Dockerfile
+      args:
+        ODIN_BUILD_REVISION: ${ODIN_BUILD_REVISION:-unknown}
     env_file: ${ODIN_ENV_FILE:-.env}
     environment:
       - REDIS_URL=redis://redis:6379/0
@@ -448,6 +456,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_SPATIAL_SCOPE_ENABLED: ${VITE_SPATIAL_SCOPE_ENABLED:-true}
+        ODIN_BUILD_REVISION: ${ODIN_BUILD_REVISION:-unknown}
     ports:
       - "${ODIN_BIND_HOST:-127.0.0.1}:5173:5173"
     volumes:
