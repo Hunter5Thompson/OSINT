@@ -16,7 +16,13 @@ callbacks and divides by actual elapsed time. Hidden tabs and intentional
 on-demand idle periods do not cause false degradation. See
 [Cesium Scene events and request rendering](https://cesium.com/learn/cesiumjs/ref-doc/Scene.html).
 
-Run from services/frontend after a source-bound production build:
+Prefer extracting `/usr/share/nginx/html` from the reviewed frontend image into
+the test server's `dist` directory, preserving the previous local build elsewhere.
+Hash every extracted file and verify `/build-info.json` against the image's OCI
+revision. This avoids qualifying a local build with different feature flags.
+A local build alternative must explicitly use `VITE_SPATIAL_SCOPE_ENABLED=true`
+and `ODIN_BUILD_REVISION=<full-code-sha>`; it is not image identity evidence.
+Run from services/frontend against the frozen, source-bound production files:
 
 ```bash
 ODIN_BROWSER_PORT=15301 ODIN_BROWSER_ARTIFACTS=/data/<run>/native \

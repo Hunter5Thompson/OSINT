@@ -31,7 +31,7 @@ This bounds admitted backend requests and cooperative Intelligence task cleanup.
 A bounded live probe on 2026-11-01 used the real HTTP routes and synthesis
 ChatOpenAI adapter against the already running local vLLM qwen3.5 model. Client
 abort, backend timeout and Intelligence timeout all returned active/waiting
-requests and KV-cache usage to zero, observed 57-59ms after the HTTP terminal
+requests and KV-cache usage to zero, observed 57-111ms after the HTTP terminal
 point; permits were reusable. Retrieval was replaced with one benign model call,
 and no database/model deployment was changed. These measurements include gauge
 publication latency and are not a universal physical generation limit: backend
