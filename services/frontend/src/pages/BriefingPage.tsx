@@ -1,3 +1,4 @@
+import { SourceReference } from "../components/evidence/SourceReference";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MuninLoader } from "../components/worldview/MuninLoader";
@@ -85,14 +86,14 @@ export function BriefingPage() {
 
   const [chatByReport, setChatByReport] = useState<Record<string, ReportMessage[]>>({});
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<{ reportId: string; message: string } | null>(null);
+  const chatGeneration = useRef(0);
 
   const [input, setInput] = useState("");
-  const [muninDownUntil, setMuninDownUntil] = useState<number | null>(null);
-  const [tick, setTick] = useState(0);
 
   const {
     loading: muninLoading,
-    currentAgent,
+    reportId: analysisReportId,
     result,
     error,
     runQuery,
@@ -103,27 +104,6 @@ export function BriefingPage() {
   const processedResultKey = useRef<string>("");
   const processedErrorKey = useRef<string>("");
   const wasLoadingRef = useRef(false);
-
-  useEffect(() => {
-    if (muninDownUntil === null) return;
-    setTick(Date.now());
-    const id = window.setInterval(() => setTick(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [muninDownUntil]);
-
-  const retryIn = useMemo(() => {
-    if (!muninDownUntil) return 0;
-    const now = tick || Date.now();
-    return Math.max(0, Math.ceil((muninDownUntil - now) / 1000));
-  }, [muninDownUntil, tick]);
-
-  const muninOffline = retryIn > 0;
-
-  useEffect(() => {
-    if (retryIn === 0 && muninDownUntil !== null) {
-      setMuninDownUntil(null);
-    }
-  }, [retryIn, muninDownUntil]);
 
   const loadReports = useCallback(async () => {
     setReportsLoading(true);
@@ -159,14 +139,19 @@ export function BriefingPage() {
   }, [selectedReport]);
 
   const loadMessages = useCallback(async (reportId: string) => {
+    const generation = ++chatGeneration.current;
     setChatLoading(true);
+    setChatError(null);
     try {
       const messages = await getReportMessages(reportId);
+      if (generation !== chatGeneration.current) return;
       setChatByReport((prev) => ({ ...prev, [reportId]: messages }));
-    } catch {
-      // keep local in-memory view; backend errors are reflected by munin state when querying
+    } catch (error) {
+      if (generation === chatGeneration.current) {
+        setChatError({ reportId, message: normalizeError(error) });
+      }
     } finally {
-      setChatLoading(false);
+      if (generation === chatGeneration.current) setChatLoading(false);
     }
   }, []);
 
@@ -222,7 +207,7 @@ export function BriefingPage() {
     if (processedResultKey.current === key) return;
     processedResultKey.current = key;
 
-    const reportId = pendingReportIdRef.current ?? selectedReport?.id;
+    const reportId = analysisReportId ?? selectedReport?.id;
     if (!reportId) return;
 
     appendChat(reportId, {
@@ -235,29 +220,31 @@ export function BriefingPage() {
       verification_status: result.verification_status,
       evidence_summary: result.evidence_summary,
     });
-  }, [result, selectedReport?.id]);
+  }, [result, analysisReportId, selectedReport?.id]);
 
   useEffect(() => {
     if (!error) return;
-    const key = `${error}|${selectedReport?.id ?? "none"}`;
+    const reportId = analysisReportId ?? selectedReport?.id;
+    const key = `${error}|${reportId ?? "none"}`;
     if (processedErrorKey.current === key) return;
     processedErrorKey.current = key;
 
-    if (selectedReport) {
-      appendChat(selectedReport.id, {
+    if (reportId) {
+      appendChat(reportId, {
         id: `m-err-${Date.now()}`,
         role: "munin",
         ts: new Date().toISOString(),
-        text: "service unreachable · retry in 10s",
+        text: error,
         refs: [],
       });
     }
 
-    setMuninDownUntil(Date.now() + 10_000);
-  }, [error, selectedReport]);
+
+  }, [error, analysisReportId, selectedReport]);
 
   useEffect(() => {
     return () => {
+      chatGeneration.current += 1;
       abortRef.current?.();
     };
   }, []);
@@ -318,7 +305,7 @@ export function BriefingPage() {
 
   const askMunin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!selectedReport || muninOffline || muninLoading) return;
+    if (!selectedReport || muninLoading) return;
 
     const question = input.trim();
     if (!question) return;
@@ -363,6 +350,7 @@ export function BriefingPage() {
             className="briefing-filter"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
+            aria-label="Filter dossiers"
             placeholder="date, entity, status"
           />
         </label>
@@ -531,7 +519,7 @@ export function BriefingPage() {
                     </div>
                     <div className="briefing-source-list mono">
                       {selectedReport.sources.map((s) => (
-                        <span key={`${selectedReport.id}-src-${s}`}>·{s}</span>
+                        <SourceReference key={`${selectedReport.id}-src-${s}`} reference={s} />
                       ))}
                     </div>
                   </aside>
@@ -545,21 +533,26 @@ export function BriefingPage() {
       <aside className="briefing-col briefing-munin">
         <header className="briefing-munin-header">
           <h2 className="serif briefing-title" style={{ marginBottom: 2 }}>
-            {muninOffline ? "§ Munin · silent." : "§ Munin · agent"}
+            § Munin · agent
           </h2>
-          <div className="mono briefing-munin-state">
-            {muninOffline
-              ? `service unreachable · retry in ${retryIn}s`
-              : muninLoading
-                ? `thinking${currentAgent ? ` · ${currentAgent}` : ""}`
+          <div className="mono briefing-munin-state" role="status" aria-live="polite">
+            {muninLoading
+                ? "Analysis in progress"
                 : chatLoading
                   ? "syncing report channel"
                   : "report-scoped channel"}
           </div>
         </header>
 
+        {error && (!analysisReportId || analysisReportId === selectedReport?.id) && <p role="alert">{error}</p>}
+        {chatError?.reportId === selectedReport?.id && chatError && (
+          <div role="alert">
+            Dossier chat could not be loaded: {chatError.message}
+            <button type="button" onClick={() => void loadMessages(chatError.reportId)}>Retry dossier chat</button>
+          </div>
+        )}
         <div className="briefing-chat-list custom-scrollbar">
-          {chatMessages.length === 0 && !muninLoading ? (
+          {chatMessages.length === 0 && !muninLoading && !chatLoading && !chatError ? (
             <div className="briefing-chat-empty serif">No dialogue yet for this dossier.</div>
           ) : (
             chatMessages.map((msg) => (
@@ -580,7 +573,7 @@ export function BriefingPage() {
                 {msg.refs && msg.refs.length > 0 ? (
                   <div className="mono briefing-chat-refs">
                     {msg.refs.map((ref) => (
-                      <span key={`${msg.id}-${ref}`}>·{ref}</span>
+                      <SourceReference key={`${msg.id}-${ref}`} reference={ref} />
                     ))}
                   </div>
                 ) : null}
@@ -591,8 +584,8 @@ export function BriefingPage() {
             <div className="munin-loader-chat" data-testid="munin-thinking">
               <MuninLoader />
               <div className="munin-loader-chat-caption">
-                § munin scanning
-                {currentAgent ? ` · ${currentAgent}` : ""}
+                Analysis in progress · detailed agent progress is unavailable
+                <button type="button" onClick={() => abortRef.current?.()}>Cancel analysis</button>
               </div>
             </div>
           ) : null}
@@ -602,14 +595,15 @@ export function BriefingPage() {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            disabled={muninOffline || muninLoading || !selectedReport}
-            placeholder={muninOffline ? "▸ munin is resting" : "▸ ask Munin about this section…"}
+            disabled={muninLoading || !selectedReport}
+            aria-label="Ask Munin about this dossier"
+            placeholder="▸ ask Munin about this section…"
             className="briefing-input"
           />
           <button
             type="submit"
             className="briefing-send"
-            disabled={muninOffline || muninLoading || !input.trim() || !selectedReport}
+            disabled={muninLoading || !input.trim() || !selectedReport}
           >
             send
           </button>

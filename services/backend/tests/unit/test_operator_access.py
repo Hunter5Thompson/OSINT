@@ -124,3 +124,36 @@ def test_public_reads_do_not_require_operator(operator_app, monkeypatch):
     assert client.get("/api/almanac/countries/UKR").status_code == 200
     assert client.get("/api/almanac/countries/UKR/signals").status_code == 200
     assert client.get("/api/intel/history").status_code == 200
+
+
+@pytest.mark.parametrize(("path", "payload"), TRIGGERS)
+def test_busy_model_rejects_before_all_work(
+    operator_app, monkeypatch, tmp_path, path, payload,
+):
+    from app.services.model_admission import FileAdmission
+
+    application, revision = operator_app
+    monkeypatch.setattr(settings, "reports_admin_token", TOKEN)
+    monkeypatch.setattr(settings, "model_admission_dir", tmp_path)
+    monkeypatch.setattr(settings, "model_max_concurrency", 1)
+    guards = []
+    for module, name in [
+        (intel, "stream_intel_query"),
+        (almanac, "stream_intel_query"),
+        (almanac, "get_country_almanac_store"),
+        (report_store, "get_report"),
+        (report_store, "append_report_message"),
+    ]:
+        guard = Mock(side_effect=AssertionError("busy request performed work"))
+        monkeypatch.setattr(module, name, guard)
+        guards.append(guard)
+    with FileAdmission(tmp_path, 1).acquire():
+        response = TestClient(application).post(
+            path.format(revision=revision), json=payload,
+            headers={"X-Admin-Token": TOKEN},
+        )
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "1"
+    assert response.json()["detail"]["code"] == "MODEL_BUSY"
+    for guard in guards:
+        guard.assert_not_called()

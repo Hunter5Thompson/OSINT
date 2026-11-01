@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     react_max_iterations: int = 5
     react_tool_timeout_s: int = 15
     react_total_timeout_s: int = 120
+    query_timeout_s: float = Field(default=240.0, gt=0, le=900.0)
     # Vision
     vision_max_file_size_mb: int = 10
     vision_max_dimension: int = 4096

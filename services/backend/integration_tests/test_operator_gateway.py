@@ -30,7 +30,7 @@ def docker(*args, check=True):
 
 
 @pytest.fixture
-def adapter(monkeypatch):
+def adapter(monkeypatch, tmp_path):
     # No lifespan, schema initialization, background feeds or production stores.
     monkeypatch.setenv("NEO4J_PASSWORD", "test-only-gateway")
     from app.config import settings
@@ -41,6 +41,7 @@ def adapter(monkeypatch):
 
     monkeypatch.setattr(settings, "reports_admin_token", TOKEN)
     monkeypatch.setattr(settings, "incidents_admin_token", "")
+    monkeypatch.setattr(settings, "model_admission_dir", tmp_path / "admission")
     loader = SpatialCatalogLoader(ROOT / "services/backend/data/spatial")
     state = asyncio.run(loader.load())
     assert isinstance(state, CatalogReadyState)
@@ -79,7 +80,8 @@ def adapter(monkeypatch):
     model = AsyncMock(
         return_value=httpx.Response(
             200,
-            json={"analysis": "Gateway fake answer", "confidence": 0.8},
+            json={"analysis": "Gateway fake answer", "confidence": 0.8,
+                  "sources_used": ["https://example.test/reviewed-source"]},
             request=httpx.Request("POST", "http://intelligence.test/query"),
         )
     )

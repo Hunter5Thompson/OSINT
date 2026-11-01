@@ -1,11 +1,12 @@
 """Shared status-SSE orchestration for the intelligence /query call.
 
-NOTE: this is status-SSE — three status events then one JSON result — not
+NOTE: this is status-SSE — one honest processing status then one JSON result — not
 token streaming. Used by routers/intel.py and routers/almanac.py (briefing).
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -67,17 +68,11 @@ async def stream_intel_query(
                     ReportMessageCreate(role="user", text=user_text),
                 )
 
+        # The downstream API returns one JSON result; it does not expose agent
+        # progress. Do not invent completed retrieval or synthesis stages.
         yield {
             "event": "status",
-            "data": json.dumps({"agent": "osint_agent", "status": "started"}),
-        }
-        yield {
-            "event": "status",
-            "data": json.dumps({"agent": "analyst_agent", "status": "analyzing"}),
-        }
-        yield {
-            "event": "status",
-            "data": json.dumps({"agent": "synthesis_agent", "status": "synthesizing"}),
+            "data": json.dumps({"agent": "intelligence", "status": "processing"}),
         }
 
         payload: dict[str, Any] = {
@@ -100,15 +95,20 @@ async def stream_intel_query(
         if grounding_evidence is not None:
             payload["grounding_evidence"] = grounding_evidence
 
-        if client is None:
-            async with httpx.AsyncClient(timeout=300.0) as owned_client:
-                resp = await owned_client.post(f"{settings.intelligence_url}/query", json=payload)
-        else:
-            resp = await client.post(
-                f"{settings.intelligence_url}/query",
-                json=payload,
-                timeout=300.0,
-            )
+        # httpx timeouts apply per I/O operation; the outer deadline also bounds
+        # a peer that keeps the connection alive with very slow response chunks.
+        async with asyncio.timeout(settings.model_timeout_s):
+            if client is None:
+                async with httpx.AsyncClient(timeout=settings.model_timeout_s) as owned_client:
+                    resp = await owned_client.post(
+                        f"{settings.intelligence_url}/query", json=payload,
+                    )
+            else:
+                resp = await client.post(
+                    f"{settings.intelligence_url}/query",
+                    json=payload,
+                    timeout=settings.model_timeout_s,
+                )
         resp.raise_for_status()
         data = resp.json()
 
@@ -165,6 +165,14 @@ async def stream_intel_query(
         yield {"event": "result", "data": analysis.model_dump_json()}
         yield {"event": "done", "data": ""}
 
+    except (TimeoutError, httpx.TimeoutException):
+        yield {
+            "event": "error",
+            "data": json.dumps({
+                "error": "Analysis exceeded its time limit. Please try again.",
+                "code": "MODEL_TIMEOUT",
+            }),
+        }
     except httpx.HTTPError as exc:
         log.warning("intelligence_service_error", error=str(exc))
         if report_id:  # preserve the existing /intel/query behavior (intel.py:119-136)

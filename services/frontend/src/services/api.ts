@@ -158,6 +158,10 @@ async function apiError(response: Response): Promise<Error> {
       if (typeof detail === "string" && detail.trim()) {
         return new Error(`${summary}: ${detail.trim()}`);
       }
+      if (typeof detail === "object" && detail !== null && "message" in detail
+        && typeof detail.message === "string" && detail.message.trim()) {
+        return new Error(`${summary}: ${detail.message.trim()}`);
+      }
     }
   } catch {
     // Proxies may return HTML or an empty body; retain the HTTP status.
@@ -358,7 +362,7 @@ export function queryIntel(
   })
     .then(async (res) => {
       if (!res.ok || !res.body) {
-        onError(`HTTP ${res.status}`);
+        onError(res.ok ? "Analysis returned no response stream" : (await apiError(res)).message);
         onDone();
         return;
       }
@@ -414,7 +418,7 @@ function streamCountryBriefingAt(
   })
     .then(async (res) => {
       if (!res.ok || !res.body) {
-        onError(`HTTP ${res.status}`);
+        onError(res.ok ? "Analysis returned no response stream" : (await apiError(res)).message);
         onDone();
         return;
       }

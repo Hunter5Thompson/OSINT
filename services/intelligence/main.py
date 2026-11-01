@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager, suppress
 from typing import Literal
 from urllib.parse import urlparse
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -16,6 +16,7 @@ from build_revision import BUILD_REVISION
 from config import settings
 from graph.workflow import run_intelligence_query, shutdown_graph_client
 from model_readiness import check_model_readiness
+from query_lifecycle import ClientDisconnectedError, run_connected
 from rag import retriever
 from spatial import RetrievalSpatialRelation
 from spatial_catalog import (
@@ -119,7 +120,6 @@ async def health() -> JSONResponse:
     return JSONResponse(status_code=200 if readiness.ready else 503, content=content)
 
 
-@app.post("/query", response_model=None)
 async def query_intelligence(req: QueryRequest) -> dict[str, object] | JSONResponse:
     """Run intelligence pipeline and return full analysis result."""
     try:
@@ -145,3 +145,16 @@ async def query_intelligence(req: QueryRequest) -> dict[str, object] | JSONRespo
             [e.model_dump() for e in req.grounding_evidence] if req.grounding_evidence else None
         ),
     )
+
+
+@app.post("/query", response_model=None)
+async def query_connected(req: QueryRequest, request: Request) -> dict[str, object] | JSONResponse:
+    try:
+        return await run_connected(
+            query_intelligence(req), request.is_disconnected,
+            timeout_s=settings.query_timeout_s,
+        )
+    except ClientDisconnectedError:
+        return JSONResponse(status_code=499, content={"detail": "Query cancelled by caller"})
+    except TimeoutError:
+        return JSONResponse(status_code=504, content={"detail": "Query time limit exceeded"})

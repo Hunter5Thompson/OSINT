@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Request
 from sse_starlette.sse import EventSourceResponse
 from starlette.responses import Response
 
-from app.admin_auth import require_operator_access
+from app.model_access import require_model_access
 from app.models.intel import IntelAnalysis, IntelQuery
 from app.models.spatial import CatalogProblemCode, SpatialCatalogProblem
 from app.routers.spatial import spatial_problem_response
@@ -47,7 +47,10 @@ def _shared_http_client(request: Request) -> httpx.AsyncClient | None:
     return proxy.client if isinstance(proxy, ProxyService) else None
 
 
-@router.post("/query", response_model=None, dependencies=[Depends(require_operator_access)])
+@router.post(
+    "/query", response_model=None,
+    dependencies=[Depends(require_model_access, scope="request")],
+)
 async def query_intel(query: IntelQuery, request: Request) -> EventSourceResponse | Response:
     """Run intelligence analysis via LangGraph pipeline, streaming results via SSE."""
 
@@ -92,7 +95,7 @@ async def query_intel(query: IntelQuery, request: Request) -> EventSourceRespons
 @router.post(
     "/hotspot/{hotspot_id}",
     response_model=None,
-    dependencies=[Depends(require_operator_access)],
+    dependencies=[Depends(require_model_access, scope="request")],
 )
 async def query_hotspot_intel(hotspot_id: str, request: Request) -> EventSourceResponse | Response:
     """Run intelligence analysis focused on a specific hotspot."""

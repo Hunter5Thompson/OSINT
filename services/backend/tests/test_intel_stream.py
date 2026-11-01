@@ -45,7 +45,9 @@ async def test_stream_emits_status_then_result_with_shared_client():
         )
     ]
     kinds = [e["event"] for e in events]
-    assert kinds[:3] == ["status", "status", "status"]
+    assert kinds[0] == "status"
+    statuses = [json.loads(e["data"]) for e in events if e["event"] == "status"]
+    assert statuses == [{"agent": "intelligence", "status": "processing"}]
     assert "result" in kinds and kinds[-1] == "done"
     result = json.loads(next(e["data"] for e in events if e["event"] == "result"))
     assert result["analysis"] == "Lage stabil"
@@ -60,3 +62,28 @@ async def test_stream_emits_error_on_http_failure():
 
     events = [ev async for ev in intel_stream.stream_intel_query(query="q", client=FailingClient())]
     assert any(e["event"] == "error" for e in events)
+
+
+async def test_total_deadline_cancels_slow_upstream_and_reports_timeout(monkeypatch):
+    import asyncio
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "model_timeout_s", 0.01)
+    closed = asyncio.Event()
+
+    class StalledClient:
+        async def post(self, *args, **kwargs):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                closed.set()
+
+    async def collect():
+        return [e async for e in intel_stream.stream_intel_query(query="q", client=StalledClient())]
+
+    events = await asyncio.wait_for(collect(), 1)
+    assert closed.is_set()
+    error = next(json.loads(e["data"]) for e in events if e["event"] == "error")
+    assert error["code"] == "MODEL_TIMEOUT"
+    assert not any(e["event"] == "result" for e in events)

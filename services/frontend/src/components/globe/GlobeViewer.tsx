@@ -5,6 +5,7 @@ import type { ShaderType } from "../../types";
 import { applyCRTShader, applyNightVisionShader, applyFLIRShader, clearShaders } from "../shaders/shaderUtils";
 import { applyTilesetPerformanceConfig } from "./tilesetConfig";
 import { createBaseLayer } from "./baseLayer";
+import { captureTerrainCacheRelease } from "./terrainCacheCleanup";
 
 interface GlobeViewerProps {
   onViewerReady: (viewer: Cesium.Viewer) => void;
@@ -38,6 +39,9 @@ export function GlobeViewer({
 
     Cesium.Ion.defaultAccessToken = cesiumToken;
 
+    // Cesium 1.142 CreditDisplay appends a head style on every construction
+    // but never removes it. Capture only this synchronous constructor's styles.
+    const previousStyles = new Set(document.head.querySelectorAll("style"));
     const viewer = new Cesium.Viewer(containerRef.current, {
       baseLayer: createBaseLayer(cesiumToken),
       timeline: false,
@@ -53,6 +57,20 @@ export function GlobeViewer({
       scene3DOnly: true,
       msaaSamples: 4,
     });
+
+    const creditStyles = [...document.head.querySelectorAll("style")].filter(
+      style => !previousStyles.has(style) && style.textContent?.includes(".cesium-credit-lightbox-overlay"),
+    );
+    const releaseCreditStyles = () => creditStyles.forEach(style => style.remove());
+    let releaseTerrainCache: () => void;
+    try {
+      releaseTerrainCache = captureTerrainCacheRelease(viewer);
+    } catch (error) {
+      viewer.useDefaultRenderLoop = false;
+      viewer.destroy();
+      releaseCreditStyles();
+      throw error;
+    }
 
     // Dark atmosphere
     viewer.scene.globe.enableLighting = Boolean(cesiumToken);
@@ -195,16 +213,16 @@ export function GlobeViewer({
         // If any layer's PolylineCollection has a stale already-destroyed
         // polyline in its internal _polylines array (a known Cesium quirk
         // around removeAll/destroy ordering), this throws on the way out.
-        // The viewer is being torn down regardless — swallow so we don't
-        // leak a half-destroyed viewer into the React error boundary on
-        // route changes.
+        // Report failures while keeping the route transition usable.
         try {
           viewerRef.current.destroy();
-        } catch {
-          /* viewer was tearing down primitives in a corrupt state */
+        } catch (error) {
+          console.warn("[GlobeViewer] teardown failed", error);
         }
+        releaseTerrainCache();
         viewerRef.current = null;
       }
+      releaseCreditStyles();
     };
   }, [cesiumToken, onViewerReady, onPhotorealTilesetReady]);
 

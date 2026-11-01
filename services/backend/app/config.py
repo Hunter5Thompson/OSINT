@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1024
     intelligence_url: str = "http://localhost:8003"
 
+    # One Linux filesystem namespace shared by all backend workers.
+    model_admission_dir: Path = Path("/tmp/odin-backend-model-admission")
+    model_max_concurrency: int = Field(default=1, ge=1, le=64)
+    model_timeout_s: float = Field(default=300.0, gt=0, le=900.0)
+
     # Feed freshness watchdog: max age (s) of the newest Qdrant point per source before it
     # counts as stale. Sized to how often new data plausibly lands, not the poll interval.
     feed_max_age_s: dict[str, int] = Field(

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { BriefingPage } from "../../pages/BriefingPage";
 import type { IntelAnalysis, ReportRecord } from "../../types";
 
-const intelState = vi.hoisted(() => ({ result: null as IntelAnalysis | null }));
+const intelState = vi.hoisted(() => ({ result: null as IntelAnalysis | null, error: null as string | null }));
 
 const {
   getReportsMock,
@@ -31,9 +31,10 @@ vi.mock("../../services/api", () => ({
 vi.mock("../../hooks/useIntel", () => ({
   useIntel: () => ({
     loading: false,
+    reportId: "r-044",
     currentAgent: null,
     result: intelState.result,
-    error: null,
+    error: intelState.error,
     runQuery: vi.fn(() => vi.fn()),
   }),
 }));
@@ -64,6 +65,7 @@ const sampleReport: ReportRecord = {
 
 beforeEach(() => {
   intelState.result = null;
+  intelState.error = null;
   vi.clearAllMocks();
   getReportsMock.mockResolvedValue([sampleReport]);
   getReportMessagesMock.mockResolvedValue([]);
@@ -201,4 +203,37 @@ describe("BriefingPage", () => {
       "false",
     );
   });
+});
+
+
+it("shows a recoverable chat load failure instead of an empty dossier channel", async () => {
+  getReportMessagesMock.mockRejectedValueOnce(new Error("chat store unavailable"));
+  renderBriefing();
+  expect(await screen.findByRole("alert")).toHaveTextContent("chat store unavailable");
+  expect(screen.queryByText("No dialogue yet for this dossier.")).not.toBeInTheDocument();
+  getReportMessagesMock.mockResolvedValueOnce([{ id: "saved", role: "user", text: "Saved question", ts: "2026-01-01T00:00:00Z", refs: [] }]);
+  fireEvent.click(screen.getByRole("button", { name: "Retry dossier chat" }));
+  expect(await screen.findByText("Saved question")).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("keeps the actual model overload reason visible and labels both inputs", async () => {
+  intelState.error = "Analysis capacity is busy. Try again shortly.";
+  renderBriefing();
+  await screen.findAllByText(/Sinjar Ridge/);
+  expect(screen.getByRole("alert")).toHaveTextContent("Analysis capacity is busy");
+  expect(screen.getByRole("textbox", { name: "Ask Munin about this dossier" })).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Filter dossiers" })).toBeInTheDocument();
+});
+
+it("never inserts an answer into a different dossier selected while analysis ran", async () => {
+  getReportsMock.mockResolvedValue([sampleReport, { ...sampleReport, id: "r-other", title: "Other dossier", paragraph_num: 45 }]);
+  const view = renderBriefing();
+  await screen.findAllByText(/Sinjar Ridge/);
+  fireEvent.click(screen.getByRole("button", { name: /Other dossier/ }));
+  await screen.findByRole("heading", { name: "Other dossier" });
+  intelState.result = { query: "old dossier", agent_chain: [], sources_used: [], analysis: "Answer belongs to the original dossier",
+    confidence: .8, threat_assessment: "MODERATE", timestamp: "2026-11-01T00:00:00Z" };
+  view.rerender(<MemoryRouter><BriefingPage /></MemoryRouter>);
+  expect(screen.queryByText("Answer belongs to the original dossier")).not.toBeInTheDocument();
 });

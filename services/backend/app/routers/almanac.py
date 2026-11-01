@@ -13,6 +13,7 @@ from sse_starlette.sse import EventSourceResponse
 from starlette.responses import Response
 
 from app.admin_auth import require_operator_access
+from app.model_access import require_model_access
 from app.models.almanac import (
     AlmanacSignalResponse,
     BriefingSaveRequest,
@@ -239,7 +240,7 @@ async def get_spatial_country_signals(
 @router.post(
     "/country/briefing",
     response_model=None,
-    dependencies=[Depends(require_operator_access)],
+    dependencies=[Depends(require_model_access, scope="request")],
 )
 async def generate_spatial_country_briefing(
     request: Request,
@@ -267,7 +268,7 @@ async def get_country_signals(
 @router.post(
     "/countries/{country_id}/briefing",
     response_model=None,
-    dependencies=[Depends(require_operator_access)],
+    dependencies=[Depends(require_model_access, scope="request")],
 )
 async def generate_country_briefing(
     country_id: str,

@@ -37,3 +37,8 @@ def operator_headers(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """Opt in existing functional tests to the operator HTTP contract."""
     monkeypatch.setattr(settings, "reports_admin_token", "test-only-operator")
     return {"X-Admin-Token": "test-only-operator"}
+
+
+@pytest.fixture(autouse=True)
+def isolate_model_admission(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "model_admission_dir", tmp_path / "model-admission")
