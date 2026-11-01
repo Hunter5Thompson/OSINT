@@ -114,3 +114,41 @@ ordnungsgemäß ab. Der exklusive Nachfolger baute tatsächlich fünf saubere
 Rückwechsel sind belegt. Anschließende selektive Python-Lockwartung verlangt
 einen neuen finalen Head-/Buildbeleg; kein Produktivrollout ist erfolgt. Der ältere falsch
 beschriftete SHA3234993-Build bleibt verworfen.
+
+### Bind an isolated worktree to the reviewed deployment target
+
+Compose derives its project name from the working directory unless it is explicit.
+A release rendered in another worktree can therefore select a new network and new
+named data volumes. Set `COMPOSE_PROJECT_NAME` in the private release environment
+and render with an explicit `-p <reviewed-project>`; do not infer the target from
+an image tag or the worktree name.
+
+Capture a small target contract from the actual deployment inventory:
+
+```json
+{
+  "schema_version": 1,
+  "project": "osint",
+  "networks": {"default": "osint_default"},
+  "volumes": {
+    "redis-data": "osint_redis-data",
+    "neo4j-data": "osint_neo4j-data",
+    "qdrant-data": "osint_qdrant-data"
+  }
+}
+```
+
+Include every existing named volume needed by the target. Validate the final
+resolved JSON without printing its runtime secrets:
+
+```bash
+python3 scripts/ops/validate_release.py --check-paths \
+  --target-contract /data/<release>/target-contract.json \
+  < /data/<release>/private/compose.json
+```
+
+This checks reviewed project/network/volume names in addition to image and mount
+rules. It does not inspect Docker itself: refresh the inventory before a target
+rollout. Static catalog copies and the live coverage snapshot are separate inputs;
+preserve the producer's existing `/run/spatial-coverage` bind and configured path
+instead of freezing the coverage snapshot into the static catalog copy.

@@ -324,3 +324,51 @@ def test_release_tracing_flag_is_preserved_for_every_lifecycle_operation(tmp_pat
     assert result.returncode == 0, result.stdout + result.stderr
     assert operations
     assert all("docker-compose.tracing.release.yml" in args for args in operations)
+
+
+def target_contract(config: dict) -> dict:
+    return {
+        "schema_version": 1,
+        "project": config["name"],
+        "networks": {key: value["name"] for key, value in config["networks"].items()},
+        "volumes": {key: value["name"] for key, value in config["volumes"].items()},
+    }
+
+
+def validate_target(config: dict, contract: object, tmp_path: Path):
+    path = tmp_path / "target.json"
+    path.write_text(json.dumps(contract))
+    return subprocess.run(
+        ["python3", str(ROOT / "scripts/ops/validate_release.py"), "--target-contract", str(path)],
+        input=json.dumps(config), capture_output=True, text=True, check=False,
+    )
+
+
+def test_release_matches_explicit_target_identity(tmp_path):
+    config = render_release()
+    assert validate_target(config, target_contract(config), tmp_path).returncode == 0
+
+
+@pytest.mark.parametrize("changed", ["project", "network", "volume", "missing-volume"])
+def test_release_rejects_a_different_target_or_data_namespace(tmp_path, changed):
+    config = render_release()
+    contract = target_contract(config)
+    if changed == "project":
+        config["name"] = "accidental-worktree"
+    elif changed == "network":
+        config["networks"]["default"]["name"] = "accidental-worktree_default"
+    elif changed == "volume":
+        config["volumes"]["neo4j-data"]["name"] = "accidental-worktree_neo4j-data"
+    else:
+        del config["volumes"]["neo4j-data"]
+    result = validate_target(config, contract, tmp_path)
+    assert result.returncode == 1
+    assert "target" in result.stderr
+
+
+@pytest.mark.parametrize("contract", [None, [], {}, {"schema_version": 1, "project": "x",
+                                                   "networks": [], "volumes": {}}])
+def test_release_rejects_malformed_target_contract_without_disclosing_input(tmp_path, contract):
+    result = validate_target(render_release(), contract, tmp_path)
+    assert result.returncode == 1
+    assert "invalid release target contract" in result.stderr
