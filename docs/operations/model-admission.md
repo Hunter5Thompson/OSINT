@@ -27,12 +27,18 @@ legacy path), then cancels and joins it. Its disconnect watcher also has a
 cooperative stop flag because a Starlette receive probe can consume cancellation.
 The existing ReAct deadline remains independently active.
 
-This bounds admitted backend requests and tests cooperative Intelligence task
-cleanup. It does **not** attest that a deployed vLLM/llama.cpp engine has already
-freed GPU/KV-cache resources when a TCP peer disappears. No live model load was
-started for these tests. Qualify engine cancellation/active-request gauges before
-claiming a hard physical generation limit or raising capacity. Deploy the updated
-Intelligence image with BP-02 to obtain the downstream cancellation behavior.
+This bounds admitted backend requests and cooperative Intelligence task cleanup.
+A bounded live probe on 2026-11-01 used the real HTTP routes and synthesis
+ChatOpenAI adapter against the already running local vLLM qwen3.5 model. Client
+abort, backend timeout and Intelligence timeout all returned active/waiting
+requests and KV-cache usage to zero, observed 57-59ms after the HTTP terminal
+point; permits were reusable. Retrieval was replaced with one benign model call,
+and no database/model deployment was changed. These measurements include gauge
+publication latency and are not a universal physical generation limit: backend
+admission can be released before downstream cancellation is observed, and other
+model clients do not share its permits. llama.cpp and full retrieval/tool workflow
+cancellation remain unqualified. Deploy the updated Intelligence image with BP-02
+to obtain the downstream cancellation behavior.
 
 The JSON-only downstream contract exposes no intermediate agent progress.
 Backend SSE therefore reports `intelligence / processing`, then the real result

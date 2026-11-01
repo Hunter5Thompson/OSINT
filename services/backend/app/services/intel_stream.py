@@ -23,6 +23,7 @@ from app.services import report_store
 from app.services.briefing import truncate_message
 
 log = structlog.get_logger(__name__)
+_TIMEOUT_MESSAGE = "Analysis exceeded its time limit. Please try again."
 
 
 async def stream_intel_query(
@@ -169,19 +170,27 @@ async def stream_intel_query(
         yield {
             "event": "error",
             "data": json.dumps({
-                "error": "Analysis exceeded its time limit. Please try again.",
+                "error": _TIMEOUT_MESSAGE,
                 "code": "MODEL_TIMEOUT",
             }),
         }
     except httpx.HTTPError as exc:
         log.warning("intelligence_service_error", error=str(exc))
-        if report_id:  # preserve the existing /intel/query behavior (intel.py:119-136)
+        status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        if status == 504:
+            message, code = _TIMEOUT_MESSAGE, "MODEL_TIMEOUT"
+        elif status == 429:
+            message, code = "Analysis capacity is busy. Try again shortly.", "MODEL_BUSY"
+        else:
+            message = "Analysis service is unavailable. Please try again."
+            code = "INTEL_SERVICE_ERROR"
+        if report_id:
             try:
                 await report_store.append_report_message(
                     report_id,
                     ReportMessageCreate(
                         role="munin",
-                        text="service unreachable · retry in 10s",
+                        text=message,
                     ),
                 )
             except Exception as persist_exc:  # noqa: BLE001
@@ -192,7 +201,7 @@ async def stream_intel_query(
                 )
         yield {
             "event": "error",
-            "data": json.dumps({"error": str(exc), "code": "INTEL_SERVICE_ERROR"}),
+            "data": json.dumps({"error": message, "code": code}),
         }
     except Exception as exc:  # noqa: BLE001
         log.exception("intel_query_failed")

@@ -87,3 +87,35 @@ async def test_total_deadline_cancels_slow_upstream_and_reports_timeout(monkeypa
     error = next(json.loads(e["data"]) for e in events if e["event"] == "error")
     assert error["code"] == "MODEL_TIMEOUT"
     assert not any(e["event"] == "result" for e in events)
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "message"),
+    [
+        (504, "MODEL_TIMEOUT", "Analysis exceeded its time limit. Please try again."),
+        (429, "MODEL_BUSY", "Analysis capacity is busy. Try again shortly."),
+        (503, "INTEL_SERVICE_ERROR", "Analysis service is unavailable. Please try again."),
+    ],
+)
+async def test_upstream_errors_are_actionable_and_persist_the_same_message(
+    monkeypatch, status, code, message,
+):
+    from unittest.mock import AsyncMock
+
+    import httpx
+
+    monkeypatch.setattr(intel_stream.report_store, "get_report", AsyncMock(return_value=object()))
+    append = AsyncMock()
+    monkeypatch.setattr(intel_stream.report_store, "append_report_message", append)
+
+    class RejectedClient:
+        async def post(self, *args, **kwargs):
+            return httpx.Response(status, request=httpx.Request("POST", "http://private-service/query"))
+
+    events = [e async for e in intel_stream.stream_intel_query(
+        query="q", report_id="r-test", client=RejectedClient(),
+    )]
+    error = next(json.loads(e["data"]) for e in events if e["event"] == "error")
+    assert error == {"code": code, "error": message}
+    assert append.call_args.args[1].text == message
+    assert "private-service" not in str(events)
