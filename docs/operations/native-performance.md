@@ -62,8 +62,10 @@ the destroyed viewer's own context entries and synchronously created credit
 styles; foreign contexts/styles remain intact. The terrain compatibility seam is
 version-pinned and fails visibly on a changed internal contract. It does not
 claim cleanup for remote terrain of other dimensions. Requalify on Cesium upgrade.
-The corrected diagnostic maintained 535 DOM nodes over the final 50-remount run;
-previous failing attempts and reference paths remain in the external evidence.
+The corrected diagnostic returned to 535 DOM nodes, with transient spikes but no
+accumulating trend across 50 remounts. Previous failing attempts and reference
+paths remain in the external evidence. The final image-backed 60-minute soak had
+exactly 1361 DOM nodes in all 142 collected samples.
 
 ## Context loss is a failure, not a slower frame sample
 
@@ -79,3 +81,16 @@ when rebuilding. An injected native context-loss test verifies resumed rendering
 and preserved layer selection. This does not repair or certify the GPU driver.
 Native actions have a 15-second deadline; the soak checks both render-error UI
 and captured context-loss events and records browser warning/error messages.
+
+## Broader process-memory gate remains open
+
+The e1c46a6 image completed 60.11 minutes / 142 cycles with stable DOM and a
++2.79 MiB retained JS heap warm delta. That is the declared JS/DOM gate only.
+Browser-process RSS rose +148.2 MiB between the 10–15 and 55–60 minute windows.
+A minimal same-distribution Cesium viewer without ODIN reproduced native browser
+retention; page closure reclaimed it, explicit WebGL context loss did not.
+HTTP/history-only, plain WebGL and worker-blob controls are recorded in the
+[dated review](../reviews/2026-11-01-quality.md). The full "no continuing memory
+rise" criterion remains open; no native allocator root cause or fix is claimed.
+`native.workers.perf.ts` separately checks blob ownership and records Linux
+browser RSS plus a pressure diagnostic; it does not silently certify RSS bounds.

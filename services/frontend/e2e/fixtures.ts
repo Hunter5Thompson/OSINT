@@ -257,7 +257,7 @@ export const test = base.extend<{ state: FixtureState; expectedRenderer: string 
         vendor: String(gl.getParameter(extension ? extension.UNMASKED_VENDOR_WEBGL : gl.VENDOR)) };
     });
     await testInfo.attach("browser-contract", { contentType: "application/json", body: JSON.stringify({
-      errors, ...state, rendering, limits: "No native GPU or human acceptance",
+      errors, ...state, rendering, limits: "Renderer identity recorded; no headed-display or human acceptance",
       catalogRevision: manifest.catalog_revision,
     }, null, 2) });
     expect(errors).toEqual([]);

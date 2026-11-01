@@ -7,6 +7,12 @@ test("an injected WebGL loss can rebuild the map without losing layer state", as
   state.flightDensity = "dense";
   await page.goto("/worldview?layer=recon");
   await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
+  const expand = page.getByRole("button", { name: "expand Layers", exact: true });
+  if (await expand.isVisible()) await expand.click();
+  const flights = page.getByRole("button", { name: "flights", exact: true });
+  await expect(flights).toHaveAttribute("aria-pressed", "true");
+  await flights.click();
+  await expect(flights).toHaveAttribute("aria-pressed", "false");
   const oldCanvas = await page.locator(".cesium-widget canvas").elementHandle();
   expect(oldCanvas).not.toBeNull();
   await page.evaluate(() => {
@@ -24,9 +30,11 @@ test("an injected WebGL loss can rebuild the map without losing layer state", as
   await expect(page.getByTestId("globe-render-error")).toHaveCount(0);
   await expect.poll(() => oldCanvas!.evaluate(canvas => canvas.isConnected)).toBe(false);
   await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
-  const expand = page.getByRole("button", { name: "expand Layers", exact: true });
   if (await expand.isVisible()) await expand.click();
-  await expect(page.getByRole("button", { name: "flights", exact: true })).toHaveAttribute("aria-pressed", "true");
+  // A non-default selection must survive replacing the underlying viewer.
+  await expect(flights).toHaveAttribute("aria-pressed", "false");
+  await flights.click();
+  await expect(flights).toHaveAttribute("aria-pressed", "true");
   await attachRenderProbe(page);
   const begin = await beginRenderSample(page);
   await new Promise(resolve => setTimeout(resolve, 1000));
