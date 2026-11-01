@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { ShaderType } from "../../types";
 import { applyCRTShader, applyNightVisionShader, applyFLIRShader, clearShaders } from "../shaders/shaderUtils";
 import { applyTilesetPerformanceConfig } from "./tilesetConfig";
 import { createBaseLayer } from "./baseLayer";
+import { watchViewerHealth, type ViewerFailure } from "./viewerHealth";
 import { captureTerrainCacheRelease } from "./terrainCacheCleanup";
 
 interface GlobeViewerProps {
@@ -24,6 +25,8 @@ export function GlobeViewer({
   showCityBuildings,
   onPhotorealTilesetReady,
 }: GlobeViewerProps) {
+  const [failure, setFailure] = useState<ViewerFailure | null>(null);
+  const [generation, setGeneration] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const nightLayerRef = useRef<Cesium.ImageryLayer | null>(null);
@@ -56,6 +59,7 @@ export function GlobeViewer({
       infoBox: false,
       scene3DOnly: true,
       msaaSamples: 4,
+      showRenderLoopErrors: false,
     });
 
     const creditStyles = [...document.head.querySelectorAll("style")].filter(
@@ -71,6 +75,8 @@ export function GlobeViewer({
       releaseCreditStyles();
       throw error;
     }
+
+    const releaseHealth = watchViewerHealth(viewer, setFailure);
 
     // Dark atmosphere
     viewer.scene.globe.enableLighting = Boolean(cesiumToken);
@@ -189,6 +195,7 @@ export function GlobeViewer({
     onViewerReady(viewer);
 
     return () => {
+      releaseHealth();
       // Stop the owned render loop before disposal: a throwing primitive can
       // leave Cesium half-destroyed while its next animation frame is queued.
       if (!viewer.isDestroyed()) {
@@ -224,7 +231,7 @@ export function GlobeViewer({
       }
       releaseCreditStyles();
     };
-  }, [cesiumToken, onViewerReady, onPhotorealTilesetReady]);
+  }, [cesiumToken, onViewerReady, onPhotorealTilesetReady, generation]);
 
   useEffect(() => {
     if (borderLayerRef.current) {
@@ -259,12 +266,24 @@ export function GlobeViewer({
       default:
         break;
     }
-  }, [activeShader]);
+  }, [activeShader, generation]);
 
   return (
-    <div
-      ref={containerRef}
-      style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0 }}
-    />
+    <>
+      <div
+        ref={containerRef}
+        style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0 }}
+      />
+      {failure && <div role="alert" data-testid="globe-render-error" style={{
+        position: "absolute", inset: 0, zIndex: 10, display: "grid", placeContent: "center",
+        background: "#0a0a0ae6", color: "var(--chalk)", padding: 24, gap: 16,
+      }}>
+        <p>The map display was interrupted. Reload the map to continue.</p>
+        <button type="button" onClick={() => { setFailure(null); setGeneration(value => value + 1); }}
+          style={{ minHeight: 44, padding: "8px 16px", border: "1px solid var(--stone)" }}>
+          Reload map
+        </button>
+      </div>}
+    </>
   );
 }

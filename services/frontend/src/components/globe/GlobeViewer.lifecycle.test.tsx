@@ -26,6 +26,7 @@ vi.mock("cesium", () => ({
   Color: { fromCssColorString: () => ({}) },
   Cartesian3: { fromDegrees: () => ({}) },
 }));
+vi.mock("./viewerHealth", () => ({ watchViewerHealth: () => () => {} }));
 vi.mock("./terrainCacheCleanup", () => ({ captureTerrainCacheRelease: () => () => {} }));
 vi.mock("./baseLayer", () => ({ createBaseLayer: () => undefined }));
 vi.mock("../shaders/shaderUtils", () => ({

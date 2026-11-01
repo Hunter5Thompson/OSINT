@@ -1,11 +1,24 @@
 import { appendFileSync } from "node:fs";
 import { test, expect } from "./fixtures";
 
+declare global { interface Window { __odinContextLossCount?: number } }
+
 // An explicit separate command, never a silently skipped CI test.
 test("60 minute native layer, time and route lifecycle soak", async ({ page, state }, info) => {
   const durationMs = 60 * 60 * 1000;
   test.setTimeout(durationMs + 120000);
   state.flightDensity = "dense";
+  await page.addInitScript(() => {
+    window.__odinContextLossCount = 0;
+    document.addEventListener("webglcontextlost", () => { window.__odinContextLossCount! += 1; }, true);
+  });
+  page.on("console", message => {
+    if (["warning", "error"].includes(message.type())) {
+      appendFileSync(info.outputPath("console.jsonl"), JSON.stringify({
+        at: new Date().toISOString(), type: message.type(), text: message.text(),
+      }) + "\n");
+    }
+  });
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Performance.enable");
   const samples: { minute: number; heap: number; nodes: number; documents: number }[] = [];
@@ -13,6 +26,7 @@ test("60 minute native layer, time and route lifecycle soak", async ({ page, sta
   let iteration = 0;
   await page.goto("/worldview?layer=recon");
   do {
+    await expect(page.locator(".cesium-widget-errorPanel, [data-testid=globe-render-error]")).toHaveCount(0);
     await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
     const expand = page.getByRole("button", { name: "expand Layers", exact: true });
     if (await expand.isVisible()) await expand.click();
@@ -27,6 +41,8 @@ test("60 minute native layer, time and route lifecycle soak", async ({ page, sta
     await page.getByRole("link", { name: "WORLDVIEW", exact: true }).click();
     await expect(page.locator(".cesium-widget canvas")).toHaveCount(1);
     await new Promise(resolve => setTimeout(resolve, 25000));
+    await expect(page.locator(".cesium-widget-errorPanel, [data-testid=globe-render-error]")).toHaveCount(0);
+    expect(await page.evaluate(() => window.__odinContextLossCount)).toBe(0);
     // Compare retained heap at the same mounted route after collection. This
     // says nothing about GPU/driver memory; record that separately on the host.
     await cdp.send("HeapProfiler.collectGarbage");

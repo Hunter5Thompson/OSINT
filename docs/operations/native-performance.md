@@ -64,3 +64,18 @@ version-pinned and fails visibly on a changed internal contract. It does not
 claim cleanup for remote terrain of other dimensions. Requalify on Cesium upgrade.
 The corrected diagnostic maintained 535 DOM nodes over the final 50-remount run;
 previous failing attempts and reference paths remain in the external evidence.
+
+## Context loss is a failure, not a slower frame sample
+
+The first image-backed soak failed after 28 cycles / about 11.85 minutes. The
+kernel recorded NVIDIA Xid 13 for the Chrome GPU process at 2026-11-01 16:25:52 UTC;
+WebGL was lost and Cesium stopped with a RangeError. This establishes the observed
+GPU/browser failure, not its ultimate cause or independence from the workload.
+The interrupted run is preserved as FAIL, never promoted to a 60-minute pass.
+
+The viewer now stops its loop and presents a controlled reload action on context
+loss or render error. It removes old listeners/resources and reapplies shaders
+when rebuilding. An injected native context-loss test verifies resumed rendering
+and preserved layer selection. This does not repair or certify the GPU driver.
+Native actions have a 15-second deadline; the soak checks both render-error UI
+and captured context-loss events and records browser warning/error messages.
