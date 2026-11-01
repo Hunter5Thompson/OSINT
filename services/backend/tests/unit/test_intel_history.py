@@ -37,7 +37,7 @@ def test_history_keeps_the_newest_fifty() -> None:
         intel._history.clear()
 
 
-def test_invalid_result_events_are_not_stored() -> None:
+def test_invalid_result_events_are_not_stored(operator_headers) -> None:
     intel._history.clear()
 
     async def fake_stream(**_kwargs: object):
@@ -49,7 +49,9 @@ def test_invalid_result_events_are_not_stored() -> None:
 
     try:
         with patch("app.routers.intel.stream_intel_query", fake_stream):
-            response = TestClient(app).post("/api/intel/query", json={"query": "hi"})
+            response = TestClient(app, headers=operator_headers).post(
+                "/api/intel/query", json={"query": "hi"}
+            )
         assert response.status_code == 200
         assert [item.query for item in intel._history] == ["kept"]
     finally:

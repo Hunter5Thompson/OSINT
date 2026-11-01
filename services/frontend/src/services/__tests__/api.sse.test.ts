@@ -153,3 +153,20 @@ describe("queryIntel SSE parser", () => {
     expect(requestBody.spatialScope).toBeUndefined();
   });
 });
+
+describe("analysis admission errors", () => {
+  it.each([
+    [429, { detail: { code: "MODEL_BUSY", message: "Analysis capacity is busy. Try again shortly." } }, "Analysis capacity is busy"],
+    [401, { detail: "invalid admin token" }, "invalid admin token"],
+    [503, "<html>unavailable</html>", "503"],
+  ])("preserves useful HTTP %s detail before SSE", async (status, body, message) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      typeof body === "string" ? body : JSON.stringify(body), { status },
+    )));
+    const error = vi.fn();
+    const done = vi.fn();
+    queryIntel({ query: "test" }, vi.fn(), vi.fn(), error, done);
+    await vi.waitFor(() => expect(done).toHaveBeenCalledOnce());
+    expect(error).toHaveBeenCalledWith(expect.stringContaining(message));
+  });
+});

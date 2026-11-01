@@ -21,6 +21,9 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Nginx config for SPA routing + cache headers (see nginx.conf)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY operator-gateway/ /opt/odin/operator-gateway/
+COPY docker-entrypoint.d/ /docker-entrypoint.d/
+RUN chmod +x /docker-entrypoint.d/40-odin-operator-gateway.sh
 
 EXPOSE 5173
 

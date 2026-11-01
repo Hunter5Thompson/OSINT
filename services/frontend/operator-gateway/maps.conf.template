@@ -1,0 +1,20 @@
+# Loaded in http context only when the loopback operator gateway is enabled.
+map "$request_method:$http_x_admin_token" $odin_reports_credential {
+    default $http_x_admin_token;
+    "~^(POST|PATCH|DELETE):$" "${ODIN_OPERATOR_TOKEN}";
+}
+map "$request_method:$http_x_admin_token" $odin_llm_credential {
+    default $http_x_admin_token;
+    "POST:" "${ODIN_OPERATOR_TOKEN}";
+}
+map "$http_origin|$scheme://$http_host" $odin_operator_origin_ok {
+    default 0;
+    # Missing Origin is allowed for local operator tools; Fetch-Site still applies.
+    "~^\\|" 1;
+    "~^([^|]+)\\|\\1$" 1;
+}
+map "$request_method:$odin_operator_origin_ok:$http_sec_fetch_site" $odin_operator_csrf_blocked {
+    default 0;
+    "~^(POST|PATCH|DELETE):0:" 1;
+    "~^(POST|PATCH|DELETE):1:cross-site$" 1;
+}

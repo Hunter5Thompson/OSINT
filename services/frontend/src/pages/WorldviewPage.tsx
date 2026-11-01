@@ -577,7 +577,7 @@ function WorldviewContent({
 
   return (
     <SpotlightProvider>
-    <PerformanceGuard>
+    <PerformanceGuard viewer={viewer}>
     <TimeProvider viewer={viewer}>
       <div className="worldview-workspace" data-degraded={configError || !config.cesium_ion_token} style={{ flex: 1, position: "relative", minHeight: 0 }} data-page="worldview">
         <div style={{ position: "absolute", inset: 0 }}>

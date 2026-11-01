@@ -45,7 +45,9 @@ async def test_stream_emits_status_then_result_with_shared_client():
         )
     ]
     kinds = [e["event"] for e in events]
-    assert kinds[:3] == ["status", "status", "status"]
+    assert kinds[0] == "status"
+    statuses = [json.loads(e["data"]) for e in events if e["event"] == "status"]
+    assert statuses == [{"agent": "intelligence", "status": "processing"}]
     assert "result" in kinds and kinds[-1] == "done"
     result = json.loads(next(e["data"] for e in events if e["event"] == "result"))
     assert result["analysis"] == "Lage stabil"
@@ -60,3 +62,60 @@ async def test_stream_emits_error_on_http_failure():
 
     events = [ev async for ev in intel_stream.stream_intel_query(query="q", client=FailingClient())]
     assert any(e["event"] == "error" for e in events)
+
+
+async def test_total_deadline_cancels_slow_upstream_and_reports_timeout(monkeypatch):
+    import asyncio
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "model_timeout_s", 0.01)
+    closed = asyncio.Event()
+
+    class StalledClient:
+        async def post(self, *args, **kwargs):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                closed.set()
+
+    async def collect():
+        return [e async for e in intel_stream.stream_intel_query(query="q", client=StalledClient())]
+
+    events = await asyncio.wait_for(collect(), 1)
+    assert closed.is_set()
+    error = next(json.loads(e["data"]) for e in events if e["event"] == "error")
+    assert error["code"] == "MODEL_TIMEOUT"
+    assert not any(e["event"] == "result" for e in events)
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "message"),
+    [
+        (504, "MODEL_TIMEOUT", "Analysis exceeded its time limit. Please try again."),
+        (429, "MODEL_BUSY", "Analysis capacity is busy. Try again shortly."),
+        (503, "INTEL_SERVICE_ERROR", "Analysis service is unavailable. Please try again."),
+    ],
+)
+async def test_upstream_errors_are_actionable_and_persist_the_same_message(
+    monkeypatch, status, code, message,
+):
+    from unittest.mock import AsyncMock
+
+    import httpx
+
+    monkeypatch.setattr(intel_stream.report_store, "get_report", AsyncMock(return_value=object()))
+    append = AsyncMock()
+    monkeypatch.setattr(intel_stream.report_store, "append_report_message", append)
+
+    class RejectedClient:
+        async def post(self, *args, **kwargs):
+            return httpx.Response(status, request=httpx.Request("POST", "http://private-service/query"))
+
+    events = [e async for e in intel_stream.stream_intel_query(
+        query="q", report_id="r-test", client=RejectedClient(),
+    )]
+    error = next(json.loads(e["data"]) for e in events if e["event"] == "error")
+    assert error == {"code": code, "error": message}
+    assert append.call_args.args[1].text == message
+    assert "private-service" not in str(events)

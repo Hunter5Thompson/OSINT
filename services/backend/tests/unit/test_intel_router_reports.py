@@ -102,8 +102,8 @@ def _sample_report() -> ReportRecord:
 
 class TestIntelReportScopedPersistence:
     @pytest.fixture
-    def client(self) -> TestClient:
-        return TestClient(app)
+    def client(self, operator_headers) -> TestClient:
+        return TestClient(app, headers=operator_headers)
 
     def test_returns_error_when_report_missing(self, client: TestClient) -> None:
         with patch(
@@ -156,9 +156,7 @@ class TestIntelReportScopedPersistence:
     ) -> None:
         report = _sample_report().model_copy(
             update={
-                "spatial_application": SpatialRunApplicationV1.model_validate(
-                    _SPATIAL_APPLICATION
-                )
+                "spatial_application": SpatialRunApplicationV1.model_validate(_SPATIAL_APPLICATION)
             }
         )
         cleared = report.model_copy(update={"spatial_application": None})

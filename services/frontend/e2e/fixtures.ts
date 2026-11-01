@@ -223,8 +223,9 @@ async function fixtures(page: Page, state: FixtureState, baseURL: string): Promi
   });
 }
 
-export const test = base.extend<{ state: FixtureState }>({
-  state: async ({ page, baseURL }, use, testInfo) => {
+export const test = base.extend<{ state: FixtureState; expectedRenderer: string }>({
+  expectedRenderer: ["SwiftShader", { option: true }],
+  state: async ({ page, baseURL, expectedRenderer }, use, testInfo) => {
     if (baseURL === undefined || new URL(baseURL).hostname !== "127.0.0.1") {
       throw new Error("Browser fixture requires the runner's own loopback preview");
     }
@@ -256,12 +257,12 @@ export const test = base.extend<{ state: FixtureState }>({
         vendor: String(gl.getParameter(extension ? extension.UNMASKED_VENDOR_WEBGL : gl.VENDOR)) };
     });
     await testInfo.attach("browser-contract", { contentType: "application/json", body: JSON.stringify({
-      errors, ...state, rendering, limits: "No native GPU or human acceptance",
+      errors, ...state, rendering, limits: "Renderer identity recorded; no headed-display or human acceptance",
       catalogRevision: manifest.catalog_revision,
     }, null, 2) });
     expect(errors).toEqual([]);
     expect(state.unexpected).toEqual([]);
-    expect(rendering?.renderer).toContain("SwiftShader");
+    expect(rendering?.renderer).toContain(expectedRenderer);
   },
 });
 export { expect };
