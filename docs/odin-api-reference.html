@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ODIN Backend-API · Referenz</title>
+<meta name="description" content="Alle 61 REST-Operationen und 2 WebSockets des ODIN-Backends mit Zweck, Grenzen, Caches und Auth, geprüft gegen den Router-Code auf main.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0a08">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b0a08'/%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%23c4813a' stroke-width='1.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23c4813a'/%3E%3C/svg%3E">
+<link rel="preload" href="assets/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+/* ODIN · Hlíðskjalf Noir. Tokens mirror services/frontend/src/theme/hlidskjalf.css */
+@font-face{font-family:"Instrument Serif";font-style:italic;font-weight:400;font-display:swap;src:url("assets/fonts/InstrumentSerif-Italic.woff2") format("woff2")}
+@font-face{font-family:"Hanken Grotesk";font-style:normal;font-weight:300 600;font-display:swap;src:url("assets/fonts/HankenGrotesk-Variable.woff2") format("woff2")}
+@font-face{font-family:"Martian Mono";font-style:normal;font-weight:300 500;font-display:swap;src:url("assets/fonts/MartianMono-Variable.woff2") format("woff2")}
+
+:root{
+  --void:#0b0a08; --obsidian:#12110e; --basalt:#1a1814; --granite:#2a2720;
+  --ash:#6b6358; --stone:#958a7a; --bone:#d4cdc0; --parchment:#e8e2d4;
+  --amber:#c4813a; --sage:#7a8a68; --sentinel:#b85a2a; --sentinel-hot:#c2622f;
+  --serif:"Instrument Serif","Times New Roman",serif;
+  --sans:"Hanken Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"Martian Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --gutter:clamp(1.25rem,4vw,3.5rem);
+  --t-body:clamp(.98rem,.95rem + .12vw,1.06rem);
+  --t-mono:clamp(.68rem,.66rem + .1vw,.76rem);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:4.5rem}
+body{background:var(--void);color:var(--bone);font:400 var(--t-body)/1.6 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:clip}
+a{color:inherit;text-decoration:none}
+code{font:400 var(--t-mono)/1.5 var(--mono);color:var(--parchment);background:var(--basalt);padding:.12em .4em}
+::selection{background:var(--amber);color:var(--void)}
+:where(a,button,input,summary):focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+.skip{position:fixed;left:1rem;top:-5rem;z-index:300;background:var(--parchment);color:var(--void);padding:.7rem 1rem;font:500 var(--t-mono)/1 var(--mono);transition:top .2s}
+.skip:focus-visible{top:1rem}
+ul,ol{list-style:none}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:100;background:var(--void);border-bottom:1px solid var(--granite)}
+.nav-in{max-width:1440px;margin-inline:auto;padding:.7rem var(--gutter);display:flex;align-items:baseline;gap:1.4rem;flex-wrap:wrap}
+.brand{font:400 1.7rem/1 var(--serif);font-style:italic;color:var(--parchment);letter-spacing:-.01em}
+.brand small{font:500 .66rem/1 var(--sans);letter-spacing:.04em;color:var(--stone);margin-left:.9rem}
+.stand{margin-left:auto;font:var(--t-mono)/1 var(--mono);color:var(--sage);display:flex;align-items:center;gap:.6rem}
+.stand::before{content:"";width:6px;height:6px;background:var(--sage)}
+
+/* head */
+.head{max-width:1440px;margin-inline:auto;padding:clamp(2.5rem,6vw,5.5rem) var(--gutter) clamp(2rem,4vw,3.5rem);display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:2rem clamp(2rem,6vw,6rem);align-items:end}
+h1{font:400 clamp(3.2rem,1.6rem + 7vw,8rem)/.92 var(--serif);font-style:italic;letter-spacing:-.035em;color:var(--parchment)}
+.head .lede{margin-top:1.6rem;max-width:46ch;font-size:clamp(1.05rem,1rem + .35vw,1.25rem);line-height:1.55}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:0;border-top:1px solid var(--stone)}
+.facts dt,.facts dd{padding:.7rem 0;border-bottom:1px solid var(--granite)}
+.facts dt{font:var(--t-mono)/1.5 var(--mono);color:var(--stone);padding-right:1.6rem}
+.facts dd{font:400 1.5rem/1.1 var(--serif);font-style:italic;color:var(--parchment);text-align:right}
+.facts dd small{font:var(--t-mono)/1.4 var(--mono);font-style:normal;color:var(--stone);margin-left:.5rem}
+.facts dd.hot{color:var(--amber)}
+
+/* drift notice: the one loud thing */
+.drift{max-width:1440px;margin:0 auto;padding:0 var(--gutter)}
+.drift-in{border:1px solid var(--sentinel-hot);background:var(--obsidian);padding:clamp(1.2rem,2.5vw,2rem);display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:1rem clamp(1.5rem,5vw,5rem)}
+.drift h2{font:400 clamp(1.6rem,1.2rem + 1.6vw,2.4rem)/1.05 var(--serif);font-style:italic;color:var(--parchment);letter-spacing:-.015em}
+.drift ul{display:grid;gap:.9rem}
+.drift li{padding-left:1rem;border-left:2px solid var(--sentinel-hot)}
+.drift li b{font-weight:500;color:var(--parchment)}
+
+/* layout */
+.layout{max-width:1440px;margin-inline:auto;padding:clamp(2.5rem,5vw,4.5rem) var(--gutter) 0;display:grid;grid-template-columns:minmax(14rem,17rem) minmax(0,1fr);gap:0 clamp(2rem,5vw,5rem);align-items:start}
+.side{position:sticky;top:4.2rem;max-height:calc(100svh - 5rem);overflow:auto;padding-bottom:1rem}
+.side h2{font:400 1.5rem/1 var(--serif);font-style:italic;color:var(--parchment);margin-bottom:.8rem}
+.search{display:block;margin-bottom:1.1rem}
+.search input{width:100%;background:var(--obsidian);border:1px solid var(--granite);color:var(--parchment);font:var(--t-mono)/1 var(--mono);padding:.8rem .8rem;border-radius:0}
+.search input::placeholder{color:var(--ash)}
+.search input:focus{border-color:var(--amber)}
+.hits{display:block;font:var(--t-mono)/1.4 var(--mono);color:var(--stone);margin-top:.5rem;min-height:1.4em}
+.reg a{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;padding:.55rem 0;border-bottom:1px solid var(--granite);color:var(--bone);transition:color .2s}
+.reg a span{font-size:.95rem}
+.reg a i{font:400 1.25rem/1 var(--serif);font-style:italic;color:var(--ash);transition:color .2s}
+.reg a:hover,.reg a.on{color:var(--parchment)}
+.reg a:hover i,.reg a.on i{color:var(--amber)}
+.no-js-hide{display:none}
+html.js .no-js-hide{display:block}
+
+main{min-width:0}
+.block{margin-bottom:clamp(3.5rem,7vw,6rem)}
+.block>h2,.ghead h2{font:400 clamp(2rem,1.3rem + 2.6vw,3.6rem)/1 var(--serif);font-style:italic;letter-spacing:-.025em;color:var(--parchment)}
+.sect{color:var(--amber);margin-right:.5em}
+.block>.sub{margin-top:1rem;max-width:60ch;color:var(--bone)}
+
+/* conventions */
+.conv{margin-top:2rem;border-top:1px solid var(--stone)}
+.conv>div{display:grid;grid-template-columns:minmax(8rem,13rem) minmax(0,1fr);gap:.4rem 2rem;padding:1.1rem 0;border-bottom:1px solid var(--granite)}
+.conv dt{font:400 1.35rem/1.1 var(--serif);font-style:italic;color:var(--parchment)}
+.conv dd{max-width:72ch}
+.ttl{display:grid;grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));gap:0 1.5rem;margin-top:.6rem}
+.ttl div{display:flex;justify-content:space-between;gap:.8rem;border-bottom:1px solid var(--granite);padding:.35rem 0;font:var(--t-mono)/1.4 var(--mono)}
+.ttl dt{font:var(--t-mono)/1.4 var(--mono);color:var(--stone)}
+.ttl dd{color:var(--parchment)}
+
+/* groups */
+.grp{margin-bottom:clamp(3.5rem,7vw,6rem)}
+.ghead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.8rem 1.5rem;align-items:baseline;padding-bottom:1.4rem;border-bottom:1px solid var(--stone)}
+.ghead .cnt{font:400 clamp(2.4rem,4vw,3.6rem)/.8 var(--serif);font-style:italic;color:var(--ash)}
+.ghead .why{grid-column:1/-1;max-width:68ch;color:var(--bone)}
+.ops li.op{display:grid;grid-template-columns:minmax(0,23rem) minmax(0,1fr);gap:.6rem clamp(1rem,2.5vw,2.5rem);padding:1.15rem 0;border-bottom:1px solid var(--granite);transition:background .2s}
+.ops li.op:hover{background:var(--obsidian)}
+.ops-path{display:grid;gap:.45rem;align-content:start}
+.p{display:grid;grid-template-columns:4.2rem minmax(0,1fr);gap:0 .4rem;align-items:baseline}
+.p code{background:none;padding:0;color:var(--parchment);font-size:clamp(.74rem,.72rem + .1vw,.82rem);overflow-wrap:anywhere;word-break:break-word}
+.m{font:500 var(--t-mono)/1 var(--mono)}
+.m.get{color:var(--sage)} .m.post{color:var(--amber)} .m.patch{color:var(--parchment)} .m.delete{color:var(--sentinel-hot)} .m.ws{color:var(--stone)}
+.tag{justify-self:start;margin-left:4.6rem;font:var(--t-mono)/1 var(--mono);padding:.3rem .5rem;border:1px solid var(--stone);color:var(--bone)}
+.tag.admin{border-color:var(--amber);color:var(--amber)}
+.tag.sse{border-color:var(--sage);color:var(--sage)}
+.tag.main{border:1px dashed var(--sentinel-hot);color:var(--sentinel-hot)}
+.desc{max-width:62ch}
+.body{min-width:0}
+.lim{display:flex;flex-wrap:wrap;gap:.35rem 1.6rem;margin-top:.7rem;font:var(--t-mono)/1.5 var(--mono);color:var(--stone)}
+.lim li{padding-left:.9rem;position:relative}
+.lim li::before{content:"";position:absolute;left:0;top:.62em;width:.4rem;height:1px;background:var(--ash)}
+.lim code{font-size:inherit;color:var(--bone)}
+.gnote{margin-top:1.1rem;max-width:72ch;color:var(--stone);font-size:.95rem}
+
+/* open points */
+.open{counter-reset:o;margin-top:2rem;border-top:1px solid var(--stone)}
+.open li{display:grid;grid-template-columns:minmax(0,17rem) minmax(0,1fr);gap:.4rem 2rem;padding:1.1rem 0;border-bottom:1px solid var(--granite)}
+.open h3{font:400 1.35rem/1.15 var(--serif);font-style:italic;color:var(--parchment)}
+.open p{max-width:68ch}
+.verify{margin-top:2rem;padding:1.1rem 1.2rem;border:1px solid var(--granite);background:var(--obsidian);font:var(--t-mono)/1.9 var(--mono);color:var(--stone);overflow-x:auto}
+.verify b{color:var(--parchment);font-weight:400}
+
+footer{border-top:1px solid var(--granite);margin-top:clamp(3rem,6vw,5rem);padding:1.4rem var(--gutter) 2rem;color:var(--stone);font:var(--t-mono)/1.7 var(--mono)}
+footer div{max-width:1440px;margin-inline:auto}
+
+.hidden{display:none!important}
+
+@media (max-width:1000px){
+  .head,.drift-in{grid-template-columns:1fr}
+  .layout{grid-template-columns:1fr}
+  .side{position:static;max-height:none;margin-bottom:3rem}
+  .reg{columns:2 14rem;column-gap:2rem}
+  .reg li{break-inside:avoid}
+  .ops li.op{grid-template-columns:minmax(0,1fr)}
+  .conv>div,.open li{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+</style>
+</head>
+<body>
+<a class="skip" href="#inhalt">Zum Inhalt</a>
+<div class="nav"><div class="nav-in">
+  <span class="brand">ODIN<small>Backend-API · Referenz</small></span>
+  <span class="stand">geprüft gegen main c003ed6 am 2026-11-01</span>
+</div></div>
+
+<header class="head">
+  <div>
+    <h1>Backend-API</h1>
+    <p class="lede">Alles, was das ODIN-Backend unter <code>/api</code> anbietet, mit Zweck, Grenzen, Caches und Auth. Hinter jeder Gruppe steht, wofür es sie gibt.</p>
+  </div>
+  <dl class="facts" aria-label="Kennzahlen">
+    <dt>REST-Operationen</dt><dd class="hot">61</dd>
+    <dt>WebSockets (nicht in Swagger)</dt><dd>2</dd>
+    <dt>Live-Streams per SSE</dt><dd>6</dd>
+    <dt>Schreibend, nur mit Admin-Token</dt><dd>10</dd>
+    <dt>Im laufenden Container</dt><dd>60<small>von 61</small></dd>
+  </dl>
+</header>
+
+<aside class="drift" aria-labelledby="drift-h">
+  <div class="drift-in">
+    <h2 id="drift-h">Container und main laufen auseinander</h2>
+    <ul>
+      <li><b><code>GET /api/satellites/orbits</code> fehlt im Container.</b> Das Frontend auf main ruft ihn bereits auf (<code>services/frontend/src/services/api.ts</code>). Das ist ein Grund für einen Rebuild.</li>
+      <li><b><code>/api/health</code> liefert dort noch kein <code>revision</code>.</b> Das Feld gibt es erst auf main.</li>
+      <li>Laut Swagger-Auslese ist das Container-Image rund fünf Wochen alt. Darüber hinaus weichen keine Routen ab.</li>
+    </ul>
+  </div>
+</aside>
+
+<div class="layout" id="inhalt">
+  <nav class="side" aria-label="Register">
+    <h2>Register</h2>
+    <label class="search no-js-hide">
+      <span class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Endpunkte filtern</span>
+      <input id="q" type="search" placeholder="Pfad oder Stichwort filtern" autocomplete="off">
+      <span class="hits" id="hits" aria-live="polite"></span>
+    </label>
+    <ul class="reg">
+<li><a href="#querschnitt"><span>Betrieb &amp; Konfiguration</span><i>3</i></a></li>
+<li><a href="#live"><span>Live-Layer für den Globus</span><i>13</i></a></li>
+<li><a href="#lagebild"><span>Lagebild, Signale, Recon</span><i>5</i></a></li>
+<li><a href="#graph"><span>Wissensgraph</span><i>6</i></a></li>
+<li><a href="#timeline"><span>Timeline (Chronik)</span><i>3</i></a></li>
+<li><a href="#spatial"><span>Räumliche Auswahl (Spatial-Katalog)</span><i>3</i></a></li>
+<li><a href="#almanac"><span>Almanac (Länderdossiers)</span><i>8</i></a></li>
+<li><a href="#intel"><span>Intelligence (Munin)</span><i>3</i></a></li>
+<li><a href="#reports"><span>Reports (Briefing-Dossiers)</span><i>7</i></a></li>
+<li><a href="#incidents"><span>Incidents (War Room)</span><i>7</i></a></li>
+<li><a href="#rag"><span>RAG (Wissensbasis)</span><i>3</i></a></li>
+      <li><a href="#ws"><span>WebSockets</span><i>2</i></a></li>
+      <li><a href="#offen"><span>Offene Punkte</span><i>5</i></a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section class="block" id="konventionen" aria-labelledby="h-konv">
+      <h2 id="h-konv"><span class="sect">§</span>Konventionen</h2>
+      <p class="sub">Was für alle Gruppen gilt, damit es nicht bei jedem Endpunkt wiederholt werden muss.</p>
+      <dl class="conv">
+        <div><dt>Basispfad</dt><dd>Alle REST-Routen hängen unter <code>/api</code> (ADR-0001). Die WebSockets liegen unter <code>/ws</code>.</dd></div>
+        <div><dt>Upstream-Fehler</dt><dd>Fällt eine externe Quelle aus, antwortet das Backend mit <code>502</code> und dem Körper <code>{error, detail}</code>. Das gilt für Flights, Satelliten, Erdbeben, Vessels und Cables.</dd></div>
+        <div><dt>Store-Fehler</dt><dd>Ist Neo4j, Qdrant oder der Report-/Incident-Store nicht erreichbar, kommt <code>503</code> mit einem <code>detail</code>-Text. Eine Ausnahme sind <code>/api/rag/stats</code> und <code>/api/rag/sources</code>: sie antworten mit Nullwerten.</dd></div>
+        <div><dt>Admin-Token</dt><dd>Schreibende Endpunkte erwarten den Header <code>X-Admin-Token</code>. Ein falscher Token ergibt <code>401</code>. Ist auf dem Server gar kein Token gesetzt, antwortet der Endpunkt mit <code>503</code>. Reports und Almanac-Save prüfen <code>reports_admin_token</code> und fallen auf <code>incidents_admin_token</code> zurück. Incidents prüfen nur <code>incidents_admin_token</code>.</dd></div>
+        <div><dt>Streams</dt><dd>Sechs Endpunkte streamen per SSE. <code>signals/stream</code> und <code>incidents/stream</code> sind Live-Feeds mit Nachlieferung über <code>Last-Event-ID</code>. <code>intel/query</code>, <code>intel/hotspot</code> und die beiden Almanac-Briefings sind Status-SSE: <code>status</code>, dann <code>result</code>, dann <code>done</code>, bei Fehlern <code>error</code>.</dd></div>
+        <div><dt>Caches</dt><dd>Zeitangaben stehen pro Endpunkt. Zur Übersicht:
+          <dl class="ttl">
+            <div><dt>flights</dt><dd>300 s</dd></div>
+            <div><dt>aircraft/tracks</dt><dd>30 s</dd></div>
+            <div><dt>satellites</dt><dd>2 h</dd></div>
+            <div><dt>satellites/orbits</dt><dd>2 h</dd></div>
+            <div><dt>earthquakes</dt><dd>5 min</dd></div>
+            <div><dt>vessels</dt><dd>180 s</dd></div>
+            <div><dt>cables</dt><dd>24 h</dd></div>
+            <div><dt>firms/hotspots</dt><dd>60 s</dd></div>
+            <div><dt>health/feeds</dt><dd>60 s</dd></div>
+            <div><dt>spatial/catalog</dt><dd>60 s</dd></div>
+          </dl></dd></div>
+      </dl>
+    </section>
+
+
+<section class="grp" id="querschnitt" aria-labelledby="h-querschnitt">
+  <header class="ghead">
+    <h2 id="h-querschnitt"><span class="sect">§</span>Betrieb &amp; Konfiguration</h2>
+    <span class="cnt" aria-label="3 Operationen">3</span>
+    <p class="why"><code>/health</code> sagt nur, dass der Prozess lebt. Ob die Ingestion noch liefert, sagt erst <code>/health/feeds</code>. Der Cesium-Token muss zum Browser, weil Globus und Google-3D-Tiles im Client rendern.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>health</code></div></div><div class="body"><p class="desc">Liveness. Antwortet immer <code>status: ok</code> mit Zeitstempel, Version und Build-Revision, ohne eine Abhängigkeit zu prüfen. <code>odin.sh smoke</code> nutzt es als „Backend läuft“.</p><ul class="lim"><li>version: 0.1.0</li><li>revision: nur auf main, im Container-Image noch nicht</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>config</code></div></div><div class="body"><p class="desc">Gibt dem Browser den Cesium-Ion-Token, <code>api_version: v1</code> und die Standard-Layer. An: flights, satellites, earthquakes, firmsHotspots, milAircraft, recon. Aus: vessels, cctv, events, cables, pipelines, eonet, gdacs.</p><ul class="lim"><li>Enthält nie andere Secrets</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>health/<wbr>feeds</code></div></div><div class="body"><p class="desc">Prüft pro Quelle in Qdrant, ob noch frische Daten ankommen, und loggt eine Warnung für jede Quelle, die nicht <code>fresh</code> ist.</p><ul class="lim"><li>Cache 60 s</li><li>503 <code>qdrant unreachable</code></li><li><code>odin.sh smoke</code> ruft ihn mit auf</li></ul></div></li>
+  </ol>
+  
+</section>
+
+<section class="grp" id="live" aria-labelledby="h-live">
+  <header class="ghead">
+    <h2 id="h-live"><span class="sect">§</span>Live-Layer für den Globus</h2>
+    <span class="cnt" aria-label="13 Operationen">13</span>
+    <p class="why">Das Frontend spricht nie selbst mit externen APIs. Das Backend bündelt, cached und normalisiert. Fällt ein Upstream aus, kommt ein einheitlicher 502-Fehler.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>flights</code></div></div><div class="body"><p class="desc">Alle Flugzeuge. Quellen werden der Reihe nach versucht: adsb.fi, OpenSky, dann der öffentliche FR24-Feed.</p><ul class="lim"><li>Cache 300 s, überbrückt kurze Ausfälle</li><li>502 wenn alle Quellen ausfallen</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>flights/<wbr>military</code></div></div><div class="body"><p class="desc">Derselbe Datensatz, gefiltert auf <code>is_military</code> (Callsign-Präfix-Liste).</p><ul class="lim"><li>502 wie <code>/api/flights</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>aircraft/<wbr>tracks</code></div></div><div class="body"><p class="desc">Historische Spuren militärischer Flugzeuge aus Neo4j (<code>SPOTTED_AT</code>). Zeitstempel kommen in Sekunden, obwohl Neo4j Millisekunden speichert.</p><ul class="lim"><li><code>since_hours</code> 1–72, Standard 24</li><li>max. 500 Flugzeuge</li><li>Cache 30 s</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>satellites</code></div></div><div class="body"><p class="desc">Satellitenliste aus CelesTrak-TLEs.</p><ul class="lim"><li>Cache 2 h</li><li>502 wenn CelesTrak nicht antwortet</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>satellites/<wbr>orbits</code></div><span class="tag main">nur auf main</span></div><div class="body"><p class="desc">Orbit-Schnappschuss aus den CelesTrak-GP-Daten (JSON). Das Frontend auf main ruft diesen Endpunkt bereits auf.</p><ul class="lim"><li>Cache 2 h</li><li>502 <code>No usable CelesTrak orbit group</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>earthquakes</code></div></div><div class="body"><p class="desc">USGS-Erdbeben.</p><ul class="lim"><li>Cache 5 min</li><li>502 wenn USGS nicht antwortet</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>vessels</code></div></div><div class="body"><p class="desc">Schiffe aus dem AISStream-Cache, mit Digitraffic-REST als Fallback.</p><ul class="lim"><li>Cache 180 s</li><li>502 <code>Vessel data unavailable</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>cables</code></div></div><div class="body"><p class="desc">Seekabel-Datensatz mit Landepunkten.</p><ul class="lim"><li>Cache 24 h</li><li>502 <code>Cable data unavailable</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>firms/<wbr>hotspots</code></div></div><div class="body"><p class="desc">NASA-FIRMS-Hitzeanomalien aus Qdrant. Jeder Punkt bekommt einen FIRMS-Karten-Link und ggf. <code>country_iso3</code>.</p><ul class="lim"><li><code>since_hours</code> 1–168, Standard 24</li><li>max. 5000 Punkte</li><li>Cache 60 s</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>eonet/<wbr>events</code></div></div><div class="body"><p class="desc">NASA-EONET-Naturereignisse aus Qdrant.</p><ul class="lim"><li><code>since_hours</code> 1–720, Standard 168 (7 Tage)</li><li>max. 2000 Ereignisse</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>gdacs/<wbr>events</code></div></div><div class="body"><p class="desc">GDACS-Katastrophenwarnungen aus Qdrant, mit Alarmstufe und Schweregrad.</p><ul class="lim"><li><code>since_hours</code> 1–720, Standard 168</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>hotspots</code></div></div><div class="body"><p class="desc">Geopolitische Brennpunkte (Ukraine, Taiwan, Hormus …) aus dem Redis-Cache, den die Ingestion füllt. Ist der Cache leer, kommt die kuratierte Default-Liste aus dem Code.</p><ul class="lim"><li>20 Default-Einträge</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>hotspots/<wbr>{hotspot_id}</code></div></div><div class="body"><p class="desc">Ein einzelner Brennpunkt.</p><ul class="lim"><li>404 wenn die ID unbekannt ist</li></ul></div></li>
+  </ol>
+  <p class="gnote">FIRMS, EONET und GDACS schreibt die Ingestion nach Qdrant, das Backend liest sie von dort. Ungültige Koordinaten (NaN, außerhalb des Bereichs) werden pro Punkt verworfen und nie an den Client gegeben.</p>
+</section>
+
+<section class="grp" id="lagebild" aria-labelledby="h-lagebild">
+  <header class="ghead">
+    <h2 id="h-lagebild"><span class="sect">§</span>Lagebild, Signale, Recon</h2>
+    <span class="cnt" aria-label="5 Operationen">5</span>
+    <p class="why">Die Startseite braucht eine Zahl, auch wenn eine Quelle fehlt. Der Signalstrom macht die Ingestion sichtbar (Hugin), und die Nachlieferung sorgt dafür, dass ein Reconnect keine Signale verliert. Recon ist bewusst strikt read-only: keine Schreibzugriffe, kein LLM, kein Upstream.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>landing/<wbr>summary</code></div></div><div class="body"><p class="desc">Die vier Kennzahlen der Startseite: Hotspots, Conflictus, Nuntii, Libri (24 h). Fällt eine Quelle aus, steht dort <code>null</code> mit Marker, der Rest kommt trotzdem. Libri ist noch ein Stub und liefert immer 0.</p><ul class="lim"><li><code>window</code> nur <code>24h</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>signals/<wbr>latest</code></div></div><div class="body"><p class="desc">Die neuesten Ingestion-Signale aus dem Ringpuffer, neueste zuerst.</p><ul class="lim"><li><code>limit</code> 1–50, Standard 6</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>signals/<wbr>stream</code></div><span class="tag sse">SSE</span></div><div class="body"><p class="desc">Live-Feed derselben Signale. Bei veralteter ID sendet er ein <code>reset</code>-Event, sonst spielt er verpasste Signale nach. Ein Heartbeat-Kommentar kommt alle 15 s.</p><ul class="lim"><li>Header <code>Last-Event-ID</code> hat Vorrang vor <code>?last_event_id=</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>recon/<wbr>scenes</code></div></div><div class="body"><p class="desc">Liste der Recon-Szenen aus einem beim Start geladenen Manifest. Ist Recon deaktiviert, kommt 200 mit <code>availability: disabled</code> und Grund.</p><ul class="lim"><li>503 wenn das Manifest nicht geladen ist</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>recon/<wbr>scenes/<wbr>{scene_id}</code></div></div><div class="body"><p class="desc">Eine Szene.</p><ul class="lim"><li>404 wenn unbekannt oder Recon inaktiv</li><li>503 wenn das Manifest nicht geladen ist</li></ul></div></li>
+  </ol>
+  
+</section>
+
+<section class="grp" id="graph" aria-labelledby="h-graph">
+  <header class="ghead">
+    <h2 id="h-graph"><span class="sect">§</span>Wissensgraph</h2>
+    <span class="cnt" aria-label="6 Operationen">6</span>
+    <p class="why">Im UI soll man von einer Entität zu Beziehungen und Ereignissen springen können. Alle Abfragen sind read-only, laufen mit Parameter-Binding und sind hart auf 200 Zeilen gedeckelt. Kein LLM-Cypher.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>graph/<wbr>search</code></div></div><div class="body"><p class="desc">Entitäten per Namens-Teilstring, ohne Beachtung der Groß-/Kleinschreibung. Lat/Lon kommt von der Entität oder ihrer Location (<code>LOCATED_AT</code>, <code>LOCATED_IN</code>, <code>BASED_IN</code>, <code>HEADQUARTERED_IN</code>).</p><ul class="lim"><li><code>q</code> Pflicht, min. 1 Zeichen</li><li><code>limit</code> Standard 20, max. 200</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>graph/<wbr>entity/<wbr>{name}</code></div></div><div class="body"><p class="desc">Details einer Entität: Typ, Aliase, Confidence.</p><ul class="lim"><li><code>limit</code> Standard 50, max. 200</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>graph/<wbr>neighbors/<wbr>{name}</code></div></div><div class="body"><p class="desc">Direkte Nachbarn (1 Hop), optional nach Typ des Nachbarn gefiltert.</p><ul class="lim"><li><code>entity_type</code> optional</li><li><code>limit</code> Standard 50, max. 200</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>graph/<wbr>network/<wbr>{name}</code></div></div><div class="body"><p class="desc">Netz mit 2 Hops um die Entität.</p><ul class="lim"><li><code>entity_type</code> optional</li><li><code>limit</code> Standard 50, max. 200</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>graph/<wbr>events</code></div></div><div class="body"><p class="desc">Neueste Events, optional für eine Entität (<code>INVOLVES</code>).</p><ul class="lim"><li><code>entity</code> optional</li><li><code>limit</code> Standard 30, max. 200</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>graph/<wbr>events/<wbr>geo</code></div></div><div class="body"><p class="desc">Events mit Lat/Lon aus den Location-Knoten (<code>OCCURRED_AT</code>). Fehlt die Location, fällt nur die Geometrie weg, das Event bleibt in der Antwort.</p><ul class="lim"><li><code>entity</code>, <code>codebook_type</code> (Präfix) optional</li><li><code>limit</code> Standard 100, max. 200</li></ul></div></li>
+  </ol>
+  
+</section>
+
+<section class="grp" id="timeline" aria-labelledby="h-timeline">
+  <header class="ghead">
+    <h2 id="h-timeline"><span class="sect">§</span>Timeline (Chronik)</h2>
+    <span class="cnt" aria-label="3 Operationen">3</span>
+    <p class="why">Der Zeitschieber im Globus braucht erst eine Übersicht (Histogramm), dann die Daten im Fenster, dann Details beim Klick.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>timeline/<wbr>histogram</code></div></div><div class="body"><p class="desc">Dichte-Balken über ein Zeitfenster mit Kategorie und Schweregrad, dazu „notable“ Events und Geo-Events.</p><ul class="lim"><li><code>t_start</code>, <code>t_end</code> Pflicht</li><li><code>buckets</code> 1–240, Standard 120</li><li>nur <code>domain=events</code></li><li>Filter: <code>bbox</code> oder <code>scope_key</code> + <code>catalog_revision</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>timeline/<wbr>window</code></div></div><div class="body"><p class="desc">Daten im Zeitfenster für Events oder Bewegungen.</p><ul class="lim"><li><code>t_start</code>, <code>t_end</code> Pflicht</li><li><code>domain</code> events | movements</li><li><code>tier</code> coarse | fine (Events nur coarse)</li><li><code>movement_kind</code> nur bei movements; implementiert ist nur <code>mil_aircraft</code>, der Rest liefert 501</li><li><code>limit</code> 1–500, Standard 200</li><li>Filter: <code>bbox</code> oder <code>scope_key</code> + <code>catalog_revision</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>timeline/<wbr>events/<wbr>{event_id}</code></div></div><div class="body"><p class="desc">Detail eines Events: Titel, Typ, Schweregrad, Quelle, URL, Ort, Land, Koordinaten, Zeit samt Zeitbasis.</p><ul class="lim"><li>404 unbekannt</li><li>503 <code>neo4j unreachable</code></li></ul></div></li>
+  </ol>
+  
+</section>
+
+<section class="grp" id="spatial" aria-labelledby="h-spatial">
+  <header class="ghead">
+    <h2 id="h-spatial"><span class="sect">§</span>Räumliche Auswahl (Spatial-Katalog)</h2>
+    <span class="cnt" aria-label="3 Operationen">3</span>
+    <p class="why">Karte, Almanac, Timeline und Intel sollen dasselbe Verständnis davon haben, was ein Land oder eine Region ist. Die Katalogrevision stellt sicher, dass ein Client keine veraltete Geometrie gegen eine neue Katalogversion verwendet.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>spatial/<wbr>catalog</code></div></div><div class="body"><p class="desc">Bootstrap des lokalen Katalogs: Revision, Fähigkeiten, Quellenangaben.</p><ul class="lim"><li>ETag mit <code>If-None-Match</code></li><li><code>Cache-Control: public, max-age=60, must-revalidate</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>spatial/<wbr>scope</code></div></div><div class="body"><p class="desc">Löst <code>scope_key</code> plus <code>catalog_revision</code> auf, also was ein Land oder eine Region genau ist.</p><ul class="lim"><li>409 <code>CATALOG_REVISION_UNAVAILABLE</code> bei veralteter Revision</li><li>422 <code>INVALID_CATALOG_REVISION</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>spatial/<wbr>assets/<wbr>{asset_id}</code></div></div><div class="body"><p class="desc">Liefert Grenz- und Geometriedateien, mit Range-Unterstützung und ETag. Slashes und Traversal in der ID laufen durch denselben strikten Validator.</p><ul class="lim"><li><code>Accept-Ranges: bytes</code></li><li>429 <code>ASSET_BUSY</code> bei zu vielen gleichzeitigen Lesezugriffen</li></ul></div></li>
+  </ol>
+  
+</section>
+
+<section class="grp" id="almanac" aria-labelledby="h-almanac">
+  <header class="ghead">
+    <h2 id="h-almanac"><span class="sect">§</span>Almanac (Länderdossiers)</h2>
+    <span class="cnt" aria-label="8 Operationen">8</span>
+    <p class="why">Ein Klick auf ein Land soll sofort Fakten zeigen. Die Analyse verwendet diese Fakten als Beleg, damit Munin nicht frei halluziniert. Gespeichert wird getrennt und nur mit Admin-Token, damit nicht jeder Dossiers erzeugt.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>almanac/<wbr>country</code></div><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>almanac/<wbr>countries/<wbr>{country_id}</code></div></div><div class="body"><p class="desc">Länderstammdaten aus dem statischen Almanac (Factbook-Stand). Die Katalogform nimmt <code>scope_key</code> und <code>catalog_revision</code>, die Altform eine Länder-ID.</p><ul class="lim"><li>Katalogform: <code>scope_key</code> + <code>catalog_revision</code> Pflicht</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>almanac/<wbr>country/<wbr>signals</code></div><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>almanac/<wbr>countries/<wbr>{country_id}/<wbr>signals</code></div></div><div class="body"><p class="desc">Die Ingestion-Signale, die zu diesem Land passen. Der Abgleich ist deterministisch.</p><ul class="lim"><li><code>limit</code> 1–20, Standard 5</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>almanac/<wbr>country/<wbr>briefing</code></div><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>almanac/<wbr>countries/<wbr>{country_id}/<wbr>briefing</code></div><span class="tag sse">SSE</span></div><div class="body"><p class="desc">Baut aus Almanac und Signalen einen Grounding-Kontext und startet damit die Munin-Analyse.</p><ul class="lim"><li>Antwort als Status-SSE</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>almanac/<wbr>country/<wbr>briefing/<wbr>save</code></div><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>almanac/<wbr>countries/<wbr>{country_id}/<wbr>briefing/<wbr>save</code></div><span class="tag admin">Admin-Token</span></div><div class="body"><p class="desc">Legt das Länderdossier an oder aktualisiert es (ein Report pro <code>scope_key</code>), füllt es mit der Analyse und hängt die Munin-Antwort in den Chat.</p><ul class="lim"><li>503 wenn das Report-Schema nicht gebootstrapped ist</li></ul></div></li>
+  </ol>
+  <p class="gnote">Jede Funktion gibt es doppelt: als Altform <code>/countries/{country_id}</code> und als Katalogform <code>/country?scope_key&amp;catalog_revision</code>. Das sind 8 Operationen auf 4 Funktionen.</p>
+</section>
+
+<section class="grp" id="intel" aria-labelledby="h-intel">
+  <header class="ghead">
+    <h2 id="h-intel"><span class="sect">§</span>Intelligence (Munin)</h2>
+    <span class="cnt" aria-label="3 Operationen">3</span>
+    <p class="why">Das ist der Kern des Produkts: Frage in Klartext, Antwort mit Quellen. Das Backend ist hier nur Vermittler zum Intelligence-Dienst.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>intel/<wbr>query</code></div><span class="tag sse">SSE</span></div><div class="body"><p class="desc">Schickt die Frage an den Intelligence-Service (LangGraph-ReAct, Port 8003). Antwort als Status-SSE: drei <code>status</code>-Events (osint_agent, analyst_agent, synthesis_agent), dann ein <code>result</code> mit JSON, dann <code>done</code>. Es gibt kein Token-Streaming. Mit <code>report_id</code> landen Frage und Munin-Antwort (oder der Fehler) im Chat des Dossiers.</p><ul class="lim"><li><code>spatial_scope</code> optional, löst gegen den Spatial-Katalog auf</li><li><code>report_message</code> max. 8000 Zeichen</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>intel/<wbr>hotspot/<wbr>{hotspot_id}</code></div><span class="tag sse">SSE</span></div><div class="body"><p class="desc">Dieselbe Analyse mit Fokus auf einen Brennpunkt. Die ID wird bereinigt und auf 80 Zeichen gekürzt, damit sie den Prompt nicht verändern kann.</p></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>intel/<wbr>history</code></div></div><div class="body"><p class="desc">Die letzten Ergebnisse, neueste zuerst. Sie liegen nur im Arbeitsspeicher und verschwinden beim Neustart.</p><ul class="lim"><li>max. 50</li><li>Frontend: <code>getIntelHistory()</code> ist definiert, wird aber nirgends aufgerufen</li></ul></div></li>
+  </ol>
+  
+</section>
+
+<section class="grp" id="reports" aria-labelledby="h-reports">
+  <header class="ghead">
+    <h2 id="h-reports"><span class="sect">§</span>Reports (Briefing-Dossiers)</h2>
+    <span class="cnt" aria-label="7 Operationen">7</span>
+    <p class="why">Analysen sollen als Dossier mit Verlauf erhalten bleiben und nicht mit der Sitzung verschwinden. Lesen ist offen, Schreiben nur mit Token.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>reports</code></div></div><div class="body"><p class="desc">Liste der Dossiers.</p><ul class="lim"><li><code>limit</code> 1–500, Standard 200</li><li>503 wenn der Store nicht erreichbar ist</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>reports/<wbr>{report_id}</code></div></div><div class="body"><p class="desc">Ein einzelnes Dossier.</p><ul class="lim"><li>404 unbekannt</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>reports</code></div><span class="tag admin">Admin-Token</span></div><div class="body"><p class="desc">Legt ein leeres Dossier an. Defaults: Titel „Untitled Dossier“, Status <code>Draft</code>, Confidence 0.62, Ort „unspecified theatre“, Koordinaten <code>--</code>, Textüberschrift „Initial Editorial Draft“.</p><ul class="lim"><li>Antwort 201</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m patch">PATCH</span><code>/<wbr>api/<wbr>reports/<wbr>{report_id}</code></div><span class="tag admin">Admin-Token</span></div><div class="body"><p class="desc">Ändert Felder eines Dossiers.</p><ul class="lim"><li>404 unbekannt</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m delete">DELETE</span><code>/<wbr>api/<wbr>reports/<wbr>{report_id}</code></div><span class="tag admin">Admin-Token</span></div><div class="body"><p class="desc">Löscht das Dossier.</p><ul class="lim"><li>Antwort 204</li><li>404 unbekannt</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>reports/<wbr>{report_id}/<wbr>messages</code></div></div><div class="body"><p class="desc">Der Chat-Verlauf des Dossiers.</p><ul class="lim"><li><code>limit</code> 1–2000, Standard 500</li><li>404 unbekanntes Dossier</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>reports/<wbr>{report_id}/<wbr>messages</code></div><span class="tag admin">Admin-Token</span></div><div class="body"><p class="desc">Hängt eine Nachricht an den Chat.</p><ul class="lim"><li>Antwort 201</li><li>503 <code>message persistence failed</code></li></ul></div></li>
+  </ol>
+  
+</section>
+
+<section class="grp" id="incidents" aria-labelledby="h-incidents">
+  <header class="ghead">
+    <h2 id="h-incidents"><span class="sect">§</span>Incidents (War Room)</h2>
+    <span class="cnt" aria-label="7 Operationen">7</span>
+    <p class="why">Ein Lagezentrum braucht Push statt Polling (Toast und War-Room-Seite). Admins müssen Incidents bestätigen oder dämpfen können. <code>_admin/promoter</code> dient dem Debugging.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>incidents</code></div></div><div class="body"><p class="desc">Offene Incidents.</p><ul class="lim"><li><code>limit</code> 1–200, Standard 50</li><li>503 <code>incidents backend unavailable</code></li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>incidents/<wbr>stream</code></div><span class="tag sse">SSE</span></div><div class="body"><p class="desc">Live-Stream der Incident-Events (<code>incident.open</code>, <code>incident.silence</code> …) mit Nachlieferung über <code>Last-Event-ID</code>.</p><ul class="lim"><li>muss vor <code>/{incident_id}</code> deklariert bleiben</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>incidents/<wbr>{incident_id}</code></div></div><div class="body"><p class="desc">Ein Incident.</p><ul class="lim"><li>404 unbekannt</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>incidents/<wbr>{incident_id}/<wbr>promote</code></div><span class="tag admin">Admin-Token</span></div><div class="body"><p class="desc">Befördert einen Incident und sendet ein SSE-Event.</p><ul class="lim"><li>404 unbekannt</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>incidents/<wbr>{incident_id}/<wbr>silence</code></div><span class="tag admin">Admin-Token</span></div><div class="body"><p class="desc">Stellt einen Incident stumm und setzt eine Abklingzeit im Cluster-Store, damit der Auto-Promoter ihn nicht sofort wieder hochholt. Bei einem Incident in Endstatus passiert nichts.</p><ul class="lim"><li>404 unbekannt</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>incidents/<wbr>_admin/<wbr>trigger</code></div><span class="tag admin">Admin-Token</span></div><div class="body"><p class="desc">Legt einen Incident von Hand an. Das ist laut Code ein Stub, weil die echte Mustererkennung noch aussteht (Spec §8).</p><ul class="lim"><li>Antwort 201</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>incidents/<wbr>_admin/<wbr>promoter</code></div><span class="tag admin">Admin-Token</span></div><div class="body"><p class="desc">Read-only-Schnappschuss des Auto-Promoters: Konfiguration, Zustand, Tasks.</p></div></li>
+  </ol>
+  
+</section>
+
+<section class="grp" id="rag" aria-labelledby="h-rag">
+  <header class="ghead">
+    <h2 id="h-rag"><span class="sect">§</span>RAG (Wissensbasis)</h2>
+    <span class="cnt" aria-label="3 Operationen">3</span>
+    <p class="why">Gedacht ist es als Verwaltung der Wissensbasis. Heute liefern nur die Statistiken etwas, und das Frontend nutzt keinen der drei Endpunkte.</p>
+  </header>
+  <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>rag/<wbr>stats</code></div></div><div class="body"><p class="desc">Gesamtzahl der Dokumente, Collections und das Embedding-Modell (Qwen3-Embedding-0.6B). Fällt Qdrant aus, kommen Nullwerte statt eines Fehlers.</p><ul class="lim"><li>200 auch bei Qdrant-Ausfall</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m get">GET</span><code>/<wbr>api/<wbr>rag/<wbr>sources</code></div></div><div class="body"><p class="desc">Dokumentzahlen pro Quelle: RSS, GDELT, manuell. Bei Qdrant-Ausfall stehen die Zähler auf 0.</p><ul class="lim"><li>200 auch bei Qdrant-Ausfall</li></ul></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m post">POST</span><code>/<wbr>api/<wbr>rag/<wbr>ingest</code></div></div><div class="body"><p class="desc">Platzhalter. Antwortet „Document queued for ingestion.“ mit <code>doc_count: 0</code>, reiht aber nichts ein. Die Anbindung an den Ingestion-Service fehlt.</p><ul class="lim"><li>Stub</li></ul></div></li>
+  </ol>
+  
+</section>
+
+    <section class="grp" id="ws" aria-labelledby="h-ws">
+      <header class="ghead">
+        <h2 id="h-ws"><span class="sect">§</span>WebSockets</h2>
+        <span class="cnt" aria-label="2 Verbindungen">2</span>
+        <p class="why">Push für die beiden Live-Layer, die sich dauernd bewegen. Sie stehen nicht in <code>openapi.json</code>, weil FastAPI WebSockets dort nicht listet.</p>
+      </header>
+      <ol class="ops">
+<li class="op"><div class="ops-path"><div class="p"><span class="m ws">WS</span><code>/ws/flights</code></div></div><div class="body"><p class="desc">Schiebt alle 10 s den aktuellen Flugdatensatz als <code>{type: "flights", data, count}</code>. Bei Fehlern kommt <code>{type: "error", message}</code> und die Verbindung bleibt offen.</p></div></li>
+<li class="op"><div class="ops-path"><div class="p"><span class="m ws">WS</span><code>/ws/vessels</code></div></div><div class="body"><p class="desc">Schiebt alle 60 s Schiffe: gecachte Positionen, sonst ein kurzer AISStream-Burst.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="block" id="offen" aria-labelledby="h-offen">
+      <h2 id="h-offen"><span class="sect">§</span>Offene Punkte</h2>
+      <ol class="open">
+        <li><h3>Container neu bauen?</h3><p><code>/api/satellites/orbits</code> und <code>revision</code> in <code>/api/health</code> fehlen im laufenden Image. Das Frontend auf main erwartet die Orbits bereits.</p></li>
+        <li><h3>Admin-Tokens in der Praxis</h3><p>Sind <code>reports_admin_token</code> und <code>incidents_admin_token</code> leer, antworten alle 10 Admin-Operationen mit 503. Ob sie im laufenden Container gesetzt sind, ist im Code nicht zu sehen und muss in der Umgebung geprüft werden.</p></li>
+        <li><h3>Stubs</h3><p>Libri in <code>landing/summary</code> ist immer 0. <code>rag/ingest</code> antwortet „queued“ und tut nichts. <code>incidents/_admin/trigger</code> legt Incidents von Hand an, weil die Mustererkennung fehlt (Spec §8).</p></li>
+        <li><h3>Ungenutzt im Frontend</h3><p><code>intel/history</code> ist als <code>getIntelHistory()</code> definiert, wird aber nirgends aufgerufen. Die drei <code>rag/*</code>-Endpunkte ruft das Frontend gar nicht auf.</p></li>
+        <li><h3>Wie belastbar diese Seite ist</h3><p>Alles stammt aus dem Quellcode von main (c003ed6) und aus der Swagger-Auslese des Containers. Es wurde kein Endpunkt live aufgerufen. Upstream-Verhalten der Live-Layer (Fallback-Reihenfolge, TTLs) ist aus dem Service-Code gelesen, nicht getestet.</p></li>
+      </ol>
+      <div class="verify">
+        <b>Nachprüfen</b><br>
+        Operationen im Container zählen: <b>curl -s localhost:8080/openapi.json | jq '[.paths[] | keys[]] | length'</b><br>
+        Router-Quellen: <b>services/backend/app/routers/*.py</b> und <b>services/backend/app/main.py</b> (Health, Config), WebSockets in <b>services/backend/app/ws/</b><br>
+        Erwartung auf main: 61. Im Container zum Stand 2026-11-01: 60.
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer><div>ODIN WorldView · Backend-API-Referenz · Stand 2026-11-01, main c003ed6. Beim Ändern eines Routers diese Seite mitziehen.</div></footer>
+
+<script>
+(function(){
+  document.documentElement.classList.add('js');
+  var q=document.getElementById('q'), hits=document.getElementById('hits');
+  var ops=[].slice.call(document.querySelectorAll('li.op'));
+  var grps=[].slice.call(document.querySelectorAll('section.grp'));
+  var links=[].slice.call(document.querySelectorAll('.reg a'));
+  if(q){
+    q.addEventListener('input',function(){
+      var t=q.value.trim().toLowerCase(), n=0;
+      ops.forEach(function(o){
+        var show=!t||o.textContent.toLowerCase().indexOf(t)>-1;
+        o.classList.toggle('hidden',!show); if(show) n++;
+      });
+      grps.forEach(function(g){
+        var any=g.querySelector('li.op:not(.hidden)');
+        g.classList.toggle('hidden',!any);
+        var l=document.querySelector('.reg a[href="#'+g.id+'"]');
+        if(l) l.parentNode.classList.toggle('hidden',!any);
+      });
+      hits.textContent=t?(n+' Treffer'):'';
+    });
+  }
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting){
+          links.forEach(function(l){l.classList.toggle('on',l.getAttribute('href')==='#'+e.target.id)});
+        }
+      });
+    },{rootMargin:'-20% 0px -70% 0px'});
+    grps.concat([].slice.call(document.querySelectorAll('#offen'))).forEach(function(s){io.observe(s)});
+  }
+})();
+</script>
+</body>
+</html>
