@@ -24,12 +24,14 @@ nach realen Fehlbefunden entfernt; zuverlässige Prognosen und externe Faktenpr�
 bleiben nicht qualifiziert. Live- und Betriebsnachweise:
 `/data/odin-agent-enablement/20261106-implementation/README.md`.
 
-Folgearbeit 06.11.2026, Analyseoptimierung als getesteter Kandidat:
+Folgearbeit 06.11.2026, Analyseoptimierung ausgerollt:
 [Quellenprüfung, gezielte Reparatur und Quellenvergleich](docs/implementation/2026-11-06-analysis-optimization.md).
 Der ausgelassene Iran-Vergeltungsvorbehalt ist im ursprünglichen Prüfkontext
 reproduziert und wird erkannt und repariert. 993 Intelligence-Tests bestehen;
 Kontrollfälle und Original-Replays bleiben separate, begrenzte Qualitätsbelege.
-Produktiv weiterhin `999b433`; keine automatische Prognosefreigabe.
+Intelligence produktiv auf `3334946`; Backend/Frontend unverändert `999b433`.
+Health und kontrollierter Replay im ausgelieferten Container bestanden;
+76 übrige Container unverändert. Keine automatische Prognosefreigabe.
 
 Gesamtmatrix: [Finding-/Abnahmegates](docs/reviews/2026-10-10-goal-gates.md).
 Menschliche Prüfung: [unbewertete Abnahmeunterlagen](docs/operations/goal-acceptance-2026-10-10.md).

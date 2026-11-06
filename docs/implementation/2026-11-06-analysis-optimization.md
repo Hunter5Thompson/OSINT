@@ -2,7 +2,8 @@
 
 Baseline: `999b4338063adc05750635e652ff4c2c76f9d74c`.
 Evidence and operational handoff: `/data/odin-analysis-optimization/20261106/README.md`.
-Status: implemented, tested candidate for review-required drafts; not deployed.
+Status: deployed after explicit operator approval on 2026-11-06. Intelligence
+source revision: `33349466fc59fc9c305cc8cab624065379f04b59`.
 Automatic forecasts and external factual verification remain unqualified.
 
 ## Changes
@@ -66,13 +67,28 @@ The final postprocessing replay adds no new inference timing evidence.
 
 Changed: `agents/current_report.py`, `agents/source_check.py`, the new
 `agents/source_comparison.py`, coverage propagation in `graph/workflow.py`, and
-focused regression tests. Backend, frontend, lockfiles, models, Tavily credentials,
-notebook archive and running services are unchanged.
+focused regression tests. Backend, frontend, lockfiles, models, Tavily credentials and
+notebook archive are unchanged. Only the Intelligence container was replaced.
 
-The main checkout under `/home` was not edited. Runtime remains `999b433` until a
-separate approved application rollout. Prepare/review only the Intelligence image
-and preserve the existing Compose configuration and rollback; no database work.
+The main checkout under `/home` was not edited. Intelligence runs `3334946`;
+backend and frontend retain `999b433`. The rollout changed only the Intelligence
+image in the existing Compose context. No database work was performed.
 
 Next quality work: atomic claim attribution with article context, measured
 recovery of valid summaries, and independent factual/forecast evaluation. More
 positive model self-checks alone do not close these acceptance boundaries.
+
+## Approved rollout
+
+The source commit existed before rollout. Fresh preflight verified clean source,
+the pinned image, the existing container identity and a single rendered Compose
+delta. The bounded command used `--no-deps --no-build --pull never intelligence`.
+Docker reports healthy; Intelligence reports `3334946` and ready. Backend and
+frontend return HTTP 200. All 76 other containers, including four retained backup
+containers, match the preflight snapshot. The notebook archive hash is unchanged.
+
+A controlled replay inside the deployed container matches the expected report
+exactly: four findings, two comparisons, and the preserved retaliation condition.
+This used captured model responses; it was not a fresh provider query or a
+production dossier persistence test. Evidence and rollback are under
+`/data/odin-analysis-optimization/20261106/release/33349466fc59/`.
