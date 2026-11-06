@@ -548,18 +548,13 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 as_of=coverage["as_of"],
             )
             content = current_report.text
-            for check_name, check_status in (
-                ("statement_check", current_report.statement_check),
-                ("scenario_check", current_report.scenario_check),
-            ):
-                if check_status == "passed":
-                    continue
+            if current_report.statement_check != "passed":
                 coverage = {
                     **coverage,
                     "status": "partial",
                     "gaps": [
                         *coverage["gaps"],
-                        check_name + "_" + check_status,
+                        "statement_check_" + current_report.statement_check,
                     ],
                 }
             if not current_report.finding_count:
@@ -582,6 +577,12 @@ async def react_synthesis_node(state: AgentState) -> dict:
             coverage["forecast"] = (
                 "not_assessed" if current_report.forecast_requested else "not_requested"
             )
+            if current_report.forecast_requested:
+                coverage = {
+                    **coverage,
+                    "status": "partial",
+                    "gaps": [*coverage["gaps"], "forecast_details_not_qualified"],
+                }
             evidence_artifacts = evidence_artifact(current_items)
             derived_sources = derive_sources_used(evidence_artifacts)
             response = AIMessage(content=content)

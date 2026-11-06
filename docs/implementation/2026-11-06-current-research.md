@@ -85,7 +85,7 @@ Optional tool failures preserve valid partial current answers with an explicit g
 Occurrence queries accept only current evidence from the pinned spatial filter;
 topic-only web matches cannot enable an occurrence claim.
 
-Technical evidence so far: 969 intelligence tests, 1,206 backend tests,
+Technical evidence so far: 966 intelligence tests, 1,206 backend tests,
 963 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
 the latest receipt display additions. Further
 independent review and live content qualification are in progress. Production
@@ -147,13 +147,17 @@ directories before assigning selectable evidence. Paragraph IDs retain their
 original offsets. The unused model-generated `gaps` field has been removed;
 limits belong to the server and retrieval receipts.
 
-Scenario premises and their supporting/opposing original passages receive a
-separate bounded audit. Rejected or unavailable checks retain the named scenario
-with an explicit assessment gap, suppressing its unsupported condition, citations
-and indicators. Both audit boundaries require a strict JSON boolean, never a
-coerced string or number. These checks reduce observed errors; they do not certify
-facts, future events or general model reliability. Final live qualification is
-still required before applying the prepared release.
+An experimental separate scenario audit did not qualify: fresh Iran runs still
+displayed incorrect temporal premises, invented advice and a wrong Hormuz starting
+state despite positive audit results. Its generative output path and audit were
+removed. The final model contract permits only source findings. For future-attack
+questions the server supplies three fixed, explicitly unassessed methodological
+cases, with no claimed current premises, automatic support assignments or forecast
+probabilities. This is a limitation of the enabled capability, not successful
+qualification of predictive analysis. `/health` exposes `forecast_details=not_qualified`.
+The source-summary audit still requires a strict JSON boolean and is not a factual
+certification. Superseded scenario-generation tests were replaced by output-boundary
+regressions; no tests were silently skipped.
 
 The full c4c56df live matrix returned eleven answers without pipeline failures.
 Independent source review rated five PASS (including two justified abstentions),
@@ -164,7 +168,7 @@ the normal statement audit; it cannot authorize new forecast details. Irrelevant
 sources remain a valid empty result. Short complete core summaries are requested
 to avoid decoder-enforced mid-sentence truncation at the field's length limit.
 
-Rejected free scenario names use neutral server-owned headings. The UI now
+Scenario names and methodological questions are server-owned. The UI now
 distinguishes an unassessed threat from absent evidence: current original sources
 can be available even when no threat or forecast rating is justified.
 
@@ -175,3 +179,7 @@ as review limitations, never as external factual acceptance or calibrated foreca
 Forecast intent is retained independently of the number of generated scenarios.
 A recovered situation with no authorized scenario details still reports an open
 forecast when the user requested one, including non-military future questions.
+
+The final live acceptance scope is current research and review-required,
+source-attributed drafts. Reliable automated scenario premises, comprehensive
+contradiction resolution and externally verified forecasts remain unqualified.

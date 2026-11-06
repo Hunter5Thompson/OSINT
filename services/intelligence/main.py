@@ -137,6 +137,7 @@ async def health() -> JSONResponse:
             else "not_configured",
             "local_corpus": "configured",
             "provider_connectivity": "not_probed",
+            "forecast_details": "not_qualified",
             "lookback_hours": settings.current_research_lookback_hours,
             "expanded_lookback_hours": settings.current_research_expanded_lookback_hours,
         },
