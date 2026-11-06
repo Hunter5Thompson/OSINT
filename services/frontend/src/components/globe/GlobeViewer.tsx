@@ -63,7 +63,9 @@ export function GlobeViewer({
         selectionIndicator: false,
         infoBox: false,
         scene3DOnly: true,
-        msaaSamples: 4,
+        // Conservative WebGL target: avoid multisampled render targets in the
+        // long-running map. Native stability is qualified separately from FPS.
+        msaaSamples: 1,
         showRenderLoopErrors: false,
       });
 
