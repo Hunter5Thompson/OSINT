@@ -83,6 +83,7 @@ def _mock_feed_fetch():
     cm.__aexit__ = AsyncMock(return_value=False)
     feed = SimpleNamespace(
         bozo=False,
+        version="rss20",
         entries=[{"title": "t", "link": "http://u", "summary": "s"}],
     )
     return (

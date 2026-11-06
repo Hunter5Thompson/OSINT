@@ -14,6 +14,7 @@ from typing import Any
 
 import structlog
 
+from feeds.availability import fetch_error, record_fetch
 from feeds.base import BaseCollector
 
 log = structlog.get_logger("hapi_collector")
@@ -80,11 +81,14 @@ class HAPICollector(BaseCollector):
         return records
 
     async def collect(self) -> None:
+        if not self.settings.hapi_app_identifier:
+            for country in FOCUS_COUNTRIES:
+                await record_fetch(
+                    self.redis, "hapi", country, error_code="missing_identifier"
+                )
+            log.warning("hapi_not_configured")
+            return
         await self._ensure_collection()
-
-        headers = {}
-        if self.settings.hapi_app_identifier:
-            headers["app_identifier"] = self.settings.hapi_app_identifier
 
         total_ingested = 0
 
@@ -93,14 +97,22 @@ class HAPICollector(BaseCollector):
                 "output_format": "json",
                 "limit": 1000,
                 "location_code": country,
+                "app_identifier": self.settings.hapi_app_identifier,
             }
             try:
-                resp = await self.http.get(_HAPI_URL, params=params, headers=headers, timeout=30)
+                resp = await self.http.get(_HAPI_URL, params=params, timeout=30)
                 resp.raise_for_status()
                 data = resp.json()
-            except Exception:
-                log.warning("hapi_fetch_failed", country=country)
+            except Exception as exc:
+                error_code = fetch_error(exc)
+                await record_fetch(self.redis, "hapi", country, error_code=error_code)
+                log.warning("hapi_fetch_failed", country=country, error_code=error_code)
                 continue
+            if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+                await record_fetch(self.redis, "hapi", country, error_code="invalid_response")
+                continue
+
+            await record_fetch(self.redis, "hapi", country, item_count=len(data["data"]))
 
             records = self._parse_records(data, country)
             points = []

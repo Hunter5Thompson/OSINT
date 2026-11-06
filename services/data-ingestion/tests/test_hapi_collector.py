@@ -210,6 +210,33 @@ async def test_hapi_transient_skips_upsert(collector):
 
 
 @pytest.mark.asyncio
+async def test_identifier_is_a_query_parameter_and_not_a_header(collector):
+    collector.http.get = AsyncMock(return_value=_hapi_http_resp())
+    collector._ensure_collection = AsyncMock()
+    collector._dedup_check = AsyncMock(return_value=True)
+    with (
+        patch("feeds.hapi_collector.FOCUS_COUNTRIES", ["UKR"]),
+        patch("feeds.hapi_collector.asyncio.sleep", new=AsyncMock()),
+    ):
+        await collector.collect()
+    kwargs = collector.http.get.call_args.kwargs
+    assert kwargs["params"]["app_identifier"] == collector.settings.hapi_app_identifier
+    assert "app_identifier" not in kwargs.get("headers", {})
+
+
+@pytest.mark.asyncio
+async def test_missing_identifier_does_not_request_or_create_collections(collector):
+    collector.settings.hapi_app_identifier = ""
+    collector.http.get = AsyncMock()
+    collector._ensure_collection = AsyncMock()
+    collector.redis = AsyncMock()
+    await collector.collect()
+    collector.http.get.assert_not_called()
+    collector._ensure_collection.assert_not_called()
+    assert collector.redis.hset.call_count == len(FOCUS_COUNTRIES)
+
+
+@pytest.mark.asyncio
 async def test_hapi_config_skips_upsert(collector):
     """When process_item raises ExtractionConfigError, record is NOT upserted + error log."""
     collector.http.get = AsyncMock(return_value=_hapi_http_resp())
