@@ -206,6 +206,36 @@ async def test_methods_cannot_displace_background_and_origins_are_not_double_cou
     assert len(hits) <= 3  # at most two background passages per independent source
 
 
+async def test_context_budget_keeps_background_before_optional_methods(tmp_path):
+    intel = package(tmp_path)
+    methods = package(tmp_path, domain="methods")
+    second_root = tmp_path / "second"
+    second_root.mkdir()
+    content = json.loads((intel / "original.json").read_text())["content"]
+    second = package(second_root, content="Second source snapshot. " + content)
+    row = json.loads((second / "curated-claims.jsonl").read_text())
+    row.update(candidate_id="CTX-second", claim_id="CTX-second", notebook_id="second")
+    with (intel / "curated-claims.jsonl").open("a") as file:
+        file.write(json.dumps(row) + "\n")
+    scope = json.loads((intel / "import-scope.json").read_text())
+    scope["candidate_allowlist"].append({
+        "candidate_id": row["candidate_id"], "notebook_id": row["notebook_id"],
+        "statement_sha256": digest(row["statement"]),
+    })
+    (intel / "import-scope.json").write_text(json.dumps(scope))
+    seal(intel)
+    target = tmp_path / "catalog.sqlite"
+    await build_catalog({"intel": intel, "methods": methods}, target, embed=embed,
+                        embedding_model="test")
+    hits = await NotebookResearch(target, embed_query=query_embed, embedding_model="test").search(
+        "magnets"
+    )
+    assert any(item.knowledge_role == "method" for item in hits)
+    _, artifact = pack_with_lineage(hits, budget=10000, preserve_order=True)
+    kept = evidence_items_from_artifact(artifact)
+    assert [item.knowledge_role for item in kept] == ["background", "background"]
+
+
 @pytest.mark.parametrize("failure", ["model", "empty_vector", "nan_vector", "dimension"])
 async def test_unusable_search_does_not_masquerade_as_no_matches(tmp_path, failure):
     root = package(tmp_path)

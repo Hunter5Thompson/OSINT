@@ -68,8 +68,8 @@ passage, with at most two passages per independent origin and cosine >= 0.45.
 Matched slices include one neighbour on either side, with exact reconstructed
 text ranges and hashes. This prevents a quoted view and the author's rebuttal
 from being separated at the retrieval boundary. Overlapping windows are not
-repeated; a relevant method follows the first background window so it can fit
-inside the shared 14,000-character archive context budget.
+repeated. Background precedes optional methods in the shared 14,000-character
+archive budget; method-only follow-up questions use the same search operation.
 These are bounded retrieval defaults, not calibrated factual confidence scores.
 
 For original passages, synthesis uses the already loaded base model with
@@ -118,8 +118,8 @@ new backend/frontend schema so stored passage metadata survives later updates.
 
 ## Validation and handoff
 
-TDD red/green evidence is recorded for 27 implementation steps. Final affected
-suites: Intelligence 899, Backend 1,204, Frontend 961; all passed. Backend mypy,
+TDD red/green evidence is recorded for 28 implementation steps. Final affected
+suites: Intelligence 900, Backend 1,204, Frontend 961; all passed. Backend mypy,
 both Python linters, frontend lint/typecheck, browser typecheck and production
 build passed. A disposable Neo4j instance passed all 12 persistence integration
 cases and was removed after confirming only its marker remained. Three browser

@@ -283,9 +283,7 @@ class NotebookResearch:
                     continue
                 selected.append(window)
                 origins[item.source.source_ref_id] += 1
-        background = [item for item in selected if item.knowledge_role == "background"]
-        methods = [item for item in selected if item.knowledge_role == "method"]
-        return background[:1] + methods + background[1:]
+        return selected
 
     def _context_window(self, item: EvidenceItem) -> EvidenceItem:
         """Keep one neighbour on each side so quoted views retain their rebuttal.
