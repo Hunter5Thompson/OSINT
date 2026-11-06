@@ -167,9 +167,10 @@ async def test_telemetry_failure_cannot_replace_a_public_query_result_or_excepti
         result = await workflow.run_intelligence_query("fixture")
         assert result["analysis"] == "authoritative result"
     else:
-        with pytest.raises(type(failure)) as caught:
+        expected = workflow.PipelineFailureError if outcome == "error" else type(failure)
+        with pytest.raises(expected) as caught:
             await workflow.run_intelligence_query("fixture")
-        assert caught.value is failure
+        assert (caught.value.__cause__ if outcome == "error" else caught.value) is failure
     assert calls == ["fixture"]
 
 
@@ -179,8 +180,8 @@ async def test_legacy_error_response_is_a_failed_trace(tracing_sink, monkeypatch
 
     monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
     monkeypatch.setattr(workflow, "legacy_graph", SimpleNamespace(ainvoke=invoke))
-    result = await workflow.run_intelligence_query("fixture", use_legacy=True)
-    assert result["mode"] == "error"
+    with pytest.raises(RuntimeError, match="legacy fixture"):
+        await workflow.run_intelligence_query("fixture", use_legacy=True)
     terminal = [event for event in tracing_sink.events if event["phase"] == "finish"]
     assert terminal[0]["status"] == "error"
 

@@ -6,6 +6,13 @@ Aufträge; [historische Ergebnisse](docs/tasks/history-2026-10-10.md) und einzel
 Reviews enthalten die Prüfbelege. Neue Sourcechecks schließen Merge, Release,
 Datenverifikation oder menschliche Abnahme nicht automatisch.
 
+Folgearbeit 06.11.2026: [Notebook-Originalpassagen im Lagebericht](docs/implementation/2026-11-06-notebook-depth.md)
+bindet die 84 ausgewählten neuen Quellen über ein unveränderliches Archiv ein.
+Automatische Suche, Folgefragen, Zitieridentität, Prüfgrenzen und gespeicherte
+Quellenkarten sind getestet. Live-/Rolloutbelege stehen separat unter
+`/data/odin-notebook-depth/20261106`; die Faktengültigkeit der Originale ist nicht
+extern geprüft. Die 29 zurückgestellten Notebooks bleiben ausgeschlossen.
+
 ## Repo-Goal und HN
 
 Gesamtmatrix: [Finding-/Abnahmegates](docs/reviews/2026-10-10-goal-gates.md).

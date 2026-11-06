@@ -27,6 +27,8 @@ class AgentState(TypedDict):
     grounding_evidence_pack: str
     # Provenance travels structurally, never via the rendered pack text.
     grounding_evidence_artifact: list[dict]
+    notebook_evidence_pack: str
+    notebook_evidence_artifact: list[dict]
 
     # ReAct loop
     messages: Annotated[list[BaseMessage], add_messages]
@@ -41,12 +43,15 @@ class AgentState(TypedDict):
     synthesis: str
     executive_summary: str
     key_findings: list[str]
-    threat_assessment: str
-    confidence: float
+    threat_assessment: str | None
+    confidence: float | None
     assessment_status: AssessmentStatus | None
     sources_used: list[str]
     evidence_summary: list[dict] | None
     agent_chain: list[str]
     tool_trace: list[dict]
+    tool_events: list[dict]
+    status: str
+    answerability: str
     error: str | None
     spatial_application: SpatialRunApplicationV1 | None

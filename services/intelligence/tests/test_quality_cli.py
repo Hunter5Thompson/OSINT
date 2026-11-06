@@ -1,4 +1,5 @@
 """Exercise the harness seam with real tool/synthesis nodes and fake providers."""
+
 from unittest.mock import AsyncMock
 
 import pytest
@@ -23,12 +24,21 @@ async def test_fixture_runner_records_structural_consumption_and_restores_factor
         async def ainvoke(self, state):
             tools = workflow.tools_for_state(state)
             assert len(tools) == 1 and tools[0].name == "qdrant_search"
-            message = await tools[0].ainvoke({
-                "type": "tool_call", "name": "qdrant_search", "id": "synthetic",
-                "args": {"query": state["query"]},
-            })
-            result = {**state, "messages": [message], "iteration": 2,
-                      "tool_calls_count": 1, "tool_trace": [{"tool": "qdrant_search"}]}
+            message = await tools[0].ainvoke(
+                {
+                    "type": "tool_call",
+                    "name": "qdrant_search",
+                    "id": "synthetic",
+                    "args": {"query": state["query"]},
+                }
+            )
+            result = {
+                **state,
+                "messages": [message],
+                "iteration": 2,
+                "tool_calls_count": 1,
+                "tool_trace": [{"tool": "qdrant_search"}],
+            }
             return {**result, **await workflow.react_synthesis_node(result)}
 
         def compile(self):
@@ -36,7 +46,9 @@ async def test_fixture_runner_records_structural_consumption_and_restores_factor
 
     monkeypatch.setattr(workflow, "build_react_graph", GraphProbe)
     run = await cli.run_fixture_graph(corpus, digest, None)
-    assert len(run["records"]) == 36 and llm.ainvoke.await_count == 36
+    assert len(run["records"]) == 36
+    consumed_runs = sum(bool(row["consumed_evidence_ref_ids"]) for row in run["records"])
+    assert llm.ainvoke.await_count == consumed_runs < 36
     assert workflow.tools_for_state is original_tools
     assert workflow._budget_research_segments is original_budget
     verdict = evaluate_run(corpus, digest, run)

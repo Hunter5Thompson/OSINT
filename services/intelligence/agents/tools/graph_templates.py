@@ -20,6 +20,25 @@ class InvalidTemplateLimitError(ValueError):
 
 
 TEMPLATES: dict[str, dict] = {
+    "reviewed_claims": {
+        "description": "Read curated claims and their original review provenance",
+        "cypher": (
+            "MATCH (c:Claim)-[r:EXTRACTED_FROM]->(d:Document) "
+            "WHERE r.review_status = 'curated_excerpt' AND r.qualification_json IS NOT NULL "
+            "AND (toLower(c.statement) CONTAINS toLower($name) "
+            "OR toLower(d.title) CONTAINS toLower($name) "
+            "OR r.candidate_id = $name OR r.candidate_id ENDS WITH ':' + $name "
+            "OR c.statement_hash = $name "
+            "OR any(url IN coalesce(r.evidence_urls, []) WHERE url = $name)) "
+            "RETURN c.statement AS statement, c.statement_hash AS claim_hash, "
+            "d.title AS title, d.notebook_id AS notebook_id, "
+            "r.source_id AS source_id, r.source_kind AS source_kind, "
+            "r.qualification_json AS qualification_json "
+            "ORDER BY r.candidate_id, d.notebook_id, r.source_id LIMIT $limit"
+        ),
+        "params": ["name"],
+        "defaults": {"limit": 15},
+    },
     "entity_lookup": {
         "description": "Find an entity by name — returns properties and type",
         "cypher": (
@@ -376,9 +395,7 @@ def select_scoped_template(
     return template["cypher"], merged
 
 
-def select_template(
-    template_id: str, params: dict
-) -> tuple[str, dict] | None:
+def select_template(template_id: str, params: dict) -> tuple[str, dict] | None:
     """Select a template by ID and merge params with defaults.
 
     Returns (cypher, merged_params) or None if template_id not found.

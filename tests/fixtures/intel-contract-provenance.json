@@ -1,0 +1,12 @@
+{
+  "reviewed-claims-47.json": {
+    "source": "/data/odin-notebooklm-ingest/20261031-reviewed-p1/prepared-points.json",
+    "source_sha256": "ba1663ca74b75cad4fb03c3abda2b9e8e27346edf62fd8c11c36e285c4df083c",
+    "fixture_sha256": "b95d2dbb2f264e89b6aba2cc6787771b3f4cf3ba5887a41e6d3299e7c56061ce"
+  },
+  "assessment-replay-12.json": {
+    "source": "/data/odin-intel-relation-evaluation/20261101-root-cause-analysis/parser-candidate-results.json",
+    "source_sha256": "12a7c18243f1eb9e700dcc6f2609dc8430e1dbebe929279e98ea61a141b9a6b1",
+    "fixture_sha256": "36d058ea57cb18b31c98f8e37c1f9d25b243b0af2c35f461a1e95b52eaf1a349"
+  }
+}

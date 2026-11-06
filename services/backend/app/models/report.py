@@ -36,7 +36,7 @@ class ReportRecord(BaseModel):
     title: str
     scope_key: str | None = None
     status: ReportStatus = "Draft"
-    confidence: float = Field(default=0.62, ge=0.0, le=1.0)
+    confidence: float | None = Field(default=0.62, ge=0.0, le=1.0)
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None
@@ -58,7 +58,7 @@ class ReportCreateRequest(BaseModel):
     title: str = "Untitled Dossier"
     scope_key: str | None = None
     status: ReportStatus = "Draft"
-    confidence: float = Field(default=0.62, ge=0.0, le=1.0)
+    confidence: float | None = Field(default=0.62, ge=0.0, le=1.0)
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None

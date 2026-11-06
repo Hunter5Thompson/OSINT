@@ -26,11 +26,17 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1024
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "odin_intel"
+    # Immutable, hash-bound source catalog; unset disables optional archive support.
+    notebook_catalog_path: Path | None = None
+    notebook_catalog_sha256: str = ""
+    notebook_embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
     spatial_catalog_path: Path = Path("/app/data/spatial")
     spatial_coverage_snapshot_path: Path = Path(
         "/app/data/spatial/qdrant-coverage.json"
     )
     gdelt_api_url: str = "https://api.gdeltproject.org/api/v2/doc/doc"
+    # Raw-file ingestion is canonical; the rate-limited legacy DOC tool is opt-in.
+    enable_gdelt_doc_tool: bool = False
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""

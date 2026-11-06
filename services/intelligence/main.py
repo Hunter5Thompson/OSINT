@@ -14,10 +14,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from build_revision import BUILD_REVISION
 from config import settings
+from graph.result import PipelineFailureError
 from graph.workflow import run_intelligence_query, shutdown_graph_client
 from model_readiness import check_model_readiness
 from query_lifecycle import ClientDisconnectedError, run_connected
 from rag import retriever
+from rag.notebooks import notebook_readiness
 from spatial import RetrievalSpatialRelation
 from spatial_catalog import (
     IntelligenceSpatialCatalog,
@@ -46,6 +48,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(title="WorldView Intelligence Service", version="0.2.0", lifespan=lifespan)
+
+
+@app.exception_handler(PipelineFailureError)
+async def pipeline_failure_handler(request: Request, exc: PipelineFailureError) -> JSONResponse:
+    return JSONResponse(
+        status_code=502,
+        content={
+            "status": "failed",
+            "code": "INTEL_PIPELINE_FAILED",
+            "error": "Recherche oder Synthese technisch fehlgeschlagen. Bitte erneut versuchen.",
+        },
+    )
 
 
 class GroundingEvidenceItem(BaseModel):
@@ -117,6 +131,12 @@ async def health() -> JSONResponse:
         "required_models": list(readiness.required_models),
         "missing_models": list(readiness.missing_models),
     }
+    if settings.notebook_catalog_path is not None:
+        try:
+            content["notebooks"] = await notebook_readiness()
+        except Exception:
+            content.update(status="not_ready", reason="notebook_catalog_unavailable")
+            return JSONResponse(status_code=503, content=content)
     return JSONResponse(status_code=200 if readiness.ready else 503, content=content)
 
 
@@ -124,9 +144,7 @@ async def query_intelligence(req: QueryRequest) -> dict[str, object] | JSONRespo
     """Run intelligence pipeline and return full analysis result."""
     try:
         spatial_scope = (
-            _spatial_catalog.resolve(req.spatial_scope)
-            if req.spatial_scope is not None
-            else None
+            _spatial_catalog.resolve(req.spatial_scope) if req.spatial_scope is not None else None
         )
     except SpatialCatalogResolutionError:
         return JSONResponse(

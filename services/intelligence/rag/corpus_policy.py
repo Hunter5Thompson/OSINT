@@ -6,6 +6,7 @@ Two lanes:
   analysis  — rss OR NotebookLM (notebook_id present; legacy raw source="unknown")
   realtime  — vetted Telegram leads (NOT verified primary sources)
 """
+
 from __future__ import annotations
 
 import math
@@ -23,9 +24,15 @@ log = structlog.get_logger(__name__)
 ANALYSIS_SOURCES: frozenset[str] = frozenset({"rss", "rss_fulltext", "suv_structured"})
 
 # Realtime lane: vetted Telegram leads. rybar (state-aligned) deliberately excluded.
-TELEGRAM_ALLOWLIST: frozenset[str] = frozenset({
-    "wartranslated", "OSINTdefender", "liveuamap", "AuroraIntel", "DeepStateEN",
-})
+TELEGRAM_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "wartranslated",
+        "OSINTdefender",
+        "liveuamap",
+        "AuroraIntel",
+        "DeepStateEN",
+    }
+)
 
 # Tunable start values — sourced from settings (env-overridable). NOT permanent truth.
 TIER_BOOST_LAMBDA: float = settings.rag_tier_boost_lambda
@@ -46,11 +53,7 @@ def analysis_filter() -> models.Filter:
                 match=models.MatchAny(any=sorted(ANALYSIS_SOURCES)),
             ),
             models.Filter(
-                must_not=[
-                    models.IsEmptyCondition(
-                        is_empty=models.PayloadField(key="notebook_id")
-                    )
-                ]
+                must_not=[models.IsEmptyCondition(is_empty=models.PayloadField(key="notebook_id"))]
             ),
         ],
         must_not=[
@@ -83,6 +86,7 @@ def credibility_of(payload: dict) -> float:
     provenance derivation so NLM(notebook_id)->notebooklm(0.60), rss->feed_name
     override or 0.60, telegram->0.40, etc."""
     from rag.evidence import to_evidence_item  # local import avoids cycle
+
     return to_evidence_item(payload).source.credibility_score
 
 
@@ -136,8 +140,15 @@ def apply_tier_boost(results: list[dict], *, lam: float = TIER_BOOST_LAMBDA) -> 
             if not math.isfinite(final):
                 reasons["invalid-final-score"] += 1
                 continue
-            out.append({**result, "tier_raw": raw, "tier_norm": normalized,
-                        "tier_cred": credibility, "tier_score": final})
+            out.append(
+                {
+                    **result,
+                    "tier_raw": raw,
+                    "tier_norm": normalized,
+                    "tier_cred": credibility,
+                    "tier_score": final,
+                }
+            )
     out.sort(key=lambda result: result["tier_score"], reverse=True)
     if reasons:
         log.warning("retrieval_hits_rejected", count=sum(reasons.values()), reasons=dict(reasons))
@@ -161,6 +172,36 @@ if set(_ANALYSIS_SOURCE_TYPE) != ANALYSIS_SOURCES:  # keep in lock-step; assert 
     )
 
 
+def _is_curated_statement(result: dict, text: str) -> bool:
+    """Recognize the explicit reviewed-claim contract, not a truth certificate.
+
+    Only the prose length heuristic is relaxed. Empty, base64-heavy and malformed
+    content still fails. No spatial or corpus filter is bypassed.
+    """
+    from pydantic import ValidationError
+
+    from rag.evidence import ReviewProvenance
+
+    raw = result.get("review")
+    if (
+        result.get("source_type") != "notebooklm"
+        or result.get("review_status") != "curated_excerpt"
+        or not isinstance(raw, dict)
+        or raw.get("statement") != text
+    ):
+        return False
+    try:
+        review = ReviewProvenance.model_validate(raw)
+    except ValidationError:
+        return False
+    return bool(
+        review.qualification_note
+        and review.original_source_id
+        and review.notebook_id == result.get("notebook_id")
+        and review.package_sha256 == result.get("review_package_sha256")
+    )
+
+
 def validate_lane(results: list[dict], lane: str) -> list[dict]:
     """Second barrier (AC-2): keep only results that satisfy the lane invariant.
     Qdrant filter is the first barrier; index lag / a filter bug must not break
@@ -175,8 +216,12 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
         if r.get("superseded_by_fulltext") is True:
             # normal supersede (fulltext chunks already replace it); logged separately
             # so corpus_guard_dropped stays a true anomaly signal (filter bug / leakage)
-            log.debug("corpus_supersede_skipped", lane=lane,
-                      source=r.get("source"), feed_name=r.get("feed_name"))
+            log.debug(
+                "corpus_supersede_skipped",
+                lane=lane,
+                source=r.get("source"),
+                feed_name=r.get("feed_name"),
+            )
             continue
         st = r.get("source_type")  # canonical contract field, if present
         if lane == "analysis":
@@ -196,38 +241,60 @@ def validate_lane(results: list[dict], lane: str) -> list[dict]:
                 # Evaluate the SAME text the model will see: mirror rag.evidence._excerpt's
                 # fallback. Bare `rss` points store prose under `summary` (no `content`
                 # key), so checking only `content` would wrongly drop ~24 wire/gov feeds.
-                text = (r.get("content") or r.get("summary")
-                        or r.get("description") or r.get("title") or "")
+                text = (
+                    r.get("content")
+                    or r.get("summary")
+                    or r.get("description")
+                    or r.get("title")
+                    or ""
+                )
                 reason = (
                     content_junk_reason(text) if isinstance(text, str) else "invalid-content-type"
                 )
+                if reason in {"too_short", "too_few_words"} and _is_curated_statement(r, text):
+                    reason = None
                 if reason is not None:
                     content_dropped.append((reason, r))
                     continue
         elif lane == "realtime":
-            identity = (r.get("source") == "telegram"
-                        and isinstance(r.get("telegram_channel"), str)
-                        and r.get("telegram_channel") in TELEGRAM_ALLOWLIST)
+            identity = (
+                r.get("source") == "telegram"
+                and isinstance(r.get("telegram_channel"), str)
+                and r.get("telegram_channel") in TELEGRAM_ALLOWLIST
+            )
             type_ok = st is None or st == "telegram"
             ok = identity and type_ok
         else:
             ok = False
         (kept if ok else dropped).append(r)
     if dropped:
-        log.warning("corpus_guard_dropped", lane=lane, count=len(dropped),
-                    sources=[d.get("source") for d in dropped])
+        log.warning(
+            "corpus_guard_dropped",
+            lane=lane,
+            count=len(dropped),
+            sources=[d.get("source") for d in dropped],
+        )
     if content_dropped:
-        log.warning("corpus_content_dropped", lane=lane, count=len(content_dropped),
-                    reasons=dict(Counter(reason for reason, _ in content_dropped)))
+        log.warning(
+            "corpus_content_dropped",
+            lane=lane,
+            count=len(content_dropped),
+            reasons=dict(Counter(reason for reason, _ in content_dropped)),
+        )
     return kept
 
 
-def merge_lanes(analysis: list[dict], realtime: list[dict],
-                *, final_k: int = FINAL_K, telegram_max: int = TELEGRAM_MAX) -> list[dict]:
+def merge_lanes(
+    analysis: list[dict],
+    realtime: list[dict],
+    *,
+    final_k: int = FINAL_K,
+    telegram_max: int = TELEGRAM_MAX,
+) -> list[dict]:
     """Analysis dominates the top; at most `telegram_max` realtime leads, last,
     each marked source_class="realtime". Realtime displaces at most
     `telegram_max` analysis slots."""
-    rt = [{**r, "source_class": "realtime"} for r in realtime[:min(telegram_max, final_k)]]
+    rt = [{**r, "source_class": "realtime"} for r in realtime[: min(telegram_max, final_k)]]
     if rt:
-        return list(analysis[:final_k - len(rt)]) + rt
+        return list(analysis[: final_k - len(rt)]) + rt
     return list(analysis[:final_k])

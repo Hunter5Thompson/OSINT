@@ -45,7 +45,8 @@ class TestSystemPrompt:
         assert "query_knowledge_graph" in prompt
         assert "classify_event" in prompt
         assert "analyze_image" in prompt
-        assert "gdelt_query" in prompt
+        assert "gdelt_query" not in prompt
+        assert "notebook_search" in prompt
         assert "rss_fetch" in prompt
 
     def test_includes_tool_budget(self):

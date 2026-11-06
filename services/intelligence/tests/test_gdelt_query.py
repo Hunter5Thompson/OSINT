@@ -5,10 +5,17 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from langchain_core.tools import ToolException
 
 from agents.tools.gdelt_query import gdelt_query
+from config import settings
 from spatial import ScopeKind, SpatialScopeTokenV1
 from tests.tool_runtime import agent_state, invoke_runtime_tool
+
+
+@pytest.fixture(autouse=True)
+def enable_legacy_doc_adapter(monkeypatch):
+    monkeypatch.setattr(settings, "enable_gdelt_doc_tool", True)
 
 
 class _DummyAsyncClient:
@@ -49,14 +56,12 @@ class TestGdeltQueryTool:
         with patch(
             "agents.tools.gdelt_query.httpx.AsyncClient",
             return_value=_DummyAsyncClient(response),
-        ):
-            result = await invoke_runtime_tool(
+        ), pytest.raises(ToolException, match="temporarily unavailable"):
+            await invoke_runtime_tool(
                 gdelt_query,
                 {"query": "strait of hormuz", "max_records": 5},
             )
 
-        assert "temporarily unavailable" in result.lower()
-        assert "expecting value" not in result.lower()
 
     @pytest.mark.asyncio
     async def test_formats_article_list_when_json_is_valid(self):

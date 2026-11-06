@@ -182,7 +182,55 @@ export interface TimeHistogramQuery {
   bbox?: readonly [number, number, number, number];
 }
 
+export interface ReviewProvenance {
+  knowledge_domain?: string | null;
+  external_fact_verification?: string | null;
+  unresolved_checks?: string[];
+  candidate_id: string;
+  claim_id: string;
+  notebook_id: string;
+  original_source_id: string;
+  epistemic_type: string;
+  qualification_note: string;
+  source_date_context?: string | null;
+  reviewed_at?: string | null;
+  factual_verification: string;
+  package_sha256: string;
+  source_anchor?: { anchor?: string | null; character_offset?: number | null;
+    sha256?: string | null; content_sha256?: string | null } | null;
+  evidence_urls?: string[];
+  evidence_ids?: string[];
+  evidence: Array<{ id: string; title?: string | null; url?: string | null;
+    independent_lineage?: string | null; analyst_scope?: string | null;
+    publication_or_reference_date?: string | null; retrieved_at?: string | null }>;
+}
+
+export interface NotebookPassage {
+  notebook_id: string;
+  original_source_id: string;
+  source_sha256: string;
+  text_sha256: string;
+  start: number;
+  end: number;
+  passage_sha256: string;
+  independent_lineage: string;
+  package_sha256: string;
+  parent_candidate_id: string;
+  qualification_note: string;
+  unresolved_checks: string[];
+  source_date_context: string | null;
+  content_review: "unreviewed_source_excerpt";
+  external_fact_verification: "not_performed";
+}
+
 export interface EvidenceSummary {
+  evidence_id?: string | null;
+  title?: string | null;
+  excerpt?: string | null;
+  review?: ReviewProvenance | null;
+  passage?: NotebookPassage | null;
+  knowledge_role?: "source" | "background" | "method" | null;
+  url?: string | null;
   source_ref_id: string;
   source_type: "rss" | "telegram" | "gdelt" | "notebooklm" | "dataset" | "unknown";
   provider: string;
@@ -193,15 +241,19 @@ export interface EvidenceSummary {
 }
 
 export interface IntelAnalysis {
+  status?: "completed" | "partial" | null;
+  answerability?: "insufficient_evidence" | "undetermined" | null;
+  tool_events?: Array<{ tool_call_id: string; tool: string;
+    status: "requested" | "started" | "succeeded" | "failed" | "blocked"; reason?: string }>;
   query: string;
   agent_chain: string[];
   sources_used: string[];
   analysis: string;
-  confidence: number;
+  confidence: number | null;
   threat_assessment: string | null;
   assessment_status?: {
-    threat: "declared" | "default";
-    confidence: "declared" | "default";
+    threat: "declared" | "default" | "not_assessed";
+    confidence: "declared" | "default" | "not_assessed";
     issues: string[];
   } | null;
   verification_status?: "unverified" | null;
@@ -272,7 +324,7 @@ export interface ReportRecord {
   title: string;
   scope_key?: string | null;
   status: ReportStatus;
-  confidence: number;
+  confidence: number | null;
   assessment_status?: IntelAnalysis["assessment_status"];
   verification_status?: IntelAnalysis["verification_status"];
   evidence_summary?: IntelAnalysis["evidence_summary"];

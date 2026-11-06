@@ -39,7 +39,10 @@ def test_tool_declares_artifact_response_format(tool_obj):
 
 
 @pytest.mark.asyncio
-async def test_gdelt_tool_call_puts_lineage_in_tool_message_artifact():
+async def test_gdelt_tool_call_puts_lineage_in_tool_message_artifact(monkeypatch):
+    from config import settings
+
+    monkeypatch.setattr(settings, "enable_gdelt_doc_tool", True)
     response = MagicMock()
     response.raise_for_status.return_value = None
     response.json.return_value = {"articles": [{

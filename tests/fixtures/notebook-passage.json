@@ -1,0 +1,33 @@
+{
+  "source_ref_id": "68e9a02c4a4f420f",
+  "provider": "notebooklm:notebook-intel",
+  "source_type": "notebooklm",
+  "published_at": null,
+  "observed_at": null,
+  "ingested_at": null,
+  "verification_status": "unverified",
+  "evidence_id": "ev-6d800a207e2c87c070704d0e",
+  "title": "Supply chains",
+  "excerpt": ". General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export",
+  "url": "https://example.org/source",
+  "knowledge_role": "background",
+  "passage": {
+    "notebook_id": "notebook-intel",
+    "original_source_id": "source-intel",
+    "source_sha256": "81a4b3f51b4fbbe30a8cf74956708d0aa688be4f24efaa25d43732141d013042",
+    "text_sha256": "44b08f12e402f78645770d5a5dccbcc2cf9eb4980ddd04b31ca4b84e13a43cb9",
+    "start": 2704,
+    "end": 4292,
+    "passage_sha256": "c18c89e135ddd7065b10def73fdf2b06f4278a3be7b2466c16fa1c46c4bca5f4",
+    "independent_lineage": "https://example.org/source",
+    "package_sha256": "ceb3436add315cfea876d73e598afc44a9a9b793e30304192ecb8cebab4c018c",
+    "parent_candidate_id": "CTX-intel",
+    "qualification_note": "Numbers are source claims, not current measurements.",
+    "unresolved_checks": [
+      "Check publication date"
+    ],
+    "source_date_context": "Snapshot only; publication unknown",
+    "content_review": "unreviewed_source_excerpt",
+    "external_fact_verification": "not_performed"
+  }
+}

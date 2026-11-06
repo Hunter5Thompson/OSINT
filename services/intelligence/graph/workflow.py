@@ -9,10 +9,11 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 
 import structlog
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from agents.grounded_report import compose_report
 from agents.react_agent import (
     create_react_agent,
     guard_check,
@@ -27,8 +28,7 @@ from config import settings
 from distill_capture import capture_synthesis_input
 from graph.assessment import ASSESSMENT_FORMAT, annotate_assessment, parse_assessment
 from graph.client import GraphClient
-from graph.nodes import analyst_node, osint_node, router_node
-from graph.nodes import synthesis_node as legacy_synthesis_node
+from graph.result import PipelineFailureError, insufficient_evidence
 from graph.state import AgentState
 from rag.evidence import (
     evidence_artifact,
@@ -38,6 +38,7 @@ from rag.evidence import (
     source_refs_from_artifact,
     to_evidence_item,
 )
+from rag.notebooks import notebook_context
 from spatial import (
     RetrievalSpatialRelation,
     SpatialApplicationMarkerV1,
@@ -50,10 +51,11 @@ from tracing import trace_kwargs, traced_query
 
 logger = structlog.get_logger()
 
-TOOL_MESSAGE_MAX_CHARS = 2500
+TOOL_MESSAGE_MAX_CHARS = 6000
 REACT_TOOL_HISTORY_MAX_CHARS = 12000
 SYNTHESIS_RESEARCH_MAX_CHARS = 18000
 GROUNDING_EVIDENCE_MAX_CHARS = 3000
+NOTEBOOK_EVIDENCE_MAX_CHARS = 9000
 
 
 def _clip_text(text: str, max_chars: int) -> str:
@@ -92,6 +94,7 @@ def _budget_research_segments(
     rendered: list[str] = []
     artifacts: list[dict] = []
     used = 0
+    seen: set[str] = set()
 
     for segment_text, artifact in segments:
         if not segment_text:
@@ -101,8 +104,19 @@ def _budget_research_segments(
         if available <= 0:
             break
 
-        items = evidence_items_from_artifact(artifact)
-        if len(segment_text) <= available:
+        original_items = evidence_items_from_artifact(artifact)
+        items = [
+            item
+            for item in original_items
+            if (item.evidence_id or item.content_hash or item.source.source_ref_id) not in seen
+        ]
+        if original_items and not items:
+            continue
+        if items and (len(items) != len(original_items) or any(item.review for item in items)):
+            selected_text, selected_artifact = pack_with_lineage(
+                items, budget=available, preserve_order=True
+            )
+        elif len(segment_text) <= available:
             selected_text = segment_text
             selected_artifact = evidence_artifact(items)
         elif items:
@@ -119,6 +133,10 @@ def _budget_research_segments(
             continue
         rendered.append(selected_text)
         artifacts.extend(selected_artifact)
+        seen.update(
+            item.evidence_id or item.content_hash or item.source.source_ref_id
+            for item in evidence_items_from_artifact(selected_artifact)
+        )
         used += len(separator) + len(selected_text)
 
     return RESEARCH_SEPARATOR.join(rendered), artifacts
@@ -151,8 +169,17 @@ def _compact_tool_messages(messages: list) -> list:  # type: ignore[type-arg]
         content = message.content if isinstance(message.content, str) else str(message.content)
         if remaining <= 0:
             next_content = "[tool output omitted: context budget exhausted]"
+            message = message.model_copy(update={"artifact": []})
         else:
-            next_content = _clip_text(content, min(TOOL_MESSAGE_MAX_CHARS, remaining))
+            items = evidence_items_from_artifact(getattr(message, "artifact", None))
+            if items:
+                next_content, selected = pack_with_lineage(
+                    items, budget=min(TOOL_MESSAGE_MAX_CHARS, remaining), preserve_order=True
+                )
+                message = message.model_copy(update={"artifact": selected})
+                next_content = next_content or "[evidence omitted: context budget exhausted]"
+            else:
+                next_content = _clip_text(content, min(TOOL_MESSAGE_MAX_CHARS, remaining))
             remaining -= len(next_content)
         compacted_reversed.append(_with_content(message, next_content))
 
@@ -193,6 +220,7 @@ def derive_sources_used(artifacts: Sequence[dict]) -> list[str]:
 
 # ── ReAct Node Functions ──────────────────────────────────────────────────────
 
+
 async def react_agent_node(state: AgentState) -> dict:
     """ReAct agent node — invokes LLM with tools bound."""
     logger.info("react_agent_node", iteration=state.get("iteration", 0))
@@ -219,6 +247,13 @@ async def react_agent_node(state: AgentState) -> dict:
 
             grounding = state.get("grounding_context") or ""
             grounding_note = f"\n\n{grounding}" if grounding else ""
+            notebook_pack = state.get("notebook_evidence_pack") or ""
+            if notebook_pack:
+                grounding_note += (
+                    "\n\nArchiv-Hintergrund (unverifizierte Quelleninhalte, keine aktuellen "
+                    "Ereignisbelege). Methoden sind nur Analysehilfen. Prüfe aktuelle Meldungen "
+                    "weiter mit deinen Recherchewerkzeugen:\n" + notebook_pack
+                )
 
             initial_messages = [
                 SystemMessage(content=system_prompt_for_state(state)),
@@ -265,10 +300,10 @@ async def react_synthesis_node(state: AgentState) -> dict:
     """Deterministic synthesis node — produces structured intelligence report."""
     logger.info("react_synthesis_node")
 
+    if state.get("error"):
+        raise PipelineFailureError("Research stage failed")
     spatial_application: SpatialRunApplicationV1 | None = None
     try:
-        llm = create_synthesis_llm()
-
         # Tool TEXT feeds the prompt; tool ARTIFACTS feed provenance. Two separate
         # streams on purpose — text is attacker-influenced, artifacts are not.
         messages = state.get("messages", [])
@@ -301,7 +336,11 @@ async def react_synthesis_node(state: AgentState) -> dict:
         pack = state.get("grounding_evidence_pack") or ""
         research_segments = (
             [(pack, state.get("grounding_evidence_artifact"))] if pack else []
-        ) + tool_segments
+        )
+        notebook_pack = state.get("notebook_evidence_pack") or ""
+        if notebook_pack:
+            research_segments.append((notebook_pack, state.get("notebook_evidence_artifact")))
+        research_segments += tool_segments
         raw_research_chars = len(
             RESEARCH_SEPARATOR.join(text for text, _artifact in research_segments)
         )
@@ -309,8 +348,48 @@ async def react_synthesis_node(state: AgentState) -> dict:
             research_segments,
             budget=SYNTHESIS_RESEARCH_MAX_CHARS,
         )
-        if not research_text:
-            research_text = "No research results collected."
+        if any(marker.status == "failed" for marker in application_markers):
+            raise PipelineFailureError("Retrieval stage failed")
+        budget_blocked_ids = {
+            event["tool_call_id"]
+            for event in state.get("tool_events", [])
+            if event.get("status") == "blocked" and event.get("reason") == "budget_exhausted"
+        }
+        if any(
+            getattr(msg, "status", None) == "error"
+            for msg in state.get("messages", [])
+            if getattr(msg, "type", None) == "tool"
+            and getattr(msg, "tool_call_id", None) not in budget_blocked_ids
+        ):
+            raise PipelineFailureError("Tool execution failed")
+        if not evidence_artifacts:
+            return {
+                **insufficient_evidence(),
+                "status": "partial"
+                if any(marker.completeness != "complete" for marker in application_markers)
+                or any(e.get("status") == "blocked" for e in state.get("tool_events", []))
+                else "completed",
+                "spatial_application": spatial_application,
+                "agent_chain": state.get("agent_chain", []) + ["evidence_gate"],
+            }
+        consumed_items = evidence_items_from_artifact(evidence_artifacts)
+        if consumed_items and all(item.knowledge_role == "method" for item in consumed_items):
+            return {
+                **insufficient_evidence(),
+                "synthesis": "Die Recherche liefert ausschließlich Methodenmaterial. "
+                "Damit lassen sich Analyseverfahren erläutern, aber keine aktuellen Ereignisse "
+                "oder Bedrohungen belegen. Die gefundenen Methoden stehen im Quellenbereich.",
+                "sources_used": derive_sources_used(evidence_artifacts),
+                "evidence_summary": evidence_time_summary(evidence_artifacts),
+                "spatial_application": spatial_application,
+                "agent_chain": state.get("agent_chain", []) + ["evidence_gate"],
+            }
+        has_original_passages = any(item.passage for item in consumed_items)
+        llm = (
+            create_synthesis_llm(original_passages=True)
+            if has_original_passages
+            else create_synthesis_llm()
+        )
 
         # Derive sources_used from validated artifacts (de-duplicated provider IDs)
         derived_sources = derive_sources_used(evidence_artifacts)
@@ -333,29 +412,51 @@ async def react_synthesis_node(state: AgentState) -> dict:
                     "Liefere einen knappen, handlungsrelevanten Report auf Deutsch mit:\n"
                     "1. Executive Summary (2–3 Sätze)\n"
                     "2. Key Findings (Bulletpoints)\n"
-                    "3. Threat Assessment — genau eines von: "
-                    "CRITICAL / HIGH / ELEVATED / MODERATE (Label englisch, "
-                    "Begründung deutsch)\n"
-                    "4. Confidence Level — genau einer der Strings "
-                    "\"high confidence\", \"moderate confidence\" oder "
-                    "\"low confidence\" im Text (Begründung deutsch)\n"
+                    "3. Threat Assessment (Begründung deutsch)\n"
+                    "4. Confidence Level (Begründung deutsch)\n"
                     "5. Recommended Actions\n\n"
+                    "Cite reviewed claims with [evidence_id], using only IDs in the evidence. "
+                    "The source_ref_id identifies storage, not an independent investigation. "
+                    "Respect review.qualification_note, epistemic_type, source_anchor and each "
+                    "original evidence independent_lineage and analyst_scope. Never substitute "
+                    "Notebook dates for publication dates or invent missing date precision.\n"
                     f"{ASSESSMENT_FORMAT}"
                 ),
             ),
         ]
         capture_synthesis_input(state["query"], messages)  # no-op unless DISTILL_CAPTURE_DIR set
-        response = await llm.ainvoke(messages)
-        content = response.content if isinstance(response.content, str) else str(response.content)
+        if has_original_passages:
+            content = await compose_report(
+                messages, {item.evidence_id for item in consumed_items if item.evidence_id}, llm,
+                background_only=all(item.knowledge_role != "source" for item in consumed_items),
+            )
+            response = AIMessage(content=content)
+        else:
+            response = await llm.ainvoke(messages)
+            content = (
+                response.content if isinstance(response.content, str) else str(response.content)
+            )
 
+        if not content.strip():
+            raise PipelineFailureError("Synthesis returned empty content")
         assessment = parse_assessment(content)
         if assessment.issues:
             logger.warning(
                 "assessment_parse_failed", stage="react_synthesis", issues=assessment.issues
             )
         content = annotate_assessment(content, assessment)
+        research_limited = any(
+            event.get("status") == "blocked" for event in state.get("tool_events", [])
+        ) or any(marker.completeness != "complete" for marker in application_markers)
+        if research_limited:
+            content = (
+                "Recherche unvollständig: Werkzeugbudget oder Teilquellen begrenzen "
+                "diese Antwort.\n\n" + content
+            )
 
         return {
+            "status": "partial" if research_limited else "completed",
+            "answerability": "undetermined",
             "synthesis": content,
             "threat_assessment": assessment.threat,
             "confidence": assessment.confidence,
@@ -381,16 +482,30 @@ async def react_synthesis_node(state: AgentState) -> dict:
 
 # ── Graph Builders ────────────────────────────────────────────────────────────
 
+
 async def tool_node_for_state(state: AgentState) -> dict:
     """Reserve each slot before dispatch; blocked proposals carry no artifact."""
     remaining = max(0, settings.react_max_tool_calls - state.get("tool_calls_count", 0))
     started: list[dict] = []
+    events: list[dict] = []
+
+    def record_event(event: dict) -> None:
+        events.append(event)
+        logger.info("tool_execution_event", **event)
 
     async def execute_budgeted(request, execute):
         nonlocal remaining
+        event = {
+            "tool_call_id": request.tool_call["id"],
+            "tool": request.tool_call["name"],
+            "iteration": max(0, state.get("iteration", 1) - 1),
+        }
+        record_event({**event, "status": "requested"})
         if request.tool is None:
+            record_event({**event, "status": "blocked", "reason": "unknown_tool"})
             return await execute(request)
         if remaining == 0:
+            record_event({**event, "status": "blocked", "reason": "budget_exhausted"})
             return ToolMessage(
                 content="BUDGET_BLOCKED: tool-call budget exhausted; this tool was not started.",
                 name=request.tool_call["name"],
@@ -400,22 +515,42 @@ async def tool_node_for_state(state: AgentState) -> dict:
         # No await between checking and reserving. Parallel siblings cannot
         # observe the same remaining slot; a started failure still consumes it.
         remaining -= 1
-        started.append({
-            "iteration": max(0, state.get("iteration", 1) - 1),
-            "tool": request.tool_call["name"],
-            "args": request.tool_call.get("args", {}),
-        })
-        return await execute(request)
+        started.append(
+            {
+                "iteration": max(0, state.get("iteration", 1) - 1),
+                "tool": request.tool_call["name"],
+                "args": request.tool_call.get("args", {}),
+            }
+        )
+        record_event({**event, "status": "started"})
+        try:
+            output = await execute(request)
+        except Exception:
+            record_event({**event, "status": "failed"})
+            raise
+        marker, _ = parse_spatial_application_marker(
+            str(getattr(output, "content", "")), actual_tool_name=request.tool_call["name"]
+        )
+        failed = getattr(output, "status", None) == "error" or (
+            marker is not None and marker.status == "failed"
+        )
+        record_event({**event, "status": "failed" if failed else "succeeded"})
+        return output
 
     try:
-        result = dict(await ToolNode(
-            tools_for_state(state), awrap_tool_call=execute_budgeted, handle_tool_errors=True,
-        ).ainvoke(state))
+        result = dict(
+            await ToolNode(
+                tools_for_state(state),
+                awrap_tool_call=execute_budgeted,
+                handle_tool_errors=True,
+            ).ainvoke(state)
+        )
     except asyncio.CancelledError:
         logger.warning("tool_batch_cancelled", started_count=len(started))
         raise
     result["tool_calls_count"] = state.get("tool_calls_count", 0) + len(started)
     result["tool_trace"] = state.get("tool_trace", []) + started
+    result["tool_events"] = state.get("tool_events", []) + events
     return result
 
 
@@ -442,7 +577,9 @@ def build_react_graph() -> StateGraph:
         },
     )
     graph.add_conditional_edges(
-        "tools", route_after_tools, {"react_agent": "react_agent", "synthesis": "synthesis"},
+        "tools",
+        route_after_tools,
+        {"react_agent": "react_agent", "synthesis": "synthesis"},
     )
     graph.add_edge("synthesis", END)
 
@@ -450,22 +587,15 @@ def build_react_graph() -> StateGraph:
 
 
 def build_legacy_graph() -> StateGraph:
-    """Build the legacy linear pipeline (fallback)."""
+    """Compatibility entry point: only supplied structural grounding is usable.
+
+    The historical knowledge-only chain cannot supply retrieved evidence and is
+    therefore retired from public execution. Keep its parser helpers for replay.
+    """
     graph = StateGraph(AgentState)
-
-    graph.add_node("osint", osint_node)
-    graph.add_node("analyst", analyst_node)
-    graph.add_node("synthesis", legacy_synthesis_node)
-
-    graph.set_entry_point("osint")
-    graph.add_conditional_edges(
-        "osint",
-        router_node,
-        {"more_research": "osint", "continue": "analyst"},
-    )
-    graph.add_edge("analyst", "synthesis")
+    graph.add_node("synthesis", react_synthesis_node)
+    graph.set_entry_point("synthesis")
     graph.add_edge("synthesis", END)
-
     return graph
 
 
@@ -484,6 +614,7 @@ def _ensure_graph_client() -> None:
     if _graph_client is not None:
         return
     from config import settings
+
     try:
         _graph_client = GraphClient(
             settings.neo4j_uri,
@@ -527,9 +658,7 @@ async def run_intelligence_query(
     logger.info(
         "intelligence_query_started",
         scope_key=pinned_scope.scope_key if pinned_scope is not None else "world",
-        catalog_revision=(
-            pinned_scope.catalog_revision if pinned_scope is not None else None
-        ),
+        catalog_revision=(pinned_scope.catalog_revision if pinned_scope is not None else None),
         mode=mode,
         deprecated_region_supplied=region is not None,
     )
@@ -539,10 +668,15 @@ async def run_intelligence_query(
 
     items = [to_evidence_item(d) for d in (grounding_evidence or [])]
     grounding_evidence_pack, grounding_evidence_artifact = (
-        pack_with_lineage(items, budget=GROUNDING_EVIDENCE_MAX_CHARS)
-        if items
-        else ("", [])
+        pack_with_lineage(items, budget=GROUNDING_EVIDENCE_MAX_CHARS) if items else ("", [])
     )
+    try:
+        notebook_items = await notebook_context(query)
+        notebook_pack, notebook_artifact = pack_with_lineage(
+            notebook_items, budget=NOTEBOOK_EVIDENCE_MAX_CHARS, preserve_order=True,
+        )
+    except Exception as exc:
+        raise PipelineFailureError("Notebook research failed") from exc
 
     initial_state: AgentState = {
         "query": query,
@@ -552,6 +686,8 @@ async def run_intelligence_query(
         "grounding_context": grounding_context or "",
         "grounding_evidence_pack": grounding_evidence_pack,
         "grounding_evidence_artifact": grounding_evidence_artifact,
+        "notebook_evidence_pack": notebook_pack,
+        "notebook_evidence_artifact": notebook_artifact,
         "messages": [],
         "tool_calls_count": 0,
         "iteration": 0,
@@ -573,7 +709,10 @@ async def run_intelligence_query(
 
     try:
         if use_legacy:
-            result = await legacy_graph.ainvoke(initial_state, **trace_kwargs())
+            result = await asyncio.wait_for(
+                legacy_graph.ainvoke(initial_state, **trace_kwargs()),
+                timeout=settings.react_total_timeout_s,
+            )
         else:
             result = await asyncio.wait_for(
                 react_graph.ainvoke(initial_state, **trace_kwargs()),
@@ -582,32 +721,17 @@ async def run_intelligence_query(
     except (TimeoutError, Exception) as e:
         if not use_legacy:
             # Fail closed: a ReAct failure must surface to the backend as a
-            # non-2xx (FastAPI 500). Never silently fall back to the legacy
+            # non-2xx (FastAPI 502). Never silently fall back to the legacy
             # (no-sources) pipeline or return a mode:"error" HTTP-200 dict —
             # that would let an analyst receive a degraded report believing it
             # was a real analysis (Phase 4 / C7).
             logger.error("react_pipeline_failed", error=str(e))
-            raise
+            raise PipelineFailureError(str(e)) from e
         logger.error("legacy_pipeline_failed", error=str(e))
-        return {
-            "query": query,
-            "analysis": f"Legacy pipeline failed: {e}",
-            "threat_assessment": "MODERATE",
-            "confidence": 0.0,
-            "sources_used": [],
-            "agent_chain": ["error"],
-            "tool_trace": [],
-            "timestamp": datetime.now(UTC).isoformat(),
-            "mode": "error",
-            "assessment_status": None,
-            "verification_status": "unverified",
-            "spatial_scope": (
-                pinned_scope.model_dump(mode="json") if pinned_scope is not None else None
-            ),
-            "spatial_relation": pinned_relation.value,
-            "spatial_application": None,
-        }
+        raise PipelineFailureError(str(e)) from e
 
+    if result.get("error"):
+        raise PipelineFailureError("Internal intelligence stage failed")
     result_application = result.get("spatial_application")
     serialized_application = (
         result_application.model_dump(mode="json")
@@ -616,6 +740,9 @@ async def run_intelligence_query(
     )
     return {
         "query": query,
+        "status": result.get("status", "completed"),
+        "answerability": result.get("answerability", "undetermined"),
+        "tool_events": result.get("tool_events", []),
         "agent_chain": result.get("agent_chain", []),
         "sources_used": result.get("sources_used", []),
         "analysis": result.get("synthesis", result.get("analysis", "")),
@@ -636,10 +763,9 @@ async def run_intelligence_query(
 
 
 if __name__ == "__main__":
+
     async def main() -> None:
-        result = await run_intelligence_query(
-            "Current situation in the Taiwan Strait"
-        )
+        result = await run_intelligence_query("Current situation in the Taiwan Strait")
         print(f"Query: {result['query']}")
         print(f"Mode: {result['mode']}")
         print(f"Agent Chain: {' → '.join(result['agent_chain'])}")

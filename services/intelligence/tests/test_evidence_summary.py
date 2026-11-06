@@ -28,6 +28,7 @@ def expected():
     item = to_evidence_item(raw_evidence())
     return {
         "source_ref_id": item.source.source_ref_id,
+        "evidence_id": item.evidence_id,
         "provider": "odin-country-almanac",
         "source_type": "dataset",
         "published_at": "2026-10-09T00:00:00+00:00",

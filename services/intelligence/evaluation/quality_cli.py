@@ -130,6 +130,8 @@ async def run_fixture_graph(corpus: dict, digest: str, model_revision: str | Non
                     "started_at": started_at,
                     "finished_at": datetime.now(UTC).isoformat(),
                     "analysis": result.get("synthesis"),
+                    "status": result.get("status"),
+                    "answerability": result.get("answerability"),
                     "threat_assessment": result.get("threat_assessment"),
                     "confidence": result.get("confidence"),
                     "assessment_status": result.get("assessment_status"),

@@ -8,12 +8,14 @@ from agents.tools.graph_query import (
     bindable_query_knowledge_graph,
     query_knowledge_graph,
 )
+from agents.tools.notebook_search import notebook_search
 from agents.tools.qdrant_search import qdrant_search
 from agents.tools.rss_fetch import rss_fetch
 from agents.tools.vision import analyze_image
 from graph.state import AgentState
 
 _REGISTERED_TOOLS = [
+    notebook_search,
     qdrant_search,
     query_knowledge_graph,
     classify_event,
@@ -26,9 +28,7 @@ _CAPABILITY_NAMES = {capability.name for capability in CAPABILITY_MATRIX}
 if _TOOLS_BY_NAME.keys() != _CAPABILITY_NAMES:
     raise RuntimeError("tool registry must exactly match the closed capability matrix")
 
-ALL_TOOLS: list[BaseTool] = [
-    _TOOLS_BY_NAME[capability.name] for capability in CAPABILITY_MATRIX
-]
+ALL_TOOLS: list[BaseTool] = [_TOOLS_BY_NAME[capability.name] for capability in CAPABILITY_MATRIX]
 
 
 def tools_for_state(state: AgentState) -> list[BaseTool]:

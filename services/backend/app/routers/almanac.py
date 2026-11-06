@@ -319,8 +319,15 @@ async def _save_resolved_country_briefing(
         chat = truncate_message(body.analysis.analysis.strip()) or "—"  # ≤8000 incl marker
         msg = await append_report_message(
             report.id,
-            ReportMessageCreate(role="munin", text=chat, ts=body.analysis.timestamp,
-                                refs=body.analysis.sources_used[:6]),
+            ReportMessageCreate(
+                role="munin",
+                text=chat,
+                ts=body.analysis.timestamp,
+                refs=body.analysis.sources_used[:6],
+                assessment_status=body.analysis.assessment_status,
+                verification_status=body.analysis.verification_status,
+                evidence_summary=body.analysis.evidence_summary,
+            ),
         )
         if msg is None:
             # dossier already hydrated above; a client retry re-hydrates (idempotent) but appends a

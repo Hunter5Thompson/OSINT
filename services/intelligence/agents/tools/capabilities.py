@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
 
+from config import settings
 from graph.state import AgentState
 from spatial import ScopeKind, SpatialScopeTokenV1
 
@@ -21,6 +22,8 @@ class ToolCapability:
 
 
 CAPABILITY_MATRIX: Final[tuple[ToolCapability, ...]] = (
+    # Global topical context only; it never supplies in-scope occurrence evidence.
+    ToolCapability("notebook_search", allowed_scoped=True),
     ToolCapability("qdrant_search", allowed_scoped=True),
     ToolCapability("query_knowledge_graph", allowed_scoped=True),
     ToolCapability("classify_event", allowed_scoped=True),
@@ -54,6 +57,8 @@ def tool_allowed_for_state(tool_name: str, state: AgentState) -> bool:
 
     capability = _CAPABILITIES_BY_NAME.get(tool_name)
     if capability is None:
+        return False
+    if tool_name == "gdelt_query" and not settings.enable_gdelt_doc_tool:
         return False
     if capability.requires_attached_image and not state.get("image_url"):
         return False

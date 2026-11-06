@@ -35,14 +35,16 @@ function statusToken(status: ReportRecord["status"]): string {
 }
 
 function confidence(report: ReportRecord): string {
-  return report.assessment_status?.confidence === "default"
+  return (report.confidence == null || report.assessment_status?.confidence === "default"
+    || report.assessment_status?.confidence === "not_assessed")
     ? "unbekannt" : report.confidence.toFixed(2);
 }
 
 function metricIsDefault(metric: DossierMetric, report: ReportRecord): boolean {
   const field = metric.label.trim().toLowerCase();
-  return (field === "confidence" && report.assessment_status?.confidence === "default")
-    || (field === "threat" && report.assessment_status?.threat === "default");
+  return (field === "confidence" && (report.confidence == null || report.assessment_status?.confidence === "default"
+    || report.assessment_status?.confidence === "not_assessed"))
+    || (field === "threat" && (report.assessment_status?.threat === "default" || report.assessment_status?.threat === "not_assessed"));
 }
 
 function displayTs(ts: string): string {
@@ -409,7 +411,9 @@ export function BriefingPage() {
               <h1 className="serif briefing-dossier-title">{selectedReport.title}</h1>
               <EvidenceTimeAxes summary={selectedReport.evidence_summary} />
               <div className="mono briefing-dossier-submeta">
-                {selectedReport.verification_status === "unverified"
+                {selectedReport.assessment_status?.threat === "not_assessed"
+                  ? "Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf."
+                  : selectedReport.verification_status === "unverified"
                   ? "Modellbewertung · Quellenbelege sind nicht unabhängig verifiziert."
                   : "Bewertungs- und Verifikationsstatus unbekannt."}
               </div>
@@ -566,8 +570,10 @@ export function BriefingPage() {
                 </div>
                 <p className={msg.role === "munin" ? "serif" : undefined}>{msg.text}</p>
                 {msg.role === "munin" && <>
-                  <div className="mono briefing-chat-meta">{msg.verification_status === "unverified"
-                    ? "Modellantwort · unverifiziert" : "Bewertungs- und Verifikationsstatus unbekannt"}</div>
+                  <div className="mono briefing-chat-meta">{msg.assessment_status?.threat === "not_assessed"
+                    ? "Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf."
+                    : msg.verification_status === "unverified"
+                      ? "Modellantwort · unverifiziert" : "Bewertungs- und Verifikationsstatus unbekannt"}</div>
                   <EvidenceTimeAxes summary={msg.evidence_summary} />
                 </>}
                 {msg.refs && msg.refs.length > 0 ? (

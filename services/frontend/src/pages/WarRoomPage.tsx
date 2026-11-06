@@ -121,9 +121,12 @@ export function WarRoomPage() {
         (analysis) => {
           if (streamSeqRef.current !== streamSeq) return;
           const body = analysis.analysis?.trim() ?? "";
-          const label = analysis.assessment_status?.threat === "default"
+          const label = (analysis.threat_assessment == null || analysis.assessment_status?.threat === "default"
+            || analysis.assessment_status?.threat === "not_assessed")
             ? "Bewertung nicht verfügbar" : analysis.threat_assessment?.trim() ?? "";
-          const verification = analysis.verification_status === "unverified"
+          const verification = analysis.assessment_status?.threat === "not_assessed"
+            ? "Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf."
+            : analysis.verification_status === "unverified"
             ? "Modellbewertung · Quellenbelege sind nicht unabhängig verifiziert."
             : "Bewertungs- und Verifikationsstatus unbekannt.";
           const composed = `${label ? `[${label}] ${body}` : body}\n\n${verification}\n\n${formatEvidenceSummary(analysis.evidence_summary)}`;

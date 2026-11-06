@@ -98,6 +98,38 @@ function renderBriefing() {
 }
 
 describe("BriefingPage", () => {
+  it.each(["live", "saved"])("labels %s abstention as no model assessment", async (mode) => {
+    const analysis: IntelAnalysis = {
+      query: "fixture", agent_chain: ["evidence_gate"], sources_used: [],
+      analysis: "Keine Belege in diesem Recherchelauf.", confidence: null, threat_assessment: null,
+      timestamp: "2026-11-01T00:00:00Z", verification_status: "unverified", evidence_summary: [],
+      assessment_status: { threat: "not_assessed", confidence: "not_assessed", issues: ["no-consumed-evidence"] },
+    };
+    if (mode === "saved") getReportMessagesMock.mockResolvedValue([{
+      id: "abstention", role: "munin", text: analysis.analysis, ts: analysis.timestamp,
+      assessment_status: analysis.assessment_status, verification_status: analysis.verification_status,
+      evidence_summary: analysis.evidence_summary, refs: [],
+    }]);
+    const view = renderBriefing();
+    await screen.findAllByText(/Sinjar Ridge/);
+    if (mode === "live") {
+      intelState.result = analysis;
+      view.rerender(<MemoryRouter initialEntries={["/briefing"]}><BriefingPage /></MemoryRouter>);
+    }
+    expect(await screen.findByText("Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf.")).toBeInTheDocument();
+    expect(screen.queryByText("Modellantwort · unverifiziert")).not.toBeInTheDocument();
+  });
+
+  it("keeps legacy chat metadata explicitly unknown", async () => {
+    getReportMessagesMock.mockResolvedValue([{
+      id: "legacy-chat", role: "munin", text: "Legacy answer", ts: "2026-11-01T00:00:00Z", refs: [],
+    }]);
+    renderBriefing();
+    await screen.findByText("Legacy answer");
+    expect(screen.getByText("Bewertungs- und Verifikationsstatus unbekannt")).toBeInTheDocument();
+    expect(screen.queryByText("Modellantwort · unverifiziert")).not.toBeInTheDocument();
+  });
+
   it("keeps live chat source metadata attached to that answer", async () => {
     const view = renderBriefing();
     await screen.findAllByText(/Sinjar Ridge/);

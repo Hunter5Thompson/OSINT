@@ -14,8 +14,8 @@ from spatial import ScopeKind
 
 
 class TestTemplateRegistry:
-    def test_eight_templates_registered(self):
-        assert len(TEMPLATES) == 8
+    def test_nine_templates_registered(self):
+        assert len(TEMPLATES) == 9
 
     def test_all_templates_have_required_keys(self):
         for tid, t in TEMPLATES.items():

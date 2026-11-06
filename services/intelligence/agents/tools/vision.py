@@ -10,7 +10,7 @@ from io import BytesIO
 from urllib.parse import urlparse
 
 import structlog
-from langchain_core.tools import tool
+from langchain_core.tools import ToolException, tool
 from langgraph.prebuilt import ToolRuntime
 from PIL import Image
 
@@ -114,7 +114,7 @@ async def analyze_image(
         data_url = await _load_image(image_url)
     except Exception as e:
         log.warning("vision_image_load_failed", url=image_url[:200], error=str(e))
-        return f"Failed to load image: {e}"
+        raise ToolException("IMAGE_LOAD_FAILED: image unavailable") from e
 
     try:
         from openai import AsyncOpenAI
@@ -144,4 +144,4 @@ async def analyze_image(
 
     except Exception as e:
         log.warning("vision_analysis_failed", url=image_url[:200], error=str(e))
-        return f"Image analysis failed: {e}"
+        raise ToolException("IMAGE_ANALYSIS_FAILED: vision provider unavailable") from e
