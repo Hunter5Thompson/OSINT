@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Sequence
-from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -26,8 +25,8 @@ from app.cypher.report_write import (
     REPORT_CREATE,
     REPORT_DELETE,
     REPORT_ID_UNIQUE_CONSTRAINT,
+    REPORT_PATCH,
     REPORT_SCOPE_UNIQUE_CONSTRAINT,
-    REPORT_UPSERT,
 )
 from app.models.intel import (
     AssessmentStatus,
@@ -53,24 +52,6 @@ from app.services.briefing import parse_munin_report
 from app.services.neo4j_client import read_query, write_query
 
 log = structlog.get_logger(__name__)
-
-_DEFAULT_FINDINGS = [
-    "Initial signal basket created. Add first confirmed indicator.",
-    "Attach one corroborating source before publication.",
-    "Define next data pull and confidence target.",
-]
-
-_DEFAULT_METRICS = [
-    DossierMetric(label="coverage", value="0", sub="sources linked", tone="sentinel"),
-    DossierMetric(label="window", value="24h", sub="analysis span", tone="amber"),
-    DossierMetric(label="confidence", value="0.62", sub="initial", tone="sage"),
-]
-
-_DEFAULT_MARGIN = [
-    MarginEntry(label="status", value="draft"),
-    MarginEntry(label="owner", value="analyst"),
-]
-
 
 class ReportRowDecodeError(ValueError):
     """A persisted report/message has an unreadable required timestamp."""
@@ -359,30 +340,9 @@ async def create_report(payload: ReportCreateRequest) -> ReportRecord:
         stamp = _stamp_from(now)
         report_id = f"r-{paragraph:03d}"
 
-        findings = payload.findings or deepcopy(_DEFAULT_FINDINGS)
-        metrics = payload.metrics or deepcopy(_DEFAULT_METRICS)
-        margin = payload.margin or deepcopy(_DEFAULT_MARGIN)
-        sources = payload.sources or ["pending·1"]
-        body_paragraphs = payload.body_paragraphs or [
-            (
-                "Start with the operational summary, then expand into competing "
-                "hypotheses, risk corridors, and open questions."
-            ),
-        ]
-
-        hydrated = payload.model_copy(
-            update={
-                "findings": findings,
-                "metrics": metrics,
-                "margin": margin,
-                "sources": sources,
-                "body_paragraphs": body_paragraphs,
-            }
-        )
-
         try:
             rows = await write_query(
-                REPORT_CREATE, _report_params(report_id, paragraph, stamp, hydrated)
+                REPORT_CREATE, _report_params(report_id, paragraph, stamp, payload)
             )
         except ConstraintError:
             # REPORT_CREATE uses CREATE, so a duplicate id genuinely raises (report_id_unique).
@@ -399,29 +359,36 @@ async def create_report(payload: ReportCreateRequest) -> ReportRecord:
 
 
 async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRecord | None:
-    current = await get_report(report_id)
-    if current is None:
-        return None
-
-    # Merge patch over current, then re-validate so DossierMetric/MarginEntry rebuild from dicts.
-    # Explicit null remains a NO-OP for ordinary fields (for example title), while the optional
-    # run snapshot has a deliberate clear operation: a later global run must be able to remove
-    # the previous scoped run's application. Zero/empty values are still applied normally.
-    patch_values = patch.model_dump(exclude_unset=True, exclude_none=True)
-    for field in (
+    # The validated request is the property allowlist. Patch only supplied fields
+    # in one database statement: no stale full-record replacement or resurrection.
+    # Ordinary nulls remain no-ops; optional assessment fields explicitly clear.
+    clearable = {
         "spatial_application",
         "assessment_status",
         "verification_status",
         "evidence_summary",
         "research_coverage",
         "confidence",
-    ):
-        if field in patch.model_fields_set:
-            patch_values[field] = getattr(patch, field)
-    merged = ReportRecord.model_validate({**current.model_dump(), **patch_values})
+    }
+    json_fields = {
+        "metrics", "margin", "spatial_application", "assessment_status",
+        "evidence_summary", "research_coverage",
+    }
+    properties: dict[str, Any] = {}
+    for field, value in patch.model_dump(mode="json", exclude_unset=True).items():
+        if value is None and field not in clearable:
+            continue
+        if field in json_fields:
+            properties[f"{field}_json"] = (
+                json.dumps(value, ensure_ascii=True, sort_keys=True) if value is not None else None
+            )
+        else:
+            properties[field] = value
+    if not properties:
+        return await get_report(report_id)
     rows = await write_query(
-        REPORT_UPSERT,
-        _report_params(report_id, current.paragraph_num, current.stamp, merged),
+        REPORT_PATCH,
+        {"report_id": report_id, "properties": properties, "now": datetime.now(UTC).isoformat()},
     )
     if not rows:
         return None

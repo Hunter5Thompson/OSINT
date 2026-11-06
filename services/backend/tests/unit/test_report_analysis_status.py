@@ -93,7 +93,7 @@ async def test_explicit_unknown_status_clears_previous_report_metadata(monkeypat
 
     async def write(query, params):
         captured.append(params)
-        return [{**params, "id": old.id, "created_at": "2026-10-10T00:00:00Z"}]
+        return [{**params["properties"], "id": old.id, "created_at": "2026-10-10T00:00:00Z"}]
 
     monkeypatch.setattr(report_store, "write_query", write)
     from app.models.report import ReportUpdateRequest
@@ -106,8 +106,8 @@ async def test_explicit_unknown_status_clears_previous_report_metadata(monkeypat
         ),
     )
     assert updated.assessment_status is None and updated.verification_status is None
-    assert captured[0]["assessment_status_json"] is None
-    assert captured[0]["verification_status"] is None
+    assert captured[0]["properties"]["assessment_status_json"] is None
+    assert captured[0]["properties"]["verification_status"] is None
 
 
 async def test_actual_message_writer_and_row_reader_keep_answer_metadata(monkeypatch):
