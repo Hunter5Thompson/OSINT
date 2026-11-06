@@ -52,7 +52,10 @@ async def prepare_public_query(question: str) -> str:
             and len(query) <= 200
             and re.fullmatch(r"[\w\s'’.,-]+", query)
         ):
-            return query.strip()
+            # The future horizon belongs to analysis, not retrieval of observations.
+            query = re.sub(r"\bnext\s+\d+\s+(?:hours?|days?)\b", "", query, flags=re.I)
+            query = re.sub(r"\b(?:forecast|prediction)s?\b", "", query, flags=re.I)
+            return " ".join(query.split()) or fallback
     except Exception:
         pass
     return fallback

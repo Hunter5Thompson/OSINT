@@ -42,6 +42,7 @@ class ResearchAttempt(BaseModel):
 
 class ResearchCoverage(BaseModel):
     run_id: str | None = None
+    search_domains: list[str] = Field(default_factory=list)
     as_of: datetime
     published_since: datetime
     status: Literal["complete", "partial", "unavailable", "not_requested"] = "complete"

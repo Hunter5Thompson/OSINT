@@ -117,7 +117,11 @@ def _render(
 
 
 async def compose_current_report(
-    question: str, items: list[EvidenceItem], model: BaseChatModel
+    question: str,
+    items: list[EvidenceItem],
+    model: BaseChatModel,
+    *,
+    as_of: str | None = None,
 ) -> RenderedCurrentReport:
     originals = {item.evidence_id: item for item in items if item.evidence_id}
     passages = {
@@ -158,6 +162,11 @@ async def compose_current_report(
                 "Verschiedene Veröffentlichungen derselben Herkunft sind keine "
                 "unabhängige Bestätigung. "
                 "Negationen, zitierte Gegenpositionen und historische Ereignisse nicht umdeuten. "
+                "Sprecher und Gegenstand einer Aussage strikt unterscheiden: Eine Aussage "
+                "über Moskau ist keine Aussage von Moskau. Zahlen und relative Zeitangaben "
+                "in gleicher Genauigkeit übersetzen, keine Datumsarithmetik ergänzen. "
+                "Der mitgelieferte server_as_of ist das tatsächliche aktuelle Datum dieses Laufs; "
+                "neuere Quellen sind nicht fiktiv, nur weil sie nach deinem Trainingsstand liegen. "
                 "Eine heutige Publikation bestätigt kein heutiges Ereignis. Vergleiche "
                 "widersprüchliche "
                 "Angaben ausdrücklich und lasse sie getrennt stehen. Bei Fragen nach "
@@ -177,14 +186,17 @@ async def compose_current_report(
             )
         ),
         HumanMessage(
-            content=json.dumps({"question": question, "sources": source_data}, ensure_ascii=False)
+            content=json.dumps(
+                {"question": question, "server_as_of": as_of, "sources": source_data},
+                ensure_ascii=False,
+            )
         ),
     ]
     capture_synthesis_input(question, messages)
     for attempt in range(2):
         response = await model.ainvoke(
             messages,
-            max_tokens=2000,
+            max_tokens=2400,
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
             response_format={"type": "json_object"},
         )
@@ -196,13 +208,22 @@ async def compose_current_report(
             ):
                 raise ValueError("Incomplete report")
             draft = CurrentDraft.model_validate_json(response.content)
+            forecast_requested = bool(
+                re.search(
+                    r"n.chst|next|48|erwart|prognos|szenari|forecast|future|k.nftig",
+                    question,
+                    re.I,
+                )
+            )
+            if not forecast_requested:
+                draft.scenarios = []
             _validate_sources(draft, originals, passages)
             if not draft.findings and draft.scenarios:
                 raise ValueError("No scenarios without relevant source findings")
             if (
                 draft.findings
                 and re.search(r"angriff|attack|strike|schl.g", question, re.I)
-                and re.search(r"n.chst|next|48|erwart|prognos|szenari|forecast", question, re.I)
+                and forecast_requested
                 and {s.name for s in draft.scenarios}
                 != {"Keine neuen Angriffe", "Begrenzte Schläge", "Größere Eskalation"}
             ):
@@ -222,7 +243,10 @@ async def compose_current_report(
             response,
             HumanMessage(
                 content=(
-                    "Prüfe alle Aussagen und Gegenpositionen gegen die Originalpassagen. "
+                    "Prüfe jeden Satz der Übersetzung: Wer spricht, über wen, welche Negation, "
+                    "welche Zahl und Zeitangabe? Keine Sprecherrolle oder Zeitrechnung ergänzen. "
+                    "Streiche sachfremde Befunde und Spekulation aus der Übersetzung. "
+                    "Bei reinen Lagefragen keine Angriffsszenarien. "
                     "Keine alte "
                     "Angabe als aktuell darstellen. Wähle vorhandene passage_id-Werte; "
                     "übersetze Negationen und Unsicherheit getreu. Korrigiere den vollständigen "

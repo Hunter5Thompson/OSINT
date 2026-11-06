@@ -33,6 +33,7 @@ export function CurrentResearchCoverage({ coverage }: { coverage?: ResearchCover
       Prognose: {coverage.forecast === "not_requested" ? "nicht angefordert" : "nicht belastbar bewertet"}.
       Mögliche Szenarien sind bedingte Überlegungen.</p>
     <details><summary>Durchgeführte Recherche und Abrufgrenzen</summary>
+      {coverage.search_domains?.length ? <p>Websuche begrenzt auf: {coverage.search_domains.join(", ")}. Die Auswahl ist keine Faktenprüfung.</p> : null}
       {coverage.attempts.map((attempt, index) => <div key={index} style={{ margin: "8px 0", overflowWrap: "anywhere" }}>
         <strong>{attempt.trigger === "counterevidence" ? "Gegenbelegsuche" : attempt.trigger === "followup"
           ? "Folgefrage" : attempt.trigger === "expanded_window" ? "Erweitertes Zeitfenster" : "Basisrecherche"}</strong>

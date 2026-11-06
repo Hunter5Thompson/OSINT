@@ -57,6 +57,34 @@ class Settings(BaseSettings):
     rag_telegram_max: int = 1
     # Current research. No key is included in health responses or receipts.
     tavily_api_key_file: Path | None = None
+    # Discovery coverage, not an assertion that these publishers are always correct.
+    current_research_domains: tuple[str, ...] = (
+        "reuters.com",
+        "apnews.com",
+        "bbc.com",
+        "bbc.co.uk",
+        "aljazeera.com",
+        "dw.com",
+        "france24.com",
+        "theguardian.com",
+        "ft.com",
+        "nytimes.com",
+        "cnn.com",
+        "state.gov",
+        "whitehouse.gov",
+        "un.org",
+        "iaea.org",
+        "mfa.gov.ir",
+        "irna.ir",
+        "timesofisrael.com",
+        "al-monitor.com",
+        "jpost.com",
+        "i24news.tv",
+        "mnd.gov.tw",
+        "mfa.gov.cn",
+        "president.gov.ua",
+        "kremlin.ru",
+    )
     tavily_api_key: SecretStr = SecretStr("")
     tavily_api_url: str = "https://api.tavily.com"
     current_research_lookback_hours: int = Field(default=72, ge=1, le=168)
@@ -64,6 +92,9 @@ class Settings(BaseSettings):
     current_research_max_requests: int = Field(default=8, ge=1, le=12)
     current_research_max_credits: int = Field(default=6, ge=1, le=12)
     current_research_timeout_s: float = Field(default=50, gt=0, le=90)
+    current_analysis_url: str = ""
+    current_analysis_model: str = ""
+    current_analysis_timeout_s: float = Field(default=75, gt=0, le=120)
     # ReAct agent guards
     react_max_tool_calls: int = 8
     react_max_iterations: int = 5

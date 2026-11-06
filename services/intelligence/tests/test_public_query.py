@@ -29,3 +29,16 @@ async def test_invalid_planner_output_falls_back_without_executing_text(monkeypa
     model.ainvoke.return_value = AIMessage(content='{"query":"https://localhost/secret"}')
     monkeypatch.setattr("rag.public_query.ChatOpenAI", lambda **kw: model)
     assert await prepare_public_query("Iran news") == "Iran news"
+
+
+async def test_forecast_horizon_does_not_bias_discovery_toward_predictions(monkeypatch):
+    from rag.public_query import prepare_public_query
+
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(
+        content='{"query":"Iran US Israel military strikes next 48 hours forecast"}'
+    )
+    monkeypatch.setattr("rag.public_query.ChatOpenAI", lambda **kw: model)
+    assert (
+        await prepare_public_query("Iran nächste 48 Stunden?") == "Iran US Israel military strikes"
+    )

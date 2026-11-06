@@ -140,12 +140,12 @@ async def test_scenario_can_reference_an_existing_specific_passage():
     payload["scenarios"][0]["supporting_ids"] = ["ev-current:p0"]
     model = AsyncMock()
     model.ainvoke.return_value = AIMessage(content=json.dumps(payload))
-    report = await compose_current_report("Iran", [source()], model)
+    report = await compose_current_report("Iran nächste 48 Stunden", [source()], model)
     assert "Stützende Angaben: [ev-current]." in report.text
     payload["scenarios"][0]["supporting_ids"] = ["ev-current:p999"]
     model.ainvoke.return_value = AIMessage(content=json.dumps(payload))
     with pytest.raises(PipelineFailureError):
-        await compose_current_report("Iran", [source()], model)
+        await compose_current_report("Iran nächste 48 Stunden", [source()], model)
 
 
 async def test_irrelevant_originals_do_not_force_a_factual_finding_or_forecast():
@@ -166,3 +166,28 @@ async def test_irrelevant_originals_do_not_force_a_factual_finding_or_forecast()
     )
     assert report.finding_count == 0
     assert "Keine thematisch tragfähige Originalpassage" in report.text
+
+
+async def test_report_uses_the_server_clock_and_bounded_source_checks():
+    from agents.current_report import compose_current_report
+
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(content=json.dumps(draft()))
+    await compose_current_report("Iran", [source()], model, as_of="2026-11-06T18:00:00+00:00")
+    first, check = model.ainvoke.call_args_list
+    assert "2026-11-06T18:00:00+00:00" in first.args[0][1].content
+    assert first.kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+    assert first.kwargs["max_tokens"] <= 4000
+    assert check.kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+
+
+async def test_a_current_situation_question_does_not_gain_unrequested_scenarios():
+    from agents.current_report import compose_current_report
+
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(content=json.dumps(draft()))
+    report = await compose_current_report(
+        "Aktuelle Ergebnisse der US-Zwischenwahlen?", [source()], model
+    )
+    assert report.scenario_count == 0
+    assert "Bedingte Szenarien" not in report.text

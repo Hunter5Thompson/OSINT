@@ -18,6 +18,7 @@ from tests.test_current_research import ARTICLE, BODY
 
 @pytest.fixture(autouse=True)
 def owned_corpus_adapter(monkeypatch):
+    monkeypatch.setattr(settings, "current_research_domains", ())
     monkeypatch.setattr("rag.public_query.prepare_public_query", AsyncMock(side_effect=lambda q: q))
     monkeypatch.setattr("rag.local_current.search_current_corpus", AsyncMock(return_value=[]))
 

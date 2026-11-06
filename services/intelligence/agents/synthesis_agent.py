@@ -6,7 +6,8 @@ from langchain_openai import ChatOpenAI
 from config import settings
 from graph.assessment import ASSESSMENT_FORMAT
 
-SYSTEM_PROMPT = """Du bist Munin, ein Intelligence-Report-Synthetisierer.
+SYSTEM_PROMPT = (
+    """Du bist Munin, ein Intelligence-Report-Synthetisierer.
 Deine Aufgabe: OSINT-Befunde und analytische Bewertungen zu einem kohärenten,
 handlungsrelevanten Lagebericht verdichten.
 
@@ -85,15 +86,34 @@ Jeder Research-Block trägt eine `[EVIDENCE]`-Metadatenzeile. Beachte:
   geprüft. Ein geparstes Threat-/Confidence-Feld ist eine Modellbewertung,
   keine Bestätigung der abgefragten Behauptung. Wenn Evidenz fehlt, irrelevant,
   veraltet oder widersprüchlich ist, benenne die Grenze statt die Prämisse zu bestätigen.
-""" + "\n\n" + ASSESSMENT_FORMAT
+"""
+    + "\n\n"
+    + ASSESSMENT_FORMAT
+)
 
 
-def create_synthesis_llm(*, original_passages: bool = False) -> ChatOpenAI:
+def create_synthesis_llm(
+    *,
+    original_passages: bool = False,
+    current_research: bool = False,
+) -> ChatOpenAI:
     """Original arguments need reasoning; the summary adapter is for legacy reports.
 
     Both names use the same loaded base model. No second local model is started.
     The larger token allowance includes reasoning, which is never report content.
     """
+    if current_research:
+        return ChatOpenAI(
+            base_url=(settings.current_analysis_url.rstrip("/") + "/v1")
+            if settings.current_analysis_url
+            else settings.llm_base_url,
+            model=settings.current_analysis_model or settings.llm_model,
+            temperature=0,
+            api_key="not-needed",
+            max_retries=0,
+            timeout=settings.current_analysis_timeout_s,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
     return ChatOpenAI(
         base_url=settings.llm_base_url,
         model=settings.llm_model if original_passages else settings.synthesis_llm_model,

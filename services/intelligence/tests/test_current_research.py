@@ -531,3 +531,33 @@ async def test_a_long_single_paragraph_is_never_cut_before_a_late_negation():
     )
     assert result.coverage.current_evidence_ids == []
     assert "excerpt_unavailable" in result.coverage.gaps
+
+
+async def test_operator_source_selection_is_enforced_and_disclosed():
+    def provider(request):
+        if request.url.path == "/search":
+            assert json.loads(request.content)["include_domains"] == ["news.example.org"]
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "url": "https://redirect.example.com/wrapper",
+                            "title": "Iran",
+                            "content": BODY,
+                            "published_date": "2026-11-06T12:00:00Z",
+                        }
+                    ]
+                },
+            )
+        raise AssertionError("An out-of-policy publisher must not be extracted")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        result = await CurrentResearch(
+            ResearchRun(as_of=AS_OF, search_domains=("news.example.org",)),
+            client=client,
+            api_key="fixture",
+            base_url="https://tavily.test",
+        ).search("Iran")
+    assert result.coverage.search_domains == ["news.example.org"]
+    assert result.coverage.current_evidence_ids == []

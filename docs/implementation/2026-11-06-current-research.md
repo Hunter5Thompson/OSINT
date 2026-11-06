@@ -85,7 +85,7 @@ Optional tool failures preserve valid partial current answers with an explicit g
 Occurrence queries accept only current evidence from the pinned spatial filter;
 topic-only web matches cannot enable an occurrence claim.
 
-Technical evidence so far: 944 intelligence tests, 1,206 backend tests,
+Technical evidence so far: 949 intelligence tests, 1,206 backend tests,
 962 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
 the latest receipt display additions. Further
 independent review and live content qualification are in progress. Production
@@ -101,3 +101,27 @@ resolve to the matching source. Irrelevant originals permit an empty finding set
 and an explicit insufficient-evidence result; the model is not forced to convert
 navigation or source metadata into a current finding. Public query planning uses
 JSON output mode with a bounded local timeout.
+
+## Measured inference boundary
+
+The v2 live matrix did not pass source-level acceptance: 28 exact original quotes
+coexisted with incorrect speaker attribution, date arithmetic and boilerplate
+selection. The preserved independent review records 0 PASS / 4 PARTIAL / 7 FAIL,
+including three pipeline failures. A longer 9B thinking pass exhausted its output
+budget and is not the selected runtime policy.
+
+The already running Spark service offers `Qwen/Qwen3.8-27B`. In a bounded read-only
+probe on the preserved cases it detected attribution/date errors missed by the
+9B audit. `CURRENT_ANALYSIS_URL`, `CURRENT_ANALYSIS_MODEL` and a 75-second call
+timeout therefore allow an explicitly configured analysis adapter. Discovery and
+ReAct remain on the existing local model. No second local model, download, model
+swap or inference-service restart is involved. The complete live matrix must
+qualify this combination; the small probe alone is not acceptance.
+
+Discovery defaults to 25 named international, regional and official publisher
+domains, configurable through `CURRENT_RESEARCH_DOMAINS`. The run pins and saves
+that selection, enforces it before extraction, and displays it in coverage. This
+is an explicit coverage boundary, not an independence or truth score. Existing
+local corpus reads remain separately identified. Tavily publication estimates may
+also reflect updates; original-date conflict checks and distinct event dates are
+still required. No automatic index writes or new ingestion occur.

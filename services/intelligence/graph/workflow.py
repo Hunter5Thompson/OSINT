@@ -465,7 +465,9 @@ async def react_synthesis_node(state: AgentState) -> dict:
             }
         has_original_passages = any(item.passage or item.retrieval for item in consumed_items)
         llm = (
-            create_synthesis_llm(original_passages=True)
+            create_synthesis_llm(original_passages=True, current_research=True)
+            if coverage
+            else create_synthesis_llm(original_passages=True)
             if has_original_passages
             else create_synthesis_llm()
         )
@@ -539,7 +541,12 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 evidence_ids=[item.evidence_id for item in current_items],
                 original_excerpt_chars=sum(len(item.excerpt) for item in current_items),
             )
-            current_report = await compose_current_report(state["query"], current_items, llm)
+            current_report = await compose_current_report(
+                state["query"],
+                current_items,
+                llm,
+                as_of=coverage["as_of"],
+            )
             content = current_report.text
             if not current_report.finding_count:
                 coverage = {

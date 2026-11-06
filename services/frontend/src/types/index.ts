@@ -238,6 +238,7 @@ export interface RetrievalProvenance {
 }
 
 export interface ResearchCoverage {
+  search_domains?: string[];
   run_id?: string | null;
   as_of: string;
   published_since: string;

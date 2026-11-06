@@ -43,6 +43,7 @@ class ResearchRun(BaseModel):
     # Public web evidence has topic relevance only; never polygon membership.
     scope_key: str = "world"
     spatial_relation: Literal["about", "occurrence", "either"] = "either"
+    search_domains: tuple[str, ...] = Field(default=(), max_length=40)
 
     @model_validator(mode="after")
     def bounded_window(self):
@@ -71,6 +72,7 @@ class ResearchAttempt(BaseModel):
 
 class ResearchCoverage(BaseModel):
     run_id: str | None = None
+    search_domains: list[str] = Field(default_factory=list)
     as_of: datetime
     published_since: datetime
     status: Literal["complete", "partial", "unavailable", "not_requested"] = "complete"
@@ -258,6 +260,7 @@ class CurrentResearch:
             evidence=evidence,
             coverage=ResearchCoverage(
                 run_id=self._run_id,
+                search_domains=list(self._run.search_domains),
                 as_of=self._run.as_of,
                 published_since=since,
                 current_evidence_ids=current,
@@ -324,6 +327,8 @@ class CurrentResearch:
                 "auto_parameters": False,
                 "include_answer": False,
                 "include_published_date": True,
+                "filter_by_published_date": True,
+                "include_domains": list(self._run.search_domains),
                 "include_raw_content": False,
                 "include_usage": True,
                 "max_results": 5,
@@ -338,6 +343,14 @@ class CurrentResearch:
             for hit in response["results"]
             if isinstance(hit, dict)
             and _public_url(hit.get("url"))
+            and (
+                not self._run.search_domains
+                or any(
+                    (urlsplit(hit["url"]).hostname or "").lower() == domain
+                    or (urlsplit(hit["url"]).hostname or "").lower().endswith("." + domain)
+                    for domain in self._run.search_domains
+                )
+            )
             and isinstance(hit.get("title"), str)
             and isinstance(hit.get("content", ""), str)
         ][:5]
@@ -451,9 +464,7 @@ class CurrentResearch:
             await self._search_web(question)
             if first:
                 self._trigger = "counterevidence"
-                await self._search_web(
-                    question + " denials contrary evidence diplomatic statements"
-                )
+                await self._search_web(question + " denials contrary evidence official statements")
                 if (
                     not self._result().coverage.current_evidence_ids
                     and self._run.expanded_lookback_hours > self._lookback_hours
@@ -504,6 +515,7 @@ async def open_research(
                     as_of=pinned_time,
                     scope_key=scope_key,
                     spatial_relation=relation,
+                    search_domains=settings.current_research_domains,
                     timeout_s=settings.current_research_timeout_s,
                     lookback_hours=settings.current_research_lookback_hours,
                     expanded_lookback_hours=settings.current_research_expanded_lookback_hours,

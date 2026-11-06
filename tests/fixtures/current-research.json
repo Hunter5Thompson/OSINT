@@ -37,7 +37,8 @@
     ],
     "scope_key": "world",
     "spatial_basis": "topic_only",
-    "run_id": null
+    "run_id": null,
+    "search_domains": []
   },
   "evidence_summary": [
     {
