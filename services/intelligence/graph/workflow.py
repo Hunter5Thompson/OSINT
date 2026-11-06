@@ -557,6 +557,15 @@ async def react_synthesis_node(state: AgentState) -> dict:
                         "statement_check_" + current_report.statement_check,
                     ],
                 }
+            coverage["forecast"] = (
+                "not_assessed" if current_report.forecast_requested else "not_requested"
+            )
+            if current_report.forecast_requested:
+                coverage = {
+                    **coverage,
+                    "status": "partial",
+                    "gaps": [*coverage["gaps"], "forecast_details_not_qualified"],
+                }
             if not current_report.finding_count:
                 coverage = {
                     **coverage,
@@ -573,15 +582,6 @@ async def react_synthesis_node(state: AgentState) -> dict:
                     "spatial_application": spatial_application,
                     "research_coverage": coverage,
                     "agent_chain": state.get("agent_chain", []) + ["current_relevance_gate"],
-                }
-            coverage["forecast"] = (
-                "not_assessed" if current_report.forecast_requested else "not_requested"
-            )
-            if current_report.forecast_requested:
-                coverage = {
-                    **coverage,
-                    "status": "partial",
-                    "gaps": [*coverage["gaps"], "forecast_details_not_qualified"],
                 }
             evidence_artifacts = evidence_artifact(current_items)
             derived_sources = derive_sources_used(evidence_artifacts)

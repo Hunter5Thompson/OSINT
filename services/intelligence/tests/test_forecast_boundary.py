@@ -66,3 +66,55 @@ async def test_an_injected_scenario_claim_is_rejected_and_cannot_survive_correct
     assert "Keine neuen Angriffe" in report.text
     assert "Größere Eskalation" in report.text
     assert item.excerpt in report.text
+
+
+async def test_empty_forecast_report_retains_qualification_gap_in_workflow(monkeypatch):
+    from pathlib import Path
+
+    import graph.workflow as workflow
+    from agents.current_report import RenderedCurrentReport
+    from rag.evidence import RetrievalProvenance, pack_with_lineage
+
+    fixture = json.loads(
+        (Path(__file__).resolve().parents[3] / "tests/fixtures/current-research.json").read_text()
+    )
+    raw = fixture["evidence_summary"][0]
+    item = EvidenceItem(
+        evidence_id=raw["evidence_id"],
+        title=raw["title"],
+        excerpt=raw["excerpt"],
+        relevance_score=1,
+        source=SourceRef(
+            **{
+                key: raw[key]
+                for key in ("source_ref_id", "source_type", "provider", "published_at")
+            }
+        ),
+        retrieval=RetrievalProvenance.model_validate(raw["retrieval"]),
+    )
+    pack, artifact = pack_with_lineage([item], budget=3000)
+    monkeypatch.setattr(workflow, "create_synthesis_llm", lambda **kwargs: AsyncMock())
+    monkeypatch.setattr(
+        workflow,
+        "compose_current_report",
+        AsyncMock(
+            return_value=RenderedCurrentReport(
+                text="Keine passende Lagepassage gewählt; Prognose offen.",
+                finding_count=0,
+                scenario_count=0,
+                forecast_requested=True,
+            )
+        ),
+    )
+    result = await workflow.react_synthesis_node(
+        {
+            "query": "Neue Angriffe morgen?",
+            "messages": [],
+            "current_evidence_pack": pack,
+            "current_evidence_artifact": artifact,
+            "research_coverage": fixture["research_coverage"],
+        }
+    )
+    assert result["research_coverage"]["forecast"] == "not_assessed"
+    assert "forecast_details_not_qualified" in result["research_coverage"]["gaps"]
+    assert result["research_coverage"]["situation"] == "insufficient_evidence"
