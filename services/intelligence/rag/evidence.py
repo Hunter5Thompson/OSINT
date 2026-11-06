@@ -20,6 +20,7 @@ from typing import Literal
 from pydantic import AliasChoices, BaseModel, Field, ValidationError
 
 from rag.credibility import credibility_score, normalize_provider
+from rag.excerpts import select_excerpt
 
 SourceType = Literal["rss", "web", "telegram", "gdelt", "notebooklm", "dataset", "unknown"]
 
@@ -243,6 +244,8 @@ def to_evidence_item(result: dict) -> EvidenceItem:
     review = ReviewProvenance.model_validate(result["review"]) if result.get("review") else None
     title = str(result.get("title", "Untitled"))
     excerpt = str(result.get("content", "")) if review else _excerpt(result)
+    if result.get("source") == "rss_fulltext" or provider == "odin-live-signal":
+        excerpt = select_excerpt(str(result.get("content", "")), title)
     content_hash = result.get("content_hash")
     url = result.get("url")
 
@@ -308,7 +311,7 @@ def to_evidence_item(result: dict) -> EvidenceItem:
 
 def eligible_current_evidence(item: EvidenceItem, since: datetime, as_of: datetime) -> bool:
     """A source-availability gate, never an assertion of truth or event date."""
-    if item.knowledge_role != "source":
+    if item.knowledge_role != "source" or not item.excerpt.strip():
         return False
     if item.source.provider == "odin-live-signal" and item.source.source_type == "dataset":
         return item.observed_at is not None and since <= item.observed_at <= as_of

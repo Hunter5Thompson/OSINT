@@ -22,7 +22,10 @@ def owned_corpus_adapter(monkeypatch):
     monkeypatch.setattr("rag.local_current.search_current_corpus", AsyncMock(return_value=[]))
 
 
-async def test_zero_tool_calls_still_research_and_consume_current_original(monkeypatch):
+@pytest.mark.parametrize("optional_graph_failure", [False, True])
+async def test_zero_tool_calls_still_research_and_consume_current_original(
+    monkeypatch, optional_graph_failure
+):
     from datetime import UTC, datetime, timedelta
 
     real_client = httpx.AsyncClient
@@ -56,11 +59,26 @@ async def test_zero_tool_calls_still_research_and_consume_current_original(monke
     monkeypatch.setattr(workflow, "notebook_context", AsyncMock(return_value=[]))
     model = AsyncMock()
     model.ainvoke.return_value = AIMessage(content="No tool calls")
+    if optional_graph_failure:
+        monkeypatch.setattr("agents.tools.graph_query._graph_client", None)
+        model.ainvoke.side_effect = [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "query_knowledge_graph",
+                        "args": {"query": "timeline of Iran"},
+                        "id": "failed-optional-graph",
+                    }
+                ],
+            ),
+            AIMessage(content="Finished"),
+        ]
     monkeypatch.setattr(workflow, "create_react_agent", lambda tools: model)
     identity = hashlib.sha256((ARTICLE + "\0" + BODY).encode()).hexdigest()[:24]
     synthesis = AsyncMock()
     synthesis.ainvoke.return_value = AIMessage(
-        content=json.dumps(draft(source_id=f"ev-{identity}", quote=BODY))
+        content=json.dumps(draft(source_id=f"ev-{identity}"))
     )
     monkeypatch.setattr(workflow, "create_synthesis_llm", lambda **kw: synthesis)
     async with real_client(
@@ -80,6 +98,9 @@ async def test_zero_tool_calls_still_research_and_consume_current_original(monke
     prompt = "\n".join(m.content for m in synthesis.ainvoke.call_args.args[0])
     assert BODY in prompt
     assert "szenari" in prompt.lower()
+    if optional_graph_failure:
+        assert result["status"] == "partial"
+        assert "supplemental_tool_failed" in result["research_coverage"]["gaps"]
 
 
 async def test_missing_provider_is_visible_and_historical_mode_can_opt_out(monkeypatch):
@@ -144,7 +165,7 @@ async def test_followup_uses_same_time_window_cache_and_public_question(monkeypa
     identity = hashlib.sha256((ARTICLE + "\0" + BODY).encode()).hexdigest()[:24]
     synthesis = AsyncMock()
     synthesis.ainvoke.return_value = AIMessage(
-        content=json.dumps(draft(source_id=f"ev-{identity}", quote=BODY))
+        content=json.dumps(draft(source_id=f"ev-{identity}"))
     )
     monkeypatch.setattr(workflow, "create_synthesis_llm", lambda **kw: synthesis)
     result = await workflow.run_intelligence_query("Iran negotiations")
@@ -178,7 +199,7 @@ async def test_fresh_backend_observation_can_supply_a_source_when_web_is_unavail
     item = to_evidence_item(raw)
     synthesis = AsyncMock()
     synthesis.ainvoke.return_value = AIMessage(
-        content=json.dumps(draft(source_id=item.evidence_id, quote=BODY))
+        content=json.dumps(draft(source_id=item.evidence_id))
     )
     monkeypatch.setattr(workflow, "create_synthesis_llm", lambda **kw: synthesis)
     result = await workflow.run_intelligence_query("Iran", grounding_evidence=[raw])

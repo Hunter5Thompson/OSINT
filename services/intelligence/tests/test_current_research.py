@@ -497,3 +497,37 @@ async def test_oversized_provider_response_is_bounded_and_has_a_redacted_receipt
         ).search("Iran")
     assert result.coverage.situation == "research_failed"
     assert result.coverage.attempts[0].code == "response_too_large"
+
+
+async def test_a_long_single_paragraph_is_never_cut_before_a_late_negation():
+    text = "Iran officials discussed " + "the disputed report " * 200 + "but denied it entirely."
+
+    def provider(request):
+        if request.url.path == "/search":
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "url": ARTICLE,
+                            "title": "Iran",
+                            "content": "teaser",
+                            "published_date": "2026-11-06T12:00:00Z",
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(200, json={"results": [{"url": ARTICLE, "raw_content": text}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        result = await CurrentResearch(
+            ResearchRun(as_of=AS_OF),
+            client=client,
+            api_key="fixture",
+            base_url="https://tavily.test",
+        ).search("Iran")
+    assert all(
+        not item.excerpt or "but denied it entirely." in item.excerpt for item in result.evidence
+    )
+    assert result.coverage.current_evidence_ids == []
+    assert "excerpt_unavailable" in result.coverage.gaps

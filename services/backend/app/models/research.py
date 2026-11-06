@@ -51,4 +51,4 @@ class ResearchCoverage(BaseModel):
     gaps: list[str] = Field(default_factory=list)
     attempts: list[ResearchAttempt] = Field(default_factory=list)
     scope_key: str = "world"
-    spatial_basis: Literal["topic_only"] = "topic_only"
+    spatial_basis: Literal["topic_only", "scoped"] = "topic_only"

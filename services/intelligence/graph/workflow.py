@@ -317,6 +317,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
         messages = state.get("messages", [])
         tool_segments: list[tuple[str, object]] = []
         application_markers: list[SpatialApplicationMarkerV1] = []
+        scoped_evidence_ids: set[str] = set()
         for msg in messages:
             if hasattr(msg, "content") and getattr(msg, "type", None) == "tool":
                 content = msg.content if isinstance(msg.content, str) else str(msg.content)
@@ -326,10 +327,21 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 )
                 if marker is not None:
                     application_markers.append(marker)
+                    if marker.status == "applied" and marker.mode == "semantic-key":
+                        scoped_evidence_ids.update(
+                            item.evidence_id
+                            for item in evidence_items_from_artifact(getattr(msg, "artifact", None))
+                            if item.evidence_id
+                        )
                 if research_text:
                     tool_segments.append((research_text, getattr(msg, "artifact", None)))
 
         scope = state.get("spatial_scope")
+        require_occurrence = (
+            scope is not None
+            and scope.scope_key != "world"
+            and state.get("spatial_relation") == RetrievalSpatialRelation.OCCURRENCE
+        )
         if scope is not None:
             application = aggregate_spatial_application(
                 scope,
@@ -361,6 +373,11 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 for _, artifact in research_segments
                 for item in evidence_items_from_artifact(artifact)
                 if eligible_current_evidence(item, since, as_of)
+                and (
+                    not require_occurrence
+                    or item.evidence_id in scoped_evidence_ids
+                    or (item.retrieval is not None and item.retrieval.spatial_basis == "scoped")
+                )
             ]
             if qualified:
                 research_segments.insert(
@@ -373,20 +390,31 @@ async def react_synthesis_node(state: AgentState) -> dict:
             research_segments,
             budget=SYNTHESIS_RESEARCH_MAX_CHARS,
         )
-        if any(marker.status == "failed" for marker in application_markers):
-            raise PipelineFailureError("Retrieval stage failed")
+        retrieval_failed = any(marker.status == "failed" for marker in application_markers)
         budget_blocked_ids = {
             event["tool_call_id"]
             for event in state.get("tool_events", [])
             if event.get("status") == "blocked" and event.get("reason") == "budget_exhausted"
         }
-        if any(
+        tool_failed = any(
             getattr(msg, "status", None) == "error"
             for msg in state.get("messages", [])
             if getattr(msg, "type", None) == "tool"
             and getattr(msg, "tool_call_id", None) not in budget_blocked_ids
-        ):
-            raise PipelineFailureError("Tool execution failed")
+        )
+        if retrieval_failed or tool_failed:
+            if not coverage:
+                raise PipelineFailureError(
+                    "Retrieval stage failed" if retrieval_failed else "Tool execution failed"
+                )
+            coverage = {
+                **coverage,
+                "status": "partial",
+                "gaps": [
+                    *coverage["gaps"],
+                    "supplemental_tool_failed",
+                ],
+            }
         if not evidence_artifacts:
             return {
                 **insufficient_evidence(),
@@ -399,12 +427,17 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 or any(e.get("status") == "blocked" for e in state.get("tool_events", []))
                 else "completed",
                 "spatial_application": spatial_application,
+                "research_coverage": coverage,
                 "agent_chain": state.get("agent_chain", []) + ["evidence_gate"],
             }
         consumed_items = evidence_items_from_artifact(evidence_artifacts)
-        coverage = state.get("research_coverage")
         if coverage:
-            coverage = reconcile_coverage(coverage, consumed_items)
+            coverage = reconcile_coverage(
+                coverage,
+                consumed_items,
+                require_occurrence=require_occurrence,
+                scoped_ids=scoped_evidence_ids,
+            )
         if coverage and coverage["situation"] != "evidence_available":
             return {
                 **insufficient_evidence(),
@@ -440,7 +473,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
         # Derive sources_used from validated artifacts (de-duplicated provider IDs)
         derived_sources = derive_sources_used(evidence_artifacts)
         logger.info(
-            "react_synthesis_grounding",
+            "react_research_collected",
             tool_call_count=len(state.get("tool_trace", [])),
             providers=derived_sources,
             tool_message_count=len(research_segments),
@@ -501,6 +534,11 @@ async def react_synthesis_node(state: AgentState) -> dict:
             # each reported current finding to an eligible original excerpt.
             current_ids = set(coverage["current_evidence_ids"])
             current_items = [item for item in consumed_items if item.evidence_id in current_ids]
+            logger.info(
+                "current_synthesis_grounding",
+                evidence_ids=[item.evidence_id for item in current_items],
+                original_excerpt_chars=sum(len(item.excerpt) for item in current_items),
+            )
             current_report = await compose_current_report(state["query"], current_items, llm)
             content = current_report.text
             coverage["forecast"] = (

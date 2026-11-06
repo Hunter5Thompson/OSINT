@@ -158,6 +158,7 @@ def build_briefing_context(
         grounding_evidence.append({
             "source_type": "dataset",
             "provider": "odin-live-signal",
+            "observed_at": s.ts if len(s.ts) <= 64 else None,
             "doc_id": f"odin-signal:{s.event_id}"[:200],
             "title": _sanitize(s.title)[:_TITLE_MAX],
             "content": content,

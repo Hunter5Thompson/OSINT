@@ -27,6 +27,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 
 from config import settings
 from rag.evidence import EvidenceItem, RetrievalProvenance, SourceRef, eligible_current_evidence
+from rag.excerpts import select_excerpt
 from rag.publication import check_publication
 
 
@@ -79,7 +80,7 @@ class ResearchCoverage(BaseModel):
     gaps: list[str] = Field(default_factory=list)
     attempts: list[ResearchAttempt] = Field(default_factory=list)
     scope_key: str = "world"
-    spatial_basis: Literal["topic_only"] = "topic_only"
+    spatial_basis: Literal["topic_only", "scoped"] = "topic_only"
 
 
 class ResearchResult(BaseModel):
@@ -122,25 +123,6 @@ def _public_url(value: object) -> bool:
             return not host.replace(".", "").isdigit()
     except ValueError:
         return False
-
-
-def _excerpt(text: str, question: str) -> str:
-    if len(text) <= 2400:
-        return text
-    words = set(re.findall(r"\w{3,}", question.lower()))
-    paragraphs = list(dict.fromkeys(p.strip() for p in text.split("\n\n") if p.strip()))
-    ranked = sorted(
-        enumerate(paragraphs), key=lambda pair: -sum(word in pair[1].lower() for word in words)
-    )
-    selected: list[tuple[int, str]] = []
-    remaining = 2390
-    for index, paragraph in ranked:
-        if remaining <= 50:
-            break
-        passage = paragraph[: min(remaining, 1000)]
-        selected.append((index, passage))
-        remaining -= len(passage) + 5
-    return "\n[…]\n".join(p for _, p in sorted(selected))[:2400]
 
 
 class CurrentResearch:
@@ -253,17 +235,23 @@ class CurrentResearch:
     def _result(self) -> ResearchResult:
         since = self._run.as_of - timedelta(hours=self._lookback_hours)
         evidence = list(self._evidence.values())
+        require_occurrence = (
+            self._run.scope_key != "world" and self._run.spatial_relation == "occurrence"
+        )
         current = [
             item.evidence_id
             for item in evidence
-            if item.evidence_id and eligible_current_evidence(item, since, self._run.as_of)
+            if item.evidence_id
+            and eligible_current_evidence(item, since, self._run.as_of)
+            and (
+                not require_occurrence
+                or (item.retrieval is not None and item.retrieval.spatial_basis == "scoped")
+            )
         ]
         date_conflict = any(
             item.retrieval and item.retrieval.publication_check == "conflict" for item in evidence
         )
-        occurrence_unproven = (
-            self._run.scope_key != "world" and self._run.spatial_relation == "occurrence"
-        )
+        occurrence_unproven = require_occurrence and not current
         errors = any(a.status in ("failed", "blocked", "partial") for a in self._attempts)
         success = any(a.status in ("succeeded", "empty", "partial") for a in self._attempts)
         return ResearchResult(
@@ -288,9 +276,11 @@ class CurrentResearch:
                 gaps=list(dict.fromkeys(a.code for a in self._attempts if a.code))
                 + (["spatial_occurrence_unproven"] if occurrence_unproven else [])
                 + (["window_expanded"] if self._window_expanded else [])
-                + (["publication_conflict"] if date_conflict else []),
+                + (["publication_conflict"] if date_conflict else [])
+                + (["excerpt_unavailable"] if any(not e.excerpt.strip() for e in evidence) else []),
                 attempts=self._attempts,
                 scope_key=self._run.scope_key,
+                spatial_basis="scoped" if require_occurrence and current else "topic_only",
             ).model_copy(deep=True),
         )
 
@@ -427,7 +417,7 @@ class CurrentResearch:
             self._evidence[url] = EvidenceItem(
                 evidence_id=f"ev-{identity[:24]}",
                 title=hit["title"][:300],
-                excerpt=_excerpt(text, question),
+                excerpt=select_excerpt(text, question),
                 relevance_score=0.0,
                 content_hash=digest,
                 source=SourceRef(

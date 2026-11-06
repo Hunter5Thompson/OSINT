@@ -22,12 +22,11 @@ def source():
     )
 
 
-def draft(source_id="ev-current", quote=QUOTE):
+def draft(source_id="ev-current"):
     return {
         "findings": [
             {
-                "source_id": source_id,
-                "quote": quote,
+                "passage_id": f"{source_id}:p0",
                 "statement": "Der Minister bestreitet einen Angriffsbefehl.",
             }
         ],
@@ -59,16 +58,13 @@ async def test_quote_and_source_identity_survive_conditional_report():
     assert model.ainvoke.await_count == 2
 
 
-@pytest.mark.parametrize(
-    "payload", [draft(source_id="ev-old"), draft(quote="An attack was ordered.")]
-)
-async def test_old_citations_and_invented_or_reversed_quotes_fail_closed(payload):
+async def test_unknown_or_old_passage_ids_fail_closed():
     from agents.current_report import compose_current_report
 
     model = AsyncMock()
-    model.ainvoke.return_value = AIMessage(content=json.dumps(payload))
+    model.ainvoke.return_value = AIMessage(content=json.dumps(draft(source_id="ev-old")))
     with pytest.raises(PipelineFailureError):
-        await compose_current_report("Iran nächste 48 Stunden", [source()], model)
+        await compose_current_report("Iran", [source()], model)
 
 
 async def test_attack_forecast_cannot_omit_the_three_conditional_scenarios():
@@ -82,18 +78,7 @@ async def test_attack_forecast_cannot_omit_the_three_conditional_scenarios():
         await compose_current_report("Neue Angriffe in den nächsten 48 Stunden?", [source()], model)
 
 
-async def test_trimming_away_a_negation_cannot_become_a_source_quote():
-    from agents.current_report import compose_current_report
-
-    model = AsyncMock()
-    model.ainvoke.return_value = AIMessage(
-        content=json.dumps(draft(quote="that an attack had been ordered."))
-    )
-    with pytest.raises(PipelineFailureError):
-        await compose_current_report("Iran", [source()], model)
-
-
-async def test_opposing_authors_keep_their_own_quotes_and_cannot_swap_attribution():
+async def test_opposing_authors_keep_their_own_passages():
     from agents.current_report import compose_current_report
 
     denial = source()
@@ -106,17 +91,43 @@ async def test_opposing_authors_keep_their_own_quotes_and_cannot_swap_attributio
     payload = draft()
     payload["findings"].append(
         {
-            "source_id": "ev-opponent",
-            "quote": allegation.excerpt,
+            "passage_id": "ev-opponent:p0",
             "statement": "Die Opposition behauptet einen Angriffsbefehl.",
         }
     )
     model = AsyncMock()
     model.ainvoke.return_value = AIMessage(content=json.dumps(payload))
     report = (await compose_current_report("Iran", [denial, allegation], model)).text
-    assert f"[ev-current]\n\n> {denial.excerpt}" in report
-    assert f"[ev-opponent]\n\n> {allegation.excerpt}" in report
-    payload["findings"][1]["source_id"] = "ev-current"
+    assert "[ev-current]" in report and f"> {denial.excerpt}" in report
+    assert "[ev-opponent]" in report and f"> {allegation.excerpt}" in report
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Officials denied that a U.S. attack had been ordered.",
+        "Officials explicitly rejected this claim: an attack has been ordered.",
+        "Officials explicitly rejected this claim — an attack has been ordered.",
+    ],
+)
+async def test_passage_selection_preserves_negation_abbreviations_and_complete_paragraph(text):
+    from agents.current_report import compose_current_report
+
+    item = source().model_copy(update={"excerpt": text})
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(content=json.dumps(draft()))
+    report = await compose_current_report("Iran", [item], model)
+    assert "> " + text in report.text
+    prompt = model.ainvoke.call_args.args[0][1].content
+    assert text in prompt and "ev-current:p0" in prompt
+
+
+async def test_model_cannot_replace_a_selected_passage_with_its_own_quote():
+    from agents.current_report import compose_current_report
+
+    payload = draft()
+    payload["findings"][0]["quote"] = "an attack has been ordered."
+    model = AsyncMock()
     model.ainvoke.return_value = AIMessage(content=json.dumps(payload))
     with pytest.raises(PipelineFailureError):
-        await compose_current_report("Iran", [denial, allegation], model)
+        await compose_current_report("Iran", [source()], model)

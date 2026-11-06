@@ -74,14 +74,20 @@ Historical mode cannot invoke arbitrary public URL/query tools; current follow-u
 searches use the pinned public question and an enumerated focus.
 
 Current synthesis receives only eligible source excerpts. Its two model passes
-produce typed findings and conditional scenarios; exact full-sentence quotations
-are checked against the cited excerpt. Translation and interpretation remain
-labelled model output requiring expert review. Cross-author quotation swaps,
-trimmed negations and missing attack scenarios fail closed.
+produce typed findings and conditional scenarios. The model selects fixed paragraph
+IDs; rendering inserts the entire original passage. No substring quotation or
+character-cut article paragraph is permitted. Translation and interpretation remain
+labelled model output requiring expert review. Unknown passage IDs, model-supplied
+replacement quotes and missing attack scenarios fail closed. Read excerpts remain
+limited context and do not establish semantic entailment or external truth.
 
-Technical evidence so far: 936 intelligence tests, 1,206 backend tests,
-962 frontend tests and 13 isolated Neo4j tests. Four browser tests passed before
-the latest receipt display additions; that build is being rechecked. Further
+Optional tool failures preserve valid partial current answers with an explicit gap.
+Occurrence queries accept only current evidence from the pinned spatial filter;
+topic-only web matches cannot enable an occurrence claim.
+
+Technical evidence so far: 942 intelligence tests, 1,206 backend tests,
+962 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
+the latest receipt display additions. Further
 independent review and live content qualification are in progress. Production
 containers have not been changed.
 

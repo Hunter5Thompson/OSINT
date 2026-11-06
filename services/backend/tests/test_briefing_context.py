@@ -141,6 +141,8 @@ def test_long_signal_title_keeps_observation_time():
     ).grounding_evidence[1]
     assert len(sig["content"]) <= 2000
     assert "observation_time:" in sig["content"]          # metadata never displaced by a long title
+    assert sig["observed_at"] == _signal().ts
+    assert "published_at" not in sig
 
 
 def test_long_signal_type_stays_within_content_bound():

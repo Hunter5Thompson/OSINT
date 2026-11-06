@@ -255,7 +255,7 @@ export interface ResearchCoverage {
     source_reads?: Array<{url: string; status: "succeeded" | "failed"; code: string | null}>;
     reserved_credits: number; reported_credits: number | null }>;
   scope_key: string;
-  spatial_basis: "topic_only";
+  spatial_basis: "topic_only" | "scoped";
 }
 
 export interface EvidenceSummary {

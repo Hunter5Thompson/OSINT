@@ -38,7 +38,13 @@ async def current_research_node(state: AgentState, runtime: Runtime[ResearchCont
     }
 
 
-def reconcile_coverage(coverage: dict, items: list[EvidenceItem]) -> dict:
+def reconcile_coverage(
+    coverage: dict,
+    items: list[EvidenceItem],
+    *,
+    require_occurrence: bool = False,
+    scoped_ids: set[str] | None = None,
+) -> dict:
     """Apply the same gate to actual consumed backend, baseline and tool evidence."""
     result = dict(coverage)
     since = datetime.fromisoformat(coverage["published_since"].replace("Z", "+00:00"))
@@ -46,10 +52,22 @@ def reconcile_coverage(coverage: dict, items: list[EvidenceItem]) -> dict:
     result["current_evidence_ids"] = [
         item.evidence_id
         for item in items
-        if item.evidence_id and eligible_current_evidence(item, since, as_of)
+        if item.evidence_id
+        and eligible_current_evidence(item, since, as_of)
+        and (
+            not require_occurrence
+            or item.evidence_id in (scoped_ids or set())
+            or (item.retrieval is not None and item.retrieval.spatial_basis == "scoped")
+        )
     ]
-    if result["current_evidence_ids"] and "spatial_occurrence_unproven" not in coverage["gaps"]:
+    if result["current_evidence_ids"]:
         result["situation"] = "evidence_available"
+        if require_occurrence:
+            result["spatial_basis"] = "scoped"
+            result["gaps"] = [g for g in coverage["gaps"] if g != "spatial_occurrence_unproven"]
         if result["status"] == "unavailable":
             result["status"] = "partial"
+    elif require_occurrence:
+        result["situation"] = "insufficient_evidence"
+        result["status"] = "partial"
     return result
