@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
+from typing import cast
+
+import redis.asyncio as redis
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
 
 from app.config import settings
+from app.services.collector_availability import (
+    KEY,
+    CollectorAvailabilityReport,
+    availability_report,
+)
 from app.services.feed_freshness import FeedFreshnessReport, compute_feed_freshness
 from app.services.qdrant_client import get_qdrant_client
 
@@ -16,6 +26,22 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 _CACHE_KEY = "health:feeds"
 _CACHE_TTL_S = 60
+
+
+@router.get("/collectors", response_model=CollectorAvailabilityReport)
+async def get_collector_availability() -> CollectorAvailabilityReport:
+    """Per-publisher fetch outcomes, including failed and unobserved feeds."""
+    try:
+        async with asyncio.timeout(3):
+            async with redis.from_url(
+                settings.redis_url, decode_responses=True,
+                socket_connect_timeout=1, socket_timeout=1,
+            ) as client:
+                snapshot = cast(dict[str, str], await client.hgetall(KEY))
+        return availability_report(snapshot, now=int(time.time()))
+    except Exception as exc:
+        log.warning("collector_health_unavailable")
+        raise HTTPException(503, "collector fetch telemetry unavailable") from exc
 
 
 @router.get("/feeds", response_model=FeedFreshnessReport)

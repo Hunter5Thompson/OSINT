@@ -150,7 +150,7 @@ class Settings(BaseSettings):
     gdacs_interval_hours: int = 2
 
     # HAPI (Humanitarian Data Exchange)
-    hapi_app_identifier: str = ""  # Base64 encoded email
+    hapi_app_identifier: str = ""  # HAPI encode_identifier output (application name + email)
     # HAPI uses CronTrigger (daily 04:00 UTC), no interval setting needed
 
     # NOAA NHC (Tropical Weather)

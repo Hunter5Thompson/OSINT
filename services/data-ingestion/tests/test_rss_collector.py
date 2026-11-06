@@ -270,6 +270,7 @@ def test_rss_init_does_not_touch_qdrant_network():
 @pytest.mark.asyncio
 async def test_rss_collect_preflights_collection_before_processing():
     collector = RSSCollector.__new__(RSSCollector)
+    collector._redis = None
     collector._ensure_collection = AsyncMock()
 
     with patch("feeds.rss_collector.RSS_FEEDS", []):

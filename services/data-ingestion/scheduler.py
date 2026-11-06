@@ -18,6 +18,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from build_revision import BUILD_REVISION
 from config import settings
+from feeds.availability import record_fetch, register_catalog
 from feeds.correlation_job import CorrelationJob
 from feeds.eonet_collector import EONETCollector
 from feeds.firms_collector import FIRMSCollector
@@ -593,6 +594,14 @@ def initial_collection_jobs() -> list[Callable[[], Awaitable[None]]]:
 async def main() -> None:
     """Start the scheduler and run until interrupted."""
     log.info("scheduler_starting", revision=BUILD_REVISION)
+    await register_catalog(_get_redis_client())
+    if not settings.hapi_app_identifier:
+        from feeds.hapi_collector import FOCUS_COUNTRIES
+
+        for country in FOCUS_COUNTRIES:
+            await record_fetch(
+                _get_redis_client(), "hapi", country, error_code="missing_identifier"
+            )
     scheduler = create_scheduler()
 
     # Register graceful shutdown

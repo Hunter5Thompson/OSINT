@@ -14,6 +14,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import settings
+from feeds.availability import fetch_error, record_fetch, register_catalog
 from feeds.provenance import ingestion_timestamps, provenance_fields
 from pipeline import (
     ExtractionConfigError,
@@ -260,13 +261,17 @@ class RSSCollector:
                 resp = await client.get(url)
                 resp.raise_for_status()
         except httpx.HTTPError as exc:
+            await record_fetch(self._redis, "rss", name, error_code=fetch_error(exc))
             log.warning("rss_fetch_failed", feed=name, error=str(exc))
             return 0
 
         parsed = feedparser.parse(resp.text)
-        if parsed.bozo and not parsed.entries:
-            log.warning("rss_parse_failed", feed=name, error=str(parsed.bozo_exception))
+        if (parsed.bozo and not parsed.entries) or not parsed.version:
+            await record_fetch(self._redis, "rss", name, error_code="invalid_response")
+            log.warning("rss_parse_failed", feed=name)
             return 0
+
+        await record_fetch(self._redis, "rss", name, item_count=len(parsed.entries))
 
         entries = parsed.entries[:MAX_ENTRIES_PER_FEED]
         log.info("rss_feed_started", feed=name, entries=len(entries))
@@ -375,6 +380,7 @@ class RSSCollector:
     # ------------------------------------------------------------------
     async def collect(self) -> None:
         """Fetch all RSS feeds and ingest new articles."""
+        await register_catalog(self._redis)
         await self._ensure_collection()
         log.info("rss_collection_started", feed_count=len(RSS_FEEDS))
         total = 0

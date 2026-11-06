@@ -11,16 +11,17 @@ from lxml import etree
 from qdrant_client.models import PointStruct
 
 from config import Settings
+from feeds.availability import fetch_error, record_fetch
 from feeds.base import BaseCollector
 
 log = structlog.get_logger(__name__)
 
 OFAC_FEEDS = {
-    "sdn": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/sdn_advanced.xml",
-    "consolidated": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/cons_advanced.xml",
+    "sdn": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/sdn.xml",
+    "consolidated": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/consolidated.xml",
 }
 
-_NS = {"ns": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_ADVANCED.XML"}
+_NS = {"ns": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML"}
 
 # 120s timeout for large XML downloads
 _DOWNLOAD_TIMEOUT = 120.0
@@ -40,7 +41,12 @@ def parse_sdn_xml(xml_text: str) -> list[dict]:
     Each dict contains:
         ofac_id, entity_type, full_name, programs, aliases, identifiers, addresses
     """
-    root = etree.fromstring(xml_text.encode() if isinstance(xml_text, str) else xml_text)
+    root = etree.fromstring(
+        xml_text.encode() if isinstance(xml_text, str) else xml_text,
+        parser=etree.XMLParser(resolve_entities=False, no_network=True),
+    )
+    if root.tag != f"{{{_NS['ns']}}}sdnList":
+        raise ValueError("Unsupported OFAC XML schema")
     entries: list[dict] = []
 
     for entry_el in root.findall("ns:sdnEntry", _NS):
@@ -143,12 +149,14 @@ class OFACCollector(BaseCollector):
     async def _fetch_xml(self, feed_name: str, url: str) -> str | None:
         """Download XML feed with extended timeout."""
         try:
-            resp = await self.http.get(url, timeout=_DOWNLOAD_TIMEOUT)
+            resp = await self.http.get(url, timeout=_DOWNLOAD_TIMEOUT, follow_redirects=True)
             resp.raise_for_status()
             log.info("ofac_feed_downloaded", feed=feed_name, bytes=len(resp.content))
             return resp.text
         except Exception as exc:
-            log.error("ofac_fetch_failed", feed=feed_name, error=str(exc))
+            error_code = fetch_error(exc)
+            await record_fetch(self.redis, "ofac", feed_name, error_code=error_code)
+            log.error("ofac_fetch_failed", feed=feed_name, error_code=error_code)
             return None
 
     async def _write_neo4j(self, entry: dict) -> None:
@@ -255,9 +263,11 @@ MERGE (e)-[:HAS_ID]->(i)
                 continue
             try:
                 entries = parse_sdn_xml(xml_text)
+                await record_fetch(self.redis, "ofac", feed_name, item_count=len(entries))
                 log.info("ofac_feed_parsed", feed=feed_name, count=len(entries))
                 all_entries.extend(entries)
             except Exception as exc:
+                await record_fetch(self.redis, "ofac", feed_name, error_code="invalid_response")
                 log.error("ofac_parse_failed", feed=feed_name, error=str(exc))
 
         # Phase 2: Cross-feed dedup by ofac_id

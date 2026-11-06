@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
-from feeds.ofac_collector import OFACCollector, parse_sdn_xml
+from feeds.ofac_collector import OFAC_FEEDS, OFACCollector, parse_sdn_xml
 
 SAMPLE_SDN_XML = """\
 <?xml version="1.0" encoding="utf-8"?>
-<sdnList xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_ADVANCED.XML">
+<sdnList xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML">
   <publshInformation>
     <Publish_Date>04/01/2026</Publish_Date>
   </publshInformation>
@@ -64,7 +65,7 @@ SAMPLE_SDN_XML = """\
 
 SAMPLE_CONS_XML = """\
 <?xml version="1.0" encoding="utf-8"?>
-<sdnList xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_ADVANCED.XML">
+<sdnList xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML">
   <sdnEntry>
     <uid>12345</uid>
     <sdnType>Entity</sdnType>
@@ -110,6 +111,26 @@ def collector(mock_settings):
 def test_parse_sdn_xml_entity_count():
     entries = parse_sdn_xml(SAMPLE_SDN_XML)
     assert len(entries) == 2
+
+
+def test_unknown_or_advanced_schema_is_not_reported_as_empty_success():
+    with pytest.raises(ValueError, match="schema"):
+        parse_sdn_xml('<Sanctions xmlns="urn:advanced"/>')
+
+
+def test_configured_downloads_match_flat_parser():
+    assert OFAC_FEEDS["sdn"].endswith("/sdn.xml")
+    assert OFAC_FEEDS["consolidated"].endswith("/consolidated.xml")
+
+
+@pytest.mark.asyncio
+async def test_ofac_follows_official_download_redirect(collector):
+    collector.http.get = AsyncMock(return_value=httpx.Response(
+        200, text=SAMPLE_SDN_XML, request=httpx.Request("GET", "https://ofac.example/sdn.xml")
+    ))
+    result = await collector._fetch_xml("sdn", OFAC_FEEDS["sdn"])
+    assert result == SAMPLE_SDN_XML
+    assert collector.http.get.call_args.kwargs["follow_redirects"] is True
 
 
 def test_parse_sdn_xml_entity_fields():
