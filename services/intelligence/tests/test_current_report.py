@@ -369,7 +369,16 @@ async def test_rejected_free_scenario_title_cannot_leak_a_factual_claim():
     assert "Szenario 1 · nicht bewertet" in report.text
 
 
-async def test_open_forecast_does_not_discard_an_available_current_situation():
+@pytest.mark.parametrize(
+    "question,scenario_count",
+    [
+        ("Neue Angriffe auf Iran morgen?", 3),
+        ("Wie entwickelt sich die Lage morgen?", 0),
+    ],
+)
+async def test_open_forecast_does_not_discard_an_available_current_situation(
+    question, scenario_count
+):
     from agents.current_report import compose_current_report
 
     model = AsyncMock()
@@ -388,13 +397,15 @@ async def test_open_forecast_does_not_discard_an_available_current_situation():
             )
         ),
     ]
-    report = await compose_current_report("Neue Angriffe auf Iran morgen?", [source()], model)
+    report = await compose_current_report(question, [source()], model)
     assert report.finding_count == 1
     assert QUOTE in report.text
     assert draft()["findings"][0]["statement"] in report.text
-    assert report.scenario_count == 3
-    assert "Szenariodetails" in report.text
-    assert report.scenario_check == "partial"
+    assert report.scenario_count == scenario_count
+    assert report.forecast_requested is True
+    if scenario_count:
+        assert "Szenariodetails" in report.text
+        assert report.scenario_check == "partial"
     assert "Stützende Angaben" not in report.text
 
 

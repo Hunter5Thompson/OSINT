@@ -580,7 +580,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
                     "agent_chain": state.get("agent_chain", []) + ["current_relevance_gate"],
                 }
             coverage["forecast"] = (
-                "not_assessed" if current_report.scenario_count else "not_requested"
+                "not_assessed" if current_report.forecast_requested else "not_requested"
             )
             evidence_artifacts = evidence_artifact(current_items)
             derived_sources = derive_sources_used(evidence_artifacts)

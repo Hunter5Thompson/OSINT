@@ -85,7 +85,7 @@ Optional tool failures preserve valid partial current answers with an explicit g
 Occurrence queries accept only current evidence from the pinned spatial filter;
 topic-only web matches cannot enable an occurrence claim.
 
-Technical evidence so far: 968 intelligence tests, 1,206 backend tests,
+Technical evidence so far: 969 intelligence tests, 1,206 backend tests,
 963 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
 the latest receipt display additions. Further
 independent review and live content qualification are in progress. Production
@@ -171,3 +171,7 @@ can be available even when no threat or forecast rating is justified.
 Remaining source-level limitations include missed contradictions and occasional
 role, time or terminology errors despite positive model checks. These are recorded
 as review limitations, never as external factual acceptance or calibrated forecasts.
+
+Forecast intent is retained independently of the number of generated scenarios.
+A recovered situation with no authorized scenario details still reports an open
+forecast when the user requested one, including non-military future questions.

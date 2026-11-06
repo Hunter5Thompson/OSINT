@@ -25,6 +25,7 @@ class RenderedCurrentReport(BaseModel):
     text: str
     scenario_count: int
     finding_count: int
+    forecast_requested: bool = False
     statement_check: Literal["passed", "partial", "unavailable"] = "passed"
     scenario_check: Literal["passed", "partial", "unavailable"] = "passed"
 
@@ -434,6 +435,7 @@ async def compose_current_report(
                     ),
                     scenario_count=len(draft.scenarios),
                     finding_count=len(draft.findings),
+                    forecast_requested=forecast_requested,
                     statement_check="unavailable"
                     if not checked.available
                     else "passed"
