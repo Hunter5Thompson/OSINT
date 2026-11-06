@@ -244,7 +244,9 @@ async def test_current_research_survives_save_reload_chat_and_explicit_clear(cas
     from app.models.research import ResearchCoverage
 
     store, report_id, message_ids = case
-    fixture = json.loads((Path(__file__).parents[3] / "tests/fixtures/current-research.json").read_text())
+    fixture = json.loads(
+        (Path(__file__).parents[3] / "tests/fixtures/current-research.json").read_text()
+    )
     analysis = IntelAnalysis(query="synthetic", analysis="Current fixture", **fixture)
     patch = store.build_hydration_patch(analysis, country_name="Synthetic")
     await store.update_report(report_id, patch)
