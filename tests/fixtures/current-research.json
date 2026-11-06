@@ -17,18 +17,27 @@
         "status": "succeeded",
         "code": null,
         "reserved_credits": 1,
-        "reported_credits": 1.0
+        "reported_credits": 1.0,
+        "trigger": "baseline",
+        "query": null,
+        "started_at": null,
+        "source_reads": []
       },
       {
         "action": "extract",
         "status": "partial",
         "code": "original_unavailable",
         "reserved_credits": 1,
-        "reported_credits": 1.0
+        "reported_credits": 1.0,
+        "trigger": "baseline",
+        "query": null,
+        "started_at": null,
+        "source_reads": []
       }
     ],
     "scope_key": "world",
-    "spatial_basis": "topic_only"
+    "spatial_basis": "topic_only",
+    "run_id": null
   },
   "evidence_summary": [
     {
@@ -52,7 +61,9 @@
         "original_lineage": "https://news.example.org/current",
         "lineage_basis": "url",
         "temporal_basis": "provider_publication",
-        "spatial_basis": "topic_only"
+        "spatial_basis": "topic_only",
+        "publication_check": "not_checked",
+        "original_publication_date": null
       }
     }
   ]

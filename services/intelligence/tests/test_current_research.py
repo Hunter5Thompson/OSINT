@@ -97,8 +97,11 @@ async def test_extract_partial_success_keeps_failure_visible_and_does_not_claim_
     assert result.coverage.status == "partial"
     assert result.coverage.current_evidence_ids == []
     assert result.coverage.situation == "insufficient_evidence"
-    assert result.coverage.attempts[-1].status == "partial"
-    assert result.coverage.attempts[-1].code == "original_unavailable"
+    assert next(a for a in result.coverage.attempts if a.action == "extract").status == "partial"
+    assert (
+        next(a for a in result.coverage.attempts if a.action == "extract").code
+        == "original_unavailable"
+    )
 
 
 async def test_provider_failure_is_a_redacted_receipt_and_followups_share_budget():
@@ -207,7 +210,7 @@ async def test_empty_search_and_missing_key_never_extract():
         disabled = await CurrentResearch(
             ResearchRun(as_of=AS_OF), client=client, api_key="", base_url="https://tavily.test"
         ).search("Iran")
-    assert len(calls) == 1
+    assert len(calls) == 3
     assert result.coverage.situation == "insufficient_evidence"
     assert disabled.coverage.situation == "research_failed"
     assert disabled.coverage.attempts[0].code == "not_configured"
@@ -366,3 +369,131 @@ async def test_owned_corpus_remains_available_when_external_search_is_not_config
     assert result.coverage.status == "partial"
     assert result.coverage.attempts[0].action == "local_search"
     assert result.coverage.attempts[-1].code == "not_configured"
+
+
+async def test_topic_only_web_evidence_cannot_authorize_scoped_occurrence():
+    def provider(request):
+        if request.url.path == "/search":
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "url": ARTICLE,
+                            "title": "London",
+                            "content": BODY,
+                            "published_date": "2026-11-06T12:00:00Z",
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(200, json={"results": [{"url": ARTICLE, "raw_content": BODY}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as c:
+        result = await CurrentResearch(
+            ResearchRun(as_of=AS_OF, scope_key="country:IRN", spatial_relation="occurrence"),
+            client=c,
+            api_key="fixture",
+            base_url="https://tavily.test",
+        ).search("Iran events")
+    assert result.coverage.situation == "insufficient_evidence"
+    assert "spatial_occurrence_unproven" in result.coverage.gaps
+
+
+async def test_baseline_always_searches_for_counterevidence_and_records_the_trigger():
+    queries = []
+
+    def provider(request):
+        if request.url.path == "/search":
+            queries.append(json.loads(request.content)["query"])
+        return httpx.Response(200, json={"results": []})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as c:
+        result = await CurrentResearch(
+            ResearchRun(as_of=AS_OF), client=c, api_key="fixture", base_url="https://tavily.test"
+        ).search("Iran military strikes")
+    assert len(queries) >= 2
+    assert "contrary evidence" in queries[1]
+    assert result.coverage.attempts[0].trigger == "baseline"
+    assert result.coverage.attempts[1].trigger == "counterevidence"
+    assert result.coverage.attempts[1].query == queries[1]
+
+
+async def test_thin_results_expand_only_within_the_pinned_window():
+    windows = []
+
+    def provider(request):
+        if request.url.path == "/search":
+            body = json.loads(request.content)
+            windows.append(body["start_date"])
+            return httpx.Response(200, json={"results": []})
+        raise AssertionError("No extraction without results")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as c:
+        research = CurrentResearch(
+            ResearchRun(as_of=AS_OF, lookback_hours=24, expanded_lookback_hours=168),
+            client=c,
+            api_key="fixture",
+            base_url="https://tavily.test",
+        )
+        result = await research.search("Iran")
+        later = await research.search("Iran official statements")
+    assert windows == ["2026-11-05", "2026-11-05", "2026-10-30", "2026-10-30"]
+    assert result.coverage.as_of == later.coverage.as_of == AS_OF
+    assert "window_expanded" in later.coverage.gaps
+    assert result.coverage.published_since == AS_OF.replace(month=10, day=30)
+
+
+async def test_original_publication_conflict_excludes_a_freshly_indexed_old_article():
+    def provider(request):
+        if request.url.path == "/search":
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "url": ARTICLE,
+                            "title": "Iran",
+                            "content": BODY,
+                            "published_date": "2026-11-06T12:00:00Z",
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "url": ARTICLE,
+                        "raw_content": "Published: May 2, 2026\n\n" + BODY,
+                    }
+                ]
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        result = await CurrentResearch(
+            ResearchRun(as_of=AS_OF),
+            client=client,
+            api_key="fixture",
+            base_url="https://tavily.test",
+        ).search("Iran")
+    assert result.coverage.current_evidence_ids == []
+    assert "publication_conflict" in result.coverage.gaps
+    assert result.evidence[0].retrieval.publication_check == "conflict"
+
+
+async def test_oversized_provider_response_is_bounded_and_has_a_redacted_receipt():
+    def provider(request):
+        return httpx.Response(200, json={"results": [], "padding": "x" * 2_100_000})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        result = await CurrentResearch(
+            ResearchRun(as_of=AS_OF),
+            client=client,
+            api_key="fixture",
+            base_url="https://tavily.test",
+        ).search("Iran")
+    assert result.coverage.situation == "research_failed"
+    assert result.coverage.attempts[0].code == "response_too_large"

@@ -227,6 +227,8 @@ export interface RetrievalProvenance {
   retrieved_at: string;
   content_kind: "snippet" | "fulltext" | "fulltext_chunk";
   content_sha256: string;
+  publication_check?: "not_checked" | "not_found" | "matched_day" | "timezone_unresolved" | "conflict";
+  original_publication_date?: string | null;
   source_chars: number;
   excerpt_truncated: boolean;
   original_lineage: string;
@@ -236,6 +238,7 @@ export interface RetrievalProvenance {
 }
 
 export interface ResearchCoverage {
+  run_id?: string | null;
   as_of: string;
   published_since: string;
   status: "complete" | "partial" | "unavailable" | "not_requested";
@@ -245,7 +248,12 @@ export interface ResearchCoverage {
   gaps: string[];
   attempts: Array<{ action: "search" | "extract" | "local_search";
     status: "succeeded" | "empty" | "partial" | "failed" | "blocked";
-    code: string | null; reserved_credits: number; reported_credits: number | null }>;
+    code: string | null;
+    trigger?: "baseline" | "counterevidence" | "followup" | "expanded_window";
+    query?: string | null;
+    started_at?: string | null;
+    source_reads?: Array<{url: string; status: "succeeded" | "failed"; code: string | null}>;
+    reserved_credits: number; reported_credits: number | null }>;
   scope_key: string;
   spatial_basis: "topic_only";
 }

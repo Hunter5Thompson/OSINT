@@ -14,6 +14,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command
 
+from agents.current_report import compose_current_report
 from agents.grounded_report import compose_report
 from agents.react_agent import (
     create_react_agent,
@@ -29,11 +30,12 @@ from config import settings
 from distill_capture import capture_synthesis_input
 from graph.assessment import ASSESSMENT_FORMAT, annotate_assessment, parse_assessment
 from graph.client import GraphClient
-from graph.current_research import current_research_node
+from graph.current_research import current_research_node, reconcile_coverage
 from graph.result import PipelineFailureError, insufficient_evidence
 from graph.state import AgentState
 from rag.current import ResearchContext, open_research
 from rag.evidence import (
+    eligible_current_evidence,
     evidence_artifact,
     evidence_items_from_artifact,
     evidence_time_summary,
@@ -350,6 +352,20 @@ async def react_synthesis_node(state: AgentState) -> dict:
         notebook_pack = state.get("notebook_evidence_pack") or ""
         if notebook_pack:
             research_segments.append((notebook_pack, state.get("notebook_evidence_artifact")))
+        coverage = state.get("research_coverage")
+        if coverage:
+            since = datetime.fromisoformat(coverage["published_since"].replace("Z", "+00:00"))
+            as_of = datetime.fromisoformat(coverage["as_of"].replace("Z", "+00:00"))
+            qualified = [
+                item
+                for _, artifact in research_segments
+                for item in evidence_items_from_artifact(artifact)
+                if eligible_current_evidence(item, since, as_of)
+            ]
+            if qualified:
+                research_segments.insert(
+                    0, pack_with_lineage(qualified, budget=13000, preserve_order=True)
+                )
         raw_research_chars = len(
             RESEARCH_SEPARATOR.join(text for text, _artifact in research_segments)
         )
@@ -375,8 +391,10 @@ async def react_synthesis_node(state: AgentState) -> dict:
             return {
                 **insufficient_evidence(),
                 "status": "partial"
-                if bool(state.get("research_coverage") and
-                        state["research_coverage"]["status"] != "complete")
+                if bool(
+                    state.get("research_coverage")
+                    and state["research_coverage"]["status"] != "complete"
+                )
                 or any(marker.completeness != "complete" for marker in application_markers)
                 or any(e.get("status") == "blocked" for e in state.get("tool_events", []))
                 else "completed",
@@ -385,6 +403,8 @@ async def react_synthesis_node(state: AgentState) -> dict:
             }
         consumed_items = evidence_items_from_artifact(evidence_artifacts)
         coverage = state.get("research_coverage")
+        if coverage:
+            coverage = reconcile_coverage(coverage, consumed_items)
         if coverage and coverage["situation"] != "evidence_available":
             return {
                 **insufficient_evidence(),
@@ -396,6 +416,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 "sources_used": derive_sources_used(evidence_artifacts),
                 "evidence_summary": evidence_time_summary(evidence_artifacts),
                 "spatial_application": spatial_application,
+                "research_coverage": coverage,
                 "agent_chain": state.get("agent_chain", []) + ["current_evidence_gate"],
             }
         if consumed_items and all(item.knowledge_role == "method" for item in consumed_items):
@@ -434,15 +455,18 @@ async def react_synthesis_node(state: AgentState) -> dict:
                     f"Erstelle einen finalen Intelligence-Lagebericht auf Deutsch.\n\n"
                     f"Anfrage: {state['query']}\n\n"
                     f"Recherche-Ergebnisse:\n{research_text}\n\n"
-                    + ("Aktuelle Lageanalyse: Trenne belegte Lage, zugeschriebene Aussagen, "
-                       "Widersprüche und offene Fragen. Bei der Frage nach Angriffen in den "
-                       "nächsten 48 Stunden behandle getrennt: keine neuen Angriffe, begrenzte "
-                       "Schläge und größere Eskalation. Nenne pro Szenario stützende und "
-                       "entgegenstehende Indizien mit Beleg-ID, öffentliche Prüfindikatoren "
-                       "und Bedingungen einer Neubewertung. Keine Zielauswahl oder taktischen "
-                       "Handlungsanweisungen. Eintrittseinschätzung und Vertrauen in die "
-                       "Einschätzung getrennt; unkalibrierte Prozentzahlen sind unzulässig.\n"
-                       if coverage else "")
+                    + (
+                        "Aktuelle Lageanalyse: Trenne belegte Lage, zugeschriebene Aussagen, "
+                        "Widersprüche und offene Fragen. Bei der Frage nach Angriffen in den "
+                        "nächsten 48 Stunden behandle getrennt: keine neuen Angriffe, begrenzte "
+                        "Schläge und größere Eskalation. Nenne pro Szenario stützende und "
+                        "entgegenstehende Indizien mit Beleg-ID, öffentliche Prüfindikatoren "
+                        "und Bedingungen einer Neubewertung. Keine Zielauswahl oder taktischen "
+                        "Handlungsanweisungen. Eintrittseinschätzung und Vertrauen in die "
+                        "Einschätzung getrennt; unkalibrierte Prozentzahlen sind unzulässig.\n"
+                        if coverage
+                        else ""
+                    )
                     + "Liefere einen knappen, handlungsrelevanten Report auf Deutsch mit:\n"
                     "1. Executive Summary (2–3 Sätze)\n"
                     "2. Key Findings (Bulletpoints)\n"
@@ -467,10 +491,29 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 ),
             ),
         ]
-        capture_synthesis_input(state["query"], messages)  # no-op unless DISTILL_CAPTURE_DIR set
-        if has_original_passages:
+        if not coverage:
+            capture_synthesis_input(
+                state["query"], messages
+            )  # no-op unless DISTILL_CAPTURE_DIR set
+        if coverage:
+            # Background and un-read snippets can guide discovery, but cannot
+            # supply claims in a current report. Exact quotation validation binds
+            # each reported current finding to an eligible original excerpt.
+            current_ids = set(coverage["current_evidence_ids"])
+            current_items = [item for item in consumed_items if item.evidence_id in current_ids]
+            current_report = await compose_current_report(state["query"], current_items, llm)
+            content = current_report.text
+            coverage["forecast"] = (
+                "not_assessed" if current_report.scenario_count else "not_requested"
+            )
+            evidence_artifacts = evidence_artifact(current_items)
+            derived_sources = derive_sources_used(evidence_artifacts)
+            response = AIMessage(content=content)
+        elif has_original_passages:
             content = await compose_report(
-                messages, {item.evidence_id for item in consumed_items if item.evidence_id}, llm,
+                messages,
+                {item.evidence_id for item in consumed_items if item.evidence_id},
+                llm,
                 background_only=all(item.knowledge_role != "source" for item in consumed_items),
             )
             response = AIMessage(content=content)
@@ -488,9 +531,11 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 "assessment_parse_failed", stage="react_synthesis", issues=assessment.issues
             )
         content = annotate_assessment(content, assessment)
-        research_limited = bool(coverage and coverage["status"] != "complete") or any(
-            event.get("status") == "blocked" for event in state.get("tool_events", [])
-        ) or any(marker.completeness != "complete" for marker in application_markers)
+        research_limited = (
+            bool(coverage and coverage["status"] != "complete")
+            or any(event.get("status") == "blocked" for event in state.get("tool_events", []))
+            or any(marker.completeness != "complete" for marker in application_markers)
+        )
         if research_limited:
             content = (
                 "Recherche unvollständig: Werkzeugbudget oder Teilquellen begrenzen "
@@ -500,6 +545,7 @@ async def react_synthesis_node(state: AgentState) -> dict:
         return {
             "status": "partial" if research_limited else "completed",
             "answerability": "undetermined",
+            "research_coverage": coverage,
             "synthesis": content,
             "threat_assessment": assessment.threat,
             "confidence": assessment.confidence,
@@ -600,8 +646,9 @@ async def tool_node_for_state(state: AgentState) -> dict:
                 coverage = update.get("research_coverage")
                 if coverage and len(coverage["attempts"]) > newest:
                     newest = len(coverage["attempts"])
-                    result.update({key: value for key, value in update.items()
-                                   if key != "messages"})
+                    result.update(
+                        {key: value for key, value in update.items() if key != "messages"}
+                    )
     except asyncio.CancelledError:
         logger.warning("tool_batch_cancelled", started_count=len(started))
         raise
@@ -714,6 +761,7 @@ async def run_intelligence_query(
 ) -> dict:
     """Run intelligence analysis — ReAct by default (fail-closed on failure);
     the legacy pipeline runs only when use_legacy=True."""
+    query_started_at = datetime.now(UTC)
     mode = "legacy" if use_legacy else "react"
     pinned_scope = spatial_scope.model_copy(deep=True) if spatial_scope is not None else None
     pinned_relation = RetrievalSpatialRelation(spatial_relation)
@@ -735,7 +783,9 @@ async def run_intelligence_query(
     try:
         notebook_items = await notebook_context(query)
         notebook_pack, notebook_artifact = pack_with_lineage(
-            notebook_items, budget=NOTEBOOK_EVIDENCE_MAX_CHARS, preserve_order=True,
+            notebook_items,
+            budget=NOTEBOOK_EVIDENCE_MAX_CHARS,
+            preserve_order=True,
         )
     except Exception as exc:
         raise PipelineFailureError("Notebook research failed") from exc
@@ -773,9 +823,12 @@ async def run_intelligence_query(
 
     try:
         async with open_research(
-            query, mode=research_mode,
+            query,
+            mode=research_mode,
             scope_key=pinned_scope.scope_key if pinned_scope else "world",
-            relation=pinned_relation.value, scope=pinned_scope,
+            relation=pinned_relation.value,
+            scope=pinned_scope,
+            as_of=query_started_at,
         ) as context:
             graph = legacy_graph if use_legacy else react_graph
             result = await asyncio.wait_for(

@@ -66,7 +66,26 @@ Maintenance update was tested independently before graph integration: LangGraph
 1.2.20, langchain-core 1.7.6 and langchain-openai 1.7.4, locked with uv 0.10.0;
 907 tests passed at that checkpoint. No framework replacement was needed.
 
-Technical evidence so far: 916 intelligence tests (plus a subsequent local
-original provenance regression), 1,206 backend tests, 962 frontend tests,
-13 isolated Neo4j tests and four browser tests. Further review and live content
-qualification are in progress. Production containers have not been changed.
+Review corrections add mandatory counterevidence discovery, explicit expansion
+from 72 hours to seven days when no eligible originals are found, original-date
+conflict checks, per-URL extraction receipts and shared eligibility checks for
+supplemental corpus evidence. Provider response bodies are bounded to 2 MiB.
+Historical mode cannot invoke arbitrary public URL/query tools; current follow-up
+searches use the pinned public question and an enumerated focus.
+
+Current synthesis receives only eligible source excerpts. Its two model passes
+produce typed findings and conditional scenarios; exact full-sentence quotations
+are checked against the cited excerpt. Translation and interpretation remain
+labelled model output requiring expert review. Cross-author quotation swaps,
+trimmed negations and missing attack scenarios fail closed.
+
+Technical evidence so far: 936 intelligence tests, 1,206 backend tests,
+962 frontend tests and 13 isolated Neo4j tests. Four browser tests passed before
+the latest receipt display additions; that build is being rechecked. Further
+independent review and live content qualification are in progress. Production
+containers have not been changed.
+
+The optional `docker-compose.current-research.yml` overlay mounts a private
+dotenv file read-only at `/run/secrets/tavily.env`. Set `ODIN_TAVILY_ENV_FILE` to
+the existing host file. Do not copy credentials into images or the repository.
+`/health` reports configuration readiness without a paid provider probe.

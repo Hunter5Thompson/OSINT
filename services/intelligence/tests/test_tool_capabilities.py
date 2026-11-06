@@ -147,3 +147,13 @@ async def test_tool_node_is_built_from_the_same_state_capabilities(monkeypatch) 
         "query_knowledge_graph",
         "classify_event",
     ]
+
+
+@pytest.mark.parametrize("mode", ["current", "historical"])
+async def test_public_run_never_exposes_arbitrary_external_url_tools(mode):
+    state = agent_state()
+    state["research_mode"] = mode
+    names = _names(tools_for_state(state))
+    assert "rss_fetch" not in names
+    assert "gdelt_query" not in names
+    assert ("current_search" in names) == (mode == "current")

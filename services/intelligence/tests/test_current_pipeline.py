@@ -1,6 +1,7 @@
 """Current default crosses real HTTP route, graph, research and evidence codecs."""
 
 import hashlib
+import json
 from unittest.mock import AsyncMock
 
 import httpx
@@ -11,6 +12,7 @@ from pydantic import SecretStr
 import graph.workflow as workflow
 import main
 from config import settings
+from tests.test_current_report import draft
 from tests.test_current_research import ARTICLE, BODY
 
 
@@ -58,10 +60,7 @@ async def test_zero_tool_calls_still_research_and_consume_current_original(monke
     identity = hashlib.sha256((ARTICLE + "\0" + BODY).encode()).hexdigest()[:24]
     synthesis = AsyncMock()
     synthesis.ainvoke.return_value = AIMessage(
-        content=(
-            f"Talks continued [ev-{identity}].\nThreat Assessment: NOT_ASSESSED\n"
-            "Confidence Level: not assessed"
-        )
+        content=json.dumps(draft(source_id=f"ev-{identity}", quote=BODY))
     )
     monkeypatch.setattr(workflow, "create_synthesis_llm", lambda **kw: synthesis)
     async with real_client(
@@ -72,7 +71,7 @@ async def test_zero_tool_calls_still_research_and_consume_current_original(monke
         )
     assert response.status_code == 200, response.text
     result = response.json()
-    assert [r.url.path for r in requests] == ["/search", "/extract"]
+    assert [r.url.path for r in requests] == ["/search", "/extract", "/search"]
     assert result["research_coverage"]["situation"] == "evidence_available"
     assert result["evidence_summary"][0]["retrieval"]["content_kind"] == "fulltext"
     assert result["evidence_summary"][0]["excerpt"] == BODY
@@ -80,7 +79,7 @@ async def test_zero_tool_calls_still_research_and_consume_current_original(monke
     assert "current_research" in result["agent_chain"]
     prompt = "\n".join(m.content for m in synthesis.ainvoke.call_args.args[0])
     assert BODY in prompt
-    assert "scenario" in prompt.lower()
+    assert "szenari" in prompt.lower()
 
 
 async def test_missing_provider_is_visible_and_historical_mode_can_opt_out(monkeypatch):
@@ -145,16 +144,44 @@ async def test_followup_uses_same_time_window_cache_and_public_question(monkeypa
     identity = hashlib.sha256((ARTICLE + "\0" + BODY).encode()).hexdigest()[:24]
     synthesis = AsyncMock()
     synthesis.ainvoke.return_value = AIMessage(
-        content=(
-            f"Talks [ev-{identity}].\n"
-            "Threat Assessment: NOT_ASSESSED\nConfidence Level: not assessed"
-        )
+        content=json.dumps(draft(source_id=f"ev-{identity}", quote=BODY))
     )
     monkeypatch.setattr(workflow, "create_synthesis_llm", lambda **kw: synthesis)
     result = await workflow.run_intelligence_query("Iran negotiations")
-    assert [r.url.path for r in requests] == ["/search", "/extract", "/search"]
+    assert [r.url.path for r in requests] == ["/search", "/extract", "/search", "/search"]
     searches = [json.loads(r.content) for r in requests if r.url.path == "/search"]
     assert searches[0]["start_date"] == searches[1]["start_date"]
     assert searches[1]["query"].startswith("Iran negotiations")
-    assert len(result["research_coverage"]["attempts"]) == 4
+    assert len(result["research_coverage"]["attempts"]) == 5
     assert len(result["evidence_summary"]) == 1
+
+
+async def test_fresh_backend_observation_can_supply_a_source_when_web_is_unavailable(monkeypatch):
+    from datetime import UTC, datetime
+
+    from rag.evidence import to_evidence_item
+
+    monkeypatch.setattr(settings, "tavily_api_key", SecretStr(""))
+    monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
+    monkeypatch.setattr(workflow, "notebook_context", AsyncMock(return_value=[]))
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(content="No calls")
+    monkeypatch.setattr(workflow, "create_react_agent", lambda tools: model)
+    raw = {
+        "source_type": "dataset",
+        "provider": "odin-live-signal",
+        "doc_id": "fixture-current",
+        "title": "Public observation",
+        "content": BODY,
+        "observed_at": datetime.now(UTC).isoformat(),
+    }
+    item = to_evidence_item(raw)
+    synthesis = AsyncMock()
+    synthesis.ainvoke.return_value = AIMessage(
+        content=json.dumps(draft(source_id=item.evidence_id, quote=BODY))
+    )
+    monkeypatch.setattr(workflow, "create_synthesis_llm", lambda **kw: synthesis)
+    result = await workflow.run_intelligence_query("Iran", grounding_evidence=[raw])
+    assert result["research_coverage"]["situation"] == "evidence_available"
+    assert result["research_coverage"]["status"] == "partial"
+    assert item.evidence_id in result["analysis"]

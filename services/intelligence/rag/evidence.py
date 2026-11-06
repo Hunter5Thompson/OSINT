@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, Field, ValidationError
@@ -112,6 +112,10 @@ class RetrievalProvenance(BaseModel):
     retrieved_at: datetime
     content_kind: Literal["snippet", "fulltext", "fulltext_chunk"]
     content_sha256: str
+    publication_check: Literal[
+        "not_checked", "not_found", "matched_day", "timezone_unresolved", "conflict"
+    ] = "not_checked"
+    original_publication_date: date | None = None
     source_chars: int = 0
     excerpt_truncated: bool = False
     original_lineage: str
@@ -285,9 +289,35 @@ def to_evidence_item(result: dict) -> EvidenceItem:
         excerpt=excerpt,
         relevance_score=float(result.get("score", 0.0)),
         content_hash=str(content_hash) if content_hash else None,
+        retrieval=RetrievalProvenance(
+            retrieved_at=datetime.now(UTC),
+            content_kind="fulltext_chunk",
+            content_sha256=hashlib.sha256(str(result.get("content", "")).encode()).hexdigest(),
+            source_chars=len(str(result.get("content", ""))),
+            excerpt_truncated=len(str(result.get("content", ""))) > len(excerpt),
+            original_lineage=url or source_ref_id,
+            temporal_basis="source_publication",
+        )
+        if result.get("source") == "rss_fulltext"
+        else None,
         source_class=result.get("source_class"),
         observed_at=_parse_dt(result.get("observed_at")),
         ingested_at=_parse_dt(result.get("ingested_at")),
+    )
+
+
+def eligible_current_evidence(item: EvidenceItem, since: datetime, as_of: datetime) -> bool:
+    """A source-availability gate, never an assertion of truth or event date."""
+    if item.knowledge_role != "source":
+        return False
+    if item.source.provider == "odin-live-signal" and item.source.source_type == "dataset":
+        return item.observed_at is not None and since <= item.observed_at <= as_of
+    return (
+        item.retrieval is not None
+        and item.retrieval.content_kind in ("fulltext", "fulltext_chunk")
+        and item.retrieval.publication_check != "conflict"
+        and item.source.published_at is not None
+        and since <= item.source.published_at <= as_of
     )
 
 
@@ -460,8 +490,10 @@ def evidence_time_summary(artifact: object) -> list[dict]:
         if item.evidence_id:
             row["evidence_id"] = item.evidence_id
             # Generic dataset grounding retains its existing minimal projection.
-            if (item.source.source_type in ("rss", "web")
-                    or item.source.provider == "odin-live-signal"):
+            if (
+                item.source.source_type in ("rss", "web")
+                or item.source.provider == "odin-live-signal"
+            ):
                 row.update(title=item.title, excerpt=item.excerpt)
                 if item.source.url:
                     row["url"] = item.source.url

@@ -5,6 +5,9 @@ const labels: Record<ResearchCoverage["status"], string> = {
   unavailable: "nicht verfügbar", not_requested: "nicht angefordert",
 };
 const gaps: Record<string, string> = {
+  publication_conflict: "Ein Publikationsdatum widerspricht dem gelesenen Original.",
+  window_expanded: "Bei dünner Quellenlage wurde das Publikationsfenster kontrolliert erweitert.",
+  spatial_occurrence_unproven: "Thematische Quellen belegen kein Ereignis im ausgewählten Gebiet.",
   local_corpus_unavailable: "Der lokale Quellenkorpus war nicht erreichbar.",
   original_unavailable: "Mindestens ein Originaltext konnte nicht gelesen werden.",
   not_configured: "Die Webrecherche ist nicht eingerichtet.",
@@ -29,6 +32,22 @@ export function CurrentResearchCoverage({ coverage }: { coverage?: ResearchCover
         : "Keine ausreichenden aktuellen Originalbelege."}<br />
       Prognose: {coverage.forecast === "not_requested" ? "nicht angefordert" : "nicht belastbar bewertet"}.
       Mögliche Szenarien sind bedingte Überlegungen.</p>
+    <details><summary>Durchgeführte Recherche und Abrufgrenzen</summary>
+      {coverage.attempts.map((attempt, index) => <div key={index} style={{ margin: "8px 0", overflowWrap: "anywhere" }}>
+        <strong>{attempt.trigger === "counterevidence" ? "Gegenbelegsuche" : attempt.trigger === "followup"
+          ? "Folgefrage" : attempt.trigger === "expanded_window" ? "Erweitertes Zeitfenster" : "Basisrecherche"}</strong>
+        <div>{attempt.action === "local_search" ? "Lokaler Korpus" : attempt.action === "extract" ? "Originalabruf" : "Websuche"}
+          {attempt.started_at ? ` · ${attempt.started_at}` : " · nicht gestartet"}</div>
+        {attempt.query && <div>Suchfrage: {attempt.query}</div>}
+        <div>{attempt.status === "succeeded" ? "Erfolgreich" : attempt.status === "empty" ? "Keine Treffer"
+          : attempt.status === "partial" ? "Teilweise erfolgreich" : attempt.status === "blocked" ? "Nicht freigegeben" : "Fehlgeschlagen"}</div>
+        {attempt.source_reads?.map(read => <div key={read.url}>
+          {read.status === "succeeded" ? "Gelesen" : "Nicht lesbar"}: {read.url}
+          {read.code === "paywall" ? " · Bezahlschranke" : read.code === "access_denied" ? " · Zugriff verweigert" : ""}
+        </div>)}
+        {attempt.reported_credits != null && <div>Gemeldeter Verbrauch: {attempt.reported_credits} Credits</div>}
+      </div>)}
+    </details>
     {coverage.gaps.length > 0 && <ul>{coverage.gaps.map(code =>
       <li key={code}>{gaps[code] ?? "Eine Recherchequelle war nicht verfügbar."}</li>)}</ul>}
   </section>;

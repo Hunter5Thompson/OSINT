@@ -131,6 +131,15 @@ async def health() -> JSONResponse:
         "reason": readiness.reason.value,
         "required_models": list(readiness.required_models),
         "missing_models": list(readiness.missing_models),
+        "current_research": {
+            "external_search": "configured"
+            if settings.current_search_key.get_secret_value()
+            else "not_configured",
+            "local_corpus": "configured",
+            "provider_connectivity": "not_probed",
+            "lookback_hours": settings.current_research_lookback_hours,
+            "expanded_lookback_hours": settings.current_research_expanded_lookback_hours,
+        },
     }
     if settings.notebook_catalog_path is not None:
         try:
@@ -171,7 +180,8 @@ async def query_intelligence(req: QueryRequest) -> dict[str, object] | JSONRespo
 async def query_connected(req: QueryRequest, request: Request) -> dict[str, object] | JSONResponse:
     try:
         return await run_connected(
-            query_intelligence(req), request.is_disconnected,
+            query_intelligence(req),
+            request.is_disconnected,
             timeout_s=settings.query_timeout_s,
         )
     except ClientDisconnectedError:

@@ -35,13 +35,23 @@ async def test_local_current_filter_excludes_freshly_ingested_old_articles(monke
 
 async def test_local_current_original_retains_publication_and_ingestion_separately(monkeypatch):
     from rag.local_current import search_current_corpus
+
     body = "Iran's government announced negotiations with regional mediators on Friday. " * 8
-    search = AsyncMock(return_value=[{
-        "source_type": "rss", "source": "rss_fulltext", "provider": "fixture",
-        "url": "https://news.example.org/article", "title": "Iran talks", "content": body,
-        "published_at": (AS_OF - timedelta(hours=2)).isoformat(),
-        "ingested_at": AS_OF.isoformat(), "score": 0.8,
-    }])
+    search = AsyncMock(
+        return_value=[
+            {
+                "source_type": "rss",
+                "source": "rss_fulltext",
+                "provider": "fixture",
+                "url": "https://news.example.org/article",
+                "title": "Iran talks",
+                "content": body,
+                "published_at": (AS_OF - timedelta(hours=2)).isoformat(),
+                "ingested_at": AS_OF.isoformat(),
+                "score": 0.8,
+            }
+        ]
+    )
     monkeypatch.setattr("rag.local_current.enhanced_search", search)
     result = await search_current_corpus("Iran", AS_OF - timedelta(hours=72), AS_OF)
     assert len(result) == 1

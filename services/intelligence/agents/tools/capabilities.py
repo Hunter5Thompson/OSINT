@@ -59,6 +59,11 @@ def tool_allowed_for_state(tool_name: str, state: AgentState) -> bool:
     capability = _CAPABILITIES_BY_NAME.get(tool_name)
     if capability is None:
         return False
+    if (state.get("research_mode") in ("current", "historical")
+            and tool_name in ("rss_fetch", "gdelt_query")):
+        # Public queries use pinned discovery terms and the owned RSS corpus;
+        # model-produced arbitrary URLs must not carry archive text off-host.
+        return False
     if tool_name == "current_search" and state.get("research_mode") == "historical":
         return False
     if tool_name == "gdelt_query" and not settings.enable_gdelt_doc_tool:

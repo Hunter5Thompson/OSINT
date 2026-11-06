@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import ipaddress
+import json
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -19,12 +20,14 @@ from email.utils import parsedate_to_datetime
 from functools import partial
 from typing import Literal
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import httpx
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from config import settings
-from rag.evidence import EvidenceItem, RetrievalProvenance, SourceRef
+from rag.evidence import EvidenceItem, RetrievalProvenance, SourceRef, eligible_current_evidence
+from rag.publication import check_publication
 
 
 class ResearchRun(BaseModel):
@@ -32,23 +35,41 @@ class ResearchRun(BaseModel):
 
     as_of: AwareDatetime
     lookback_hours: int = Field(default=72, ge=1, le=168)
+    expanded_lookback_hours: int = Field(default=168, ge=1, le=168)
     max_requests: int = Field(default=6, ge=1, le=12)
     max_credits: int = Field(default=6, ge=1, le=12)
     timeout_s: float = Field(default=50, gt=0, le=90)
     # Public web evidence has topic relevance only; never polygon membership.
     scope_key: str = "world"
-    spatial_relation: str = "either"
+    spatial_relation: Literal["about", "occurrence", "either"] = "either"
+
+    @model_validator(mode="after")
+    def bounded_window(self):
+        if self.expanded_lookback_hours < self.lookback_hours:
+            raise ValueError("Expanded window cannot be shorter than the primary window")
+        return self
+
+
+class SourceRead(BaseModel):
+    url: str
+    status: Literal["succeeded", "failed"]
+    code: str | None = None
 
 
 class ResearchAttempt(BaseModel):
     action: Literal["search", "extract", "local_search"]
     status: Literal["succeeded", "empty", "partial", "failed", "blocked"]
     code: str | None = None
+    trigger: Literal["baseline", "counterevidence", "followup", "expanded_window"] = "baseline"
+    query: str | None = None
+    started_at: datetime | None = None
+    source_reads: list[SourceRead] = Field(default_factory=list)
     reserved_credits: int = 0
     reported_credits: float | None = None
 
 
 class ResearchCoverage(BaseModel):
+    run_id: str | None = None
     as_of: datetime
     published_since: datetime
     status: Literal["complete", "partial", "unavailable", "not_requested"] = "complete"
@@ -135,6 +156,13 @@ class CurrentResearch:
         local_reader: Callable[[str, datetime, datetime], Awaitable[list[EvidenceItem]]]
         | None = None,
     ) -> None:
+        self._lookback_hours = run.lookback_hours
+        self._window_expanded = False
+        self._provider_blocked: str | None = None
+        self._run_id = uuid4().hex
+        self._first_search = True
+        self._trigger = "baseline"
+        self._extracted_urls: set[str] = set()
         self._local_reader = local_reader
         self._local_done = False
         self._run = run
@@ -151,28 +179,52 @@ class CurrentResearch:
     async def _request(self, action: Literal["search", "extract"], body: dict) -> dict | None:
         # Reserve before the first await, including failed/unknown paid requests.
         code = None
-        if not self._api_key:
-            code = "not_configured"
-        elif self._requests >= self._run.max_requests or self._credits + 1 > self._run.max_credits:
+        if self._requests >= self._run.max_requests or self._credits + 1 > self._run.max_credits:
             code = "budget_exhausted"
+        elif self._provider_blocked:
+            code = self._provider_blocked
+        elif not self._api_key:
+            code = "not_configured"
         elif time.monotonic() >= self._deadline:
             code = "deadline_exceeded"
         if code:
-            self._attempts.append(ResearchAttempt(action=action, status="blocked", code=code))
+            self._attempts.append(
+                ResearchAttempt(
+                    action=action,
+                    status="blocked",
+                    code=code,
+                    trigger=self._trigger,
+                    query=body.get("query"),
+                )
+            )
             return None
         self._requests += 1
         self._credits += 1
-        receipt = ResearchAttempt(action=action, status="failed", reserved_credits=1)
+        receipt = ResearchAttempt(
+            action=action,
+            status="failed",
+            reserved_credits=1,
+            trigger=self._trigger,
+            query=body.get("query"),
+            started_at=datetime.now(UTC),
+        )
         self._attempts.append(receipt)
         try:
             async with asyncio.timeout(min(15, self._deadline - time.monotonic())):
-                response = await self._client.post(
+                async with self._client.stream(
+                    "POST",
                     f"{self._base_url}/{action}",
                     headers={"Authorization": f"Bearer {self._api_key}"},
                     json=body,
-                )
-                response.raise_for_status()
-                data = response.json()
+                ) as response:
+                    response.raise_for_status()
+                    payload = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=65536):
+                        if len(payload) + len(chunk) > 2 * 1024 * 1024:
+                            receipt.code = "response_too_large"
+                            return None
+                        payload.extend(chunk)
+                    data = json.loads(payload)
                 if not isinstance(data, dict) or not isinstance(data.get("results"), list):
                     raise ValueError("invalid response")
                 usage = data.get("usage", {})
@@ -188,6 +240,8 @@ class CurrentResearch:
                 403: "access_denied",
                 429: "rate_limited",
             }.get(exc.response.status_code, "provider_error")
+            if exc.response.status_code in (401, 403, 429):
+                self._provider_blocked = receipt.code
         except (TimeoutError, httpx.TimeoutException):
             receipt.code = "timeout"
         except httpx.RequestError:
@@ -197,34 +251,44 @@ class CurrentResearch:
         return None
 
     def _result(self) -> ResearchResult:
-        since = self._run.as_of - timedelta(hours=self._run.lookback_hours)
+        since = self._run.as_of - timedelta(hours=self._lookback_hours)
         evidence = list(self._evidence.values())
         current = [
             item.evidence_id
             for item in evidence
-            if item.evidence_id
-            and item.source.published_at is not None
-            and since <= item.source.published_at <= self._run.as_of
-            and item.retrieval
-            and item.retrieval.content_kind in ("fulltext", "fulltext_chunk")
+            if item.evidence_id and eligible_current_evidence(item, since, self._run.as_of)
         ]
+        date_conflict = any(
+            item.retrieval and item.retrieval.publication_check == "conflict" for item in evidence
+        )
+        occurrence_unproven = (
+            self._run.scope_key != "world" and self._run.spatial_relation == "occurrence"
+        )
         errors = any(a.status in ("failed", "blocked", "partial") for a in self._attempts)
         success = any(a.status in ("succeeded", "empty", "partial") for a in self._attempts)
         return ResearchResult(
             evidence=evidence,
             coverage=ResearchCoverage(
+                run_id=self._run_id,
                 as_of=self._run.as_of,
                 published_since=since,
                 current_evidence_ids=current,
-                situation="evidence_available"
+                situation="insufficient_evidence"
+                if occurrence_unproven
+                else "evidence_available"
                 if current
                 else (
                     "insufficient_evidence"
                     if (success and (evidence or not errors))
                     else "research_failed"
                 ),
-                status=("partial" if success else "unavailable") if errors else "complete",
-                gaps=list(dict.fromkeys(a.code for a in self._attempts if a.code)),
+                status=("partial" if success else "unavailable")
+                if errors or occurrence_unproven or self._window_expanded or date_conflict
+                else "complete",
+                gaps=list(dict.fromkeys(a.code for a in self._attempts if a.code))
+                + (["spatial_occurrence_unproven"] if occurrence_unproven else [])
+                + (["window_expanded"] if self._window_expanded else [])
+                + (["publication_conflict"] if date_conflict else []),
                 attempts=self._attempts,
                 scope_key=self._run.scope_key,
             ).model_copy(deep=True),
@@ -234,7 +298,13 @@ class CurrentResearch:
         if self._local_reader is None or self._local_done:
             return
         self._local_done = True
-        receipt = ResearchAttempt(action="local_search", status="failed")
+        receipt = ResearchAttempt(
+            action="local_search",
+            status="failed",
+            query=question,
+            started_at=datetime.now(UTC),
+            trigger=self._trigger,
+        )
         self._attempts.append(receipt)
         if self._requests >= self._run.max_requests or time.monotonic() >= self._deadline:
             receipt.status, receipt.code = "blocked", "budget_exhausted"
@@ -244,7 +314,7 @@ class CurrentResearch:
             async with asyncio.timeout(min(10, self._deadline - time.monotonic())):
                 items = await self._local_reader(
                     question,
-                    self._run.as_of - timedelta(hours=self._run.lookback_hours),
+                    self._run.as_of - timedelta(hours=self._lookback_hours),
                     self._run.as_of,
                 )
             for item in items:
@@ -253,109 +323,161 @@ class CurrentResearch:
         except Exception:
             receipt.code = "local_corpus_unavailable"
 
+    async def _search_web(self, question: str) -> None:
+        since = self._run.as_of - timedelta(hours=self._lookback_hours)
+        response = await self._request(
+            "search",
+            {
+                "query": question[:2000],
+                "topic": "news",
+                "search_depth": "basic",
+                "auto_parameters": False,
+                "include_answer": False,
+                "include_published_date": True,
+                "include_raw_content": False,
+                "include_usage": True,
+                "max_results": 5,
+                "start_date": since.date().isoformat(),
+                "end_date": (self._run.as_of + timedelta(days=1)).date().isoformat(),
+            },
+        )
+        if response is None or not response["results"]:
+            return
+        hits = [
+            hit
+            for hit in response["results"]
+            if isinstance(hit, dict)
+            and _public_url(hit.get("url"))
+            and isinstance(hit.get("title"), str)
+            and isinstance(hit.get("content", ""), str)
+        ][:5]
+        if len(hits) != len(response["results"]):
+            self._attempts[-1].status = "partial"
+            self._attempts[-1].code = "invalid_results"
+        pending = list(
+            dict.fromkeys(hit["url"] for hit in hits if hit["url"] not in self._extracted_urls)
+        )
+        if not pending:
+            return
+        self._extracted_urls.update(pending)
+        extracted = await self._request(
+            "extract",
+            {
+                "urls": pending,
+                "format": "markdown",
+                "extract_depth": "basic",
+                "include_usage": True,
+            },
+        )
+        bodies = {
+            row["url"]: row["raw_content"]
+            for row in (extracted or {}).get("results", [])
+            if isinstance(row, dict)
+            and row.get("url") in pending
+            and isinstance(row.get("raw_content"), str)
+            and row["raw_content"].strip()
+        }
+        if self._attempts[-1].action == "extract":
+            failures = {
+                row.get("url"): str(row.get("error", "")).lower()
+                for row in (extracted or {}).get("failed_results", [])
+                if isinstance(row, dict) and isinstance(row.get("url"), str)
+            }
+            for url in pending:
+                error = failures.get(url, "")
+                code = next(
+                    (
+                        label
+                        for word, label in [
+                            ("paywall", "paywall"),
+                            ("403", "access_denied"),
+                            ("blocked", "access_denied"),
+                            ("timeout", "timeout"),
+                            ("robots", "robots_denied"),
+                        ]
+                        if word in error
+                    ),
+                    self._attempts[-1].code or "original_unavailable",
+                )
+                self._attempts[-1].source_reads.append(
+                    SourceRead(
+                        url=url,
+                        status="succeeded" if url in bodies else "failed",
+                        code=None if url in bodies else code,
+                    )
+                )
+        if extracted is not None and any(url not in bodies for url in pending):
+            self._attempts[-1].status = "partial"
+            self._attempts[-1].code = "original_unavailable"
+        for hit in hits:
+            url = hit["url"]
+            if url not in pending:
+                continue
+            text = bodies.get(url, hit.get("content", ""))
+            digest = hashlib.sha256(text.encode()).hexdigest()
+            identity = hashlib.sha256((url + "\0" + text).encode()).hexdigest()
+            published = _publication(hit.get("published_date"))
+            publication = check_publication(text, published)
+            attribution = re.search(r"\((Reuters|Associated Press|AP)\)\s*[-–—]", text[:1500], re.I)
+            lineage = (
+                ("agency:" + ("reuters" if attribution[1].lower() == "reuters" else "ap"))
+                if attribution
+                else url
+            )
+            self._evidence[url] = EvidenceItem(
+                evidence_id=f"ev-{identity[:24]}",
+                title=hit["title"][:300],
+                excerpt=_excerpt(text, question),
+                relevance_score=0.0,
+                content_hash=digest,
+                source=SourceRef(
+                    source_ref_id=identity[:16],
+                    source_type="web",
+                    provider=urlsplit(url).netloc,
+                    url=url,
+                    published_at=published,
+                ),
+                retrieval=RetrievalProvenance(
+                    retrieved_at=datetime.now(UTC),
+                    content_kind="fulltext" if url in bodies else "snippet",
+                    content_sha256=digest,
+                    publication_check=publication.status,
+                    original_publication_date=publication.original_date,
+                    original_lineage=lineage,
+                    lineage_basis="attribution" if attribution else "url",
+                    temporal_basis="provider_publication" if published else "unknown",
+                    source_chars=len(text),
+                    excerpt_truncated=len(text) > 2400,
+                ),
+            )
+        return
+
     async def search(self, question: str) -> ResearchResult:
         async with self._lock:
+            first = self._first_search
+            self._first_search = False
+            self._trigger = "baseline" if first else "followup"
             await self._read_local(question)
-            since = self._run.as_of - timedelta(hours=self._run.lookback_hours)
-            response = await self._request(
-                "search",
-                {
-                    "query": question[:2000],
-                    "topic": "news",
-                    "search_depth": "basic",
-                    "auto_parameters": False,
-                    "include_answer": False,
-                    "include_published_date": True,
-                    "include_raw_content": False,
-                    "include_usage": True,
-                    "max_results": 5,
-                    "start_date": since.date().isoformat(),
-                    "end_date": (self._run.as_of + timedelta(days=1)).date().isoformat(),
-                },
-            )
-            if response is None or not response["results"]:
-                return self._result()
-            hits = [
-                hit
-                for hit in response["results"]
-                if isinstance(hit, dict)
-                and _public_url(hit.get("url"))
-                and isinstance(hit.get("title"), str)
-                and isinstance(hit.get("content", ""), str)
-            ][:5]
-            if len(hits) != len(response["results"]):
-                self._attempts[-1].status = "partial"
-                self._attempts[-1].code = "invalid_results"
-            pending = list(
-                dict.fromkeys(
-                    hit["url"]
-                    for hit in hits
-                    if hit["url"] not in self._evidence
-                    or self._evidence[hit["url"]].retrieval.content_kind != "fulltext"
+            await self._search_web(question)
+            if first:
+                self._trigger = "counterevidence"
+                await self._search_web(
+                    question + " denials contrary evidence diplomatic statements"
                 )
-            )
-            if not pending:
-                return self._result()
-            extracted = await self._request(
-                "extract",
-                {
-                    "urls": pending,
-                    "format": "markdown",
-                    "extract_depth": "basic",
-                    "include_usage": True,
-                },
-            )
-            bodies = {
-                row["url"]: row["raw_content"]
-                for row in (extracted or {}).get("results", [])
-                if isinstance(row, dict)
-                and row.get("url") in pending
-                and isinstance(row.get("raw_content"), str)
-                and row["raw_content"].strip()
-            }
-            if extracted is not None and any(url not in bodies for url in pending):
-                self._attempts[-1].status = "partial"
-                self._attempts[-1].code = "original_unavailable"
-            for hit in hits:
-                url = hit["url"]
-                if url not in pending:
-                    continue
-                text = bodies.get(url, hit.get("content", ""))
-                digest = hashlib.sha256(text.encode()).hexdigest()
-                identity = hashlib.sha256((url + "\0" + text).encode()).hexdigest()
-                published = _publication(hit.get("published_date"))
-                attribution = re.search(
-                    r"\((Reuters|Associated Press|AP)\)\s*[-–—]", text[:1500], re.I
-                )
-                lineage = (
-                    ("agency:" + ("reuters" if attribution[1].lower() == "reuters" else "ap"))
-                    if attribution
-                    else url
-                )
-                self._evidence[url] = EvidenceItem(
-                    evidence_id=f"ev-{identity[:24]}",
-                    title=hit["title"][:300],
-                    excerpt=_excerpt(text, question),
-                    relevance_score=0.0,
-                    content_hash=digest,
-                    source=SourceRef(
-                        source_ref_id=identity[:16],
-                        source_type="web",
-                        provider=urlsplit(url).netloc,
-                        url=url,
-                        published_at=published,
-                    ),
-                    retrieval=RetrievalProvenance(
-                        retrieved_at=datetime.now(UTC),
-                        content_kind="fulltext" if url in bodies else "snippet",
-                        content_sha256=digest,
-                        original_lineage=lineage,
-                        lineage_basis="attribution" if attribution else "url",
-                        temporal_basis="provider_publication" if published else "unknown",
-                        source_chars=len(text),
-                        excerpt_truncated=len(text) > 2400,
-                    ),
-                )
+                if (
+                    not self._result().coverage.current_evidence_ids
+                    and self._run.expanded_lookback_hours > self._lookback_hours
+                    and any(
+                        a.action == "search" and a.status in ("succeeded", "empty")
+                        for a in self._attempts
+                    )
+                ):
+                    self._lookback_hours = self._run.expanded_lookback_hours
+                    self._window_expanded = True
+                    self._trigger = "expanded_window"
+                    self._local_done = False
+                    await self._read_local(question)
+                    await self._search_web(question)
             return self._result()
 
 
@@ -366,7 +488,15 @@ class ResearchContext:
 
 
 @asynccontextmanager
-async def open_research(question: str, *, mode: str, scope_key: str, relation: str, scope=None):
+async def open_research(
+    question: str,
+    *,
+    mode: str,
+    scope_key: str,
+    relation: str,
+    scope=None,
+    as_of: datetime | None = None,
+):
     """HTTP ownership belongs to the report lifetime, not individual graph nodes."""
     if mode == "historical":
         yield ResearchContext(None, question)
@@ -375,18 +505,23 @@ async def open_research(question: str, *, mode: str, scope_key: str, relation: s
     from rag.public_query import prepare_public_query
     from spatial import RetrievalSpatialRelation
 
+    pinned_time = as_of or datetime.now(UTC)
     public_query = await prepare_public_query(question)
     async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
         yield ResearchContext(
             CurrentResearch(
                 ResearchRun(
-                    as_of=datetime.now(UTC),
+                    as_of=pinned_time,
                     scope_key=scope_key,
                     spatial_relation=relation,
                     timeout_s=settings.current_research_timeout_s,
+                    lookback_hours=settings.current_research_lookback_hours,
+                    expanded_lookback_hours=settings.current_research_expanded_lookback_hours,
+                    max_requests=settings.current_research_max_requests,
+                    max_credits=settings.current_research_max_credits,
                 ),
                 client=client,
-                api_key=settings.tavily_api_key.get_secret_value(),
+                api_key=settings.current_search_key.get_secret_value(),
                 base_url=settings.tavily_api_url,
                 local_reader=partial(
                     search_current_corpus, scope=scope, relation=RetrievalSpatialRelation(relation)

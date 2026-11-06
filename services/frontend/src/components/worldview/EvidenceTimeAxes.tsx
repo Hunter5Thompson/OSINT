@@ -32,8 +32,14 @@ export function EvidenceTimeAxes({ summary, coverage }: {
         <p style={textStyle}>{ref.excerpt}</p>
         {retrieval.excerpt_truncated && <p>Ausgewählte Textstellen aus einem längeren Abruf.</p>}
         {sourceLink(ref.url) && <a href={sourceLink(ref.url)} target="_blank" rel="noopener noreferrer">Originalquelle öffnen</a>}
-        <p>Publikation laut Suchanbieter: {ref.published_at ?? "unbekannt"}<br />
+        <p>{retrieval.temporal_basis === "provider_publication" ? "Publikation laut Suchanbieter"
+          : retrieval.temporal_basis === "source_publication" ? "Publikation laut Quellenmetadaten"
+          : "Publikation, Herkunft ungeprüft"}: {ref.published_at ?? "unbekannt"}<br />
           Ereigniszeit: {ref.observed_at ?? "unbekannt"}<br />Abruf: {retrieval.retrieved_at}</p>
+        <p>{retrieval.publication_check === "matched_day" ? "Publikationstag passt zur Datumszeile im Original."
+          : retrieval.publication_check === "conflict" ? "Datumswiderspruch zwischen Suchanbieter und Original."
+          : "Original-Publikationsdatum nicht eindeutig bestätigt."}
+          {retrieval.original_publication_date && ` Originalangabe: ${retrieval.original_publication_date}.`}</p>
         <p>Thematischer Bezug; kein Nachweis räumlicher Zugehörigkeit. Unabhängigkeit der Quelle ungeprüft.</p>
         <details><summary>Beleg-ID und Herkunft</summary><pre style={textStyle}>{formatEvidenceSummary([ref])}</pre></details>
       </details>;
