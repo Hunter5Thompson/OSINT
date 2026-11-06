@@ -16,7 +16,7 @@ logger = structlog.get_logger()
 @tool(response_format="content_and_artifact")
 async def gdelt_query(
     query: str,
-    runtime: ToolRuntime[dict[str, object], AgentState],
+    runtime: ToolRuntime[object, AgentState],
     max_records: int = 20,
 ) -> tuple[str, list[dict]]:
     """Query GDELT DOC-API for breaking news (last 24-72h coverage window).

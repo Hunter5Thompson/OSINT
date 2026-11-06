@@ -15,6 +15,11 @@ extern geprüft. Die 29 zurückgestellten Notebooks bleiben ausgeschlossen.
 
 ## Repo-Goal und HN
 
+Folgearbeit 06.11.2026, in Umsetzung:
+[Verbindliche aktuelle Recherche](docs/implementation/2026-11-06-current-research.md).
+Tavily-/Originalabruf, zeitliche Belegprüfung und gespeicherte Rechercheabdeckung;
+technische, fachliche und Release-Abnahme werden getrennt geführt.
+
 Gesamtmatrix: [Finding-/Abnahmegates](docs/reviews/2026-10-10-goal-gates.md).
 Menschliche Prüfung: [unbewertete Abnahmeunterlagen](docs/operations/goal-acceptance-2026-10-10.md).
 

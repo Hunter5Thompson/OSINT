@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     rag_realtime_score_threshold: float = 0.45
     rag_final_k: int = 5
     rag_telegram_max: int = 1
+    # Current research. No key is included in health responses or receipts.
+    tavily_api_key: SecretStr = SecretStr("")
+    tavily_api_url: str = "https://api.tavily.com"
+    current_research_timeout_s: float = Field(default=50, gt=0, le=90)
     # ReAct agent guards
     react_max_tool_calls: int = 8
     react_max_iterations: int = 5

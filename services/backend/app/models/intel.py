@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.models.research import ResearchCoverage, RetrievalProvenance
 from app.models.spatial import SpatialQueryRef
 
 _utc_now = partial(datetime.now, UTC)
@@ -89,6 +90,8 @@ class SpatialRunApplicationV1(_FrozenContractModel):
         return value
 
 
+
+
 class IntelQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -99,6 +102,7 @@ class IntelQuery(BaseModel):
     hotspot_id: str | None = None
     image_url: str | None = None
     use_legacy: bool = False
+    research_mode: Literal["current", "historical"] = "current"
     report_id: str | None = None
     report_message: str | None = Field(default=None, max_length=8000)
 
@@ -240,6 +244,7 @@ class NotebookPassage(BaseModel):
 
 
 class EvidenceSummary(BaseModel):
+    retrieval: RetrievalProvenance | None = Field(default=None, exclude_if=lambda v: v is None)
     passage: NotebookPassage | None = Field(default=None, exclude_if=lambda value: value is None)
     knowledge_role: Literal["source", "background", "method"] | None = Field(
         default=None, exclude_if=lambda value: value is None
@@ -250,7 +255,7 @@ class EvidenceSummary(BaseModel):
     excerpt: str | None = Field(default=None, exclude_if=lambda value: value is None)
     review: ReviewProvenance | None = Field(default=None, exclude_if=lambda value: value is None)
     source_ref_id: str
-    source_type: Literal["rss", "telegram", "gdelt", "notebooklm", "dataset", "unknown"]
+    source_type: Literal["rss", "web", "telegram", "gdelt", "notebooklm", "dataset", "unknown"]
     provider: str
     published_at: datetime | None = None
     observed_at: datetime | None = None
@@ -289,6 +294,7 @@ class IntelAnalysis(BaseModel):
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None
+    research_coverage: ResearchCoverage | None = None
     tool_trace: list[dict[str, Any]] = Field(default_factory=list)
     mode: str = "react"
     timestamp: datetime = Field(default_factory=_utc_now)

@@ -3,6 +3,7 @@ from langchain_core.tools import BaseTool
 from agents.tools.capabilities import CAPABILITY_MATRIX, is_non_global_state
 from agents.tools.capabilities import blocked_tool_names as blocked_tool_names
 from agents.tools.classify import classify_event
+from agents.tools.current_search import current_search
 from agents.tools.gdelt_query import gdelt_query
 from agents.tools.graph_query import (
     bindable_query_knowledge_graph,
@@ -15,6 +16,7 @@ from agents.tools.vision import analyze_image
 from graph.state import AgentState
 
 _REGISTERED_TOOLS = [
+    current_search,
     notebook_search,
     qdrant_search,
     query_knowledge_graph,

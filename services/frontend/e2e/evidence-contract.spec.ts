@@ -109,3 +109,30 @@ test("notebook original passages and method limits survive report reload", async
   }
   await page.screenshot({ path: testInfo.outputPath("notebook-passages.png"), fullPage: true });
 });
+
+import current from "../../../tests/fixtures/current-research.json" with { type: "json" };
+
+test("current research coverage and original reads survive saved report reload", async ({ page }, testInfo) => {
+  const report = {
+    id: "current-fixture", paragraph_num: 4, stamp: "06·XI", title: "Current research fixture",
+    status: "Draft", confidence: null, location: "Fixture", coords: "--", findings: [], metrics: [],
+    context: "", body_title: "Current claims", body_paragraphs: ["Attributed current claims."],
+    margin: [], sources: [], created_at: "2026-11-06T14:35:00Z", updated_at: "2026-11-06T14:35:00Z",
+    verification_status: "unverified", ...current,
+  };
+  await page.route(/\/api\/reports(?:\?.*)?$/, route => route.fulfill({ json: [report] }));
+  await page.route("**/api/reports/current-fixture/messages*", route => route.fulfill({ json: [] }));
+  await page.goto("/briefing");
+  for (let reload = 0; reload < 2; reload++) {
+    await expect(page.getByTestId("current-research-coverage")).toContainText("eingeschränkt");
+    await expect(page.getByTestId("current-research-coverage")).toContainText("Prognose: nicht belastbar bewertet");
+    await page.getByText("Quellen und Zeitachsen", { exact: true }).click();
+    await page.getByTestId("current-source").locator(":scope > summary").click();
+    await expect(page.getByTestId("current-source")).toContainText(current.evidence_summary[0]!.excerpt);
+    await expect(page.getByTestId("current-source")).toContainText("Ereigniszeit: unbekannt");
+    await expect(page.getByRole("link", { name: "Originalquelle öffnen" })).toHaveAttribute(
+      "href", current.evidence_summary[0]!.url);
+    if (reload === 0) await page.reload();
+  }
+  await page.screenshot({ path: testInfo.outputPath("current-research.png"), fullPage: true });
+});

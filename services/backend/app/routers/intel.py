@@ -78,6 +78,7 @@ async def query_intel(query: IntelQuery, request: Request) -> EventSourceRespons
             spatial_relation=query.spatial_relation,
             image_url=query.image_url,
             use_legacy=query.use_legacy,
+            research_mode=query.research_mode,
             report_id=query.report_id.strip() if query.report_id else None,
             report_message=query.report_message,
             client=_shared_http_client(request),

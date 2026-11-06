@@ -114,7 +114,7 @@ async def test_react_failure_propagates_instead_of_silent_legacy_fallback() -> N
         pytest.raises(RuntimeError, match="react exploded"),
     ):
         await run_intelligence_query(
-            "test query",
+            "test query", research_mode="historical",
             use_legacy=False,
             spatial_scope=_token("country:UKR", "d30efa07e141"),
         )
@@ -130,7 +130,7 @@ async def test_run_pins_scope_before_later_ui_scope_switch() -> None:
     captured: dict[str, AgentState] = {}
 
     class ReactGraph:
-        async def ainvoke(self, state: AgentState) -> dict[str, object]:
+        async def ainvoke(self, state: AgentState, **kwargs) -> dict[str, object]:
             captured["state"] = state
             started.set()
             await release.wait()
@@ -151,7 +151,7 @@ async def test_run_pins_scope_before_later_ui_scope_switch() -> None:
     ):
         task = asyncio.create_task(
             run_intelligence_query(
-                "test query",
+                "test query", research_mode="historical",
                 spatial_scope=original,
                 spatial_relation=RetrievalSpatialRelation.EITHER,
             )
@@ -189,7 +189,7 @@ async def test_legacy_region_is_observable_without_logging_free_text() -> None:
         patch("graph.workflow.logger.info") as info,
     ):
         await run_intelligence_query(
-            "sensitive query text",
+            "sensitive query text", research_mode="historical",
             region="Eastern Europe",
             use_legacy=True,
         )

@@ -94,7 +94,7 @@ def _clip_text(text: str, max_chars: int) -> str:
 @tool(response_format="content_and_artifact")
 async def qdrant_search(
     query: str,
-    runtime: ToolRuntime[dict[str, object], AgentState],
+    runtime: ToolRuntime[object, AgentState],
 ) -> tuple[str, list[dict]]:
     """Semantic vector search across the OSINT knowledge base.
 

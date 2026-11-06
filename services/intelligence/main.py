@@ -84,6 +84,7 @@ class QueryRequest(BaseModel):
     spatial_relation: RetrievalSpatialRelation
     image_url: str | None = None
     use_legacy: bool = False
+    research_mode: Literal["current", "historical"] = "current"
     grounding_context: str | None = Field(default=None, max_length=4000)
     grounding_evidence: list[GroundingEvidenceItem] | None = Field(default=None, max_length=6)
 
@@ -156,6 +157,7 @@ async def query_intelligence(req: QueryRequest) -> dict[str, object] | JSONRespo
         req.region,
         req.image_url,
         req.use_legacy,
+        research_mode=req.research_mode,
         spatial_scope=spatial_scope,
         spatial_relation=req.spatial_relation,
         grounding_context=req.grounding_context,

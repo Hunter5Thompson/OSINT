@@ -165,7 +165,7 @@ function CountryBriefingContent({
               : "Bewertungs- und Verifikationsstatus unbekannt."}
           </div>
           <pre className="country-almanac__report-body">{briefing.result.analysis}</pre>
-          <EvidenceTimeAxes summary={briefing.result.evidence_summary} />
+          <EvidenceTimeAxes summary={briefing.result.evidence_summary} coverage={briefing.result.research_coverage} />
           <button
             type="button"
             className="country-almanac__tab"

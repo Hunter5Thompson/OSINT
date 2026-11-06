@@ -52,7 +52,12 @@ async def test_claim_survives_real_query_route(monkeypatch, payload):
         transport=httpx.ASGITransport(app=main.app), base_url="http://test"
     ) as c:
         response = await c.post(
-            "/query", json={"query": "Read the reviewed claim", "spatial_relation": "either"}
+            "/query",
+            json={
+                "query": "Read the reviewed claim",
+                "spatial_relation": "either",
+                "research_mode": "historical",
+            },
         )
     assert response.status_code == 200, response.text
     body = response.json()

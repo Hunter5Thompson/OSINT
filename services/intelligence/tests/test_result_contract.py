@@ -28,7 +28,7 @@ async def test_inner_failure_reaches_http(monkeypatch, stage):
             "/query",
             json={
                 "query": "test",
-                "spatial_relation": "either",
+                "spatial_relation": "either", "research_mode": "historical",
                 "grounding_evidence": [
                     {
                         "source_type": "dataset",

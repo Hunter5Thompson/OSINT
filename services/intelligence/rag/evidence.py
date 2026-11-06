@@ -21,7 +21,7 @@ from pydantic import AliasChoices, BaseModel, Field, ValidationError
 
 from rag.credibility import credibility_score, normalize_provider
 
-SourceType = Literal["rss", "telegram", "gdelt", "notebooklm", "dataset", "unknown"]
+SourceType = Literal["rss", "web", "telegram", "gdelt", "notebooklm", "dataset", "unknown"]
 
 
 class SourceRef(BaseModel):
@@ -106,6 +106,20 @@ class NotebookPassage(BaseModel):
     external_fact_verification: Literal["not_performed"] = "not_performed"
 
 
+class RetrievalProvenance(BaseModel):
+    """How a public document was read; retrieval does not verify its contents."""
+
+    retrieved_at: datetime
+    content_kind: Literal["snippet", "fulltext", "fulltext_chunk"]
+    content_sha256: str
+    source_chars: int = 0
+    excerpt_truncated: bool = False
+    original_lineage: str
+    lineage_basis: Literal["url", "attribution", "identical_content"] = "url"
+    temporal_basis: Literal["provider_publication", "source_publication", "unknown"] = "unknown"
+    spatial_basis: Literal["topic_only", "scoped"] = "topic_only"
+
+
 class EvidenceItem(BaseModel):
     evidence_id: str | None = None
     review: ReviewProvenance | None = None
@@ -119,6 +133,7 @@ class EvidenceItem(BaseModel):
     source_class: str | None = None  # "realtime" marks an unverified lead
     observed_at: datetime | None = None
     ingested_at: datetime | None = None
+    retrieval: RetrievalProvenance | None = None
     # Read-side lineage is not an independent factual verification certificate.
     verification_status: Literal["unverified"] = "unverified"
 
@@ -295,6 +310,8 @@ def _block(item: EvidenceItem) -> str:
     }
     if item.evidence_id:
         meta["evidence_id"] = item.evidence_id
+    if item.retrieval:
+        meta["retrieval"] = item.retrieval.model_dump(mode="json")
     if item.review:
         meta["review"] = item.review.model_dump(mode="json")
     if item.passage:
@@ -443,10 +460,13 @@ def evidence_time_summary(artifact: object) -> list[dict]:
         if item.evidence_id:
             row["evidence_id"] = item.evidence_id
             # Generic dataset grounding retains its existing minimal projection.
-            if item.source.source_type == "rss" or item.source.provider == "odin-live-signal":
+            if (item.source.source_type in ("rss", "web")
+                    or item.source.provider == "odin-live-signal"):
                 row.update(title=item.title, excerpt=item.excerpt)
                 if item.source.url:
                     row["url"] = item.source.url
+        if item.retrieval:
+            row["retrieval"] = item.retrieval.model_dump(mode="json")
         if item.review:
             row.update(
                 evidence_id=item.evidence_id,

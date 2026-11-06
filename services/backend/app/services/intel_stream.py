@@ -10,7 +10,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 import structlog
@@ -34,6 +34,7 @@ async def stream_intel_query(
     spatial_relation: RetrievalSpatialRelation = RetrievalSpatialRelation.EITHER,
     image_url: str | None = None,
     use_legacy: bool = False,
+    research_mode: Literal["current", "historical"] = "current",
     grounding_context: str | None = None,
     grounding_evidence: list[dict[str, Any]] | None = None,
     report_id: str | None = None,
@@ -90,6 +91,7 @@ async def stream_intel_query(
             "spatial_relation": spatial_relation.value,
             "image_url": image_url,
             "use_legacy": use_legacy,
+            "research_mode": research_mode,
         }
         if grounding_context is not None:
             payload["grounding_context"] = grounding_context
@@ -128,6 +130,7 @@ async def stream_intel_query(
             assessment_status=data.get("assessment_status"),
             verification_status=data.get("verification_status"),
             evidence_summary=data.get("evidence_summary"),
+            research_coverage=data.get("research_coverage"),
             tool_trace=data.get("tool_trace", []),
             mode=data.get("mode", "react"),
             timestamp=datetime.fromisoformat(data["timestamp"])
@@ -159,6 +162,7 @@ async def stream_intel_query(
                         assessment_status=analysis.assessment_status,
                         verification_status=analysis.verification_status,
                         evidence_summary=analysis.evidence_summary,
+                        research_coverage=analysis.research_coverage,
                     ),
                 )
             except Exception as persist_exc:  # noqa: BLE001

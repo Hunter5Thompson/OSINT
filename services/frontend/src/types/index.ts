@@ -223,7 +223,35 @@ export interface NotebookPassage {
   external_fact_verification: "not_performed";
 }
 
+export interface RetrievalProvenance {
+  retrieved_at: string;
+  content_kind: "snippet" | "fulltext" | "fulltext_chunk";
+  content_sha256: string;
+  source_chars: number;
+  excerpt_truncated: boolean;
+  original_lineage: string;
+  lineage_basis: "url" | "attribution" | "identical_content";
+  temporal_basis: "provider_publication" | "source_publication" | "unknown";
+  spatial_basis: "topic_only" | "scoped";
+}
+
+export interface ResearchCoverage {
+  as_of: string;
+  published_since: string;
+  status: "complete" | "partial" | "unavailable" | "not_requested";
+  situation: "evidence_available" | "insufficient_evidence" | "research_failed";
+  forecast: "not_requested" | "not_assessed";
+  current_evidence_ids: string[];
+  gaps: string[];
+  attempts: Array<{ action: "search" | "extract" | "local_search";
+    status: "succeeded" | "empty" | "partial" | "failed" | "blocked";
+    code: string | null; reserved_credits: number; reported_credits: number | null }>;
+  scope_key: string;
+  spatial_basis: "topic_only";
+}
+
 export interface EvidenceSummary {
+  retrieval?: RetrievalProvenance | null;
   evidence_id?: string | null;
   title?: string | null;
   excerpt?: string | null;
@@ -232,7 +260,7 @@ export interface EvidenceSummary {
   knowledge_role?: "source" | "background" | "method" | null;
   url?: string | null;
   source_ref_id: string;
-  source_type: "rss" | "telegram" | "gdelt" | "notebooklm" | "dataset" | "unknown";
+  source_type: "rss" | "web" | "telegram" | "gdelt" | "notebooklm" | "dataset" | "unknown";
   provider: string;
   published_at: string | null;
   observed_at: string | null;
@@ -258,6 +286,7 @@ export interface IntelAnalysis {
   } | null;
   verification_status?: "unverified" | null;
   evidence_summary?: EvidenceSummary[] | null;
+  research_coverage?: ResearchCoverage | null;
   timestamp: string;
   tool_trace?: Array<{ tool_name: string; duration_ms?: number; success?: boolean }>;
   mode?: "react" | "legacy" | "error";
@@ -294,6 +323,7 @@ export interface IntelQuery {
   region?: string;
   hotspot_id?: string;
   use_legacy?: boolean;
+  research_mode?: "current" | "historical";
   report_id?: string;
   report_message?: string;
   spatialScope?: SpatialQueryRef;
@@ -328,6 +358,7 @@ export interface ReportRecord {
   assessment_status?: IntelAnalysis["assessment_status"];
   verification_status?: IntelAnalysis["verification_status"];
   evidence_summary?: IntelAnalysis["evidence_summary"];
+  research_coverage?: IntelAnalysis["research_coverage"];
   location: string;
   coords: string;
   findings: string[];
@@ -349,6 +380,7 @@ export interface ReportCreateRequest {
   assessment_status?: IntelAnalysis["assessment_status"];
   verification_status?: IntelAnalysis["verification_status"];
   evidence_summary?: IntelAnalysis["evidence_summary"];
+  research_coverage?: IntelAnalysis["research_coverage"];
   location?: string;
   coords?: string;
   findings?: string[];
@@ -372,6 +404,7 @@ export interface ReportMessage {
   assessment_status?: IntelAnalysis["assessment_status"];
   verification_status?: IntelAnalysis["verification_status"];
   evidence_summary?: IntelAnalysis["evidence_summary"];
+  research_coverage?: IntelAnalysis["research_coverage"];
 }
 
 export interface ReportMessageCreate {
@@ -382,6 +415,7 @@ export interface ReportMessageCreate {
   assessment_status?: IntelAnalysis["assessment_status"];
   verification_status?: IntelAnalysis["verification_status"];
   evidence_summary?: IntelAnalysis["evidence_summary"];
+  research_coverage?: IntelAnalysis["research_coverage"];
 }
 
 export interface IntelEvent {

@@ -68,7 +68,7 @@ async def test_real_query_serializes_status_without_promoting_it_to_facts(monkey
     monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
 
     class SynthesisGraph:
-        async def ainvoke(self, state):
+        async def ainvoke(self, state, **kwargs):
             return await workflow.react_synthesis_node(state)
 
     monkeypatch.setattr(workflow, "react_graph", SynthesisGraph())
@@ -79,7 +79,7 @@ async def test_real_query_serializes_status_without_promoting_it_to_facts(monkey
             "/query",
             json={
                 "query": "synthetic",
-                "spatial_relation": "either",
+                "spatial_relation": "either", "research_mode": "historical",
                 "grounding_evidence": [raw_evidence()],
             },
         )

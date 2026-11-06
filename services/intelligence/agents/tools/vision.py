@@ -90,7 +90,7 @@ async def _load_image(url: str) -> str:
 @tool
 async def analyze_image(
     question: str,
-    runtime: ToolRuntime[dict[str, object], AgentState],
+    runtime: ToolRuntime[object, AgentState],
 ) -> str:
     """Analyze an image using Qwen3.5 multimodal vision.
     Use for satellite imagery, document photos, maps, or any visual content.

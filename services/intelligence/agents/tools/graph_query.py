@@ -286,7 +286,7 @@ def bindable_query_knowledge_graph(*, scoped: bool) -> BaseTool:
 @tool(response_format="content_and_artifact")
 async def query_knowledge_graph(
     question: str,
-    runtime: ToolRuntime[dict[str, object], AgentState],
+    runtime: ToolRuntime[object, AgentState],
 ) -> tuple[str, list[dict]]:
     """Query the Neo4j knowledge graph (entities, events, locations, sources).
 

@@ -1,4 +1,5 @@
-import type { EvidenceSummary } from "../../types";
+import type { EvidenceSummary, ResearchCoverage } from "../../types";
+import { CurrentResearchCoverage } from "./CurrentResearchCoverage";
 import { formatEvidenceSummary } from "../../lib/evidenceSummary";
 
 function sourceLink(url: string | null | undefined): string | undefined {
@@ -14,10 +15,28 @@ function sourceLink(url: string | null | undefined): string | undefined {
 
 const textStyle = { whiteSpace: "pre-wrap", overflowWrap: "anywhere", font: "inherit" } as const;
 
-export function EvidenceTimeAxes({ summary }: { summary: EvidenceSummary[] | null | undefined }) {
-  return <details data-testid="evidence-provenance" style={{ fontSize: ".8rem", lineHeight: 1.6, color: "var(--stone)" }}>
+export function EvidenceTimeAxes({ summary, coverage }: {
+  summary: EvidenceSummary[] | null | undefined;
+  coverage?: ResearchCoverage | null;
+}) {
+  return <><CurrentResearchCoverage coverage={coverage} /><details data-testid="evidence-provenance" style={{ fontSize: ".8rem", lineHeight: 1.6, color: "var(--stone)" }}>
     <summary>Quellen und Zeitachsen</summary>
     {summary?.length ? summary.map((ref, index) => {
+      const retrieval = ref.retrieval;
+      if (retrieval) return <details key={ref.evidence_id ?? index} data-testid="current-source"
+        style={{ margin: "12px 0", padding: "10px 12px", border: "1px solid currentColor", borderRadius: 3 }}>
+        <summary>{ref.title ?? ref.provider}</summary>
+        <p>{retrieval.content_kind === "fulltext" ? "Originaltext abgerufen"
+          : retrieval.content_kind === "fulltext_chunk" ? "Originalauszug aus lokalem Korpus"
+          : "Nur Suchauszug verfügbar"} · nicht extern faktengeprüft</p>
+        <p style={textStyle}>{ref.excerpt}</p>
+        {retrieval.excerpt_truncated && <p>Ausgewählte Textstellen aus einem längeren Abruf.</p>}
+        {sourceLink(ref.url) && <a href={sourceLink(ref.url)} target="_blank" rel="noopener noreferrer">Originalquelle öffnen</a>}
+        <p>Publikation laut Suchanbieter: {ref.published_at ?? "unbekannt"}<br />
+          Ereigniszeit: {ref.observed_at ?? "unbekannt"}<br />Abruf: {retrieval.retrieved_at}</p>
+        <p>Thematischer Bezug; kein Nachweis räumlicher Zugehörigkeit. Unabhängigkeit der Quelle ungeprüft.</p>
+        <details><summary>Beleg-ID und Herkunft</summary><pre style={textStyle}>{formatEvidenceSummary([ref])}</pre></details>
+      </details>;
       const review = ref.review;
       const passage = ref.passage;
       if (passage) return <details key={ref.evidence_id ?? index} data-testid="notebook-passage"
@@ -60,5 +79,5 @@ export function EvidenceTimeAxes({ summary }: { summary: EvidenceSummary[] | nul
         </details>
       </details>;
     }) : <pre style={textStyle}>{formatEvidenceSummary(summary)}</pre>}
-  </details>;
+  </details></>;
 }

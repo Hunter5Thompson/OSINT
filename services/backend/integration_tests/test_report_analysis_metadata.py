@@ -238,3 +238,24 @@ async def test_saved_briefing_chat_keeps_original_review_after_second_save(case,
     final = await store.get_report(report_id)
     assert final.evidence_summary == []
     assert final.confidence is None
+
+
+async def test_current_research_survives_save_reload_chat_and_explicit_clear(case):
+    from app.models.research import ResearchCoverage
+
+    store, report_id, message_ids = case
+    fixture = json.loads((Path(__file__).parents[3] / "tests/fixtures/current-research.json").read_text())
+    analysis = IntelAnalysis(query="synthetic", analysis="Current fixture", **fixture)
+    patch = store.build_hydration_patch(analysis, country_name="Synthetic")
+    await store.update_report(report_id, patch)
+    saved = await store.get_report(report_id)
+    assert saved.research_coverage == ResearchCoverage.model_validate(fixture["research_coverage"])
+    assert saved.model_dump(mode="json")["evidence_summary"] == fixture["evidence_summary"]
+    message = await store.append_report_message(report_id, ReportMessageCreate(
+        role="munin", text="Later current answer", **fixture))
+    message_ids.append(message.id)
+    read_message = (await store.list_report_messages(report_id))[0]
+    assert read_message.research_coverage == saved.research_coverage
+    await store.update_report(report_id, ReportUpdateRequest(research_coverage=None))
+    assert (await store.get_report(report_id)).research_coverage is None
+    assert (await store.list_report_messages(report_id))[0].research_coverage is not None

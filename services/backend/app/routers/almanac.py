@@ -327,6 +327,7 @@ async def _save_resolved_country_briefing(
                 assessment_status=body.analysis.assessment_status,
                 verification_status=body.analysis.verification_status,
                 evidence_summary=body.analysis.evidence_summary,
+                research_coverage=body.analysis.research_coverage,
             ),
         )
         if msg is None:

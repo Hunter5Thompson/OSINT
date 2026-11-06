@@ -23,6 +23,7 @@ class ToolCapability:
 
 CAPABILITY_MATRIX: Final[tuple[ToolCapability, ...]] = (
     # Global topical context only; it never supplies in-scope occurrence evidence.
+    ToolCapability("current_search", allowed_scoped=True),
     ToolCapability("notebook_search", allowed_scoped=True),
     ToolCapability("qdrant_search", allowed_scoped=True),
     ToolCapability("query_knowledge_graph", allowed_scoped=True),
@@ -57,6 +58,8 @@ def tool_allowed_for_state(tool_name: str, state: AgentState) -> bool:
 
     capability = _CAPABILITIES_BY_NAME.get(tool_name)
     if capability is None:
+        return False
+    if tool_name == "current_search" and state.get("research_mode") == "historical":
         return False
     if tool_name == "gdelt_query" and not settings.enable_gdelt_doc_tool:
         return False

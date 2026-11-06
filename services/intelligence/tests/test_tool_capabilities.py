@@ -41,6 +41,7 @@ def test_scoped_binding_excludes_unscoped_sources_and_image_without_attachment()
     state = agent_state(spatial_scope=_scope_token())
 
     assert _names(tools_for_state(state)) == [
+        "current_search",
         "notebook_search",
         "qdrant_search",
         "query_knowledge_graph",
@@ -60,6 +61,7 @@ def test_scoped_binding_adds_vision_only_for_the_attached_image() -> None:
     )
 
     assert _names(tools_for_state(state)) == [
+        "current_search",
         "notebook_search",
         "qdrant_search",
         "query_knowledge_graph",
@@ -76,6 +78,7 @@ def test_global_binding_retains_approved_capabilities(
     state = agent_state(spatial_scope=scope)
 
     assert _names(tools_for_state(state)) == [
+        "current_search",
         "notebook_search",
         "qdrant_search",
         "query_knowledge_graph",
@@ -104,6 +107,7 @@ async def test_react_node_binds_exactly_the_state_capabilities(monkeypatch) -> N
     await workflow.react_agent_node(agent_state(spatial_scope=_scope_token()))
 
     assert captured["tools"] == [
+        "current_search",
         "notebook_search",
         "qdrant_search",
         "query_knowledge_graph",
@@ -137,6 +141,7 @@ async def test_tool_node_is_built_from_the_same_state_capabilities(monkeypatch) 
     await graph.compile().ainvoke(state)
 
     assert captured["tools"] == [
+        "current_search",
         "notebook_search",
         "qdrant_search",
         "query_knowledge_graph",

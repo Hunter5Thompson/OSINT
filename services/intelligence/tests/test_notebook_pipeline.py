@@ -58,6 +58,7 @@ async def test_started_report_receives_original_passages_automatically(
             json={
                 "query": "Assess export restrictions affecting magnets",
                 "spatial_relation": "either",
+                "research_mode": "historical",
             },
         )
     if not valid_citations:
@@ -114,7 +115,10 @@ async def test_missing_configured_archive_is_http_failure(monkeypatch, tmp_path)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=main.app), base_url="http://test"
     ) as client:
-        response = await client.post("/query", json={"query": "test", "spatial_relation": "either"})
+        response = await client.post(
+            "/query",
+            json={"query": "test", "spatial_relation": "either", "research_mode": "historical"},
+        )
     assert response.status_code == 502
     assert response.json()["code"] == "INTEL_PIPELINE_FAILED"
 

@@ -1,6 +1,6 @@
 """LangGraph agent state definition."""
 
-from typing import Annotated, TypedDict
+from typing import Annotated, NotRequired, TypedDict
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
@@ -29,6 +29,11 @@ class AgentState(TypedDict):
     grounding_evidence_artifact: list[dict]
     notebook_evidence_pack: str
     notebook_evidence_artifact: list[dict]
+
+    research_mode: NotRequired[str]
+    current_evidence_pack: NotRequired[str]
+    current_evidence_artifact: NotRequired[list[dict]]
+    research_coverage: NotRequired[dict | None]
 
     # ReAct loop
     messages: Annotated[list[BaseMessage], add_messages]

@@ -121,7 +121,7 @@ async def test_query_response_carries_parse_notice(monkeypatch):
     monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
 
     class SynthesisGraph:
-        async def ainvoke(self, state):
+        async def ainvoke(self, state, **kwargs):
             return await workflow.react_synthesis_node(state)
 
     monkeypatch.setattr(workflow, "react_graph", SynthesisGraph())
@@ -132,7 +132,7 @@ async def test_query_response_carries_parse_notice(monkeypatch):
             "/query",
             json={
                 "query": "synthetic",
-                "spatial_relation": "either",
+                "spatial_relation": "either", "research_mode": "historical",
                 "grounding_evidence": [raw_evidence()],
             },
         )

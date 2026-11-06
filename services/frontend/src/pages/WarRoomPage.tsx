@@ -18,7 +18,7 @@ import {
   silenceIncident,
 } from "../services/api";
 import type { Incident } from "../types/incident";
-import { formatEvidenceSummary } from "../lib/evidenceSummary";
+import { formatEvidenceSummary, formatResearchCoverage } from "../lib/evidenceSummary";
 
 import "../components/warroom/warRoomLayout.css";
 
@@ -129,7 +129,7 @@ export function WarRoomPage() {
             : analysis.verification_status === "unverified"
             ? "Modellbewertung · Quellenbelege sind nicht unabhängig verifiziert."
             : "Bewertungs- und Verifikationsstatus unbekannt.";
-          const composed = `${label ? `[${label}] ${body}` : body}\n\n${verification}\n\n${formatEvidenceSummary(analysis.evidence_summary)}`;
+          const composed = `${label ? `[${label}] ${body}` : body}\n\n${verification}\n\n${formatResearchCoverage(analysis.research_coverage)}\n\n${formatEvidenceSummary(analysis.evidence_summary)}`;
           setHypothesis(composed || "Munin returned no synthesis.");
         },
         (error) => {

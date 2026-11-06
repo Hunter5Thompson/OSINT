@@ -92,6 +92,7 @@ export function BriefingPage() {
   const chatGeneration = useRef(0);
 
   const [input, setInput] = useState("");
+  const [researchMode, setResearchMode] = useState<"current" | "historical">("current");
 
   const {
     loading: muninLoading,
@@ -221,6 +222,7 @@ export function BriefingPage() {
       assessment_status: result.assessment_status,
       verification_status: result.verification_status,
       evidence_summary: result.evidence_summary,
+      research_coverage: result.research_coverage,
     });
   }, [result, analysisReportId, selectedReport?.id]);
 
@@ -326,9 +328,10 @@ export function BriefingPage() {
     abortRef.current?.();
 
     abortRef.current = runQuery({
-      query: `Report ${selectedReport.paragraph_num} (${selectedReport.title}): ${question}`,
+      query: question,
       report_id: selectedReport.id,
       report_message: question,
+      research_mode: researchMode,
     });
   };
 
@@ -409,7 +412,7 @@ export function BriefingPage() {
                 {`§ ${String(selectedReport.paragraph_num).padStart(3, "0")} · ${statusToken(selectedReport.status)} · conf ${confidence(selectedReport)}`}
               </div>
               <h1 className="serif briefing-dossier-title">{selectedReport.title}</h1>
-              <EvidenceTimeAxes summary={selectedReport.evidence_summary} />
+              <EvidenceTimeAxes summary={selectedReport.evidence_summary} coverage={selectedReport.research_coverage} />
               <div className="mono briefing-dossier-submeta">
                 {selectedReport.assessment_status?.threat === "not_assessed"
                   ? "Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf."
@@ -574,7 +577,7 @@ export function BriefingPage() {
                     ? "Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf."
                     : msg.verification_status === "unverified"
                       ? "Modellantwort · unverifiziert" : "Bewertungs- und Verifikationsstatus unbekannt"}</div>
-                  <EvidenceTimeAxes summary={msg.evidence_summary} />
+                  <EvidenceTimeAxes summary={msg.evidence_summary} coverage={msg.research_coverage} />
                 </>}
                 {msg.refs && msg.refs.length > 0 ? (
                   <div className="mono briefing-chat-refs">
@@ -598,6 +601,14 @@ export function BriefingPage() {
         </div>
 
         <form className="briefing-input-wrap" onSubmit={(e) => void askMunin(e)}>
+          <label style={{ fontSize: ".75rem" }}>Recherche
+            <select aria-label="Recherchemodus" value={researchMode}
+              onChange={e => setResearchMode(e.target.value === "historical" ? "historical" : "current")}
+              disabled={muninLoading}>
+              <option value="current">Aktuelle Quellen</option>
+              <option value="historical">Archivfrage · ohne Web</option>
+            </select>
+          </label>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}

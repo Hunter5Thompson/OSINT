@@ -19,7 +19,7 @@ logger = structlog.get_logger()
 @tool(response_format="content_and_artifact")
 async def rss_fetch(
     feed_url: str,
-    runtime: ToolRuntime[dict[str, object], AgentState],
+    runtime: ToolRuntime[object, AgentState],
 ) -> tuple[str, list[dict]]:
     """Fetch and parse an RSS feed to get recent articles.
 
