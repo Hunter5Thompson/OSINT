@@ -1,6 +1,7 @@
 # Current research for ODIN
 
-Status: implementation in progress. Baseline: `39b79dd1ce7d8d93a175a0fa35c7cb46206c028a`.
+Status: current research enabled for review-required analysis drafts; automated
+forecasts are not qualified. Baseline: `39b79dd1ce7d8d93a175a0fa35c7cb46206c028a`.
 
 The accepted requirement is current, source-grounded analysis with bounded scenario
 assessment. The specification and initial live failures are preserved under
@@ -74,11 +75,12 @@ Historical mode cannot invoke arbitrary public URL/query tools; current follow-u
 searches use the pinned public question and an enumerated focus.
 
 Current synthesis receives only eligible source excerpts. Its two model passes
-produce typed findings and conditional scenarios. The model selects fixed paragraph
+produce typed source findings. Future-attack questions receive a fixed, unassessed
+server-owned methodological framework. The model selects fixed paragraph
 IDs; rendering inserts the entire original passage. No substring quotation or
 character-cut article paragraph is permitted. Translation and interpretation remain
 labelled model output requiring expert review. Unknown passage IDs, model-supplied
-replacement quotes and missing attack scenarios fail closed. Read excerpts remain
+replacement quotes and additional free scenario fields fail closed. Read excerpts remain
 limited context and do not establish semantic entailment or external truth.
 
 Optional tool failures preserve valid partial current answers with an explicit gap.
@@ -87,17 +89,16 @@ topic-only web matches cannot enable an occurrence claim.
 
 Technical evidence so far: 967 intelligence tests, 1,206 backend tests,
 963 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
-the latest receipt display additions. Further
-independent review and live content qualification are in progress. Production
-containers have not been changed.
+the latest receipt display additions. The scoped application rollout and a real
+UI query, automatic chat persistence, report API save and browser reload are recorded
+under the implementation artifact directory. These checks do not certify truth.
 
 The optional `docker-compose.current-research.yml` overlay mounts a private
 dotenv file read-only at `/run/secrets/tavily.env`. Set `ODIN_TAVILY_ENV_FILE` to
 the existing host file. Do not copy credentials into images or the repository.
 `/health` reports configuration readiness without a paid provider probe.
 
-Known passage IDs are also accepted in scenario references and deterministically
-resolve to the matching source. Irrelevant originals permit an empty finding set
+Irrelevant originals permit an empty finding set
 and an explicit insufficient-evidence result; the model is not forced to convert
 navigation or source metadata into a current finding. Public query planning uses
 JSON output mode with a bounded local timeout.
@@ -116,7 +117,8 @@ probe on the preserved cases it detected attribution/date errors missed by the
 timeout therefore allow an explicitly configured analysis adapter. Discovery and
 ReAct remain on the existing local model. No second local model, download, model
 swap or inference-service restart is involved. The complete live matrix must
-qualify this combination; the small probe alone is not acceptance.
+assess this combination; the small probe alone is not acceptance. The completed
+matrix and targeted repetitions support only the bounded draft scope documented below.
 
 Discovery defaults to 25 named international, regional and official publisher
 domains, configurable through `CURRENT_RESEARCH_DOMAINS`. The run pins and saves
@@ -127,7 +129,7 @@ also reflect updates; original-date conflict checks and distinct event dates are
 still required. No automatic index writes or new ingestion occur.
 
 The current report also supplies its JSON Schema to the inference boundary,
-including allowed passage IDs and the requested scenario shape. The schema keeps
+including allowed passage IDs and only the source-finding shape. The schema keeps
 an empty-finding abstention branch; structural constraints must not force a claim.
 Local validation remains mandatory even when the inference server constrains JSON.
 

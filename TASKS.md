@@ -15,10 +15,14 @@ extern geprüft. Die 29 zurückgestellten Notebooks bleiben ausgeschlossen.
 
 ## Repo-Goal und HN
 
-Folgearbeit 06.11.2026, in Umsetzung:
+Folgearbeit 06.11.2026, aktuelle Recherche aktiviert:
 [Verbindliche aktuelle Recherche](docs/implementation/2026-11-06-current-research.md).
 Tavily-/Originalabruf, zeitliche Belegprüfung und gespeicherte Rechercheabdeckung;
-technische, fachliche und Release-Abnahme werden getrennt geführt.
+technische, fachliche und Release-Abnahme werden getrennt geführt. Nutzbarer Umfang:
+fachlich zu prüfende Rechercheentwürfe. Freie automatische Szenariodetails wurden
+nach realen Fehlbefunden entfernt; zuverlässige Prognosen und externe Faktenprüfung
+bleiben nicht qualifiziert. Live- und Betriebsnachweise:
+`/data/odin-agent-enablement/20261106-implementation/README.md`.
 
 Gesamtmatrix: [Finding-/Abnahmegates](docs/reviews/2026-10-10-goal-gates.md).
 Menschliche Prüfung: [unbewertete Abnahmeunterlagen](docs/operations/goal-acceptance-2026-10-10.md).

@@ -23,7 +23,7 @@ const gaps: Record<string, string> = {
   statement_check_unavailable: "Die zusätzliche Quellenprüfung war nicht verfügbar; automatische Einordnungen wurden zurückgehalten.",
   forecast_details_not_qualified: "Automatische Prognosedetails sind fachlich nicht freigegeben; die Szenarien sind ein unbewertetes Prüfraster.",
   supplemental_tool_failed: "Ein ergänzendes Recherchewerkzeug ist ausgefallen.",
-  excerpt_unavailable: "Kein vollständiger Originalabsatz passt in das verfügbare Textbudget.",
+  excerpt_unavailable: "Für einzelne Treffer ist kein vollständiger Originalabsatz im verfügbaren Textbudget enthalten.",
   response_too_large: "Die Antwort des Suchanbieters überschreitet die Größenbegrenzung.",
 };
 
