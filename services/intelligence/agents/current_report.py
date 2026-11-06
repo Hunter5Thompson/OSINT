@@ -7,11 +7,13 @@ the German interpretation. Only eligible current original excerpts reach this st
 import json
 import re
 from dataclasses import dataclass
+from typing import Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from agents.source_check import check_statements
 from distill_capture import capture_synthesis_input
 from graph.result import PipelineFailureError
 from rag.evidence import EvidenceItem
@@ -22,6 +24,7 @@ class RenderedCurrentReport(BaseModel):
     text: str
     scenario_count: int
     finding_count: int
+    statement_check: Literal["passed", "partial", "unavailable"] = "passed"
 
 
 class Finding(BaseModel):
@@ -67,7 +70,10 @@ def _validate_sources(
 
 
 def _render(
-    draft: CurrentDraft, originals: dict[str, EvidenceItem], passages: dict[str, SourcePassage]
+    draft: CurrentDraft,
+    originals: dict[str, EvidenceItem],
+    passages: dict[str, SourcePassage],
+    approved_statements: set[str],
 ) -> str:
     citation_ids = {key: key for key in originals} | {
         key: passage.source_id for key, passage in passages.items()
@@ -77,14 +83,17 @@ def _render(
         "Zugeschriebene Quellenangaben; nicht extern faktengeprüft. "
         "Publikationszeit ist keine bestätigte Ereigniszeit.",
     ]
-    for finding in draft.findings:
+    for index, finding in enumerate(draft.findings):
         passage = passages[finding.passage_id]
         item = originals[passage.source_id]
         stamp = item.source.published_at.isoformat() if item.source.published_at else "unbekannt"
         parts += [
             f"**{item.source.provider} · publiziert {stamp}** [{passage.source_id}]",
             "> " + passage.text.replace("\n", "\n> "),
-            "Modellübersetzung / Einordnung (fachlich prüfen): " + finding.statement,
+            "Modellübersetzung / Einordnung (fachlich prüfen): " + finding.statement
+            if f"f{index}" in approved_statements
+            else "Automatische Einordnung nach Quellenprüfung zurückgehalten; "
+            "maßgeblich bleibt die Originalpassage.",
         ]
     if draft.scenarios:
         parts += [
@@ -109,7 +118,15 @@ def _render(
         ]
     parts += [
         "## Grenzen und offene Fragen",
-        "\n".join(f"- {gap}" for gap in draft.gaps),
+        "Keine externe Faktenprüfung der Quellen. Suchumfang und Abrufe sind begrenzt; "
+        "weitere Meldungen und Gegenpositionen können fehlen. Publikationszeit bestätigt "
+        "weder Ereigniszeit noch Absichten der beteiligten Akteure.",
+        "Die Voraussetzungen der Szenarien bleiben offene Prüffragen; "
+        "eine kalibrierte Eintrittseinschätzung liegt nicht vor."
+        if draft.scenarios
+        else "Keine thematisch tragfähige Originalpassage ausgewählt."
+        if not draft.findings
+        else "Die Originalpassagen und Einordnungen benötigen fachliche Prüfung.",
         "Threat Assessment: NOT_ASSESSED",
         "Confidence Level: not assessed",
     ]
@@ -131,7 +148,7 @@ async def compose_current_report(
     }
     forecast_requested = bool(
         re.search(
-            r"n.chst|next|48|erwart|prognos|szenari|forecast|future|k.nftig",
+            r"\b(?:nächste\w*|next|morgen|tomorrow|coming|erwart\w*|prognos\w*|szenari\w*|forecast\w*|future|künftig\w*)\b",
             question,
             re.I,
         )
@@ -256,10 +273,26 @@ async def compose_current_report(
                     "Begrenzte Schläge, Größere Eskalation"
                 )
             if attempt == 1:
+                checked = await check_statements(
+                    [
+                        {
+                            "id": f"f{index}",
+                            "original": passages[f.passage_id].text,
+                            "translation": f.statement,
+                        }
+                        for index, f in enumerate(draft.findings)
+                    ],
+                    model,
+                )
                 return RenderedCurrentReport(
-                    text=_render(draft, originals, passages),
+                    text=_render(draft, originals, passages, checked.approved),
                     scenario_count=len(draft.scenarios),
                     finding_count=len(draft.findings),
+                    statement_check="unavailable"
+                    if not checked.available
+                    else "passed"
+                    if len(checked.approved) == len(draft.findings)
+                    else "partial",
                 )
         except (ValidationError, ValueError) as exc:
             error = str(exc)[:800]

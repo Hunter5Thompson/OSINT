@@ -548,6 +548,15 @@ async def react_synthesis_node(state: AgentState) -> dict:
                 as_of=coverage["as_of"],
             )
             content = current_report.text
+            if current_report.statement_check != "passed":
+                coverage = {
+                    **coverage,
+                    "status": "partial",
+                    "gaps": [
+                        *coverage["gaps"],
+                        "statement_check_" + current_report.statement_check,
+                    ],
+                }
             if not current_report.finding_count:
                 coverage = {
                     **coverage,

@@ -130,3 +130,12 @@ The current report also supplies its JSON Schema to the inference boundary,
 including allowed passage IDs and the requested scenario shape. The schema keeps
 an empty-finding abstention branch; structural constraints must not force a claim.
 Local validation remains mandatory even when the inference server constrains JSON.
+
+A final, separate source-only audit receives at most four original/translation
+pairs and no report context. It has a 25-second deadline. Rejected, missing,
+duplicate or unavailable approvals withhold the model interpretation while
+retaining its original passage. This model check is explicitly not factual
+verification. Technical coverage records partial/unavailable checks. Free model
+claims about missing sources are not rendered as facts; report limits are
+deterministic and actual retrieval gaps remain visible. Past 48-hour windows
+are distinct from explicit future requests such as tomorrow.

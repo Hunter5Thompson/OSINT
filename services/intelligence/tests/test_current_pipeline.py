@@ -96,7 +96,7 @@ async def test_zero_tool_calls_still_research_and_consume_current_original(
     assert result["evidence_summary"][0]["excerpt"] == BODY
     assert result["verification_status"] == "unverified"
     assert "current_research" in result["agent_chain"]
-    prompt = "\n".join(m.content for m in synthesis.ainvoke.call_args.args[0])
+    prompt = "\n".join(m.content for m in synthesis.ainvoke.call_args_list[0].args[0])
     assert BODY in prompt
     assert "szenari" in prompt.lower()
     if optional_graph_failure:

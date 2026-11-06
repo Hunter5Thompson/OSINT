@@ -18,6 +18,12 @@ const gaps: Record<string, string> = {
   timeout: "Ein Abruf hat sein Zeitlimit überschritten.",
   invalid_results: "Nicht verwendbare Suchtreffer wurden verworfen.",
   prompt_budget: "Der Berichtskontext begrenzt die verwendbaren Belege.",
+  no_relevant_passage: "Keine thematisch tragfähige Originalpassage ausgewählt.",
+  statement_check_partial: "Einzelne automatische Einordnungen wurden nach Quellenprüfung zurückgehalten.",
+  statement_check_unavailable: "Die zusätzliche Quellenprüfung war nicht verfügbar; automatische Einordnungen wurden zurückgehalten.",
+  supplemental_tool_failed: "Ein ergänzendes Recherchewerkzeug ist ausgefallen.",
+  excerpt_unavailable: "Kein vollständiger Originalabsatz passt in das verfügbare Textbudget.",
+  response_too_large: "Die Antwort des Suchanbieters überschreitet die Größenbegrenzung.",
 };
 
 export function CurrentResearchCoverage({ coverage }: { coverage?: ResearchCoverage | null }) {

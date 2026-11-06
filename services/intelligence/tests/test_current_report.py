@@ -55,7 +55,7 @@ async def test_quote_and_source_identity_survive_conditional_report():
     assert "Keine neuen Angriffe" in report and "Größere Eskalation" in report
     assert "Threat Assessment: NOT_ASSESSED" in report
     assert "Confidence Level: not assessed" in report
-    assert model.ainvoke.await_count == 2
+    assert model.ainvoke.await_count == 3
 
 
 async def test_unknown_or_old_passage_ids_fail_closed():
@@ -118,7 +118,7 @@ async def test_passage_selection_preserves_negation_abbreviations_and_complete_p
     model.ainvoke.return_value = AIMessage(content=json.dumps(draft()))
     report = await compose_current_report("Iran", [item], model)
     assert "> " + text in report.text
-    prompt = model.ainvoke.call_args.args[0][1].content
+    prompt = model.ainvoke.call_args_list[0].args[0][1].content
     assert text in prompt and "ev-current:p0" in prompt
 
 
@@ -174,7 +174,7 @@ async def test_report_uses_the_server_clock_and_bounded_source_checks():
     model = AsyncMock()
     model.ainvoke.return_value = AIMessage(content=json.dumps(draft()))
     await compose_current_report("Iran", [source()], model, as_of="2026-11-06T18:00:00+00:00")
-    first, check = model.ainvoke.call_args_list
+    first, check = model.ainvoke.call_args_list[:2]
     assert "2026-11-06T18:00:00+00:00" in first.args[0][1].content
     assert first.kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
     assert first.kwargs["max_tokens"] <= 4000
@@ -201,8 +201,54 @@ async def test_attack_scenario_structure_is_constrained_at_the_model_boundary():
     await compose_current_report(
         "Neue Angriffe auf Iran in den nächsten 48 Stunden?", [source()], model
     )
-    contract = model.ainvoke.call_args.kwargs["response_format"]
+    contract = model.ainvoke.call_args_list[0].kwargs["response_format"]
     assert contract["type"] == "json_schema"
     schema = contract["json_schema"]["schema"]
     assert schema["anyOf"][0]["properties"]["scenarios"]["minItems"] == 3
     assert schema["$defs"]["Finding"]["properties"]["passage_id"]["enum"] == ["ev-current:p0"]
+
+
+@pytest.mark.parametrize(
+    "question,expected",
+    [
+        ("Welche Angriffe gab es in den letzten 48 Stunden?", 0),
+        ("Gibt es morgen neue Angriffe auf Iran?", 3),
+    ],
+)
+async def test_a_time_span_is_distinct_from_a_future_request(question, expected):
+    from agents.current_report import compose_current_report
+
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(content=json.dumps(draft()))
+    report = await compose_current_report(question, [source()], model)
+    assert report.scenario_count == expected
+
+
+async def test_failed_source_check_preserves_original_and_withholds_interpretation():
+    from agents.current_report import compose_current_report
+
+    payload = draft()
+    payload["findings"][0]["statement"] = "Der Minister hat den Angriff befohlen."
+    model = AsyncMock()
+    model.ainvoke.side_effect = [AIMessage(content=json.dumps(payload))] * 2 + [
+        AIMessage(
+            content=json.dumps({"checks": [{"id": "f0", "faithful": False, "reason": "Negation"}]})
+        ),
+    ]
+    report = await compose_current_report("Iran", [source()], model)
+    assert QUOTE in report.text
+    assert "Der Minister hat den Angriff befohlen." not in report.text
+    assert "zurückgehalten" in report.text
+    assert report.statement_check == "partial"
+
+
+async def test_model_gap_claims_do_not_escape_the_source_check_as_report_facts():
+    from agents.current_report import compose_current_report
+
+    payload = draft()
+    payload["gaps"] = ["All sources dated 2026 are fictional."]
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(content=json.dumps(payload))
+    report = await compose_current_report("Iran", [source()], model)
+    assert "fictional" not in report.text
+    assert "Keine externe Faktenprüfung" in report.text
