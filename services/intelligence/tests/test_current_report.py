@@ -343,3 +343,68 @@ async def test_report_limits_are_server_owned_and_need_no_model_gap_prose():
     report = await compose_current_report("Iran", [source()], model)
     assert "Keine externe Faktenprüfung" in report.text
     assert QUOTE in report.text
+
+
+async def test_rejected_free_scenario_title_cannot_leak_a_factual_claim():
+    from agents.current_report import compose_current_report
+
+    payload = draft()
+    payload["scenarios"] = [payload["scenarios"][0]]
+    payload["scenarios"][0]["name"] = "Der Minister hat den Angriff bestätigt"
+    model = AsyncMock()
+    model.ainvoke.side_effect = [AIMessage(content=json.dumps(payload))] * 2 + [
+        AIMessage(content=json.dumps({"checks": []})),
+        AIMessage(
+            content=json.dumps(
+                {
+                    "checks": [
+                        {"id": "s0", "faithful": False, "reason": "Unsupported title"},
+                    ]
+                }
+            )
+        ),
+    ]
+    report = await compose_current_report("Wie entwickelt sich die Lage morgen?", [source()], model)
+    assert payload["scenarios"][0]["name"] not in report.text
+    assert "Szenario 1 · nicht bewertet" in report.text
+
+
+async def test_open_forecast_does_not_discard_an_available_current_situation():
+    from agents.current_report import compose_current_report
+
+    model = AsyncMock()
+    empty = AIMessage(content=json.dumps({"findings": [], "scenarios": []}))
+    model.ainvoke.side_effect = [
+        empty,
+        empty,
+        AIMessage(content=json.dumps({"findings": draft()["findings"]})),
+        AIMessage(
+            content=json.dumps(
+                {
+                    "checks": [
+                        {"id": "f0", "faithful": True, "reason": "Faithful denial"},
+                    ]
+                }
+            )
+        ),
+    ]
+    report = await compose_current_report("Neue Angriffe auf Iran morgen?", [source()], model)
+    assert report.finding_count == 1
+    assert QUOTE in report.text
+    assert draft()["findings"][0]["statement"] in report.text
+    assert report.scenario_count == 3
+    assert "Szenariodetails" in report.text
+    assert report.scenario_check == "partial"
+    assert "Stützende Angaben" not in report.text
+
+
+async def test_unavailable_source_reader_cannot_invent_a_recovered_finding():
+    from agents.current_report import compose_current_report
+
+    model = AsyncMock()
+    empty = AIMessage(content=json.dumps({"findings": [], "scenarios": []}))
+    model.ainvoke.side_effect = [empty, empty, TimeoutError()]
+    report = await compose_current_report("Iran morgen?", [source()], model)
+    assert report.finding_count == 0
+    assert QUOTE not in report.text
+    assert "Keine thematisch tragfähige Originalpassage" in report.text

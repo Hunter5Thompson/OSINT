@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatUnassessedEvidence } from "../lib/evidenceSummary";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { IncidentBar } from "../components/hlidskjalf/IncidentBar";
@@ -125,7 +126,7 @@ export function WarRoomPage() {
             || analysis.assessment_status?.threat === "not_assessed")
             ? "Bewertung nicht verfügbar" : analysis.threat_assessment?.trim() ?? "";
           const verification = analysis.assessment_status?.threat === "not_assessed"
-            ? "Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf."
+            ? formatUnassessedEvidence(analysis.evidence_summary)
             : analysis.verification_status === "unverified"
             ? "Modellbewertung · Quellenbelege sind nicht unabhängig verifiziert."
             : "Bewertungs- und Verifikationsstatus unbekannt.";

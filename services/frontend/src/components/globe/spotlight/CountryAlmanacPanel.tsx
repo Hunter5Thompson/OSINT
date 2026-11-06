@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EvidenceTimeAxes } from "../../worldview/EvidenceTimeAxes";
+import { formatUnassessedEvidence } from "../../../lib/evidenceSummary";
 
 import { useCountryAlmanac } from "../../../hooks/useCountryAlmanac";
 import { useCountryBriefing } from "../../../hooks/useCountryBriefing";
@@ -159,7 +160,7 @@ function CountryBriefingContent({
           </summary>
           <div className="country-almanac__muted">
             {briefing.result.assessment_status?.threat === "not_assessed"
-            ? "Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf."
+            ? formatUnassessedEvidence(briefing.result.evidence_summary)
             : briefing.result.verification_status === "unverified"
               ? "Modellbewertung · Quellenbelege sind nicht unabhängig verifiziert."
               : "Bewertungs- und Verifikationsstatus unbekannt."}

@@ -98,6 +98,23 @@ function renderBriefing() {
 }
 
 describe("BriefingPage", () => {
+  it("distinguishes unassessed threat from absent current source evidence after reload", async () => {
+    const evidence = [{ source_ref_id: "current-original", source_type: "web" as const,
+      provider: "fixture.example.invalid", excerpt: "Officials denied the reported attack.",
+      published_at: "2026-11-06T00:00:00Z", observed_at: null, ingested_at: null,
+      verification_status: "unverified" as const }];
+    const assessment = { threat: "not_assessed" as const, confidence: "not_assessed" as const, issues: [] };
+    getReportsMock.mockResolvedValue([{ ...sampleReport, confidence: null,
+      assessment_status: assessment, verification_status: "unverified", evidence_summary: evidence }]);
+    getReportMessagesMock.mockResolvedValue([{ id: "current", role: "munin", text: "Current sources read.",
+      ts: "2026-11-06T00:00:00Z", refs: [], assessment_status: assessment,
+      verification_status: "unverified", evidence_summary: evidence }]);
+    renderBriefing();
+    await screen.findByText("Current sources read.");
+    expect(screen.queryByText(/Keine verwendbaren Belege/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Keine Modellbewertung · Quellenangaben vorhanden, nicht extern faktengeprüft.")).toHaveLength(2);
+  });
+
   it.each(["live", "saved"])("labels %s abstention as no model assessment", async (mode) => {
     const analysis: IntelAnalysis = {
       query: "fixture", agent_chain: ["evidence_gate"], sources_used: [],

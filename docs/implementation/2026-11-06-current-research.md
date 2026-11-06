@@ -85,8 +85,8 @@ Optional tool failures preserve valid partial current answers with an explicit g
 Occurrence queries accept only current evidence from the pinned spatial filter;
 topic-only web matches cannot enable an occurrence claim.
 
-Technical evidence so far: 965 intelligence tests, 1,206 backend tests,
-962 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
+Technical evidence so far: 968 intelligence tests, 1,206 backend tests,
+963 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
 the latest receipt display additions. Further
 independent review and live content qualification are in progress. Production
 containers have not been changed.
@@ -154,3 +154,20 @@ and indicators. Both audit boundaries require a strict JSON boolean, never a
 coerced string or number. These checks reduce observed errors; they do not certify
 facts, future events or general model reliability. Final live qualification is
 still required before applying the prepared release.
+
+The full c4c56df live matrix returned eleven answers without pipeline failures.
+Independent source review rated five PASS (including two justified abstentions),
+five PARTIAL and one coverage FAIL: a combined forecast draft discarded relevant
+Iran situation passages. A bounded source-only reader now handles this empty
+selection case separately. It may recover source-bound findings, which still pass
+the normal statement audit; it cannot authorize new forecast details. Irrelevant
+sources remain a valid empty result. Short complete core summaries are requested
+to avoid decoder-enforced mid-sentence truncation at the field's length limit.
+
+Rejected free scenario names use neutral server-owned headings. The UI now
+distinguishes an unassessed threat from absent evidence: current original sources
+can be available even when no threat or forecast rating is justified.
+
+Remaining source-level limitations include missed contradictions and occasional
+role, time or terminology errors despite positive model checks. These are recorded
+as review limitations, never as external factual acceptance or calibrated forecasts.

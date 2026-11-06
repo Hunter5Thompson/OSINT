@@ -1,5 +1,11 @@
 import type { EvidenceSummary, ResearchCoverage } from "../types";
 
+export function formatUnassessedEvidence(summary: EvidenceSummary[] | null | undefined): string {
+  return summary?.length
+    ? "Keine Modellbewertung · Quellenangaben vorhanden, nicht extern faktengeprüft."
+    : "Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf.";
+}
+
 function utc(value: string | null): string {
   if (value === null) return "unbekannt";
   const date = new Date(value);

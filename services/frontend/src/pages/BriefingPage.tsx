@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MuninLoader } from "../components/worldview/MuninLoader";
 import { EvidenceTimeAxes } from "../components/worldview/EvidenceTimeAxes";
+import { formatUnassessedEvidence } from "../lib/evidenceSummary";
 import { useIntel } from "../hooks/useIntel";
 import {
   createReport,
@@ -415,7 +416,7 @@ export function BriefingPage() {
               <EvidenceTimeAxes summary={selectedReport.evidence_summary} coverage={selectedReport.research_coverage} />
               <div className="mono briefing-dossier-submeta">
                 {selectedReport.assessment_status?.threat === "not_assessed"
-                  ? "Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf."
+                  ? formatUnassessedEvidence(selectedReport.evidence_summary)
                   : selectedReport.verification_status === "unverified"
                   ? "Modellbewertung · Quellenbelege sind nicht unabhängig verifiziert."
                   : "Bewertungs- und Verifikationsstatus unbekannt."}
@@ -574,7 +575,7 @@ export function BriefingPage() {
                 <p className={msg.role === "munin" ? "serif" : undefined}>{msg.text}</p>
                 {msg.role === "munin" && <>
                   <div className="mono briefing-chat-meta">{msg.assessment_status?.threat === "not_assessed"
-                    ? "Keine Modellbewertung · Keine verwendbaren Belege in diesem Recherchelauf."
+                    ? formatUnassessedEvidence(msg.evidence_summary)
                     : msg.verification_status === "unverified"
                       ? "Modellantwort · unverifiziert" : "Bewertungs- und Verifikationsstatus unbekannt"}</div>
                   <EvidenceTimeAxes summary={msg.evidence_summary} coverage={msg.research_coverage} />
