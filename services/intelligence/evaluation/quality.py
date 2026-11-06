@@ -182,13 +182,22 @@ def evaluate_run(corpus: dict, corpus_sha256: str, run: dict) -> dict:
             errors.append(f"{key}:{repetition}:MISSING_ANALYSIS")
         else:
             parsed = parse_assessment(analysis)
-            if row.get("assessment_status") != parsed.status:
-                errors.append(f"{key}:{repetition}:ASSESSMENT_ORIGIN_MISMATCH")
-            if (
-                row.get("threat_assessment") != parsed.threat
-                or row.get("confidence") != parsed.confidence
-            ):
-                errors.append(f"{key}:{repetition}:ASSESSMENT_VALUE_MISMATCH")
+            if row.get("answerability") == "insufficient_evidence":
+                if (allowed[key] or row.get("threat_assessment") is not None
+                        or row.get("confidence") is not None
+                        or row.get("assessment_status") != {
+                            "threat": "not_assessed", "confidence": "not_assessed",
+                            "issues": ["no-consumed-evidence"],
+                        }):
+                    errors.append(f"{key}:{repetition}:INVALID_EMPTY_EVIDENCE_RESULT")
+            else:
+                if row.get("assessment_status") != parsed.status:
+                    errors.append(f"{key}:{repetition}:ASSESSMENT_ORIGIN_MISMATCH")
+                if (
+                    row.get("threat_assessment") != parsed.threat
+                    or row.get("confidence") != parsed.confidence
+                ):
+                    errors.append(f"{key}:{repetition}:ASSESSMENT_VALUE_MISMATCH")
         if row.get("verification_status") != "unverified":
             errors.append(f"{key}:{repetition}:UNSUPPORTED_FACTUAL_STATUS")
         if row.get("evidence_summary") != summaries[key]:

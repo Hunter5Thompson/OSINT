@@ -2,7 +2,7 @@
 
 import httpx
 import structlog
-from langchain_core.tools import tool
+from langchain_core.tools import ToolException, tool
 from langgraph.prebuilt import ToolRuntime
 
 from agents.tools.capabilities import tool_allowed_for_state
@@ -16,7 +16,7 @@ logger = structlog.get_logger()
 @tool(response_format="content_and_artifact")
 async def gdelt_query(
     query: str,
-    runtime: ToolRuntime[dict[str, object], AgentState],
+    runtime: ToolRuntime[object, AgentState],
     max_records: int = 20,
 ) -> tuple[str, list[dict]]:
     """Query GDELT DOC-API for breaking news (last 24-72h coverage window).
@@ -75,8 +75,7 @@ async def gdelt_query(
                     preview=body_preview,
                     error=str(exc),
                 )
-                return (f"GDELT query temporarily unavailable for: "
-                        f"{neutralize_evidence_markers(query)}"), []
+                raise ToolException("GDELT_QUERY_FAILED: temporarily unavailable") from exc
 
         articles = data.get("articles", [])
         logger.info(
@@ -104,4 +103,4 @@ async def gdelt_query(
         return f"[GDELT Evidence for: {neutralize_evidence_markers(query)}]\n{pack}", lineage
     except Exception as e:
         logger.warning("gdelt_query_failed", error=str(e))
-        return f"GDELT query failed: {neutralize_evidence_markers(str(e))}", []
+        raise ToolException("GDELT_QUERY_FAILED: temporarily unavailable") from e

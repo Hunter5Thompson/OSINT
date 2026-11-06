@@ -28,6 +28,7 @@ def expected():
     item = to_evidence_item(raw_evidence())
     return {
         "source_ref_id": item.source.source_ref_id,
+        "evidence_id": item.evidence_id,
         "provider": "odin-country-almanac",
         "source_type": "dataset",
         "published_at": "2026-10-09T00:00:00+00:00",
@@ -96,7 +97,7 @@ async def test_real_query_retains_explicit_grounding_time_axes_and_public_projec
     monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
 
     class SynthesisProbe:
-        async def ainvoke(self, state):
+        async def ainvoke(self, state, **kwargs):
             return await workflow.react_synthesis_node(state)
 
     monkeypatch.setattr(workflow, "react_graph", SynthesisProbe())
@@ -107,7 +108,7 @@ async def test_real_query_retains_explicit_grounding_time_axes_and_public_projec
             "/query",
             json={
                 "query": "synthetic",
-                "spatial_relation": "either",
+                "spatial_relation": "either", "research_mode": "historical",
                 "grounding_evidence": [raw_evidence()],
             },
         )

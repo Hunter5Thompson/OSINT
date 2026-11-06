@@ -9,12 +9,15 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.models.intel import AssessmentStatus, EvidenceSummary, SpatialRunApplicationV1
+from app.models.research import ResearchCoverage
 
 _utc_now = partial(datetime.now, UTC)
 
 ReportStatus = Literal["Draft", "Published", "Archived"]
 MessageRole = Literal["user", "munin", "system"]
 AccentTone = Literal["sentinel", "amber", "sage"]
+
+
 
 
 class DossierMetric(BaseModel):
@@ -36,10 +39,11 @@ class ReportRecord(BaseModel):
     title: str
     scope_key: str | None = None
     status: ReportStatus = "Draft"
-    confidence: float = Field(default=0.62, ge=0.0, le=1.0)
+    confidence: float | None = Field(default=0.62, ge=0.0, le=1.0)
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None
+    research_coverage: ResearchCoverage | None = None
     location: str = "unspecified theatre"
     coords: str = "--"
     findings: list[str] = Field(default_factory=list)
@@ -58,10 +62,11 @@ class ReportCreateRequest(BaseModel):
     title: str = "Untitled Dossier"
     scope_key: str | None = None
     status: ReportStatus = "Draft"
-    confidence: float = Field(default=0.62, ge=0.0, le=1.0)
+    confidence: float | None = Field(default=0.62, ge=0.0, le=1.0)
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None
+    research_coverage: ResearchCoverage | None = None
     location: str = "unspecified theatre"
     coords: str = "--"
     findings: list[str] = Field(default_factory=list)
@@ -81,6 +86,7 @@ class ReportUpdateRequest(BaseModel):
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None
+    research_coverage: ResearchCoverage | None = None
     location: str | None = None
     coords: str | None = None
     findings: list[str] | None = None
@@ -102,6 +108,7 @@ class ReportMessage(BaseModel):
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None
+    research_coverage: ResearchCoverage | None = None
 
 
 class ReportMessageCreate(BaseModel):
@@ -112,3 +119,4 @@ class ReportMessageCreate(BaseModel):
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None
+    research_coverage: ResearchCoverage | None = None

@@ -1,26 +1,59 @@
 # ODIN/WorldView — Task Registry
 
-Stand: 10.10.2026. Dieses Registry ist die maßgebliche Status- und Stackübersicht.
+Stand: 06.11.2026. Dieses Registry ist die maßgebliche Status- und Stackübersicht.
 Die [technischen Briefings](docs/tasks/specifications.md) bewahren alle TASK-001–123-
 Aufträge; [historische Ergebnisse](docs/tasks/history-2026-10-10.md) und einzelne
 Reviews enthalten die Prüfbelege. Neue Sourcechecks schließen Merge, Release,
 Datenverifikation oder menschliche Abnahme nicht automatisch.
 
+Folgearbeit 06.11.2026: [Notebook-Originalpassagen im Lagebericht](docs/implementation/2026-11-06-notebook-depth.md)
+bindet die 84 ausgewählten neuen Quellen über ein unveränderliches Archiv ein.
+Automatische Suche, Folgefragen, Zitieridentität, Prüfgrenzen und gespeicherte
+Quellenkarten sind getestet. Live-/Rolloutbelege stehen separat unter
+`/data/odin-notebook-depth/20261106`; die Faktengültigkeit der Originale ist nicht
+extern geprüft. Die 29 zurückgestellten Notebooks bleiben ausgeschlossen.
+
 ## Repo-Goal und HN
+
+Folgearbeit 06.11.2026, aktuelle Recherche aktiviert:
+[Verbindliche aktuelle Recherche](docs/implementation/2026-11-06-current-research.md).
+Tavily-/Originalabruf, zeitliche Belegprüfung und gespeicherte Rechercheabdeckung;
+technische, fachliche und Release-Abnahme werden getrennt geführt. Nutzbarer Umfang:
+fachlich zu prüfende Rechercheentwürfe. Freie automatische Szenariodetails wurden
+nach realen Fehlbefunden entfernt; zuverlässige Prognosen und externe Faktenprüfung
+bleiben nicht qualifiziert. Live- und Betriebsnachweise:
+`/data/odin-agent-enablement/20261106-implementation/README.md`.
+
+Folgearbeit 06.11.2026, Analyseoptimierung ausgerollt:
+[Quellenprüfung, gezielte Reparatur und Quellenvergleich](docs/implementation/2026-11-06-analysis-optimization.md).
+Der ausgelassene Iran-Vergeltungsvorbehalt ist im ursprünglichen Prüfkontext
+reproduziert und wird erkannt und repariert. 993 Intelligence-Tests bestehen;
+Kontrollfälle und Original-Replays bleiben separate, begrenzte Qualitätsbelege.
+Intelligence produktiv auf `3334946`; Backend/Frontend unverändert `999b433`.
+Health und kontrollierter Replay im ausgelieferten Container bestanden;
+76 übrige Container unverändert. Keine automatische Prognosefreigabe.
 
 Gesamtmatrix: [Finding-/Abnahmegates](docs/reviews/2026-10-10-goal-gates.md).
 Menschliche Prüfung: [unbewertete Abnahmeunterlagen](docs/operations/goal-acceptance-2026-10-10.md).
 
-G01–G08 bleiben vollständig verbindlich. Eigener Sourceworktree:
-`feat/odin-release-provenance-20261009`, Übernahmebasis `e8603c6`.
-Writer01a12412-a9fe-7052-93e0-ba88db75c740 hat alle212 übernommenen Sourcepfade
-scoped committet und führt die tatsächlichen Integrationsgates aus.
-Die früheren Policyfehler gehören zum beendeten Vorgänger; aktueller Index-,
-Remote-, Docker- und Browserzugriff funktionieren im regulären Profil.
-GitHub frisch bestätigt B05/PR138MERGED und Main `a47da45`, keinen GoalPR.
-Produktivrelease bleibt offen. Die [Gate-Matrix](docs/reviews/2026-10-10-goal-gates.md)
-trennt aktuelle lokale Ergebnisse, finale Prüfungen und den dokumentierten
-unbeabsichtigten Redis-Testzugriff; keine produktive Rücksetzung ohne Freigabe.
+Aktueller Folgeauftrag: [fünf sequenzielle Stabilisierungspakete](
+docs/plans/2026-11-06-reliability-closure.md), einschließlich Integration und
+gezielter Rollouts mit Rückweg, vom Nutzer am 06.11.2026 freigegeben.
+P1 läuft; P2–P5 sind geplant. Nachweise: `/data/odin-reliability-20261106`.
+
+Frisch geprüfte Basis: Remote-Main `fe15309` enthält PR #152 und #153 samt
+BP-01/BP-02 und Karten-Recovery. `feat/current-research-20261106` auf `1846da4`
+enthält zusätzlich die bereits ausgelieferte Notebook-/Recherche-/Analysearbeit;
+deren PR/CI-Integration läuft in P1. Produktiv: Intelligence `3334946`,
+Backend/Frontend `999b433`; Ingestion verwendet noch das September-Image und
+bekommt ein eigenes, kompatibilitätsgeprüftes Paket. Der dirty Home-Checkout
+auf `813594a` bleibt geschützt. 36 Worktrees wurden inventarisiert, nicht bereinigt.
+
+G01–G08 bleiben verbindlich. Die folgende Matrix bewahrt den historischen
+Prüfstand vom 10.10.2026; ihre damaligen Source-/PR-Angaben sind keine Aussage
+über heutige offene Implementierungen. Aktuelle Integration und Release stehen
+oben; fachliche, native und menschliche Abnahme werden separat geschlossen.
+Die [Gate-Matrix](docs/reviews/2026-10-10-goal-gates.md) bewahrt auch Fehlversuche.
 
 | Bündel | Source-/Entscheidungsstand | Prüfbeleg / verbleibende Grenze |
 |---|---|---|

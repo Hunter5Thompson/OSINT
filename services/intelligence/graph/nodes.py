@@ -10,6 +10,7 @@ from agents.osint_agent import get_system_message as osint_sys
 from agents.synthesis_agent import create_synthesis_llm
 from agents.synthesis_agent import get_system_message as synthesis_sys
 from graph.assessment import ASSESSMENT_FORMAT, annotate_assessment, parse_assessment
+from graph.result import PipelineFailureError
 from graph.state import AgentState
 
 logger = structlog.get_logger()
@@ -55,11 +56,11 @@ async def osint_node(state: AgentState) -> dict:
 async def analyst_node(state: AgentState) -> dict:
     """Analyst agent analyzes OSINT results."""
     logger.info("analyst_node_started")
+    if state.get("error"):
+        raise PipelineFailureError("Legacy stage failed")
 
     try:
-        osint_text = "\n".join(
-            r.get("content", "") for r in state.get("osint_results", [])
-        )
+        osint_text = "\n".join(r.get("content", "") for r in state.get("osint_results", []))
 
         llm = create_analyst_llm()
         messages = [
@@ -100,6 +101,8 @@ async def analyst_node(state: AgentState) -> dict:
 async def synthesis_node(state: AgentState) -> dict:
     """Synthesis agent produces final intelligence report."""
     logger.info("synthesis_node_started")
+    if state.get("error"):
+        raise PipelineFailureError("Legacy stage failed")
 
     try:
         llm = create_synthesis_llm()

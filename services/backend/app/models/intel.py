@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.models.research import ResearchCoverage, RetrievalProvenance
 from app.models.spatial import SpatialQueryRef
 
 _utc_now = partial(datetime.now, UTC)
@@ -89,6 +90,8 @@ class SpatialRunApplicationV1(_FrozenContractModel):
         return value
 
 
+
+
 class IntelQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -99,6 +102,7 @@ class IntelQuery(BaseModel):
     hotspot_id: str | None = None
     image_url: str | None = None
     use_legacy: bool = False
+    research_mode: Literal["current", "historical"] = "current"
     report_id: str | None = None
     report_message: str | None = Field(default=None, max_length=8000)
 
@@ -165,14 +169,93 @@ class IntelDocument(BaseModel):
 
 
 class AssessmentStatus(BaseModel):
-    threat: Literal["declared", "default"]
-    confidence: Literal["declared", "default"]
+    threat: Literal["declared", "default", "not_assessed"]
+    confidence: Literal["declared", "default", "not_assessed"]
     issues: list[str] = Field(default_factory=list)
 
 
+class OriginalEvidence(BaseModel):
+    """Original investigation, distinct from its Notebook storage location.
+
+    The publication/reference value is verbatim; it is not an ISO timestamp.
+    No day or date role is inferred from an ambiguous source label.
+    """
+
+    id: str
+    title: str | None = None
+    url: str | None = None
+    sha256: str | None = None
+    text_sha256: str | None = None
+    publication_or_reference_date: str | None = None
+    date_precision: Literal["as_recorded"] = "as_recorded"
+    retrieved_at: str | None = None
+    independent_lineage: str | None = None
+    analyst_scope: str | None = None
+    content_review: str | None = None
+
+
+class SourceAnchor(BaseModel):
+    sha256: str | None = None
+    content_sha256: str | None = None
+    anchor: str | None = None
+    character_offset: int | None = None
+
+
+class ReviewProvenance(BaseModel):
+    candidate_id: str
+    claim_id: str
+    notebook_id: str
+    original_source_id: str
+    epistemic_type: str
+    qualification_note: str
+    knowledge_domain: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    external_fact_verification: str | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    unresolved_checks: list[str] = Field(default_factory=list, exclude_if=lambda value: not value)
+    source_date_context: str | None = None
+    reviewed_at: str | None = None
+    source_anchor: SourceAnchor | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+    evidence_urls: list[str] = Field(default_factory=list)
+    evidence: list[OriginalEvidence] = Field(default_factory=list)
+    package_sha256: str
+    factual_verification: str
+
+
+class NotebookPassage(BaseModel):
+    """A literal archive excerpt; an editorial review does not verify its claims."""
+
+    notebook_id: str
+    original_source_id: str
+    source_sha256: str
+    text_sha256: str
+    start: int
+    end: int
+    passage_sha256: str
+    independent_lineage: str
+    package_sha256: str
+    parent_candidate_id: str
+    qualification_note: str
+    unresolved_checks: list[str] = Field(default_factory=list)
+    source_date_context: str | None = None
+    content_review: Literal["unreviewed_source_excerpt"] = "unreviewed_source_excerpt"
+    external_fact_verification: Literal["not_performed"] = "not_performed"
+
+
 class EvidenceSummary(BaseModel):
+    retrieval: RetrievalProvenance | None = Field(default=None, exclude_if=lambda v: v is None)
+    passage: NotebookPassage | None = Field(default=None, exclude_if=lambda value: value is None)
+    knowledge_role: Literal["source", "background", "method"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    url: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    evidence_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    title: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    excerpt: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    review: ReviewProvenance | None = Field(default=None, exclude_if=lambda value: value is None)
     source_ref_id: str
-    source_type: Literal["rss", "telegram", "gdelt", "notebooklm", "dataset", "unknown"]
+    source_type: Literal["rss", "web", "telegram", "gdelt", "notebooklm", "dataset", "unknown"]
     provider: str
     published_at: datetime | None = None
     observed_at: datetime | None = None
@@ -199,15 +282,19 @@ class EvidenceSummary(BaseModel):
 
 
 class IntelAnalysis(BaseModel):
+    status: Literal["completed", "partial"] | None = None
+    answerability: Literal["insufficient_evidence", "undetermined"] | None = None
+    tool_events: list[dict[str, Any]] = Field(default_factory=list)
     query: str
     agent_chain: list[str] = Field(default_factory=list)
     sources_used: list[str] = Field(default_factory=list)
     analysis: str
-    confidence: float = 0.0
+    confidence: float | None = None
     threat_assessment: str | None = None
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None
+    research_coverage: ResearchCoverage | None = None
     tool_trace: list[dict[str, Any]] = Field(default_factory=list)
     mode: str = "react"
     timestamp: datetime = Field(default_factory=_utc_now)

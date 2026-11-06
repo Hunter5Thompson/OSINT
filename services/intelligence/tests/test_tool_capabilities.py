@@ -41,6 +41,8 @@ def test_scoped_binding_excludes_unscoped_sources_and_image_without_attachment()
     state = agent_state(spatial_scope=_scope_token())
 
     assert _names(tools_for_state(state)) == [
+        "current_search",
+        "notebook_search",
         "qdrant_search",
         "query_knowledge_graph",
         "classify_event",
@@ -59,6 +61,8 @@ def test_scoped_binding_adds_vision_only_for_the_attached_image() -> None:
     )
 
     assert _names(tools_for_state(state)) == [
+        "current_search",
+        "notebook_search",
         "qdrant_search",
         "query_knowledge_graph",
         "classify_event",
@@ -74,13 +78,14 @@ def test_global_binding_retains_approved_capabilities(
     state = agent_state(spatial_scope=scope)
 
     assert _names(tools_for_state(state)) == [
+        "current_search",
+        "notebook_search",
         "qdrant_search",
         "query_knowledge_graph",
         "classify_event",
-        "gdelt_query",
         "rss_fetch",
     ]
-    assert blocked_tool_names(state) == ("analyze_image",)
+    assert blocked_tool_names(state) == ("analyze_image", "gdelt_query")
 
 
 @pytest.mark.asyncio
@@ -102,6 +107,8 @@ async def test_react_node_binds_exactly_the_state_capabilities(monkeypatch) -> N
     await workflow.react_agent_node(agent_state(spatial_scope=_scope_token()))
 
     assert captured["tools"] == [
+        "current_search",
+        "notebook_search",
         "qdrant_search",
         "query_knowledge_graph",
         "classify_event",
@@ -134,7 +141,19 @@ async def test_tool_node_is_built_from_the_same_state_capabilities(monkeypatch) 
     await graph.compile().ainvoke(state)
 
     assert captured["tools"] == [
+        "current_search",
+        "notebook_search",
         "qdrant_search",
         "query_knowledge_graph",
         "classify_event",
     ]
+
+
+@pytest.mark.parametrize("mode", ["current", "historical"])
+async def test_public_run_never_exposes_arbitrary_external_url_tools(mode):
+    state = agent_state()
+    state["research_mode"] = mode
+    names = _names(tools_for_state(state))
+    assert "rss_fetch" not in names
+    assert "gdelt_query" not in names
+    assert ("current_search" in names) == (mode == "current")

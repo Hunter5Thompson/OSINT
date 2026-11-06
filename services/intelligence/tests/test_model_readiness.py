@@ -119,7 +119,14 @@ async def test_health_returns_503_when_configured_model_is_missing(
         response = await client.get("/health")
 
     assert response.status_code == 503
-    assert response.json() == {
+    payload = response.json()
+    assert payload.pop("current_research") == {
+        "external_search": "not_configured", "local_corpus": "configured",
+        "provider_connectivity": "not_probed", "lookback_hours": 72,
+        "forecast_details": "not_qualified",
+        "expanded_lookback_hours": 168,
+    }
+    assert payload == {
         "revision": None,
         "status": "not_ready",
         "reason": "missing_models",
@@ -147,7 +154,14 @@ async def test_health_returns_200_when_all_configured_models_are_present(
         response = await client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {
+    payload = response.json()
+    assert payload.pop("current_research") == {
+        "external_search": "not_configured", "local_corpus": "configured",
+        "provider_connectivity": "not_probed", "lookback_hours": 72,
+        "forecast_details": "not_qualified",
+        "expanded_lookback_hours": 168,
+    }
+    assert payload == {
         "revision": None,
         "status": "ok",
         "reason": "ready",

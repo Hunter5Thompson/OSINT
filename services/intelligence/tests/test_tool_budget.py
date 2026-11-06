@@ -168,7 +168,8 @@ async def test_fifth_decision_turn_runs_tools_then_synthesizes_without_sixth(mon
     result = await workflow.build_react_graph().compile().ainvoke(agent_state())
     assert len(decisions) == 5 and len(starts) == 5
     assert result["tool_calls_count"] == 5 and len(result["tool_trace"]) == 5
-    synthesis.ainvoke.assert_awaited_once()
+    synthesis.ainvoke.assert_not_awaited()
+    assert result["answerability"] == "insufficient_evidence"
 
 
 async def test_cancelled_batch_does_not_start_blocked_calls(monkeypatch):
@@ -202,3 +203,28 @@ async def test_cancelled_batch_does_not_start_blocked_calls(monkeypatch):
         await task
     await asyncio.wait_for(stopped.wait(), timeout=2)
     assert starts == [True]
+
+
+async def test_execution_events_distinguish_failure_and_blocked(monkeypatch):
+    @tool
+    async def probe():
+        """Fail after starting."""
+        raise RuntimeError("provider failed")
+
+    monkeypatch.setattr(workflow, "tools_for_state", lambda state: [probe])
+    result = await _tool_graph().ainvoke(
+        agent_state(
+            tool_calls_count=7, iteration=1, messages=[AIMessage(content="", tool_calls=_calls(2))]
+        )
+    )
+    events = result["tool_events"]
+    assert [e["status"] for e in events if e["tool_call_id"] == "call-0"] == [
+        "requested",
+        "started",
+        "failed",
+    ]
+    assert [e["status"] for e in events if e["tool_call_id"] == "call-1"] == [
+        "requested",
+        "blocked",
+    ]
+    assert result["tool_calls_count"] == 8

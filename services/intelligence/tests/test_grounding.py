@@ -75,9 +75,7 @@ def test_internal_query_requires_relation_and_accepts_only_catalog_reference() -
             query="q",
             spatial_scope={
                 **SCOPE_REF_JSON,
-                "compatible_derivation_revisions": [
-                    "spatial-derive-v1-attacker00000"
-                ],
+                "compatible_derivation_revisions": ["spatial-derive-v1-attacker00000"],
             },
             spatial_relation="either",
         )
@@ -110,7 +108,7 @@ async def test_grounding_pack_and_artifact_share_budget_and_order(monkeypatch):
     captured: dict = {}
 
     class FakeGraph:
-        async def ainvoke(self, state):
+        async def ainvoke(self, state, **kwargs):
             captured["state"] = state
             return {
                 "synthesis": "ok",
@@ -134,16 +132,16 @@ async def test_grounding_pack_and_artifact_share_budget_and_order(monkeypatch):
         for index, score in enumerate(scores)
     ]
 
-    await wf.run_intelligence_query("budget parity", grounding_evidence=grounding)
+    await wf.run_intelligence_query(
+        "budget parity", research_mode="historical", grounding_evidence=grounding
+    )
 
     state = captured["state"]
     rendered_ids = [
-        ref.source_ref_id
-        for ref in parse_evidence_refs(state["grounding_evidence_pack"])
+        ref.source_ref_id for ref in parse_evidence_refs(state["grounding_evidence_pack"])
     ]
     artifact_ids = [
-        ref.source_ref_id
-        for ref in source_refs_from_artifact(state["grounding_evidence_artifact"])
+        ref.source_ref_id for ref in source_refs_from_artifact(state["grounding_evidence_artifact"])
     ]
     assert 0 < len(rendered_ids) < len(grounding)
     assert artifact_ids == rendered_ids
@@ -190,11 +188,18 @@ async def test_grounding_reaches_react_seed_and_synthesis_sources(monkeypatch):
 
     grounding_item = EvidenceItem(
         source=SourceRef(
-            source_ref_id="x", source_type="dataset", provider="odin-country-almanac",
-            display_name=None, url=None, published_at=None,
-            credibility_score=0.8, provenance_inferred=False,
+            source_ref_id="x",
+            source_type="dataset",
+            provider="odin-country-almanac",
+            display_name=None,
+            url=None,
+            published_at=None,
+            credibility_score=0.8,
+            provenance_inferred=False,
         ),
-        title="t", excerpt="e", relevance_score=1.0,
+        title="t",
+        excerpt="e",
+        relevance_score=1.0,
     )
     pack = format_evidence_pack([grounding_item], budget=5000)
     syn = await wf.react_synthesis_node(

@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 import httpx
 import structlog
-from langchain_core.tools import tool
+from langchain_core.tools import ToolException, tool
 from langgraph.prebuilt import ToolRuntime
 
 from agents.tools.capabilities import tool_allowed_for_state
@@ -19,7 +19,7 @@ logger = structlog.get_logger()
 @tool(response_format="content_and_artifact")
 async def rss_fetch(
     feed_url: str,
-    runtime: ToolRuntime[dict[str, object], AgentState],
+    runtime: ToolRuntime[object, AgentState],
 ) -> tuple[str, list[dict]]:
     """Fetch and parse an RSS feed to get recent articles.
 
@@ -71,5 +71,4 @@ async def rss_fetch(
         return f"[RSS Evidence: {neutralize_evidence_markers(feed_url)}]\n{pack}", lineage
     except Exception as e:
         logger.warning("rss_fetch_failed", url=feed_url, error=str(e))
-        return (f"Failed to fetch RSS feed: {neutralize_evidence_markers(feed_url)} - "
-                f"{neutralize_evidence_markers(str(e))}"), []
+        raise ToolException("RSS_FETCH_FAILED: RSS provider unavailable") from e

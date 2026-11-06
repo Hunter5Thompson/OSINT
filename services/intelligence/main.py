@@ -14,10 +14,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from build_revision import BUILD_REVISION
 from config import settings
+from graph.result import PipelineFailureError
 from graph.workflow import run_intelligence_query, shutdown_graph_client
 from model_readiness import check_model_readiness
 from query_lifecycle import ClientDisconnectedError, run_connected
 from rag import retriever
+from rag.notebooks import notebook_readiness
 from spatial import RetrievalSpatialRelation
 from spatial_catalog import (
     IntelligenceSpatialCatalog,
@@ -48,6 +50,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 app = FastAPI(title="WorldView Intelligence Service", version="0.2.0", lifespan=lifespan)
 
 
+@app.exception_handler(PipelineFailureError)
+async def pipeline_failure_handler(request: Request, exc: PipelineFailureError) -> JSONResponse:
+    return JSONResponse(
+        status_code=502,
+        content={
+            "status": "failed",
+            "code": "INTEL_PIPELINE_FAILED",
+            "error": "Recherche oder Synthese technisch fehlgeschlagen. Bitte erneut versuchen.",
+        },
+    )
+
+
 class GroundingEvidenceItem(BaseModel):
     source_type: Literal["dataset"]
     provider: Literal["odin-country-almanac", "odin-live-signal"]
@@ -70,6 +84,7 @@ class QueryRequest(BaseModel):
     spatial_relation: RetrievalSpatialRelation
     image_url: str | None = None
     use_legacy: bool = False
+    research_mode: Literal["current", "historical"] = "current"
     grounding_context: str | None = Field(default=None, max_length=4000)
     grounding_evidence: list[GroundingEvidenceItem] | None = Field(default=None, max_length=6)
 
@@ -116,7 +131,23 @@ async def health() -> JSONResponse:
         "reason": readiness.reason.value,
         "required_models": list(readiness.required_models),
         "missing_models": list(readiness.missing_models),
+        "current_research": {
+            "external_search": "configured"
+            if settings.current_search_key.get_secret_value()
+            else "not_configured",
+            "local_corpus": "configured",
+            "provider_connectivity": "not_probed",
+            "forecast_details": "not_qualified",
+            "lookback_hours": settings.current_research_lookback_hours,
+            "expanded_lookback_hours": settings.current_research_expanded_lookback_hours,
+        },
     }
+    if settings.notebook_catalog_path is not None:
+        try:
+            content["notebooks"] = await notebook_readiness()
+        except Exception:
+            content.update(status="not_ready", reason="notebook_catalog_unavailable")
+            return JSONResponse(status_code=503, content=content)
     return JSONResponse(status_code=200 if readiness.ready else 503, content=content)
 
 
@@ -124,9 +155,7 @@ async def query_intelligence(req: QueryRequest) -> dict[str, object] | JSONRespo
     """Run intelligence pipeline and return full analysis result."""
     try:
         spatial_scope = (
-            _spatial_catalog.resolve(req.spatial_scope)
-            if req.spatial_scope is not None
-            else None
+            _spatial_catalog.resolve(req.spatial_scope) if req.spatial_scope is not None else None
         )
     except SpatialCatalogResolutionError:
         return JSONResponse(
@@ -138,6 +167,7 @@ async def query_intelligence(req: QueryRequest) -> dict[str, object] | JSONRespo
         req.region,
         req.image_url,
         req.use_legacy,
+        research_mode=req.research_mode,
         spatial_scope=spatial_scope,
         spatial_relation=req.spatial_relation,
         grounding_context=req.grounding_context,
@@ -151,7 +181,8 @@ async def query_intelligence(req: QueryRequest) -> dict[str, object] | JSONRespo
 async def query_connected(req: QueryRequest, request: Request) -> dict[str, object] | JSONResponse:
     try:
         return await run_connected(
-            query_intelligence(req), request.is_disconnected,
+            query_intelligence(req),
+            request.is_disconnected,
             timeout_s=settings.query_timeout_s,
         )
     except ClientDisconnectedError:

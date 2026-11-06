@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 import pytest
+from langchain_core.tools import ToolException
 from pydantic import ValidationError
 
 from agents.tools.vision import (
@@ -168,12 +169,12 @@ class TestAnalyzeImageTool:
         with patch("agents.tools.vision._load_image") as mock_load:
             mock_load.side_effect = Exception("Connection refused")
 
-            result = await invoke_runtime_tool(
-                analyze_image,
-                {"question": "describe this"},
-                state=agent_state(image_url="https://example.com/img.jpg"),
-            )
-            assert "failed" in result.lower()
+            with pytest.raises(ToolException, match="IMAGE_LOAD_FAILED"):
+                await invoke_runtime_tool(
+                    analyze_image,
+                    {"question": "describe this"},
+                    state=agent_state(image_url="https://example.com/img.jpg"),
+                )
             mock_load.assert_awaited_once_with("https://example.com/img.jpg")
 
     @pytest.mark.asyncio

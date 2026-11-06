@@ -116,6 +116,6 @@ async def test_upstream_errors_are_actionable_and_persist_the_same_message(
         query="q", report_id="r-test", client=RejectedClient(),
     )]
     error = next(json.loads(e["data"]) for e in events if e["event"] == "error")
-    assert error == {"code": code, "error": message}
+    assert error == {"status": "failed", "code": code, "error": message}
     assert append.call_args.args[1].text == message
     assert "private-service" not in str(events)

@@ -1,7 +1,9 @@
 """Tests for the stateless POST /almanac/countries/{id}/briefing/save endpoint."""
 
 import datetime as _dt
+import json
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -126,6 +128,66 @@ def _rec(scope_key: str) -> ReportRecord:
         created_at=now,
         updated_at=now,
     )
+
+
+@pytest.mark.parametrize("committed_scope", [False, True])
+@pytest.mark.parametrize("abstention", [False, True])
+async def test_both_save_routes_preserve_chat_review_and_assessment(
+    monkeypatch,
+    committed_scope,
+    abstention,
+):
+    loader = app.state.spatial_catalog
+    resolved = loader.resolve_country_identifiers(("276", "DEU"))
+    token = spatial_scope_token_from_resolution(resolved)
+    record = _rec(token.scope_key)
+    monkeypatch.setattr(
+        almanac_router, "get_or_create_report_by_scope", AsyncMock(return_value=record)
+    )
+    monkeypatch.setattr(almanac_router, "update_report", AsyncMock(return_value=record))
+    append = AsyncMock(return_value=ReportMessage(id="review-chat", role="munin", text="Fixture"))
+    monkeypatch.setattr(almanac_router, "append_report_message", append)
+    payload = json.loads(
+        (Path(__file__).parents[3] / "tests/fixtures/reviewed-claims-47.json").read_text()
+    )[0]
+    status = "not_assessed" if abstention else "declared"
+    analysis = IntelAnalysis(
+        query="fixture",
+        analysis="Fixture answer",
+        confidence=None if abstention else 0.3,
+        verification_status="unverified",
+        assessment_status={"threat": status, "confidence": status, "issues": []},
+        evidence_summary=[]
+        if abstention
+        else [
+            {
+                "source_ref_id": "parent",
+                "evidence_id": "claim-fixture",
+                "source_type": "notebooklm",
+                "provider": payload["provider"],
+                "review": payload["review"],
+                "verification_status": "unverified",
+            }
+        ],
+    )
+    path = "/api/almanac/countries/276/briefing/save"
+    params = {}
+    if committed_scope:
+        path = "/api/almanac/country/briefing/save"
+        params = {"scope_key": token.scope_key, "catalog_revision": token.catalog_revision}
+    app.state.report_schema_ready = True
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            path,
+            params=params,
+            headers=ADMIN_HEADERS,
+            json={"analysis": analysis.model_dump(mode="json")},
+        )
+    assert response.status_code == 200, response.text
+    saved = append.call_args.args[1]
+    assert saved.evidence_summary == analysis.evidence_summary
+    assert saved.assessment_status == analysis.assessment_status
+    assert saved.verification_status == analysis.verification_status
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,71 @@
+{
+  "research_coverage": {
+    "as_of": "2026-11-06T14:35:00Z",
+    "published_since": "2026-11-03T14:35:00Z",
+    "status": "partial",
+    "situation": "evidence_available",
+    "forecast": "not_assessed",
+    "current_evidence_ids": [
+      "ev-current-fixture"
+    ],
+    "gaps": [
+      "original_unavailable"
+    ],
+    "attempts": [
+      {
+        "action": "search",
+        "status": "succeeded",
+        "code": null,
+        "reserved_credits": 1,
+        "reported_credits": 1.0,
+        "trigger": "baseline",
+        "query": null,
+        "started_at": null,
+        "source_reads": []
+      },
+      {
+        "action": "extract",
+        "status": "partial",
+        "code": "original_unavailable",
+        "reserved_credits": 1,
+        "reported_credits": 1.0,
+        "trigger": "baseline",
+        "query": null,
+        "started_at": null,
+        "source_reads": []
+      }
+    ],
+    "scope_key": "world",
+    "spatial_basis": "topic_only",
+    "run_id": null,
+    "search_domains": []
+  },
+  "evidence_summary": [
+    {
+      "source_ref_id": "fixture-current-source",
+      "evidence_id": "ev-current-fixture",
+      "source_type": "web",
+      "provider": "news.example.org",
+      "title": "Synthetic current report",
+      "url": "https://news.example.org/current",
+      "excerpt": "The parties met. No agreement was announced.",
+      "published_at": "2026-11-06T12:00:00Z",
+      "observed_at": null,
+      "ingested_at": null,
+      "verification_status": "unverified",
+      "retrieval": {
+        "retrieved_at": "2026-11-06T14:35:02Z",
+        "content_kind": "fulltext",
+        "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_chars": 43,
+        "excerpt_truncated": false,
+        "original_lineage": "https://news.example.org/current",
+        "lineage_basis": "url",
+        "temporal_basis": "provider_publication",
+        "spatial_basis": "topic_only",
+        "publication_check": "not_checked",
+        "original_publication_date": null
+      }
+    }
+  ]
+}

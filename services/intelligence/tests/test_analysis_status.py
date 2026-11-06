@@ -1,4 +1,5 @@
 """G06 separates decoded fields, compatibility defaults and factual verification."""
+
 from unittest.mock import AsyncMock
 
 import httpx
@@ -7,6 +8,8 @@ from langchain_core.messages import AIMessage
 
 import graph.nodes as nodes
 import graph.workflow as workflow
+from rag.evidence import pack_with_lineage, to_evidence_item
+from tests.test_evidence_summary import raw_evidence
 
 
 @pytest.mark.parametrize("legacy", [False, True])
@@ -14,10 +17,18 @@ import graph.workflow as workflow
     ("report", "threat_status", "confidence_status", "issues"),
     [
         ("Threat Assessment: HIGH\nConfidence Level: low confidence", "declared", "declared", []),
-        ("Threat Assessment: HIGHWAY\nConfidence Level: low confidence", "default", "declared",
-         ["threat-invalid"]),
-        ("Threat Assessment: HIGH\nNo confidence field", "declared", "default",
-         ["confidence-missing"]),
+        (
+            "Threat Assessment: HIGHWAY\nConfidence Level: low confidence",
+            "default",
+            "declared",
+            ["threat-invalid"],
+        ),
+        (
+            "Threat Assessment: HIGH\nNo confidence field",
+            "declared",
+            "default",
+            ["confidence-missing"],
+        ),
         ("No fields", "default", "default", ["threat-missing", "confidence-missing"]),
     ],
 )
@@ -29,9 +40,20 @@ async def test_final_node_exposes_each_field_origin(
     module = nodes if legacy else workflow
     monkeypatch.setattr(module, "create_synthesis_llm", lambda: fake)
     node = nodes.synthesis_node if legacy else workflow.react_synthesis_node
-    result = await node({"query": "synthetic", "messages": [], "analysis": "synthetic"})
+    pack, artifact = pack_with_lineage([to_evidence_item(raw_evidence())], budget=3000)
+    result = await node(
+        {
+            "query": "synthetic",
+            "messages": [],
+            "analysis": "synthetic",
+            "grounding_evidence_pack": pack,
+            "grounding_evidence_artifact": artifact,
+        }
+    )
     assert result.get("assessment_status") == {
-        "threat": threat_status, "confidence": confidence_status, "issues": issues,
+        "threat": threat_status,
+        "confidence": confidence_status,
+        "issues": issues,
     }
 
 
@@ -46,7 +68,7 @@ async def test_real_query_serializes_status_without_promoting_it_to_facts(monkey
     monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
 
     class SynthesisGraph:
-        async def ainvoke(self, state):
+        async def ainvoke(self, state, **kwargs):
             return await workflow.react_synthesis_node(state)
 
     monkeypatch.setattr(workflow, "react_graph", SynthesisGraph())
@@ -54,12 +76,19 @@ async def test_real_query_serializes_status_without_promoting_it_to_facts(monkey
         transport=httpx.ASGITransport(app=main.app), base_url="http://test"
     ) as client:
         response = await client.post(
-            "/query", json={"query": "synthetic", "spatial_relation": "either"}
+            "/query",
+            json={
+                "query": "synthetic",
+                "spatial_relation": "either", "research_mode": "historical",
+                "grounding_evidence": [raw_evidence()],
+            },
         )
     assert response.status_code == 200
     body = response.json()
     assert body.get("assessment_status") == {
-        "threat": "default", "confidence": "declared", "issues": ["threat-invalid"],
+        "threat": "default",
+        "confidence": "declared",
+        "issues": ["threat-invalid"],
     }
     assert body.get("verification_status") == "unverified"
     assert body["threat_assessment"] == "MODERATE" and body["confidence"] == 0.3

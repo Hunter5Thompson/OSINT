@@ -1,0 +1,11 @@
+# Opt-in credential mount; never put the key into the repository or shared env_file.
+# ODIN_TAVILY_ENV_FILE must identify a private file containing TAVILY_API_KEY=... .
+services:
+  intelligence:
+    environment:
+      TAVILY_API_KEY_FILE: /run/secrets/tavily.env
+    volumes:
+      - type: bind
+        source: ${ODIN_TAVILY_ENV_FILE:?Set the absolute path of the private Tavily env file}
+        target: /run/secrets/tavily.env
+        read_only: true

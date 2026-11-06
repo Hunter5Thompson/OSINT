@@ -8,6 +8,8 @@ from langchain_core.messages import AIMessage
 
 import graph.nodes as nodes
 import graph.workflow as workflow
+from rag.evidence import pack_with_lineage, to_evidence_item
+from tests.test_evidence_summary import raw_evidence
 
 NOTICE = (
     "Assessment-Felder konnten nicht eindeutig gelesen werden; "
@@ -74,12 +76,20 @@ async def test_synthesis_uses_only_declared_fields(
     fake.ainvoke.return_value = AIMessage(content=report)
     monkeypatch.setattr(workflow, "create_synthesis_llm", lambda: fake)
 
-    result = await workflow.react_synthesis_node({"query": "synthetic", "messages": []})
+    pack, artifact = pack_with_lineage([to_evidence_item(raw_evidence())], budget=3000)
+    result = await workflow.react_synthesis_node(
+        {
+            "query": "synthetic",
+            "messages": [],
+            "grounding_evidence_pack": pack,
+            "grounding_evidence_artifact": artifact,
+        }
+    )
 
     assert result["threat_assessment"] == threat
     assert result["confidence"] == confidence
     assert result["synthesis"].count(NOTICE) == int(invalid)
-    assert result["sources_used"] == []
+    assert result["sources_used"] == ["odin-country-almanac"]
 
 
 async def test_legacy_analyst_does_not_extract_threat_from_prose(monkeypatch):
@@ -111,7 +121,7 @@ async def test_query_response_carries_parse_notice(monkeypatch):
     monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
 
     class SynthesisGraph:
-        async def ainvoke(self, state):
+        async def ainvoke(self, state, **kwargs):
             return await workflow.react_synthesis_node(state)
 
     monkeypatch.setattr(workflow, "react_graph", SynthesisGraph())
@@ -119,7 +129,12 @@ async def test_query_response_carries_parse_notice(monkeypatch):
         transport=httpx.ASGITransport(app=main.app), base_url="http://test"
     ) as client:
         response = await client.post(
-            "/query", json={"query": "synthetic", "spatial_relation": "either"}
+            "/query",
+            json={
+                "query": "synthetic",
+                "spatial_relation": "either", "research_mode": "historical",
+                "grounding_evidence": [raw_evidence()],
+            },
         )
     assert response.status_code == 200
     body = response.json()

@@ -1,0 +1,33 @@
+{
+  "source_ref_id": "68e9a02c4a4f420f",
+  "provider": "notebooklm:notebook-intel",
+  "source_type": "notebooklm",
+  "published_at": null,
+  "observed_at": null,
+  "ingested_at": null,
+  "verification_status": "unverified",
+  "evidence_id": "ev-0f7db90fe038999b90994bbe",
+  "title": "Supply chains",
+  "excerpt": ". General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. General introductory discussion. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. Rare earth export restrictions affect permanent magnets and supply chains. ",
+  "url": "https://example.org/source",
+  "knowledge_role": "background",
+  "passage": {
+    "notebook_id": "notebook-intel",
+    "original_source_id": "source-intel",
+    "source_sha256": "81a4b3f51b4fbbe30a8cf74956708d0aa688be4f24efaa25d43732141d013042",
+    "text_sha256": "44b08f12e402f78645770d5a5dccbcc2cf9eb4980ddd04b31ca4b84e13a43cb9",
+    "start": 1351,
+    "end": 4425,
+    "passage_sha256": "9b31a4965bb955ee8b0e0737d805ed6e88945a22551f906e9703af8d06defb16",
+    "independent_lineage": "https://example.org/source",
+    "package_sha256": "cebf81bcdb597acbc8e031ad3e66c9beb6c939854e43e075fcc0bb77981847a9",
+    "parent_candidate_id": "CTX-intel",
+    "qualification_note": "Numbers are source claims, not current measurements.",
+    "unresolved_checks": [
+      "Check publication date"
+    ],
+    "source_date_context": "Snapshot only; publication unknown",
+    "content_review": "unreviewed_source_excerpt",
+    "external_fact_verification": "not_performed"
+  }
+}

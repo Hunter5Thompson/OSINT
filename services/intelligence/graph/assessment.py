@@ -11,37 +11,48 @@ ASSESSMENT_NOTICE = (
     "angezeigte Standardwerte sind keine extrahierte Bewertung."
 )
 ASSESSMENT_FORMAT = (
-    "Use exactly one 'Threat Assessment:' field with CRITICAL, HIGH, ELEVATED or MODERATE, "
+    "Use exactly one 'Threat Assessment:' field with CRITICAL, HIGH, ELEVATED, MODERATE "
+    "or NOT_ASSESSED when the evidence cannot support a current threat assessment, "
     "and exactly one 'Confidence Level:' field with high confidence, moderate confidence "
-    "or low confidence. Put each value directly after its colon, or on the next line "
+    "or low confidence (or 'not assessed' for no assessment). Put each value directly "
+    "after its colon, or on the next line "
     "after a Markdown heading. Put explanations on separate lines."
 )
 _FIELD = re.compile(r"^(Threat Assessment|Confidence Level)\s*(?:(?:[:—–])\s*(.*))?$", re.I)
-_THREAT = re.compile(r"^(CRITICAL|HIGH|ELEVATED|MODERATE)(?:\s*$|\s*[—–:;,.(!]|\s+-\s+)", re.I)
+_THREAT = re.compile(
+    r"^(CRITICAL|HIGH|ELEVATED|MODERATE|NOT_ASSESSED)(?:\s*$|\s*[—–:;,.(!]|\s+-\s+)", re.I
+)
 _CONFIDENCE = re.compile(
-    r"^(high\s+confidence|moderate\s+confidence|low\s+confidence)(?:\s*$|\s*[—–:;,.(!]|\s+-\s+)",
+    r"^(high\s+confidence|moderate\s+confidence|low\s+confidence|not\s+assessed)"
+    r"(?:\s*$|\s*[—–:;,.(!]|\s+-\s+)",
     re.I,
 )
 
 
 class AssessmentStatus(TypedDict):
-    threat: Literal["declared", "default"]
-    confidence: Literal["declared", "default"]
+    threat: Literal["declared", "default", "not_assessed"]
+    confidence: Literal["declared", "default", "not_assessed"]
     issues: list[str]
 
 
 @dataclass(frozen=True)
 class AssessmentValues:
-    threat: str
-    confidence: float
+    threat: str | None
+    confidence: float | None
     issues: tuple[str, ...]
 
     @property
     def status(self) -> AssessmentStatus:
         return {
-            "threat": "default" if any(issue.startswith("threat-") for issue in self.issues)
+            "threat": "not_assessed"
+            if self.threat is None
+            else "default"
+            if any(issue.startswith("threat-") for issue in self.issues)
             else "declared",
-            "confidence": "default" if any(issue.startswith("confidence-") for issue in self.issues)
+            "confidence": "not_assessed"
+            if self.confidence is None
+            else "default"
+            if any(issue.startswith("confidence-") for issue in self.issues)
             else "declared",
             "issues": list(self.issues),
         }
@@ -89,13 +100,14 @@ def parse_assessment(
         if match is None:
             issues.append(f"{key}-invalid")
         elif key == "threat":
-            threat = match[1].upper()
+            threat = None if match[1].upper() == "NOT_ASSESSED" else match[1].upper()
         else:
             label = " ".join(match[1].lower().split())
             confidence = {
                 "high confidence": 0.8,
                 "moderate confidence": 0.6,
                 "low confidence": 0.3,
+                "not assessed": None,
             }[label]
     return AssessmentValues(threat, confidence, tuple(issues))
 

@@ -47,6 +47,7 @@ from app.models.report import (
     ReportStatus,
     ReportUpdateRequest,
 )
+from app.models.research import ResearchCoverage
 from app.services._persisted_time import parse_persisted_datetime
 from app.services.briefing import parse_munin_report
 from app.services.neo4j_client import read_query, write_query
@@ -171,6 +172,17 @@ def _decode_evidence_summary(raw: object) -> list[EvidenceSummary] | None:
     return None
 
 
+def _decode_research_coverage(raw: object) -> ResearchCoverage | None:
+    try:
+        if isinstance(raw, str):
+            return ResearchCoverage.model_validate_json(raw)
+        if isinstance(raw, dict):
+            return ResearchCoverage.model_validate(raw)
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
 def _encode_evidence_summary(value: list[EvidenceSummary] | None) -> str | None:
     if value is None:
         return None
@@ -201,9 +213,10 @@ def _row_to_report(row: dict[str, Any]) -> ReportRecord:
         title=str(row.get("title") or ""),
         scope_key=row.get("scope_key"),
         status=_coerce_report_status(row.get("status")),
-        confidence=float(row.get("confidence") or 0.0),
+        confidence=float(row["confidence"]) if row.get("confidence") is not None else None,
         assessment_status=_decode_assessment_status(row.get("assessment_status_json")),
         evidence_summary=_decode_evidence_summary(row.get("evidence_summary_json")),
+        research_coverage=_decode_research_coverage(row.get("research_coverage_json")),
         verification_status=(
             "unverified" if row.get("verification_status") == "unverified" else None
         ),
@@ -216,9 +229,7 @@ def _row_to_report(row: dict[str, Any]) -> ReportRecord:
         body_paragraphs=[str(v) for v in (row.get("body_paragraphs") or [])],
         margin=_decode_margin(row.get("margin_json")),
         sources=[str(v) for v in (row.get("sources") or [])],
-        spatial_application=_decode_spatial_application(
-            row.get("spatial_application_json")
-        ),
+        spatial_application=_decode_spatial_application(row.get("spatial_application_json")),
         created_at=created_at,
         updated_at=updated_at,
     )
@@ -236,6 +247,7 @@ def _row_to_message(row: dict[str, Any]) -> ReportMessage:
             "unverified" if row.get("verification_status") == "unverified" else None
         ),
         evidence_summary=_decode_evidence_summary(row.get("evidence_summary_json")),
+        research_coverage=_decode_research_coverage(row.get("research_coverage_json")),
     )
 
 
@@ -279,13 +291,16 @@ def _report_params(
         "stamp": stamp,
         "title": payload.title,
         "status": payload.status,
-        "confidence": float(payload.confidence),
+        "confidence": float(payload.confidence) if payload.confidence is not None else None,
         "assessment_status_json": (
             payload.assessment_status.model_dump_json()
-            if payload.assessment_status is not None else None
+            if payload.assessment_status is not None
+            else None
         ),
         "verification_status": payload.verification_status,
         "evidence_summary_json": _encode_evidence_summary(payload.evidence_summary),
+        "research_coverage_json": (payload.research_coverage.model_dump_json()
+                                   if payload.research_coverage is not None else None),
         "location": payload.location,
         "coords": payload.coords,
         "findings": payload.findings,
@@ -394,13 +409,16 @@ async def update_report(report_id: str, patch: ReportUpdateRequest) -> ReportRec
     # the previous scoped run's application. Zero/empty values are still applied normally.
     patch_values = patch.model_dump(exclude_unset=True, exclude_none=True)
     for field in (
-        "spatial_application", "assessment_status", "verification_status", "evidence_summary",
+        "spatial_application",
+        "assessment_status",
+        "verification_status",
+        "evidence_summary",
+        "research_coverage",
+        "confidence",
     ):
         if field in patch.model_fields_set:
             patch_values[field] = getattr(patch, field)
-    merged = ReportRecord.model_validate(
-        {**current.model_dump(), **patch_values}
-    )
+    merged = ReportRecord.model_validate({**current.model_dump(), **patch_values})
     rows = await write_query(
         REPORT_UPSERT,
         _report_params(report_id, current.paragraph_num, current.stamp, merged),
@@ -428,28 +446,42 @@ def build_hydration_patch(
 ) -> ReportUpdateRequest:
     """Map analysis content, accepting run attribution only through an explicit trust seam."""
     parsed = parse_munin_report(analysis.analysis)
-    threat = analysis.threat_assessment or "MODERATE"
+    threat = analysis.threat_assessment or "—"
     threat_default = analysis.assessment_status is not None and (
-        analysis.assessment_status.threat == "default"
+        analysis.assessment_status.threat != "declared"
     )
-    confidence_default = analysis.assessment_status is not None and (
-        analysis.assessment_status.confidence == "default"
+    confidence_default = (
+        analysis.confidence is None
+        or analysis.assessment_status is not None
+        and (analysis.assessment_status.confidence != "declared")
     )
     metrics = [
         DossierMetric(
-            label="Threat", value="—" if threat_default else threat,
+            label="Threat",
+            value="—" if threat_default else threat,
             sub="nicht gelesen" if threat_default else "Modellbewertung",
             tone=_DEFAULT_TONE if threat_default else _THREAT_TONE.get(threat, _DEFAULT_TONE),
         ),
         DossierMetric(
-            label="Confidence", value="—" if confidence_default else f"{analysis.confidence:.0%}",
-            sub="nicht gelesen" if confidence_default else "Modellbewertung", tone="sage",
+            label="Confidence",
+            value="—" if confidence_default else f"{analysis.confidence:.0%}",
+            sub="nicht gelesen" if confidence_default else "Modellbewertung",
+            tone="sage",
         ),
         DossierMetric(
-            label="Sources", value=("—" if analysis.evidence_summary is None else
-                str(len({ref.source_ref_id for ref in analysis.evidence_summary}))),
-            sub=("Quellenbelege unbekannt" if analysis.evidence_summary is None
-                 else "konsumierte Beleg-IDs"),
+            label="Sources",
+            value=(
+                "—"
+                if analysis.evidence_summary is None
+                else str(
+                    len({ref.evidence_id or ref.source_ref_id for ref in analysis.evidence_summary})
+                )
+            ),
+            sub=(
+                "Quellenbelege unbekannt"
+                if analysis.evidence_summary is None
+                else "konsumierte Beleg-IDs"
+            ),
             tone="sentinel",
         ),
     ]
@@ -458,6 +490,7 @@ def build_hydration_patch(
         assessment_status=analysis.assessment_status,
         verification_status=analysis.verification_status,
         evidence_summary=analysis.evidence_summary,
+        research_coverage=analysis.research_coverage,
         context=parsed.context,
         findings=parsed.findings,
         body_title=f"{country_name} — Munin Lagebriefing",
@@ -520,9 +553,7 @@ async def get_or_create_report_by_scope(
         return existing
     try:
         return await create_report(
-            ReportCreateRequest(
-                scope_key=scope_key, title=title, location=location, coords=coords
-            )
+            ReportCreateRequest(scope_key=scope_key, title=title, location=location, coords=coords)
         )
     except ConstraintError:
         winner = await get_report_by_scope_keys(scope_key, legacy_aliases)
@@ -571,10 +602,13 @@ async def append_report_message(
             "refs": payload.refs,
             "assessment_status_json": (
                 payload.assessment_status.model_dump_json()
-                if payload.assessment_status is not None else None
+                if payload.assessment_status is not None
+                else None
             ),
             "verification_status": payload.verification_status,
             "evidence_summary_json": _encode_evidence_summary(payload.evidence_summary),
+        "research_coverage_json": (payload.research_coverage.model_dump_json()
+                                   if payload.research_coverage is not None else None),
             "ordering": time.time_ns(),
             "now": datetime.now(UTC).isoformat(),
         },

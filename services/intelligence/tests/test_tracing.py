@@ -29,8 +29,9 @@ class Span:
         recorder.events.append({"kind": kind, "phase": "start", "name": name, **self.fields})
 
     def finish(self, status="success", **fields):
-        self.recorder.events.append({"kind": self.kind, "phase": "finish", "status": status,
-                                     **self.fields, **fields})
+        self.recorder.events.append(
+            {"kind": self.kind, "phase": "finish", "status": status, **self.fields, **fields}
+        )
 
 
 class Recorder:
@@ -49,13 +50,20 @@ def tracing_sink(monkeypatch):
     recorder = Recorder()
     values = config.Settings(_env_file=None).model_dump()
     values["llm_model"] = config.settings.llm_model
-    values.update(spark_trace_endpoint="unix:/fixture", spark_trace_token_file="/fixture/token",
-                  spark_trace_capture="metadata", spark_trace_target_id="workstation-5090",
-                  spark_trace_spark_id="")
+    values.update(
+        spark_trace_endpoint="unix:/fixture",
+        spark_trace_token_file="/fixture/token",
+        spark_trace_capture="metadata",
+        spark_trace_target_id="workstation-5090",
+        spark_trace_spark_id="",
+    )
     settings = SimpleNamespace(**values)
     monkeypatch.setattr(config, "settings", settings)
-    monkeypatch.setitem(sys.modules, "spark_trace_reporter",
-                        SimpleNamespace(TraceReporter=lambda *args, **kwargs: recorder))
+    monkeypatch.setitem(
+        sys.modules,
+        "spark_trace_reporter",
+        SimpleNamespace(TraceReporter=lambda *args, **kwargs: recorder),
+    )
     adapter = sys.modules.get("tracing")
     if adapter is not None:
         monkeypatch.setattr(adapter, "settings", settings)
@@ -72,30 +80,46 @@ class FixtureChatModel(BaseChatModel):
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         if any(isinstance(message, ToolMessage) for message in messages):
-            message = AIMessage(content="done", usage_metadata={
-                "input_tokens": 4, "output_tokens": 2, "total_tokens": 6,
-            })
+            message = AIMessage(
+                content="done",
+                usage_metadata={
+                    "input_tokens": 4,
+                    "output_tokens": 2,
+                    "total_tokens": 6,
+                },
+            )
         else:
-            message = AIMessage(content="", tool_calls=[{"id": "tool1", "name": "probe",
-                                                         "args": {}}], usage_metadata={
-                "input_tokens": 3, "output_tokens": 1, "total_tokens": 4,
-            })
-        return ChatResult(generations=[ChatGeneration(message=message)],
-                          llm_output={"model_name": "local-fixture"})
+            message = AIMessage(
+                content="",
+                tool_calls=[{"id": "tool1", "name": "probe", "args": {}}],
+                usage_metadata={
+                    "input_tokens": 3,
+                    "output_tokens": 1,
+                    "total_tokens": 4,
+                },
+            )
+        return ChatResult(
+            generations=[ChatGeneration(message=message)],
+            llm_output={"model_name": "local-fixture"},
+        )
 
 
 async def test_public_parallel_queries_capture_model_tool_and_direct_spans(
-    tracing_sink, monkeypatch,
+    tracing_sink,
+    monkeypatch,
 ):
     @tool
     async def probe() -> str:
         """Return fixture evidence, including a directly invoked SDK completion."""
+
         async def create(**request):
-            return SimpleNamespace(model_dump=lambda: {
-                "model": "local-direct", "choices": [{"message": {"content": "fixture"},
-                                                       "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 2, "completion_tokens": 1},
-            })
+            return SimpleNamespace(
+                model_dump=lambda: {
+                    "model": "local-direct",
+                    "choices": [{"message": {"content": "fixture"}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 2, "completion_tokens": 1},
+                }
+            )
 
         adapter = sys.modules.get("tracing")
         if adapter is None:
@@ -105,21 +129,26 @@ async def test_public_parallel_queries_capture_model_tool_and_direct_spans(
         return "evidence"
 
     async def model_node(state):
-        return {"messages": [await FixtureChatModel().ainvoke(state["messages"])],
-                "synthesis": "fixture result"}
+        return {
+            "messages": [await FixtureChatModel().ainvoke(state["messages"])],
+            "synthesis": "fixture result",
+        }
 
     builder = StateGraph(AgentState)
     builder.add_node("model", model_node)
     builder.add_node("tools", workflow.tool_node_for_state)
     builder.set_entry_point("model")
-    builder.add_conditional_edges("model", lambda state:
-                                 "tools" if state["messages"][-1].tool_calls else END)
+    builder.add_conditional_edges(
+        "model", lambda state: "tools" if state["messages"][-1].tool_calls else END
+    )
     builder.add_edge("tools", "model")
     monkeypatch.setattr(workflow, "react_graph", builder.compile())
     monkeypatch.setattr(workflow, "tools_for_state", lambda state: [probe])
     monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
-    results = await asyncio.gather(workflow.run_intelligence_query("one"),
-                                   workflow.run_intelligence_query("two"))
+    results = await asyncio.gather(
+        workflow.run_intelligence_query("one", research_mode="historical"),
+        workflow.run_intelligence_query("two", research_mode="historical"),
+    )
     assert all(result["analysis"] == "fixture result" for result in results)
     events = [event for event in tracing_sink.events if event["phase"] == "finish"]
     runs = [event for event in events if event["kind"] == "run"]
@@ -141,7 +170,10 @@ async def test_public_parallel_queries_capture_model_tool_and_direct_spans(
 @pytest.mark.parametrize("point", ["start", "finish"])
 @pytest.mark.parametrize("outcome", ["success", "error", "cancelled"])
 async def test_telemetry_failure_cannot_replace_a_public_query_result_or_exception(
-    tracing_sink, monkeypatch, point, outcome,
+    tracing_sink,
+    monkeypatch,
+    point,
+    outcome,
 ):
     failure = TimeoutError("provider timeout") if outcome == "error" else asyncio.CancelledError()
 
@@ -164,12 +196,13 @@ async def test_telemetry_failure_cannot_replace_a_public_query_result_or_excepti
     monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
     monkeypatch.setattr(workflow, "react_graph", SimpleNamespace(ainvoke=invoke))
     if outcome == "success":
-        result = await workflow.run_intelligence_query("fixture")
+        result = await workflow.run_intelligence_query("fixture", research_mode="historical")
         assert result["analysis"] == "authoritative result"
     else:
-        with pytest.raises(type(failure)) as caught:
-            await workflow.run_intelligence_query("fixture")
-        assert caught.value is failure
+        expected = workflow.PipelineFailureError if outcome == "error" else type(failure)
+        with pytest.raises(expected) as caught:
+            await workflow.run_intelligence_query("fixture", research_mode="historical")
+        assert (caught.value.__cause__ if outcome == "error" else caught.value) is failure
     assert calls == ["fixture"]
 
 
@@ -179,8 +212,10 @@ async def test_legacy_error_response_is_a_failed_trace(tracing_sink, monkeypatch
 
     monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
     monkeypatch.setattr(workflow, "legacy_graph", SimpleNamespace(ainvoke=invoke))
-    result = await workflow.run_intelligence_query("fixture", use_legacy=True)
-    assert result["mode"] == "error"
+    with pytest.raises(RuntimeError, match="legacy fixture"):
+        await workflow.run_intelligence_query(
+            "fixture", use_legacy=True, research_mode="historical"
+        )
     terminal = [event for event in tracing_sink.events if event["phase"] == "finish"]
     assert terminal[0]["status"] == "error"
 
@@ -196,23 +231,30 @@ async def test_direct_completion_survives_telemetry_failure(tracing_sink, monkey
 
     async def invoke(state, **kwargs):
         if point == "start":
+
             def fail(*args, **kwargs):
                 raise RuntimeError("generation telemetry unavailable")
+
             monkeypatch.setattr(tracing_sink, "span", fail)
         else:
+
             def fail(*args, **kwargs):
                 raise RuntimeError("generation finish unavailable")
+
             monkeypatch.setattr(Span, "finish", fail)
         assert await tracing.trace_completion(create, model="fixture", messages=[]) is expected
         return {"synthesis": "preserved"}
 
     monkeypatch.setattr(workflow, "_ensure_graph_client", lambda: None)
     monkeypatch.setattr(workflow, "react_graph", SimpleNamespace(ainvoke=invoke))
-    assert (await workflow.run_intelligence_query("fixture"))["analysis"] == "preserved"
+    assert (await workflow.run_intelligence_query("fixture", research_mode="historical"))[
+        "analysis"
+    ] == "preserved"
 
 
 async def test_app_shutdown_flushes_reporter_without_replacing_resource_errors(
-    tracing_sink, monkeypatch,
+    tracing_sink,
+    monkeypatch,
 ):
     import main
     import tracing

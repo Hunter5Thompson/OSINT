@@ -10,7 +10,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 import structlog
@@ -34,6 +34,7 @@ async def stream_intel_query(
     spatial_relation: RetrievalSpatialRelation = RetrievalSpatialRelation.EITHER,
     image_url: str | None = None,
     use_legacy: bool = False,
+    research_mode: Literal["current", "historical"] = "current",
     grounding_context: str | None = None,
     grounding_evidence: list[dict[str, Any]] | None = None,
     report_id: str | None = None,
@@ -90,6 +91,7 @@ async def stream_intel_query(
             "spatial_relation": spatial_relation.value,
             "image_url": image_url,
             "use_legacy": use_legacy,
+            "research_mode": research_mode,
         }
         if grounding_context is not None:
             payload["grounding_context"] = grounding_context
@@ -112,17 +114,23 @@ async def stream_intel_query(
                 )
         resp.raise_for_status()
         data = resp.json()
+        if data.get("status") == "failed" or data.get("error") or data.get("mode") == "error":
+            raise ValueError("Intelligence service reported a failed run")
 
         analysis = IntelAnalysis(
             query=query,
+            status=data.get("status"),
+            answerability=data.get("answerability"),
+            tool_events=data.get("tool_events", []),
             agent_chain=data.get("agent_chain", []),
             sources_used=data.get("sources_used", []),
             analysis=data.get("analysis", ""),
-            confidence=data.get("confidence", 0.0),
-            threat_assessment=data.get("threat_assessment", "MODERATE"),
+            confidence=data.get("confidence"),
+            threat_assessment=data.get("threat_assessment"),
             assessment_status=data.get("assessment_status"),
             verification_status=data.get("verification_status"),
             evidence_summary=data.get("evidence_summary"),
+            research_coverage=data.get("research_coverage"),
             tool_trace=data.get("tool_trace", []),
             mode=data.get("mode", "react"),
             timestamp=datetime.fromisoformat(data["timestamp"])
@@ -154,6 +162,7 @@ async def stream_intel_query(
                         assessment_status=analysis.assessment_status,
                         verification_status=analysis.verification_status,
                         evidence_summary=analysis.evidence_summary,
+                        research_coverage=analysis.research_coverage,
                     ),
                 )
             except Exception as persist_exc:  # noqa: BLE001
@@ -170,6 +179,7 @@ async def stream_intel_query(
         yield {
             "event": "error",
             "data": json.dumps({
+                "status": "failed",
                 "error": _TIMEOUT_MESSAGE,
                 "code": "MODEL_TIMEOUT",
             }),
@@ -184,13 +194,28 @@ async def stream_intel_query(
         else:
             message = "Analysis service is unavailable. Please try again."
             code = "INTEL_SERVICE_ERROR"
+        error = {
+            "status": "failed",
+            "error": message,
+            "code": code,
+        }
+        if isinstance(exc, httpx.HTTPStatusError) and status == 502:
+            try:
+                upstream = exc.response.json()
+                if upstream.get("code") == "INTEL_PIPELINE_FAILED":
+                    error.update(
+                        code="INTEL_PIPELINE_FAILED",
+                        error="Recherche oder Synthese technisch fehlgeschlagen.",
+                    )
+            except (ValueError, AttributeError):
+                pass
         if report_id:
             try:
                 await report_store.append_report_message(
                     report_id,
                     ReportMessageCreate(
                         role="munin",
-                        text=message,
+                        text=error["error"],
                     ),
                 )
             except Exception as persist_exc:  # noqa: BLE001
@@ -199,13 +224,17 @@ async def stream_intel_query(
                     report_id=report_id,
                     error=str(persist_exc),
                 )
-        yield {
-            "event": "error",
-            "data": json.dumps({"error": message, "code": code}),
-        }
-    except Exception as exc:  # noqa: BLE001
+        yield {"event": "error", "data": json.dumps(error)}
+        yield {"event": "done", "data": ""}
+    except Exception:  # noqa: BLE001
         log.exception("intel_query_failed")
         yield {
             "event": "error",
-            "data": json.dumps({"error": str(exc), "code": "INTEL_ERROR"}),
+            "data": json.dumps(
+                {
+                    "status": "failed",
+                    "error": "Intelligence-Anfrage fehlgeschlagen.",
+                    "code": "INTEL_ERROR",
+                }
+            ),
         }

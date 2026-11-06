@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from pydantic import Field
+from dotenv import dotenv_values
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -26,17 +27,21 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1024
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "odin_intel"
+    # Immutable, hash-bound source catalog; unset disables optional archive support.
+    notebook_catalog_path: Path | None = None
+    notebook_catalog_sha256: str = ""
+    notebook_embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
     spatial_catalog_path: Path = Path("/app/data/spatial")
-    spatial_coverage_snapshot_path: Path = Path(
-        "/app/data/spatial/qdrant-coverage.json"
-    )
+    spatial_coverage_snapshot_path: Path = Path("/app/data/spatial/qdrant-coverage.json")
     gdelt_api_url: str = "https://api.gdeltproject.org/api/v2/doc/doc"
+    # Raw-file ingestion is canonical; the rate-limited legacy DOC tool is opt-in.
+    enable_gdelt_doc_tool: bool = False
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
     neo4j_query_timeout_s: float = Field(default=15.0, gt=0)
     # RAG feature flags
-    enable_hybrid: bool = False       # Phase 2: needs sparse vectors in Qdrant
+    enable_hybrid: bool = False  # Phase 2: needs sparse vectors in Qdrant
     enable_rerank: bool = True
     enable_graph_context: bool = True
     # Legacy LLM-generated Cypher is opt-in; the keyword prefilter is not authorization.
@@ -50,6 +55,46 @@ class Settings(BaseSettings):
     rag_realtime_score_threshold: float = 0.45
     rag_final_k: int = 5
     rag_telegram_max: int = 1
+    # Current research. No key is included in health responses or receipts.
+    tavily_api_key_file: Path | None = None
+    # Discovery coverage, not an assertion that these publishers are always correct.
+    current_research_domains: tuple[str, ...] = (
+        "reuters.com",
+        "apnews.com",
+        "bbc.com",
+        "bbc.co.uk",
+        "aljazeera.com",
+        "dw.com",
+        "france24.com",
+        "theguardian.com",
+        "ft.com",
+        "nytimes.com",
+        "cnn.com",
+        "state.gov",
+        "whitehouse.gov",
+        "un.org",
+        "iaea.org",
+        "mfa.gov.ir",
+        "irna.ir",
+        "timesofisrael.com",
+        "al-monitor.com",
+        "jpost.com",
+        "i24news.tv",
+        "mnd.gov.tw",
+        "mfa.gov.cn",
+        "president.gov.ua",
+        "kremlin.ru",
+    )
+    tavily_api_key: SecretStr = SecretStr("")
+    tavily_api_url: str = "https://api.tavily.com"
+    current_research_lookback_hours: int = Field(default=72, ge=1, le=168)
+    current_research_expanded_lookback_hours: int = Field(default=168, ge=1, le=168)
+    current_research_max_requests: int = Field(default=8, ge=1, le=12)
+    current_research_max_credits: int = Field(default=6, ge=1, le=12)
+    current_research_timeout_s: float = Field(default=50, gt=0, le=90)
+    current_analysis_url: str = ""
+    current_analysis_model: str = ""
+    current_analysis_timeout_s: float = Field(default=75, gt=0, le=120)
     # ReAct agent guards
     react_max_tool_calls: int = 8
     react_max_iterations: int = 5
@@ -60,6 +105,17 @@ class Settings(BaseSettings):
     vision_max_file_size_mb: int = 10
     vision_max_dimension: int = 4096
     vision_download_timeout_s: int = 10
+
+    @property
+    def current_search_key(self) -> SecretStr:
+        if self.tavily_api_key_file is None:
+            return self.tavily_api_key
+        try:
+            if not self.tavily_api_key_file.is_file():
+                return SecretStr("")
+            return SecretStr(dotenv_values(self.tavily_api_key_file).get("TAVILY_API_KEY") or "")
+        except OSError:
+            return SecretStr("")
 
     @property
     def llm_base_url(self) -> str:

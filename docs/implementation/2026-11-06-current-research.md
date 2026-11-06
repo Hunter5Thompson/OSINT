@@ -1,0 +1,187 @@
+# Current research for ODIN
+
+Status: current research enabled for review-required analysis drafts; automated
+forecasts are not qualified. Baseline: `39b79dd1ce7d8d93a175a0fa35c7cb46206c028a`.
+
+The accepted requirement is current, source-grounded analysis with bounded scenario
+assessment. The specification and initial live failures are preserved under
+`/data/odin-agent-enablement/20261106-plan` and
+`/data/odin-iran-assessment/20261106T143306Z`. Runtime evidence and red/green logs
+belong under `/data/odin-agent-enablement/20261106-implementation`.
+
+## Interface decision
+
+Three independent designs considered a minimal one-shot interface, an explicit
+research session, and a trivial default caller. Use a run-scoped deep module with
+one `search(question)` operation. Its immutable run pins and shared budget give
+session semantics without a second lifecycle interface. Inject the instance via
+LangGraph runtime context, never as an object in serialized state. Current
+research is the analysis endpoint's conservative default; an explicit historical
+request opts out. Language recognition cannot remove the research requirement.
+
+## Invariants and test seams
+
+1. A current report performs baseline research even when the model emits no tool call.
+2. Follow-up queries cannot reset as-of time, scope, deadline, or request/credit budget.
+3. Search, extraction, publication, event, and ingestion times keep distinct meanings.
+4. Search relevance, matching citations, and multiple publications never certify truth.
+5. Failed/empty/blocked retrievals have distinct receipts; cancellation propagates.
+6. Current evidence precedes archive context in a bounded prompt; summaries describe
+   only evidence actually passed to synthesis.
+7. Public web context is not spatial occurrence evidence without a scoped source.
+8. Private archive content and credentials never enter external search requests.
+9. Research does not write to the curated corpus or mutate source archives.
+
+Tests cross the public research interface, the `/query` interface, and report
+create/read plus browser rendering. External HTTP, the owned corpus, time and the
+model are injected adapters; pure selection and provenance logic remain real.
+
+## Implementation sequence
+
+- Preserve baseline and failure reproduction; qualify dependency update separately.
+- Build Tavily search/extract with source metadata and bounded failure handling.
+- Add mandatory research and a follow-up tool sharing one run context.
+- Propagate coverage and web evidence through saved reports and the UI.
+- Run contract, service, database, browser and live-source checks independently.
+- Review standards and spec against the baseline; prepare a pinned release and rollback.
+
+Baseline intelligence suite: 900 tests passed on the original lockfile.
+The Tavily credential is outside the worktree in a private runtime file.
+
+## Implemented candidate
+
+The candidate uses Tavily Search/Extract plus publication-filtered local corpus
+reads, a deterministic research stage and focused follow-up queries in one
+runtime context. A local, time-limited query planner sees only the user's question
+and translates it into short English discovery terms; it never sees archive text.
+The first live German query exposed unrelated news selection and is retained as
+failed content qualification, not a success metric.
+
+The API defaults to current research. Historical requests opt out explicitly;
+the dossier chat exposes that choice. Original reads, snippets, stored original
+chunks, publication, observation and retrieval time remain separate through
+report persistence. Scenario discussion is conditional; forecast assessment and
+external fact verification remain unavailable.
+
+Maintenance update was tested independently before graph integration: LangGraph
+1.2.20, langchain-core 1.7.6 and langchain-openai 1.7.4, locked with uv 0.10.0;
+907 tests passed at that checkpoint. No framework replacement was needed.
+
+Review corrections add mandatory counterevidence discovery, explicit expansion
+from 72 hours to seven days when no eligible originals are found, original-date
+conflict checks, per-URL extraction receipts and shared eligibility checks for
+supplemental corpus evidence. Provider response bodies are bounded to 2 MiB.
+Historical mode cannot invoke arbitrary public URL/query tools; current follow-up
+searches use the pinned public question and an enumerated focus.
+
+Current synthesis receives only eligible source excerpts. Its two model passes
+produce typed source findings. Future-attack questions receive a fixed, unassessed
+server-owned methodological framework. The model selects fixed paragraph
+IDs; rendering inserts the entire original passage. No substring quotation or
+character-cut article paragraph is permitted. Translation and interpretation remain
+labelled model output requiring expert review. Unknown passage IDs, model-supplied
+replacement quotes and additional free scenario fields fail closed. Read excerpts remain
+limited context and do not establish semantic entailment or external truth.
+
+Optional tool failures preserve valid partial current answers with an explicit gap.
+Occurrence queries accept only current evidence from the pinned spatial filter;
+topic-only web matches cannot enable an occurrence claim.
+
+Technical evidence so far: 967 intelligence tests, 1,206 backend tests,
+963 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
+the latest receipt display additions. The scoped application rollout and a real
+UI query, automatic chat persistence, report API save and browser reload are recorded
+under the implementation artifact directory. These checks do not certify truth.
+
+The optional `docker-compose.current-research.yml` overlay mounts a private
+dotenv file read-only at `/run/secrets/tavily.env`. Set `ODIN_TAVILY_ENV_FILE` to
+the existing host file. Do not copy credentials into images or the repository.
+`/health` reports configuration readiness without a paid provider probe.
+
+Irrelevant originals permit an empty finding set
+and an explicit insufficient-evidence result; the model is not forced to convert
+navigation or source metadata into a current finding. Public query planning uses
+JSON output mode with a bounded local timeout.
+
+## Measured inference boundary
+
+The v2 live matrix did not pass source-level acceptance: 28 exact original quotes
+coexisted with incorrect speaker attribution, date arithmetic and boilerplate
+selection. The preserved independent review records 0 PASS / 4 PARTIAL / 7 FAIL,
+including three pipeline failures. A longer 9B thinking pass exhausted its output
+budget and is not the selected runtime policy.
+
+The already running Spark service offers `Qwen/Qwen3.8-27B`. In a bounded read-only
+probe on the preserved cases it detected attribution/date errors missed by the
+9B audit. `CURRENT_ANALYSIS_URL`, `CURRENT_ANALYSIS_MODEL` and a 75-second call
+timeout therefore allow an explicitly configured analysis adapter. Discovery and
+ReAct remain on the existing local model. No second local model, download, model
+swap or inference-service restart is involved. The complete live matrix must
+assess this combination; the small probe alone is not acceptance. The completed
+matrix and targeted repetitions support only the bounded draft scope documented below.
+
+Discovery defaults to 25 named international, regional and official publisher
+domains, configurable through `CURRENT_RESEARCH_DOMAINS`. The run pins and saves
+that selection, enforces it before extraction, and displays it in coverage. This
+is an explicit coverage boundary, not an independence or truth score. Existing
+local corpus reads remain separately identified. Tavily publication estimates may
+also reflect updates; original-date conflict checks and distinct event dates are
+still required. No automatic index writes or new ingestion occur.
+
+The current report also supplies its JSON Schema to the inference boundary,
+including allowed passage IDs and only the source-finding shape. The schema keeps
+an empty-finding abstention branch; structural constraints must not force a claim.
+Local validation remains mandatory even when the inference server constrains JSON.
+
+A final, separate source-only audit receives at most four original/translation
+pairs and no report context. It has a 25-second deadline. Rejected, missing,
+duplicate or unavailable approvals withhold the model interpretation while
+retaining its original passage. This model check is explicitly not factual
+verification. Technical coverage records partial/unavailable checks. Free model
+claims about missing sources are not rendered as facts; report limits are
+deterministic and actual retrieval gaps remain visible. Past 48-hour windows
+are distinct from explicit future requests such as tomorrow.
+
+The live v5 review found accurate displayed translations in three election
+reports but also promoted a navigation block and a related-story heading to
+findings. Paragraph selection now excludes standalone Markdown headings and link
+directories before assigning selectable evidence. Paragraph IDs retain their
+original offsets. The unused model-generated `gaps` field has been removed;
+limits belong to the server and retrieval receipts.
+
+An experimental separate scenario audit did not qualify: fresh Iran runs still
+displayed incorrect temporal premises, invented advice and a wrong Hormuz starting
+state despite positive audit results. Its generative output path and audit were
+removed. The final model contract permits only source findings. For future-attack
+questions the server supplies three fixed, explicitly unassessed methodological
+cases, with no claimed current premises, automatic support assignments or forecast
+probabilities. This is a limitation of the enabled capability, not successful
+qualification of predictive analysis. `/health` exposes `forecast_details=not_qualified`.
+The source-summary audit still requires a strict JSON boolean and is not a factual
+certification. Superseded scenario-generation tests were replaced by output-boundary
+regressions; no tests were silently skipped.
+
+The full c4c56df live matrix returned eleven answers without pipeline failures.
+Independent source review rated five PASS (including two justified abstentions),
+five PARTIAL and one coverage FAIL: a combined forecast draft discarded relevant
+Iran situation passages. A bounded source-only reader now handles this empty
+selection case separately. It may recover source-bound findings, which still pass
+the normal statement audit; it cannot authorize new forecast details. Irrelevant
+sources remain a valid empty result. Short complete core summaries are requested
+to avoid decoder-enforced mid-sentence truncation at the field's length limit.
+
+Scenario names and methodological questions are server-owned. The UI now
+distinguishes an unassessed threat from absent evidence: current original sources
+can be available even when no threat or forecast rating is justified.
+
+Remaining source-level limitations include missed contradictions and occasional
+role, time or terminology errors despite positive model checks. These are recorded
+as review limitations, never as external factual acceptance or calibrated forecasts.
+
+Forecast intent is retained independently of the number of generated scenarios.
+A recovered situation with no authorized scenario details still reports an open
+forecast when the user requested one, including non-military future questions.
+
+The final live acceptance scope is current research and review-required,
+source-attributed drafts. Reliable automated scenario premises, comprehensive
+contradiction resolution and externally verified forecasts remain unqualified.

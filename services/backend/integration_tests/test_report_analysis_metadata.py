@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -22,6 +26,9 @@ SUMMARY = [
         "verification_status": "unverified",
     }
 ]
+NOTEBOOK_SUMMARY = [json.loads(
+    (Path(__file__).parents[3] / "tests/fixtures/notebook-passage.json").read_text()
+)]
 
 
 @pytest.fixture
@@ -74,7 +81,7 @@ async def case(monkeypatch):
         await driver.close()
 
 
-@pytest.mark.parametrize("summary", [None, [], SUMMARY])
+@pytest.mark.parametrize("summary", [None, [], SUMMARY, NOTEBOOK_SUMMARY])
 async def test_dossier_metadata_round_trip_and_explicit_unknown_clear(case, summary):
     store, report_id, _ = case
     analysis = IntelAnalysis(
@@ -134,3 +141,123 @@ async def test_chat_metadata_is_attached_to_message_without_relabelling_dossier(
     report = await store.get_report(report_id)
     assert report.body_paragraphs == ["Original body"]
     assert report.evidence_summary is None and report.assessment_status is None
+
+
+@pytest.mark.parametrize("operation", ["create", "update"])
+@pytest.mark.parametrize("confidence", [None, 0.0, 0.73])
+async def test_confidence_survives_every_report_projection(case, operation, confidence):
+    store, _, _ = case
+    scope_key = f"review:{uuid4().hex}"
+    created = None
+    try:
+        created = await store.create_report(
+            ReportCreateRequest(
+                title="Null confidence roundtrip",
+                scope_key=scope_key,
+                confidence=confidence if operation == "create" else 0.8,
+            )
+        )
+        result = created
+        if operation == "update":
+            result = await store.update_report(
+                created.id, ReportUpdateRequest(confidence=confidence)
+            )
+        assert result.confidence == confidence
+        assert (await store.get_report(created.id)).confidence == confidence
+        assert (await store.get_report_by_scope(scope_key)).confidence == confidence
+        assert (
+            next(r for r in await store.list_reports() if r.id == created.id).confidence
+            == confidence
+        )
+        # An unrelated edit must not turn absence into a declared numeric value.
+        renamed = await store.update_report(created.id, ReportUpdateRequest(title="Renamed"))
+        assert renamed.confidence == confidence
+        assert (await store.get_report(created.id)).confidence == confidence
+    finally:
+        if created is not None:
+            await store.delete_report(created.id)
+
+
+async def test_saved_briefing_chat_keeps_original_review_after_second_save(case, monkeypatch):
+    from app.models.almanac import BriefingSaveRequest
+    from app.routers import almanac
+
+    store, report_id, message_ids = case
+    original = await store.get_report(report_id)
+    monkeypatch.setattr(almanac, "get_or_create_report_by_scope", AsyncMock(return_value=original))
+
+    async def append(rid, payload):
+        message = await store.append_report_message(rid, payload)
+        message_ids.append(message.id)
+        return message
+
+    monkeypatch.setattr(almanac, "append_report_message", append)
+    context = SimpleNamespace(
+        country=SimpleNamespace(name="Fixture", capital=None),
+        token=SimpleNamespace(scope_key=f"review:{report_id}"),
+        legacy_scope_keys=(),
+    )
+    payload = json.loads(
+        (Path(__file__).parents[3] / "tests/fixtures/reviewed-claims-47.json").read_text()
+    )[0]
+    reviewed = IntelAnalysis(
+        query="fixture",
+        analysis="Reviewed fixture answer",
+        confidence=0.3,
+        assessment_status={"threat": "declared", "confidence": "declared", "issues": []},
+        verification_status="unverified",
+        evidence_summary=[
+            {
+                "source_ref_id": "parent",
+                "evidence_id": "claim-fixture",
+                "source_type": "notebooklm",
+                "provider": payload["provider"],
+                "review": payload["review"],
+                "verification_status": "unverified",
+            }
+        ],
+    )
+    abstention = IntelAnalysis(
+        query="fixture",
+        analysis="No evidence in this research run.",
+        confidence=None,
+        evidence_summary=[],
+        verification_status="unverified",
+        assessment_status={"threat": "not_assessed", "confidence": "not_assessed", "issues": []},
+    )
+    for analysis in [reviewed, abstention]:
+        await almanac._save_resolved_country_briefing(
+            context, BriefingSaveRequest(analysis=analysis)
+        )
+    messages = await store.list_report_messages(report_id)
+    assert len(messages) == 2
+    for message, analysis in zip(messages, [reviewed, abstention], strict=True):
+        assert message.evidence_summary == analysis.evidence_summary
+        assert message.assessment_status == analysis.assessment_status
+        assert message.verification_status == analysis.verification_status
+    final = await store.get_report(report_id)
+    assert final.evidence_summary == []
+    assert final.confidence is None
+
+
+async def test_current_research_survives_save_reload_chat_and_explicit_clear(case):
+    from app.models.research import ResearchCoverage
+
+    store, report_id, message_ids = case
+    fixture = json.loads(
+        (Path(__file__).parents[3] / "tests/fixtures/current-research.json").read_text()
+    )
+    analysis = IntelAnalysis(query="synthetic", analysis="Current fixture", **fixture)
+    patch = store.build_hydration_patch(analysis, country_name="Synthetic")
+    await store.update_report(report_id, patch)
+    saved = await store.get_report(report_id)
+    assert saved.research_coverage == ResearchCoverage.model_validate(fixture["research_coverage"])
+    assert saved.model_dump(mode="json")["evidence_summary"] == fixture["evidence_summary"]
+    message = await store.append_report_message(report_id, ReportMessageCreate(
+        role="munin", text="Later current answer", **fixture))
+    message_ids.append(message.id)
+    read_message = (await store.list_report_messages(report_id))[0]
+    assert read_message.research_coverage == saved.research_coverage
+    await store.update_report(report_id, ReportUpdateRequest(research_coverage=None))
+    assert (await store.get_report(report_id)).research_coverage is None
+    assert (await store.list_report_messages(report_id))[0].research_coverage is not None

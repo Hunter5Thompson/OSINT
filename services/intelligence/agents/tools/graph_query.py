@@ -6,6 +6,7 @@ through ENABLE_FREE_CYPHER and the application prefilter is not a security bound
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from typing import Any
@@ -24,6 +25,7 @@ from agents.tools.graph_templates import (
 from config import settings
 from graph.read_queries import validate_cypher_readonly
 from graph.state import AgentState
+from rag.evidence import pack_with_lineage, to_evidence_item
 from spatial import (
     RetrievalSpatialRelation,
     ScopeKind,
@@ -87,9 +89,7 @@ def set_graph_client(client: Any) -> None:
     _graph_client = client
 
 
-def route_to_template(
-    template_id: str, params: dict
-) -> dict | None:
+def route_to_template(template_id: str, params: dict) -> dict | None:
     """Try to select a template. Returns routing metadata or None."""
     result = select_template(template_id, params)
     if result is None:
@@ -283,11 +283,11 @@ def bindable_query_knowledge_graph(*, scoped: bool) -> BaseTool:
     )
 
 
-@tool
+@tool(response_format="content_and_artifact")
 async def query_knowledge_graph(
     question: str,
-    runtime: ToolRuntime[dict[str, object], AgentState],
-) -> str:
+    runtime: ToolRuntime[object, AgentState],
+) -> tuple[str, list[dict]]:
     """Query the Neo4j knowledge graph (entities, events, locations, sources).
 
     The graph is built from Qdrant's underlying documents — same content,
@@ -297,6 +297,8 @@ async def query_knowledge_graph(
     The question is mapped to a Cypher template by keyword. To trigger a
     specific template, phrase your question to match its keywords:
 
+    - **reviewed_claims** — 'reviewed claims about "RUSI"' / 'reviewed claims about "C060"'
+        Returns: curated statements with original evidence, qualifications and citation IDs.
     - **entity_lookup** — "who is \\"Wagner Group\\"" / "find entity \\"Murmansk\\""
         Returns: profile of one entity (relations, mentions, sources).
     - **events_by_entity** — "events involving \\"Murmansk\\"" / "events about \\"Houthi\\""
@@ -334,14 +336,13 @@ async def query_knowledge_graph(
         if relation is RetrievalSpatialRelation.ABOUT:
             return _with_graph_application(
                 runtime.state,
-                "SPATIAL_SCOPE_UNSUPPORTED_RELATION: about has no reviewed "
-                "scoped graph template",
-            )
+                "SPATIAL_SCOPE_UNSUPPORTED_RELATION: about has no reviewed scoped graph template",
+            ), []
         if template_id is None:
             return _with_graph_application(
                 runtime.state,
                 "SPATIAL_SCOPE_UNSUPPORTED: no scoped graph template",
-            )
+            ), []
         log.info(
             "spatial_filter_applied",
             consumer="neo4j",
@@ -350,8 +351,39 @@ async def query_knowledge_graph(
             filter_mode="semantic-key",
         )
         output = await execute_scoped_graph_query(template_id, params, scope)
-        return _with_graph_application(runtime.state, output)
+        return _with_graph_application(runtime.state, output), []
 
+    if template_id == "reviewed_claims":
+        try:
+            if _graph_client is None:
+                raise RuntimeError("Graph database unavailable")
+            cypher, bound = build_cypher_from_template(template_id, params)
+            rows = await _graph_client.run_query(cypher, bound, read_only=True)
+            items = [
+                to_evidence_item(
+                    {
+                        "source_type": "notebooklm",
+                        "provider": f"notebooklm:{row['notebook_id']}",
+                        "notebook_id": row["notebook_id"],
+                        "source_id": row["source_id"],
+                        "source_kind": row["source_kind"],
+                        "content": row["statement"],
+                        "title": row["title"],
+                        "content_hash": row["claim_hash"],
+                        "review": json.loads(row["qualification_json"]),
+                    }
+                )
+                for row in rows
+            ]
+            text, artifact = pack_with_lineage(items, budget=6000, preserve_order=True)
+            return _with_graph_application(
+                runtime.state, text or "No reviewed claims found."
+            ), artifact
+        except Exception as exc:
+            log.warning("reviewed_claim_read_failed", error=str(exc))
+            return _with_graph_application(
+                runtime.state, "Graph query failed: reviewed claim read"
+            ), []
     if template_id:
         output = await execute_graph_query(template_id=template_id, params=params)
     elif not settings.enable_free_cypher:
@@ -359,7 +391,7 @@ async def query_knowledge_graph(
     else:
         # No template matched — fallback to LLM-generated Cypher
         output = await _free_cypher_fallback(question)
-    return _with_graph_application(runtime.state, output)
+    return _with_graph_application(runtime.state, output), []
 
 
 def _intent_phrase(text: str, phrases: tuple[str, ...]) -> re.Match[str] | None:
@@ -390,6 +422,13 @@ def _match_intent(question: str) -> tuple[str | None, dict]:
     if location_events:
         location = entity or question[location_events.end() :].strip(" \t\r\n?.,!")
         return ("event_timeline", {"location": location}) if location else (None, {})
+
+    reviewed = _intent_phrase(
+        intent_text, ("reviewed claims about", "reviewed claims", "geprüfte Aussagen")
+    )
+    if reviewed:
+        name = entity or question[reviewed.end() :].strip(" \t\r\n?.,!")
+        return ("reviewed_claims", {"name": name}) if name else (None, {})
 
     if not entity:
         words = question.split()
@@ -453,12 +492,16 @@ async def _free_cypher_fallback(question: str) -> str:
             client.chat.completions.create,
             model=settings.llm_model,
             messages=[
-                {"role": "system", "content": (
-                    "You are a Cypher query generator for Neo4j. "
-                    "Generate a single READ-ONLY Cypher query to answer the user's question.\n\n"
-                    f"{schema_prompt_block()}\n\n"
-                    "Return ONLY the Cypher query, no explanation."
-                )},
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a Cypher query generator for Neo4j. "
+                        "Generate a single READ-ONLY Cypher query "
+                        "to answer the user's question.\n\n"
+                        f"{schema_prompt_block()}\n\n"
+                        "Return ONLY the Cypher query, no explanation."
+                    ),
+                },
                 {"role": "user", "content": question},
             ],
             temperature=0,
