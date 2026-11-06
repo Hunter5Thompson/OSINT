@@ -557,6 +557,15 @@ async def react_synthesis_node(state: AgentState) -> dict:
                         "statement_check_" + current_report.statement_check,
                     ],
                 }
+            if current_report.comparison_check in {"partial", "unavailable"}:
+                coverage = {
+                    **coverage,
+                    "status": "partial",
+                    "gaps": [
+                        *coverage["gaps"],
+                        "comparison_check_" + current_report.comparison_check,
+                    ],
+                }
             coverage["forecast"] = (
                 "not_assessed" if current_report.forecast_requested else "not_requested"
             )

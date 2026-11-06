@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage
 
 from graph.result import PipelineFailureError
 from rag.evidence import EvidenceItem, SourceRef
+from tests.test_source_check_dimensions import check_row
 
 QUOTE = "The minister denied that an attack had been ordered."
 
@@ -46,7 +47,7 @@ async def test_quote_and_source_identity_survive_conditional_report():
     assert "Keine neuen Angriffe" in report and "Größere Eskalation" in report
     assert "Threat Assessment: NOT_ASSESSED" in report
     assert "Confidence Level: not assessed" in report
-    assert model.ainvoke.await_count == 3
+    assert model.ainvoke.await_count == 2
 
 
 async def test_unknown_or_old_passage_ids_fail_closed():
@@ -178,9 +179,9 @@ async def test_failed_source_check_preserves_original_and_withholds_interpretati
     payload = draft()
     payload["findings"][0]["statement"] = "Der Minister hat den Angriff befohlen."
     model = AsyncMock()
-    model.ainvoke.side_effect = [AIMessage(content=json.dumps(payload))] * 2 + [
+    model.ainvoke.side_effect = [AIMessage(content=json.dumps(payload))] + [
         AIMessage(
-            content=json.dumps({"checks": [{"id": "f0", "faithful": False, "reason": "Negation"}]})
+            content=json.dumps({"checks": [check_row(polarity="changed", reason="Negation")]})
         ),
     ]
     report = await compose_current_report("Iran", [source()], model)
@@ -249,13 +250,12 @@ async def test_open_forecast_does_not_discard_an_available_current_situation(
     empty = AIMessage(content=json.dumps({"findings": []}))
     model.ainvoke.side_effect = [
         empty,
-        empty,
         AIMessage(content=json.dumps({"findings": draft()["findings"]})),
         AIMessage(
             content=json.dumps(
                 {
                     "checks": [
-                        {"id": "f0", "faithful": True, "reason": "Faithful denial"},
+                        check_row(reason="Faithful denial"),
                     ]
                 }
             )
@@ -277,7 +277,7 @@ async def test_unavailable_source_reader_cannot_invent_a_recovered_finding():
 
     model = AsyncMock()
     empty = AIMessage(content=json.dumps({"findings": []}))
-    model.ainvoke.side_effect = [empty, empty, TimeoutError()]
+    model.ainvoke.side_effect = [empty, TimeoutError()]
     report = await compose_current_report("Iran morgen?", [source()], model)
     assert report.finding_count == 0
     assert QUOTE not in report.text

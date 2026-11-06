@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock
 import pytest
 from langchain_core.messages import AIMessage
 
+from tests.test_source_check_dimensions import check_row
+
 
 async def test_rejected_or_missing_checks_never_approve_a_translation():
     from agents.source_check import check_statements
@@ -15,7 +17,7 @@ async def test_rejected_or_missing_checks_never_approve_a_translation():
         content=json.dumps(
             {
                 "checks": [
-                    {"id": "f0", "faithful": False, "reason": "Wrong speaker"},
+                    check_row(attribution="changed", reason="Wrong speaker"),
                 ]
             }
         )
@@ -55,7 +57,7 @@ async def test_only_one_explicit_positive_check_can_authorize_its_own_statement(
     from agents.source_check import check_statements
 
     model = AsyncMock()
-    row = {"id": "f0", "faithful": True, "reason": "Faithful translation"}
+    row = check_row(reason="Faithful translation")
     model.ainvoke.return_value = AIMessage(content=json.dumps({"checks": [row]}))
     pairs = [
         {

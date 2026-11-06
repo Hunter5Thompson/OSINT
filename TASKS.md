@@ -24,6 +24,13 @@ nach realen Fehlbefunden entfernt; zuverl채ssige Prognosen und externe Faktenpr�
 bleiben nicht qualifiziert. Live- und Betriebsnachweise:
 `/data/odin-agent-enablement/20261106-implementation/README.md`.
 
+Folgearbeit 06.11.2026, Analyseoptimierung als getesteter Kandidat:
+[Quellenpr체fung, gezielte Reparatur und Quellenvergleich](docs/implementation/2026-11-06-analysis-optimization.md).
+Der ausgelassene Iran-Vergeltungsvorbehalt ist im urspr체nglichen Pr체fkontext
+reproduziert und wird erkannt und repariert. 993 Intelligence-Tests bestehen;
+Kontrollf채lle und Original-Replays bleiben separate, begrenzte Qualit채tsbelege.
+Produktiv weiterhin `999b433`; keine automatische Prognosefreigabe.
+
 Gesamtmatrix: [Finding-/Abnahmegates](docs/reviews/2026-10-10-goal-gates.md).
 Menschliche Pr체fung: [unbewertete Abnahmeunterlagen](docs/operations/goal-acceptance-2026-10-10.md).
 
