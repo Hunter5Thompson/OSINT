@@ -223,9 +223,10 @@ async function fixtures(page: Page, state: FixtureState, baseURL: string): Promi
   });
 }
 
-export const test = base.extend<{ state: FixtureState; expectedRenderer: string }>({
+export const test = base.extend<{ state: FixtureState; expectedRenderer: string; expectedBrowserVersion: string | null }>({
   expectedRenderer: ["SwiftShader", { option: true }],
-  state: async ({ page, baseURL, expectedRenderer }, use, testInfo) => {
+  expectedBrowserVersion: [null, { option: true }],
+  state: async ({ page, baseURL, expectedRenderer, expectedBrowserVersion }, use, testInfo) => {
     if (baseURL === undefined || new URL(baseURL).hostname !== "127.0.0.1") {
       throw new Error("Browser fixture requires the runner's own loopback preview");
     }
@@ -263,6 +264,7 @@ export const test = base.extend<{ state: FixtureState; expectedRenderer: string 
     expect(errors).toEqual([]);
     expect(state.unexpected).toEqual([]);
     expect(rendering?.renderer).toContain(expectedRenderer);
+    if (expectedBrowserVersion) expect(page.context().browser()?.version()).toBe(expectedBrowserVersion);
   },
 });
 export { expect };

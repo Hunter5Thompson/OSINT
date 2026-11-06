@@ -35,7 +35,10 @@ The first viewer-lease candidate with four MSAA samples failed after 26 minutes:
 Chrome lost its WebGL context and the kernel recorded NVIDIA Xid 31. Stable RSS
 did not qualify that run. The follow-up uses single-sample render targets; this
 is an empirical stability candidate, not a demonstrated root-cause fix. All four
-short native tests pass; the complete follow-up soak retains the same criteria.
+short native tests passed, but the complete follow-up also failed after 15.5
+minutes with NVIDIA Xid 69 and context loss. Neither attempt clears acceptance.
+The same application is now being qualified using native ANGLE/Vulkan, retaining
+all duration, workload, memory and error thresholds. OpenGL remains unqualified.
 
 Native acceptance is separate from JS heap. The complete 60-minute dense native
 soak compares medians at minutes 10–15 and 55–60: browser RSS growth <32 MiB and
@@ -44,3 +47,31 @@ existing JS heap (<5 MiB) and DOM (<50 nodes) gates remain. Errors/context losse
 must be zero. Shared device-wide VRAM is diagnostic, not app-owned memory.
 The source/assets were frozen before the run. Final verdict and measurements:
 `/data/odin-reliability-20261106/p5/` (pending until the full run completes).
+
+
+## Native workstation browser
+
+The shared `services/frontend/scripts/native-browser-profile.json` pins Chromium
+156.0.8078.4 and native NVIDIA Vulkan 1.4.329 on this RTX 5090. The native tests and
+the operator launcher consume the same graphics flags. This is a candidate
+operating configuration until the complete native verdict passes; it does not
+repair or qualify the failing OpenGL path. No driver, global browser preference,
+model service or GPU reset is required.
+
+From `services/frontend`, with the existing locked Playwright browser installed:
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=/data/odin-caches/playwright \
+ODIN_NATIVE_URL=http://127.0.0.1:5173/worldview \
+ODIN_NATIVE_PROFILE=/data/odin-browser/native-vulkan \
+npm run browser:native
+```
+
+Use the configured loopback gateway URL for authenticated operation if applicable;
+never put credentials in the URL. `-- --check` verifies the actual map renderer in
+a visible browser and closes that owned browser. The ordinary command keeps it
+open for use. An existing non-ODIN profile is refused. Browser version and actual
+Vulkan/NVIDIA renderer are checked before navigation; software fallback is refused.
+The profile path is separate from normal browser profiles. The launcher neither
+installs browsers nor changes desktop defaults. Requalify after browser/driver
+changes. Remote terrain and human visual acceptance remain separate.

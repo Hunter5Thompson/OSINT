@@ -300,6 +300,7 @@ jobs:
       - run: npm run type-check
       - run: npm run test
       - run: npm run test:build-info
+      - run: npm run test:native-browser
       - run: npm run build
 
   test-frontend-browser:
