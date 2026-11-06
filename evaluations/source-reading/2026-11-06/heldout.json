@@ -1,0 +1,282 @@
+[
+  {
+    "id": "7cb6d9674f1b8fba",
+    "original": "The local bulletin and the regional website both quoted the same unsigned memo.",
+    "translation": "Das Lokalblatt und die regionale Website zitierten dasselbe nicht unterschriebene Memo.",
+    "dimension": "lineage",
+    "expected": true
+  },
+  {
+    "id": "50f547bcdd7c9735",
+    "original": "The temporary barrier was removed before the permanent fence was installed.",
+    "translation": "Die vorläufige Barriere wurde erst nach der Installation des dauerhaften Zauns entfernt.",
+    "dimension": "sequence",
+    "expected": false
+  },
+  {
+    "id": "48822fe0164f40ae",
+    "original": "The registrar said no record of a transfer had been found, which did not establish whether a transfer occurred.",
+    "translation": "Der Registerführer bestätigte, dass keine Übertragung stattgefunden habe.",
+    "dimension": "modality",
+    "expected": false
+  },
+  {
+    "id": "9b9575785ec99ff9",
+    "original": "The registrar said no record of a transfer had been found, which did not establish whether a transfer occurred.",
+    "translation": "Der Registerführer sagte, es sei kein Übertragungsnachweis gefunden worden; damit sei nicht geklärt, ob eine Übertragung stattgefunden habe.",
+    "dimension": "modality",
+    "expected": true
+  },
+  {
+    "id": "397e58376c38a001",
+    "original": "Only the western loading dock was suspended; the eastern loading dock continued to operate.",
+    "translation": "Nur die westliche Laderampe wurde stillgelegt; die östliche blieb in Betrieb.",
+    "dimension": "scope",
+    "expected": true
+  },
+  {
+    "id": "19f77173513a9371",
+    "original": "The town said heating would restart if the leak was sealed and the pressure remained stable overnight.",
+    "translation": "Die Stadt sagte, die Heizung werde nach Abdichtung des Lecks unabhängig vom Druck wieder anlaufen.",
+    "dimension": "conditions",
+    "expected": false
+  },
+  {
+    "id": "bad195b6d2bf35e4",
+    "original": "The inventory recorded twelve working radios and four radios awaiting repair.",
+    "translation": "Die Bestandsaufnahme erfasste zwölf funktionierende Funkgeräte und vier zur Reparatur vorgesehene Funkgeräte.",
+    "dimension": "quantity",
+    "expected": true
+  },
+  {
+    "id": "fb963c0d91826032",
+    "original": "According to the technician, the sensor was replaced on Wednesday. The notice also listed next month's cafeteria menu.",
+    "translation": "Der Techniker sagte, der Sensor werde erst im nächsten Monat ersetzt.",
+    "dimension": "summary",
+    "expected": false
+  },
+  {
+    "id": "c5333d5e19ea2d3b",
+    "original": "The broadcaster quoted a witness who thought the crane was leaning; the broadcaster did not verify that account.",
+    "translation": "Der Sender verifizierte, dass der Kran sich neigte.",
+    "dimension": "attribution",
+    "expected": false
+  },
+  {
+    "id": "5f22b0377646809c",
+    "original": "The depot will dispatch the spare pumps only if the municipality requests them in writing.",
+    "translation": "Das Depot wird die Ersatzpumpen nur versenden, wenn die Gemeinde sie schriftlich anfordert.",
+    "dimension": "conditions",
+    "expected": true
+  },
+  {
+    "id": "421cec7409833572",
+    "original": "The siren sounded before the blackout, but the incident report did not identify what caused the blackout.",
+    "translation": "Der Vorfallbericht stellte fest, dass die Sirene den Stromausfall verursachte.",
+    "dimension": "inference",
+    "expected": false
+  },
+  {
+    "id": "0b72ad5af8516780",
+    "original": "The board heard the accountant's estimate of a loss without adopting it as its own forecast.",
+    "translation": "Der Vorstand veröffentlichte die Verlustschätzung als seine eigene Prognose.",
+    "dimension": "attribution",
+    "expected": false
+  },
+  {
+    "id": "92d01bbba0a32d18",
+    "original": "The consultant suggested that rerouting buses might shorten delays.",
+    "translation": "Der Berater stellte fest, dass die Umleitung der Busse Verzögerungen bereits verkürzt habe.",
+    "dimension": "modality",
+    "expected": false
+  },
+  {
+    "id": "d65dc6c3181152e5",
+    "original": "The siren sounded before the blackout, but the incident report did not identify what caused the blackout.",
+    "translation": "Die Sirene ertönte vor dem Stromausfall; der Vorfallbericht bestimmte dessen Ursache nicht.",
+    "dimension": "inference",
+    "expected": true
+  },
+  {
+    "id": "a496b58b6c868149",
+    "original": "Only the western loading dock was suspended; the eastern loading dock continued to operate.",
+    "translation": "Sämtliche Laderampen wurden stillgelegt.",
+    "dimension": "scope",
+    "expected": false
+  },
+  {
+    "id": "a3876f8ed0fd4e59",
+    "original": "The planner said a second road could be considered, but no route had been approved.",
+    "translation": "Der Planer sagte, eine zweite Straße könne erwogen werden; keine Trasse sei genehmigt.",
+    "dimension": "modality",
+    "expected": true
+  },
+  {
+    "id": "fe68cba1818ea15f",
+    "original": "The tunnel authority said night traffic could return provided the ventilation test passed.",
+    "translation": "Die Tunnelbehörde sagte, Nachtverkehr könne ohne weitere Voraussetzung wieder zugelassen werden.",
+    "dimension": "conditions",
+    "expected": false
+  },
+  {
+    "id": "7586c99d831f01d2",
+    "original": "The tunnel authority said night traffic could return provided the ventilation test passed.",
+    "translation": "Die Tunnelbehörde sagte, Nachtverkehr könnte wieder zugelassen werden, sofern der Lüftungstest bestanden werde.",
+    "dimension": "conditions",
+    "expected": true
+  },
+  {
+    "id": "30200e65d4cc561a",
+    "original": "The depot will dispatch the spare pumps only if the municipality requests them in writing.",
+    "translation": "Das Depot wird die Ersatzpumpen auf eine mündliche Anfrage der Gemeinde hin versenden.",
+    "dimension": "conditions",
+    "expected": false
+  },
+  {
+    "id": "7d67bfffb75f9b4a",
+    "original": "The temporary barrier was removed before the permanent fence was installed.",
+    "translation": "Die vorläufige Barriere wurde vor der Installation des dauerhaften Zauns entfernt.",
+    "dimension": "sequence",
+    "expected": true
+  },
+  {
+    "id": "f7487a64df5dec3d",
+    "original": "The operator paused ticket sales but said existing tickets remained valid.",
+    "translation": "Der Betreiber erklärte bereits verkaufte Tickets für ungültig.",
+    "dimension": "action",
+    "expected": false
+  },
+  {
+    "id": "32a5e874ccc34e23",
+    "original": "Inspectors found damage on two panels of the demonstration unit, not on the production fleet.",
+    "translation": "Inspektoren fanden Schäden an der gesamten Produktionsflotte.",
+    "dimension": "scope",
+    "expected": false
+  },
+  {
+    "id": "85d8c87ed100d3a3",
+    "original": "At the April 4 briefing, the director said the April 2 inspection had already finished.",
+    "translation": "Am 4. April sagte der Direktor, die Prüfung vom 2. April stehe noch bevor.",
+    "dimension": "time",
+    "expected": false
+  },
+  {
+    "id": "ecff7fff596eabd1",
+    "original": "The planner said a second road could be considered, but no route had been approved.",
+    "translation": "Der Planer sagte, die Trasse für eine zweite Straße sei genehmigt.",
+    "dimension": "modality",
+    "expected": false
+  },
+  {
+    "id": "3bc9ab1032a7e140",
+    "original": "An opposition councillor alleged that the tender had been manipulated; investigators had reached no conclusion.",
+    "translation": "Die Ermittler kamen zu dem Schluss, dass die Ausschreibung manipuliert worden war.",
+    "dimension": "attribution",
+    "expected": false
+  },
+  {
+    "id": "781b83030912f0ac",
+    "original": "The town said heating would restart if the leak was sealed and the pressure remained stable overnight.",
+    "translation": "Die Stadt sagte, die Heizung werde wieder anlaufen, wenn das Leck abgedichtet sei und der Druck über Nacht stabil bleibe.",
+    "dimension": "conditions",
+    "expected": true
+  },
+  {
+    "id": "58266239c653f19a",
+    "original": "At the April 4 briefing, the director said the April 2 inspection had already finished.",
+    "translation": "Bei der Unterrichtung am 4. April sagte der Direktor, die Prüfung vom 2. April sei bereits abgeschlossen.",
+    "dimension": "time",
+    "expected": true
+  },
+  {
+    "id": "d11cfb75e15f7f79",
+    "original": "The consultant suggested that rerouting buses might shorten delays.",
+    "translation": "Der Berater schlug vor, Busse umzuleiten, wodurch sich Verzögerungen möglicherweise verkürzen könnten.",
+    "dimension": "modality",
+    "expected": true
+  },
+  {
+    "id": "eda1d1ef377703a7",
+    "original": "The local bulletin and the regional website both quoted the same unsigned memo.",
+    "translation": "Das Lokalblatt und die regionale Website bestätigten den Inhalt durch zwei unabhängige Quellen.",
+    "dimension": "lineage",
+    "expected": false
+  },
+  {
+    "id": "e196a30a0f595eb9",
+    "original": "The operator paused ticket sales but said existing tickets remained valid.",
+    "translation": "Der Betreiber setzte den Ticketverkauf aus, erklärte bestehende Tickets jedoch weiterhin für gültig.",
+    "dimension": "action",
+    "expected": true
+  },
+  {
+    "id": "c40700cadf468ce5",
+    "original": "A statement issued on March 18 described a gate failure that occurred on March 11.",
+    "translation": "Eine Erklärung vom 18. März beschrieb einen Torausfall vom 11. März.",
+    "dimension": "time",
+    "expected": true
+  },
+  {
+    "id": "792c65464dec43a1",
+    "original": "According to the technician, the sensor was replaced on Wednesday. The notice also listed next month's cafeteria menu.",
+    "translation": "Laut dem Techniker wurde der Sensor am Mittwoch ersetzt.",
+    "dimension": "summary",
+    "expected": true
+  },
+  {
+    "id": "76ef29aab64f53de",
+    "original": "A statement issued on March 18 described a gate failure that occurred on March 11.",
+    "translation": "Die Erklärung beschrieb einen Torausfall vom 18. März.",
+    "dimension": "time",
+    "expected": false
+  },
+  {
+    "id": "3525e4cc5c17e5d5",
+    "original": "Inspectors found damage on two panels of the demonstration unit, not on the production fleet.",
+    "translation": "Inspektoren fanden Schäden an zwei Paneelen des Vorführgeräts, nicht an der Produktionsflotte.",
+    "dimension": "scope",
+    "expected": true
+  },
+  {
+    "id": "fc825ae8e1845c72",
+    "original": "The broadcaster quoted a witness who thought the crane was leaning; the broadcaster did not verify that account.",
+    "translation": "Der Sender zitierte einen Zeugen, der glaubte, der Kran neige sich; der Sender prüfte diesen Bericht nicht.",
+    "dimension": "attribution",
+    "expected": true
+  },
+  {
+    "id": "93aa7327b3408950",
+    "original": "An opposition councillor alleged that the tender had been manipulated; investigators had reached no conclusion.",
+    "translation": "Ein Oppositionsrat behauptete, die Ausschreibung sei manipuliert worden; die Ermittler hatten noch keine Schlussfolgerung gezogen.",
+    "dimension": "attribution",
+    "expected": true
+  },
+  {
+    "id": "79952fb12be1c378",
+    "original": "The inventory recorded twelve working radios and four radios awaiting repair.",
+    "translation": "Die Bestandsaufnahme erfasste vier funktionierende Funkgeräte und zwölf zur Reparatur vorgesehene Funkgeräte.",
+    "dimension": "quantity",
+    "expected": false
+  },
+  {
+    "id": "4c2873447479cccc",
+    "original": "The operator rejected reports that all three cables had failed.",
+    "translation": "Der Betreiber wies Berichte zurück, wonach alle drei Kabel ausgefallen seien.",
+    "dimension": "polarity",
+    "expected": true
+  },
+  {
+    "id": "6cfa813b116d82d6",
+    "original": "The operator rejected reports that all three cables had failed.",
+    "translation": "Der Betreiber bestätigte den Ausfall aller drei Kabel.",
+    "dimension": "polarity",
+    "expected": false
+  },
+  {
+    "id": "26a8acb010b5dec9",
+    "original": "The board heard the accountant's estimate of a loss without adopting it as its own forecast.",
+    "translation": "Der Vorstand nahm die Verlustschätzung des Buchhalters zur Kenntnis, ohne sie als eigene Prognose zu übernehmen.",
+    "dimension": "attribution",
+    "expected": true
+  }
+]

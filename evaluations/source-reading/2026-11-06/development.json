@@ -1,0 +1,282 @@
+[
+  {
+    "id": "9db0fbd2406ac4be",
+    "original": "Both newspapers reproduced the same statement from the ferry operator without additional reporting.",
+    "translation": "Beide Zeitungen übernahmen dieselbe Erklärung des Fährbetreibers ohne zusätzliche Recherche.",
+    "dimension": "lineage",
+    "expected": true
+  },
+  {
+    "id": "cb2e89747df5a1db",
+    "original": "Repairs began after the evacuation ended, the dispatcher said.",
+    "translation": "Der Einsatzleiter sagte, die Evakuierung habe nach Ende der Reparaturen begonnen.",
+    "dimension": "sequence",
+    "expected": false
+  },
+  {
+    "id": "2fee4d7915333bb1",
+    "original": "The agency said it could not determine whether the missing buoy had been stolen.",
+    "translation": "Die Behörde stellte fest, dass die vermisste Boje nicht gestohlen worden sei.",
+    "dimension": "modality",
+    "expected": false
+  },
+  {
+    "id": "5963e1ac88351594",
+    "original": "The agency said it could not determine whether the missing buoy had been stolen.",
+    "translation": "Die Behörde sagte, sie könne nicht feststellen, ob die vermisste Boje gestohlen worden sei.",
+    "dimension": "modality",
+    "expected": true
+  },
+  {
+    "id": "44730cdfaab8e04c",
+    "original": "Some northern depots reported fuel shortages, while the southern depot reported normal stocks.",
+    "translation": "Einige nördliche Depots meldeten Treibstoffengpässe.",
+    "dimension": "scope",
+    "expected": true
+  },
+  {
+    "id": "5b157633f6a05ed1",
+    "original": "Unless the permit is renewed and the crew is certified, the operator cannot restart the lift.",
+    "translation": "Mit erneuerter Genehmigung kann der Betreiber den Lift auch ohne zertifizierte Besatzung wieder starten.",
+    "dimension": "conditions",
+    "expected": false
+  },
+  {
+    "id": "354705b859fe2395",
+    "original": "The audit found three defective valves among the twenty valves examined.",
+    "translation": "Die Prüfung fand drei defekte Ventile unter zwanzig untersuchten Ventilen.",
+    "dimension": "quantity",
+    "expected": true
+  },
+  {
+    "id": "ac151e0617419ba0",
+    "original": "The warehouse reopened on Monday, according to its manager. Separately, a school announced a new timetable.",
+    "translation": "Laut dem Schulleiter wurde das Lager am Montag wieder geöffnet.",
+    "dimension": "summary",
+    "expected": false
+  },
+  {
+    "id": "32bd1496b7efcc1d",
+    "original": "The newspaper reported that the contractor denied using unsuitable cement.",
+    "translation": "Die Zeitung bestätigte, der Bauunternehmer habe ungeeigneten Zement eingesetzt.",
+    "dimension": "attribution",
+    "expected": false
+  },
+  {
+    "id": "7b9c2bc5c8fb8587",
+    "original": "The council will release the grant if both auditors approve the accounts.",
+    "translation": "Der Rat wird den Zuschuss freigeben, wenn beide Prüfer die Abrechnung genehmigen.",
+    "dimension": "conditions",
+    "expected": true
+  },
+  {
+    "id": "ad7271440d0388ad",
+    "original": "Truck arrivals fell on Tuesday. A new toll also began on Tuesday; the report did not assess a link.",
+    "translation": "Die neue Maut verursachte am Dienstag den Rückgang der Lkw-Ankünfte.",
+    "dimension": "inference",
+    "expected": false
+  },
+  {
+    "id": "838b60ded2ceb32a",
+    "original": "The minister cited an adviser who expected demand to decline, but offered no forecast herself.",
+    "translation": "Die Ministerin gab ihre eigene Prognose eines Nachfragerückgangs ab.",
+    "dimension": "attribution",
+    "expected": false
+  },
+  {
+    "id": "b6be9ef92ab39ead",
+    "original": "Engineers said the new antenna could improve reception in the valley.",
+    "translation": "Ingenieure bestätigten, dass die neue Antenne den Empfang im Tal verbessert hat.",
+    "dimension": "modality",
+    "expected": false
+  },
+  {
+    "id": "d454bc3d26f8177b",
+    "original": "Truck arrivals fell on Tuesday. A new toll also began on Tuesday; the report did not assess a link.",
+    "translation": "Die Lkw-Ankünfte gingen am Dienstag zurück; am selben Tag begann eine neue Maut, ohne dass der Bericht einen Zusammenhang bewertete.",
+    "dimension": "inference",
+    "expected": true
+  },
+  {
+    "id": "7518b92b06ed3faa",
+    "original": "Some northern depots reported fuel shortages, while the southern depot reported normal stocks.",
+    "translation": "Alle Depots des Landes meldeten Treibstoffengpässe.",
+    "dimension": "scope",
+    "expected": false
+  },
+  {
+    "id": "70c5ec6b13a1a092",
+    "original": "The forecaster described another outage as unlikely but did not rule it out.",
+    "translation": "Der Prognostiker bezeichnete einen weiteren Ausfall als unwahrscheinlich, schloss ihn aber nicht aus.",
+    "dimension": "modality",
+    "expected": true
+  },
+  {
+    "id": "30c81c72ef361c99",
+    "original": "The railway operator said freight service would resume only after the bridge inspection was complete.",
+    "translation": "Der Bahnbetreiber sagte, der Güterverkehr werde wieder aufgenommen.",
+    "dimension": "conditions",
+    "expected": false
+  },
+  {
+    "id": "da2e722c29c719d3",
+    "original": "The railway operator said freight service would resume only after the bridge inspection was complete.",
+    "translation": "Der Bahnbetreiber sagte, der Güterverkehr werde erst nach Abschluss der Brückenprüfung wieder aufgenommen.",
+    "dimension": "conditions",
+    "expected": true
+  },
+  {
+    "id": "1ed5eb2068e75941",
+    "original": "The council will release the grant if both auditors approve the accounts.",
+    "translation": "Der Rat wird den Zuschuss freigeben, wenn einer der Prüfer die Abrechnung genehmigt.",
+    "dimension": "conditions",
+    "expected": false
+  },
+  {
+    "id": "acddc731daf5228f",
+    "original": "Repairs began after the evacuation ended, the dispatcher said.",
+    "translation": "Der Einsatzleiter sagte, die Reparaturen hätten nach Ende der Evakuierung begonnen.",
+    "dimension": "sequence",
+    "expected": true
+  },
+  {
+    "id": "3fbe1ee6f2d87f4e",
+    "original": "The shipping agent said the vessel diverted to a different berth, not to another port.",
+    "translation": "Der Schiffsagent sagte, das Schiff sei in einen anderen Hafen umgeleitet worden.",
+    "dimension": "action",
+    "expected": false
+  },
+  {
+    "id": "3b91eb3e89e35099",
+    "original": "The laboratory measured contamination in one sample from the east well.",
+    "translation": "Das Labor stellte eine Verunreinigung aller Brunnen fest.",
+    "dimension": "scope",
+    "expected": false
+  },
+  {
+    "id": "df3aefb48c5edd05",
+    "original": "Published August 9. The mayor said the water main broke on August 2.",
+    "translation": "Der Bürgermeister sagte, die Wasserleitung sei am 9. August gebrochen.",
+    "dimension": "time",
+    "expected": false
+  },
+  {
+    "id": "a39658ee5cfa3d37",
+    "original": "The forecaster described another outage as unlikely but did not rule it out.",
+    "translation": "Der Prognostiker schloss einen weiteren Ausfall aus.",
+    "dimension": "modality",
+    "expected": false
+  },
+  {
+    "id": "a4a36a2cb124fd33",
+    "original": "A union representative predicted that the factory might close; management made no announcement.",
+    "translation": "Die Geschäftsleitung kündigte an, dass die Fabrik schließen werde.",
+    "dimension": "attribution",
+    "expected": false
+  },
+  {
+    "id": "33e74d8dd404660c",
+    "original": "Unless the permit is renewed and the crew is certified, the operator cannot restart the lift.",
+    "translation": "Ohne erneuerte Genehmigung und zertifizierte Besatzung kann der Betreiber den Lift nicht wieder starten.",
+    "dimension": "conditions",
+    "expected": true
+  },
+  {
+    "id": "321c10599d73e16b",
+    "original": "Published August 9. The mayor said the water main broke on August 2.",
+    "translation": "Der Bürgermeister sagte, die Wasserleitung sei am 2. August gebrochen.",
+    "dimension": "time",
+    "expected": true
+  },
+  {
+    "id": "9e0ac4a542488d02",
+    "original": "Engineers said the new antenna could improve reception in the valley.",
+    "translation": "Ingenieure sagten, die neue Antenne könnte den Empfang im Tal verbessern.",
+    "dimension": "modality",
+    "expected": true
+  },
+  {
+    "id": "d2f9f9bd432b1e18",
+    "original": "Both newspapers reproduced the same statement from the ferry operator without additional reporting.",
+    "translation": "Zwei unabhängige Recherchen bestätigten die Angaben des Fährbetreibers.",
+    "dimension": "lineage",
+    "expected": false
+  },
+  {
+    "id": "56c6b9794994676e",
+    "original": "The shipping agent said the vessel diverted to a different berth, not to another port.",
+    "translation": "Der Schiffsagent sagte, das Schiff sei zu einem anderen Liegeplatz im selben Hafen umgeleitet worden.",
+    "dimension": "action",
+    "expected": true
+  },
+  {
+    "id": "32cfae67e56de80b",
+    "original": "On June 12 the agency announced a drill scheduled for June 20.",
+    "translation": "Die Behörde kündigte am 12. Juni eine für den 20. Juni geplante Übung an.",
+    "dimension": "time",
+    "expected": true
+  },
+  {
+    "id": "93514f0dd260c491",
+    "original": "The warehouse reopened on Monday, according to its manager. Separately, a school announced a new timetable.",
+    "translation": "Laut dem Leiter wurde das Lager am Montag wieder geöffnet.",
+    "dimension": "summary",
+    "expected": true
+  },
+  {
+    "id": "4c821719e99c3fc3",
+    "original": "On June 12 the agency announced a drill scheduled for June 20.",
+    "translation": "Die Behörde führte am 12. Juni eine Übung durch.",
+    "dimension": "time",
+    "expected": false
+  },
+  {
+    "id": "15fa41b2446197c3",
+    "original": "The laboratory measured contamination in one sample from the east well.",
+    "translation": "Das Labor maß eine Verunreinigung in einer Probe aus dem östlichen Brunnen.",
+    "dimension": "scope",
+    "expected": true
+  },
+  {
+    "id": "ab310eaf0bc9396d",
+    "original": "The newspaper reported that the contractor denied using unsuitable cement.",
+    "translation": "Die Zeitung berichtete, der Bauunternehmer habe den Einsatz ungeeigneten Zements bestritten.",
+    "dimension": "attribution",
+    "expected": true
+  },
+  {
+    "id": "9c5f4c718cf541d3",
+    "original": "A union representative predicted that the factory might close; management made no announcement.",
+    "translation": "Ein Gewerkschaftsvertreter prognostizierte, dass die Fabrik schließen könnte.",
+    "dimension": "attribution",
+    "expected": true
+  },
+  {
+    "id": "52428b817fdea425",
+    "original": "The audit found three defective valves among the twenty valves examined.",
+    "translation": "Die Prüfung fand zwanzig defekte Ventile.",
+    "dimension": "quantity",
+    "expected": false
+  },
+  {
+    "id": "88f355f42475f8bd",
+    "original": "The inspector denied saying that the reservoir was unsafe.",
+    "translation": "Der Inspektor bestritt, gesagt zu haben, dass das Reservoir unsicher sei.",
+    "dimension": "polarity",
+    "expected": true
+  },
+  {
+    "id": "70456e00a270e462",
+    "original": "The inspector denied saying that the reservoir was unsafe.",
+    "translation": "Der Inspektor sagte, das Reservoir sei unsicher.",
+    "dimension": "polarity",
+    "expected": false
+  },
+  {
+    "id": "fed62e17429b697f",
+    "original": "The minister cited an adviser who expected demand to decline, but offered no forecast herself.",
+    "translation": "Die Ministerin verwies auf einen Berater, der einen Nachfragerückgang erwartete.",
+    "dimension": "attribution",
+    "expected": true
+  }
+]

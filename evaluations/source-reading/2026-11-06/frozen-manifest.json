@@ -1,0 +1,18 @@
+{
+  "purpose": "source meaning only, synthetic nonfactual controls",
+  "authorship": "agent authored before outcomes; not independent human certification",
+  "acceptance": {
+    "false_approvals": 0,
+    "faithful_acceptance_min": 0.9
+  },
+  "corpora": {
+    "development": {
+      "sha256": "e1d9d82eced39479f11800cb31ba8332a27a767695063106fa313e7aff5e42be",
+      "cases": 40
+    },
+    "heldout": {
+      "sha256": "a8c1ac0cfb5bbfb4f4d4b2f7fbc2e4bdd71a113b9ea7e5db2e54fc213c2cc5b8",
+      "cases": 40
+    }
+  }
+}

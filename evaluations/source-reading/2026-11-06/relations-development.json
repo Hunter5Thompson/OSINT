@@ -1,0 +1,170 @@
+[
+  {
+    "id": "e9755f9f83bb717f",
+    "expected": "contradiction",
+    "question": "Was the east gate closed on July 4?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The caretaker said the east gate was closed all day on July 4.",
+        "statement": "The caretaker said the east gate was closed all day on July 4."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The supervisor said the east gate remained open all day on July 4.",
+        "statement": "The supervisor said the east gate remained open all day on July 4."
+      }
+    ]
+  },
+  {
+    "id": "998a26ed71c1169c",
+    "expected": "agreement",
+    "question": "What was reported about tram service at noon on July 4?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The bulletin quoted Dispatch A: tram service resumed at noon on July 4.",
+        "statement": "The bulletin quoted Dispatch A: tram service resumed at noon on July 4."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The website quoted Dispatch A: tram service resumed at noon on July 4.",
+        "statement": "The website quoted Dispatch A: tram service resumed at noon on July 4."
+      }
+    ]
+  },
+  {
+    "id": "e2ec76568a73f14b",
+    "expected": "different_assessments",
+    "question": "How do observers assess next year's capacity?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "Engineer Lee considers next year's planned capacity sufficient.",
+        "statement": "Engineer Lee considers next year's planned capacity sufficient."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "Engineer Noor considers next year's planned capacity insufficient.",
+        "statement": "Engineer Noor considers next year's planned capacity insufficient."
+      }
+    ]
+  },
+  {
+    "id": "75e65977946d99e1",
+    "expected": "compatible",
+    "question": "Do the reports describe incompatible station states?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The station manager said the station was closed on July 1.",
+        "statement": "The station manager said the station was closed on July 1."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The station manager said the station reopened on July 3.",
+        "statement": "The station manager said the station reopened on July 3."
+      }
+    ]
+  },
+  {
+    "id": "05627a418cda7ed0",
+    "expected": "compatible",
+    "question": "What do the statements say about lift operations?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The operator said the lift would stop if the wind exceeded the limit.",
+        "statement": "The operator said the lift would stop if the wind exceeded the limit."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The inspector said the lift was operating while wind remained below the limit.",
+        "statement": "The inspector said the lift was operating while wind remained below the limit."
+      }
+    ]
+  },
+  {
+    "id": "2784166a0c0fdb80",
+    "expected": null,
+    "question": "Can these passages establish a source comparison?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "An astronomer catalogued a distant comet.",
+        "statement": "An astronomer catalogued a distant comet."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "A bakery published its weekly bread prices.",
+        "statement": "A bakery published its weekly bread prices."
+      }
+    ]
+  },
+  {
+    "id": "f8eafcbc875d6243",
+    "expected": "compatible",
+    "question": "Do the reported dock closures conflict?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The dispatcher said the northern dock was closed on July 4.",
+        "statement": "The dispatcher said the northern dock was closed on July 4."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The dispatcher said the southern dock was open on July 4.",
+        "statement": "The dispatcher said the southern dock was open on July 4."
+      }
+    ]
+  },
+  {
+    "id": "7d3654b4aef249e3",
+    "expected": "contradiction",
+    "question": "Did a spill occur at tank A on July 4?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The company denied that a spill occurred at tank A on July 4.",
+        "statement": "The company denied that a spill occurred at tank A on July 4."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The regulator said a spill occurred at tank A on July 4.",
+        "statement": "The regulator said a spill occurred at tank A on July 4."
+      }
+    ]
+  }
+]
