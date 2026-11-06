@@ -36,7 +36,15 @@ async def compose_report(
             )
         )
     for _attempt in range(2):
-        response = await model.ainvoke(conversation)
+        # Reserve the revision's allowance for the actual report. Otherwise the
+        # deployed Qwen server can spend it entirely on reasoning and return "".
+        response = (
+            await model.ainvoke(
+                conversation, extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+                max_tokens=2000,
+            )
+            if _attempt else await model.ainvoke(conversation)
+        )
         text = response.content if isinstance(response.content, str) else ""
         # Accept formatting differences, never approximate an evidence identity.
         cited = set(_IDENTITY.findall(text))
@@ -47,6 +55,7 @@ async def compose_report(
         if (
             _attempt == 1 and text.strip() and cited
             and cited <= evidence_ids and allowed_assessment
+            and response.response_metadata.get("finish_reason") != "length"
         ):
             return _CITATION.sub(
                 lambda match: "[" + next(g for g in match.groups() if g) + "]", text

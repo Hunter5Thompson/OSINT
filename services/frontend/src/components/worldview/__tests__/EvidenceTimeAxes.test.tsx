@@ -23,6 +23,6 @@ it("shows original notebook passages and keeps methods separate from event evide
   expect(screen.getByText("Originalpassage · nicht extern faktengeprüft")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Originalquelle öffnen", hidden: true })).toHaveAttribute(
     "href", passage.url);
-  expect(screen.getByText(passage.excerpt, { selector: "p" })).toBeInTheDocument();
+  expect(screen.getByText(passage.excerpt, { selector: "p", normalizer: text => text })).toBeInTheDocument();
   expect(screen.getByText("Check publication date", { selector: "li" })).toBeInTheDocument();
 });

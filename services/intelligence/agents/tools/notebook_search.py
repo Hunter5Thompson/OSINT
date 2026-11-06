@@ -3,7 +3,7 @@
 from langchain_core.tools import ToolException, tool
 
 from rag.evidence import pack_with_lineage
-from rag.notebooks import notebook_context
+from rag.notebooks import NOTEBOOK_EVIDENCE_MAX_CHARS, notebook_context
 
 
 @tool(response_format="content_and_artifact")
@@ -18,6 +18,6 @@ async def notebook_search(query: str) -> tuple[str, list[dict]]:
         items = await notebook_context(query)
         if not items:
             return "NO_NOTEBOOK_MATCHES: no matching archive passages.", []
-        return pack_with_lineage(items, budget=9000, preserve_order=True)
+        return pack_with_lineage(items, budget=NOTEBOOK_EVIDENCE_MAX_CHARS, preserve_order=True)
     except Exception as exc:
         raise ToolException("Notebook archive retrieval failed") from exc

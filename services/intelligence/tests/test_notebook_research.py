@@ -139,6 +139,20 @@ async def test_original_passage_beyond_editorial_anchor_is_searchable(tmp_path):
     assert passage.passage.unresolved_checks == ["Check publication date"]
 
 
+async def test_retrieval_keeps_neighbouring_argument_and_exact_expanded_text(tmp_path):
+    content = "Critics say magnets prove their theory. " * 45
+    content += "I reject the critics' position: their conclusion does not follow. " * 30
+    root = package(tmp_path, content=content)
+    target = tmp_path / "catalog.sqlite"
+    await build_catalog({"intel": root}, target, embed=embed, embedding_model="test")
+    research = NotebookResearch(target, embed_query=query_embed, embedding_model="test")
+    hits = await research.search("magnets")
+    assert "I reject the critics' position" in hits[0].excerpt
+    assert hits[0].excerpt == content[hits[0].passage.start:hits[0].passage.end]
+    assert hits[0].passage.passage_sha256 == digest(hits[0].excerpt)
+    assert len(hits) == 1  # neighbouring windows must not repeat the same argument
+
+
 @pytest.mark.parametrize("changed", ["original.json", "curated-claims.jsonl"])
 async def test_changed_sources_or_packages_never_publish_a_catalog(tmp_path, changed):
     root = package(tmp_path)

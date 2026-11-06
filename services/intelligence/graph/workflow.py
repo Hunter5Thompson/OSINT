@@ -38,7 +38,7 @@ from rag.evidence import (
     source_refs_from_artifact,
     to_evidence_item,
 )
-from rag.notebooks import notebook_context
+from rag.notebooks import NOTEBOOK_EVIDENCE_MAX_CHARS, notebook_context
 from spatial import (
     RetrievalSpatialRelation,
     SpatialApplicationMarkerV1,
@@ -55,7 +55,6 @@ TOOL_MESSAGE_MAX_CHARS = 6000
 REACT_TOOL_HISTORY_MAX_CHARS = 12000
 SYNTHESIS_RESEARCH_MAX_CHARS = 18000
 GROUNDING_EVIDENCE_MAX_CHARS = 3000
-NOTEBOOK_EVIDENCE_MAX_CHARS = 9000
 
 
 def _clip_text(text: str, max_chars: int) -> str:

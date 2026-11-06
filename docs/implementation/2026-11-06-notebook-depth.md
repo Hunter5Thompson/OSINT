@@ -65,10 +65,21 @@ The archive uses Qwen3-Embedding-0.6B / 1,024 dimensions. Queries carry the
 [model's retrieval instruction](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B),
 documents do not. Search selects up to three background passages and one method
 passage, with at most two passages per independent origin and cosine >= 0.45.
+Matched slices include one neighbour on either side, with exact reconstructed
+text ranges and hashes. This prevents a quoted view and the author's rebuttal
+from being separated at the retrieval boundary. Overlapping windows are not
+repeated; a relevant method follows the first background window so it can fit
+inside the shared 14,000-character archive context budget.
 These are bounded retrieval defaults, not calibrated factual confidence scores.
 
 For original passages, synthesis uses the already loaded base model with
 reasoning enabled and a 5,000-token generation allowance including reasoning.
+The final source-check pass reserves 2,000 tokens for direct report output;
+it does not open another reasoning block. The deployed vLLM 0.18.1 has no
+separate thinking-token budget, and the earlier two-reasoning-pass experiment
+exhausted generation without returning report text. Truncated final revisions
+fail explicitly. The archive Compose overlay allows 220 seconds for the graph,
+within the existing 240-second query and 300-second backend deadlines.
 The existing short-summary adapter remains the legacy path. A live
 counterexample exposed attribution inversion with both the summary adapter and
 non-reasoning base generation; the reasoning comparison corrected that case.
@@ -107,8 +118,8 @@ new backend/frontend schema so stored passage metadata survives later updates.
 
 ## Validation and handoff
 
-TDD red/green evidence is recorded for 25 implementation steps. Final affected
-suites: Intelligence 897, Backend 1,204, Frontend 961; all passed. Backend mypy,
+TDD red/green evidence is recorded for 27 implementation steps. Final affected
+suites: Intelligence 899, Backend 1,204, Frontend 961; all passed. Backend mypy,
 both Python linters, frontend lint/typecheck, browser typecheck and production
 build passed. A disposable Neo4j instance passed all 12 persistence integration
 cases and was removed after confirming only its marker remained. Three browser

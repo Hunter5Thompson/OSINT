@@ -26,6 +26,7 @@ from rag.evidence import EvidenceItem, NotebookPassage, SourceRef
 
 EmbedBatch = Callable[[list[str]], Awaitable[list[list[float]]]]
 EmbedQuery = Callable[[str], Awaitable[list[float]]]
+NOTEBOOK_EVIDENCE_MAX_CHARS = 14000
 
 
 async def embed_notebook_documents(texts: list[str]) -> list[list[float]]:
@@ -271,6 +272,48 @@ class NotebookResearch:
                     continue
                 if sum(origins.values()) == limit:
                     break
-                selected.append(item)
+                window = self._context_window(item)
+                if any(
+                    previous.knowledge_role == window.knowledge_role
+                    and previous.passage.text_sha256 == window.passage.text_sha256
+                    and previous.passage.start < window.passage.end
+                    and window.passage.start < previous.passage.end
+                    for previous in selected
+                ):
+                    continue
+                selected.append(window)
                 origins[item.source.source_ref_id] += 1
-        return selected
+        background = [item for item in selected if item.knowledge_role == "background"]
+        methods = [item for item in selected if item.knowledge_role == "method"]
+        return background[:1] + methods + background[1:]
+
+    def _context_window(self, item: EvidenceItem) -> EvidenceItem:
+        """Keep one neighbour on each side so quoted views retain their rebuttal.
+
+        Windows are reconstructed only from sealed, overlapping source slices.
+        The returned identity/hash/range describes exactly the expanded text.
+        """
+        rows = sorted(
+            (row for row, _ in self._rows or []
+             if row.passage.parent_candidate_id == item.passage.parent_candidate_id),
+            key=lambda row: row.passage.start,
+        )
+        index = next(i for i, row in enumerate(rows) if row.evidence_id == item.evidence_id)
+        neighbours = rows[max(0, index - 1):index + 2]
+        text, end = neighbours[0].excerpt, neighbours[0].passage.end
+        for neighbour in neighbours[1:]:
+            overlap = end - neighbour.passage.start
+            if overlap <= 0 or text[-overlap:] != neighbour.excerpt[:overlap]:
+                raise ValueError("inconsistent notebook passage overlap")
+            text += neighbour.excerpt[overlap:]
+            end = neighbour.passage.end
+        start = neighbours[0].passage.start
+        domain = "methods" if item.knowledge_role == "method" else "intel"
+        identity = f"{domain}:{item.passage.text_sha256}:{start}:{end}"
+        passage = item.passage.model_copy(update={
+            "start": start, "end": end, "passage_sha256": _hash(text),
+        })
+        return item.model_copy(update={
+            "evidence_id": "ev-" + _hash(identity)[:24], "excerpt": text,
+            "content_hash": _hash(text), "passage": passage,
+        })

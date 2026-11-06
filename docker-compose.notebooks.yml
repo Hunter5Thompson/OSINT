@@ -7,6 +7,8 @@ services:
       NOTEBOOK_CATALOG_SHA256: ${ODIN_NOTEBOOK_CATALOG_SHA256:?Set the reviewed catalog SHA-256}
       NOTEBOOK_EMBEDDING_MODEL: ${ODIN_NOTEBOOK_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
       ENABLE_GDELT_DOC_TOOL: "false"
+      # Two bounded synthesis passes; remains below the 240s HTTP query deadline.
+      REACT_TOTAL_TIMEOUT_S: "220"
     volumes:
       - type: bind
         source: ${ODIN_NOTEBOOK_CATALOG:?Set the absolute catalog file path}

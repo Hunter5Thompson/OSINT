@@ -77,6 +77,19 @@ async def test_cited_draft_is_checked_against_originals_before_publication():
     checked_messages = model.ainvoke.call_args.args[0]
     assert "They say X. I disagree completely." in checked_messages[0].content
     assert "Author supports" in checked_messages[-2].content
+    assert model.ainvoke.call_args.kwargs == {
+        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+        "max_tokens": 2000,
+    }
+
+
+async def test_truncated_revision_is_not_published_even_with_a_valid_citation():
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(
+        content="Unfinished claim [ev-known]", response_metadata={"finish_reason": "length"}
+    )
+    with pytest.raises(PipelineFailureError, match="citation"):
+        await compose_report([HumanMessage(content="Evidence")], {"ev-known"}, model)
 
 
 async def test_valid_citation_does_not_hide_an_invented_bare_identity():
