@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { applyCRTShader } from "../shaders/shaderUtils";
 import { GlobeViewer } from "./GlobeViewer";
+import { disposeParkedViewer } from "./viewerLease";
 
 const state = vi.hoisted(() => ({ viewers: [] as {
   canvas: HTMLCanvasElement; useDefaultRenderLoop: boolean; destroy: ReturnType<typeof vi.fn>;
@@ -15,8 +16,8 @@ vi.mock("cesium", () => ({
       const canvas = document.createElement("canvas"); container.append(canvas);
       const viewer = {
         canvas, useDefaultRenderLoop: true, clock: { shouldAnimate: true },
-        scene: { globe: {}, fog: {}, renderError: { addEventListener: () => () => {} } },
-        camera: { setView: vi.fn() }, isDestroyed: () => destroyed,
+        scene: { canvas, globe: {}, fog: {}, renderError: { addEventListener: () => () => {} } },
+        camera: { setView: vi.fn() }, resize: vi.fn(), isDestroyed: () => destroyed,
         destroy: vi.fn(() => { destroyed = true; canvas.remove(); }),
       };
       state.viewers.push(viewer); return viewer;
@@ -47,5 +48,7 @@ it("rebuilds the owned viewer after failure and ignores the old canvas", () => {
   act(() => first.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true })));
   expect(screen.queryByRole("alert")).toBeNull();
   view.unmount();
+  expect(state.viewers[1]!.destroy).not.toHaveBeenCalled();
+  disposeParkedViewer();
   expect(state.viewers[1]!.destroy).toHaveBeenCalledOnce();
 });

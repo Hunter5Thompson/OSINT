@@ -32,6 +32,7 @@ from app.routers import (
     intel,
     landing,
     rag,
+    readiness,
     reports,
     satellites,
     signals,
@@ -271,6 +272,7 @@ if _recon_static_dir.is_dir():
 # S1 Hlidskjalf routers (already at /api, no alias needed)
 app.include_router(signals.router, prefix="/api")
 app.include_router(feed_health.router, prefix="/api")
+app.include_router(readiness.router, prefix="/api")
 app.include_router(almanac.router, prefix="/api")
 app.include_router(landing.router, prefix="/api")
 app.include_router(incidents.router, prefix="/api")

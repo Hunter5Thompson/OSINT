@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from starlette.responses import Response
 
 from app.config import settings
+from app.cypher.timeline_histogram import HISTOGRAM_AGGREGATION
 from app.models.spatial import (
     CatalogProblemCode,
     SpatialCatalogProblem,
@@ -672,9 +673,37 @@ WHERE $bbox_off
        AND ( ($west <= $east AND l.lon >= $west AND l.lon <= $east)
           OR ($west >  $east AND (l.lon >= $west OR l.lon <= $east)) ))
 WITH DISTINCT ev
-RETURN toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
-       ev.severity AS severity
-"""
+""" + HISTOGRAM_AGGREGATION
+
+
+def _histogram_buckets(
+    rows: list[dict[str, Any]], start_ms: int, bucket_ms: int,
+) -> list[HistogramBucket]:
+    """Normalize weighted database groups without expanding them into events."""
+    result: list[HistogramBucket] = []
+    for row in rows:
+        by_category: dict[str, int] = {}
+        by_severity: dict[str, int] = {}
+        for group in row["groups"]:
+            count = int(group["count"])
+            category = category_of(group.get("codebook_type"))
+            severity = normalize_severity(group.get("severity"))
+            by_category[category] = by_category.get(category, 0) + count
+            by_severity[severity] = by_severity.get(severity, 0) + count
+        highest = max(by_category.values())
+        tied: list[object] = [
+            category for category, count in by_category.items() if count == highest
+        ]
+        result.append(HistogramBucket(
+            ts=datetime.fromtimestamp(
+                (start_ms + int(row["bucket"]) * bucket_ms) / 1000, tz=UTC,
+            ).isoformat(),
+            count=int(row["count"]),
+            dominant_category=dominant_category(tied),
+            by_category=by_category,
+            by_severity=by_severity,
+        ))
+    return result
 
 
 @router.get("/histogram", response_model=HistogramResponse)
@@ -738,6 +767,7 @@ async def get_histogram(
     end_ms = int(end.timestamp() * 1000)
     span = max(end_ms - start_ms, 1)
     bucket_ms = max(span // buckets, 1)
+    params.update(start_ms=start_ms, bucket_ms=bucket_ms, buckets=buckets)
 
     try:
         if is_exact:
@@ -773,50 +803,20 @@ async def get_histogram(
             unavailable = ExactSpatialFilterUnavailableError(event_spatial_query)
             return spatial_problem_response(unavailable.problem)
         raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
+    event_count = sum(int(row["count"]) for row in rows)
     if is_exact:
         assert isinstance(event_spatial_query, ExactEventQueryPlan)
         try:
             exact_accounting = parse_exact_event_accounting(
                 accounting_rows,
-                sample_count=len(rows),
+                sample_count=event_count,
             )
         except ExactEventAccountingError as exc:
             log.error("timeline_exact_histogram_accounting_invalid", error=str(exc))
             unavailable = ExactSpatialFilterUnavailableError(event_spatial_query)
             return spatial_problem_response(unavailable.problem)
 
-    # Bin in Python so the deterministic rules live in one tested place.
-    cats: dict[int, list[object]] = {}
-    sevs: dict[int, list[str]] = {}
-    counts: dict[int, int] = {}
-    for r in rows:
-        t = r.get("time")
-        if not t:
-            continue
-        ts_ms = int(datetime.fromisoformat(str(t).replace("Z", "+00:00")).timestamp() * 1000)
-        bi = min(int((ts_ms - start_ms) // bucket_ms), buckets - 1)
-        bi = max(bi, 0)
-        counts[bi] = counts.get(bi, 0) + 1
-        cats.setdefault(bi, []).append(r.get("codebook_type"))
-        sevs.setdefault(bi, []).append(normalize_severity(r.get("severity")))
-
-    bucket_list: list[HistogramBucket] = []
-    for bi in sorted(counts):
-        bcats = cats[bi]
-        by_cat: dict[str, int] = {}
-        for c in bcats:
-            cat = category_of(c)
-            by_cat[cat] = by_cat.get(cat, 0) + 1
-        by_sev: dict[str, int] = {}
-        for s in sevs[bi]:
-            by_sev[s] = by_sev.get(s, 0) + 1
-        bucket_list.append(HistogramBucket(
-            ts=datetime.fromtimestamp((start_ms + bi * bucket_ms) / 1000, tz=UTC).isoformat(),
-            count=counts[bi],
-            dominant_category=dominant_category(bcats),
-            by_category=by_cat,
-            by_severity=by_sev,
-        ))
+    bucket_list = _histogram_buckets(rows, start_ms, bucket_ms)
 
     # The notable + geo reads hit Neo4j too — keep them inside a 503 guard so a failure
     # there returns the promised 503, not an unhandled 500 (review finding #1).
@@ -845,7 +845,7 @@ async def get_histogram(
         except Exception as exc:
             log.error("timeline_histogram_aux_neo4j_query_failed", error=str(exc))
             raise HTTPException(status_code=503, detail="neo4j unreachable") from exc
-        total = len(rows)
+        total = event_count
         excluded_unlocated = (
             int(unlocated_rows[0].get("excluded_unlocated_count", 0))
             if unlocated_rows

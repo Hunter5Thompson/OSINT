@@ -159,7 +159,7 @@ jobs:
           driver.close()
           PY
       - name: Run opt-in real Neo4j races
-        run: uv run pytest integration_tests/test_incident_concurrency.py integration_tests/test_graph_geo_events.py integration_tests/test_location_identity.py integration_tests/test_report_analysis_metadata.py -q
+        run: uv run pytest integration_tests/test_incident_concurrency.py integration_tests/test_graph_geo_events.py integration_tests/test_location_identity.py integration_tests/test_report_analysis_metadata.py integration_tests/test_timeline_histogram_aggregation.py -q
 
   test-ingestion-neo4j-fixtures:
     name: tests · ingestion neo4j fixtures
