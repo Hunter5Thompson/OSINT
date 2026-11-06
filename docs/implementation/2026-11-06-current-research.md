@@ -85,7 +85,7 @@ Optional tool failures preserve valid partial current answers with an explicit g
 Occurrence queries accept only current evidence from the pinned spatial filter;
 topic-only web matches cannot enable an occurrence claim.
 
-Technical evidence so far: 942 intelligence tests, 1,206 backend tests,
+Technical evidence so far: 944 intelligence tests, 1,206 backend tests,
 962 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
 the latest receipt display additions. Further
 independent review and live content qualification are in progress. Production
@@ -95,3 +95,9 @@ The optional `docker-compose.current-research.yml` overlay mounts a private
 dotenv file read-only at `/run/secrets/tavily.env`. Set `ODIN_TAVILY_ENV_FILE` to
 the existing host file. Do not copy credentials into images or the repository.
 `/health` reports configuration readiness without a paid provider probe.
+
+Known passage IDs are also accepted in scenario references and deterministically
+resolve to the matching source. Irrelevant originals permit an empty finding set
+and an explicit insufficient-evidence result; the model is not forced to convert
+navigation or source metadata into a current finding. Public query planning uses
+JSON output mode with a bounded local timeout.

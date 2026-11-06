@@ -23,11 +23,11 @@ async def prepare_public_query(question: str) -> str:
             api_key="not-needed",
             temperature=0,
             max_tokens=120,
-            timeout=8,
+            timeout=12,
             max_retries=0,
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
-        async with asyncio.timeout(8):
+        async with asyncio.timeout(12):
             response = await model.ainvoke(
                 [
                     SystemMessage(
@@ -41,7 +41,8 @@ async def prepare_public_query(question: str) -> str:
                         )
                     ),
                     HumanMessage(content=question),
-                ]
+                ],
+                response_format={"type": "json_object"},
             )
         payload = json.loads(response.content) if isinstance(response.content, str) else {}
         query = payload.get("query")

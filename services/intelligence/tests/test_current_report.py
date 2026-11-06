@@ -131,3 +131,38 @@ async def test_model_cannot_replace_a_selected_passage_with_its_own_quote():
     model.ainvoke.return_value = AIMessage(content=json.dumps(payload))
     with pytest.raises(PipelineFailureError):
         await compose_current_report("Iran", [source()], model)
+
+
+async def test_scenario_can_reference_an_existing_specific_passage():
+    from agents.current_report import compose_current_report
+
+    payload = draft()
+    payload["scenarios"][0]["supporting_ids"] = ["ev-current:p0"]
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(content=json.dumps(payload))
+    report = await compose_current_report("Iran", [source()], model)
+    assert "Stützende Angaben: [ev-current]." in report.text
+    payload["scenarios"][0]["supporting_ids"] = ["ev-current:p999"]
+    model.ainvoke.return_value = AIMessage(content=json.dumps(payload))
+    with pytest.raises(PipelineFailureError):
+        await compose_current_report("Iran", [source()], model)
+
+
+async def test_irrelevant_originals_do_not_force_a_factual_finding_or_forecast():
+    from agents.current_report import compose_current_report
+
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(
+        content=json.dumps(
+            {
+                "findings": [],
+                "scenarios": [],
+                "gaps": ["Keine thematisch tragfähige Originalpassage."],
+            }
+        )
+    )
+    report = await compose_current_report(
+        "Angriffe auf Iran in den nächsten 48 Stunden?", [source()], model
+    )
+    assert report.finding_count == 0
+    assert "Keine thematisch tragfähige Originalpassage" in report.text

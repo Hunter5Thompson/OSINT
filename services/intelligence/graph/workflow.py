@@ -541,6 +541,23 @@ async def react_synthesis_node(state: AgentState) -> dict:
             )
             current_report = await compose_current_report(state["query"], current_items, llm)
             content = current_report.text
+            if not current_report.finding_count:
+                coverage = {
+                    **coverage,
+                    "status": "partial",
+                    "situation": "insufficient_evidence",
+                    "gaps": [*coverage["gaps"], "no_relevant_passage"],
+                }
+                return {
+                    **insufficient_evidence(),
+                    "status": "partial",
+                    "synthesis": content,
+                    "sources_used": derive_sources_used(evidence_artifact(current_items)),
+                    "evidence_summary": evidence_time_summary(evidence_artifact(current_items)),
+                    "spatial_application": spatial_application,
+                    "research_coverage": coverage,
+                    "agent_chain": state.get("agent_chain", []) + ["current_relevance_gate"],
+                }
             coverage["forecast"] = (
                 "not_assessed" if current_report.scenario_count else "not_requested"
             )
