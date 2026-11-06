@@ -3,6 +3,7 @@ import pytest
 from neo4j.exceptions import ConstraintError
 
 from app.cypher.report_read import REPORT_BY_SCOPE_KEYS
+from app.cypher.report_write import REPORT_PATCH
 from app.models.intel import SpatialRunApplicationV1
 from app.models.report import ReportCreateRequest, ReportUpdateRequest
 from app.services import report_store
@@ -45,6 +46,13 @@ class _FakeGraph:
         self.by_id: dict[str, dict] = {}
 
     async def write(self, cypher, params):
+        if cypher == REPORT_PATCH:
+            rid = params["report_id"]
+            if rid not in self.by_id:
+                return []
+            self.by_id[rid].update(params["properties"])
+            self.by_id[rid]["now"] = params["now"]
+            return [self._row(rid)]
         is_create = "CREATE (r:Report" in cypher
         is_upsert = "MERGE (r:Report" in cypher and "scope_key = $scope_key" in cypher
         if is_create or is_upsert:
@@ -314,8 +322,7 @@ async def test_update_report_ignores_explicit_null_fields(graph):
 
 @pytest.mark.asyncio
 async def test_update_report_accepts_metrics_patch_without_crashing(graph):
-    # Regression: hydration sends DossierMetric objects through update_report → _report_params.
-    # Without the merged-record re-validation this raises AttributeError on dict.model_dump().
+    # Regression: typed metrics must serialize correctly through the sparse patch.
     from app.models.report import DossierMetric
 
     rec = await report_store.create_report(_req(scope_key="country:MET"))
@@ -325,5 +332,7 @@ async def test_update_report_accepts_metrics_patch_without_crashing(graph):
             metrics=[DossierMetric(label="Threat", value="HIGH", sub="assessment", tone="amber")]
         ),
     )
-    # real _report_params(json.dumps([m.model_dump()...])) did not crash
     assert updated is not None
+    import json
+
+    assert json.loads(graph.by_id[rec.id]["metrics_json"])[0]["value"] == "HIGH"

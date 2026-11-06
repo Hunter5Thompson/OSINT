@@ -98,6 +98,28 @@ function renderBriefing() {
 }
 
 describe("BriefingPage", () => {
+  it("shows empty draft guidance after create and reload without fabricated evidence", async () => {
+    const empty: ReportRecord = { ...sampleReport, id: "r-045", paragraph_num: 45,
+      title: "Untitled Dossier", confidence: null, findings: [], metrics: [], margin: [],
+      sources: [], body_paragraphs: [], body_title: "", context: "" };
+    createReportMock.mockResolvedValue(empty);
+    const view = renderBriefing();
+    await screen.findAllByText(sampleReport.title);
+    fireEvent.click(screen.getByRole("button", { name: /new dossier/i }));
+    await screen.findAllByText("Untitled Dossier");
+    expect(createReportMock).toHaveBeenCalledWith({});
+    expect(screen.getByText("Noch keine Findings. Ergänze zuerst eine belegte Beobachtung.")).toBeInTheDocument();
+    expect(screen.queryByText("0.62")).not.toBeInTheDocument();
+    expect(screen.queryByText("pending·1")).not.toBeInTheDocument();
+    view.unmount();
+    getReportsMock.mockResolvedValue([empty]);
+    renderBriefing();
+    await screen.findByText("Noch keine Findings. Ergänze zuerst eine belegte Beobachtung.");
+    fireEvent.click(screen.getByRole("button", { name: /read full dossier/i }));
+    expect(screen.getByText("Noch kein Dossiertext.")).toBeInTheDocument();
+    expect(screen.getByText("Noch keine Quellen verknüpft.")).toBeInTheDocument();
+    expect(updateReportMock).not.toHaveBeenCalled();
+  });
   it("distinguishes unassessed threat from absent current source evidence after reload", async () => {
     const evidence = [{ source_ref_id: "current-original", source_type: "web" as const,
       provider: "fixture.example.invalid", excerpt: "Officials denied the reported attack.",

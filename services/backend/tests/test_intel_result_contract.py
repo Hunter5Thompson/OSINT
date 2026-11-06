@@ -121,7 +121,8 @@ async def test_no_assessment_clears_previous_report_confidence(monkeypatch):
     )
     patch = report_store.build_hydration_patch(analysis, country_name="Fixture")
     await report_store.update_report("fixture", patch)
-    assert writer.call_args.args[1]["confidence"] is None
+    properties = writer.call_args.args[1]["properties"]
+    assert properties["confidence"] is None
     assert (
-        json.loads(writer.call_args.args[1]["assessment_status_json"])["threat"] == "not_assessed"
+        json.loads(properties["assessment_status_json"])["threat"] == "not_assessed"
     )

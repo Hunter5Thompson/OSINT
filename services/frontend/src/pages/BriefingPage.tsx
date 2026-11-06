@@ -430,6 +430,9 @@ export function BriefingPage() {
 
             <section>
               <div className="briefing-section-label mono">§ Findings</div>
+              {selectedReport.findings.length === 0 && (
+                <p className="briefing-context">Noch keine Findings. Ergänze zuerst eine belegte Beobachtung.</p>
+              )}
               <ol className="briefing-findings">
                 {selectedReport.findings.map((finding, idx) => (
                   <li key={`${selectedReport.id}-f-${idx}`}>
@@ -506,6 +509,9 @@ export function BriefingPage() {
                 <section id="briefing-dossier-body" className="briefing-body-grid">
                   <div>
                     <h3 className="serif briefing-body-title">{selectedReport.body_title}</h3>
+                    {selectedReport.body_paragraphs.length === 0 && (
+                      <p className="briefing-body-paragraph">Noch kein Dossiertext.</p>
+                    )}
                     {selectedReport.body_paragraphs.map((paragraph, idx) => (
                       <p key={`${selectedReport.id}-p-${idx}`} className="briefing-body-paragraph">
                         {paragraph}
@@ -526,6 +532,7 @@ export function BriefingPage() {
                       § Sources
                     </div>
                     <div className="briefing-source-list mono">
+                      {selectedReport.sources.length === 0 && <span>Noch keine Quellen verknüpft.</span>}
                       {selectedReport.sources.map((s) => (
                         <SourceReference key={`${selectedReport.id}-src-${s}`} reference={s} />
                       ))}

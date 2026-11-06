@@ -100,8 +100,8 @@ kept explicit instead of being closed by a deadline or renamed acceptance gate.
 
 | Package | State | Evidence |
 |---|---|---|
-| P1 | In progress | `p1/lint-red.log`; full CI and merge pending |
-| P2 | Planned | Review: repeated pending slice and three failed RSS publishers |
-| P3 | Planned | Review: deterministic in-memory reproductions |
+| P1 | Complete | PR #154; 21 successful checks; merged `cc3548b`; `p1/merge.json` |
+| P2 | In progress | PR #155; 1832 ingestion + 1213 backend tests; image smokes and compatibility pass; CI/browser and rollout pending |
+| P3 | In progress | Five failures reproduced in isolated Neo4j; all 18 metadata/concurrency cases pass; 1213 backend + 964 frontend tests; integration/release pending |
 | P4 | Planned | Existing small controls remain historical evidence |
 | P5 | Planned | Existing cache/histogram and native-memory baseline |

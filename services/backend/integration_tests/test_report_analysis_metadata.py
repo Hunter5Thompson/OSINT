@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -261,3 +262,71 @@ async def test_current_research_survives_save_reload_chat_and_explicit_clear(cas
     await store.update_report(report_id, ReportUpdateRequest(research_coverage=None))
     assert (await store.get_report(report_id)).research_coverage is None
     assert (await store.list_report_messages(report_id))[0].research_coverage is not None
+
+
+async def test_disjoint_concurrent_patches_both_survive(case, monkeypatch):
+    store, report_id, _ = case
+    original_read = store.read_query
+    barrier = asyncio.Barrier(2)
+
+    async def overlapping_read(query, params):
+        rows = await original_read(query, params)
+        # Force the old read/merge/write path to read the same snapshot. Atomic
+        # PATCH does not need this read and is checked by the same final state.
+        await asyncio.wait_for(barrier.wait(), timeout=5)
+        return rows
+
+    with monkeypatch.context() as m:
+        m.setattr(store, "read_query", overlapping_read)
+        await asyncio.gather(
+            store.update_report(report_id, ReportUpdateRequest(title="Concurrent title")),
+            store.update_report(report_id, ReportUpdateRequest(confidence=0.37)),
+        )
+    result = await store.get_report(report_id)
+    assert result.title == "Concurrent title"
+    assert result.confidence == 0.37
+
+
+async def test_delete_winning_before_patch_does_not_resurrect_report(case, monkeypatch):
+    store, report_id, _ = case
+    original_write = store.write_query
+    from app.cypher.report_write import REPORT_DELETE
+
+    async def delete_before_write(query, params):
+        await original_write(REPORT_DELETE, {"report_id": report_id})
+        return await original_write(query, params)
+
+    with monkeypatch.context() as m:
+        m.setattr(store, "write_query", delete_before_write)
+        result = await store.update_report(report_id, ReportUpdateRequest(title="Too late"))
+    assert result is None
+    assert await store.get_report(report_id) is None
+
+
+@pytest.mark.parametrize("patch", [{}, {"title": None, "findings": None}])
+async def test_empty_or_ordinary_null_patch_never_writes(case, monkeypatch, patch):
+    store, report_id, _ = case
+    before = await store.get_report(report_id)
+    with monkeypatch.context() as m:
+        no_writes = AsyncMock(side_effect=AssertionError("no-op patch issued a write"))
+        m.setattr(store, "write_query", no_writes)
+        after = await store.update_report(report_id, ReportUpdateRequest(**patch))
+    assert before == after
+
+
+async def test_new_dossier_is_empty_after_create_and_reload(case):
+    store, _, _ = case
+    created = None
+    try:
+        created = await store.create_report(ReportCreateRequest())
+        for report in [created, await store.get_report(created.id)]:
+            assert report.confidence is None
+            assert report.findings == []
+            assert report.metrics == []
+            assert report.margin == []
+            assert report.sources == []
+            assert report.body_paragraphs == []
+            assert report.body_title == ""
+    finally:
+        if created is not None:
+            await store.delete_report(created.id)

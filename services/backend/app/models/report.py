@@ -39,7 +39,7 @@ class ReportRecord(BaseModel):
     title: str
     scope_key: str | None = None
     status: ReportStatus = "Draft"
-    confidence: float | None = Field(default=0.62, ge=0.0, le=1.0)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None
@@ -62,7 +62,7 @@ class ReportCreateRequest(BaseModel):
     title: str = "Untitled Dossier"
     scope_key: str | None = None
     status: ReportStatus = "Draft"
-    confidence: float | None = Field(default=0.62, ge=0.0, le=1.0)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     assessment_status: AssessmentStatus | None = None
     verification_status: Literal["unverified"] | None = None
     evidence_summary: list[EvidenceSummary] | None = None
@@ -72,7 +72,7 @@ class ReportCreateRequest(BaseModel):
     findings: list[str] = Field(default_factory=list)
     metrics: list[DossierMetric] = Field(default_factory=list)
     context: str = ""
-    body_title: str = "Initial Editorial Draft"
+    body_title: str = ""
     body_paragraphs: list[str] = Field(default_factory=list)
     margin: list[MarginEntry] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)

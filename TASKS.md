@@ -39,12 +39,15 @@ Menschliche Prüfung: [unbewertete Abnahmeunterlagen](docs/operations/goal-accep
 Aktueller Folgeauftrag: [fünf sequenzielle Stabilisierungspakete](
 docs/plans/2026-11-06-reliability-closure.md), einschließlich Integration und
 gezielter Rollouts mit Rückweg, vom Nutzer am 06.11.2026 freigegeben.
-P1 läuft; P2–P5 sind geplant. Nachweise: `/data/odin-reliability-20261106`.
+P1 ist abgeschlossen: PR #154, 21 erfolgreiche Remote-Prüfungen, Main `cc3548b`.
+P2 ist in PR #155; lokale Suiten, Images und Datenkompatibilität bestehen,
+Remote-Browserprüfung und Rollout stehen noch aus. P3 besteht lokal einschließlich
+echter Neo4j-Konkurrenztests; Integration und Rollout folgen. P4/P5 bleiben offen.
+Nachweise: `/data/odin-reliability-20261106`.
 
-Frisch geprüfte Basis: Remote-Main `fe15309` enthält PR #152 und #153 samt
-BP-01/BP-02 und Karten-Recovery. `feat/current-research-20261106` auf `1846da4`
-enthält zusätzlich die bereits ausgelieferte Notebook-/Recherche-/Analysearbeit;
-deren PR/CI-Integration läuft in P1. Produktiv: Intelligence `3334946`,
+Frisch geprüfte Basis: Remote-Main `cc3548b` enthält PR #152–154 samt
+BP-01/BP-02, Karten-Recovery und der bereits ausgelieferten Notebook-/Recherche-/
+Analysearbeit. Produktiv: Intelligence `3334946`,
 Backend/Frontend `999b433`; Ingestion verwendet noch das September-Image und
 bekommt ein eigenes, kompatibilitätsgeprüftes Paket. Der dirty Home-Checkout
 auf `813594a` bleibt geschützt. 36 Worktrees wurden inventarisiert, nicht bereinigt.
