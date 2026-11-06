@@ -1,0 +1,170 @@
+[
+  {
+    "id": "76c914c24b34058f",
+    "expected": "contradiction",
+    "question": "Was tunnel C open throughout May 8?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The authority said tunnel C was open throughout May 8.",
+        "statement": "The authority said tunnel C was open throughout May 8."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The police said tunnel C was closed throughout May 8.",
+        "statement": "The police said tunnel C was closed throughout May 8."
+      }
+    ]
+  },
+  {
+    "id": "0c80f5515bc94830",
+    "expected": "agreement",
+    "question": "What do the outlets report about the reservoir inspection?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The newsletter repeated Inspector D's statement that the reservoir inspection ended on May 8.",
+        "statement": "The newsletter repeated Inspector D's statement that the reservoir inspection ended on May 8."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The radio report repeated Inspector D's statement that the reservoir inspection ended on May 8.",
+        "statement": "The radio report repeated Inspector D's statement that the reservoir inspection ended on May 8."
+      }
+    ]
+  },
+  {
+    "id": "7e17f4836b1d6d09",
+    "expected": "different_assessments",
+    "question": "How is the proposed storage expansion assessed?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "Consultant Vale described the proposed storage expansion as economical.",
+        "statement": "Consultant Vale described the proposed storage expansion as economical."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "Consultant Idris described the proposed storage expansion as uneconomical.",
+        "statement": "Consultant Idris described the proposed storage expansion as uneconomical."
+      }
+    ]
+  },
+  {
+    "id": "41dd6f306e9b5e71",
+    "expected": "compatible",
+    "question": "Do these bridge status reports contradict each other?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "In a notice published May 10, the authority said the bridge closed on May 6.",
+        "statement": "In a notice published May 10, the authority said the bridge closed on May 6."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "In a notice published May 10, the authority said the bridge reopened on May 9.",
+        "statement": "In a notice published May 10, the authority said the bridge reopened on May 9."
+      }
+    ]
+  },
+  {
+    "id": "758b03144e1d35dd",
+    "expected": "compatible",
+    "question": "What do these pump statements imply?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The utility said the backup pump would start only if the main pump failed.",
+        "statement": "The utility said the backup pump would start only if the main pump failed."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The utility said the main pump was still working and the backup pump remained stopped.",
+        "statement": "The utility said the main pump was still working and the backup pump remained stopped."
+      }
+    ]
+  },
+  {
+    "id": "6508d310bb9d54c2",
+    "expected": null,
+    "question": "Is a meaningful common issue established?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "A museum listed its new painting acquisitions.",
+        "statement": "A museum listed its new painting acquisitions."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "A weather buoy recorded wave height far offshore.",
+        "statement": "A weather buoy recorded wave height far offshore."
+      }
+    ]
+  },
+  {
+    "id": "ec98139bfc964d64",
+    "expected": "compatible",
+    "question": "Do the regional service reports conflict?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The operator said passenger service in the western district was suspended on May 8.",
+        "statement": "The operator said passenger service in the western district was suspended on May 8."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The operator said passenger service in the eastern district continued on May 8.",
+        "statement": "The operator said passenger service in the eastern district continued on May 8."
+      }
+    ]
+  },
+  {
+    "id": "1b57a9a5c0d7f286",
+    "expected": "contradiction",
+    "question": "Was the generator inspected on May 8?",
+    "readings": [
+      {
+        "id": "f0",
+        "source_id": "source-0",
+        "passage_id": "passage-0",
+        "original": "The contractor denied that generator B was inspected on May 8.",
+        "statement": "The contractor denied that generator B was inspected on May 8."
+      },
+      {
+        "id": "f1",
+        "source_id": "source-1",
+        "passage_id": "passage-1",
+        "original": "The auditor said generator B was inspected on May 8.",
+        "statement": "The auditor said generator B was inspected on May 8."
+      }
+    ]
+  }
+]

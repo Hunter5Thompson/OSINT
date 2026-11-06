@@ -108,7 +108,7 @@ describe("BriefingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /new dossier/i }));
     await screen.findAllByText("Untitled Dossier");
     expect(createReportMock).toHaveBeenCalledWith({});
-    expect(screen.getByText("Noch keine Findings. Ergänze zuerst eine belegte Beobachtung.")).toBeInTheDocument();
+    await screen.findByText("Noch keine Findings. Ergänze zuerst eine belegte Beobachtung.");
     expect(screen.queryByText("0.62")).not.toBeInTheDocument();
     expect(screen.queryByText("pending·1")).not.toBeInTheDocument();
     view.unmount();

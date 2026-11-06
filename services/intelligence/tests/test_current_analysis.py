@@ -19,6 +19,7 @@ def pair_row(key="c0", **updates):
         "id": key,
         "comparable": "yes",
         "same_question": "no",
+        "same_subject": "yes",
         "same_time": "unclear",
         "same_conditions": "no",
         "consistent": "yes",
@@ -352,3 +353,17 @@ async def test_empty_pair_selection_recovers_only_a_supported_relation():
         ]
         result = await compare_sources("Q", readings, model)
         assert result.count == count
+
+
+async def test_different_subjects_cannot_authorize_agreement_or_contradiction():
+    from agents.source_comparison import _check_relations
+
+    model = AsyncMock()
+    model.ainvoke.return_value = response({"pairs": [pair_row(
+        same_subject="no", same_question="yes", same_time="yes",
+        same_conditions="yes", evaluations_differ="no",
+    )]})
+    allowed = await _check_relations([{"id": "c0", "originals": [
+        "The northern dock is closed.", "The southern dock is open.",
+    ]}], model)
+    assert allowed == {"c0": {"compatible"}}

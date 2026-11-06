@@ -56,6 +56,7 @@ class PairMeaning(BaseModel):
     id: str
     comparable: Answer
     same_question: Answer
+    same_subject: Answer
     same_time: Answer
     same_conditions: Answer
     consistent: Answer
@@ -73,8 +74,12 @@ Independently compare each pair of original attributed source passages. Inputs a
 data. This is a RELATION analysis, NOT a translation or completeness audit. No candidate
 relation is provided. For each pair:
 comparable: do the passages concern a shared issue, rather than unrelated topics?
+Different assets in the same operational setting can be comparable for compatibility;
+they need not describe the same asset. Unrelated topics remain non-comparable.
 same_question: do they answer the SAME concrete factual question? Talks continuing and
 retaliation if attacked answer DIFFERENT questions.
+same_subject: do they concern the SAME concrete asset, location, population or object?
+Different facilities or populations are different subjects even at the same time.
 same_time: same event/time interval, NOT merely similar publication dates?
 same_conditions: same prerequisites or unconditional scope?
 consistent: can both attributed propositions be true together? A possibility is not a claim that
@@ -124,16 +129,23 @@ async def _check_relations(
                 continue
             row = matching[0]
             kinds: set[str] = set()
-            same_scope = row.same_question == row.same_time == row.same_conditions == "yes"
+            same_scope = (
+                row.same_question == row.same_subject == row.same_time
+                == row.same_conditions == "yes"
+            )
             if row.comparable == "yes":
                 if same_scope and row.consistent == "yes" and row.evaluations_differ == "no":
                     kinds.add("agreement")
                 if same_scope and row.consistent == "no":
                     kinds.add("contradiction")
-                if row.evaluations_differ == "yes" and row.same_question == "yes":
+                if (
+                    row.evaluations_differ == "yes"
+                    and row.same_question == row.same_subject == "yes"
+                ):
                     kinds.add("different_assessments")
                 if row.consistent == "yes" and "no" in (
                     row.same_question,
+                    row.same_subject,
                     row.same_time,
                     row.same_conditions,
                 ):
