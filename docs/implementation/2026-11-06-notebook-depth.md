@@ -131,3 +131,28 @@ receipts, protected-worktree checks and runtime/rollback record live in the
 external evidence directory. Original worktrees and source archives are preserved.
 External fact checks, broad model accuracy evaluation and human acceptance of
 analytical interpretations remain separate from these pipeline checks.
+
+## Runtime outcome, 6 November
+
+Application revision `a3f740ecc77261e1851cdb246d03e01a481f80e9` is active in
+Intelligence, Backend and Frontend. The real loopback UI/backend/SSE route
+returned a report with two original notebook passages and 12 collector events
+in 86.8 seconds. Application files and static assets were compared across the
+final image metadata correction. Use the pinned runtime package and its
+ownership preflight at `/data/odin-notebook-depth/20261106/release/apply.sh`;
+the original protected checkout is not the integration target.
+
+Technical pipeline checks pass. Semantic qualification remains partial: live
+reports still occasionally mix authors' positions or describe snapshot dates
+imprecisely. Treat the output as an analyst-reviewed draft, not factual release.
+
+Operational incident: Compose also removed four previously stopped backup
+containers sharing the selected service labels. Saved inspect configurations,
+original images and bind inputs allowed their stopped definitions to be
+recreated. Original writable layers, IDs and logs were not recovered. The
+recreated archives are detached from Compose; release images neutralize
+inherited Compose labels and the wrapper refuses duplicate ownership. Other
+previously running services and protected working trees remained unchanged.
+Full evidence, remaining limits and recovery commands are in
+`/data/odin-notebook-depth/20261106/README.md` and
+`release/backup-container-recovery.json` beneath that directory.
