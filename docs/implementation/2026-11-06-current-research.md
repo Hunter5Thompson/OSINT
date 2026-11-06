@@ -85,7 +85,7 @@ Optional tool failures preserve valid partial current answers with an explicit g
 Occurrence queries accept only current evidence from the pinned spatial filter;
 topic-only web matches cannot enable an occurrence claim.
 
-Technical evidence so far: 950 intelligence tests, 1,206 backend tests,
+Technical evidence so far: 965 intelligence tests, 1,206 backend tests,
 962 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
 the latest receipt display additions. Further
 independent review and live content qualification are in progress. Production
@@ -139,3 +139,18 @@ verification. Technical coverage records partial/unavailable checks. Free model
 claims about missing sources are not rendered as facts; report limits are
 deterministic and actual retrieval gaps remain visible. Past 48-hour windows
 are distinct from explicit future requests such as tomorrow.
+
+The live v5 review found accurate displayed translations in three election
+reports but also promoted a navigation block and a related-story heading to
+findings. Paragraph selection now excludes standalone Markdown headings and link
+directories before assigning selectable evidence. Paragraph IDs retain their
+original offsets. The unused model-generated `gaps` field has been removed;
+limits belong to the server and retrieval receipts.
+
+Scenario premises and their supporting/opposing original passages receive a
+separate bounded audit. Rejected or unavailable checks retain the named scenario
+with an explicit assessment gap, suppressing its unsupported condition, citations
+and indicators. Both audit boundaries require a strict JSON boolean, never a
+coerced string or number. These checks reduce observed errors; they do not certify
+facts, future events or general model reliability. Final live qualification is
+still required before applying the prepared release.

@@ -3,6 +3,7 @@
 import json
 from unittest.mock import AsyncMock
 
+import pytest
 from langchain_core.messages import AIMessage
 
 
@@ -79,3 +80,27 @@ async def test_cancellation_of_source_check_propagates():
     model.ainvoke.side_effect = asyncio.CancelledError()
     with pytest.raises(asyncio.CancelledError):
         await check_statements([{"id": "f0", "original": "Source", "translation": "Claim"}], model)
+
+
+@pytest.mark.parametrize("value", [1, "yes", "true"])
+async def test_non_boolean_audit_result_never_approves_a_translation(value):
+    from agents.source_check import check_statements
+
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(
+        content=json.dumps(
+            {"checks": [{"id": "f0", "faithful": value, "reason": "Claimed approval"}]}
+        )
+    )
+    result = await check_statements(
+        [
+            {
+                "id": "f0",
+                "original": "An attack was denied.",
+                "translation": "An attack was confirmed.",
+            }
+        ],
+        model,
+    )
+    assert result.approved == set()
+    assert result.available is False

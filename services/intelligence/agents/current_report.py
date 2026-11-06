@@ -13,7 +13,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from agents.source_check import check_statements
+from agents.source_check import check_scenarios, check_statements
 from distill_capture import capture_synthesis_input
 from graph.result import PipelineFailureError
 from rag.evidence import EvidenceItem
@@ -25,6 +25,7 @@ class RenderedCurrentReport(BaseModel):
     scenario_count: int
     finding_count: int
     statement_check: Literal["passed", "partial", "unavailable"] = "passed"
+    scenario_check: Literal["passed", "partial", "unavailable"] = "passed"
 
 
 class Finding(BaseModel):
@@ -46,13 +47,27 @@ class CurrentDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
     findings: list[Finding] = Field(min_length=0, max_length=4)
     scenarios: list[Scenario] = Field(min_length=0, max_length=3)
-    gaps: list[str] = Field(min_length=1, max_length=5)
 
 
 @dataclass(frozen=True)
 class SourcePassage:
     source_id: str
     text: str
+
+
+def _article_passage(text: str) -> bool:
+    """Do not promote headings or link directories to read article prose."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        if re.fullmatch(r"#{1,6}\s+.*", line):
+            continue
+        if line.upper() in {"TOP STORIES", "READ MORE", "RELATED STORIES"}:
+            continue
+        entry = re.sub(r"^(?:[-*+]\s+|\d+\.\s+)", "", line)
+        if re.fullmatch(r"!?\[.*\]\(.*\)", entry):
+            continue
+        return True
+    return False
 
 
 def _validate_sources(
@@ -74,6 +89,7 @@ def _render(
     originals: dict[str, EvidenceItem],
     passages: dict[str, SourcePassage],
     approved_statements: set[str],
+    approved_scenarios: set[str],
 ) -> str:
     citation_ids = {key: key for key in originals} | {
         key: passage.source_id for key, passage in passages.items()
@@ -88,7 +104,7 @@ def _render(
         item = originals[passage.source_id]
         stamp = item.source.published_at.isoformat() if item.source.published_at else "unbekannt"
         parts += [
-            f"**{item.source.provider} · publiziert {stamp}** [{passage.source_id}]",
+            f"**{item.source.provider} · Quellenzeit {stamp}** [{passage.source_id}]",
             "> " + passage.text.replace("\n", "\n> "),
             "Modellübersetzung / Einordnung (fachlich prüfen): " + finding.statement
             if f"f{index}" in approved_statements
@@ -101,7 +117,15 @@ def _render(
             "Keine kalibrierte Eintrittsprognose. Die Bedingungen "
             "sind analytische Annahmen; fehlende Gegenbelege bedeuten keine Bestätigung.",
         ]
-    for scenario in draft.scenarios:
+    for index, scenario in enumerate(draft.scenarios):
+        if f"s{index}" not in approved_scenarios:
+            parts += [
+                f"### {scenario.name}",
+                "Szenariodetails nach Quellenprüfung zurückgehalten. "
+                "Tragfähige Voraussetzungen, Gegenbelege und neue öffentliche "
+                "Prüfindikatoren bleiben offen; keine Eintrittseinschätzung.",
+            ]
+            continue
         support = (
             " ".join(f"[{citation_ids[key]}]" for key in scenario.supporting_ids)
             or "keine tragfähigen Belege"
@@ -145,6 +169,7 @@ async def compose_current_report(
         f"{key}:p{index}": SourcePassage(key, text)
         for key, item in originals.items()
         for index, text in enumerate(complete_passages(item.excerpt))
+        if _article_passage(text)
     }
     forecast_requested = bool(
         re.search(
@@ -198,7 +223,7 @@ async def compose_current_report(
                 "Wähle nur thematisch aussagekräftige Originalabsätze. Navigation, Werbung, "
                 "Autorenverzeichnisse, Bildunterschriften und Sprachmenüs sind keine Befunde. "
                 "Leite keine Tatsachen aus Titeln oder URL-Namen ab. Wenn keine Passage "
-                "die Frage trägt, liefere findings=[], scenarios=[] und konkrete gaps. "
+                "die Frage trägt, liefere findings=[], scenarios=[]. "
                 "Liefere als statement eine getreue deutsche Übersetzung nur dieser Passage, ohne "
                 "zusätzliche Aussagen. "
                 "Verschiedene Veröffentlichungen derselben Herkunft sind keine "
@@ -284,14 +309,45 @@ async def compose_current_report(
                     ],
                     model,
                 )
+                scenario_checks = await check_scenarios(
+                    [
+                        {
+                            "id": f"s{index}",
+                            "question": question,
+                            "as_of": as_of,
+                            "scenario": scenario.model_dump(),
+                            "supporting_originals": {
+                                key: passages[key].text
+                                if key in passages
+                                else originals[key].excerpt
+                                for key in scenario.supporting_ids
+                            },
+                            "opposing_originals": {
+                                key: passages[key].text
+                                if key in passages
+                                else originals[key].excerpt
+                                for key in scenario.opposing_ids
+                            },
+                        }
+                        for index, scenario in enumerate(draft.scenarios)
+                    ],
+                    model,
+                )
                 return RenderedCurrentReport(
-                    text=_render(draft, originals, passages, checked.approved),
+                    text=_render(
+                        draft, originals, passages, checked.approved, scenario_checks.approved
+                    ),
                     scenario_count=len(draft.scenarios),
                     finding_count=len(draft.findings),
                     statement_check="unavailable"
                     if not checked.available
                     else "passed"
                     if len(checked.approved) == len(draft.findings)
+                    else "partial",
+                    scenario_check="unavailable"
+                    if not scenario_checks.available
+                    else "passed"
+                    if len(scenario_checks.approved) == len(draft.scenarios)
                     else "partial",
                 )
         except (ValidationError, ValueError) as exc:
