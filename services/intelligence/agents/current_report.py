@@ -129,6 +129,31 @@ async def compose_current_report(
         for key, item in originals.items()
         for index, text in enumerate(complete_passages(item.excerpt))
     }
+    forecast_requested = bool(
+        re.search(
+            r"n.chst|next|48|erwart|prognos|szenari|forecast|future|k.nftig",
+            question,
+            re.I,
+        )
+    )
+    attack_scenarios = forecast_requested and bool(
+        re.search(r"angriff|attack|strike|schl.g", question, re.I)
+    )
+    schema = CurrentDraft.model_json_schema()
+    schema["$defs"]["Finding"]["properties"]["passage_id"]["enum"] = list(passages)
+    if attack_scenarios:
+        # An honest abstention remains valid; otherwise require the three cases.
+        schema["anyOf"] = [
+            {"properties": {"findings": {"minItems": 1}, "scenarios": {"minItems": 3}}},
+            {"properties": {"findings": {"maxItems": 0}, "scenarios": {"maxItems": 0}}},
+        ]
+        schema["$defs"]["Scenario"]["properties"]["name"]["enum"] = [
+            "Keine neuen Angriffe",
+            "Begrenzte Schläge",
+            "Größere Eskalation",
+        ]
+    elif not forecast_requested:
+        schema["properties"]["scenarios"]["maxItems"] = 0
     source_data = [
         {
             "id": key,
@@ -198,7 +223,13 @@ async def compose_current_report(
             messages,
             max_tokens=2400,
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-            response_format={"type": "json_object"},
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "current_report",
+                    "schema": schema,
+                },
+            },
         )
         error = ""
         try:
@@ -208,13 +239,6 @@ async def compose_current_report(
             ):
                 raise ValueError("Incomplete report")
             draft = CurrentDraft.model_validate_json(response.content)
-            forecast_requested = bool(
-                re.search(
-                    r"n.chst|next|48|erwart|prognos|szenari|forecast|future|k.nftig",
-                    question,
-                    re.I,
-                )
-            )
             if not forecast_requested:
                 draft.scenarios = []
             _validate_sources(draft, originals, passages)
@@ -246,7 +270,7 @@ async def compose_current_report(
                     "Prüfe jeden Satz der Übersetzung: Wer spricht, über wen, welche Negation, "
                     "welche Zahl und Zeitangabe? Keine Sprecherrolle oder Zeitrechnung ergänzen. "
                     "Streiche sachfremde Befunde und Spekulation aus der Übersetzung. "
-                    "Bei reinen Lagefragen keine Angriffsszenarien. "
+                    "Behalte die von der ursprünglichen Frage verlangte Szenariostruktur bei. "
                     "Keine alte "
                     "Angabe als aktuell darstellen. Wähle vorhandene passage_id-Werte; "
                     "übersetze Negationen und Unsicherheit getreu. Korrigiere den vollständigen "

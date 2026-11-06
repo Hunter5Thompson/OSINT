@@ -85,7 +85,7 @@ Optional tool failures preserve valid partial current answers with an explicit g
 Occurrence queries accept only current evidence from the pinned spatial filter;
 topic-only web matches cannot enable an occurrence claim.
 
-Technical evidence so far: 949 intelligence tests, 1,206 backend tests,
+Technical evidence so far: 950 intelligence tests, 1,206 backend tests,
 962 frontend tests and 13 isolated Neo4j tests. Four browser tests passed with
 the latest receipt display additions. Further
 independent review and live content qualification are in progress. Production
@@ -125,3 +125,8 @@ is an explicit coverage boundary, not an independence or truth score. Existing
 local corpus reads remain separately identified. Tavily publication estimates may
 also reflect updates; original-date conflict checks and distinct event dates are
 still required. No automatic index writes or new ingestion occur.
+
+The current report also supplies its JSON Schema to the inference boundary,
+including allowed passage IDs and the requested scenario shape. The schema keeps
+an empty-finding abstention branch; structural constraints must not force a claim.
+Local validation remains mandatory even when the inference server constrains JSON.

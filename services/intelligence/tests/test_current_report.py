@@ -191,3 +191,18 @@ async def test_a_current_situation_question_does_not_gain_unrequested_scenarios(
     )
     assert report.scenario_count == 0
     assert "Bedingte Szenarien" not in report.text
+
+
+async def test_attack_scenario_structure_is_constrained_at_the_model_boundary():
+    from agents.current_report import compose_current_report
+
+    model = AsyncMock()
+    model.ainvoke.return_value = AIMessage(content=json.dumps(draft()))
+    await compose_current_report(
+        "Neue Angriffe auf Iran in den nächsten 48 Stunden?", [source()], model
+    )
+    contract = model.ainvoke.call_args.kwargs["response_format"]
+    assert contract["type"] == "json_schema"
+    schema = contract["json_schema"]["schema"]
+    assert schema["anyOf"][0]["properties"]["scenarios"]["minItems"] == 3
+    assert schema["$defs"]["Finding"]["properties"]["passage_id"]["enum"] == ["ev-current:p0"]
