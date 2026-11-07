@@ -223,10 +223,11 @@ async function fixtures(page: Page, state: FixtureState, baseURL: string): Promi
   });
 }
 
-export const test = base.extend<{ state: FixtureState; expectedRenderer: string; expectedBrowserVersion: string | null }>({
+export const test = base.extend<{ state: FixtureState; expectedRenderer: string; expectedBrowserVersion: string | null; requireSpatialCatalog: boolean }>({
   expectedRenderer: ["SwiftShader", { option: true }],
   expectedBrowserVersion: [null, { option: true }],
-  state: async ({ page, baseURL, expectedRenderer, expectedBrowserVersion }, use, testInfo) => {
+  requireSpatialCatalog: [false, { option: true }],
+  state: async ({ page, baseURL, expectedRenderer, expectedBrowserVersion, requireSpatialCatalog }, use, testInfo) => {
     if (baseURL === undefined || new URL(baseURL).hostname !== "127.0.0.1") {
       throw new Error("Browser fixture requires the runner's own loopback preview");
     }
@@ -261,6 +262,10 @@ export const test = base.extend<{ state: FixtureState; expectedRenderer: string;
       errors, ...state, rendering, limits: "Renderer identity recorded; no headed-display or human acceptance",
       catalogRevision: manifest.catalog_revision,
     }, null, 2) });
+    if (requireSpatialCatalog) {
+      expect(state.requests.some(path => path.startsWith("/api/spatial/catalog")),
+        "Native qualification requires the release build with VITE_SPATIAL_SCOPE_ENABLED=true").toBe(true);
+    }
     expect(errors).toEqual([]);
     expect(state.unexpected).toEqual([]);
     expect(rendering?.renderer).toContain(expectedRenderer);

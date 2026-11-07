@@ -41,24 +41,24 @@ Menschliche Prüfung: [unbewertete Abnahmeunterlagen](docs/operations/goal-accep
 Aktueller Folgeauftrag: [fünf sequenzielle Stabilisierungspakete](
 docs/plans/2026-11-06-reliability-closure.md), einschließlich Integration und
 gezielter Rollouts mit Rückweg, vom Nutzer am 06.11.2026 freigegeben.
-P1–P4 sind im vereinbarten Umfang abgeschlossen und integriert (PR #154–157).
-P2 hat den festhängenden GDELT-Slice aufgearbeitet, OFAC repariert und ehrliche
-Einzelfeed-Verfügbarkeit eingeführt: 35 verfügbar, drei Anbieterfehler sichtbar,
-20 HAPI-Feeds ohne konfigurierten Identifier. P3 besteht echte Konkurrenz- und
-Live-Dossierprüfungen. P4 besteht eingefrorene Quellen-/Vergleichsprüfungen und
-drei reale Anwendungsfälle; der Nutzer akzeptiert den vorgelegten Rechercheentwurf
-vorläufig. Externe Faktengültigkeit und Prognosen sind damit nicht freigegeben.
-P5 ist in PR #158 offen: Cache-/Readiness-/RAG-/Histogrammprüfungen bestehen,
-aber zwei native OpenGL-Langzeitversuche scheiterten mit Kontextverlust und
-NVIDIA Xid 31/69. Ein expliziter Vulkan-Browsermodus wird unter denselben
-Dauer-/Speicher-/Fehlergrenzen geprüft; bisher kein P5-Rollout.
+P1–P5 sind im vereinbarten Umfang abgeschlossen und integriert (PR #154–158).
+[Abschlussbericht und Grenzen](docs/reviews/2026-11-07-reliability-closure.md):
+Ingestion-Recovery und ehrliche Einzelfeed-Verfügbarkeit, atomare Dossierupdates,
+eingefrorene fachliche Prüfungen mit vorläufiger Nutzerannahme, Redis-/Readiness-/
+RAG-Verträge und Histogramm-Aggregation bestehen. Die vollständige native
+60-Minuten-Prüfung besteht für das exakte Release-Image im dokumentierten
+Chromium/Vulkan-Modus; andere Grafikpfade bleiben separat zu qualifizieren.
+Drei RSS-Quellen sind nicht verfügbar, 20 HAPI-Feeds nicht konfiguriert.
+Externe Faktengültigkeit und automatische Prognosen sind nicht freigegeben.
 Nachweise: `/data/odin-reliability-20261106/README.md`.
 
-Frisch geprüfte Basis: Remote-Main `e162706` enthält PR #152–157 samt
-Notebook-/Recherche-/Analysearbeit. Produktiv: Intelligence `badfbf7`,
-Backend/Frontend `195dcba`, Spark-Ingestion `b56f2cd`.
-Der dirty Home-Checkout auf `813594a` bleibt geschützt. 36 Worktrees wurden
-inventarisiert, nicht bereinigt. Archiv und fremde Laufzeitcontainer bleiben erhalten.
+Integrierte Anwendungsbasis: Remote-Main nach PR #158 `dfef993`.
+Produktiv: Intelligence `badfbf7`, Backend/Frontend `70a175a`,
+Spark-Ingestion `b56f2cd`. Nachgelagerte Guard-/Abschlussdokumentation verändert
+keinen Anwendungscode und benötigt kein weiteres Image-Release.
+Der dirty Home-Checkout auf `813594a` bleibt geschützt. Die 36 Worktrees des
+Ausgangsinventars wurden nicht bereinigt; eigene Qualifikationsworktrees kamen hinzu.
+Originalarchiv und die 27 übrigen Containeridentitäten bleiben erhalten.
 
 G01–G08 bleiben verbindlich. Die folgende Matrix bewahrt den historischen
 Prüfstand vom 10.10.2026; ihre damaligen Source-/PR-Angaben sind keine Aussage

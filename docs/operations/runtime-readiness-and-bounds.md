@@ -31,14 +31,19 @@ failure and context loss discard the lease. Layer hooks still unmount normally.
 This bounds ordinary navigation; it does not fix Chromium context disposal or
 qualify arbitrarily repeated device failures.
 
-The first viewer-lease candidate with four MSAA samples failed after 26 minutes:
-Chrome lost its WebGL context and the kernel recorded NVIDIA Xid 31. Stable RSS
-did not qualify that run. The follow-up uses single-sample render targets; this
-is an empirical stability candidate, not a demonstrated root-cause fix. All four
-short native tests passed, but the complete follow-up also failed after 15.5
-minutes with NVIDIA Xid 69 and context loss. Neither attempt clears acceptance.
-The same application is now being qualified using native ANGLE/Vulkan, retaining
-all duration, workload, memory and error thresholds. OpenGL remains unqualified.
+Two diagnostic OpenGL builds failed with context loss and NVIDIA Xid 31/69.
+Artifact comparison subsequently showed that those local builds, and an initial
+Vulkan diagnostic run, omitted `VITE_SPATIAL_SCOPE_ENABLED=true`. They do not
+qualify the spatial-enabled release. The first Vulkan run was stopped around
+minute 49; no result was transferred to release acceptance.
+
+All 411 served files were copied directly from the immutable candidate image and
+independently hash-matched. The four native tests and full 60-minute soak were
+repeated against those exact assets. The release verdict passes with zero render
+errors/context losses/kernel Xids and unchanged thresholds. The native fixture
+now requires an observed spatial-catalog request, so the disabled build is rejected.
+This is qualification of the documented Vulkan profile, not an OpenGL or general
+driver-fix claim. See the [closure report](../reviews/2026-11-07-reliability-closure.md).
 
 Native acceptance is separate from JS heap. The complete 60-minute dense native
 soak compares medians at minutes 10–15 and 55–60: browser RSS growth <32 MiB and
@@ -46,16 +51,19 @@ slope <0.5 MiB/min, GPU process RSS growth <64 MiB, renderer RSS growth <128 MiB
 existing JS heap (<5 MiB) and DOM (<50 nodes) gates remain. Errors/context losses
 must be zero. Shared device-wide VRAM is diagnostic, not app-owned memory.
 The source/assets were frozen before the run. Final verdict and measurements:
-`/data/odin-reliability-20261106/p5/` (pending until the full run completes).
+`/data/odin-reliability-20261106/p5/native-verdict.json` (passed).
+Browser/GPU-process/renderer RSS deltas were -6.9/+4.7/+21.4 MiB; JS heap +1.96 MiB,
+DOM +0, browser slope -0.209 MiB/min. Shared device VRAM is not included.
 
 
 ## Native workstation browser
 
 The shared `services/frontend/scripts/native-browser-profile.json` pins Chromium
 156.0.8078.4 and native NVIDIA Vulkan 1.4.329 on this RTX 5090. The native tests and
-the operator launcher consume the same graphics flags. This is a candidate
-operating configuration until the complete native verdict passes; it does not
-repair or qualify the failing OpenGL path. No driver, global browser preference,
+the operator launcher consume the same graphics flags. This operating configuration
+passed the exact-image native qualification; it
+does not qualify the spatial-enabled OpenGL path or identify the cause of the
+diagnostic OpenGL failures. No driver, global browser preference,
 model service or GPU reset is required.
 
 From `services/frontend`, with the existing locked Playwright browser installed:
@@ -75,3 +83,13 @@ Vulkan/NVIDIA renderer are checked before navigation; software fallback is refus
 The profile path is separate from normal browser profiles. The launcher neither
 installs browsers nor changes desktop defaults. Requalify after browser/driver
 changes. Remote terrain and human visual acceptance remain separate.
+
+
+For future release qualification, stage the immutable image's complete served
+HTML/assets into the preview directory, preserve any previous local build, and
+compare every served file hash before and after the run. Keep the explicit spatial
+build argument set to `true` in Docker/CI. Run the native short suite followed by
+`playwright.soak.config.ts`; freeze the image identity, source and asset hashes.
+The observed catalog request catches the demonstrated missing-flag error; it does
+not replace full artifact identity checks. The separately named SwiftShader
+negative/positive guard probes are not native performance evidence.
