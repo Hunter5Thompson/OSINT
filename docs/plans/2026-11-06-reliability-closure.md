@@ -104,4 +104,6 @@ kept explicit instead of being closed by a deadline or renamed acceptance gate.
 | P2 | Complete | PR #155; 17 successful checks; deployed ingestion `b56f2cd`; pending slice recovered; 35 available / 3 unavailable / 20 unconfigured feeds |
 | P3 | Complete | PR #156; 21 successful checks; deployed backend/frontend `195dcba`; 18 real DB cases and live create/parallel-patch/reload/delete checks |
 | P4 | Complete within research-draft scope | PR #157; 21 successful checks; deployed intelligence `badfbf7`; frozen 40+40 source and 8+8 comparison cases; three live workflows; provisional user acceptance |
-| P5 | Native qualification in progress; not deployed | `f7fb75e` passed 21 CI checks; 1221 backend / 967 frontend tests and 12 real histogram cases; OpenGL soaks failed with Xid 31/69; explicit Vulkan operating profile under qualification |
+| P5 | Complete for the documented native Vulkan profile | PR #158; 21 successful checks; exact image 60-minute soak and live rollout verification pass; backend/frontend `70a175a`; failed/non-equivalent attempts retained |
+
+Final evidence and acceptance boundaries: [closure report](../reviews/2026-11-07-reliability-closure.md).
