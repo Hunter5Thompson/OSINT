@@ -13,7 +13,9 @@
     "lint": "eslint src/",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "browser:native": "node scripts/open-native-map.mjs",
+    "test:native-browser": "node --test scripts/test-native-browser.mjs"
   },
   "dependencies": {
     "@mkkellogg/gaussian-splats-3d": "^0.4.7",

@@ -101,7 +101,7 @@ kept explicit instead of being closed by a deadline or renamed acceptance gate.
 | Package | State | Evidence |
 |---|---|---|
 | P1 | Complete | PR #154; 21 successful checks; merged `cc3548b`; `p1/merge.json` |
-| P2 | In progress | PR #155; 1832 ingestion + 1213 backend tests; image smokes and compatibility pass; CI/browser and rollout pending |
-| P3 | In progress | Five failures reproduced in isolated Neo4j; all 18 metadata/concurrency cases pass; 1213 backend + 964 frontend tests; integration/release pending |
-| P4 | Planned | Existing small controls remain historical evidence |
-| P5 | Planned | Existing cache/histogram and native-memory baseline |
+| P2 | Complete | PR #155; 17 successful checks; deployed ingestion `b56f2cd`; pending slice recovered; 35 available / 3 unavailable / 20 unconfigured feeds |
+| P3 | Complete | PR #156; 21 successful checks; deployed backend/frontend `195dcba`; 18 real DB cases and live create/parallel-patch/reload/delete checks |
+| P4 | Complete within research-draft scope | PR #157; 21 successful checks; deployed intelligence `badfbf7`; frozen 40+40 source and 8+8 comparison cases; three live workflows; provisional user acceptance |
+| P5 | Native qualification in progress; not deployed | `f7fb75e` passed 21 CI checks; 1221 backend / 967 frontend tests and 12 real histogram cases; OpenGL soaks failed with Xid 31/69; explicit Vulkan operating profile under qualification |

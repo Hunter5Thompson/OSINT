@@ -7,6 +7,7 @@ import { applyTilesetPerformanceConfig } from "./tilesetConfig";
 import { createBaseLayer } from "./baseLayer";
 import { watchViewerHealth, type ViewerFailure } from "./viewerHealth";
 import { captureTerrainCacheRelease } from "./terrainCacheCleanup";
+import { acquireViewer, parkViewer } from "./viewerLease";
 
 interface GlobeViewerProps {
   onViewerReady: (viewer: Cesium.Viewer) => void;
@@ -41,42 +42,66 @@ export function GlobeViewer({
     if (!containerRef.current || viewerRef.current) return;
 
     Cesium.Ion.defaultAccessToken = cesiumToken;
+    let disposed = false;
+    let healthy = true;
+    const resource = acquireViewer(cesiumToken, () => {
+      const host = document.createElement("div");
+      Object.assign(host.style, { width: "100%", height: "100%" });
+      // Cesium 1.142 CreditDisplay appends a head style on every construction
+      // but never removes it. Capture only this synchronous constructor's styles.
+      const previousStyles = new Set(document.head.querySelectorAll("style"));
+      const viewer = new Cesium.Viewer(host, {
+        baseLayer: createBaseLayer(cesiumToken),
+        timeline: false,
+        animation: false,
+        baseLayerPicker: false,
+        geocoder: false,
+        homeButton: false,
+        sceneModePicker: false,
+        navigationHelpButton: false,
+        fullscreenButton: false,
+        selectionIndicator: false,
+        infoBox: false,
+        scene3DOnly: true,
+        // Conservative WebGL target: avoid multisampled render targets in the
+        // long-running map. Native stability is qualified separately from FPS.
+        msaaSamples: 1,
+        showRenderLoopErrors: false,
+      });
 
-    // Cesium 1.142 CreditDisplay appends a head style on every construction
-    // but never removes it. Capture only this synchronous constructor's styles.
-    const previousStyles = new Set(document.head.querySelectorAll("style"));
-    const viewer = new Cesium.Viewer(containerRef.current, {
-      baseLayer: createBaseLayer(cesiumToken),
-      timeline: false,
-      animation: false,
-      baseLayerPicker: false,
-      geocoder: false,
-      homeButton: false,
-      sceneModePicker: false,
-      navigationHelpButton: false,
-      fullscreenButton: false,
-      selectionIndicator: false,
-      infoBox: false,
-      scene3DOnly: true,
-      msaaSamples: 4,
-      showRenderLoopErrors: false,
+      const creditStyles = [...document.head.querySelectorAll("style")].filter(
+        style => !previousStyles.has(style) && style.textContent?.includes(".cesium-credit-lightbox-overlay"),
+      );
+      const releaseCreditStyles = () => creditStyles.forEach(style => style.remove());
+      let releaseTerrainCache: () => void;
+      try {
+        releaseTerrainCache = captureTerrainCacheRelease(viewer);
+      } catch (error) {
+        viewer.useDefaultRenderLoop = false;
+        viewer.destroy();
+        releaseCreditStyles();
+        throw error;
+      }
+
+      return { token: cesiumToken, viewer, host, dispose: () => {
+        try {
+          if (!viewer.isDestroyed()) viewer.destroy();
+        } catch (error) {
+          console.warn("[GlobeViewer] teardown failed", error);
+        } finally {
+          releaseTerrainCache();
+          releaseCreditStyles();
+        }
+      } };
     });
-
-    const creditStyles = [...document.head.querySelectorAll("style")].filter(
-      style => !previousStyles.has(style) && style.textContent?.includes(".cesium-credit-lightbox-overlay"),
-    );
-    const releaseCreditStyles = () => creditStyles.forEach(style => style.remove());
-    let releaseTerrainCache: () => void;
-    try {
-      releaseTerrainCache = captureTerrainCacheRelease(viewer);
-    } catch (error) {
-      viewer.useDefaultRenderLoop = false;
-      viewer.destroy();
-      releaseCreditStyles();
-      throw error;
-    }
-
-    const releaseHealth = watchViewerHealth(viewer, setFailure);
+    const viewer = resource.viewer;
+    containerRef.current.append(resource.host);
+    viewer.useDefaultRenderLoop = true;
+    viewer.resize();
+    const releaseHealth = watchViewerHealth(viewer, value => {
+      healthy = false;
+      setFailure(value);
+    });
 
     // Dark atmosphere
     viewer.scene.globe.enableLighting = Boolean(cesiumToken);
@@ -104,7 +129,7 @@ export function GlobeViewer({
 
       // Google Photorealistic 3D Tiles with night-side darkening
       const addBuildingsTileset = (tileset: Cesium.Cesium3DTileset) => {
-        if (viewer.isDestroyed()) return;
+        if (disposed || viewer.isDestroyed()) { tileset.destroy(); return; }
         applyTilesetPerformanceConfig(tileset);
         tileset.show = showBuildingsRef.current;
         (tileset as unknown as { _odinPhotoreal?: boolean })._odinPhotoreal = true;
@@ -136,6 +161,7 @@ export function GlobeViewer({
           addBuildingsTileset(tileset);
         })
         .catch((e) => {
+          if (disposed) return;
           // Surface WHY (the old silent catch hid the Cesium-1.139 key regression),
           // then fall back to OpenStreetMap buildings if Google is unavailable.
           console.warn("[GlobeViewer] Google photoreal 3D tiles unavailable, falling back to OSM:", e);
@@ -154,7 +180,7 @@ export function GlobeViewer({
       // Country borders + place labels overlay.
       void Cesium.createWorldImageryAsync({ style: Cesium.IonWorldImageryStyle.ROAD })
         .then((provider) => {
-          if (viewer.isDestroyed()) return;
+          if (disposed || viewer.isDestroyed()) return;
           const bordersLayer = viewer.imageryLayers.addImageryProvider(provider);
           bordersLayer.show = showBordersRef.current;
           bordersLayer.alpha = 0.45;
@@ -170,7 +196,7 @@ export function GlobeViewer({
       // Cesium ion asset id: 3812
       void Cesium.IonImageryProvider.fromAssetId(3812)
         .then((provider) => {
-          if (viewer.isDestroyed()) return;
+          if (disposed || viewer.isDestroyed()) return;
           const nightLayer = new Cesium.ImageryLayer(provider, {
             dayAlpha: 0.0,
             nightAlpha: 0.9,
@@ -195,6 +221,7 @@ export function GlobeViewer({
     onViewerReady(viewer);
 
     return () => {
+      disposed = true;
       releaseHealth();
       // Stop the owned render loop before disposal: a throwing primitive can
       // leave Cesium half-destroyed while its next animation frame is queued.
@@ -203,11 +230,11 @@ export function GlobeViewer({
         viewer.clock.shouldAnimate = false;
       }
       if (nightLayerRef.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
-        viewerRef.current.imageryLayers.remove(nightLayerRef.current, false);
+        viewerRef.current.imageryLayers.remove(nightLayerRef.current, true);
         nightLayerRef.current = null;
       }
       if (borderLayerRef.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
-        viewerRef.current.imageryLayers.remove(borderLayerRef.current, false);
+        viewerRef.current.imageryLayers.remove(borderLayerRef.current, true);
         borderLayerRef.current = null;
       }
       if (buildingsTilesetRef.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
@@ -215,21 +242,8 @@ export function GlobeViewer({
         buildingsTilesetRef.current = null;
         onPhotorealTilesetReady?.(null);
       }
-      if (viewerRef.current && !viewerRef.current.isDestroyed()) {
-        // Cesium walks scene.primitives on destroy and re-destroys each child.
-        // If any layer's PolylineCollection has a stale already-destroyed
-        // polyline in its internal _polylines array (a known Cesium quirk
-        // around removeAll/destroy ordering), this throws on the way out.
-        // Report failures while keeping the route transition usable.
-        try {
-          viewerRef.current.destroy();
-        } catch (error) {
-          console.warn("[GlobeViewer] teardown failed", error);
-        }
-        releaseTerrainCache();
-        viewerRef.current = null;
-      }
-      releaseCreditStyles();
+      viewerRef.current = null;
+      parkViewer(resource, healthy);
     };
   }, [cesiumToken, onViewerReady, onPhotorealTilesetReady, generation]);
 

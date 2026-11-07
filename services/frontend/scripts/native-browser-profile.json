@@ -1,0 +1,5 @@
+{
+  "chromiumVersion": "156.0.8078.4",
+  "rendererTokens": ["NVIDIA GeForce RTX 5090", "Vulkan 1.4.329"],
+  "args": ["--use-gl=angle", "--use-angle=vulkan", "--ozone-platform=x11"]
+}

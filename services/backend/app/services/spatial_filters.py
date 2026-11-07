@@ -10,6 +10,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Final, Literal
 
+from app.cypher.timeline_histogram import HISTOGRAM_AGGREGATION
 from app.models.spatial import (
     CatalogProblemCode,
     ContainmentDescriptor,
@@ -201,11 +202,7 @@ WHERE l.country_scope_key = $scope_key
   AND ev.timeline_at >= datetime($t_start)
   AND ev.timeline_at <= datetime($t_end)
 WITH DISTINCT ev
-RETURN toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
-       ev.severity AS severity
-ORDER BY ev.timeline_at ASC,
-         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
-"""
+""" + HISTOGRAM_AGGREGATION
 
 _EVENTS_COUNTRY_SCOPE_NOTABLES_QUERY = """
 MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
@@ -376,11 +373,7 @@ WHERE l.admin1_scope_key = $scope_key
   AND ev.timeline_at >= datetime($t_start)
   AND ev.timeline_at <= datetime($t_end)
 WITH DISTINCT ev
-RETURN toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
-       ev.severity AS severity
-ORDER BY ev.timeline_at ASC,
-         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
-"""
+""" + HISTOGRAM_AGGREGATION
 
 _EVENTS_ADMIN1_SCOPE_NOTABLES_QUERY = """
 MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)
@@ -551,11 +544,7 @@ WHERE l.admin2_scope_key = $scope_key
   AND ev.timeline_at >= datetime($t_start)
   AND ev.timeline_at <= datetime($t_end)
 WITH DISTINCT ev
-RETURN toString(ev.timeline_at) AS time, ev.codebook_type AS codebook_type,
-       ev.severity AS severity
-ORDER BY ev.timeline_at ASC,
-         coalesce(ev.id, ev.event_id, toString(elementId(ev))) ASC
-"""
+""" + HISTOGRAM_AGGREGATION
 
 _EVENTS_ADMIN2_SCOPE_NOTABLES_QUERY = """
 MATCH (l:Location)<-[:OCCURRED_AT]-(ev:Event)

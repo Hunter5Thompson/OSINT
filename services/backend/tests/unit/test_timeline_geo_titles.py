@@ -35,7 +35,10 @@ def test_geo_title_is_optional_and_never_invented(title):
 
 @pytest.mark.parametrize("bbox", [None, "170,-90,-170,90"])
 async def test_histogram_transports_titles_and_preserves_spatial_accounting(bbox):
-    read = AsyncMock(side_effect=[ROWS, [], [], ROWS])
+    aggregated = [{"bucket": 0, "count": 3, "groups": [
+        {"codebook_type": "military.test", "severity": "low", "count": 3},
+    ]}]
+    read = AsyncMock(side_effect=[aggregated, [], [], ROWS])
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         with patch("app.routers.timeline.read_query", read):

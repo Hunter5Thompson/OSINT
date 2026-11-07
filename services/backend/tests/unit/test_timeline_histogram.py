@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -68,8 +69,14 @@ def _activation() -> ChronikExactSpatialActivationV1:
 
 
 def _rows(*triples):
-    # triples: (iso_time, codebook_type, severity)
-    return [{"time": t, "codebook_type": c, "severity": s} for t, c, s in triples]
+    # Database aggregates for this four-hour fixture; normalization is tested below.
+    grouped = {}
+    for time, category, severity in triples:
+        bucket = datetime.fromisoformat(time.replace("Z", "+00:00")).hour
+        row = grouped.setdefault(bucket, {"bucket": bucket, "count": 0, "groups": []})
+        row["count"] += 1
+        row["groups"].append({"codebook_type": category, "severity": severity, "count": 1})
+    return list(grouped.values())
 
 
 def test_histogram_bins_and_dominant_category_is_modal(client):
@@ -192,11 +199,7 @@ def test_exact_histogram_reuses_static_event_rows_and_shared_accounting(client):
         coverage_revision="coverage-fixture-a",
         coverage_complete=True,
     )
-    histogram_rows = [{
-        "time": "2026-06-01T00:30:00Z",
-        "codebook_type": "military.airstrike",
-        "severity": "high",
-    }]
+    histogram_rows = _rows(("2026-06-01T00:30:00Z", "military.airstrike", "high"))
     notable_rows = [{
         "id": "event-1",
         "time": "2026-06-01T00:30:00Z",

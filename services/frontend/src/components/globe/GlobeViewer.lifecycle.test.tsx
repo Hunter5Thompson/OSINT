@@ -1,6 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { GlobeViewer } from "./GlobeViewer";
+import { disposeParkedViewer } from "./viewerLease";
 
 const { viewer, destroy } = vi.hoisted(() => {
   const destroy = vi.fn(() => { throw new Error("partially destroyed primitive"); });
@@ -11,6 +12,7 @@ const { viewer, destroy } = vi.hoisted(() => {
       clock: { shouldAnimate: true },
       scene: { globe: {}, fog: {} },
       camera: { setView: vi.fn() },
+      resize: vi.fn(),
       isDestroyed: () => false,
       destroy,
     },
@@ -46,6 +48,8 @@ describe("GlobeViewer teardown", () => {
     const before = new Set(document.head.querySelectorAll("style"));
     const view = render(<GlobeViewer onViewerReady={vi.fn()} cesiumToken="" activeShader="none" showCountryBorders={false} showCityBuildings={false} />);
     view.unmount();
+    expect(destroy).not.toHaveBeenCalled();
+    disposeParkedViewer();
     expect(new Set(document.head.querySelectorAll("style"))).toEqual(before);
     expect(foreign.isConnected).toBe(true);
     foreign.remove();

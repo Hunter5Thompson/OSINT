@@ -1,6 +1,6 @@
 # ODIN/WorldView — Task Registry
 
-Stand: 06.11.2026. Dieses Registry ist die maßgebliche Status- und Stackübersicht.
+Stand: 07.11.2026. Dieses Registry ist die maßgebliche Status- und Stackübersicht.
 Die [technischen Briefings](docs/tasks/specifications.md) bewahren alle TASK-001–123-
 Aufträge; [historische Ergebnisse](docs/tasks/history-2026-10-10.md) und einzelne
 Reviews enthalten die Prüfbelege. Neue Sourcechecks schließen Merge, Release,
@@ -29,7 +29,9 @@ Folgearbeit 06.11.2026, Analyseoptimierung ausgerollt:
 Der ausgelassene Iran-Vergeltungsvorbehalt ist im ursprünglichen Prüfkontext
 reproduziert und wird erkannt und repariert. 993 Intelligence-Tests bestehen;
 Kontrollfälle und Original-Replays bleiben separate, begrenzte Qualitätsbelege.
-Intelligence produktiv auf `3334946`; Backend/Frontend unverändert `999b433`.
+Historischer Release dieses Schritts: Intelligence `3334946`, Backend/Frontend
+`999b433`; diese Revisionen wurden inzwischen durch die unten genannten
+Stabilisierungspakete ersetzt.
 Health und kontrollierter Replay im ausgelieferten Container bestanden;
 76 übrige Container unverändert. Keine automatische Prognosefreigabe.
 
@@ -39,18 +41,24 @@ Menschliche Prüfung: [unbewertete Abnahmeunterlagen](docs/operations/goal-accep
 Aktueller Folgeauftrag: [fünf sequenzielle Stabilisierungspakete](
 docs/plans/2026-11-06-reliability-closure.md), einschließlich Integration und
 gezielter Rollouts mit Rückweg, vom Nutzer am 06.11.2026 freigegeben.
-P1 ist abgeschlossen: PR #154, 21 erfolgreiche Remote-Prüfungen, Main `cc3548b`.
-P2 ist in PR #155; lokale Suiten, Images und Datenkompatibilität bestehen,
-Remote-Browserprüfung und Rollout stehen noch aus. P3 besteht lokal einschließlich
-echter Neo4j-Konkurrenztests; Integration und Rollout folgen. P4/P5 bleiben offen.
-Nachweise: `/data/odin-reliability-20261106`.
+P1–P4 sind im vereinbarten Umfang abgeschlossen und integriert (PR #154–157).
+P2 hat den festhängenden GDELT-Slice aufgearbeitet, OFAC repariert und ehrliche
+Einzelfeed-Verfügbarkeit eingeführt: 35 verfügbar, drei Anbieterfehler sichtbar,
+20 HAPI-Feeds ohne konfigurierten Identifier. P3 besteht echte Konkurrenz- und
+Live-Dossierprüfungen. P4 besteht eingefrorene Quellen-/Vergleichsprüfungen und
+drei reale Anwendungsfälle; der Nutzer akzeptiert den vorgelegten Rechercheentwurf
+vorläufig. Externe Faktengültigkeit und Prognosen sind damit nicht freigegeben.
+P5 ist in PR #158 offen: Cache-/Readiness-/RAG-/Histogrammprüfungen bestehen,
+aber zwei native OpenGL-Langzeitversuche scheiterten mit Kontextverlust und
+NVIDIA Xid 31/69. Ein expliziter Vulkan-Browsermodus wird unter denselben
+Dauer-/Speicher-/Fehlergrenzen geprüft; bisher kein P5-Rollout.
+Nachweise: `/data/odin-reliability-20261106/README.md`.
 
-Frisch geprüfte Basis: Remote-Main `cc3548b` enthält PR #152–154 samt
-BP-01/BP-02, Karten-Recovery und der bereits ausgelieferten Notebook-/Recherche-/
-Analysearbeit. Produktiv: Intelligence `3334946`,
-Backend/Frontend `999b433`; Ingestion verwendet noch das September-Image und
-bekommt ein eigenes, kompatibilitätsgeprüftes Paket. Der dirty Home-Checkout
-auf `813594a` bleibt geschützt. 36 Worktrees wurden inventarisiert, nicht bereinigt.
+Frisch geprüfte Basis: Remote-Main `e162706` enthält PR #152–157 samt
+Notebook-/Recherche-/Analysearbeit. Produktiv: Intelligence `badfbf7`,
+Backend/Frontend `195dcba`, Spark-Ingestion `b56f2cd`.
+Der dirty Home-Checkout auf `813594a` bleibt geschützt. 36 Worktrees wurden
+inventarisiert, nicht bereinigt. Archiv und fremde Laufzeitcontainer bleiben erhalten.
 
 G01–G08 bleiben verbindlich. Die folgende Matrix bewahrt den historischen
 Prüfstand vom 10.10.2026; ihre damaligen Source-/PR-Angaben sind keine Aussage
@@ -87,7 +95,9 @@ nativen Rendernachweis (~60 tatsächliche FPS) und verbessert Dossierabläufe.
 Der 60-Minuten-Lauf besteht Fehler-/JS-/DOM-Grenzen; die vollständige
 Speicherabnahme bleibt wegen reproduzierbarem nativem Browserwachstum offen.
 Releasepaket und gemeinsamer Rückweg sind geprüft. CI, diese Speichergrenze,
-Zielrelease und menschliche Abnahme sind im Review getrennt geführt. BP-03–09 bleiben offen.
+Zielrelease und menschliche Abnahme sind in diesem historischen Review getrennt
+geführt. Der aktuelle Abschlussstand von BP-03/04 und der Betriebsfolgearbeit
+steht in den fünf Stabilisierungspaketen oben.
 
 Versionsquelle sind die fünf tracked Deployment-Lockfiles und die gewählten
 Compose-/Releaseinputs. Diese Tabelle beschreibt Sourceverträge, keinen heute
