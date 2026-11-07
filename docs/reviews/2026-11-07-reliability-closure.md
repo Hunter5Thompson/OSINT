@@ -40,7 +40,9 @@ Lokale Nachweise: `/data/odin-reliability-20261106`.
   bleibt dokumentiert. Quellenvergleich nach einer Entwicklungskorrektur 8/8
   Entwicklungs- und anschließend 8/8 unveränderte Holdout-Fälle; 994 Service-Tests.
 - Echte Anwendung: aktuelle Recherche rund 82,7 s, historische Recherche 82,7 s,
-  Nichttreffer 22,5 s. Reservierte/providerberichtete Suchcredits: 4/2, 0/0, 4/4.
+  Nichttreffer 22,5 s. Reservierte/providerberichtete Suchcredits: aktuell 4/2,
+  Nichttreffer 4/4. Die Archivfrage reservierte null Credits und stellte keine
+  externe Suchanfrage; eine Provider-Verbrauchsmeldung liegt dafür nicht vor.
   Drei bezeichnete REVIEW-Dossiers enthalten gespeicherte und erneut geladene
   Ergebnisse. Chatantworten wurden ausdrücklich über die Report-API in die eigenen
   leeren Testentwürfe übernommen; keine automatische Überschreibung redaktioneller
